@@ -1,0 +1,4 @@
+limit: cpu, in c225d05a65ab as 10001:10001 at 2026-10-17T13:30:01Z
+cpu.max: 200000 100000
+4 busy processes for 10.0 s used 20.01 CPU-seconds: 1.99 CPUs
+throttled periods: 100 of 101

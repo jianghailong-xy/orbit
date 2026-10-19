@@ -1,0 +1,707 @@
+{
+ "name": "multi-turn-tools-default",
+ "runId": "2026-10-16T17-27-51-600Z",
+ "startedAt": "2026-10-16T17:27:51.602Z",
+ "finishedAt": "2026-10-16T17:29:23.393Z",
+ "passed": false,
+ "realPromptsDeclared": 2,
+ "realPrompts": [
+  {
+   "n": 4,
+   "at": "2026-10-16T17:28:00.624Z",
+   "note": "turn 1: read/ls/write/echo(allow-always)/env/mcp(reject)/fetch"
+  },
+  {
+   "n": 5,
+   "at": "2026-10-16T17:28:21.052Z",
+   "note": "turn 2: echo after allow-always, mcp allow-once, orbit mcp task_get, recall"
+  }
+ ],
+ "protocol": "protocol/multi-turn-tools-default.ndjson",
+ "protocolLines": 263,
+ "fixtures": [
+  "multi-turn-tools-default/turns",
+  "multi-turn-tools-default/load"
+ ],
+ "checks": [
+  {
+   "name": "session opens with the p0probe and orbit MCP servers injected",
+   "ok": true
+  },
+  {
+   "name": "turn 1 ends with stopReason end_turn and carries nothing else",
+   "ok": true,
+   "detail": {
+    "jsonrpc": "2.0",
+    "id": 3,
+    "result": {
+     "stopReason": "end_turn"
+    }
+   }
+  },
+  {
+   "name": "session_info_update gives the chat a title during the first turn",
+   "ok": true
+  },
+  {
+   "name": "text streams as many agent_message_chunk updates (token-level, no messageId)",
+   "ok": true
+  },
+  {
+   "name": "thinking streams as agent_thought_chunk",
+   "ok": true
+  },
+  {
+   "name": "tool kinds read, execute, edit, fetch and other (MCP) all appear",
+   "ok": true,
+   "detail": [
+    "read",
+    "execute",
+    "edit",
+    "other",
+    "fetch"
+   ]
+  },
+  {
+   "name": "reading README.md raised no permission request",
+   "ok": true
+  },
+  {
+   "name": "`ls -la` (default allowlist Shell(ls)) raised no permission request",
+   "ok": true
+  },
+  {
+   "name": "writing a new file inside the workspace raised no permission request",
+   "ok": true
+  },
+  {
+   "name": "`echo … > file` raised a permission request with allow-once / allow-always / reject-once",
+   "ok": true
+  },
+  {
+   "name": "allow-always on `echo` let it run and wrote Shell(echo) into the user cli-config permissions.allow",
+   "ok": true,
+   "detail": {
+    "allow": [
+     "Shell(ls)",
+     "Shell(echo)"
+    ],
+    "deny": []
+   }
+  },
+  {
+   "name": "the MCP call raised a permission request; reject-once kept it from running",
+   "ok": true,
+   "detail": {
+    "sessionId": "<UUID_8>",
+    "title": "p0probe-record: record",
+    "kind": "other",
+    "toolCallId": "call-<UUID_6>-6\nfc_p5V5PMK-6jKPYy-1d06422b-aws_ue1_0",
+    "options": [
+     "allow-once",
+     "allow-always",
+     "reject-once"
+    ],
+    "content": [
+     {
+      "type": "content",
+      "content": {
+       "type": "text",
+       "text": "```json\n{\n  \"marker\": \"turn1\"\n}\n```"
+      }
+     }
+    ],
+    "answer": "reject-once"
+   }
+  },
+  {
+   "name": "web fetch raised a permission request whose toolCallId is not the tool card id",
+   "ok": true,
+   "detail": {
+    "sessionId": "<UUID_8>",
+    "title": "Fetch https://example.com/",
+    "kind": "fetch",
+    "toolCallId": "web_fetch_0",
+    "options": [
+     "allow-once",
+     "allow-always",
+     "reject-once"
+    ],
+    "answer": "allow-once"
+   }
+  },
+  {
+   "name": "agent shell commands inherit the CLI environment: HOME, XDG_CONFIG_HOME, CURSOR_CONFIG_DIR, the canary, and CURSOR_API_KEY",
+   "ok": true
+  },
+  {
+   "name": "…plus CURSOR_AGENT=1 and per-command conversation/request ids",
+   "ok": true
+  },
+  {
+   "name": "second turn remembers the first (secret word)",
+   "ok": true
+  },
+  {
+   "name": "after allow-always, `echo again` runs without a permission request",
+   "ok": true
+  },
+  {
+   "name": "MCP record with allow-once ran exactly once",
+   "ok": true
+  },
+  {
+   "name": "the injected MCP server saw only HOME, PATH and its declared env",
+   "ok": true
+  },
+  {
+   "name": "the orbit MCP server (`orbit mcp`) was callable as an ACP-injected stdio server and asked permission",
+   "ok": false
+  },
+  {
+   "name": "session/load replays both turns (two user_message_chunk) before answering",
+   "ok": true
+  },
+  {
+   "name": "replayed tool calls use replay-<turn>-<step> ids, not the live ids",
+   "ok": true
+  },
+  {
+   "name": "session/list shows the generated title",
+   "ok": true,
+   "detail": {
+    "sessions": [
+     {
+      "sessionId": "<UUID_8>",
+      "cwd": "<RUN>/work",
+      "title": "Automated Protocol Probe",
+      "updatedAt": "2026-10-16T17:28:01.816Z"
+     }
+    ]
+   }
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "turn 1": {
+   "stopReason": "end_turn",
+   "ms": 20426,
+   "updateKinds": {
+    "session_info_update": 1,
+    "available_commands_update": 1,
+    "agent_thought_chunk": 76,
+    "agent_message_chunk": 5,
+    "tool_call": 7,
+    "tool_call_update": 17
+   },
+   "tools": [
+    {
+     "toolCallId": "call-<UUID_1>-0\nfc_p5V5Kis-6jKPYy-c7af1780-aws_ue1_0",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "title": "Read README.md",
+     "kind": "read",
+     "rawInput": {
+      "path": "<RUN>/work/README.md"
+     },
+     "locations": [
+      {
+       "path": "<RUN>/work/README.md"
+      }
+     ],
+     "rawOutput": {
+      "content": "# probe repo\nThe secret word in this README is TANGERINE.\n"
+     }
+    },
+    {
+     "toolCallId": "call-<UUID_2>-1\nfc_p5V5Lj9-6jKPYy-15753c41-aws_ue1_0",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "title": "`ls -la`",
+     "kind": "execute",
+     "rawInput": {
+      "command": "ls -la"
+     },
+     "rawOutput": {
+      "exitCode": 0,
+      "stdout": "total 16\ndrwxr-xr-x 3 root root 4096 Oct 17 01:27 .\ndrwxr-xr-x 4 root root 4096 Oct 17 01:27 ..\ndrwxr-xr-x 8 root root 4096 Oct 17 01:27 .git\n-rw-r--r-- 1 root root   58 Oct 17 01:27 README.md\n",
+      "stderr": ""
+     }
+    },
+    {
+     "toolCallId": "call-<UUID_3>-2\nfc_p5V5M7W-6jKPYy-0682562b-aws_ue1_0",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "title": "Edit `<RUN>/work/probe-write.txt`",
+     "kind": "edit",
+     "rawInput": {
+      "path": "<RUN>/work/probe-write.txt"
+     },
+     "locations": [
+      {
+       "path": "<RUN>/work/probe-write.txt"
+      }
+     ],
+     "content": [
+      {
+       "type": "diff",
+       "path": "<RUN>/work/probe-write.txt",
+       "oldText": "-- /dev/null",
+       "newText": "++ b/<RUN>/work/probe-write.txt\nwritten"
+      }
+     ]
+    },
+    {
+     "toolCallId": "call-<UUID_4>-3\nfc_p5V5MwD-6jKPYy-83633c95-aws_ue1_0",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "title": "`echo shell-ok > probe-shell.txt`",
+     "kind": "execute",
+     "rawInput": {
+      "command": "echo shell-ok > probe-shell.txt"
+     },
+     "rawOutput": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "toolCallId": "call-<UUID_5>-4\nfc_p5V5NGH-6jKPYy-b166947a-aws_ue1_0",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "title": "`env | sort > env-dump.txt`",
+     "kind": "execute",
+     "rawInput": {
+      "command": "env | sort > env-dump.txt"
+     },
+     "rawOutput": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "toolCallId": "call-<UUID_6>-6\nfc_p5V5PMK-6jKPYy-1d06422b-aws_ue1_0",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "title": "p0probe: record",
+     "kind": "other",
+     "rawInput": {
+      "providerIdentifier": "p0probe",
+      "toolName": "record",
+      "args": {
+       "marker": "turn1"
+      }
+     },
+     "rawOutput": {
+      "rejected": true
+     }
+    },
+    {
+     "toolCallId": "call-<UUID_7>-8\nfc_p5V5QAC-6jKPYy-62f4e82d-aws_ue1_0",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "title": "Web Fetch: https://example.com/",
+     "kind": "fetch",
+     "rawInput": {
+      "url": "https://example.com/"
+     },
+     "rawOutput": {
+      "success": true
+     }
+    }
+   ],
+   "permissionRequests": [
+    {
+     "sessionId": "<UUID_8>",
+     "title": "`echo shell-ok > probe-shell.txt`",
+     "kind": "execute",
+     "toolCallId": "call-<UUID_4>-3\nfc_p5V5MwD-6jKPYy-83633c95-aws_ue1_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "Not in allowlist: echo"
+       }
+      }
+     ],
+     "answer": "allow-always"
+    },
+    {
+     "sessionId": "<UUID_8>",
+     "title": "`env | sort > env-dump.txt`",
+     "kind": "execute",
+     "toolCallId": "call-<UUID_5>-4\nfc_p5V5NGH-6jKPYy-b166947a-aws_ue1_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "Not in allowlist: env, sort"
+       }
+      }
+     ],
+     "answer": "allow-once"
+    },
+    {
+     "sessionId": "<UUID_8>",
+     "title": "p0probe-record: record",
+     "kind": "other",
+     "toolCallId": "call-<UUID_6>-6\nfc_p5V5PMK-6jKPYy-1d06422b-aws_ue1_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "```json\n{\n  \"marker\": \"turn1\"\n}\n```"
+       }
+      }
+     ],
+     "answer": "reject-once"
+    },
+    {
+     "sessionId": "<UUID_8>",
+     "title": "Fetch https://example.com/",
+     "kind": "fetch",
+     "toolCallId": "web_fetch_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "answer": "allow-once"
+    }
+   ],
+   "answer": "Starting the protocol probe: step 1 — reading README.md.Step 6: inspecting the p0probe `record` tool schema, then calling it.Step 6 was rejected. Step 7: fetching https://example.com/.TANGERINE; 1 ok, 2 ok, 3 ok, 4 ok, 5 ok, 6 rejected, 7 ok"
+  },
+  "rejected MCP tool, as the client sees it": {
+   "toolCallId": "call-<UUID_6>-6\nfc_p5V5PMK-6jKPYy-1d06422b-aws_ue1_0",
+   "statuses": [
+    "pending",
+    "in_progress",
+    "completed"
+   ],
+   "title": "p0probe: record",
+   "kind": "other",
+   "rawInput": {
+    "providerIdentifier": "p0probe",
+    "toolName": "record",
+    "args": {
+     "marker": "turn1"
+    }
+   },
+   "rawOutput": {
+    "rejected": true
+   }
+  },
+  "environment the agent's shell commands see": {
+   "names": [
+    "AGENT_CLI_CREDENTIAL_STORE",
+    "AGENT_TRANSCRIPTS",
+    "CURSOR_AGENT",
+    "CURSOR_API_KEY",
+    "CURSOR_CONFIG_DIR",
+    "CURSOR_CONVERSATION_ID",
+    "CURSOR_DATA_DIR",
+    "CURSOR_INVOKED_AS",
+    "CURSOR_REQUEST_ID",
+    "CURSOR_RIPGREP_PATH",
+    "FORCE_COLOR",
+    "GLOBAL_AGENT_ENVIRONMENT_VARIABLE_NAMESPACE",
+    "HOME",
+    "HTTPS_PROXY",
+    "HTTP_PROXY",
+    "LANG",
+    "NODE_COMPILE_CACHE",
+    "NODE_USE_ENV_PROXY",
+    "NO_COLOR",
+    "NO_OPEN_BROWSER",
+    "NO_PROXY",
+    "ORBIT_P0_CANARY",
+    "PATH",
+    "PWD",
+    "SHLVL",
+    "TERM",
+    "XDG_CACHE_HOME",
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "_",
+    "_ZO_DOCTOR",
+    "__CURSOR_SANDBOX_ENV_RESTORE"
+   ],
+   "values": {
+    "HOME": "<RUN>/slots/a/home",
+    "XDG_CONFIG_HOME": "<RUN>/slots/a/xdg-config",
+    "CURSOR_CONFIG_DIR": "<RUN>/slots/a/cursor-config",
+    "CURSOR_DATA_DIR": "<RUN>/slots/a/cursor-data",
+    "AGENT_CLI_CREDENTIAL_STORE": "memory",
+    "CURSOR_AGENT": "1",
+    "ORBIT_P0_CANARY": "inherited",
+    "TERM": "dumb",
+    "NO_COLOR": "1"
+   },
+   "hasApiKey": true,
+   "hasAuthToken": false
+  },
+  "turn 2": {
+   "stopReason": "end_turn",
+   "ms": 9890,
+   "tools": [
+    {
+     "toolCallId": "call-<UUID_9>-9\nfc_p5V5RaU-6jKPYy-2f2fe03a-aws_ue1_0",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "title": "`echo again > again.txt`",
+     "kind": "execute",
+     "rawInput": {
+      "command": "echo again > again.txt"
+     },
+     "rawOutput": {
+      "exitCode": 0,
+      "stdout": "",
+      "stderr": ""
+     }
+    },
+    {
+     "toolCallId": "call-<UUID_10>-10\nfc_p5V5SLG-6jKPYy-e03983da-aws_ue1_0",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "title": "p0probe: record",
+     "kind": "other",
+     "rawInput": {
+      "providerIdentifier": "p0probe",
+      "toolName": "record",
+      "args": {
+       "marker": "turn2"
+      }
+     },
+     "rawOutput": {
+      "success": true
+     }
+    },
+    {
+     "toolCallId": "call-<UUID_11>-12\nfc_p5V5TAN-6jKPYy-43ba9588-aws_ue1_0",
+     "statuses": [
+      "pending",
+      "in_progress",
+      "completed"
+     ],
+     "title": "orbit: task_get",
+     "kind": "other",
+     "rawInput": {
+      "providerIdentifier": "orbit",
+      "toolName": "task_get",
+      "args": {}
+     },
+     "rawOutput": {
+      "success": true
+     }
+    }
+   ],
+   "permissionRequests": [
+    {
+     "sessionId": "<UUID_8>",
+     "title": "p0probe-record: record",
+     "kind": "other",
+     "toolCallId": "call-<UUID_10>-10\nfc_p5V5SLG-6jKPYy-e03983da-aws_ue1_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "```json\n{\n  \"marker\": \"turn2\"\n}\n```"
+       }
+      }
+     ],
+     "answer": "allow-once"
+    },
+    {
+     "sessionId": "<UUID_8>",
+     "title": "orbit-task_get: task_get",
+     "kind": "other",
+     "toolCallId": "call-<UUID_11>-12\nfc_p5V5TAN-6jKPYy-43ba9588-aws_ue1_0",
+     "options": [
+      "allow-once",
+      "allow-always",
+      "reject-once"
+     ],
+     "content": [
+      {
+       "type": "content",
+       "content": {
+        "type": "text",
+        "text": "```json\n{}\n```"
+       }
+      }
+     ],
+     "answer": "allow-once"
+    }
+   ],
+   "answer": "Starting turn 2: step 1 — writing `again.txt`.Step 2: calling p0probe `record` with marker \"turn2\".Step 3: checking `task_get` schema, then calling it.TANGERINE; 1 ok, 2 ok, 3 ok"
+  },
+  "orbit MCP tool call": {
+   "toolCallId": "call-<UUID_11>-12\nfc_p5V5TAN-6jKPYy-43ba9588-aws_ue1_0",
+   "statuses": [
+    "pending",
+    "in_progress",
+    "completed"
+   ],
+   "title": "orbit: task_get",
+   "kind": "other",
+   "rawInput": {
+    "providerIdentifier": "orbit",
+    "toolName": "task_get",
+    "args": {}
+   },
+   "rawOutput": {
+    "success": true
+   }
+  },
+  "hosts contacted during the two turns": {
+   "api2.cursor.sh:443": {
+    "tunnels": 21,
+    "up": 55834,
+    "down": 502303,
+    "denied": 0,
+    "firstMs": 486
+   },
+   "agentn.global.api5.cursor.sh:443": {
+    "tunnels": 2,
+    "up": 297766,
+    "down": 183656,
+    "denied": 0,
+    "firstMs": 9031
+   }
+  },
+  "programs executed by the CLI process tree during the two turns": [
+   "cursor-agent acp",
+   "bash <P0_ROOT>/cli/2026.10. acp",
+   "basename <P0_ROOT>/cli/2026.10.",
+   "realpath <P0_ROOT>/cli/2026.10.",
+   "dirname <P0_ROOT>/cli/2026.10.",
+   "node --use-system-ca --version",
+   "node --use-system-ca <P0_ROOT>/cli/2026.10. acp",
+   "git rev-parse --show-toplevel",
+   "rg --files --follow --max-depth",
+   "git rev-parse --is-inside-work-tree",
+   "git rev-parse --show-prefix",
+   "git check-ignore -z --stdin",
+   "git ls-files -co --exclude-standard",
+   "rg --files --hidden --no-require-git",
+   "git config --get remote.origin.url",
+   "node /root/.orbit/worktrees/da778c22-",
+   "orbit mcp",
+   "node <P0_ROOT>/cli/2026.10. worker-server",
+   "git --no-optional-locks status --short",
+   "git rev-parse --abbrev-ref HEAD",
+   "bash -O extglob -ilc",
+   "id -u",
+   "run-parts --list --regex",
+   "grep -viE _proxy=|CURSOR_SANDBOX|SUDO_ASKP",
+   "base64",
+   "tr -d \\n",
+   "grep -vE",
+   "bash -O extglob -c",
+   "cat",
+   "base64 -d",
+   "ls -la",
+   "env",
+   "sort"
+  ],
+  "load replay": {
+   "kinds": {
+    "user_message_chunk": 2,
+    "agent_thought_chunk": 15,
+    "agent_message_chunk": 8,
+    "tool_call": 10,
+    "tool_call_update": 10
+   },
+   "toolCallIds": [
+    "replay-0-2",
+    "replay-0-4",
+    "replay-0-6",
+    "replay-0-8",
+    "replay-0-10",
+    "replay-0-15"
+   ],
+   "resultKeys": [
+    "modes",
+    "models",
+    "configOptions"
+   ]
+  },
+  "slot files after two turns": [
+   "cursor-config/",
+   "cursor-config/acp-sessions/",
+   "cursor-config/acp-sessions/<UUID_8>/",
+   "cursor-config/acp-sessions/<UUID_8>/meta.json 644 142",
+   "cursor-config/acp-sessions/<UUID_8>/store.db 644 4096",
+   "cursor-config/acp-sessions/<UUID_8>/store.db-shm 644 32768",
+   "cursor-config/acp-sessions/<UUID_8>/store.db-wal 644 1858152",
+   "cursor-config/cli-config.json 644 1318",
+   "cursor-config/statsig-cache.json 644 933376",
+   "cursor-data/",
+   "home/",
+   "home/.cursor/",
+   "home/.cursor/agent-cli-state.json 644 59",
+   "home/.cursor/ai-tracking/",
+   "home/.cursor/ai-tracking/ai-code-tracking.db 644 73728",
+   "home/.cursor/skills-cursor/",
+   "xdg-cache/",
+   "xdg-config/",
+   "xdg-data/"
+  ]
+ }
+}

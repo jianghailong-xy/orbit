@@ -37,7 +37,11 @@ data class RunEvent(
 }
 
 @Serializable
-data class EventPage(val events: List<RunEvent>, val hasMore: Boolean = false, val after: Long? = null)
+data class EventPage(val events: List<RunEvent>, val hasMore: Boolean = false, val after: Long? = null,
+    val before: Long? = null, val anchor: RecordAnchor? = null)
+
+@Serializable
+data class RecordAnchor(val kind: String, val id: String, val seq: Long)
 
 @Serializable
 data class ControlEvent(val type: String, val sessionId: String = "", val data: JsonObject = JsonObject(emptyMap()))
@@ -70,6 +74,8 @@ data class DirectorySnapshot(
 data class SessionSnapshot(
     val detail: JsonObject,
     val approvals: List<JsonObject>,
+    /** `GET …/turns?view=active`: the user turns no transcript event draws yet, each with its `placement` — the accepted head, the
+     * queue behind it and steers — and the receipts of steers that never made it (`delivery`). */
     val queuedTurns: List<JsonObject>,
     val background: List<JsonObject>,
     val standing: Map<String, JsonElement>,
@@ -82,6 +88,7 @@ data class SessionState(
     val fresh: Boolean = false,
     val connection: ConnectionState = ConnectionState.STOPPED,
     val error: RealtimeError? = null,
+    val accessDenied: Boolean = false,
 )
 
 data class RealtimeState(
@@ -96,6 +103,11 @@ data class RealtimeState(
     /** Changes on every control reconnect and non-ping event, including empty sessionId events.
      * Business pages use it to re-read their own authoritative REST state. */
     val invalidationRevision: Long = 0,
+    /** How many account events of each type this handle's stream has delivered, and how many times the stream has
+     * (re)connected. A page that owns a model re-reads it on the event types that concern it (iOS `AppModel.apply`)
+     * and on every connect, which replays nothing; counts only grow, so no event is lost to a conflated read. */
+    val accountEvents: Map<String, Long> = emptyMap(),
+    val controlConnects: Long = 0,
 )
 
 class ReconnectPolicy(private val jitter: () -> Double = { Math.random() }) {

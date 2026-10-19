@@ -1,9 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <base-config cleartextTrafficPermitted="false" />
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">localhost</domain>
-        <domain includeSubdomains="false">127.0.0.1</domain>
-        <domain includeSubdomains="false">::1</domain>
-    </domain-config>
+    <!-- Cleartext to any host, as the main manifest allows: the account owner's decision of 2026-10-15 (card 34g6JcZwpKTUcwc5WvuVx). -->
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

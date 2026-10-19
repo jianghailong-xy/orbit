@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-17T23:42:27.077+00:00",
+  "changes": [
+    [
+      "2026-10-17T23:42:23.935+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": null,
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": null,
+        "management_state": "PROVISIONING",
+        "pod": null,
+        "reason": null,
+        "revision": 4,
+        "runner_status": "OFFLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:42:27.077+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": null,
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": null,
+        "management_state": "FAILED",
+        "pod": null,
+        "reason": "ADMISSION_GUARD_MISSING",
+        "revision": 9,
+        "runner_status": "OFFLINE",
+        "workspace_bound": true
+      }
+    ]
+  ],
+  "owner": "jack",
+  "reached": {
+    "reason": null,
+    "state": "FAILED"
+  }
+}

@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import {
@@ -18,7 +18,6 @@ import {
   type WikiDocDispositionAction,
   type WikiDocFootnoteKind,
   type WikiDocFootnoteView,
-  type WikiDocMaterial,
   type WikiDocRecordKind,
   type WikiDocRepoKind,
   type WikiDocSchemaLevel,
@@ -33,7 +32,6 @@ import {
   type WikiDocViaEntry,
   type WikiDocWithdrawReason,
   type WikiDocWriteResult,
-  type WikiDocsAffected,
   type WikiDocsDirectory,
   type WikiDocsIndex,
   type WikiDocsIndexItem,
@@ -52,10 +50,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { markersOf, splitSentences, wikiRepoPath, withoutMarkers } from './wiki-articles';
 import { docWithdrawReason } from './wiki-doc-withdrawal';
-import { wikiDocsAffected, withdrawDocSentencesByPath } from './wiki-docs-affected';
-import { conditionView, gatherDocMaterial, type StoredSessionCondition } from './wiki-docs-material';
+import { withdrawDocSentencesByPath } from './wiki-docs-affected';
 import { ownerEnvLiterals } from './wiki-dossier';
-import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
 import { requireConfirmedPlan } from './wiki-plan';
 import { WikiRefusalError, WikiService, type WikiPrincipal } from './wiki.service';
 
@@ -65,7 +61,7 @@ import { WikiRefusalError, WikiService, type WikiPrincipal } from './wiki.servic
  * pointing at a first-hand original with its verbatim quote, and the entry it was found through kept
  * as the via entry.
  *
- * WHAT THE SERVER DECIDES. The model writes and the runner gathers; this file decides what can be decided
+ * WHAT THE SERVER DECIDES. The model writes and the build gathers; this file decides what can be decided
  * without either. Which plan a document is written from (`requireConfirmedPlan`, and the version the
  * write names); whether a section needs writing at all (its material's fingerprint); what the body's
  * sentences are (`parseSectionBody`, the articles' cut); whether a record's quote is in the record
@@ -74,12 +70,12 @@ import { WikiRefusalError, WikiService, type WikiPrincipal } from './wiki.servic
  * or withdrawn) and whether the whole document needs review.
  *
  * WHAT IT TAKES ON TRUST. The repository: a design document, code or a contract exists only in a
- * checkout, which the server has none of. The runner checks those quotes at a sha and says so; the
- * footnote is stored as the runner's check at that sha, and one without a sha is refused.
+ * checkout, which the server has none of. The writer checks those quotes in the files the space's runner read
+ * at a sha and says so; the footnote is stored as that check at that sha, and one without a sha is refused.
  *
  * A VIEW. Nothing points at these tables: no source kind names them, so a document is never a source;
  * the push and the agent's search and get read `wiki_entry` and nothing else. The owner reads, on the
- * user door; a maintenance run writes, on the runner door.
+ * user door; the server's own jobs write (`assertWriter`).
  *
  * NOT A SESSIONS OR PROJECTS DEPENDENCY: this reads the wiki's rows, the records a footnote names and
  * the titles a page shows, through Prisma, like the articles and the plan beside it.
@@ -93,7 +89,7 @@ const REPO_KINDS = new Set<string>(WIKI_DOC_REPO_KINDS);
 const RECORD_KINDS = new Set<string>(WIKI_DOC_RECORD_KINDS);
 const FOOTNOTE_KINDS = new Set<string>(WIKI_DOC_FOOTNOTE_KINDS);
 const DISPOSITION_ACTIONS = new Set<string>(WIKI_DOC_DISPOSITION_ACTIONS);
-/** A material's id in its section, as the runner gives it: `D1`, `C12`, `S3`. */
+/** A material's id in its section, as the writer gives it: `D1`, `C12`, `S3`. */
 const MATERIAL_ID = /^[A-Za-z][A-Za-z0-9_-]{0,15}$/u;
 const HEX64 = /^[0-9a-f]{64}$/u;
 const SHA = /^[0-9a-f]{7,64}$/u;
@@ -155,7 +151,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-/** Every error a write has, collected rather than thrown at the first: the runner fixes them all at once. */
+/** Every error a write has, collected rather than thrown at the first: the refusal names them all at once. */
 class Problems {
   readonly list: WikiFieldError[] = [];
 
@@ -305,7 +301,7 @@ function parseDispositions(value: unknown, at: string, problems: Problems): Wiki
     }
     problems.fields(raw, path, 'disposition');
     const material = typeof raw.material === 'string' ? raw.material.trim() : '';
-    if (!MATERIAL_ID.test(material)) problems.fail(`${path}.material`, 'is the id the runner gave the material in its section: a letter, then up to 15 letters, digits, _ or -');
+    if (!MATERIAL_ID.test(material)) problems.fail(`${path}.material`, 'is the id the build gave the material in its section: a letter, then up to 15 letters, digits, _ or -');
     else if (named.has(material)) problems.fail(`${path}.material`, `${material} is named twice: each piece of material has one disposition`);
     named.add(material);
     const kind = raw.kind;
@@ -370,11 +366,11 @@ function parseFootnote(value: unknown, at: string, problems: Problems): Footnote
     if (!SHA.test(sha)) {
       problems.fail(
         `${at}.sha`,
-        'a repository footnote is pinned to the commit it was read at: sha is required, 7 to 64 lowercase hex characters (the server cannot read the repository, so it keeps the runner\'s check only at a sha)',
+        'a repository footnote is pinned to the commit it was read at: sha is required, 7 to 64 lowercase hex characters (the server keeps no checkout, so it keeps the writer\'s check only at a sha)',
       );
     }
     const lines = problems.range(value.lines, `${at}.lines`, 'lines');
-    if (typeof value.verified !== 'boolean') problems.fail(`${at}.verified`, 'is required: whether the runner found the quote in those lines at that sha');
+    if (typeof value.verified !== 'boolean') problems.fail(`${at}.verified`, 'is required: whether the writer found the quote in those lines at that sha');
     const section = problems.optionalText(value.section, `${at}.section`, WIKI_DOC_RULES.textMaxChars);
     const symbol = problems.optionalText(value.symbol, `${at}.symbol`, WIKI_DOC_RULES.textMaxChars);
     let excerpt: string | null = null;
@@ -908,6 +904,15 @@ export function docLead(sentences: readonly string[]): string | null {
   return chars.length <= WIKI_DOC_LEAD_RULES.maxChars ? text : `${chars.slice(0, WIKI_DOC_LEAD_RULES.maxChars).join('').trimEnd()}…`;
 }
 
+/**
+ * The principal the server's `docs_build` job reads and writes a space's documents as (contract `docs.who.write`,
+ * `jobs.kindRuns.docs_build`): the space's maintenance, with no session and no user — the server writes on its own
+ * account, as its `articles` job does (`wikiArticlesJobPrincipal`).
+ */
+export function wikiDocsBuildJobPrincipal(ownerId: string): WikiPrincipal {
+  return { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
+}
+
 @Injectable()
 export class WikiDocs {
   private readonly logger = new Logger(WikiDocs.name);
@@ -930,26 +935,14 @@ export class WikiDocs {
   }
 
   /**
-   * The writers (contract `docs.who.write`): a maintenance run of this space, asked the one test
-   * criterion 2 exported, or the import the server's own container runs. The space is found first, so
-   * another owner's is a 404 before it is anything else.
+   * The writers (contract `docs.who.write`): the server's own `docs_build` and `maintain` jobs and the import the
+   * server's own container runs — origin `maintenance` or `import`, with no session and no user, which no door
+   * builds. The space is found first, so another owner's is a 404 before it is anything else.
    */
   async assertWriter(principal: WikiPrincipal, spaceId: string): Promise<void> {
     await this.requireSpace(principal.ownerId, spaceId);
-    if (principal.origin === 'import' && principal.sessionId === null && principal.userId === null) return;
-    if (
-      principal.origin === 'maintenance'
-      && principal.sessionId !== null
-      && (await isWikiMaintenanceSession(this.prisma, { ownerId: principal.ownerId, sessionId: principal.sessionId, spaceId }))
-    ) {
-      return;
-    }
-    throw new WikiRefusalError({
-      code: 'WIKI_NOT_MAINTENANCE_SESSION',
-      message:
-        "only a Wiki maintenance run of this space writes its documents — a session whose task is in the space's hidden "
-          + '«Wiki maintenance» list — or an import the server runs itself. This caller is neither.',
-    });
+    if ((principal.origin === 'maintenance' || principal.origin === 'import') && principal.sessionId === null && principal.userId === null) return;
+    throw new Error("a wiki document is written by the server's own jobs or import, and this caller is none of them");
   }
 
   /** The space's confirmed plan with its documents and sections, or null while it has none. */
@@ -957,7 +950,7 @@ export class WikiDocs {
     return db.wikiPlan.findFirst({ where: { ownerId, spaceId, status: 'confirmed' }, select: PLAN_SELECT });
   }
 
-  // ── The runner door ───────────────────────────────────────────────────────────────────────────
+  // ── The writers' reads and writes ─────────────────────────────────────────────────────────────
 
   /** What is written, for a run to tell which sections to write again (contract `docs.reads.writerState`). */
   async writerState(principal: WikiPrincipal, spaceId: string): Promise<WikiDocsWriterState> {
@@ -999,23 +992,12 @@ export class WikiDocs {
   }
 
   /**
-   * One document as it is written, for a maintenance run of the space (contract `docs.reads.writerDoc`):
-   * the owner's read, on the runner door, so a run can write an overview over sections it left unchanged.
+   * One document as it is written, for the server's build and maintenance jobs (contract `docs.reads.writerDoc`):
+   * the owner's read, so a job can write an overview over sections it left unchanged.
    */
   async writerDoc(principal: WikiPrincipal, spaceId: string, slug: string): Promise<WikiDocView> {
     await this.assertWriter(principal, spaceId);
     return this.doc(principal.ownerId, spaceId, slug);
-  }
-
-  /**
-   * What a maintenance run of the space writes again because of the entries, and what it may propose
-   * (contract `docs.reads.affected`): the written sections an entry that changed since they were written
-   * fits, and the stale ones; the entries that fit no section and no proposal names; and what the
-   * proposals already name. With no confirmed plan, plan is null and the run writes no document.
-   */
-  async affected(principal: WikiPrincipal, spaceId: string): Promise<WikiDocsAffected> {
-    await this.assertWriter(principal, spaceId);
-    return wikiDocsAffected(this.prisma, principal.ownerId, spaceId);
   }
 
   /**
@@ -1063,39 +1045,7 @@ export class WikiDocs {
   }
 
   /**
-   * The server's half of one section's material (contract `docs.reads.material`, `docs.material`): the
-   * section's session condition as the confirmed plan states it, the entries it picks, and the records
-   * found through them or by its projects, window and keywords — each read through the one reader a
-   * record has, redacted as a footnote's check reads it, and placed.
-   */
-  async material(principal: WikiPrincipal, spaceId: string, slug: string, key: string | undefined): Promise<WikiDocMaterial> {
-    await this.assertWriter(principal, spaceId);
-    const { ownerId } = principal;
-    const sectionKey = (key ?? '').trim();
-    if (sectionKey === '') {
-      throw new BadRequestException('section is required: ?section=<key>, a section of the document in the space\'s confirmed plan');
-    }
-    const confirmed = await requireConfirmedPlan(this.prisma, { ownerId, spaceId });
-    const section = await this.prisma.wikiPlanSection.findFirst({
-      where: { ownerId, key: sectionKey, doc: { ownerId, slug, planId: confirmed.id } },
-      select: { sources: true },
-    });
-    if (!section) throw new NotFoundException(`no section ${sectionKey} of document ${slug} in the space's confirmed plan`);
-    const condition = ((section.sources as unknown as { sessions?: StoredSessionCondition | null }) ?? {}).sessions ?? null;
-    const literals = await ownerEnvLiterals(this.prisma, ownerId);
-    const gathered = await gatherDocMaterial(this.prisma, this.wiki, { ownerId, spaceId, condition, literals });
-    return {
-      spaceId,
-      slug,
-      section: sectionKey,
-      planVersion: confirmed.version,
-      condition: await conditionView(this.prisma, ownerId, condition),
-      ...gathered,
-    };
-  }
-
-  /**
-   * Write sections of one document (contract `docs.routes.write`, `docs.regeneration`).
+   * Write sections of one document (contract `docs.requests.write`, `docs.regeneration`).
    *
    * In order: the caller is a writer of the space; the space has a confirmed plan (`requireConfirmedPlan`,
    * or WIKI_PLAN_UNCONFIRMED) and the document is one of its documents (else 404); the write names that
@@ -1200,7 +1150,7 @@ export class WikiDocs {
   /**
    * One footnote checked (contract `docs.verification`). A record is read again among the account's own
    * rows, redacted, and the quote — redacted the same way — looked for in it; a repository original is
-   * the runner's check at its sha, which the server has no checkout to repeat.
+   * the writer's check at its sha, which the server has no checkout to repeat.
    */
   private async checkFootnote(ownerId: string, footnote: Footnote, literals: readonly string[]): Promise<FootnoteRow> {
     const quote = redacted(footnote.quote, literals);

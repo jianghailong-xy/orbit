@@ -1,0 +1,10 @@
+qmp hostfwd-remove 16443: Traceback (most recent call last):
+  File "/root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/scripts/managed-runner/lab/qmp.py", line 83, in <module>
+    main()
+    ~~~~^^
+  File "/root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/scripts/managed-runner/lab/qmp.py", line 63, in main
+    hostfwd(monitor, f"hostfwd_remove net0 tcp:127.0.0.1:{ports[0]}")
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/scripts/managed-runner/lab/qmp.py", line 51, in hostfwd
+    raise RuntimeError(f"{line}: {answer}")
+RuntimeError: hostfwd_remove net0 tcp:127.0.0.1:16443: host forwarding rule for tcp:127.0.0.1:16443 removed

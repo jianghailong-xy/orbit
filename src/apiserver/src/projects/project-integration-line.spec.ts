@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { integrationJobLimitSeconds } from './project-integration-job';
-import { lastLandingCheck, projectDefaultLine } from './project-integration-line';
+import {
+  canonicalRepoUrl,
+  lastLandingCheck,
+  projectDefaultLine,
+  repositoryShortName,
+} from './project-integration-line';
 
 test('landing checks require actual complete check results to pass', () => {
   for (const checks of [undefined, null, [], {}, [null], [{}], [{ exitCode: 0 }]]) {
@@ -69,4 +74,15 @@ test('project default line stays on main when no in-scope dependency exists', as
   } as unknown as Parameters<typeof projectDefaultLine>[0];
 
   assert.equal(await projectDefaultLine(db, 'project-1'), 'MAIN');
+});
+
+test('a repository is shown by the last two segments of its canonical URL', () => {
+  for (const [remote, shown] of [
+    ['git@github.com:acme/payments-api.git', 'acme/payments-api'],
+    ['https://GitHub.com/Acme/Payments-API.git/', 'Acme/Payments-API'],
+    ['ssh://git@gitlab.example.com:2222/group/sub/repo', 'sub/repo'],
+    ['https://example.com/repo', 'example.com/repo'],
+  ] as const) {
+    assert.equal(repositoryShortName(canonicalRepoUrl(remote)!), shown, remote);
+  }
 });

@@ -13,8 +13,9 @@ import {
   SUPERSEDED_TAG,
   exceptionCardRows,
   isOwnerExceptionCard,
+  itemStandingLine,
 } from './ProjectProgressStatus';
-import { projectOpenItemsQuery } from '../lib/queries';
+import { projectIntegrationQuery, projectOpenItemsQuery } from '../lib/queries';
 
 /**
  * An exception card through the coordinator's handling of it (contract §4.7 H1–H5): handling while
@@ -303,5 +304,46 @@ describe('where the settled cards are drawn', () => {
     expect(text(html)).toContain('the re-check of the merge into main — generation 2 is queued');
     expect(html).not.toContain(HANDLED_TAG);
     expect(html).not.toContain(SUPERSEDED_TAG);
+  });
+});
+
+describe('the merge a re-check is of, by the project’s main branch', () => {
+  const HANDLED_PROMOTION = settled(PROMOTION, {
+    ...SUPERSEDED_PROMOTION.outcome!,
+    state: 'RESOLVED',
+    resolution: 'HANDLED',
+    supersededByItemId: null,
+  });
+  const cardOn = (row: ProjectOpenItemRow, main: string) => text(paint({ needsYou: [], withCoordinator: [] }, () => (
+    <ItemAsCard projectId={PROJECT_ID} row={row} now={NOW} main={main} />
+  )));
+
+  it('says the merge into main word for word as before for a project on main', () => {
+    expect(cardOn(HANDLING_PROMOTION, 'main')).toContain('the re-check of the merge into main — generation 2 is queued · asked 1m ago');
+    expect(cardOn(SUPERSEDED_PROMOTION, 'main')).toContain('the re-check of the merge into main failed again — a new item took its place');
+    expect(cardOn(HANDLED_PROMOTION, 'main')).toContain('the re-check of the merge into main passed');
+    expect(itemStandingLine(HANDLING_PROMOTION, NOW)).toBe(itemStandingLine(HANDLING_PROMOTION, NOW, 'main'));
+  });
+
+  it('names master on the card, the standing line and the project page’s row for a project on master', () => {
+    expect(cardOn(HANDLING_PROMOTION, 'master')).toContain('the re-check of the merge into master — generation 2 is queued · asked 1m ago');
+    expect(cardOn(SUPERSEDED_PROMOTION, 'master')).toContain('the re-check of the merge into master failed again — a new item took its place');
+    expect(cardOn(HANDLED_PROMOTION, 'master')).toContain('the re-check of the merge into master passed');
+    expect(itemStandingLine(HANDLING_PROMOTION, NOW, 'master')).toContain('the re-check of the merge into master');
+    // A task's landing names no branch either way.
+    expect(cardOn(HANDLING_LANDING, 'master')).toContain('the rerun of the landing — generation 2 is running');
+    // The project page's row reads the branch off the integration read the page holds.
+    const page = (upstreamRef: string): string => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      qc.setQueryData(projectOpenItemsQuery(PROJECT_ID).queryKey, { needsYou: [], withCoordinator: [HANDLING_PROMOTION] });
+      qc.setQueryData(projectIntegrationQuery(PROJECT_ID).queryKey, { upstreamRef } as never);
+      return text(renderToStaticMarkup(
+        <MemoryRouter>
+          <QueryClientProvider client={qc}><ProjectOpenItems projectId={PROJECT_ID} now={NOW} /></QueryClientProvider>
+        </MemoryRouter>,
+      ));
+    };
+    expect(page('master')).toContain('the re-check of the merge into master — generation 2 is queued');
+    expect(page('main')).toContain('the re-check of the merge into main — generation 2 is queued');
   });
 });

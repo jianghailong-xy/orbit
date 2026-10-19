@@ -32,7 +32,7 @@ output into a public report: expanded values can contain secrets.
 | `ORBIT_WATCHES_CANARY_OWNERS` | Optional; empty | Comma-separated account IDs enabled in Watch canary mode. | No; account identifiers are private diagnostic data | Recreate API |
 | `ORBIT_WIKI_MODE` → container `ORBIT_WIKI` | Optional; `on` | Wiki rollout: `on`, `canary`, or `off`. Disabled accounts receive `WIKI_DISABLED` and no Wiki tools/context. | No | Recreate API; no migration or runner release |
 | `ORBIT_WIKI_CANARY_OWNERS` | Optional; empty | Comma-separated account IDs enabled in Wiki canary mode. | No; account identifiers are private diagnostic data | Recreate API |
-| `DEEPSEEK_API_KEY` | Optional; empty disables title enrichment | Asynchronous session title/tag enrichment; independent of the coding runtime's credentials. | Yes | Recreate API |
+| `DEEPSEEK_API_KEY` | Optional; empty names sessions with their own provider | Asynchronous session title/tag enrichment. When empty, a session is named by its own provider instead: on a configured API key the server holds (title and tags; not a Claude subscription token or an internal-host endpoint), or, for an engine's own sign-in, by Claude Code or Codex from inside the process running the session (title only). | Yes | Recreate API |
 | `DEEPSEEK_BASE_URL` | Optional; `https://api.deepseek.com` | Endpoint for title/tag enrichment. | No; avoid credential-bearing URLs | Recreate API |
 | `DEEPSEEK_MODEL` | Optional; `deepseek-chat` | Model used for title/tag enrichment. | No | Recreate API |
 | `APNS_KEY` | Optional; empty disables push | Base64-encoded contents of the Apple `AuthKey_XXXX.p8` key. Push also needs the key/team identifiers. | Yes | Recreate API |
@@ -71,6 +71,59 @@ Two deployment values matter to it:
   again under **Admin → Sign-in**.
 
 See [Google sign-in](self-hosting.md#google-sign-in) for the Google Cloud console steps and who can sign in.
+
+### Wiki worker and System model
+
+The `wiki-worker` service runs the apiserver image with another command and calls the wiki's System model: the
+deployment's own endpoint speaking the Anthropic Messages API, such as vLLM. These variables are passed to
+`wiki-worker` only. The API container never receives the model's address or key; it reads the model's name and
+state from the status row the worker writes.
+
+| Variable | Required / default | Purpose | Secret? | Apply change |
+| --- | --- | --- | --- | --- |
+| `ORBIT_WIKI_MODEL_BASE_URL` | Optional; empty means no System model | The endpoint. Calls go to `{base}/v1/messages` and the worker probes `{base}/health` every 10 seconds. Use an address the `wiki-worker` container can reach. | No, but it is never shown to clients; avoid credential-bearing URLs | Recreate `wiki-worker` |
+| `ORBIT_WIKI_MODEL_API_KEY` | Required with the base URL | Sent as `Authorization: Bearer`. | Yes | Recreate `wiki-worker` |
+| `ORBIT_WIKI_MODEL` | Required with the base URL | The model name sent with every call; the only part of the configuration clients see. | No | Recreate `wiki-worker` |
+| `ORBIT_WIKI_MODEL_CONCURRENCY` | Optional; `4` | The most model requests in flight at once, across every wiki space. | No | Recreate `wiki-worker` |
+
+The server runs every account's wiki work in `wiki-worker`; there is no runner path to fall back to, and no
+executor switch (`ORBIT_WIKI_EXECUTOR` and `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` are read by nothing since P11, so an
+old `.env` line is harmless). To pause the wiki's model work, stop the worker (`docker compose stop wiki-worker`):
+its jobs and model requests wait in the queue, nothing is lost, and the wiki shows the worker as not running until
+`docker compose up -d wiki-worker`. To turn the wiki off altogether, use `ORBIT_WIKI_MODE=off` above.
+
+All three of the base URL, key, and model must be set; otherwise the System model reads as unconfigured and the
+worker calls nothing. The wiki settings and health line show the model's name and one of these states: up,
+unreachable, key refused, unconfigured, or wiki worker not running (no heartbeat for 60 seconds). A refused key
+(HTTP 401) stays refused until the worker restarts, so correct the key in `.env` and run
+`docker compose up -d wiki-worker`.
+
+The worker runs in Compose's default bridge network, where `127.0.0.1` is the container itself and
+`host.docker.internal` is not defined. For a model on the Docker host or a GPU machine, use its LAN or tunnel
+address, or give `wiki-worker` an `extra_hosts: ["host.docker.internal:host-gateway"]` entry in a Compose override.
+The names deliberately avoid `ANTHROPIC_*`: agent sessions carry those variables, and a deploy run from inside one
+would otherwise pick up the session's values.
+
+Until the wiki's jobs move to the server, the worker only probes the model and reports its state; wiki jobs still
+run on runners.
+
+### Managed runners
+
+Every account's own runner, a container on this host's Docker, given at sign-in: see
+[Managed runners](self-hosting.md#managed-runners) for what it is, who gets one and how far a container isolates
+it. A fresh install (`scripts/install-server.sh`) writes all three variables; an upgrade never writes any of them,
+so a deployment installed before them keeps managed runners off.
+
+| Variable | Required / default | Purpose | Secret? | Apply change |
+| --- | --- | --- | --- | --- |
+| `ORBIT_MANAGED_RUNNERS_ENABLED` | Optional; off. A fresh install writes `true` | The switch. `true` turns managed runners on; absent, empty or `false` is off, and so is any other value, with a warning in the API's log. Off, no account is given a runner and none is started or woken; nothing is stopped or deleted. | No | Recreate API |
+| `ORBIT_MANAGED_RUNNERS_DIR` | Optional; unset mounts nothing. A fresh install writes `./data/managed-runners` | The managed runners' directory: the API's profile (`profile.json`), the Docker channel's configuration (`channel.json`), token, socket and state. Mounted read-only into the API and read-write into `docker-channel`. | Holds the channel's token | Recreate API and `docker-channel` |
+| `COMPOSE_PROFILES` | Optional; unset. A fresh install writes `managed-runners-docker` | Compose's own variable. `managed-runners-docker` runs `docker-channel`, the restricted Docker channel and the only service given the Docker socket. | No | `docker compose up -d docker-channel` |
+
+`profile.json` chooses the Docker backend (`"backend": "docker"`) and sets each runner's CPU, memory, process and
+volume limits, its image (by local image ID) and the address it reaches the deployment at. `channel.json` names
+the same image and the network `orbit-managed-runners`, and caps what a runner may be given. After editing either,
+run `docker compose up -d --force-recreate docker-channel apiserver`.
 
 ## PostgreSQL and backups
 

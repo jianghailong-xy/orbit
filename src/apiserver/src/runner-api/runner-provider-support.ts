@@ -1,4 +1,4 @@
-import { AgentProvider } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES } from '@orbit/shared';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 
 export const OPENCODE_RUNNER_UPGRADE_ERROR = 'OpenCode requires Orbit runner 0.1.82 or newer; update this runner first';
@@ -11,6 +11,12 @@ export const ANTIGRAVITY_RUNNER_UPGRADE_ERROR =
 export const DSH_RUNNER_UPGRADE_ERROR =
   'DeepSeek Harness requires a newer Orbit runner with dsh support; update this runner first';
 
+/** Names no version, as Antigravity's does: which release first declares Cursor CLI is not known here
+ *  until it ships. The engine by its CLI's name, which ENGINE_CLI_NAMES alone spells. */
+export const CURSOR_RUNNER_UPGRADE_ERROR =
+  `${ENGINE_CLI_NAMES[AgentProvider.CURSOR]} requires a newer Orbit runner with ${ENGINE_CLI_NAMES[AgentProvider.CURSOR]} ` +
+  'support; update this runner first';
+
 /**
  * Why a runner that declares dsh still cannot start it, by what its last engine report says. Each
  * leads with the runner's own `DSH_*` code, which the clients' repair reads (web `dshRepair`,
@@ -18,13 +24,13 @@ export const DSH_RUNNER_UPGRADE_ERROR =
  */
 export const DSH_NOT_INSTALLED_ERROR =
   'DSH_NOT_INSTALLED: DeepSeek Harness is not installed on this runner, or the runner has not reported it yet; ' +
-  'install it from Providers, then try again';
+  'install it from Infrastructure, then try again';
 export const DSH_PLATFORM_UNSUPPORTED_ERROR =
   'DSH_PLATFORM_UNSUPPORTED: DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only; ' +
   'use a runner that can run it';
 export const DSH_VERSION_INCOMPATIBLE_ERROR =
   'DSH_VERSION_INCOMPATIBLE: this runner has a DeepSeek Harness version Orbit does not support; ' +
-  'reinstall it from Providers, then try again';
+  'reinstall it from Infrastructure, then try again';
 
 export const PROVIDER_UNAVAILABLE_ERROR = 'Provider is unavailable; check its configuration';
 
@@ -41,10 +47,12 @@ export const ADMIN_ONLY_PROVIDER_ERROR =
  * session on one of these, claimed by such a runner, would start `claude` on a conversation that
  * belongs to another CLI. Claude, Codex and Kimi are not here: they predate the advertisement, so
  * a header without them says nothing about them. The claim SQL (QueueService.trySessionClaim) and
- * the database triggers behind it (migrations 0080, 0367 and 0377) hold the same list. A session is on a
+ * the database triggers behind it (migrations 0080, 0367, 0377 and 0426) hold the same list. A session is on a
  * runtime by its slug or by the configured row it names — a Gemini key borrows Antigravity — so
  * each gate asks providerSlugsOn's question. The dsh discriminator preserves configured keyword
- * collisions; 0372 widened 0367's trigger and 0377 protects dsh claims and lease acquisition.
+ * collisions; 0372 widened 0367's trigger and 0377 protects dsh claims and lease acquisition, as 0426
+ * does Cursor CLI's. Those two are handed out only when the runner's persisted heartbeat declares them
+ * as well (persistedProviderSupport).
  */
 export const ADVERTISED_RUNTIMES: ReadonlyArray<{
   provider: AgentProvider;
@@ -53,6 +61,7 @@ export const ADVERTISED_RUNTIMES: ReadonlyArray<{
   { provider: AgentProvider.OPENCODE, upgradeError: OPENCODE_RUNNER_UPGRADE_ERROR },
   { provider: AgentProvider.ANTIGRAVITY, upgradeError: ANTIGRAVITY_RUNNER_UPGRADE_ERROR },
   { provider: AgentProvider.DSH, upgradeError: DSH_RUNNER_UPGRADE_ERROR },
+  { provider: AgentProvider.CURSOR, upgradeError: CURSOR_RUNNER_UPGRADE_ERROR },
 ];
 
 /**

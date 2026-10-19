@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerSelfUpdate } from '@orbit/shared';
@@ -263,16 +262,14 @@ async function mount(input: RunnerAttentionInput, refuse?: string) {
   root = createRoot(host);
   act(() =>
     root!.render(
-      <AntdApp>
-        <QueryClientProvider client={qc}>
-          <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
-            <Routes>
-              <Route path="/runners/:id" element={<RunnerDetailPage />} />
-            </Routes>
-            <ToastViewport />
-          </MemoryRouter>
-        </QueryClientProvider>
-      </AntdApp>,
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
+          <Routes>
+            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+          </Routes>
+          <ToastViewport />
+        </MemoryRouter>
+      </QueryClientProvider>,
     ),
   );
   await settle();

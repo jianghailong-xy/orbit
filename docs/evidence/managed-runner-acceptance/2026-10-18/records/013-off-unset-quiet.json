@@ -1,0 +1,61 @@
+{
+ "checks": [
+  {
+   "check": "no managed row changed",
+   "ok": true
+  },
+  {
+   "check": "the capacity pool did not change",
+   "ok": true
+  },
+  {
+   "check": "no connection reached the gate (the manager's only way to k3s)",
+   "ok": true,
+   "value": 0
+  },
+  {
+   "check": "no apiserver socket to the k3s API",
+   "ok": true
+  },
+  {
+   "check": "no object in the namespace changed",
+   "ok": true,
+   "value": []
+  }
+ ],
+ "endedAt": "2026-10-18T12:34:18.948+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "off-unset",
+ "result": {
+  "apiserverSocketsToTheApi": [],
+  "changed": [],
+  "demands": [],
+  "from": "2026-10-18T12:32:48.757+00:00",
+  "gateConnectionsDuring": 0,
+  "label": "unset",
+  "managedLogLinesSinceStart": [
+   "\u001b[32m[Nest] 484389  - \u001b[39m10/18/2026, 8:31:48 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/ensure, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 484389  - \u001b[39m10/18/2026, 8:31:48 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/retry, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 484389  - \u001b[39m10/18/2026, 8:31:48 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/wake, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 484389  - \u001b[39m10/18/2026, 8:31:48 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/sleep, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 484389  - \u001b[39m10/18/2026, 8:31:48 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/delete, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 484389  - \u001b[39m10/18/2026, 8:31:48 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mManagedRunnerAdmissionController {/api/managed-runner/admission}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 484389  - \u001b[39m10/18/2026, 8:31:48 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/admission, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "ngine-migration 8012ef66-349b-4bc6-b7d8-fe79e80b9720 {\"step\":\"check\",\"table\":\"managed_runner\",\"rowId\":null,\"ownerId\":null,\"action\":\"NOOP\",\"note\":\"every managed runner starts on a built-in engine; none is rewritten\"}\u001b[39m"
+  ],
+  "mappingRows": 0,
+  "mappingsUnchanged": true,
+  "namespaceObjects": 53,
+  "namespaceUnchanged": true,
+  "poolUnchanged": true,
+  "switch": [
+   "(unset)"
+  ],
+  "to": "2026-10-18T12:34:18.882+00:00",
+  "waitedSeconds": 90
+ },
+ "seconds": 90.3,
+ "startedAt": "2026-10-18T12:32:48.602+00:00",
+ "step": "quiet"
+}

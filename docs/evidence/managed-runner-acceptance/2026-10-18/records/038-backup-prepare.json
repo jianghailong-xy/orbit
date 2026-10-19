@@ -1,0 +1,398 @@
+{
+ "checks": [
+  {
+   "check": "ann stayed READY through the probe",
+   "ok": true
+  },
+  {
+   "check": "ann is disabled: held asleep for the backup",
+   "ok": true,
+   "value": 200
+  },
+  {
+   "check": "ann: no Pod and no attachment on the volume",
+   "ok": true
+  },
+  {
+   "check": "ann: no RBD client watches the image",
+   "ok": true,
+   "value": []
+  }
+ ],
+ "endedAt": "2026-10-18T12:55:53.096+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "backup",
+ "result": {
+  "disabled": {
+   "answer": {
+    "disabledAt": "2026-10-18T12:55:15.347Z",
+    "email": "t08-ann@lab.invalid",
+    "id": "34i3N7YWPyZxFmU3WOzzQ"
+   },
+   "at": "2026-10-18T12:55:15.343+00:00",
+   "disabled": true,
+   "owner": "ann",
+   "status": 200
+  },
+  "ensure": {
+   "answered": {
+    "event": {
+     "created_at": "2026-10-18T12:52:42.43",
+     "ingested_at": "2026-10-18T12:52:42.528322+00:00",
+     "ingested_by_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+     "seq": 100,
+     "session_id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+     "type": "assistant"
+    },
+    "modelRequests": [
+     {
+      "at": "2026-10-18T12:52:42Z",
+      "kind": "text",
+      "messages": 35,
+      "n": 28,
+      "secrets": [
+       "annfirst"
+      ],
+      "tool": null
+     }
+    ],
+    "session": {
+     "assigned_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+     "created_at": "2026-10-18T12:37:47.476",
+     "engine": "claude",
+     "id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+     "provider": "deepseek-2",
+     "runtime_session_id": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+     "status": "AWAITING_INPUT",
+     "task_id": null
+    }
+   },
+   "turn": {
+    "answer": {
+     "code": null,
+     "id": null,
+     "message": null,
+     "seq": 11,
+     "status": null
+    },
+    "at": "2026-10-18T12:52:42.286+00:00",
+    "kind": "turn",
+    "session": "34i3WAGGhr09tgpAvF8px",
+    "status": 201
+   }
+  },
+  "keeper": {
+   "answer": {
+    "code": null,
+    "id": null,
+    "message": null,
+    "seq": 12,
+    "status": null
+   },
+   "at": "2026-10-18T12:52:43.494+00:00",
+   "kind": "turn",
+   "session": "34i3WAGGhr09tgpAvF8px",
+   "status": 201
+  },
+  "kept": {
+   "event": {
+    "created_at": "2026-10-18T12:55:13.623",
+    "ingested_at": "2026-10-18T12:55:13.735844+00:00",
+    "ingested_by_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "seq": 108,
+    "session_id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+    "type": "assistant"
+   },
+   "modelRequests": [
+    {
+     "at": "2026-10-18T12:52:43Z",
+     "kind": "text",
+     "messages": 38,
+     "n": 29,
+     "secrets": [
+      "annfirst"
+     ],
+     "tool": null
+    }
+   ],
+   "session": {
+    "assigned_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "created_at": "2026-10-18T12:37:47.476",
+    "engine": "claude",
+    "id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+    "provider": "deepseek-2",
+    "runtime_session_id": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+    "status": "AWAITING_INPUT",
+    "task_id": null
+   }
+  },
+  "probe": {
+   "action": "write",
+   "at": "2026-10-18T12:53:00.625+00:00",
+   "data": {
+    "gitFsckExit": 0,
+    "gitHead": "7f8108f5328cfc3357e2c01ac8eb1a4d121a5e37",
+    "integrityCheck": "ok",
+    "maxRow": 150,
+    "mount": [
+     [
+      "/dev/rbd1",
+      "/var/lib/orbit",
+      "ext4"
+     ]
+    ],
+    "randomSha256": "b146e40fe13f66c4cd0ce89ee7e865a774da66b107108013528efe79d6c67207",
+    "rows": 150,
+    "rowsSha256": "8436f7a9143c40be270617776226e4957e33183e8a50cb8ae90591334ede5596"
+   },
+   "generation": 5,
+   "owner": "ann",
+   "pod": "9f389de8-9abe-430f-a6fb-40041929e1a4",
+   "run": "b125243",
+   "volume": {
+    "managedInstance": {
+     "generation": 5,
+     "podUid": "9f389de8-9abe-430f-a6fb-40041929e1a4",
+     "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+    },
+    "repos": [
+     "default"
+    ],
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "worktrees": [
+     "01a14f04-a754-73a1-9d1b-91a624ffc84d"
+    ]
+   }
+  },
+  "slept": {
+   "at": "2026-10-18T12:55:49.127+00:00",
+   "changes": [
+    {
+     "at": "2026-10-18T12:55:15.397+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 5,
+      "management_state": "READY",
+      "pod": "9f389de8",
+      "reason": null,
+      "revision": 81
+     }
+    },
+    {
+     "at": "2026-10-18T12:55:16.481+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": "asked",
+      "generation": 5,
+      "management_state": "DRAINING",
+      "pod": "9f389de8",
+      "reason": null,
+      "revision": 82
+     }
+    },
+    {
+     "at": "2026-10-18T12:55:44.226+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": "asked",
+      "generation": 5,
+      "management_state": "DRAINING",
+      "pod": "9f389de8",
+      "reason": null,
+      "revision": 85
+     }
+    },
+    {
+     "at": "2026-10-18T12:55:49.127+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 6,
+      "management_state": "SLEEPING",
+      "pod": null,
+      "reason": null,
+      "revision": 86
+     }
+    }
+   ],
+   "reached": "SLEEPING",
+   "seconds": 33.8
+  },
+  "snapshot": {
+   "managedInstance": {
+    "generation": 5,
+    "podUid": "9f389de8-9abe-430f-a6fb-40041929e1a4",
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+   },
+   "mount": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd1"
+    }
+   ],
+   "podUid": "9f389de8-9abe-430f-a6fb-40041929e1a4",
+   "prefix": {},
+   "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "runs": {
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d": {
+     "provider": "claude",
+     "runtimeSessionId": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+     "sessionUuid": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+     "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a14f04-a754-73a1-9d1b-91a624ffc84d"
+    }
+   },
+   "sqlite": {
+    "t08-probe/b125243/rows.sqlite": "ok",
+    "t08-probe/p1/rows.sqlite": "ok"
+   },
+   "takenAt": "2026-10-18T12:55:15.343+00:00",
+   "transcripts": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a754-73a1-9d1b-91a624ffc84d/9412b32d-8af2-4596-a874-0be0e646f1f4.jsonl": {
+     "lines": 97,
+     "sha256": "ea0a358355554663b8d422a402af8b59897780780dce1f44e448791cb2855a2c"
+    }
+   },
+   "uid": 10001,
+   "uploads": {
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d/t08-ann-note.txt": "47b104235806bd367051f1b5bdd828df3fc5fbd77508c8a997a05e8c0d99110c"
+   },
+   "workspace": {
+    "fsckExit": 0,
+    "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+    "worktrees": [
+     "worktree /var/lib/orbit/home/orbit-repos/default",
+     "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+     "branch refs/heads/master",
+     "",
+     "worktree /var/lib/orbit/home/.orbit/worktrees/01a14f04-a754-73a1-9d1b-91a624ffc84d",
+     "HEAD b3da4b68be18c1bb2ad735b863515e5d53c86717",
+     "branch refs/heads/orbit/t08-ann-first-session-a0df10"
+    ]
+   },
+   "worktrees": {
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d": {
+     "branch": "orbit/t08-ann-first-session-a0df10",
+     "files": {
+      ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+      "t08-ann1.txt": "dd4a213dc6ebc5bc9ec1e1fc8014cc9e231298a70d955f818ca4cf29b3e9ce5d"
+     },
+     "head": "b3da4b68be18c1bb2ad735b863515e5d53c86717",
+     "status": []
+    }
+   }
+  },
+  "storage": {
+   "at": "2026-10-18T12:55:52.999+00:00",
+   "ceph": {
+    "blocklist": "10.0.2.15:6825/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/2192275973 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3935614439 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/1734439907 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/3454451936 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/2395484111 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1452041557 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6824/253666604 2026-10-19T10:02:55.470772+0000\n10.0.2.15:0/4039567310 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/3015615161 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6825/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/1848105137 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3738769582 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/1235428334 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6825/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/143010893 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/260511182 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/2241673006 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6825/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6824/950501931 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6825/3840669940 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/3078658604 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2147079381 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/2798022552 2026-10-18T23:34:31.804906+0000\n10.0.2.15:0/1584311584 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/1785994816 2026-10-18T19:46:35.556850+0000\n10.0.2.15:6825/1664890398 2026-10-19T00:37:34.827392+0000\n10.0.2.15:6824/3998907050 2026-10-19T08:59:08.491062+0000\n10.0.2.15:0/217504789 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/918684945 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/3517004605 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/862953885 2026-10-19T05:50:23.855464+0000\n10.0.2.15:0/3385750799 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6825/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/818406480 2026-10-19T00:37:34.827392+0000\n10.0.2.15:0/2083735106 2026-10-19T10:02:55.470772+0000\n10.0.2.15:6825/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6824/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6825/2917292929 2026-10-19T05:50:23.855464+0000\n10.0.2.15:6824/4228077307 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/1533044841 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/2768098679 2026-10-18T19:46:35.556850+0000\n10.0.2.15:0/1304950385 2026-10-18T21:24:31.410237+0000\n10.0.2.15:0/3155633547 2026-10-18T22:06:44.304908+0000\n10.0.2.15:0/929215377 2026-10-18T21:24:31.410237+0000\n10.0.2.15:6824/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:6824/2600747625 2026-10-18T23:34:31.804906+0000\n10.0.2.15:6825/2495859622 2026-10-18T23:04:42.393240+0000\n10.0.2.15:6825/309297135 2026-10-19T03:49:50.908611+0000\n10.0.2.15:0/236988318 2026-10-18T20:01:51.062380+0000\n10.0.2.15:0/3985671070 2026-10-18T23:04:42.393240+0000\n10.0.2.15:0/3319805666 2026-10-18T20:01:51.062380+0000\n10.0.2.15:6824/2495859622 2026-10-18T23:04:42.393240+0000\nlisted 55 entries",
+    "fsid": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "health": "HEALTH_OK",
+    "healthDetail": "HEALTH_OK",
+    "osdmap": {
+     "epoch": 188,
+     "num_in_osds": 3,
+     "num_osds": 3,
+     "num_remapped_pgs": 0,
+     "num_up_osds": 3,
+     "osd_in_since": 1792215315,
+     "osd_up_since": 1792317777
+    },
+    "pgs": [
+     {
+      "count": 33,
+      "state_name": "active+clean"
+     }
+    ],
+    "rbdInfo": {
+     "access_timestamp": "Sun Oct 18 12:36:59 2026",
+     "block_name_prefix": "rbd_data.2f67fd3d8d0a2",
+     "create_timestamp": "Sun Oct 18 12:36:59 2026",
+     "features": [
+      "layering"
+     ],
+     "flags": [],
+     "format": 2,
+     "id": "2f67fd3d8d0a2",
+     "modify_timestamp": "Sun Oct 18 12:36:59 2026",
+     "name": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+     "object_size": 4194304,
+     "objects": 512,
+     "op_features": [],
+     "order": 22,
+     "size": 2147483648,
+     "snapshot_count": 0
+    },
+    "rbdStatus": {
+     "watchers": []
+    }
+   },
+   "guest": [
+    "== kernel 7.0.0-34-generic, boot f728e937-6023-44ca-a548-b190a5821993, up 10421.76 s",
+    "== rbd devices",
+    "rbd0 orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd client client194119 addr 10.0.2.15:0/4215951233",
+    "== RBD filesystems mounted",
+    "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd /dev/rbd0 ext4 rw,relatime,stripe=1024",
+    "/var/lib/kubelet/pods/b1a4fd21-2843-4aa3-96b0-84897f626678/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount /dev/rbd0 ext4 rw,relatime,stripe=1024"
+   ],
+   "mapping": {
+    "attachments": 0,
+    "attempt": 0,
+    "desired": "SLEEPING",
+    "generation": 6,
+    "operation": "DELETE_POD:COMPLETED",
+    "pod": null,
+    "podUid": null,
+    "proof": "OBSERVED_STOP",
+    "proofRetired": true,
+    "reason": null,
+    "secretGeneration": "5",
+    "state": "SLEEPING"
+   },
+   "objects": {
+    "bootstrapSecret": {
+     "createdAt": "2026-10-18T12:52:24Z",
+     "generation": "5",
+     "name": "mr-boot-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+     "uid": "bac60929-ca22-4bf3-96bf-42209d8417c5"
+    },
+    "pod": null,
+    "podsUsingTheClaim": [],
+    "pv": {
+     "claimUid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+     "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+     "fsType": "ext4",
+     "image": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+     "name": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154",
+     "pool": "orbit-mr-rbd",
+     "reclaimPolicy": "Retain",
+     "uid": "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc",
+     "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834"
+    },
+    "pvc": {
+     "accessModes": [
+      "ReadWriteOnce"
+     ],
+     "annotations": {
+      "orbit.dev/owner-id": "01a14eff-3644-71dc-bd3a-169457b10c34",
+      "orbit.dev/runner-id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+      "pv.kubernetes.io/bind-completed": "yes",
+      "pv.kubernetes.io/bound-by-controller": "yes",
+      "volume.beta.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com",
+      "volume.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com"
+     },
+     "name": "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+     "phase": "Bound",
+     "storageClassName": "runner-data",
+     "uid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+     "volumeName": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154"
+    },
+    "volumeAttachments": []
+   }
+  }
+ },
+ "seconds": 190.9,
+ "startedAt": "2026-10-18T12:52:42.244+00:00",
+ "step": "prepare"
+}

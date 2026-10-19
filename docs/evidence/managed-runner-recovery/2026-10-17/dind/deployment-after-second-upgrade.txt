@@ -1,0 +1,19 @@
+== checkout: e51574350d7c215a92d76f0e0859b927527b38c8 fix(managed-runners): a restored volume is retryable only once nothing holds it
+== services
+orbit-apiserver orbit-apiserver:local Up 33 seconds (healthy)
+orbit-docker-channel orbit-docker-channel:local Up 14 seconds (healthy)
+orbit-gateway nginx:alpine Up 21 minutes (healthy)
+orbit-pgbackup postgres:16-alpine Up 21 minutes
+orbit-postgres postgres:16-alpine Up 21 minutes (healthy)
+orbit-web orbit-web Up 22 seconds (healthy)
+orbit-wiki-worker orbit-apiserver:local Up 22 seconds
+== runner image in the files
+  "image": "sha256:980c46799e1f825db03367062dcc0df219cd766ac7c6f49349c4dfc6eadd15dc",
+    "image": "sha256:980c46799e1f825db03367062dcc0df219cd766ac7c6f49349c4dfc6eadd15dc",
+== the apiserver build has the e51574350 restore rule
+1
+== the runner image revision
+e51574350d7c215a92d76f0e0859b927527b38c8 sha256:980c46799e1f825db03367062dcc0df219cd766ac7c6f49349c4dfc6eadd15dc
+== the runners
+a@d7-drill.test | READY | 4 | 2
+b@d7-drill.test | READY | 5 | 0

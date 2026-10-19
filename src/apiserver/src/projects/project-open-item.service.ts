@@ -20,6 +20,7 @@ import {
   type OpenItemHandling,
   type OpenItemOutcome,
   type ProjectDoneNotReadyBody,
+  type ProjectClosedQuestion,
   type ProjectDoneRequestDeclineBody,
   type ProjectDoneRequestDeclined,
   type ProjectDoneRequestFiled,
@@ -55,10 +56,11 @@ import {
   deliveryReviewDetailLine,
   markOpenItemsHandling,
   openItemActions,
+  openItemChat,
   openItemRequiredAction,
   primaryAction,
-  openItemChat,
   openItemFacts,
+  type LandedFix,
   openItemMessage,
   openItemOwed,
   openItemTurnId,
@@ -70,6 +72,7 @@ import {
 } from './project-open-item';
 import { escalatesAt } from './open-item-escalation.service';
 import { canonicalJson } from './canonical-json';
+import { mainBranchOf } from './project-criterion-landing';
 import {
   RetryableLandingFailureClass,
   SkippedMergeCheckRecord,
@@ -373,19 +376,28 @@ export interface PromotionCheckRetried {
 
 /** The project's open exceptions, split by who is expected to act (§4.8), and the coordinator's
  *  open requests to start it and to record it done — beside them rather than among them
- *  (`ProjectOpenItemsView`) — plus what the coordinator closed in the last day (§4.7 H5). */
+ *  (`ProjectOpenItemsView`) — plus what the coordinator closed in the last day (§4.7 H5) and the
+ *  questions that have ended (§5.2 R10, R12). */
 export interface ProjectOpenItems {
   needsYou: OpenItemRow[];
   withCoordinator: OpenItemRow[];
   startRequest: OpenItemRow | null;
   doneRequest: OpenItemRow | null;
   settled: OpenItemRow[];
+  closedQuestions: ProjectClosedQuestion<Date>[];
+  /** The main branch a row's merge into main goes into; null with no repository bound. */
+  mainBranch: string | null;
 }
 
 /** How far back `settled` reaches, and how many it holds at most (§4.7 H5): enough for the card a
  *  conversation drew to be seen changing state, not a history of the project. */
 const SETTLED_WITHIN_MS = 24 * 60 * 60 * 1_000;
 const SETTLED_SHOWN = 20;
+
+/** How many ended questions the read carries (§4.8): a count and not a window of days, because a
+ *  question's record is drawn wherever it ended, and a quiet week must not take the last ones
+ *  out of the conversation they were asked in. */
+const CLOSED_QUESTIONS_SHOWN = 50;
 
 /** The item stopped being owed to the coordinator while its turn was being written. */
 class OpenItemNoLongerOwed extends Error {}
@@ -556,6 +568,7 @@ export class ProjectOpenItemService {
         projectId: true,
         ownerId: true,
         handlingJobId: true,
+        integrationJobId: true,
         project: { select: { coordinatorEnabled: true, coordinatorSessionId: true } },
       },
     });
@@ -596,6 +609,7 @@ export class ProjectOpenItemService {
       return;
     }
     const clientTurnId = openItemTurnId(item.id, item.assignedAt);
+    const fixed = await this.landedFixesOf(item.id, item.integrationJobId);
     try {
       const turn = await this.sessions.createTurn(item.ownerId, sessionId, {
         clientTurnId,
@@ -607,6 +621,8 @@ export class ProjectOpenItemService {
           taskId: item.taskId,
           promotionId: item.promotionId,
           payload: item.payload,
+          landedFixes: fixed.landedFixes,
+          failedSourceSha: fixed.failedSourceSha,
         }),
         intent: 'NEXT_TURN',
       }, {
@@ -651,6 +667,47 @@ export class ProjectOpenItemService {
       }
       throw error;
     }
+  }
+
+  /**
+   * The fixes of this item whose landing is in, and the commit the item's own failed landing was
+   * handed (§4.4 X-D4 5). Read only from rows that no longer change — a fix task's id and its latest
+   * landing job once that job has ended — so the same key words the same text (G6). A landing that
+   * answered about a branch the work did not end on is followed by the generation it queued, so the
+   * latest job is the one that counts; a `NOTHING_TO_LAND` counts only with the receipt it writes
+   * when the task has no work of its own anywhere.
+   */
+  private async landedFixesOf(
+    itemId: string,
+    failedJobId: string | null,
+  ): Promise<{ landedFixes: LandedFix[]; failedSourceSha: string | null }> {
+    const fixes = await this.prisma.task.findMany({ where: { fixesOpenItemId: itemId }, select: { id: true } });
+    if (fixes.length === 0) return { landedFixes: [], failedSourceSha: null };
+    const jobs = await this.prisma.projectIntegrationJob.findMany({
+      where: { taskId: { in: fixes.map((fix) => fix.id) }, kind: 'LAND_TASK' },
+      orderBy: [{ generation: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true, taskId: true, state: true, targetRef: true, landedSha: true, receiptIds: true, finishedAt: true,
+      },
+    });
+    const latest = new Map<string, (typeof jobs)[number]>();
+    for (const job of jobs) if (job.taskId && !latest.has(job.taskId)) latest.set(job.taskId, job);
+    const landedFixes = [...latest.values()]
+      .filter((job) => job.state === 'LANDED' || job.state === 'ALREADY_LANDED'
+        || (job.state === 'NOTHING_TO_LAND' && job.receiptIds.length > 0))
+      .sort((a, b) => (a.finishedAt?.getTime() ?? 0) - (b.finishedAt?.getTime() ?? 0) || a.id.localeCompare(b.id))
+      .map((job) => ({
+        taskId: job.taskId!,
+        jobId: job.id,
+        state: job.state,
+        targetRef: job.targetRef,
+        landedSha: job.landedSha,
+      }));
+    if (landedFixes.length === 0) return { landedFixes, failedSourceSha: null };
+    const failed = failedJobId
+      ? await this.prisma.projectIntegrationJob.findUnique({ where: { id: failedJobId }, select: { sourceSha: true } })
+      : null;
+    return { landedFixes, failedSourceSha: failed?.sourceSha ?? null };
   }
 
   /**
@@ -778,7 +835,9 @@ export class ProjectOpenItemService {
    * payload carries none, which is also what the two clients draw from.
    *
    * Automatic left out is on: the owner's card opens with it on whatever is sent, and a coordinator
-   * that would keep it off says so in `why`.
+   * that would keep it off says so in `why`. A main branch (`upstreamRef`) is kept as suggested, and
+   * left out suggests none: the card then opens on this project's own choice, or this account's last
+   * for the repository, or main (L6).
    */
   async requestStart(
     ownerId: string,
@@ -791,6 +850,9 @@ export class ProjectOpenItemService {
         'a project that lands directly into main has no project branch to name',
       );
     }
+    if (body.projectBranchName != null && body.projectBranchName === body.upstreamRef) {
+      throw new BadRequestException('a project branch cannot be the upstream it integrates into');
+    }
     const why = body.why?.trim();
     if (!why) {
       throw new BadRequestException(
@@ -800,9 +862,16 @@ export class ProjectOpenItemService {
     const settings: ProjectStartSettings = {
       line: body.line,
       ...(body.projectBranchName != null ? { projectBranchName: body.projectBranchName } : {}),
+      ...(body.upstreamRef != null ? { upstreamRef: body.upstreamRef } : {}),
       automatic: body.automatic ?? true,
       maxConcurrentTasks: body.maxConcurrentTasks,
       mergeCheckCommand: body.mergeCheckCommand?.trim() || null,
+      // Named or not named, never defaulted: a suggestion of the one-hour default and no suggestion
+      // at all read the same on the card — an empty box says "one hour unless set" — so inventing
+      // the number here would put a setting on the request that nobody chose.
+      ...(body.mergeCheckTimeoutSeconds !== undefined
+        ? { mergeCheckTimeoutSeconds: body.mergeCheckTimeoutSeconds }
+        : {}),
     };
     const asking = actingSessionId?.trim();
     return withTransactionRetry(this.prisma, async (tx) => {
@@ -2036,6 +2105,13 @@ export class ProjectOpenItemService {
    * the coordinator's open items about the candidate marked as being handled by that check — still
    * OPEN until it reports. A check that passes makes them HANDLED in the coordinator's name; one that
    * fails again supersedes them with its own item.
+   *
+   * A TIMED-OUT CHECK (§2.2 J-T9). A newest check that is RUNNING but silent past its limit is judged
+   * by the same read the job list draws (`readInFlightJobs`), and a retry of it first ends it as
+   * `ERROR · RUNNER_LOST` — the compare-and-set on the heartbeat it was judged from — then requeues
+   * the check like any other rerun, with the candidate readmitted from CHECKING as well as BLOCKED.
+   * The account owner's door (`retryPromotionCheckAsOwner`) is this same method, held to the same
+   * rules.
    */
   async retryPromotionCheck(
     ownerId: string,
@@ -2076,6 +2152,10 @@ export class ProjectOpenItemService {
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         select: { id: true, kind: true, generation: true, state: true, checks: true },
       });
+      // Whether a RUNNING check timed out, by the rule the job list draws it with (§1.6).
+      const [silent] = newestJob?.state === 'RUNNING'
+        ? await readInFlightJobs(tx, projectId, newestJob.id)
+        : [];
       const openItems = await tx.projectOpenItem.findMany({
         where: { projectId, promotionId, kind: { in: [...INTEGRATION_ITEM_KINDS] }, state: 'OPEN' },
         select: { id: true, kind: true, assignee: true, assigneeReason: true },
@@ -2085,10 +2165,17 @@ export class ProjectOpenItemService {
         requester: ownerRequester ? 'OWNER' : 'COORDINATOR',
         coordinatorEnabled: current.coordinatorEnabled,
         promotionState: locked.state,
-        newestJob,
+        newestJob: newestJob && { ...newestJob, timedOut: silent?.timedOut === true },
         openItems,
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
+      if (decision.endsTimedOutJob && !(silent && await endTimedOutLanding(tx, silent))) {
+        throw new ConflictException({
+          code: INTEGRATION_RETRY_IN_FLIGHT,
+          message: 'this check\'s runner reported again while the retry was being decided, so it has not '
+            + 'timed out any more. Read the project again.',
+        });
+      }
 
       const queued = await requeuePromotionCheck(tx, {
         promotionId,
@@ -2393,7 +2480,9 @@ export class ProjectOpenItemService {
    * attempted again does not answer one either: the task being carried to a new commit is not the
    * new generation §4.2 names, and an item that closed on every retry would close on the way to the
    * landing that is supposed to answer it. Cancelled and replaced are the two that do — nobody is
-   * going to land a task that is gone.
+   * going to land a task that is gone — and they name the fact they saw the way the item's own door
+   * table names it: `SUCCESSOR_FILED` when a successor took the task over (`taskRepair`'s
+   * `task_create`), `TASK_CLOSED` when it was cancelled (`task_update`'s cancel).
    */
   async resolveByFact(taskIds: ReadonlyArray<string | null | undefined>): Promise<void> {
     const ids = unique(taskIds);
@@ -2426,7 +2515,9 @@ export class ProjectOpenItemService {
       await this.prisma.$executeRaw(Prisma.sql`
         UPDATE "project_open_item" i
            SET "state" = 'RESOLVED',
-               "resolution" = 'TASK_CLOSED',
+               "resolution" = CASE
+                 WHEN t."superseded_by_task_id" IS NOT NULL THEN 'SUCCESSOR_FILED'
+                 ELSE 'TASK_CLOSED' END,
                "resolved_at" = now(),
                "resolved_by" = 'PLATFORM',
                "updated_at" = now()
@@ -2636,6 +2727,7 @@ export class ProjectOpenItemService {
     const deliveredAt = new Map(
       turns.map((turn) => [`${turn.sessionId}:${turn.clientTurnId}`, turn.deliveredAt]),
     );
+    const mainBranch = mainBranchOf(await readProjectCodebase(this.prisma, projectId));
     const view = rows.map((row): OpenItemRow => {
       const [sent] = row.deliveries;
       const handed = sent ? deliveredAt.get(`${sent.sessionId}:${sent.clientTurnId}`) ?? null : null;
@@ -2717,6 +2809,7 @@ export class ProjectOpenItemService {
           state: 'OPEN',
           handledBy: handledBy.get(row.id) ?? [],
           handoverNote: row.handoverNote,
+          mainBranch,
         }),
         primaryAction: primaryAction({
           kind: row.kind,
@@ -2808,7 +2901,65 @@ export class ProjectOpenItemService {
       startRequest: view.find((row) => row.kind === START_REQUEST_KIND) ?? null,
       doneRequest: view.find((row) => row.kind === DONE_REQUEST_KIND) ?? null,
       settled: settledView,
+      closedQuestions: await this.closedQuestions(projectId),
+      mainBranch,
     };
+  }
+
+  /**
+   * The questions this project's coordinator asked that have ended, newest first (§4.8, §5.2 R10,
+   * R12): answered by the owner, or withdrawn. Each carries the question as it was asked and what
+   * became of it, so the card the conversation drew is drawn as the record it became — after a
+   * relaunch, and on a device that never saw it open — instead of vanishing with the open row.
+   *
+   * Where the answer went is the first ANSWER delivery (§5.2 R11 may add one per later
+   * coordinator); none yet is an answer still waiting for this project's next coordinator.
+   */
+  private async closedQuestions(projectId: string): Promise<ProjectClosedQuestion<Date>[]> {
+    const rows = await this.prisma.projectOpenItem.findMany({
+      where: {
+        projectId,
+        kind: 'COORDINATOR_QUESTION',
+        state: 'RESOLVED',
+        resolution: { in: ['ANSWERED', 'WITHDRAWN'] },
+      },
+      orderBy: [{ resolvedAt: 'desc' }, { id: 'desc' }],
+      take: CLOSED_QUESTIONS_SHOWN,
+      select: {
+        id: true,
+        payload: true,
+        createdAt: true,
+        resolution: true,
+        resolvedBy: true,
+        resolvedAt: true,
+        resolutionNote: true,
+        answer: true,
+        deliveries: {
+          where: { purpose: 'ANSWER' },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          take: 1,
+          select: { sessionId: true, createdAt: true },
+        },
+      },
+    });
+    return rows.map((row) => {
+      const answered = row.resolution === 'ANSWERED';
+      const answer = answered ? (row.answer as unknown as OwnerAnswer | null) : null;
+      const [delivered] = row.deliveries;
+      return {
+        itemId: row.id,
+        question: row.payload as unknown as CoordinatorQuestion,
+        askedAt: row.createdAt,
+        resolution: answered ? 'ANSWERED' : 'WITHDRAWN',
+        resolvedBy: row.resolvedBy === 'COORDINATOR' ? 'COORDINATOR' : 'USER',
+        resolvedAt: row.resolvedAt!,
+        answer: answer ? { option: answer.option ?? null, text: answer.text ?? null } : null,
+        delivery: answered && delivered
+          ? { sessionId: delivered.sessionId, at: delivered.createdAt }
+          : null,
+        withdrawReason: answered ? null : row.resolutionNote,
+      };
+    });
   }
 
   /**

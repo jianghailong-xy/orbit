@@ -9,8 +9,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   DecisionStrip,
   GO_TO_NEXT_CARD_HINT,
-  needsDecisionCount,
-  revealOpenItemCard,
+  revealOwnerItemCard,
   wayPosition,
   type ExceptionCardPointer,
   type PendingDecisionQueue,
@@ -122,12 +121,60 @@ const caretOf = (html: string): string | undefined =>
   /class="decision-strip-caret"[^>]*>([^<]*)</u.exec(html)?.[1];
 
 describe('the cards the owner presses, on the line', () => {
+  it('uses the short server need and keeps a pause ahead of other exceptions', () => {
+    const escalated = {
+      ...pointer({ ...ESCALATED, requiredAction: 'Fix the combined tree.' }, false),
+      need: 'Checks failed',
+    } satisfies ExceptionCardPointer;
+    const html = renderToStaticMarkup(
+      <DecisionStrip
+        queue={queue()}
+        open={false}
+        hasCard={() => true}
+        onToggle={() => {}}
+        needsYou={[escalated, pointer(PAUSED, false)]}
+      />,
+    );
+    expect(html).toContain('The coordinator paused itself');
+    expect(html).toContain('aria-label="2 waiting:');
+    const onlyEscalation = renderToStaticMarkup(
+      <DecisionStrip
+        queue={queue()}
+        open={false}
+        hasCard={() => true}
+        onToggle={() => {}}
+        needsYou={[escalated]}
+      />,
+    );
+    expect(onlyEscalation).toContain('Escalated to you · Checks failed');
+  });
+
+  it('keeps needsYou to anchored exceptions, not question or merge cards', () => {
+    const html = renderToStaticMarkup(
+      <DecisionStrip
+        queue={queue()}
+        open={false}
+        hasCard={() => true}
+        onToggle={() => {}}
+        needsYou={[
+          pointer({ ...ESCALATED, kind: 'COORDINATOR_QUESTION' }, false),
+          pointer({ ...ESCALATED, itemId: 'unanchored', kind: 'INTEGRATION_ERROR', escalatedAt: null, waitingSince: null }, false),
+          pointer({ ...PAUSED, itemId: 'merge', kind: 'PROMOTION_APPROVAL' }, false),
+          pointer(ESCALATED, false),
+        ]}
+      />,
+    );
+    expect(html).toContain('aria-label="1 waiting:');
+    expect(html).toContain(ESCALATED.title);
+    expect(html).not.toContain('unanchored');
+  });
+
   it('names an escalation in its session row’s word, then the item, with how long it has been theirs', () => {
     const html = drawn([pointer(ESCALATED, true)]);
-    expect(html).toContain(`>Escalated to you: ${ESCALATED.title}<`);
+    expect(html).toContain(`>Escalated to you · ${ESCALATED.title}<`);
     expect(html).toContain('>3h 10m<');
     expect(html).toContain(
-      `aria-label="${needsDecisionCount(1)}: Escalated to you: ${ESCALATED.title}"`,
+      `aria-label="1 waiting: Escalated to you · ${ESCALATED.title}"`,
     );
   });
 
@@ -146,7 +193,7 @@ describe('the cards the owner presses, on the line', () => {
     // The evidence row is older, and is still named second: its card waits at the foot of the
     // conversation, under every message — the exception's is among them.
     const html = drawn([pointer(ESCALATED, true)], [evidence()]);
-    expect(html).toContain(`>Escalated to you: ${ESCALATED.title}<`);
+    expect(html).toContain(`>Escalated to you · ${ESCALATED.title}<`);
     expect(html).not.toContain('>the derived pending queue<');
     expect(html).toContain(wayPosition(1, 2));
   });
@@ -213,7 +260,7 @@ async function page(
             hasCard={() => true}
             onToggle={() => {}}
             exceptions={exceptions}
-            onRevealException={(row) => revealOpenItemCard(row.itemId)}
+            onRevealException={(row) => revealOwnerItemCard(row.itemId)}
           />
           {exceptions.map(({ row }) => (
             <ItemAsCard key={row.itemId} projectId={PROJECT_ID} row={row} now={Date.now()} />
@@ -261,7 +308,7 @@ describe('a press goes to the card', () => {
     await press(scope);
     // The line names the card it went to; the next press goes down, to the question at the foot.
     expect(line(scope).querySelector('.decision-strip-title')?.textContent)
-      .toBe(`Escalated to you: ${ESCALATED.title}`);
+      .toBe(`Escalated to you · ${ESCALATED.title}`);
     expect(line(scope).getAttribute('title')).toBe(GO_TO_NEXT_CARD_HINT);
     expect(line(scope).querySelector('.decision-strip-caret')?.textContent).toBe('↓');
   });

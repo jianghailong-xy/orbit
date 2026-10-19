@@ -1,0 +1,8 @@
+[orbit-runner 2026-10-17T22:07:51.865Z] managed runner instance identity read; it is sent with every request
+[orbit-runner 2026-10-17T22:07:51.866Z] runner "orbit-managed" online -> https://10.0.2.2:13711 (max 2 concurrent)
+[orbit-runner 2026-10-17T22:08:06.870Z] claude plan-usage unavailable: no oauth token (api-key auth?)
+[orbit-runner 2026-10-17T22:10:44.308Z] claim failed: Get "https://10.0.2.2:13711/api/runner/sessions/claim": EOF
+[orbit-runner 2026-10-17T22:12:18.593Z] claim failed: Get "https://10.0.2.2:13711/api/runner/sessions/claim": read tcp 10.42.0.7:40814->10.0.2.2:13711: read: connection reset by peer
+[orbit-runner 2026-10-17T22:14:19.039Z] claim failed: Get "https://10.0.2.2:13711/api/runner/sessions/claim": EOF
+[orbit-runner 2026-10-17T22:15:35.859Z] claim failed: Get "https://10.0.2.2:13711/api/runner/sessions/claim": read tcp 10.42.0.7:35678->10.0.2.2:13711: read: connection reset by peer
+[orbit-runner 2026-10-17T22:15:51.875Z] heartbeat failed: Post "https://10.0.2.2:13711/api/runner/heartbeat": EOF

@@ -43,6 +43,9 @@ public enum RunnerPageCopy {
     public static let RUNNER_ENGINE_NOT_INSTALLED = "Not installed"
     public static let RUNNER_ENGINE_UP_TO_DATE = "up to date"
     public static let RUNNER_ENGINE_NO_QUOTA = "No quota reported"
+    /// A Kimi login whose plan carries no quota limit: its quota was read and held no window at all —
+    /// not a read that failed or never ran (RUNNER_ENGINE_NO_QUOTA).
+    public static let RUNNER_ENGINE_NO_QUOTA_LIMIT = "No quota limit"
     public static let RUNNER_SIGN_IN = "Sign In"
     public static let RUNNER_UPDATE_ENGINES_NOW = "Update Engines Now"
     public static let RUNNER_REFRESH_MODEL_LISTS = "Refresh Model Lists"

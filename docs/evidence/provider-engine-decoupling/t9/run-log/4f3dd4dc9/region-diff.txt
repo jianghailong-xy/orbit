@@ -1,0 +1,16 @@
+09-composer-key-deleted-dark.png: inside (120,432,960,2040) changed=2405 box=(120, 1970, 960, 2040); outside changed=350520 box=(0, 1916, 1080, 2337)
+09-composer-key-deleted-light.png: inside (120,432,960,2040) changed=0 box=None; outside changed=0 box=None
+10-task-pin-engine-menu-dark.png: inside (369,500,405,526) changed=522 box=(369, 500, 405, 526); outside changed=0 box=None
+10-task-pin-engine-menu-light.png: inside (369,500,405,526) changed=521 box=(369, 500, 405, 526); outside changed=0 box=None
+11-task-pin-provider-menu-dark.png: inside (369,500,405,526) changed=522 box=(369, 500, 405, 526); outside changed=0 box=None
+11-task-pin-provider-menu-light.png: inside (369,500,405,526) changed=521 box=(369, 500, 405, 526); outside changed=0 box=None
+12-task-pinned-dark.png: inside (369,500,405,526) changed=522 box=(369, 500, 405, 526); outside changed=0 box=None
+12-task-pinned-light.png: inside (369,500,405,526) changed=521 box=(369, 500, 405, 526); outside changed=0 box=None
+sha=4f3dd4dc90a88eb00ce502f44a33395de7a4d23a
+dirty=false
+api=36
+theme=light
+sha=4f3dd4dc90a88eb00ce502f44a33395de7a4d23a
+dirty=false
+api=36
+theme=dark

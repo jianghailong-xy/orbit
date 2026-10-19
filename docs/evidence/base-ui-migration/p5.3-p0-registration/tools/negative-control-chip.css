@@ -1,0 +1,4 @@
+
+/* Scratch negative control of the P5.3 P0 registration (34dTUdzY6mgNk4CGh7ZHl), never delivered: the staged file
+   chip's name moves 1px to the right, so only session-attachment-staged changes (eight environments). */
+.composer-file-name { position: relative; left: 1px; }

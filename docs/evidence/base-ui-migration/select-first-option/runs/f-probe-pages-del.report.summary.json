@@ -1,0 +1,1149 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/probe-pages.config.mjs"
+  ],
+  "configFile": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration/probe-pages.config.mjs",
+  "rootDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-pages.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-pages.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-pages.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-pages.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-pages.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-pages.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-pages.browser.mjs"
+    ],
+    "timeout": 90000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "probe-pages.browser.mjs"
+    ],
+    "timeout": 90000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "none",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4531 --strictPort",
+   "cwd": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/del/src/web/",
+   "url": "http://127.0.0.1:4531",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "probe-pages.browser.mjs",
+   "file": "probe-pages.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [
+    {
+     "title": "pages: the coordinator workspace pickers",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 4104,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-light-desktop rebind {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline (current)\"],\"afterEnter\":\"Orbit baseline (current)\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE chromium-light-desktop choose {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline\"],\"afterEnter\":\"Orbit baseline\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:21.060Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rebind-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choose-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-coordinator",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-407b3-ordinator-workspace-pickers-chromium-light-desktop/attachments/computed-styles-and-timings-7e37aea371838b033f7fa2033fbc4826ecfd825b.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-34c86c0e78f8d80aec10",
+     "file": "probe-pages.browser.mjs",
+     "line": 34,
+     "column": 1
+    },
+    {
+     "title": "pages: a shared link that stops on a date, and a stopped task with no suggestion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-desktop",
+       "projectName": "chromium-light-desktop",
+       "results": [
+        {
+         "workerIndex": 0,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3234,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-light-desktop expires-until {\"before\":\"Until Oct 5\",\"highlighted\":[\"Never\"],\"afterEnter\":\"Never\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE chromium-light-desktop suggested-none {\"before\":\"No suggestion\",\"highlighted\":[\"No suggestionKeeps the agent's model, as today\"],\"afterEnter\":\"No suggestion\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:25.569Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "expires-until-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "suggested-none-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-pilot",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-57ab2-ped-task-with-no-suggestion-chromium-light-desktop/attachments/computed-styles-and-timings-f27c4049a8fc702f86f546b86e32e4014f500487.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-7b8e0f5415157dd8cc1d",
+     "file": "probe-pages.browser.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "pages: the coordinator workspace pickers",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2068,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-light-phone rebind {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline (current)\"],\"afterEnter\":\"Orbit baseline (current)\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE chromium-light-phone choose {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline\"],\"afterEnter\":\"Orbit baseline\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:29.158Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rebind-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choose-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-coordinator",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-407b3-ordinator-workspace-pickers-chromium-light-phone/attachments/computed-styles-and-timings-6f688fbb2f390d5dfeaa309c9b4f92b7b13905b5.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-fca80ecfbd759b6f7fc8",
+     "file": "probe-pages.browser.mjs",
+     "line": 34,
+     "column": 1
+    },
+    {
+     "title": "pages: a shared link that stops on a date, and a stopped task with no suggestion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-light-phone",
+       "projectName": "chromium-light-phone",
+       "results": [
+        {
+         "workerIndex": 1,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2635,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-light-phone expires-until {\"before\":\"Until Oct 5\",\"highlighted\":[\"Never\"],\"afterEnter\":\"Never\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE chromium-light-phone suggested-none {\"before\":\"No suggestion\",\"highlighted\":[\"No suggestionKeeps the agent's model, as today\"],\"afterEnter\":\"No suggestion\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:31.276Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "expires-until-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "suggested-none-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-pilot",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-57ab2-ped-task-with-no-suggestion-chromium-light-phone/attachments/computed-styles-and-timings-b2cc3f27589d6c2e5b59e887871cb5d59134cee5.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-298bfb0fd41a50ffa806",
+     "file": "probe-pages.browser.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "pages: the coordinator workspace pickers",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2039,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-dark-desktop rebind {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline (current)\"],\"afterEnter\":\"Orbit baseline (current)\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE chromium-dark-desktop choose {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline\"],\"afterEnter\":\"Orbit baseline\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:34.740Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rebind-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choose-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-coordinator",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-407b3-ordinator-workspace-pickers-chromium-dark-desktop/attachments/computed-styles-and-timings-4d9fd5860c11f0e2dc04b17a61a8031f057aa1ce.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-2275cda58b371a89e68c",
+     "file": "probe-pages.browser.mjs",
+     "line": 34,
+     "column": 1
+    },
+    {
+     "title": "pages: a shared link that stops on a date, and a stopped task with no suggestion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-desktop",
+       "projectName": "chromium-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 2,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2694,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-dark-desktop expires-until {\"before\":\"Until Oct 5\",\"highlighted\":[\"Never\"],\"afterEnter\":\"Never\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE chromium-dark-desktop suggested-none {\"before\":\"No suggestion\",\"highlighted\":[\"No suggestionKeeps the agent's model, as today\"],\"afterEnter\":\"No suggestion\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:36.835Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "expires-until-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "suggested-none-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-pilot",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-57ab2-ped-task-with-no-suggestion-chromium-dark-desktop/attachments/computed-styles-and-timings-ca6cad1a00693201d9ac1a42db65d6228ecbd5c4.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-06d1a12e04012b4bf523",
+     "file": "probe-pages.browser.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "pages: the coordinator workspace pickers",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2263,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-dark-phone rebind {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline (current)\"],\"afterEnter\":\"Orbit baseline (current)\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE chromium-dark-phone choose {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline\"],\"afterEnter\":\"Orbit baseline\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:40.560Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rebind-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choose-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-coordinator",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-407b3-ordinator-workspace-pickers-chromium-dark-phone/attachments/computed-styles-and-timings-0eada499f847b4dfb462a574b367b2e5dd5f3d60.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-9c4c9f3b73c103ceefb3",
+     "file": "probe-pages.browser.mjs",
+     "line": 34,
+     "column": 1
+    },
+    {
+     "title": "pages: a shared link that stops on a date, and a stopped task with no suggestion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "chromium-dark-phone",
+       "projectName": "chromium-dark-phone",
+       "results": [
+        {
+         "workerIndex": 3,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3034,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE chromium-dark-phone expires-until {\"before\":\"Until Oct 5\",\"highlighted\":[\"Never\"],\"afterEnter\":\"Never\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE chromium-dark-phone suggested-none {\"before\":\"No suggestion\",\"highlighted\":[\"No suggestionKeeps the agent's model, as today\"],\"afterEnter\":\"No suggestion\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:42.877Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "expires-until-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "suggested-none-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-pilot",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-57ab2-ped-task-with-no-suggestion-chromium-dark-phone/attachments/computed-styles-and-timings-71259eb2272dbce14aa9bfe14392744a5875b426.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-e6e28693803029fa1583",
+     "file": "probe-pages.browser.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "pages: the coordinator workspace pickers",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2936,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-light-desktop rebind {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline (current)\"],\"afterEnter\":\"Orbit baseline (current)\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE webkit-light-desktop choose {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline\"],\"afterEnter\":\"Orbit baseline\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:46.450Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rebind-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choose-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-coordinator",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-407b3-ordinator-workspace-pickers-webkit-light-desktop/attachments/computed-styles-and-timings-f254c6d89bd0be4d2317be4402f3ff94e0bf827f.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-097c492653b0e6cd4ceb",
+     "file": "probe-pages.browser.mjs",
+     "line": 34,
+     "column": 1
+    },
+    {
+     "title": "pages: a shared link that stops on a date, and a stopped task with no suggestion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-desktop",
+       "projectName": "webkit-light-desktop",
+       "results": [
+        {
+         "workerIndex": 4,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3389,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-light-desktop expires-until {\"before\":\"Until Oct 5\",\"highlighted\":[\"Never\"],\"afterEnter\":\"Never\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE webkit-light-desktop suggested-none {\"before\":\"No suggestion\",\"highlighted\":[\"No suggestionKeeps the agent's model, as today\"],\"afterEnter\":\"No suggestion\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:49.454Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "expires-until-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "suggested-none-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-pilot",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-57ab2-ped-task-with-no-suggestion-webkit-light-desktop/attachments/computed-styles-and-timings-9b5156972a3bbad28c0a8e0b676758bb6f56abe5.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-0993d37d1adcedfefa72",
+     "file": "probe-pages.browser.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "pages: the coordinator workspace pickers",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2513,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-light-phone rebind {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline (current)\"],\"afterEnter\":\"Orbit baseline (current)\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE webkit-light-phone choose {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline\"],\"afterEnter\":\"Orbit baseline\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:53.172Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rebind-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choose-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-coordinator",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-407b3-ordinator-workspace-pickers-webkit-light-phone/attachments/computed-styles-and-timings-7d474aa8597b4f2fc163c2ec73b1a8ed85caf733.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-325b621a011e7f65f67e",
+     "file": "probe-pages.browser.mjs",
+     "line": 34,
+     "column": 1
+    },
+    {
+     "title": "pages: a shared link that stops on a date, and a stopped task with no suggestion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-light-phone",
+       "projectName": "webkit-light-phone",
+       "results": [
+        {
+         "workerIndex": 5,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3047,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-light-phone expires-until {\"before\":\"Until Oct 5\",\"highlighted\":[\"Never\"],\"afterEnter\":\"Never\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE webkit-light-phone suggested-none {\"before\":\"No suggestion\",\"highlighted\":[\"No suggestionKeeps the agent's model, as today\"],\"afterEnter\":\"No suggestion\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:55.753Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "expires-until-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "suggested-none-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-pilot",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-57ab2-ped-task-with-no-suggestion-webkit-light-phone/attachments/computed-styles-and-timings-d9faa25b06477b51435be0bf17476cf6cd8a6e62.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-94562b06ada48b380757",
+     "file": "probe-pages.browser.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "pages: the coordinator workspace pickers",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2599,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-dark-desktop rebind {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline (current)\"],\"afterEnter\":\"Orbit baseline (current)\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE webkit-dark-desktop choose {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline\"],\"afterEnter\":\"Orbit baseline\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:50:59.115Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rebind-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choose-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-coordinator",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-407b3-ordinator-workspace-pickers-webkit-dark-desktop/attachments/computed-styles-and-timings-2ecd0e9d795a16259e2bda7f24884ea462d50d33.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-7eda36621331a8fe2bc9",
+     "file": "probe-pages.browser.mjs",
+     "line": 34,
+     "column": 1
+    },
+    {
+     "title": "pages: a shared link that stops on a date, and a stopped task with no suggestion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-desktop",
+       "projectName": "webkit-dark-desktop",
+       "results": [
+        {
+         "workerIndex": 6,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3137,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-dark-desktop expires-until {\"before\":\"Until Oct 5\",\"highlighted\":[\"Never\"],\"afterEnter\":\"Never\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE webkit-dark-desktop suggested-none {\"before\":\"No suggestion\",\"highlighted\":[\"No suggestionKeeps the agent's model, as today\"],\"afterEnter\":\"No suggestion\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:51:01.779Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "expires-until-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "suggested-none-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-pilot",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-57ab2-ped-task-with-no-suggestion-webkit-dark-desktop/attachments/computed-styles-and-timings-a180c646be399698392b6f9481c9f89b6b94f832.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-ce44d701247573003523",
+     "file": "probe-pages.browser.mjs",
+     "line": 55,
+     "column": 1
+    },
+    {
+     "title": "pages: the coordinator workspace pickers",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 2449,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-dark-phone rebind {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline (current)\"],\"afterEnter\":\"Orbit baseline (current)\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE webkit-dark-phone choose {\"before\":\"Workspace\",\"highlighted\":[\"Orbit baseline\"],\"afterEnter\":\"Orbit baseline\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:51:05.227Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "rebind-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "choose-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-coordinator",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-407b3-ordinator-workspace-pickers-webkit-dark-phone/attachments/computed-styles-and-timings-73112f23c71b31dd7c4db0b5e4fd172847cb71a6.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-126c67b7c29da379a9c1",
+     "file": "probe-pages.browser.mjs",
+     "line": 34,
+     "column": 1
+    },
+    {
+     "title": "pages: a shared link that stops on a date, and a stopped task with no suggestion",
+     "ok": true,
+     "tags": [],
+     "tests": [
+      {
+       "timeout": 90000,
+       "annotations": [],
+       "expectedStatus": "passed",
+       "projectId": "webkit-dark-phone",
+       "projectName": "webkit-dark-phone",
+       "results": [
+        {
+         "workerIndex": 7,
+         "parallelIndex": 0,
+         "status": "passed",
+         "duration": 3066,
+         "errors": [],
+         "stdout": [
+          {
+           "text": "PROBE webkit-dark-phone expires-until {\"before\":\"Until Oct 5\",\"highlighted\":[\"Never\"],\"afterEnter\":\"Never\",\"listOpen\":false}\n"
+          },
+          {
+           "text": "PROBE webkit-dark-phone suggested-none {\"before\":\"No suggestion\",\"highlighted\":[\"No suggestionKeeps the agent's model, as today\"],\"afterEnter\":\"No suggestion\",\"listOpen\":false}\n"
+          }
+         ],
+         "stderr": [],
+         "retry": 0,
+         "startTime": "2026-10-10T01:51:07.746Z",
+         "annotations": [],
+         "attachments": [
+          {
+           "name": "expires-until-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "suggested-none-open",
+           "contentType": "image/png"
+          },
+          {
+           "name": "pages-pilot",
+           "contentType": "application/json"
+          },
+          {
+           "name": "computed-styles-and-timings",
+           "contentType": "application/json",
+           "path": "/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-pages-del-out/probe-pages.browser.mjs-pa-57ab2-ped-task-with-no-suggestion-webkit-dark-phone/attachments/computed-styles-and-timings-de67217452873f5a5c618d6bd52836029bfa6696.json"
+          }
+         ]
+        }
+       ],
+       "status": "expected"
+      }
+     ],
+     "id": "7375b037b52a53b3cb84-feb663b42e29b5745916",
+     "file": "probe-pages.browser.mjs",
+     "line": 55,
+     "column": 1
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-10T01:50:05.249Z",
+  "duration": 65638.371,
+  "expected": 16,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

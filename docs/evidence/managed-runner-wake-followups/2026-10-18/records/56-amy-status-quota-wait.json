@@ -1,0 +1,35 @@
+{
+  "at": "2026-10-18T04:15:20.977+00:00",
+  "owner": "amy",
+  "runner": {
+    "last_heartbeat_at": "2026-10-18T04:14:56.276",
+    "never_reported": false,
+    "status": "ONLINE"
+  },
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "desiredState": "RUNNING",
+    "initialProvider": "deepseek",
+    "managementState": "STARTING",
+    "reason": {
+      "code": "KUBERNETES_QUOTA_EXCEEDED",
+      "message": "The cluster's resource quota for managed runners has no room for this runner, so it is not started yet. It starts by itself once there is room, as when another runner goes to sleep or an operator raises the quota.",
+      "retryable": false
+    },
+    "retryAfter": "2026-10-18T04:15:50.438Z",
+    "usable": false
+  },
+  "workspace": {
+    "id": "34hqhoqOlpfZmupfebgI9",
+    "lastEngine": "claude",
+    "lastProvider": "deepseek",
+    "name": "Default",
+    "providerBuiltin": false
+  }
+}

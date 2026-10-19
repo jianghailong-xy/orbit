@@ -7,12 +7,29 @@ import OrbitKit
 struct QueuedControls {
     /// Takes the turn back off the queue (`ConsoleModel.cancelQueued`): a card's Cancel, a watch
     /// wake's Withdraw. Nil until the server's turn id is known — the DELETE keys on it — and for a
-    /// steer: written into the running turn rather than queued behind it, it is refused by the server,
-    /// which will not withdraw what the engine may already be reading.
+    /// steer: written into the running turn rather than queued behind it, it is taken back by its
+    /// own Withdraw (`SteerControls`), and only while nothing has read it.
     let onCancel: (() -> Void)?
 
     init(bubble: UserBubble, cancel: @escaping () -> Void) {
         onCancel = bubble.turnId == nil || bubble.steer ? nil : cancel
+    }
+}
+
+/// What a steer the reader typed has while nothing has read it, wherever it is drawn — still on the
+/// server's queue, or written into the running turn: the way to take it back
+/// (`ConsoleModel.withdrawSteer`), drawn beside how far it got, and whether that has been asked for
+/// and not yet answered.
+struct SteerControls {
+    /// Nil wherever there is nothing to take back (`SteerDelivery.offersWithdraw`): no steer, no
+    /// words of the reader's, or one the engine has read, failed or cannot drop unread.
+    let onWithdraw: (() -> Void)?
+    /// Asked for and not yet answered: the bubble reads "Withdrawing…" and offers nothing more.
+    let withdrawing: Bool
+
+    init(bubble: UserBubble, withdrawing asked: Set<String>, withdraw: @escaping () -> Void) {
+        onWithdraw = SteerDelivery.offersWithdraw(bubble) ? withdraw : nil
+        withdrawing = bubble.turnId.map { asked.contains($0) } ?? false
     }
 }
 
@@ -31,6 +48,11 @@ struct UserTurnRow: View {
     let bubble: UserBubble
     /// What only a turn still waiting on the queue has; nil for one the transcript holds.
     var queued: QueuedControls? = nil
+    /// What a steer has, queued or delivered; nil where there is no console to act through.
+    var steer: SteerControls? = nil
+    /// The words of a message that never reached the engine, back in the composer: nil unless
+    /// `SteerDelivery.offersPutBack` says so and there is a console to act through.
+    var putBack: (() -> Void)? = nil
 
     var body: some View {
         let b = bubble
@@ -66,6 +88,15 @@ struct UserTurnRow: View {
             OpenItemDeliveryCardView(card: card, text: b.text, ts: b.ts,
                                      undelivered: undelivered,
                                      attached: b.attached, onCancelQueued: cancel)
+        } else if let card = b.ownerAnswer, b.sessionReplies?.isEmpty ?? true {
+            // The owner's answer handed to the coordinator is the platform's message too: the question
+            // replayed in full and the answer, written for the AGENT — as a bubble, the reader's own
+            // question asked a second time. What the reader needs is that it was sent and when, so it
+            // is one line (`ownerAnswer`, `OwnerAnswer.parse`) that opens to those words, queued or
+            // delivered alike. Outcomes riding on it are the replies branch's below. No payload, the
+            // old reading.
+            OwnerAnswerLineView(card: card, text: b.text, undelivered: undelivered,
+                                attached: b.attached, onCancelQueued: cancel)
         } else if let card = b.taskStart {
             // A task run's opening turn is the brief written for the agent — the task, then four
             // steps of protocol — and nobody typed it either. With the task recorded beside it
@@ -108,7 +139,12 @@ struct UserTurnRow: View {
             // blocks the cards draw, so it has no bubble.
             VStack(alignment: .leading, spacing: 6) {
                 if queued == nil, !b.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    UserBubbleView(bubble: withoutNote(b))
+                    // The owner's answer handed to the coordinator is still nobody's message: its line.
+                    if let answer = b.ownerAnswer {
+                        OwnerAnswerLineView(card: answer, text: b.text, undelivered: undelivered)
+                    } else {
+                        UserBubbleView(bubble: withoutNote(b))
+                    }
                 }
                 SessionReplyCardsView(replies: replies, ts: b.ts, attached: replyRest(b),
                                       undelivered: undelivered, onCancelQueued: cancel)
@@ -116,8 +152,10 @@ struct UserTurnRow: View {
         } else if let wake = WatchWakeText.parse(b.text) {
             // A turn a watch queued is the watch's to show, not a message the user typed: it opens
             // with a raw UUID and carries the whole payload the agent read (web parity: NodeView).
+            // It is a line in the agent's stream, as a background job's news is, dashed while queued.
             WatchWakeCardView(wake: wake, text: b.text, ts: b.ts,
-                              undelivered: undelivered, onWithdraw: cancel)
+                              undelivered: undelivered, onWithdraw: cancel,
+                              queued: queued != nil)
         } else if let background = BackgroundWakeText.parse(wakeNote) {
             // A turn the control plane opened for a background job's news, or for a wakeup
             // coming due, is nobody's message either: the block IS the turn, so it is read off
@@ -129,7 +167,8 @@ struct UserTurnRow: View {
             // in it, in the reader's own name. A job that ended while a turn ran was written
             // into that turn as a steer: the same line, where its echo landed inside the running
             // turn, saying how far it got (web parity: `Transcript.tsx`'s `steer=`) — and, while
-            // it waits for the runner, with no Cancel, because nothing takes a steer back.
+            // it waits for the runner, with no Cancel: a steer is taken back only by its own
+            // Withdraw, and only when somebody typed it.
             VStack(alignment: .leading, spacing: 6) {
                 BackgroundWakeCardView(wake: background, ts: b.ts,
                                        undelivered: undelivered,
@@ -144,7 +183,7 @@ struct UserTurnRow: View {
                 }
             }
         } else {
-            UserBubbleView(bubble: b, onCancelQueued: cancel)
+            UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer, onPutBack: putBack)
         }
     }
 

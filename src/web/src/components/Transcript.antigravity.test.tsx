@@ -19,7 +19,7 @@ describe('Antigravity session remedies', () => {
   it('connects an encrypted Gemini key and offers the same-runtime switch', () => {
     const html = renderError('Failed to authenticate: Antigravity needs GEMINI_API_KEY');
     expect(html).toContain('Antigravity needs authentication');
-    expect(html).toContain('Sign in with Google on this runner, or connect a Gemini API key in Providers.');
+    expect(html).toContain('Sign in with Google on this runner, or connect a Gemini API key in Infrastructure.');
     expect(html).toContain('Connect Gemini</button>');
     expect(html).toContain('Switch to Gemini</button>');
     expect(html).not.toContain('environment variables');
@@ -34,7 +34,7 @@ describe('Antigravity session remedies', () => {
     expect(html).toContain('Waiting for a newer runner');
     expect(html).toContain('HPC runs Orbit runner 0.1.208; Antigravity needs 0.1.209 or newer.');
     expect(html).toContain('The runner updates itself when no session is running on it, and this session starts then.');
-    expect(html).toContain('Open in Providers</button>');
+    expect(html).toContain('Open in Infrastructure</button>');
     expect(html).not.toContain('Install</button>');
   });
 
@@ -54,9 +54,9 @@ describe('Antigravity session remedies', () => {
     for (const provider of ['antigravity', 'gemini-key']) {
       const html = renderError(error, { ...help, provider });
       expect(html).toContain('Antigravity CLI isn&#x27;t installed on HPC');
-      expect(html).toContain('Install it from Providers, then send your message again.');
+      expect(html).toContain('Install it from Infrastructure, then send your message again.');
       expect(html).toContain('Install</button>');
-      expect(html).toContain('Open in Providers</button>');
+      expect(html).toContain('Open in Infrastructure</button>');
       expect(html).not.toContain('orbit doctor');
     }
     expect(renderError('API Error: bad input')).toContain('chat-error');
@@ -66,7 +66,7 @@ describe('Antigravity session remedies', () => {
   it('keeps the raw diagnosis on a shared transcript without repair context', () => {
     const html = renderToStaticMarkup(<Transcript events={[{ seq: 1, type: 'error', payload: { message: 'Antigravity CLI ("agy") not found' } }]} />);
     expect(html).toContain('chat-error');
-    expect(html).not.toContain('Open in Providers');
+    expect(html).not.toContain('Open in Infrastructure');
   });
 
   it('runs the connect, switch, install and provider actions and disables an unavailable switch', async () => {

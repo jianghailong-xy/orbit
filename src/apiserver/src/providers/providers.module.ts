@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AdminRoleGuard } from '../users/admin-role.guard';
 import { AdminProvidersController } from './admin-providers.controller';
 import { CodexLoginService } from './codex-login.service';
+import { DeepSeekBalanceService } from './deepseek-balance.service';
 import {
   CHATGPT_CODEX_BASE,
   OPENAI_OAUTH_TOKEN_URL,
@@ -28,6 +29,8 @@ import { SharedPoolsService } from './shared-pools.service';
     ProvidersService,
     ModelCatalogService,
     ProviderPlanUsageService,
+    // The DeepSeek account balance of a DeepSeek key, read with the stored key and cached per key.
+    DeepSeekBalanceService,
     AdminRoleGuard,
     SharedPoolsService,
     // The ChatGPT sign-in of a personal Codex pool (migration 0323): it spawns the official codex CLI's

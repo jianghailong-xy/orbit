@@ -55,9 +55,6 @@ struct WikiPlanPage: View {
     let jobCard: WikiPlanLogic.JobCard?
     /// How far the documents of the version in force are written.
     let written: (written: Int, total: Int)?
-    /// Where a draft runs, and on what: `orbit · wikova`, `local-vllm`.
-    let whereItRuns: String?
-    let provider: String?
     var busy = false
     /// The gate's errors of a change whose acceptance it refused, by proposal.
     var refused: [String: [WikiPlanGateError]] = [:]
@@ -231,7 +228,7 @@ struct WikiPlanPage: View {
                 .foregroundStyle(.secondary)
             Text(WikiPlanCopy.emptyTitle)
                 .font(.title3.bold())
-            Text(WikiPlanCopy.emptyText(provider: provider))
+            Text(WikiPlanCopy.emptyText)
                 .font(.orbitSubtext)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -241,7 +238,7 @@ struct WikiPlanPage: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(busy)
-            Text(WikiPlanCopy.emptyNote(where: whereItRuns, provider: provider))
+            Text(WikiPlanCopy.emptyNoteServer)
                 .font(.orbitLabel)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

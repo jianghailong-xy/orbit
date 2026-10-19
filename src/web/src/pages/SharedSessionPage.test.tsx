@@ -11,7 +11,7 @@ import {
   deriveSessionRunState,
   deriveSessionState,
 } from '@orbit/shared';
-import type { SharedEvent, SharedSession } from '../api';
+import type { SharedEvent, SharedSession, SharedSessionNow } from '../api';
 import { Transcript } from '../components/Transcript';
 import { encodeId } from '../lib/idCodec';
 import { TASK_START_OPEN_TASK } from '../lib/taskStartCard';
@@ -21,10 +21,11 @@ import * as rows from './SharedSessionPage.fixtures';
 /**
  * The public page of a shared session (`/s/<token>`), mounted whole on the routes T1 gave it:
  * GET /shared/:token for the newest page, /events?before= for each page above it, /events/:seq for
- * a clipped card opened. What is held here is what leaves the page and what a signed-out reader is
- * shown: one request to open it, one per page scrolled into, one per clipped card opened; a header
- * that says the session's state as the share answers it; and no link into the app, whose every page
- * sends that reader to sign in.
+ * a clipped card opened, /events?after= for what a live conversation adds. What is held here is what
+ * leaves the page and what a signed-out reader is shown: one request to open it, one per page
+ * scrolled into, one per clipped card opened, one every few seconds while the conversation is going
+ * and none once it is over; a header that says the session's state as the share answers it; and no
+ * link into the app, whose every page sends that reader to sign in.
  *
  * The transcript is this deployment's own rows (SharedSessionPage.fixtures.ts), and the page runs
  * at this deployment's own address, so a link a person pasted to one of its sessions is the in-app
@@ -93,6 +94,20 @@ let container: HTMLDivElement;
 let root: Root;
 let answer: SharedSession;
 let requests: string[];
+/** The session row as it stands now, and what it has added past TAIL: what `/events?after=` reads. */
+let current: rows.SessionRow;
+let added: SharedEvent[];
+let followAnswer: (after: number, limit: number) => unknown;
+
+/** What `/events?after=` answers (sessions.service.ts `getSharedEventsAfter`): the header as
+ *  `current` stands now, and the events of `added` past the seq asked for, `limit` at a time with
+ *  the cursor to the rest. */
+function followed(after: number, limit: number): SharedSessionNow {
+  const rest = added.filter((e) => e.seq > after);
+  const events = rest.slice(0, limit);
+  const { hasMore: _, ...header } = served(current, events, false);
+  return { ...header, after: rest.length > limit ? events[events.length - 1].seq : null };
+}
 
 const okJson = (body: unknown) =>
   ({ ok: true, status: 200, statusText: 'OK', json: async () => body, text: async () => JSON.stringify(body) }) as Response;
@@ -104,6 +119,8 @@ function share(url: string): Response {
   const u = new URL(url, window.location.origin);
   if (u.pathname === SHARE) return okJson(answer);
   if (u.pathname === `${SHARE}/events`) {
+    const after = u.searchParams.get('after');
+    if (after !== null) return okJson(followAnswer(Number(after), Number(u.searchParams.get('limit'))));
     const before = u.searchParams.get('before');
     const whole = !u.searchParams.has('maxPayload');
     if (before === null) return okJson({ events: whole ? TAIL_WHOLE : TAIL, hasMore: true });
@@ -119,6 +136,9 @@ beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   requests = [];
   answer = served(rows.T6_RUN, TAIL, true);
+  current = rows.T6_RUN;
+  added = [];
+  followAnswer = followed;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (url: string) => {
@@ -141,7 +161,8 @@ afterEach(() => {
 async function settle() {
   for (let i = 0; i < 6; i++) {
     await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      if (vi.isFakeTimers()) await vi.advanceTimersByTimeAsync(0);
+      else await new Promise((resolve) => setTimeout(resolve, 0));
     });
   }
 }
@@ -238,6 +259,170 @@ describe('the shared page, a page at a time', () => {
     await click([...card!.querySelectorAll('button.chat-more')].find((b) => /more lines/.test(b.textContent!))!);
     expect(RESULT_TEXT.endsWith('pool-claim-selection.pg.spec.ts')).toBe(true);
     expect(card!.textContent).toContain('pool-claim-selection.pg.spec.ts');
+  });
+});
+
+describe('a conversation still going', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Let `ms` of the page's clock pass, and what it set off land. */
+  async function elapse(ms: number) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+    await settle();
+  }
+  /** The reads of what the conversation has added, in the order they left. */
+  const followReads = () => transcriptReads().filter((url) => url.includes('after='));
+  const after = (seq: number) => `${SHARE}/events?after=${seq}&limit=200&maxPayload=2048`;
+  const pill = () => container.querySelector('header .status-pill')!.textContent;
+  // How the two progress lines read on the page: the second's words before its inline code.
+  const FIRST: string = rows.OLDER_PROGRESS_1.payload.text;
+  const SECOND: string = rows.OLDER_PROGRESS_2.payload.text.slice(0, 16);
+
+  async function mountRunning() {
+    answer = served(rows.THIS_RUN, TAIL, true);
+    current = rows.THIS_RUN;
+    await mountPage();
+  }
+
+  it('asks a running one what it has added every few seconds, and draws it below what is there', async () => {
+    await mountRunning();
+    added = [at(rows.OLDER_PROGRESS_1, 209)];
+    await elapse(3_999);
+    expect(followReads()).toEqual([]);
+
+    await elapse(1);
+    expect(followReads()).toEqual([after(208)]);
+    const text = container.textContent!;
+    expect(text.indexOf(FIRST)).toBeGreaterThan(
+      text.indexOf(rows.REFERENCES_REPLY.payload.text.slice(0, 8)),
+    );
+
+    added = [...added, at(rows.OLDER_PROGRESS_2, 210)];
+    await elapse(4_000);
+    expect(followReads()).toEqual([after(208), after(209)]);
+    expect(container.textContent).toContain(SECOND);
+    expect(pill()).toBe('Running');
+  });
+
+  it('redraws the header from each answer, and stops asking once the run is over and quiet', async () => {
+    await mountRunning();
+    expect(pill()).toBe('Running');
+    current = { ...rows.THIS_RUN, status: 'SUCCEEDED' };
+    added = [at(rows.OLDER_PROGRESS_1, 209)];
+
+    await elapse(4_000);
+    expect(pill()).toBe('Succeeded');
+    expect(container.textContent).toContain(FIRST);
+    // It moved as it ended, so it is asked once more, in case the last of it was still on its way.
+    await elapse(4_000);
+    expect(followReads()).toEqual([after(208), after(209)]);
+    await elapse(10 * 60_000);
+    expect(followReads()).toHaveLength(2);
+  });
+
+  it('asks one waiting on its owner now and then, and every few seconds again once it moves', async () => {
+    answer = served(rows.COORDINATOR, TAIL, true);
+    current = rows.COORDINATOR;
+    await mountPage();
+    await elapse(29_999);
+    expect(followReads()).toEqual([]);
+    await elapse(1);
+    expect(followReads()).toEqual([after(208)]);
+
+    // The owner answers: it is running again, and has said something.
+    current = { ...rows.COORDINATOR, status: 'RUNNING' };
+    added = [at(rows.OLDER_PROGRESS_1, 209)];
+    await elapse(30_000);
+    expect(followReads()).toEqual([after(208), after(208)]);
+    expect(pill()).toBe('Running');
+    await elapse(4_000);
+    expect(followReads()).toEqual([after(208), after(208), after(209)]);
+  });
+
+  it('asks a finished one nothing', async () => {
+    // beforeEach's answer: the T6 run, filed Completed.
+    added = [at(rows.OLDER_PROGRESS_1, 209)];
+    await mountPage();
+    await elapse(10 * 60_000);
+    expect(transcriptReads()).toEqual([`${SHARE}?limit=200&maxPayload=2048`]);
+  });
+
+  it('reads a backlog through at once, a page at a time, then waits again', async () => {
+    await mountRunning();
+    added = Array.from({ length: 250 }, (_, i) => at(rows.OLDER_PROGRESS_1, 209 + i));
+    await elapse(4_000);
+    expect(followReads()).toEqual([after(208), after(408)]);
+    await elapse(4_000);
+    expect(followReads()).toEqual([after(208), after(408), after(458)]);
+  });
+
+  it('asks nothing while its tab is not looked at, and catches up the moment it is', async () => {
+    let hidden = false;
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+    try {
+      await mountRunning();
+      hidden = true;
+      added = [at(rows.OLDER_PROGRESS_1, 209)];
+      await elapse(10 * 60_000);
+      expect(followReads()).toEqual([]);
+
+      hidden = false;
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'));
+      });
+      await settle();
+      expect(followReads()).toEqual([after(208)]);
+      expect(container.textContent).toContain(FIRST);
+    } finally {
+      delete (document as { hidden?: boolean }).hidden;
+    }
+  });
+
+  it('keeps a reader at the end at the end, and leaves one who scrolled up where they are', async () => {
+    await mountRunning();
+    // The layout jsdom has none of: a 500px viewport over content as tall as its text is long.
+    const scroller = container.querySelector<HTMLElement>('.share-scroll')!;
+    let top = 0;
+    Object.defineProperties(scroller, {
+      clientHeight: { configurable: true, get: () => 500 },
+      scrollHeight: { configurable: true, get: () => scroller.textContent!.length },
+      scrollTop: { configurable: true, get: () => top, set: (v: number) => { top = v; } },
+    });
+    expect(scroller.scrollHeight).toBeGreaterThan(2_000);
+
+    top = scroller.scrollHeight - 500;
+    added = [at(rows.OLDER_PROGRESS_1, 209)];
+    await elapse(4_000);
+    expect(container.textContent).toContain(FIRST);
+    expect(top).toBe(scroller.scrollHeight);
+
+    top = 1_000;
+    added = [...added, at(rows.OLDER_PROGRESS_2, 210)];
+    await elapse(4_000);
+    expect(container.textContent).toContain(SECOND);
+    expect(top).toBe(1_000);
+  });
+
+  it('against a server from before `after`, adds only what is new and keeps its header', async () => {
+    await mountRunning();
+    // That server reads `after` as nothing: its tail page, newest last, and no header.
+    followAnswer = () => ({ events: [...TAIL, ...added], hasMore: true });
+    added = [at(rows.OLDER_PROGRESS_1, 209)];
+    await elapse(4_000);
+    expect(followReads()).toEqual([after(208)]);
+    const text = container.textContent!;
+    expect(text.split(FIRST)).toHaveLength(2);
+    expect(text.split(rows.REFERENCES_REPLY.payload.text.slice(0, 8))).toHaveLength(2);
+    expect(pill()).toBe('Running');
+    await elapse(4_000);
+    expect(followReads()).toEqual([after(208), after(209)]);
   });
 });
 

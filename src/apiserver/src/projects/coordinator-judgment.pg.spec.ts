@@ -316,8 +316,8 @@ test('one wake opens exactly one judgment session, and five deliveries of the fa
       assert.equal(sessions[0].runSource, SessionRunSource.PROJECT_COORDINATOR);
       // A judgment is not an execution: it takes no task claim and occupies no project slot.
       assert.equal(sessions[0].taskId, null);
-      assert.match(sessions[0].title, /^判断：/);
-      assert.match(sessions[0].prompt!, /发生了什么：/);
+      assert.match(sessions[0].title, /^Judgment: /);
+      assert.match(sessions[0].prompt!, /What happened: /);
 
       const wakes = await wakeRows(stack.db, target);
       assert.equal(wakes.length, 1);
@@ -501,8 +501,8 @@ test('a second wake opens a second session — an ended judgment is never resume
       const sessions = await judgmentSessions(stack.db, target);
       assert.equal(sessions.length, 2);
       // And the second one opens on ITS fact, not on the one that opened the first.
-      assert.match(sessions[1].prompt!, /都到了终态/);
-      assert.doesNotMatch(sessions[1].prompt!, /不是终态/);
+      assert.match(sessions[1].prompt!, /have reached a terminal state/);
+      assert.doesNotMatch(sessions[1].prompt!, /not a terminal state/);
     } finally {
       await stack.db.$disconnect();
     }

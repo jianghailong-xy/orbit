@@ -1,9 +1,16 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider, notifyManager } from '@tanstack/react-query';
 import { act } from 'react';
+import type { ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectOpenItemRow, ProjectStartRequest, StartProjectRequestBody } from '@orbit/shared';
+import type {
+  ProjectIntegrationView,
+  ProjectOpenItemRow,
+  ProjectStartRequest,
+  StartProjectRequestBody,
+} from '@orbit/shared';
 import { api, ApiError } from '../api';
 import { MOBILE_QUERY } from '../lib/useMediaQuery';
 import { revealSettlementCard } from './DecisionRail';
@@ -21,12 +28,16 @@ import {
   RUN_LINE_PROJECT_BRANCH_HINT,
   RUN_MERGE_CHECK_HINT,
   RUN_MERGE_CHECK_NONE_SAYS,
+  RUN_MERGE_CHECK_TIMEOUT,
+  RUN_MERGE_CHECK_TIMEOUT_HINT,
+  RUN_MERGE_CHECK_TIMEOUT_UNIT,
   START_CHAT_PLACEHOLDER,
   START_NOT_RECORDED,
   START_OPENS_COORDINATOR,
   START_PROJECT_ACTION,
   START_PROJECT_TITLE,
   START_REQUEST_GONE,
+  START_TASK_GRAPH,
   START_VIEW_TASKS,
   planLevels,
   planTaskLabel,
@@ -46,6 +57,7 @@ import {
 } from '../lib/projectStart';
 import {
   ACCEPTANCE_PLAN_CHANGE_PLACEHOLDER,
+  ACCEPTANCE_SHOW_LESS_LABEL,
   SessionAcceptanceConfirmationCard,
   acceptancePlanChangePlaceholder,
   acceptanceReadLabel,
@@ -76,6 +88,51 @@ vi.mock('../api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api')>();
   return { ...actual, api: vi.fn() };
 });
+
+/** The graph is React Flow, which jsdom cannot lay out: whether the plan fits is the arithmetic's
+ *  (`startPlanGraphFits`, ProjectDependencyGraph.test.tsx), and what the card does with the answer
+ *  is under test here — so the answer is the test's to give. */
+const planGraph = vi.hoisted(() => ({ fits: false }));
+vi.mock('./StartPlanGraph', async () => {
+  const { createElement, Fragment, useEffect } = await import('react');
+  return {
+    default: function StubPlanGraph({ fallback, onDrawn }: { fallback: ReactNode; onDrawn: (drawn: boolean) => void }) {
+      useEffect(() => {
+        onDrawn(planGraph.fits);
+      }, [onDrawn]);
+      return planGraph.fits
+        ? createElement('div', { 'data-testid': 'start-plan-graph' })
+        : createElement(Fragment, null, fallback);
+    },
+    StartTaskGraph: function StubTaskGraph({ onClose }: { onClose: () => void }) {
+      return createElement('button', { type: 'button', 'data-testid': 'start-task-graph', onClick: onClose }, 'close');
+    },
+  };
+});
+
+/** Where a test sends the router, as a task opened from the card's graph would. */
+let navigateTo: ((path: string) => void) | null = null;
+function RouteHand(): null {
+  const navigate = useNavigate();
+  navigateTo = navigate;
+  return null;
+}
+
+/** jsdom lays nothing out, so a clamped text never reads as cut; a test that needs one says which. */
+function cutText(cut: { why?: boolean; criteria?: boolean }): () => void {
+  const tall = (element: Element): boolean =>
+    (cut.why === true && element.classList.contains('start-card-quote-text') && !element.classList.contains('is-open'))
+    || (cut.criteria === true && element.classList.contains('settlement-card-criterion')
+      && element.closest('.is-open') === null);
+  const scroll = vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(function (this: Element) {
+    return tall(this) ? 60 : 20;
+  });
+  const client = vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(() => 20);
+  return () => {
+    scroll.mockRestore();
+    client.mockRestore();
+  };
+}
 
 const PROJECT = '34WvwUS8YMXfOfWbMqVuu';
 const SEAL = `c2b4e16c4b59${'0'.repeat(52)}`;
@@ -180,11 +237,15 @@ const server: {
   standing: Answer<StandardSetConfirmationStanding>;
   document: Answer<Record<string, unknown>>;
   row: ProjectOpenItemRow | null;
+  /** The project's integration view; null leaves the read unanswered, as a project the card cannot
+   *  say has a repository. */
+  integration: Answer<ProjectIntegrationView> | null;
   door: (body: StartProjectRequestBody) => Promise<unknown>;
 } = {
   standing: standingOf(),
   document: {},
   row: null,
+  integration: null,
   door: async () => ({}),
 };
 
@@ -216,9 +277,12 @@ function answer<T>(value: Answer<T>): Promise<T> {
 beforeEach(() => {
   narrow = false;
   startedCalls = 0;
+  planGraph.fits = false;
+  navigateTo = null;
   server.standing = standingOf();
   server.document = documentOf();
   server.row = rowOf('item-1');
+  server.integration = null;
   server.door = async () => {
     // A start the door took: the project is started, the request answered.
     server.document = documentOf(STARTED_AT);
@@ -229,7 +293,7 @@ beforeEach(() => {
   bodies.length = 0;
   armed.length = 0;
   reports.length = 0;
-  // The merge check's box grows with its command (antd's autoSize), which watches its own size.
+  // The merge check's box grows with its command (the Textarea's autoSize), which watches its own size.
   vi.stubGlobal('ResizeObserver', class {
     observe(): void {}
     unobserve(): void {}
@@ -252,6 +316,7 @@ beforeEach(() => {
       return { needsYou: [], withCoordinator: [], startRequest: server.row };
     }
     if (path === `/projects/${PROJECT}/dependency-graph`) return GRAPH;
+    if (path === `/projects/${PROJECT}/integration` && server.integration) return answer(server.integration);
     if (path === `/projects/${PROJECT}`) return answer(server.document);
     throw new Error(`nothing is stubbed at ${path}`);
   }) as unknown as typeof api);
@@ -286,7 +351,7 @@ async function until(done: () => boolean, what: string): Promise<void> {
 let startedCalls = 0;
 
 async function mount(
-  options: { router?: boolean; bare?: boolean; dialog?: boolean; onViewTasks?: () => void } = {},
+  options: { router?: boolean; bare?: boolean; dialog?: boolean; own?: boolean; onViewTasks?: () => void } = {},
 ): Promise<{ node: HTMLElement; qc: QueryClient }> {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   const qc = new QueryClient({
@@ -300,26 +365,31 @@ async function mount(
   root = tree;
   await act(async () => {
     tree.render(
-      <QueryClientProvider client={qc}>
-        {options.dialog ? (
-          <ProjectStartDialog projectId={PROJECT} asked open onClose={() => { startedCalls += 1; }} />
-        ) : options.bare ? (
-          <SessionStartProjectCard projectId={PROJECT} bare onStarted={() => { startedCalls += 1; }} />
-        ) : options.router ? (
-          <SessionAcceptanceConfirmationCard
-            projectId={PROJECT}
-            onOpenQuestion={(question) => reports.push(question)}
-            onChatAbout={(plan) => armed.push(plan)}
-          />
-        ) : (
-          <SessionStartProjectCard
-            projectId={PROJECT}
-            onOpen={(open) => reports.push(open)}
-            onChatAbout={(plan) => armed.push(plan)}
-            onViewTasks={options.onViewTasks}
-          />
-        )}
-      </QueryClientProvider>,
+      <MemoryRouter initialEntries={[`/projects/${PROJECT}`]}>
+        <RouteHand />
+        <QueryClientProvider client={qc}>
+          {options.own ? (
+            <ProjectStartDialog projectId={PROJECT} open onClose={() => { startedCalls += 1; }} />
+          ) : options.dialog ? (
+            <ProjectStartDialog projectId={PROJECT} asked open onClose={() => { startedCalls += 1; }} />
+          ) : options.bare ? (
+            <SessionStartProjectCard projectId={PROJECT} bare onStarted={() => { startedCalls += 1; }} />
+          ) : options.router ? (
+            <SessionAcceptanceConfirmationCard
+              projectId={PROJECT}
+              onOpenQuestion={(question) => reports.push(question)}
+              onChatAbout={(plan) => armed.push(plan)}
+            />
+          ) : (
+            <SessionStartProjectCard
+              projectId={PROJECT}
+              onOpen={(open) => reports.push(open)}
+              onChatAbout={(plan) => armed.push(plan)}
+              onViewTasks={options.onViewTasks}
+            />
+          )}
+        </QueryClientProvider>
+      </MemoryRouter>,
     );
   });
   return { node, qc };
@@ -329,7 +399,11 @@ const cardIn = (_node: ParentNode): HTMLElement | null => document.querySelector
 
 async function delivered(options: { onViewTasks?: () => void } = {}) {
   const { node, qc } = await mount(options);
-  await until(() => cardIn(node) !== null && (cardIn(node)!.querySelector('.start-card-plan span') !== null), 'the card and its plan');
+  await until(
+    () => cardIn(node) !== null
+      && cardIn(node)!.querySelector('.start-card-plan span, .start-card-plan [data-testid="start-plan-graph"]') !== null,
+    'the card and its plan',
+  );
   expect(node.querySelector('.review-card-preview')).toBeNull();
   expect(node.contains(cardIn(node))).toBe(true);
   const card = (): HTMLElement => {
@@ -392,6 +466,12 @@ async function mergeCheckBox(card: HTMLElement): Promise<HTMLTextAreaElement> {
     });
   }
   return settingRow(card, 'Merge check').querySelector<HTMLTextAreaElement>('textarea')!;
+}
+
+/** The budget under the merge check's command, in the row the command lives in. */
+async function mergeCheckBudgetBox(card: HTMLElement): Promise<HTMLInputElement> {
+  await mergeCheckBox(card);
+  return settingRow(card, 'Merge check').querySelector<HTMLInputElement>('input')!;
 }
 
 async function key(init: KeyboardEventInit = {}): Promise<void> {
@@ -578,20 +658,27 @@ describe('the plan by level', () => {
 });
 
 describe('what a press sends', () => {
-  it('opens with Automatic on whatever the coordinator suggested', () => {
-    const suggestedOff = requestOf({ settings: { ...requestOf().settings, automatic: false } });
+  it('opens with Automatic on whatever the coordinator suggested, and the check budget it suggested', () => {
+    const suggestedOff = requestOf({
+      settings: { ...requestOf().settings, automatic: false, mergeCheckTimeoutSeconds: 900 },
+    });
     expect(startDraftOf(suggestedOff.settings)).toEqual({
       line: 'PROJECT_BRANCH',
+      upstream: null,
       automatic: true,
       maxConcurrentTasks: 3,
       mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
+      mergeCheckTimeoutSeconds: 900,
     });
+    // A coordinator that suggested no budget leaves the box empty, which is the default one.
+    expect(startDraftOf(requestOf().settings).mergeCheckTimeoutSeconds).toBeNull();
   });
 
   it('sends the seal it was asked about, every setting as the card shows it, and the request', () => {
     const request = requestOf();
     expect(startBody(request, {
-      line: 'PROJECT_BRANCH', automatic: false, maxConcurrentTasks: 5, mergeCheckCommand: '  npm test  ',
+      line: 'PROJECT_BRANCH', upstream: null, automatic: false, maxConcurrentTasks: 5, mergeCheckCommand: '  npm test  ',
+      mergeCheckTimeoutSeconds: 90,
     }, 'item-1')).toEqual({
       criteriaDigest: SEAL,
       line: 'PROJECT_BRANCH',
@@ -599,17 +686,21 @@ describe('what a press sends', () => {
       automatic: false,
       maxConcurrentTasks: 5,
       mergeCheckCommand: 'npm test',
+      mergeCheckTimeoutSeconds: 90,
       requestId: 'item-1',
     });
-    // Directly into main names no branch — the door refuses one — and a blank check is none.
+    // Directly into main names no branch — the door refuses one — and a blank check is none. An
+    // empty budget box is the naming that runs the check on its one-hour default.
     expect(startBody(request, {
-      line: 'MAIN', automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: '   ',
+      line: 'MAIN', upstream: null, automatic: true, maxConcurrentTasks: 3, mergeCheckCommand: '   ',
+      mergeCheckTimeoutSeconds: null,
     }, 'item-1')).toEqual({
       criteriaDigest: SEAL,
       line: 'MAIN',
       automatic: true,
       maxConcurrentTasks: 3,
       mergeCheckCommand: null,
+      mergeCheckTimeoutSeconds: null,
       requestId: 'item-1',
     });
   });
@@ -659,11 +750,13 @@ describe('what the card says', () => {
       .toBe('B and C both build on A — one branch checks them together before main.');
     // The three sections, in the order of the questions they answer.
     expect(sections(card())).toEqual(['Done when · 4 criteria', 'How it runs', 'Plan · 5 tasks in 4 levels']);
-    // Every criterion is on the card before anything is pressed, clamped until read in full, and
-    // what starting binds the project to under them.
+    // Every criterion is on the card before anything is pressed, clamped until read in full — and
+    // here nothing is cut, so there is nothing to open: no Read all, and no More under the words —
+    // and what starting binds the project to under them.
     expect([...card().querySelectorAll('.settlement-card-criteria li')].map((li) => li.textContent))
       .toEqual(CRITERIA.map((c) => c.text));
-    expect(card().querySelector('.settlement-card-read')?.textContent).toBe(acceptanceReadLabel(4));
+    expect(card().querySelector('.settlement-card-read')).toBeNull();
+    expect(card().querySelector('.start-card-quote .start-card-link')).toBeNull();
     expect(card().querySelector('.start-card-note')?.textContent).toBe(startExplanation(4));
     // Automatic on, what it means with this merge check, and what still comes to the owner.
     const automatic = settingRow(card(), 'Automatic');
@@ -676,7 +769,7 @@ describe('what the card says', () => {
       'Problems it can’t resolve within 2 h',
     ]);
     // The three settings that can change later, one row each.
-    expect(settingRow(card(), 'Tasks land on').querySelector('.ant-select-content')?.getAttribute('title'))
+    expect(settingRow(card(), 'Tasks land on').querySelector('[role="combobox"]')?.textContent)
       .toBe('A project branch');
     expect(settingRow(card(), 'Merge check').querySelector('.start-card-row-value')?.textContent).toBe('Set ›');
     expect(settingRow(card(), 'At most').querySelector<HTMLInputElement>('input')?.value).toBe('3');
@@ -758,7 +851,55 @@ describe('what the card says', () => {
     const link = card().querySelector<HTMLAnchorElement>('a.start-card-link');
     expect(link?.textContent).toBe(START_VIEW_TASKS);
     expect(new URL(link!.href, window.location.href).pathname).toBe(`/projects/${PROJECT}`);
-    expect(card().querySelector('.start-card-plan button.start-card-link')).toBeNull();
+    // The plan's one press that is not a link is the task graph's.
+    expect([...card().querySelectorAll('.start-card-plan button.start-card-link')].map((b) => b.textContent))
+      .toEqual([`${START_TASK_GRAPH} ⤢`]);
+  });
+
+  it('offers More and Read all only while the clamp hides words, and keeps them once opened', async () => {
+    const restore = cutText({ why: true, criteria: true });
+    try {
+      const { card } = await delivered();
+      const more = () => card().querySelector<HTMLButtonElement>('.start-card-quote .start-card-link');
+      const read = () => card().querySelector<HTMLButtonElement>('.settlement-card-read');
+      expect(more()?.textContent).toBe('More');
+      expect(read()?.textContent).toBe(acceptanceReadLabel(4));
+      // Opened, the clamp is off and nothing is cut any more — the toggles stay, to close it again.
+      await act(async () => {
+        more()!.click();
+        read()!.click();
+      });
+      expect(more()?.textContent).toBe('Less');
+      expect(read()?.textContent).toBe(ACCEPTANCE_SHOW_LESS_LABEL);
+      expect(card().querySelector('.settlement-card-criteria.is-open')).not.toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it('draws the plan as the project’s task graph when the whole of it fits, and counts tasks only', async () => {
+    planGraph.fits = true;
+    const { card } = await delivered();
+    await until(() => card().querySelector('[data-testid="start-plan-graph"]') !== null, 'the graph');
+    expect(card().querySelector('.start-card-levels')).toBeNull();
+    // The graph's rows are its layout's, not levels: the head says how many tasks and no more.
+    expect(sections(card()).at(-1)).toBe('Plan · 5 tasks');
+    expect(card().querySelector('.start-card-graph-link')).toBeNull();
+  });
+
+  it('lists the plan by level when the graph does not fit, with the graph full screen a press away', async () => {
+    const { card } = await delivered();
+    await until(() => card().querySelector('.start-card-graph-link') !== null, 'the task graph link');
+    expect(levelsOf(card())).toHaveLength(4);
+    expect(sections(card()).at(-1)).toBe('Plan · 5 tasks in 4 levels');
+    await act(async () => {
+      card().querySelector<HTMLButtonElement>('.start-card-graph-link')!.click();
+    });
+    await until(() => document.querySelector('[data-testid="start-task-graph"]') !== null, 'the full-screen graph');
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-testid="start-task-graph"]')!.click();
+    });
+    expect(document.querySelector('[data-testid="start-task-graph"]')).toBeNull();
   });
 });
 
@@ -801,6 +942,16 @@ describe('the card answered over the project’s sessions page', () => {
       await mount({ dialog: true });
       await until(() => document.querySelector(`${shell} .start-card`) !== null, `the card in ${shell}`);
     });
+
+  it('gets out of the way of a task opened from its graph, which opens over the page', async () => {
+    await mount({ dialog: true });
+    await until(() => document.querySelector('.start-card-dialog .start-card') !== null, 'the card');
+    expect(startedCalls).toBe(0);
+    await act(async () => {
+      navigateTo!(`/projects/${PROJECT}/tasks/task-b`);
+    });
+    expect(startedCalls).toBe(1);
+  });
 });
 
 describe('the press', () => {
@@ -822,6 +973,7 @@ describe('the press', () => {
       automatic: false,
       maxConcurrentTasks: 5,
       mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
+      mergeCheckTimeoutSeconds: null,
       requestId: 'item-1',
     });
     // The question is answered: the card goes, and the record is the conversation's to draw.
@@ -876,7 +1028,7 @@ describe('the press', () => {
     // Still on screen, with nothing to start and the conversation still open to it.
     expect(action(card(), START_PROJECT_ACTION).disabled).toBe(true);
     expect(action(card(), OWNER_SEND_BACK_ACTION).disabled).toBe(false);
-    expect(settingRow(card(), 'Automatic').querySelector<HTMLButtonElement>('[role="switch"]')?.disabled).toBe(true);
+    expect(settingRow(card(), 'Automatic').querySelector('[role="switch"]')?.getAttribute('aria-disabled')).toBe('true');
     expect(bodies).toHaveLength(1);
   });
 
@@ -901,7 +1053,7 @@ describe('the press', () => {
     await reread(qc);
     await until(() => settingRow(card(), 'At most').querySelector<HTMLInputElement>('input')?.value === '2',
       'the new suggestion to replace the edit');
-    expect(settingRow(card(), 'Tasks land on').querySelector('.ant-select-content')?.getAttribute('title'))
+    expect(settingRow(card(), 'Tasks land on').querySelector('[role="combobox"]')?.textContent)
       .toBe('Directly into main');
     expect(card().querySelector('.start-card-quote-text')?.textContent).toBe('a single fix');
     await act(async () => {
@@ -935,5 +1087,271 @@ describe('the compact project preview', () => {
     await act(async () => { action(cardIn(node)!, START_PROJECT_ACTION).click(); });
     await until(() => bodies.length === 1, 'the start decision');
     expect(bodies[0]).toMatchObject({ mergeCheckCommand: 'npm run my-check', requestId: 'item-1' });
+  });
+});
+
+// ── the main branch ─────────────────────────────────────────────────────────────────────────
+
+/** The payments project of the board (②③⑥⑦): a repository on master, three local branches. */
+const PAYMENTS = {
+  names: ['develop', 'master', 'release/2.4'],
+  workspaceName: 'payments-api',
+  reportedAt: '2026-10-09T03:00:00.000Z',
+};
+const LAST_CHOSEN = { branch: 'master', repository: 'acme/payments-api', chosenAt: '2026-10-07T03:00:00.000Z' };
+
+/** A project nobody has started, as its integration view reads before the start binds it. */
+function integrationOf(over: Partial<ProjectIntegrationView> = {}): ProjectIntegrationView {
+  return {
+    line: null, lineAbsentReason: 'NOT_DECIDED', ref: null, upstreamRef: null, upstreamChosenAt: null,
+    lastMainBranch: null, source: null, locked: false, startedAt: null,
+    mergeCheckCommand: null, mergeCheckCommandAbsentReason: 'NOT_CONFIGURED', mergeCheckTimeoutSeconds: null,
+    escalationSeconds: 7_200, repository: 'acme/payments-api', branches: PAYMENTS,
+    commitsAheadOfUpstream: null, commitsAheadOfUpstreamAbsentReason: 'NO_LANDING_YET',
+    lastUpstreamSyncAt: null, lastUpstreamSyncAbsentReason: 'NEVER_SYNCED',
+    integratingCount: 0, queuedCount: 0, mergeCheckOnTip: 'UNKNOWN', inFlight: null,
+    ...over,
+  };
+}
+
+/** The coordinator's request, suggesting the main branch it read off origin/HEAD. */
+const suggestingMaster = (): ProjectStartRequest =>
+  requestOf({ settings: { ...requestOf().settings, upstreamRef: 'refs/heads/master' } });
+
+/** A mouse press as a browser delivers it, the mouse being the primary pointer. */
+async function pointerPress(element: Element | null | undefined, what: string): Promise<void> {
+  expect(element, `${what} is on screen`).toBeTruthy();
+  await act(async () => {
+    const init = { bubbles: true, cancelable: true, button: 0, buttons: 1, detail: 1 };
+    element!.dispatchEvent(new PointerEvent('pointerdown', { ...init, pointerType: 'mouse', isPrimary: true }));
+    element!.dispatchEvent(new MouseEvent('mousedown', init));
+    element!.dispatchEvent(new PointerEvent('pointerup', { ...init, buttons: 0, pointerType: 'mouse', isPrimary: true }));
+    element!.dispatchEvent(new MouseEvent('mouseup', { ...init, buttons: 0 }));
+    element!.dispatchEvent(new MouseEvent('click', { ...init, buttons: 0 }));
+  });
+  for (let n = 0; n < 5; n += 1) await turn();
+}
+
+const rowNames = (card: HTMLElement): string[] =>
+  [...card.querySelectorAll('.start-card-row-head > span:first-child')].map((span) => span.textContent ?? '');
+const mainBranchField = (card: HTMLElement): HTMLInputElement =>
+  settingRow(card, 'Main branch').querySelector<HTMLInputElement>('input[role="combobox"]')!;
+const mainBranchShown = (card: HTMLElement): string =>
+  settingRow(card, 'Main branch').querySelector('.orbit-combobox-value')?.textContent ?? '';
+const menuOptions = (): HTMLElement[] => [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')];
+
+async function openMainBranch(card: HTMLElement): Promise<HTMLElement[]> {
+  await pointerPress(mainBranchField(card), 'the Main branch field');
+  await until(() => menuOptions().length > 0, 'the Main branch menu');
+  return menuOptions();
+}
+
+describe('the main branch on the card', () => {
+  it('draws Main branch under Tasks land on, set to the coordinator’s suggestion, and names it in every sentence', async () => {
+    server.integration = integrationOf();
+    server.row = rowOf('item-1', suggestingMaster());
+    const { card } = await delivered();
+    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Main branch', 'Merge check', 'At most']);
+    expect(mainBranchShown(card())).toBe('master');
+    // Nobody chose it before: nothing to say under it.
+    expect(settingRow(card(), 'Main branch').querySelector('.start-card-hint')).toBeNull();
+    // Where work goes is master, in the sentence under Automatic and in what comes to the owner.
+    expect(settingRow(card(), 'Automatic').textContent).toContain(
+      'The coordinator decides when each task is done and merges into master once the merge check passes');
+    await act(async () => {
+      settingRow(card(), 'Automatic').querySelector<HTMLButtonElement>('[role="switch"]')!.click();
+    });
+    expect(settingRow(card(), 'Automatic').textContent).toContain(
+      'You decide when each task is done and when the branch goes into master.');
+    expect(comesToYou(card())).toContain('Merging the branch into master');
+    expect(card().textContent).not.toMatch(/into main\b/u);
+    await mergeCheckBox(card());
+    expect(settingRow(card(), 'Merge check').textContent).toContain('on the project branch and again before master.');
+  });
+
+  it('lists the branches the runner reported in the menu, and the line menu says directly into master', async () => {
+    server.integration = integrationOf();
+    server.row = rowOf('item-1', suggestingMaster());
+    const { card } = await delivered();
+    const options = await openMainBranch(card());
+    expect(document.body.querySelector('.main-branch-menu-head')?.textContent).toBe('Branches in payments-api');
+    expect(options.map((option) => option.textContent)).toEqual(['develop', 'master', 'release/2.4']);
+    await pointerPress(options.find((option) => option.textContent === 'master'), 'master');
+
+    await pointerPress(settingRow(card(), 'Tasks land on').querySelector('[role="combobox"]'), 'the line menu');
+    await until(() => menuOptions().length === 2, 'the line menu');
+    expect(menuOptions().map((option) => option.querySelector('b')?.textContent)).toEqual([
+      'A project branch', 'Directly into master']);
+    expect(menuOptions()[1]!.textContent).toContain('Every merge into master asks you.');
+  });
+
+  it('opens on the owner’s last choice for the repository before the suggestion, says so, and tags it in the menu', async () => {
+    server.integration = integrationOf({ lastMainBranch: { ...LAST_CHOSEN, branch: 'develop' } });
+    server.row = rowOf('item-1', suggestingMaster());
+    const { card } = await delivered();
+    expect(mainBranchShown(card())).toBe('develop');
+    expect(settingRow(card(), 'Main branch').querySelector('.start-card-hint')?.textContent)
+      .toBe('Your last choice for acme/payments-api');
+    const options = await openMainBranch(card());
+    expect(options.map((option) => option.textContent)).toEqual(['developlast chosen', 'master', 'release/2.4']);
+    // Another branch is the owner's choice too; the line saying where it came from goes with it.
+    await pointerPress(options.find((option) => option.textContent === 'master'), 'master');
+    expect(mainBranchShown(card())).toBe('master');
+    expect(settingRow(card(), 'Main branch').querySelector('.start-card-hint')).toBeNull();
+  });
+
+  it('opens on this project’s own choice before the last choice and the suggestion', async () => {
+    server.integration = integrationOf({
+      upstreamRef: 'trunk', upstreamChosenAt: '2026-10-09T01:00:00.000Z', lastMainBranch: LAST_CHOSEN,
+    });
+    server.row = rowOf('item-1', suggestingMaster());
+    const { card } = await delivered();
+    expect(mainBranchShown(card())).toBe('trunk');
+  });
+
+  it('opens on main when nobody chose one and the coordinator suggests none', async () => {
+    server.integration = integrationOf({ upstreamRef: 'main' });
+    const { card } = await delivered();
+    expect(mainBranchShown(card())).toBe('main');
+    // A project on main says what it always said.
+    expect(settingRow(card(), 'Automatic').textContent).toContain(RUN_AUTOMATIC_ON_CHECKED);
+  });
+
+  it('starts with the main branch on the card, as a full ref', async () => {
+    server.integration = integrationOf({ lastMainBranch: LAST_CHOSEN });
+    const { card } = await delivered();
+    const options = await openMainBranch(card());
+    await pointerPress(options.find((option) => option.textContent === 'release/2.4'), 'release/2.4');
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press to reach the door');
+    expect(bodies[0]).toEqual({
+      criteriaDigest: SEAL,
+      line: 'PROJECT_BRANCH',
+      projectBranchName: `refs/heads/project/${PROJECT}`,
+      upstreamRef: 'refs/heads/release/2.4',
+      automatic: true,
+      maxConcurrentTasks: 3,
+      mergeCheckCommand: 'cd src/web && npx tsc -b && npx vitest run',
+      mergeCheckTimeoutSeconds: null,
+      requestId: 'item-1',
+    });
+  });
+
+  it('starts with a branch typed into the menu that the runner never reported', async () => {
+    server.integration = integrationOf();
+    server.row = rowOf('item-1', suggestingMaster());
+    const { card } = await delivered();
+    await openMainBranch(card());
+    await type(mainBranchField(card()), 'release/3.0');
+    await until(() => menuOptions().length === 1, 'the typed name on offer');
+    expect(menuOptions()[0]!.textContent).toBe('Use “release/3.0”');
+    await pointerPress(menuOptions()[0], 'Use “release/3.0”');
+    expect(mainBranchShown(card())).toBe('release/3.0');
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press');
+    expect(bodies[0]).toMatchObject({ upstreamRef: 'refs/heads/release/3.0', requestId: 'item-1' });
+  });
+
+  it('draws no Main branch for a project with no repository, and the press names none', async () => {
+    server.integration = integrationOf({ repository: null, branches: null });
+    server.row = rowOf('item-1', requestOf({
+      settings: { line: 'MAIN', automatic: true, maxConcurrentTasks: 1, mergeCheckCommand: null },
+    }));
+    const { card } = await delivered();
+    expect(rowNames(card())).toEqual(['Automatic', 'Tasks land on', 'Merge check', 'At most']);
+    expect(settingRow(card(), 'Automatic').textContent).toContain(RUN_AUTOMATIC_ON_MAIN);
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press');
+    expect(bodies[0]).not.toHaveProperty('upstreamRef');
+  });
+
+  it('is read-only once the request no longer stands', async () => {
+    server.integration = integrationOf();
+    const { qc, card } = await delivered();
+    expect(mainBranchField(card()).disabled).toBe(false);
+    server.standing = standingOf(MOVED);
+    await reread(qc);
+    await until(() => card().querySelector('.settlement-card-stale')?.textContent === START_REQUEST_GONE,
+      'the card to say its request no longer stands');
+    expect(mainBranchField(card()).disabled).toBe(true);
+  });
+
+  it('draws the same row on the owner’s own Start…, set to the main branch the project stands on', async () => {
+    server.row = null;
+    server.integration = integrationOf({ line: 'MAIN', lineAbsentReason: null, ref: 'master', upstreamRef: 'master',
+      source: 'DEFAULT_RULE' });
+    await mount({ own: true });
+    await until(() => document.querySelector('.start-card-dialog .start-card') !== null
+      && document.querySelector('.start-card-plan span') !== null, 'the card over the page');
+    const card = document.querySelector<HTMLElement>('.start-card')!;
+    expect(mainBranchShown(card)).toBe('master');
+    expect(settingRow(card, 'Tasks land on').querySelector('[role="combobox"]')?.textContent).toBe('Directly into master');
+    await act(async () => {
+      action(card, START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press');
+    expect(bodies[0]).toMatchObject({ line: 'MAIN', upstreamRef: 'refs/heads/master', requestId: null });
+  });
+});
+
+describe('the main branch a press sends', () => {
+  it('opens a draft on no main branch for a project the card cannot say has a repository', () => {
+    expect(startDraftOf(requestOf().settings, null).upstream).toBeNull();
+    expect(startDraftOf(requestOf().settings, integrationOf({ repository: null })).upstream).toBeNull();
+    // A server that predates the field says nothing either.
+    expect(startDraftOf(requestOf().settings, integrationOf({ repository: undefined })).upstream).toBeNull();
+    expect(startDraftOf(suggestingMaster().settings, integrationOf()).upstream).toBe('master');
+  });
+
+  it('names the main branch only when the card offered one', () => {
+    const draft = {
+      line: 'MAIN' as const, automatic: true, maxConcurrentTasks: 1, mergeCheckCommand: '',
+      mergeCheckTimeoutSeconds: null,
+    };
+    expect(startBody(requestOf(), { ...draft, upstream: 'master' }, null)).toMatchObject({ upstreamRef: 'refs/heads/master' });
+    expect(startBody(requestOf(), { ...draft, upstream: null }, null)).not.toHaveProperty('upstreamRef');
+  });
+});
+
+// ── the merge check's budget ──────────────────────────────────────────────────────────────────
+
+describe('the merge check budget on the card', () => {
+  it('opens on the coordinator’s suggestion, says what an empty box means, and presses it back', async () => {
+    server.row = rowOf('item-1', requestOf({
+      settings: { ...requestOf().settings, mergeCheckTimeoutSeconds: 900 },
+    }));
+    const { card } = await delivered();
+    const box = await mergeCheckBudgetBox(card());
+    expect(box.value).toBe('900');
+    // The number and the unit, then what it means and what an empty box is.
+    const row = settingRow(card(), 'Merge check');
+    expect(row.textContent).toContain(RUN_MERGE_CHECK_TIMEOUT);
+    expect(row.textContent).toContain(RUN_MERGE_CHECK_TIMEOUT_UNIT);
+    expect(row.textContent).toContain(RUN_MERGE_CHECK_TIMEOUT_HINT);
+
+    // The owner changes the budget the coordinator suggested, and the press carries theirs.
+    await type(box, '90');
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press to reach the door');
+    expect(bodies[0]).toMatchObject({ mergeCheckTimeoutSeconds: 90, requestId: 'item-1' });
+  });
+
+  it('opens empty when nobody suggested a budget, and an empty box presses the default', async () => {
+    server.row = rowOf('item-1');
+    const { card } = await delivered();
+    expect((await mergeCheckBudgetBox(card())).value).toBe('');
+    await act(async () => {
+      action(card(), START_PROJECT_ACTION).click();
+    });
+    await until(() => bodies.length === 1, 'the press to reach the door');
+    expect(bodies[0]).toMatchObject({ mergeCheckTimeoutSeconds: null, requestId: 'item-1' });
   });
 });

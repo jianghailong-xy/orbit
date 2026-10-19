@@ -1,0 +1,24 @@
+0::/system.slice/run-p69611-i88100207.scope
+worktree-overlay: incompatible dependencies in /root/orbit: node_modules/@ant-design/cssinjs: an extra installed package could shadow the locked graph
+==> installing this worktree's lockfile in isolated node_modules
+npm warn deprecated whatwg-encoding@3.1.1: Use @exodus/bytes instead for a more spec-conformant and faster implementation
+
+added 692 packages in 3s
+==> tsc /root/.orbit/worktrees/49cb15ca-2b61-5210-8668-a7972fa8f259/node_modules/.bin/tsc (Version 7.0.2)
+==> copying @prisma/client out of /root/.orbit/worktrees/49cb15ca-2b61-5210-8668-a7972fa8f259/node_modules/@prisma/client (this worktree needs its own)
+==> generating this branch's Prisma client
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+==> building @orbit/shared
+==> require.resolve('@orbit/shared') from src/apiserver = /root/.orbit/worktrees/49cb15ca-2b61-5210-8668-a7972fa8f259/src/shared/dist/index.js
+==> require.resolve('@orbit/shared') from src/web = /root/.orbit/worktrees/49cb15ca-2b61-5210-8668-a7972fa8f259/src/shared/dist/index.js
+==> OK: /root/.orbit/worktrees/49cb15ca-2b61-5210-8668-a7972fa8f259 is ready to build and test
+
+> @orbit/shared@0.1.0 build
+> tsc -p tsconfig.json
+
+
+> @orbit/apiserver@0.1.0 build
+> rm -rf dist && tsc -p tsconfig.json
+

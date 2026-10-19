@@ -5,10 +5,12 @@ import io.orbitd.android.core.auth.AuthState
 import io.orbitd.android.core.auth.SessionChanged
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.net.ApiRequest
+import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.core.protocol.Wire
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
@@ -23,10 +25,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** One per application. Auth owns credentials and disk namespaces; this store owns foreground
  * connections, bounded transcript/cache state, and authority refreshes. UI must match state.handle
@@ -42,6 +47,8 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
     private val network = MutableStateFlow(Network())
     private val selection = MutableStateFlow(Selection(null, 0))
     private val directoryRevision = MutableStateFlow(0L)
+    /** The revision the last directory read that landed left at: what [rereadDirectory] waits on. */
+    private val directoryLanded = MutableStateFlow(0L)
     private val sessionRevision = MutableStateFlow(0L)
     private val mutableState = MutableStateFlow(RealtimeState())
     val state: StateFlow<RealtimeState> = mutableState.asStateFlow()
@@ -69,7 +76,36 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
         }
     }
     fun refreshDirectory() { directoryRevision.update { it + 1 } }
+    /** Reads the directory again and returns once a read that left after this call has landed — one that saw a write the
+     * caller already had answered. A read still on the wire from before is not it: the revision this bumps makes the loop
+     * drop that answer and read again. Offline or in the background it waits for the next connection's read. */
+    suspend fun rereadDirectory() {
+        val asked = directoryRevision.updateAndGet { it + 1 }
+        directoryLanded.first { it >= asked }
+    }
     fun refreshSession() { sessionRevision.update { it + 1 } }
+    /** Mutations check the live inputs too: collectors may not yet have withdrawn `fresh`. */
+    fun canAct(handle: SessionHandle, sessionId: String): Boolean {
+        val focus = selection.value
+        val live = state.value
+        return current(handle) && foreground.value && network.value.available &&
+            focus.handle === handle && focus.id == sessionId && live.handle === handle &&
+            live.session?.let { it.id == sessionId && it.fresh && !it.accessDenied && it.snapshot != null } == true
+    }
+    /** A reader's REST denial is authority too; invalidate pending snapshots and live content. */
+    suspend fun reportReadDenial(handle: SessionHandle, id: String, error: ApiError) {
+        require(error.status == 403 || error.status == 404)
+        if (!current(handle)) return
+        val focus = selection.value
+        if (focus.handle === handle && focus.id == id) {
+            updateSession(handle, focus) { it.copy(accessDenied = true, fresh = false, snapshot = null,
+                transcript = Transcript(), error = RealtimeError.from(error)) }
+            refreshSession()
+        }
+        // A route can disappear before its UI collector runs. The store persists this decision
+        // independently, and a new process/route must read it before restoring any transcript.
+        withContext(NonCancellable) { ReadingCache(auth, handle, id).revoke() }
+    }
     override fun close() { owner.cancel() }
 
     private fun current(handle: SessionHandle) = (auth.state.value as? AuthState.SignedIn)?.handle === handle
@@ -103,6 +139,11 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
             }
         }
         launch {
+            state.map { it.session?.takeIf { s -> s.accessDenied }?.id }.distinctUntilChanged().collect { id ->
+                if (id != null) { cache.update { it.copy(sessions = it.sessions - id) }; writes.trySend(Unit) }
+            }
+        }
+        launch {
             combine(foreground, network) { visible, path -> visible to path }.collectLatest { (visible, path) ->
                 if (visible && path.available) control(handle, path, cache, writes)
                 else publish(handle) { it.copy(controlConnection = ConnectionState.STOPPED,
@@ -113,8 +154,9 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
             if (focus.handle !== handle) return@collectLatest
             cache.update { it.copy(lastSessionId = focus.id) }
             writes.trySend(Unit)
+            val denied = focus.id?.let { ReadingCache(auth, handle, it).permission().denied } == true
             publish(handle) { it.copy(session = focus.id?.let { id ->
-                SessionState(id, cache.value.sessions[id]?.withoutLive() ?: Transcript())
+                SessionState(id, if (denied) Transcript() else cache.value.sessions[id]?.withoutLive() ?: Transcript(), accessDenied = denied)
             }) }
             if (focus.id == null) return@collectLatest
             combine(foreground, network) { visible, path -> visible to path }.collectLatest { (visible, path) ->
@@ -144,6 +186,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                     if (directoryRevision.value != revision) { refresh.trySend(Unit); continue }
                     publish(handle) { it.copy(directory = snapshot, directoryRefreshing = false,
                         directoryFresh = true, directoryError = null) }
+                    directoryLanded.update { maxOf(it, revision) }
                     cache.update { it.copy(directory = snapshot) }
                     writes.trySend(Unit)
                     retry.healthy()
@@ -163,13 +206,17 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
             try {
                 auth.stream(handle, ApiRequest(listOf("events")), onOpen = {
                     if (!active(handle, path)) throw CancellationException()
+                    publish(handle) { it.copy(controlConnects = it.controlConnects + 1) }
                     invalidate(handle)
                     publish(handle) { it.copy(controlConnection = ConnectionState.CONNECTED, controlError = null) }
                 }, onFrame = { frame ->
                     if (!active(handle, path)) throw CancellationException()
                     val event = Wire.decode(frame.data.encodeToByteArray(), ControlEvent.serializer())
                     policy.healthy()
-                    if (event.type != "ping") invalidate(handle)
+                    if (event.type != "ping") {
+                        publish(handle) { it.copy(accountEvents = it.accountEvents + (event.type to (it.accountEvents[event.type] ?: 0L) + 1)) }
+                        invalidate(handle)
+                    }
                 })
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) {
@@ -200,6 +247,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
         fun check() { if (!active(handle, path) || selection.value != focus) throw CancellationException() }
         fun save() {
             check()
+            if (state.value.session?.accessDenied == true) return
             val transcript = state.value.session?.transcript ?: return
             cache.update { it.remember(id, transcript) }
             writes.trySend(Unit)
@@ -216,11 +264,26 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                     currentCoroutineContext().ensureActive()
                     check()
                     if (revision != sessionRevision.value) { refresh.trySend(Unit); continue }
-                    updateSession(handle, focus) { it.copy(snapshot = snapshot, fresh = true, error = null) }
+                    val wasDenied = state.value.session?.accessDenied == true
+                    updateSession(handle, focus) { it.copy(snapshot = snapshot, fresh = true, error = null, accessDenied = false) }
+                    if (wasDenied) {
+                        val tail = rest.page(handle, id)
+                        check()
+                        updateSession(handle, focus) { it.copy(transcript = it.transcript.tail(tail)) }
+                        save()
+                    }
                     policy.healthy()
                 } catch (cancelled: CancellationException) { throw cancelled }
                 catch (error: Exception) {
-                    updateSession(handle, focus) { it.copy(fresh = false, error = RealtimeError.from(error)) }
+                    val denied = error is ApiError && error.status in setOf(403, 404)
+                    updateSession(handle, focus) { it.copy(fresh = false, error = RealtimeError.from(error),
+                        accessDenied = it.accessDenied || denied,
+                        snapshot = if (denied) null else it.snapshot,
+                        transcript = if (denied) Transcript() else it.transcript) }
+                    if (denied) {
+                        withContext(NonCancellable) { ReadingCache(auth, handle, id).revoke() }
+                        cache.update { it.copy(sessions = it.sessions - id) }; writes.trySend(Unit)
+                    }
                     delay(policy.delayMs(true))
                     refresh.trySend(Unit)
                 }
@@ -229,6 +292,28 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
         // Standing review deadlines can expire without a push. This refresh exists only while
         // the session is foregrounded; reconnect always performs its own unthrottled read.
         launch { while (isActive) { delay(30_000); refreshSession() } }
+        fun land(page: EventPage) {
+            check()
+            updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.page(page)) }
+            save()
+        }
+        // Close the gap over REST pages before the stream opens. The gateway gzips JSON but never
+        // text/event-stream, and a replay is all-or-nothing: a drop mid-replay re-sends the whole gap.
+        // Each landed page moves the frontier. A failed page is not retried here; the stream attempt
+        // right after it is the retry, from the advanced frontier. Past the server's own budget the
+        // window is re-seeded from the tail, as the server's resync would have ordered.
+        suspend fun catchUp() {
+            var after = state.value.session!!.transcript.resumeSeq
+            repeat(CATCH_UP_PAGES) {
+                val page = try { rest.page(handle, id, after) } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (_: Exception) { return }
+                land(page)
+                val next = page.after ?: return
+                if (next <= after) throw Resync()
+                after = next
+            }
+            throw Resync()
+        }
         val policy = ReconnectPolicy()
         var reseed = false
         while (isActive) {
@@ -240,29 +325,24 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                 if (reseed || state.value.session?.transcript?.seeded != true) {
                     val tail = rest.page(handle, id)
                     check()
-                    updateSession(handle, focus) { it.copy(transcript = it.transcript.tail(tail)) }
+                    updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.tail(tail)) }
                     save()
                     reseed = false
+                } else {
+                    // Live frames never move the frontier, so a window seeded before this attempt (restored
+                    // from the cache, or carried over a drop or a clean close) is behind by all they carried.
+                    catchUp()
                 }
                 val cursor = state.value.session!!.transcript.resumeSeq
                 auth.stream(handle, ApiRequest(listOf("sessions", id, "events"),
                     query = listOf("sinceSeq" to "$cursor", "maxPayload" to "2048")), onOpen = {
                     check()
                     refreshSession()
-                    // A bounded REST overlap verifies a frontier, while SSE already buffers the
-                    // replay/live seam on the server. Future live events cannot move this frontier.
-                    var after = cursor
-                    var pages = 0
-                    do {
-                        val page = rest.page(handle, id, after)
-                        check()
-                        if (++pages > 2) throw Resync()
-                        updateSession(handle, focus) { it.copy(transcript = it.transcript.page(page)) }
-                        save()
-                        val next = page.after ?: break
-                        if (next <= after) throw Resync()
-                        after = next
-                    } while (true)
+                    // One REST page verifies the frontier where the stream began, while SSE already
+                    // buffers the replay/live seam on the server. Future live events cannot move this
+                    // frontier. Never a loop: the gap was closed before connecting, and the replay
+                    // carries whatever is newer than this page.
+                    land(rest.page(handle, id, cursor))
                     updateSession(handle, focus) { it.copy(connection = ConnectionState.CONNECTED) }
                 }, onFrame = { frame ->
                     check()
@@ -270,7 +350,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                     if (event.type == "resync") throw Resync()
                     // An opening heartbeat alone does not prove that the replay window works.
                     if (event.type != "ping") policy.healthy()
-                    updateSession(handle, focus) { it.copy(transcript = it.transcript.apply(event)) }
+                    updateSession(handle, focus) { if (it.accessDenied) it else it.copy(transcript = it.transcript.apply(event)) }
                     if (event.durable) save()
                     if (event.type in SNAPSHOT_EVENTS) refreshSession()
                 })
@@ -282,6 +362,7 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
                 save()
             } catch (error: Exception) {
                 failed = true
+                if (error is ApiError && error.status in setOf(403, 404)) reportReadDenial(handle, id, error)
                 updateSession(handle, focus) { it.copy(error = RealtimeError.from(error), fresh = false) }
             }
             updateSession(handle, focus) { it.copy(connection = ConnectionState.BACKOFF, fresh = false,
@@ -291,6 +372,8 @@ class RealtimeStore(private val auth: AuthSession, scope: CoroutineScope) : Auto
     }
 
     companion object {
+        /** Five 200-event pages: the server's SSE_GAP_CAP, past which it answers a cursor with resync. */
+        private const val CATCH_UP_PAGES = 5
         private val SNAPSHOT_EVENTS = setOf("approval_request", "approval_resolved", "queued_turns_changed",
             "background_task", "user", "user_delivery", "turn_end", "status", "result", "interrupt")
     }

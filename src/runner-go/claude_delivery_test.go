@@ -508,3 +508,77 @@ func TestOnlyTheSessionsOwnTurnEndsTheRun(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// echoes named by uuid, and withdrawn messages
+// ---------------------------------------------------------------------------
+
+// A steer's frame carries its own uuid, and the CLI echoes it back: that echo answers the steer it
+// names wherever it stands in the queue. An echo naming none of ours still answers the oldest.
+func TestDeliveryLedgerMatchesAnEchoByTheUUIDItCarries(t *testing.T) {
+	l := &deliveryLedger{}
+	message := newMessageDelivery("turn-1", false)
+	first, second := newMessageDelivery("steer-1", true), newMessageDelivery("steer-2", true)
+	first.uuid, second.uuid = "steer-1", "steer-2"
+	for _, d := range []*messageDelivery{message, first, second} {
+		l.accept(d, newWriteReceipt())
+	}
+	if got, ok := l.acknowledgeEcho("steer-2"); !ok || got != second {
+		t.Fatalf("the echo naming steer-2 answered %v, want steer-2 itself", got)
+	}
+	if got, ok := l.acknowledgeEcho("the CLI's own uuid"); !ok || got != message {
+		t.Fatalf("an echo naming none of ours answered %v, want the oldest message", got)
+	}
+	if got, ok := l.acknowledgeEcho("steer-1"); !ok || got != first {
+		t.Fatalf("the echo naming steer-1 answered %v, want steer-1", got)
+	}
+}
+
+// A withdrawn message leaves the queue for good: nothing answers it again, and the echoes that
+// follow still line up with the messages that are left.
+func TestDeliveryLedgerWithdrawsAMessageTheCLIDropped(t *testing.T) {
+	l := &deliveryLedger{}
+	dropped, kept := newMessageDelivery("steer-1", true), newMessageDelivery("steer-2", true)
+	dropped.uuid, kept.uuid = "steer-1", "steer-2"
+	l.accept(dropped, newWriteReceipt())
+	l.accept(kept, newWriteReceipt())
+	l.markWritten(dropped)
+
+	if d, _ := l.waiting("steer-1"); d != dropped {
+		t.Fatalf("waiting(steer-1) = %v, want the written steer", d)
+	}
+	if !l.withdraw(dropped) {
+		t.Fatal("a written steer could not be withdrawn")
+	}
+	if dropped.state != deliveryWithdrawn {
+		t.Errorf("the withdrawn steer is %q, want %q", dropped.state, deliveryWithdrawn)
+	}
+	if l.withdraw(dropped) || l.fail(dropped) || l.markWritten(dropped) {
+		t.Error("a withdrawn steer was moved on again")
+	}
+	if d, read := l.waiting("steer-1"); d != nil || read {
+		t.Errorf("waiting(steer-1) after the withdrawal = %v (read=%v), want nothing", d, read)
+	}
+	// Positional too: an echo naming no uuid of ours answers the steer still waiting, not the gone one.
+	if got, ok := l.acknowledgeEcho(""); !ok || got != kept {
+		t.Fatalf("the next echo answered %v, want steer-2", got)
+	}
+	if d, read := l.waiting("steer-2"); d != nil || !read {
+		t.Errorf("waiting(steer-2) after its echo = %v (read=%v), want it recorded as read", d, read)
+	}
+}
+
+// What a withdrawal may act on: an accepted message that is not yet read, failed or withdrawn.
+func TestDeliveryLedgerWithdrawsNothingAlreadySettled(t *testing.T) {
+	l := &deliveryLedger{}
+	d := newMessageDelivery("steer-1", true)
+	d.uuid = "steer-1"
+	if l.withdraw(d) {
+		t.Error("a message not yet accepted was withdrawn")
+	}
+	l.accept(d, newWriteReceipt())
+	l.fail(d)
+	if l.withdraw(d) {
+		t.Error("a failed message was withdrawn")
+	}
+}

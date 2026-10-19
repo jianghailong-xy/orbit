@@ -1,0 +1,704 @@
+argv: env P44_SNAPSHOTS=/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots P44_OUTPUT=/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-out npx playwright test --config ui-migration/p44.config.mjs --update-snapshots=all
+tree: /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref
+head: c55c2ef2b5812cf14615cd57281038e17d7bf4c9
+uncommitted:
+load: 53.38 52.73 50.09 33/6017 3400111
+mem: 2271M available
+disk: / 5843M available, TMPDIR /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/tmp
+started: 2026-10-09T21:27:00Z
+
+
+Running 112 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-new-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-new-entry-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-new-entry-filled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-home-shared.png, writing actual.
+  ✓    1 [chromium-light-desktop] › ui-migration/p44.browser.mjs:134:3 › P4.4 the Wiki home › its head, the new entry form and the share dialog (14.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-doc.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-doc-mark.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-doc-mark-footnote.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-doc-footnote-44.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-doc-footnote-9.png, writing actual.
+  ✓    2 [chromium-light-desktop] › ui-migration/p44.browser.mjs:196:3 › P4.4 a written document › its marks, footnote cards and the phone sheet (6.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-article.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-article-footnote.png, writing actual.
+  ✓    3 [chromium-light-desktop] › ui-migration/p44.browser.mjs:274:3 › P4.4 a topic article › its footnote cards and the way to an entry (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-entry-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-entry-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-entry-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-entry-retire.png, writing actual.
+  ✓    4 [chromium-light-desktop] › ui-migration/p44.browser.mjs:299:3 › P4.4 an entry › its answers, menus and forms (20.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-review-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-review-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-review-amend.png, writing actual.
+  ✓    5 [chromium-light-desktop] › ui-migration/p44.browser.mjs:361:3 › P4.4 Review › its answers, the edit form and its refusal, a challenge and the phone pager (10.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-plan-versions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-plan-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-plan-compared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-plan-redraft.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-plan-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-plan-edit-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-plan-edit-changed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-plan-section.png, writing actual.
+  ✓    6 [chromium-light-desktop] › ui-migration/p44.browser.mjs:425:3 › P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form (36.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-plan-empty.png, writing actual.
+  ✓    7 [chromium-light-desktop] › ui-migration/p44.browser.mjs:531:3 › P4.4 the plan › before one exists (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-settings-automatic.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-settings-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-settings-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-settings-lookback.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-settings-on.png, writing actual.
+  ✓    8 [chromium-light-desktop] › ui-migration/p44.browser.mjs:549:3 › P4.4 Wiki settings › review modes, spot checks, setting maintenance up and maintenance on (14.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-activity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-activity-revert.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-run-reject.png, writing actual.
+  ✓    9 [chromium-light-desktop] › ui-migration/p44.browser.mjs:608:3 › P4.4 Activity and a run › the pressed Activity button, the revert question and the run drawer (5.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-links-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-links.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-links-turn-off-three.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-links-turn-off.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-links-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-links-failed.png, writing actual.
+  ✓   10 [chromium-light-desktop] › ui-migration/p44.browser.mjs:664:3 › P4.4 Settings → Shared links › tabs, the turn-off questions, share again, loading and a failed read (13.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-shared-project.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-shared-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-shared-wiki-footnote.png, writing actual.
+  ✓   11 [chromium-light-desktop] › ui-migration/p44.browser.mjs:728:3 › P4.4 public pages › a shared project and a shared wiki (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-following-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-following.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-following-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-following-needs-attention.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-following-triggered-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-following-failed.png, writing actual.
+  ✓   12 [chromium-light-desktop] › ui-migration/p44.browser.mjs:765:3 › P4.4 Following › its tabs, pause, resume and stop, loading and a failed read (10.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-task-followed-by.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-watch-editor.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-watch-editor-sessions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-watch-editor-filled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-session-waiting-on.png, writing actual.
+  ✓   13 [chromium-light-desktop] › ui-migration/p44.browser.mjs:819:3 › P4.4 watches › the editor on a task and a conversation’s chips (15.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-desktop/p44-landing.png, writing actual.
+  ✓   14 [chromium-light-desktop] › ui-migration/p44.browser.mjs:880:3 › P4.4 the default landing › its spinner while the workspaces read (11.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-new-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-new-entry-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-new-entry-filled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-home-shared.png, writing actual.
+  ✓   15 [chromium-light-phone] › ui-migration/p44.browser.mjs:134:3 › P4.4 the Wiki home › its head, the new entry form and the share dialog (22.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-doc.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-doc-mark.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-doc-mark-footnote.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-doc-footnote-44.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-doc-footnote-9.png, writing actual.
+  ✓   16 [chromium-light-phone] › ui-migration/p44.browser.mjs:196:3 › P4.4 a written document › its marks, footnote cards and the phone sheet (7.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-article.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-article-footnote.png, writing actual.
+  ✓   17 [chromium-light-phone] › ui-migration/p44.browser.mjs:274:3 › P4.4 a topic article › its footnote cards and the way to an entry (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-entry-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-entry-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-entry-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-entry-retire.png, writing actual.
+  ✓   18 [chromium-light-phone] › ui-migration/p44.browser.mjs:299:3 › P4.4 an entry › its answers, menus and forms (15.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-review-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-review-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-review-pager.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-review-amend.png, writing actual.
+  ✓   19 [chromium-light-phone] › ui-migration/p44.browser.mjs:361:3 › P4.4 Review › its answers, the edit form and its refusal, a challenge and the phone pager (8.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-plan-versions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-plan-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-plan-compared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-plan-redraft.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-plan-docpage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-plan-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-plan-edit-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-plan-edit-changed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-plan-section.png, writing actual.
+  ✓   20 [chromium-light-phone] › ui-migration/p44.browser.mjs:425:3 › P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form (26.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-plan-empty.png, writing actual.
+  ✓   21 [chromium-light-phone] › ui-migration/p44.browser.mjs:531:3 › P4.4 the plan › before one exists (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-settings-automatic.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-settings-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-settings-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-settings-lookback.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-settings-on.png, writing actual.
+  ✓   22 [chromium-light-phone] › ui-migration/p44.browser.mjs:549:3 › P4.4 Wiki settings › review modes, spot checks, setting maintenance up and maintenance on (11.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-activity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-activity-revert.png, writing actual.
+  ✓   23 [chromium-light-phone] › ui-migration/p44.browser.mjs:608:3 › P4.4 Activity and a run › the pressed Activity button, the revert question and the run drawer (4.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-links-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-links.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-links-turn-off-three.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-links-turn-off.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-links-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-links-failed.png, writing actual.
+  ✓   24 [chromium-light-phone] › ui-migration/p44.browser.mjs:664:3 › P4.4 Settings → Shared links › tabs, the turn-off questions, share again, loading and a failed read (11.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-shared-project.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-shared-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-shared-wiki-footnote.png, writing actual.
+  ✓   25 [chromium-light-phone] › ui-migration/p44.browser.mjs:728:3 › P4.4 public pages › a shared project and a shared wiki (3.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-following-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-following.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-following-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-following-needs-attention.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-following-triggered-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-following-failed.png, writing actual.
+  ✓   26 [chromium-light-phone] › ui-migration/p44.browser.mjs:765:3 › P4.4 Following › its tabs, pause, resume and stop, loading and a failed read (7.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-task-followed-by.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-watch-editor.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-watch-editor-sessions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-watch-editor-filled.png, writing actual.
+  ✓   27 [chromium-light-phone] › ui-migration/p44.browser.mjs:819:3 › P4.4 watches › the editor on a task and a conversation’s chips (12.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-light-phone/p44-landing.png, writing actual.
+  ✓   28 [chromium-light-phone] › ui-migration/p44.browser.mjs:880:3 › P4.4 the default landing › its spinner while the workspaces read (9.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-new-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-new-entry-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-new-entry-filled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-home-shared.png, writing actual.
+  ✓   29 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:134:3 › P4.4 the Wiki home › its head, the new entry form and the share dialog (12.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-doc.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-doc-mark.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-doc-mark-footnote.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-doc-footnote-44.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-doc-footnote-9.png, writing actual.
+  ✓   30 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:196:3 › P4.4 a written document › its marks, footnote cards and the phone sheet (8.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-article.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-article-footnote.png, writing actual.
+  ✓   31 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:274:3 › P4.4 a topic article › its footnote cards and the way to an entry (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-entry-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-entry-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-entry-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-entry-retire.png, writing actual.
+  ✓   32 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:299:3 › P4.4 an entry › its answers, menus and forms (21.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-review-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-review-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-review-amend.png, writing actual.
+  ✓   33 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:361:3 › P4.4 Review › its answers, the edit form and its refusal, a challenge and the phone pager (57.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-versions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-compared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-redraft.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-edit-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-edit-changed.png, writing actual.
+  ✘   34 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:425:3 › P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form (2.2m)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-empty.png, writing actual.
+  ✓   35 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:531:3 › P4.4 the plan › before one exists (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-settings-automatic.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-settings-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-settings-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-settings-lookback.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-settings-on.png, writing actual.
+  ✓   36 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:549:3 › P4.4 Wiki settings › review modes, spot checks, setting maintenance up and maintenance on (18.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-activity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-activity-revert.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-run-reject.png, writing actual.
+  ✓   37 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:608:3 › P4.4 Activity and a run › the pressed Activity button, the revert question and the run drawer (20.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-links-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-links.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-links-turn-off-three.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-links-turn-off.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-links-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-links-failed.png, writing actual.
+  ✓   38 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:664:3 › P4.4 Settings → Shared links › tabs, the turn-off questions, share again, loading and a failed read (17.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-shared-project.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-shared-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-shared-wiki-footnote.png, writing actual.
+  ✓   39 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:728:3 › P4.4 public pages › a shared project and a shared wiki (4.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-following-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-following.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-following-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-following-needs-attention.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-following-triggered-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-following-failed.png, writing actual.
+  ✓   40 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:765:3 › P4.4 Following › its tabs, pause, resume and stop, loading and a failed read (9.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-task-followed-by.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-watch-editor.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-watch-editor-sessions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-watch-editor-filled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-session-waiting-on.png, writing actual.
+  ✓   41 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:819:3 › P4.4 watches › the editor on a task and a conversation’s chips (14.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-desktop/p44-landing.png, writing actual.
+  ✓   42 [chromium-dark-desktop] › ui-migration/p44.browser.mjs:880:3 › P4.4 the default landing › its spinner while the workspaces read (25.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-new-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-new-entry-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-new-entry-filled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-home-shared.png, writing actual.
+  ✓   43 [chromium-dark-phone] › ui-migration/p44.browser.mjs:134:3 › P4.4 the Wiki home › its head, the new entry form and the share dialog (20.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-doc.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-doc-mark.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-doc-mark-footnote.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-doc-footnote-44.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-doc-footnote-9.png, writing actual.
+  ✓   44 [chromium-dark-phone] › ui-migration/p44.browser.mjs:196:3 › P4.4 a written document › its marks, footnote cards and the phone sheet (6.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-article.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-article-footnote.png, writing actual.
+  ✓   45 [chromium-dark-phone] › ui-migration/p44.browser.mjs:274:3 › P4.4 a topic article › its footnote cards and the way to an entry (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-entry-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-entry-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-entry-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-entry-retire.png, writing actual.
+  ✓   46 [chromium-dark-phone] › ui-migration/p44.browser.mjs:299:3 › P4.4 an entry › its answers, menus and forms (16.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-review-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-review-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-review-pager.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-review-amend.png, writing actual.
+  ✓   47 [chromium-dark-phone] › ui-migration/p44.browser.mjs:361:3 › P4.4 Review › its answers, the edit form and its refusal, a challenge and the phone pager (9.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-plan-versions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-plan-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-plan-compared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-plan-redraft.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-plan-docpage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-plan-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-plan-edit-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-plan-edit-changed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-plan-section.png, writing actual.
+  ✓   48 [chromium-dark-phone] › ui-migration/p44.browser.mjs:425:3 › P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form (35.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-plan-empty.png, writing actual.
+  ✓   49 [chromium-dark-phone] › ui-migration/p44.browser.mjs:531:3 › P4.4 the plan › before one exists (5.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-settings-automatic.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-settings-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-settings-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-settings-lookback.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-settings-on.png, writing actual.
+  ✓   50 [chromium-dark-phone] › ui-migration/p44.browser.mjs:549:3 › P4.4 Wiki settings › review modes, spot checks, setting maintenance up and maintenance on (12.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-activity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-activity-revert.png, writing actual.
+  ✓   51 [chromium-dark-phone] › ui-migration/p44.browser.mjs:608:3 › P4.4 Activity and a run › the pressed Activity button, the revert question and the run drawer (5.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-links-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-links.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-links-turn-off-three.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-links-turn-off.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-links-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-links-failed.png, writing actual.
+  ✓   52 [chromium-dark-phone] › ui-migration/p44.browser.mjs:664:3 › P4.4 Settings → Shared links › tabs, the turn-off questions, share again, loading and a failed read (14.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-shared-project.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-shared-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-shared-wiki-footnote.png, writing actual.
+  ✓   53 [chromium-dark-phone] › ui-migration/p44.browser.mjs:728:3 › P4.4 public pages › a shared project and a shared wiki (4.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-following-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-following.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-following-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-following-needs-attention.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-following-triggered-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-following-failed.png, writing actual.
+  ✓   54 [chromium-dark-phone] › ui-migration/p44.browser.mjs:765:3 › P4.4 Following › its tabs, pause, resume and stop, loading and a failed read (7.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-task-followed-by.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-watch-editor.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-watch-editor-sessions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-watch-editor-filled.png, writing actual.
+  ✓   55 [chromium-dark-phone] › ui-migration/p44.browser.mjs:819:3 › P4.4 watches › the editor on a task and a conversation’s chips (11.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/chromium-dark-phone/p44-landing.png, writing actual.
+  ✓   56 [chromium-dark-phone] › ui-migration/p44.browser.mjs:880:3 › P4.4 the default landing › its spinner while the workspaces read (9.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-new-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-new-entry-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-new-entry-filled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-home-shared.png, writing actual.
+  ✓   57 [webkit-light-desktop] › ui-migration/p44.browser.mjs:134:3 › P4.4 the Wiki home › its head, the new entry form and the share dialog (11.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-doc.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-doc-mark.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-doc-mark-footnote.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-doc-footnote-44.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-doc-footnote-9.png, writing actual.
+  ✓   58 [webkit-light-desktop] › ui-migration/p44.browser.mjs:196:3 › P4.4 a written document › its marks, footnote cards and the phone sheet (8.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-article.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-article-footnote.png, writing actual.
+  ✓   59 [webkit-light-desktop] › ui-migration/p44.browser.mjs:274:3 › P4.4 a topic article › its footnote cards and the way to an entry (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-entry-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-entry-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-entry-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-entry-retire.png, writing actual.
+  ✓   60 [webkit-light-desktop] › ui-migration/p44.browser.mjs:299:3 › P4.4 an entry › its answers, menus and forms (19.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-review-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-review-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-review-amend.png, writing actual.
+  ✓   61 [webkit-light-desktop] › ui-migration/p44.browser.mjs:361:3 › P4.4 Review › its answers, the edit form and its refusal, a challenge and the phone pager (11.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-plan-versions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-plan-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-plan-compared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-plan-redraft.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-plan-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-plan-edit-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-plan-edit-changed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-plan-section.png, writing actual.
+  ✓   62 [webkit-light-desktop] › ui-migration/p44.browser.mjs:425:3 › P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form (30.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-plan-empty.png, writing actual.
+  ✓   63 [webkit-light-desktop] › ui-migration/p44.browser.mjs:531:3 › P4.4 the plan › before one exists (4.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-settings-automatic.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-settings-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-settings-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-settings-lookback.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-settings-on.png, writing actual.
+  ✓   64 [webkit-light-desktop] › ui-migration/p44.browser.mjs:549:3 › P4.4 Wiki settings › review modes, spot checks, setting maintenance up and maintenance on (13.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-activity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-activity-revert.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-run-reject.png, writing actual.
+  ✓   65 [webkit-light-desktop] › ui-migration/p44.browser.mjs:608:3 › P4.4 Activity and a run › the pressed Activity button, the revert question and the run drawer (6.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-links-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-links.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-links-turn-off-three.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-links-turn-off.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-links-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-links-failed.png, writing actual.
+  ✓   66 [webkit-light-desktop] › ui-migration/p44.browser.mjs:664:3 › P4.4 Settings → Shared links › tabs, the turn-off questions, share again, loading and a failed read (18.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-shared-project.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-shared-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-shared-wiki-footnote.png, writing actual.
+  ✓   67 [webkit-light-desktop] › ui-migration/p44.browser.mjs:728:3 › P4.4 public pages › a shared project and a shared wiki (6.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-following-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-following.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-following-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-following-needs-attention.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-following-triggered-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-following-failed.png, writing actual.
+  ✓   68 [webkit-light-desktop] › ui-migration/p44.browser.mjs:765:3 › P4.4 Following › its tabs, pause, resume and stop, loading and a failed read (16.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-task-followed-by.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-watch-editor.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-watch-editor-sessions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-watch-editor-filled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-session-waiting-on.png, writing actual.
+  ✓   69 [webkit-light-desktop] › ui-migration/p44.browser.mjs:819:3 › P4.4 watches › the editor on a task and a conversation’s chips (17.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-desktop/p44-landing.png, writing actual.
+  ✓   70 [webkit-light-desktop] › ui-migration/p44.browser.mjs:880:3 › P4.4 the default landing › its spinner while the workspaces read (9.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-new-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-new-entry-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-new-entry-filled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-home-shared.png, writing actual.
+  ✓   71 [webkit-light-phone] › ui-migration/p44.browser.mjs:134:3 › P4.4 the Wiki home › its head, the new entry form and the share dialog (10.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-doc.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-doc-mark.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-doc-mark-footnote.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-doc-footnote-44.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-doc-footnote-9.png, writing actual.
+  ✓   72 [webkit-light-phone] › ui-migration/p44.browser.mjs:196:3 › P4.4 a written document › its marks, footnote cards and the phone sheet (7.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-article.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-article-footnote.png, writing actual.
+  ✓   73 [webkit-light-phone] › ui-migration/p44.browser.mjs:274:3 › P4.4 a topic article › its footnote cards and the way to an entry (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-entry-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-entry-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-entry-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-entry-retire.png, writing actual.
+  ✓   74 [webkit-light-phone] › ui-migration/p44.browser.mjs:299:3 › P4.4 an entry › its answers, menus and forms (17.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-review-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-review-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-review-pager.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-review-amend.png, writing actual.
+  ✓   75 [webkit-light-phone] › ui-migration/p44.browser.mjs:361:3 › P4.4 Review › its answers, the edit form and its refusal, a challenge and the phone pager (10.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-plan-versions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-plan-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-plan-compared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-plan-redraft.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-plan-docpage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-plan-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-plan-edit-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-plan-edit-changed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-plan-section.png, writing actual.
+  ✓   76 [webkit-light-phone] › ui-migration/p44.browser.mjs:425:3 › P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form (36.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-plan-empty.png, writing actual.
+  ✓   77 [webkit-light-phone] › ui-migration/p44.browser.mjs:531:3 › P4.4 the plan › before one exists (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-settings-automatic.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-settings-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-settings-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-settings-lookback.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-settings-on.png, writing actual.
+  ✓   78 [webkit-light-phone] › ui-migration/p44.browser.mjs:549:3 › P4.4 Wiki settings › review modes, spot checks, setting maintenance up and maintenance on (12.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-activity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-activity-revert.png, writing actual.
+  ✓   79 [webkit-light-phone] › ui-migration/p44.browser.mjs:608:3 › P4.4 Activity and a run › the pressed Activity button, the revert question and the run drawer (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-links-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-links.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-links-turn-off-three.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-links-turn-off.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-links-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-links-failed.png, writing actual.
+  ✓   80 [webkit-light-phone] › ui-migration/p44.browser.mjs:664:3 › P4.4 Settings → Shared links › tabs, the turn-off questions, share again, loading and a failed read (15.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-shared-project.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-shared-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-shared-wiki-footnote.png, writing actual.
+  ✓   81 [webkit-light-phone] › ui-migration/p44.browser.mjs:728:3 › P4.4 public pages › a shared project and a shared wiki (5.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-following-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-following.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-following-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-following-needs-attention.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-following-triggered-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-following-failed.png, writing actual.
+  ✓   82 [webkit-light-phone] › ui-migration/p44.browser.mjs:765:3 › P4.4 Following › its tabs, pause, resume and stop, loading and a failed read (11.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-task-followed-by.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-watch-editor.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-watch-editor-sessions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-watch-editor-filled.png, writing actual.
+  ✓   83 [webkit-light-phone] › ui-migration/p44.browser.mjs:819:3 › P4.4 watches › the editor on a task and a conversation’s chips (14.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-light-phone/p44-landing.png, writing actual.
+  ✓   84 [webkit-light-phone] › ui-migration/p44.browser.mjs:880:3 › P4.4 the default landing › its spinner while the workspaces read (9.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-new-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-new-entry-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-new-entry-filled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-home-shared.png, writing actual.
+  ✓   85 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:134:3 › P4.4 the Wiki home › its head, the new entry form and the share dialog (11.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-doc.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-doc-mark.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-doc-mark-footnote.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-doc-footnote-44.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-doc-footnote-9.png, writing actual.
+  ✓   86 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:196:3 › P4.4 a written document › its marks, footnote cards and the phone sheet (8.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-article.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-article-footnote.png, writing actual.
+  ✓   87 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:274:3 › P4.4 a topic article › its footnote cards and the way to an entry (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-entry-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-entry-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-entry-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-entry-retire.png, writing actual.
+  ✓   88 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:299:3 › P4.4 an entry › its answers, menus and forms (16.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-review-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-review-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-review-amend.png, writing actual.
+  ✓   89 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:361:3 › P4.4 Review › its answers, the edit form and its refusal, a challenge and the phone pager (6.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-plan-versions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-plan-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-plan-compared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-plan-redraft.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-plan-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-plan-edit-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-plan-edit-changed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-plan-section.png, writing actual.
+  ✓   90 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:425:3 › P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form (42.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-plan-empty.png, writing actual.
+  ✓   91 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:531:3 › P4.4 the plan › before one exists (4.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-settings-automatic.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-settings-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-settings-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-settings-lookback.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-settings-on.png, writing actual.
+  ✓   92 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:549:3 › P4.4 Wiki settings › review modes, spot checks, setting maintenance up and maintenance on (28.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-activity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-activity-revert.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-run-reject.png, writing actual.
+  ✓   93 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:608:3 › P4.4 Activity and a run › the pressed Activity button, the revert question and the run drawer (29.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-links-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-links.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-links-turn-off-three.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-links-turn-off.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-links-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-links-failed.png, writing actual.
+  ✓   94 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:664:3 › P4.4 Settings → Shared links › tabs, the turn-off questions, share again, loading and a failed read (16.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-shared-project.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-shared-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-shared-wiki-footnote.png, writing actual.
+  ✓   95 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:728:3 › P4.4 public pages › a shared project and a shared wiki (6.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-following-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-following.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-following-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-following-needs-attention.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-following-triggered-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-following-failed.png, writing actual.
+  ✓   96 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:765:3 › P4.4 Following › its tabs, pause, resume and stop, loading and a failed read (14.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-task-followed-by.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-watch-editor.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-watch-editor-sessions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-watch-editor-filled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-session-waiting-on.png, writing actual.
+  ✓   97 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:819:3 › P4.4 watches › the editor on a task and a conversation’s chips (17.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-desktop/p44-landing.png, writing actual.
+  ✓   98 [webkit-dark-desktop] › ui-migration/p44.browser.mjs:880:3 › P4.4 the default landing › its spinner while the workspaces read (10.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-home.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-new-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-new-entry-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-new-entry-filled.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-home-shared.png, writing actual.
+  ✓   99 [webkit-dark-phone] › ui-migration/p44.browser.mjs:134:3 › P4.4 the Wiki home › its head, the new entry form and the share dialog (13.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-doc.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-doc-mark.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-doc-mark-footnote.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-doc-footnote-44.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-doc-footnote-9.png, writing actual.
+  ✓  100 [webkit-dark-phone] › ui-migration/p44.browser.mjs:196:3 › P4.4 a written document › its marks, footnote cards and the phone sheet (9.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-article.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-article-footnote.png, writing actual.
+  ✓  101 [webkit-dark-phone] › ui-migration/p44.browser.mjs:274:3 › P4.4 a topic article › its footnote cards and the way to an entry (4.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-entry.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-entry-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-entry-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-entry-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-entry-retire.png, writing actual.
+  ✓  102 [webkit-dark-phone] › ui-migration/p44.browser.mjs:299:3 › P4.4 an entry › its answers, menus and forms (21.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-review.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-review-reject.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-review-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-review-pager.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-review-amend.png, writing actual.
+  ✓  103 [webkit-dark-phone] › ui-migration/p44.browser.mjs:361:3 › P4.4 Review › its answers, the edit form and its refusal, a challenge and the phone pager (17.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-plan-versions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-plan-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-plan-compared.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-plan-redraft.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-plan-docpage.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-plan-edit.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-plan-edit-kinds.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-plan-edit-changed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-plan-section.png, writing actual.
+  ✓  104 [webkit-dark-phone] › ui-migration/p44.browser.mjs:425:3 › P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form (31.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-plan-empty.png, writing actual.
+  ✓  105 [webkit-dark-phone] › ui-migration/p44.browser.mjs:531:3 › P4.4 the plan › before one exists (4.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-settings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-settings-automatic.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-settings-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-settings-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-settings-lookback.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-settings-on.png, writing actual.
+  ✓  106 [webkit-dark-phone] › ui-migration/p44.browser.mjs:549:3 › P4.4 Wiki settings › review modes, spot checks, setting maintenance up and maintenance on (13.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-activity.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-run.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-activity-revert.png, writing actual.
+  ✓  107 [webkit-dark-phone] › ui-migration/p44.browser.mjs:608:3 › P4.4 Activity and a run › the pressed Activity button, the revert question and the run drawer (5.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-links-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-links.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-links-turn-off-three.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-links-turn-off.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-links-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-links-failed.png, writing actual.
+  ✓  108 [webkit-dark-phone] › ui-migration/p44.browser.mjs:664:3 › P4.4 Settings → Shared links › tabs, the turn-off questions, share again, loading and a failed read (14.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-shared-project.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-shared-wiki.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-shared-wiki-footnote.png, writing actual.
+  ✓  109 [webkit-dark-phone] › ui-migration/p44.browser.mjs:728:3 › P4.4 public pages › a shared project and a shared wiki (5.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-following-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-following.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-following-stop.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-following-needs-attention.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-following-triggered-history.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-following-failed.png, writing actual.
+  ✓  110 [webkit-dark-phone] › ui-migration/p44.browser.mjs:765:3 › P4.4 Following › its tabs, pause, resume and stop, loading and a failed read (10.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-task-followed-by.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-watch-editor.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-watch-editor-sessions.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-watch-editor-filled.png, writing actual.
+  ✓  111 [webkit-dark-phone] › ui-migration/p44.browser.mjs:819:3 › P4.4 watches › the editor on a task and a conversation’s chips (16.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p44-ref-shots/webkit-dark-phone/p44-landing.png, writing actual.
+  ✓  112 [webkit-dark-phone] › ui-migration/p44.browser.mjs:880:3 › P4.4 the default landing › its spinner while the workspaces read (9.6s)
+
+
+  1) [chromium-dark-desktop] › ui-migration/p44.browser.mjs:425:3 › P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form 
+
+    Error: expect(locator).toBeVisible() failed
+
+    Locator: locator('.wk-pl-secpage')
+    Expected: visible
+    Timeout: 15000ms
+    Error: element(s) not found
+
+    Call log:
+      - Expect "toBeVisible" locator('.wk-pl-secpage') with timeout 15000ms
+      - waiting for locator('.wk-pl-secpage')
+
+
+      515 |     await page.goto(`${P44_PATHS.plan}/d/product/1?v=2`);
+      516 |     const sectionPage = page.locator('.wk-pl-secpage');
+    > 517 |     await expect(sectionPage).toBeVisible();
+          |                               ^
+      518 |     await sectionPage.locator('.wk-pl-titlerow').getByRole('button', { name: named('Edit') }).click();
+      519 |     const sectionForm = visible(page, '[role="dialog"]');
+      520 |     await expect(sectionForm.locator('textarea')).toBeVisible();
+        at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/ref/src/web/ui-migration/p44.browser.mjs:517:31
+
+    attachment #1: p44-plan (image/png) ────────────────────────────────────────────────────────────
+    Expected: ../../../runs3/p44-ref-shots/chromium-dark-desktop/p44-plan.png
+    Received: ../../../runs3/p44-ref-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: p44-plan-versions (image/png) ───────────────────────────────────────────────────
+    Expected: ../../../runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-versions.png
+    Received: ../../../runs3/p44-ref-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-versions-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: p44-plan-more (image/png) ───────────────────────────────────────────────────────
+    Expected: ../../../runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-more.png
+    Received: ../../../runs3/p44-ref-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-more-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #4: p44-plan-compared (image/png) ───────────────────────────────────────────────────
+    Expected: ../../../runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-compared.png
+    Received: ../../../runs3/p44-ref-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-compared-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #5: p44-plan-redraft (image/png) ────────────────────────────────────────────────────
+    Expected: ../../../runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-redraft.png
+    Received: ../../../runs3/p44-ref-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-redraft-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #6: p44-plan-edit (image/png) ───────────────────────────────────────────────────────
+    Expected: ../../../runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-edit.png
+    Received: ../../../runs3/p44-ref-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-edit-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #7: p44-plan-edit-kinds (image/png) ─────────────────────────────────────────────────
+    Expected: ../../../runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-edit-kinds.png
+    Received: ../../../runs3/p44-ref-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-edit-kinds-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #8: p44-plan-edit-changed (image/png) ───────────────────────────────────────────────
+    Expected: ../../../runs3/p44-ref-shots/chromium-dark-desktop/p44-plan-edit-changed.png
+    Received: ../../../runs3/p44-ref-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/p44-plan-edit-changed-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #9: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p44-ref-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/attachments/computed-styles-and-timings-27dd8b20049c968f3000d24ab4fc550e2bdb1da2.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p44-ref-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/error-context.md
+
+    attachment #11: trace (application/zip) ────────────────────────────────────────────────────────
+    ../../../runs3/p44-ref-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p44-ref-out/p44.browser.mjs-P4-4-the-p-4c04a-t-drawer-and-a-section-form-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [chromium-dark-desktop] › ui-migration/p44.browser.mjs:425:3 › P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form 
+  111 passed (26.7m)
+exit=1
+load: 47.44 52.82 56.38 35/6068 3620192
+ended: 2026-10-09T21:53:50Z

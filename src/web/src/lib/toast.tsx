@@ -16,7 +16,7 @@ import { clearToasts, showToast } from './toastStore';
 // server's words as the headline: "revision 12 is stale" on its own doesn't say which action
 // failed.
 //
-// None of these hands anything back. AntD's handle, which they used to return, was a thenable that
+// None of these hands anything back. The replaced library's handle, which they used to return, was a thenable that
 // settled when the toast closed, and `onError: (e) => message.error(…)` returned it to TanStack
 // Query, which waited on it: an error toast never closes on its own, so the mutation stayed pending
 // — its button spinning — until someone clicked the toast's ×.
@@ -43,6 +43,12 @@ function announce(headline: React.ReactNode, assertive: boolean, ...lines: React
   if (!liveRegion) {
     liveRegion = document.createElement('div');
     liveRegion.className = 'sr-only';
+    // Fixed, where the class says absolute: hung after the app at the end of <body>, an absolute box
+    // sits just under the fold and makes the document 1px taller than the window. That pixel gives the
+    // document WebKit's 8px page scrollbar (index.css), which narrows fixed layers laid out after it on
+    // a phone and makes a modal's scroll lock lose the place of the page beneath it. A fixed box adds
+    // nothing to the document's height.
+    liveRegion.style.position = 'fixed';
     liveRegion.setAttribute('aria-atomic', 'true');
     document.body.appendChild(liveRegion);
   }

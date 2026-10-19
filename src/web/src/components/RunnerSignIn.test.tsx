@@ -33,6 +33,8 @@ describe('the name each login engine signs in under', () => {
       codex: 'Codex',
       kimi: 'Kimi Code',
       antigravity: 'Antigravity',
+      // Named like every engine, though no page offers its sign-in yet (webShowsEngine).
+      cursor: 'Cursor CLI',
     });
   });
 
@@ -101,6 +103,19 @@ describe('RunnerSignIn on a runner with an earlier sign-in on record', () => {
     expect(html).toContain('Enter this one-time code on the sign-in page:');
     expect(html.indexOf('ZXHO-K06HC')).toBeGreaterThan(-1);
     expect(html.indexOf('ZXHO-K06HC')).toBeLessThan(html.indexOf('Copy Code &amp; Open Sign-In Page'));
+  });
+
+  it('offers the authorization link for copying into another browser', () => {
+    const html = open(
+      loginState({
+        status: 'awaiting_code',
+        engine: 'codex',
+        url: 'https://auth.example.test/authorize?state=one-time',
+      }),
+    );
+
+    expect(html).toContain('href="https://auth.example.test/authorize?state=one-time"');
+    expect(html).toContain('Copy sign-in link');
   });
 });
 
@@ -379,5 +394,33 @@ describe('RunnerSignIn for Kimi', () => {
     expect(probeReportsSignedIn(on('global'), RUNNER, 'kimi', undefined, undefined, 'global')).toBe(true);
     // No site to wait for: the engine's own answer, as before.
     expect(probeReportsSignedIn(on('mainland-cn'), RUNNER, 'kimi')).toBe(true);
+  });
+
+  it("waits for an account's login on the site just signed in on, the account's own", () => {
+    const WORK = '5c2e91a0';
+    const on = (work: KimiRegion) => [
+      {
+        id: RUNNER,
+        engines: [
+          {
+            engine: 'kimi' as const,
+            installed: true,
+            // The engine's site is Default's, already on the site Work is moving to.
+            auth: 'yes' as const,
+            kimiRegion: 'global' as const,
+            accounts: [
+              { id: 'default', home: '/root/.kimi-code', auth: 'yes' as const, kimiRegion: 'global' as const },
+              { id: WORK, name: 'Work', home: `/root/.orbit/kimi-accounts/${WORK}`, auth: 'yes' as const, kimiRegion: work },
+            ],
+          },
+        ],
+      },
+    ];
+    // Work moving from kimi.com to kimi.ai: its yes before the runner re-probes is kimi.com's.
+    expect(probeReportsSignedIn(on('mainland-cn'), RUNNER, 'kimi', WORK, undefined, 'global')).toBe(false);
+    expect(probeReportsSignedIn(on('global'), RUNNER, 'kimi', WORK, undefined, 'global')).toBe(true);
+    // A new account, by its name, on the site it is added on.
+    expect(probeReportsSignedIn(on('mainland-cn'), RUNNER, 'kimi', undefined, 'Work', 'mainland-cn')).toBe(true);
+    expect(probeReportsSignedIn(on('mainland-cn'), RUNNER, 'kimi', undefined, 'Work', 'global')).toBe(false);
   });
 });

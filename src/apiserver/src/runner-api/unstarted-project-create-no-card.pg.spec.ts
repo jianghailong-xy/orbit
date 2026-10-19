@@ -1,7 +1,8 @@
 /**
  * D3 over real HTTP and a real PostgreSQL: in a project nobody has started, the tasks its
  * coordinator files are not put in front of the owner one card at a time — the start card reviews
- * them — and every other create is asked exactly as before.
+ * them — nor in a project whose Automatic is on, where its coordinator decides them; every other
+ * create is asked exactly as before.
  *
  * Driven through the doors a runner reaches, in the order `askBeforeCreate` / `askBeforeBatch`
  * reach them: the batch preview, the card (`POST /api/runner/sessions/:id/approvals`) and the poll
@@ -16,11 +17,22 @@
  *      count — and the tasks are written.
  *   2. One item in a project that has started: asked.
  *   3. The same create from a conversation that does not coordinate the project: asked.
- *   4. The project already started: asked.
+ *   4. The project already started, with Automatic off: asked.
  *   5. The batch preview in the unstarted project promises no run, where the same batch in a
  *      started project does: nothing starts before the start.
  *   6. An item that names no project is asked even from the coordinator: which project an unnamed
  *      create lands in is the write's own derivation, and the card door does not guess it.
+ *   7. All of it in a started project whose Automatic is on, from its coordinator: as in 1, under
+ *      the Automatic rule's own message, and the tasks are written.
+ *   8. The Automatic project, but from a conversation that does not coordinate it, or with one
+ *      item in another project: asked.
+ *   9. A single create whose own write is refused — the acceptance prose reads like a mechanically
+ *      decided result under a declaration that says nothing about why — is refused at the card with
+ *      that write's own body, and no card is raised: the answer to it is the CALLER's, and a person
+ *      pressing a button cannot give it. The write is sent too, and answers the same 409.
+ *  10. A single create that names its assignee the way the runner does — the base62 public id — is
+ *      carded with the server's preview of it. The ids a runner sends are public ids, and the card
+ *      door reads them through the DTO that decodes them rather than handing base62 to Prisma.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/runner-api/unstarted-project-create-no-card.pg.spec.ts
  *
@@ -58,12 +70,13 @@ import { SessionsService } from '../sessions/sessions.service';
 import { ListEventsService } from '../task-lists/list-events.service';
 import { TaskListsService } from '../task-lists/task-lists.service';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
+import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
 import { TasksService } from '../tasks/tasks.service';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
 import { RunnerTasksController } from './runner-tasks.controller';
-import { START_CARD_REVIEWS_MESSAGE } from './unstarted-project-create';
+import { AUTOMATIC_COORDINATOR_DECIDES_MESSAGE, START_CARD_REVIEWS_MESSAGE } from './unstarted-project-create';
 
 declare global {
   interface BigInt { toJSON(): string; }
@@ -90,7 +103,7 @@ interface Answer {
 const silent = (): unknown =>
   new Proxy({}, { get: (_target, key) => (key === 'then' ? undefined : () => undefined) });
 
-test('a coordinator’s creates in a project nobody has started are not carded one by one', {
+test('a coordinator’s creates in a project nobody has started, or one that is Automatic, are not carded one by one', {
   skip, concurrency: 1, timeout: 300_000,
 }, async (t) => {
   const url = URL!;
@@ -231,8 +244,11 @@ test('a coordinator’s creates in a project nobody has started are not carded o
     return id;
   }
 
-  /** A project of this owner, coordinated from `coordinator` when one is given. */
-  async function project(title: string, options: { coordinator?: string; started: boolean }): Promise<string> {
+  /** A project of this owner, coordinated from `coordinator` when one is given; Automatic off unless asked. */
+  async function project(
+    title: string,
+    options: { coordinator?: string; started: boolean; automatic?: boolean },
+  ): Promise<string> {
     const id = randomUUID();
     await prisma.project.create({
       data: {
@@ -243,6 +259,7 @@ test('a coordinator’s creates in a project nobody has started are not carded o
           ? { coordinatorWorkspaceId: workspaceId, coordinatorSessionId: options.coordinator }
           : {}),
         startedAt: options.started ? new Date() : null,
+        coordinatorEnabled: options.automatic ?? false,
       },
     });
     await prisma.projectRuntime.upsert({ where: { projectId: id }, create: { projectId: id }, update: {} });
@@ -280,6 +297,16 @@ test('a coordinator’s creates in a project nobody has started are not carded o
     });
     assert.equal(preview.status, 201, preview.text);
     return ask(sessionId, 'orbit_task_batch', { tasks: bodies, preview: preview.json });
+  }
+
+  /** The input a card was stored with: what the clients render, and what its pill is read from. */
+  async function storedInput(id: string): Promise<Record<string, any>> {
+    const { rows } = await sql.query<{ input: Record<string, any> }>(
+      `SELECT "input" FROM "approval" WHERE "id" = $1::uuid`,
+      [toUuid(id)],
+    );
+    assert.equal(rows.length, 1, `approval ${id} was not written`);
+    return rows[0].input;
   }
 
   async function approvalRow(id: string) {
@@ -403,7 +430,7 @@ test('a coordinator’s creates in a project nobody has started are not carded o
   });
 
   // ── 4 ────────────────────────────────────────────────────────────────────────────────────────
-  await t.test('the project already started: asked', async () => {
+  await t.test('the project already started, with Automatic off: asked', async () => {
     const coordinator = await conversation('协调：已开工');
     const started = await project('已开工的项目（协调）', { coordinator, started: true });
 
@@ -453,5 +480,131 @@ test('a coordinator’s creates in a project nobody has started are not carded o
     ]);
 
     await assertAsked(coordinator, card);
+  });
+
+  // ── 7 ────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('all of it in the Automatic project, from its coordinator: no card, and the tasks are written', async () => {
+    const coordinator = await conversation('协调：Automatic 项目');
+    const automatic = await project('Automatic 的项目', { coordinator, started: true, automatic: true });
+
+    const single = taskBody('a fix the coordinator decided on', automatic);
+    const card = await ask(coordinator, 'orbit_task_create', single);
+    assert.equal(card.status, 'ALLOWED');
+    const polled = await send('GET', `/runner/sessions/${uuidToBase62(coordinator)}/approvals/${card.id}`);
+    assert.equal(polled.status, 200, polled.text);
+    assert.equal(polled.json.status, 'ALLOWED');
+    assert.equal(polled.json.behavior, 'allow');
+    assert.equal(polled.json.message, AUTOMATIC_COORDINATOR_DECIDES_MESSAGE);
+    assert.deepEqual(await approvalRow(card.id), {
+      status: 'ALLOWED',
+      message: 'project is Automatic: its coordinator decides these',
+      decided_by_id: null,
+      decided: true,
+    });
+    await write(coordinator, '/runner/tasks', single);
+
+    const batch = [taskBody('a second fix', automatic), taskBody('a third fix', automatic)];
+    const batchCard = await askBatch(coordinator, batch);
+    assert.equal(batchCard.status, 'ALLOWED');
+    assert.equal((await approvalRow(batchCard.id)).message, AUTOMATIC_COORDINATOR_DECIDES_MESSAGE);
+    await write(coordinator, '/runner/tasks/batch-create', { tasks: batch });
+
+    assert.deepEqual(await raised(coordinator), { cards: 0, pushes: 0, pending: 0 });
+    assert.deepEqual(await tasksIn(automatic), ['a fix the coordinator decided on', 'a second fix', 'a third fix']);
+  });
+
+  // ── 8 ────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('the Automatic project from another conversation, or with an item elsewhere: asked', async () => {
+    const coordinator = await conversation('协调：Automatic 项目（反例）');
+    const automatic = await project('Automatic 的项目（反例）', { coordinator, started: true, automatic: true });
+    const elsewhere = await project('另一个 Automatic 的项目', { started: true, automatic: true });
+    const someoneElse = await conversation('一个普通会话（Automatic）');
+
+    const fromElsewhere = await ask(someoneElse, 'orbit_task_create', taskBody('filed from elsewhere', automatic));
+    await assertAsked(someoneElse, fromElsewhere);
+
+    const straddling = await askBatch(coordinator, [
+      taskBody('here', automatic),
+      taskBody('and there', elsewhere),
+    ]);
+    await assertAsked(coordinator, straddling);
+  });
+
+  // ── 9 ────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('a create the write would refuse is refused at the card, and no card is raised', async () => {
+    const someone = await conversation('普通会话：注定被拒的单张 create');
+    // One body the write itself refuses: prose that reads like a mechanically decided result
+    // (a `typecheck`) under a declaration that is not EXECUTABLE and says nothing about why. What
+    // the server has to say about it is a question for the CALLER — use the suggested criterion, or
+    // record the reason — and only the model is in a position to answer it.
+    const refused = {
+      title: 'a task the write refuses',
+      completionCriterion: 'EVIDENCE_JUDGMENT',
+      acceptanceCriteria: 'typecheck passes',
+    };
+
+    const cardAnswer = await send('POST', `/runner/sessions/${uuidToBase62(someone)}/approvals`, {
+      toolName: 'orbit_task_create',
+      input: refused,
+      toolUseId: `call-${randomUUID()}`,
+    });
+    assert.equal(cardAnswer.status, 409, cardAnswer.text);
+    assert.equal(cardAnswer.json.code, TASK_CRITERION_SHAPE_ADVICE_CODE);
+    assert.equal(cardAnswer.json.kind, 'ADVISORY');
+    assert.equal(cardAnswer.json.declaredCriterion, 'EVIDENCE_JUDGMENT');
+    assert.equal(cardAnswer.json.suggestedCriterion, 'EXECUTABLE');
+    assert.equal(cardAnswer.json.requiredAction, 'USE_SUGGESTED_CRITERION_OR_EXPLAIN_OVERRIDE');
+    assert.equal(cardAnswer.json.overrideReasonField, 'completionCriterionOverrideReason');
+
+    // The premise of the case, from the other door: this body's write is refused too, with the same
+    // answer. That is what makes the card pointless — a person pressing it can only be turned away.
+    const writeAnswer = await send('POST', '/runner/tasks', refused, {
+      'x-orbit-session-id': uuidToBase62(someone),
+      'x-orbit-workspace-id': uuidToBase62(workspaceId),
+    });
+    assert.equal(writeAnswer.status, 409, writeAnswer.text);
+    assert.equal(writeAnswer.json.code, cardAnswer.json.code);
+    assert.equal(writeAnswer.json.requiredAction, cardAnswer.json.requiredAction);
+    assert.equal(writeAnswer.json.suggestedCriterion, cardAnswer.json.suggestedCriterion);
+
+    // And the card itself was never raised: no row at all for the session list to count, no card on
+    // the conversation, no phone buzzed.
+    const { rows } = await sql.query<{ n: number }>(
+      `SELECT count(*)::int AS "n" FROM "approval" WHERE "session_id" = $1::uuid`,
+      [someone],
+    );
+    assert.equal(rows[0].n, 0, 'a refused create filed an approval row');
+    assert.deepEqual(await raised(someone), { cards: 0, pushes: 0, pending: 0 });
+
+    // The control: the same create once the caller has answered that question is carded as usual —
+    // what the door refused was the silence, not the shape.
+    const answered = {
+      ...refused,
+      completionCriterionOverrideReason: 'the run is judged by a session; the suite is evidence',
+    };
+    const card = await ask(someone, 'orbit_task_create', answered);
+    await assertAsked(someone, card);
+  });
+
+  // ── 10 ───────────────────────────────────────────────────────────────────────────────────────
+  await t.test('a single create names its ids the way the runner does, and is carded with its preview', async () => {
+    const someone = await conversation('普通会话：单张 create 的预览');
+    const assigneeId = uuidToBase62(workspaceId);
+    const body = taskBody('an ordinary create', null, { assigneeId });
+
+    const card = await ask(someone, 'orbit_task_create', body);
+    const stored = await storedInput(card.id);
+
+    // The reading the card leads with, computed over the body the runner actually sent: a task
+    // assigned to a workspace on a live runner, filed in no project, has nothing that would start
+    // it by itself. Before the DTO was applied at this door the first query of this preview threw
+    // `invalid input syntax for type uuid` — the ids a runner sends are base62 — and the card was
+    // filed without a preview, which is how every one of these cards was filed.
+    assert.equal(stored.preview.taskCount, 1);
+    assert.equal(stored.preview.needsManualStart, 1);
+    assert.equal(stored.preview.startingNow, 0);
+    // Stored as sent: the card renders the body the runner spelled, public id and all.
+    assert.equal(stored.assigneeId, assigneeId);
+    assert.equal(stored.title, 'an ordinary create');
   });
 });

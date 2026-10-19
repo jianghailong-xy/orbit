@@ -22,16 +22,12 @@ import { PushService } from '../push/push.service';
 import { buildDossier, loadDossierRecords, ownerEnvLiterals, storedDossierSources, type DossierReader } from './wiki-dossier';
 import { normalizeRepoUrl, WikiRefusalError } from './wiki.service';
 
-export { isWikiMaintenanceSession, setWikiMaintenance, wikiMaintenanceSpaceOf } from './wiki-maintenance-settings';
+export { setWikiMaintenance } from './wiki-maintenance-settings';
 
 /**
  * The Wiki maintenance run's side of the server (design §8.2, contracts/wiki.contract.json
- * `maintenance`, criterion 2): who a maintenance session is, a space's maintenance settings, the
- * cursor and its backlog, and the dossier pages a run reads.
- *
- * WHO. A maintenance session is a session whose task is in its space's hidden «Wiki maintenance»
- * list; `isWikiMaintenanceSession` (wiki-maintenance-settings.ts, re-exported here) is the one test of
- * it, and every route of the door this serves asks it first.
+ * `maintenance`, criterion 2): a space's maintenance settings, the cursor and its backlog, and the
+ * dossier pages a run reads — the server's maintenance job (`maintenance.job.server`) is the run.
  *
  * THE BACKLOG IS COUNTED, NOT KEPT UP. Every committed fact after the watermark — a session come to
  * rest, a task settled, an approval answered, a merge receipt, a criterion revised — is one, read from
@@ -42,7 +38,7 @@ export { isWikiMaintenanceSession, setWikiMaintenance, wikiMaintenanceSpaceOf } 
  * THE CURSOR ONLY MOVES FORWARD, AND ONLY PAST WHAT A RUN RECORDED. A page hands out the position of
  * the last fact it covered as a token; `advanceCursor` moves the watermark to it only when the run says
  * it succeeded, only forward, and only as far as a page has handed out — one compare-and-set on the
- * row. A failed or truncated run moves nothing and is counted as a failure. `orbit wiki maintain` moves it
+ * row. A failed or truncated run moves nothing and is counted as a failure. The maintenance job moves it
  * earlier, the same way, once its ops are recorded (`advanceRecorded`, criterion 3 revision 4): what fails
  * after that still ends the run failed, and the cursor stays past the sessions those ops came from.
  */
@@ -229,8 +225,9 @@ export async function spaceScope(prisma: PrismaService, ownerId: string, spaceId
 
 /**
  * The space's committed facts (contract `maintenance.cursor.factKinds`), as one statement over the five
- * sources. Nothing of a maintenance run is among them: its sessions, its tasks, its approvals and its
- * receipts are the run's own work, and counting them would have a run feed its own backlog.
+ * sources. Nothing of a maintenance run is among them: the sessions, tasks, approvals and receipts a run made
+ * before P11 were the run's own work, and counting them would have a run feed its own backlog; a run the
+ * server makes has none.
  */
 export function factsSql(scope: SpaceScope, from: FactPosition | null): Prisma.Sql {
   const owner = scope.ownerId;
@@ -414,7 +411,7 @@ function positionOf(at: Date | null, kind: string | null, ref: string | null): F
 }
 
 /**
- * Which two conditions make a maintenance task due (criterion 3 reads these; nothing here starts one):
+ * Which two conditions make a maintenance run due (criterion 3 reads these; nothing here starts one):
  * `rules.backlogThreshold` SESSIONS with a fact after the watermark — design §8.2's «20 个会话», so a
  * session that came to rest with its task settled and its branch merged is one, not three — or the
  * oldest fact after it older than `rules.maxPendingAgeHours`.
@@ -456,7 +453,7 @@ export function errorSignature(output: string): string {
 
 export interface DossierPageOptions {
   after?: string | null;
-  /** A cursor token the page does not go past: the position a run's task expects it to reach. */
+  /** A cursor token the page does not go past: the position the run expects it to reach. */
   until?: string | null;
   limit?: number;
   /** Now, for a spec to hold still; the grace a fact is given to commit is counted back from it. */
@@ -469,8 +466,8 @@ export interface DossierPageOptions {
 /**
  * One page over facts read oldest first: the facts it covers until it holds `limit` sessions, the
  * sessions they name, and the position of the last one — the page's token. The same walk makes a
- * maintenance task's expected position (wiki-maintenance-run.ts), so a run that pages from the same
- * watermark reaches exactly what its task expects.
+ * maintenance run's expected position (wiki-maintenance-run.ts), so a run that pages from the same
+ * watermark reaches exactly what it expects.
  */
 export function pageOf(
   facts: readonly Fact[],
@@ -596,7 +593,7 @@ export class WikiMaintenance {
     }
     const grace = options.graceSeconds ?? WIKI_MAINTENANCE_RULES.settleGraceSeconds;
     const settled = new Date(now.getTime() - grace * 1000);
-    // A page never passes the position its run's task expects (`until`): what is after it is the next
+    // A page never passes the position its run expects (`until`): what is after it is the next
     // run's. The facts before it are read to the grace like any others.
     const stop = options.until ? decodeCursorToken(options.until, spaceId) : null;
     const until = stop && stop.at < settled ? stop.at : settled;

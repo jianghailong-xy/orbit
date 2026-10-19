@@ -1,0 +1,80 @@
+92 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+93 |     }
+94 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[439/448] Compiling OrbitApp ProjectLandingJobsSheet.swift
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:92:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+90 |                        value: spun)
+91 |             .onAppear { spun = running }
+92 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+93 |     }
+94 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[440/448] Compiling OrbitApp ProjectLandingRow.swift
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:92:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+90 |                        value: spun)
+91 |             .onAppear { spun = running }
+92 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+93 |     }
+94 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[441/448] Compiling OrbitApp ProjectStartedCardView.swift
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:92:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+90 |                        value: spun)
+91 |             .onAppear { spun = running }
+92 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+93 |     }
+94 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[442/448] Compiling OrbitApp ProjectsView.swift
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:92:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+90 |                        value: spun)
+91 |             .onAppear { spun = running }
+92 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+93 |     }
+94 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[443/448] Compiling OrbitApp ProviderPoolViews.swift
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:92:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+90 |                        value: spun)
+91 |             .onAppear { spun = running }
+92 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+93 |     }
+94 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[444/448] Compiling OrbitApp RowSwipeActions.swift
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:92:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+90 |                        value: spun)
+91 |             .onAppear { spun = running }
+92 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+93 |     }
+94 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[445/448] Compiling OrbitApp RunnerControlPane.swift
+/Users/runner/work/orbit/orbit/src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectLandingRow.swift:92:14: warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+90 |                        value: spun)
+91 |             .onAppear { spun = running }
+92 |             .onChange(of: running) { spun = $0 }
+   |              `- warning: 'onChange(of:perform:)' was deprecated in macOS 14.0: Use `onChange` with a two or zero parameter action closure instead. [#DeprecatedDeclaration]
+93 |     }
+94 | }
+
+[#DeprecatedDeclaration]: <https://docs.swift.org/compiler/documentation/diagnostics/deprecated-declaration>
+[445/448] Write Objects.LinkFileList
+[446/448] Linking OrbitApp
+[447/448] Applying OrbitApp
+Build complete! (165.57s)

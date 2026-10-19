@@ -144,6 +144,32 @@ const ROOT_KINDS: { readonly [K in ShareRootKind]?: RootKindSpec } = {
     // updates.
     shows: [],
   },
+  WIKI: {
+    title: 'Share wiki',
+    publicDetail: 'Anyone with the link can view — no sign-in. They can’t change anything.',
+    layers: [
+      {
+        layer: null,
+        name: 'Documents',
+        detail: 'The wiki’s home and every document written so far',
+        count: (counts) => countOf(counts.documents ?? 0, 'document'),
+      },
+      {
+        layer: 'footnotes',
+        name: 'Footnotes',
+        // What a footnote shows, then the fixed risk sentence (§8).
+        detail: `The quotes and code each sentence cites, with file paths and lines. ${CONVERSATIONS_RISK}`,
+        count: (counts) => countOf(counts.footnotes ?? 0, 'footnote'),
+        warn: true,
+      },
+    ],
+    // A space is addressed by its slug, which the id alone does not give: whoever opens the dialog
+    // passes `appPath`, and the Wiki's own route stands in for it otherwise.
+    appPath: () => '/wiki',
+    // The wiki header's pill reads the link under this dialog's own key, which every write here
+    // updates.
+    shows: [],
+  },
 };
 
 /** Whether this dialog can be opened for a root of `kind`. */
@@ -168,6 +194,7 @@ export function ShareModal({
   kind,
   rootId,
   returnFocus,
+  appPath,
 }: {
   open: boolean;
   onClose: () => void;
@@ -175,6 +202,8 @@ export function ShareModal({
   rootId: string;
   /** Where focus goes when the dialog closes, for an opener that does not outlive it (a menu item). */
   returnFocus?: RefObject<HTMLElement | null>;
+  /** The root's signed-in address, when its id alone does not make it: a wiki space's is its slug's. */
+  appPath?: string;
 }) {
   const spec = ROOT_KINDS[kind];
   const message = useToast();
@@ -347,7 +376,7 @@ export function ShareModal({
             </span>
             <Button
               icon={<LinkOutlined />}
-              onClick={() => copy(`${window.location.origin}${spec.appPath(rootId)}`, 'Link copied')}
+              onClick={() => copy(`${window.location.origin}${appPath ?? spec.appPath(rootId)}`, 'Link copied')}
             >
               Copy link
             </Button>

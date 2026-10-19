@@ -3,7 +3,6 @@ import type { ReactElement } from 'react';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { SessionLifecycleState, SessionRunState } from '@orbit/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -225,7 +224,7 @@ beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
   apiMock.mockReset();
   landedOn = '';
-  // antd's Modal/Select siblings subscribe to breakpoints on mount and jsdom ships no matchMedia.
+  // The page's breakpoint reads subscribe on mount and jsdom ships no matchMedia.
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
@@ -256,24 +255,22 @@ async function mount(node: ReactElement): Promise<void> {
   await act(async () => {
     root.render(
       <QueryClientProvider client={client}>
-        {/* The toast surface: without it AntD's `App.useApp()` hands back no-ops, and the one
-            sentence a re-opened conversation has to produce would go nowhere — silently. */}
-        <AntApp>
-          <MemoryRouter initialEntries={['/projects/x']}>
-            <Routes>
-              <Route path="*" element={node} />
-            </Routes>
-            <Probe />
-            <ToastViewport />
-          </MemoryRouter>
-        </AntApp>
+        <MemoryRouter initialEntries={['/projects/x']}>
+          <Routes>
+            <Route path="*" element={node} />
+          </Routes>
+          <Probe />
+          {/* The toast surface: without it the one sentence a re-opened conversation has to produce
+              would go nowhere — silently. */}
+          <ToastViewport />
+        </MemoryRouter>
       </QueryClientProvider>,
     );
   });
   await settle();
 }
 
-/** React Query answers on a macrotask, and antd's message layer paints on another. */
+/** React Query answers on a macrotask, and the toast layer paints on another. */
 async function settle(): Promise<void> {
   for (let i = 0; i < 4; i += 1) {
     await act(async () => {

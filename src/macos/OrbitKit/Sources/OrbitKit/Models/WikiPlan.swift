@@ -319,10 +319,12 @@ public enum WikiPlanJobKind: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// The fact that asked for a job (contract `plan.jobs.triggers`): the space was created, or its owner asked.
+/// The fact that asked for a job (contract `plan.jobs.triggers`): the space was created, its owner asked, or an
+/// administrator asked for the build of the version in force again, for support (`plan.jobs.rebuild`).
 public enum WikiPlanJobTrigger: String, Codable, Sendable, CaseIterable {
     case spaceCreated = "space_created"
     case owner
+    case support
     case unknown
 
     public init(from decoder: Decoder) throws {
@@ -359,14 +361,6 @@ public struct WikiPlanJob: Codable, Equatable, Sendable {
     public struct Held: Codable, Equatable, Sendable {
         public let reason: WikiPlanJobHeldReason
         public let at: String?
-    }
-
-    /// A queued job's: the unfinished task of the maintenance list it waits for, and that task's run.
-    public struct WaitingFor: Codable, Equatable, Sendable {
-        public let taskId: String
-        public let title: String?
-        public let sessionId: String?
-        public let startedAt: String?
     }
 
     /// What the run reported: a draft's or a revision's (contract `plan.jobs.report`), or a build's
@@ -484,9 +478,8 @@ public struct WikiPlanJob: Codable, Equatable, Sendable {
     public let instructions: String?
     public let requestedAt: String?
     public let held: Held?
-    public let waitingFor: WaitingFor?
-    public let taskId: String?
-    public let provider: String?
+    /// The session that ran a job a task made before server execution; nil for the server's own (contract
+    /// `plan.jobs.read`, whose `waitingFor`, `taskId` and `provider` this client does not read).
     public let sessionId: String?
     public let madeAt: String?
     public let startedAt: String?
@@ -509,7 +502,7 @@ public struct WikiPlanJob: Codable, Equatable, Sendable {
     private let lossyDraft: LossyDecodable<WikiPlanDraftInput>?
 
     private enum CodingKeys: String, CodingKey {
-        case id, spaceId, kind, trigger, state, instructions, requestedAt, held, waitingFor, taskId, provider, sessionId, madeAt,
+        case id, spaceId, kind, trigger, state, instructions, requestedAt, held, sessionId, madeAt,
              startedAt, endedAt, attempt, attemptsMax, progress, version, errors, error, report
         case lossyDraft = "draft"
     }

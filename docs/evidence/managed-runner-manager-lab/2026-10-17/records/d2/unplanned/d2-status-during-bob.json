@@ -1,0 +1,40 @@
+{
+  "at": "2026-10-17T21:39:06.403+00:00",
+  "display": {
+    "acceptsWork": true,
+    "detail": "Sessions here run on the runner Orbit manages for you.",
+    "ensure": false,
+    "kind": "available",
+    "moving": false,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": true,
+    "title": "Managed runner ready"
+  },
+  "owner": "bob",
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": true,
+      "canWake": false
+    },
+    "agentId": "34hhHGasbFwtKT74BhUYR",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": "claude",
+    "lastHeartbeatAt": "2026-10-17T21:38:47.995Z",
+    "managementState": "READY",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 13,
+    "runnerId": "34hhHGaIO4wyXGkYmA2OC",
+    "runnerPublicId": "34hhHGaIO4wyXGkYmA2OC",
+    "usable": true,
+    "workspaceId": "34hhHGasbFwtKT74BhUYR",
+    "workspacePublicId": "34hhHGasbFwtKT74BhUYR"
+  }
+}

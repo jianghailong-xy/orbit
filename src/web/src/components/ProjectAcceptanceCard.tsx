@@ -1,15 +1,20 @@
 import { DownOutlined } from '@ant-design/icons';
 import { useId, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Alert, Button, Card, Skeleton, Typography } from 'antd';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { api } from '../api';
 import { ReferenceLink, referenceUrlTransform } from '../lib/markdownLinks';
+import { DEFAULT_MAIN_BRANCH, mainBranchName } from '../lib/projectStart';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { AppLink } from './AppLink';
 import { ProjectTaskLink } from './ProjectTaskLink';
 import { TaskStatusPill } from './TaskStatusPill';
+import { Alert } from './ui/Alert';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
+import { Skeleton } from './ui/Skeleton';
+import './ui/Typography.css';
 
 /**
  * What this project is held to, drawn from `GET /projects/:id` → `acceptanceCriteriaItems`.
@@ -132,8 +137,9 @@ export interface AcceptanceCriterionItem {
 interface ProjectAcceptanceDetail {
   acceptanceCriteriaItems?: AcceptanceCriterionItem[];
   /** The settings half of the project's integration line, which this document already carries: the
-   *  branch a criterion's work can be met ON without being on main (§7.4 V11). */
-  integration?: { ref?: string | null };
+   *  branch a criterion's work can be met ON without being on main (§7.4 V11), and the project's main
+   *  branch, which the landings name. */
+  integration?: { ref?: string | null; upstreamRef?: string | null };
 }
 
 /** How many criteria a card lists before it stops and says how many more there are. Twelve rather
@@ -208,11 +214,13 @@ const ON_INTEGRATION_LINE = 'ON_INTEGRATION_LINE';
 function landingSentence(
   landing: string,
   ref: string | null | undefined,
+  main: string,
 ): { text: string; tail?: string } {
   if (landing === ON_INTEGRATION_LINE) {
-    return { text: `on ${ref ?? 'the project branch'}`, tail: 'not on main yet' };
+    return { text: `on ${ref ?? 'the project branch'}`, tail: `not on ${main} yet` };
   }
-  return { text: LANDING[landing] ?? landing };
+  // Landed is on the project's main branch, by name — `LANDING` says it of main.
+  return { text: landing === 'LANDED' ? `on ${main}` : LANDING[landing] ?? landing };
 }
 
 /** The landing value that is drawn heavier than the other. A criterion its work has MET, with no
@@ -250,7 +258,7 @@ function RequiredAction({ code }: { code: string }) {
   if (sentence === undefined) {
     return (
       <span className="acceptance-held-up-action">
-        <Typography.Text code>{code}</Typography.Text>
+        <span className="orbit-typography"><code>{code}</code></span>
       </span>
     );
   }
@@ -269,10 +277,13 @@ function RequiredAction({ code }: { code: string }) {
 function CriterionWork({
   criterion,
   integrationRef,
+  mainBranch = DEFAULT_MAIN_BRANCH,
   projectId,
 }: {
   criterion: AcceptanceCriterionItem;
   integrationRef?: string | null;
+  /** The project's main branch by name, which the landings name. */
+  mainBranch?: string;
   /** The project whose page this is: a named task opens over it. Absent on a public page. */
   projectId?: string;
 }) {
@@ -280,7 +291,7 @@ function CriterionWork({
   const unmet = criterion.unmet ?? [];
   const landing = criterion.landing === undefined
     ? null
-    : landingSentence(criterion.landing, integrationRef);
+    : landingSentence(criterion.landing, integrationRef, mainBranch);
   return (
     <>
       <div className="acceptance-work">
@@ -382,6 +393,7 @@ export function AcceptanceCriteriaList({
   criteria,
   id,
   integrationRef,
+  mainBranch,
   projectId,
 }: {
   criteria: AcceptanceCriterionItem[];
@@ -389,6 +401,8 @@ export function AcceptanceCriteriaList({
   /** This project's integration branch, so a criterion met on it can NAME it. Absent for a project
    *  with no line, where the only two landings are "on main" and "nobody said". */
   integrationRef?: string | null;
+  /** The project's main branch by name — what "on main" says — main when the page does not know. */
+  mainBranch?: string;
   /** The project whose page this is (CriterionWork). Absent on a public page. */
   projectId?: string;
 }) {
@@ -409,7 +423,7 @@ export function AcceptanceCriteriaList({
             >
               {c.text}
             </Markdown>
-            <CriterionWork criterion={c} integrationRef={integrationRef} projectId={projectId} />
+            <CriterionWork criterion={c} integrationRef={integrationRef} mainBranch={mainBranch} projectId={projectId} />
             {c.verificationMethod ? <CriterionMethod method={c.verificationMethod} /> : null}
           </div>
         </li>
@@ -473,6 +487,7 @@ export function ProjectAcceptanceCard({
       error={detail.isError ? detail.error : null}
       criteria={Array.isArray(detail.data?.acceptanceCriteriaItems) ? detail.data.acceptanceCriteriaItems : []}
       integrationRef={detail.data?.integration?.ref ?? null}
+      mainBranch={mainBranchName(detail.data?.integration?.upstreamRef)}
     />
   );
 }
@@ -485,6 +500,7 @@ export function ProjectAcceptanceCard({
 export function AcceptanceCriteriaCard({
   criteria,
   integrationRef,
+  mainBranch,
   projectId,
   pending = false,
   error = null,
@@ -492,6 +508,8 @@ export function AcceptanceCriteriaCard({
 }: {
   criteria: AcceptanceCriterionItem[];
   integrationRef: string | null;
+  /** The project's main branch by name; main where the page holds no read that names it. */
+  mainBranch?: string;
   /** The project whose page this is (CriterionWork). Absent on a public page. */
   projectId?: string;
   pending?: boolean;
@@ -513,19 +531,17 @@ export function AcceptanceCriteriaCard({
     <Card
       className="acceptance-card"
       title="Acceptance criteria"
-      styles={{ body: { padding: 0 } }}
       extra={action}
     >
       {pending ? (
         <div className="acceptance-block">
-          <Skeleton active title={false} paragraph={{ rows: 3 }} />
+          <Skeleton rows={3} />
         </div>
       ) : error ? (
         <div className="acceptance-block">
           <Alert
             type="error"
-            showIcon
-            message="Acceptance criteria could not be loaded"
+            title="Acceptance criteria could not be loaded"
             description={error instanceof Error ? error.message : undefined}
           />
         </div>
@@ -543,6 +559,7 @@ export function AcceptanceCriteriaCard({
             id={criteriaListId}
             criteria={shown}
             integrationRef={integrationRef}
+            mainBranch={mainBranch}
             projectId={projectId}
           />
           {hasCriteriaDisclosure ? (
@@ -552,29 +569,30 @@ export function AcceptanceCriteriaCard({
             <div className="acceptance-block acceptance-more">
               <Button
                 size="small"
-                block={phone}
+                style={phone ? { width: '100%' } : undefined}
                 className="acceptance-more-button"
                 aria-expanded={expanded}
                 aria-controls={criteriaListId}
                 onClick={() => setExpanded((current) => !current)}
+                icon={phone ? (
+                  <DownOutlined
+                    className={`acceptance-more-icon${expanded ? ' is-expanded' : ''}`}
+                    aria-hidden
+                  />
+                ) : undefined}
+                iconPlacement="end"
               >
                 {expanded
                   ? `Show first ${previewLimit} criteria`
                   : phone
                     ? `View all ${criteria.length} criteria`
                     : `Show all ${criteria.length} criteria`}
-                {phone ? (
-                  <DownOutlined
-                    className={`acceptance-more-icon${expanded ? ' is-expanded' : ''}`}
-                    aria-hidden
-                  />
-                ) : null}
               </Button>
-              <Typography.Text type="secondary" className="acceptance-more-meta">
+              <span className="acceptance-more-meta orbit-typography orbit-typography-secondary">
                 {expanded
                   ? `Showing all ${criteria.length} criteria`
                   : `${criteria.length - shown.length} more not shown`}
-              </Typography.Text>
+              </span>
             </div>
           ) : null}
           <OutcomeNote />

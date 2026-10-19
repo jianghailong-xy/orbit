@@ -2,32 +2,28 @@ import {
   AgentProvider,
   autoAvailable,
   DSH_PERMISSION_MODES,
+  isEngine,
   isRetiredModel,
-  openCodeKeyModel,
+  keyDialect,
   openCodeKeyOf,
   type PlanUsageSnapshot,
   type RunnerModelCatalog,
   type RuntimeDefaultModels,
 } from '@orbit/shared';
 
-export const PROVIDER_OPTIONS = [
-  { value: 'claude', label: 'Claude' },
-  { value: 'codex', label: 'Codex' },
-  { value: 'kimi', label: 'Kimi' },
-  { value: 'opencode', label: 'OpenCode' },
-  { value: 'antigravity', label: 'Antigravity' },
-];
-
 type ModelOption = { value: string; label: string };
 
 /**
- * A control-plane–configured provider (from GET /api/providers): a custom identity (its own
- * slug/label + model list) that borrows a built-in runtime. Its slug lands in a workspace/session's
- * `provider` field just like a built-in, so it's merged into the pickers alongside claude/codex.
+ * A control-plane–configured provider (from GET /api/providers): a key — its own slug/label and
+ * model list — that one or more engines run on (docs/provider-engine-contract.md §2.1). Its slug
+ * lands in a session's `provider` beside the engine that runs it, as an engine's own sign-in does.
+ * The account pools ride the same shape (poolsAsProviders), each running on its own engine alone.
  */
 export interface ConfiguredProvider {
   slug: string;
   label: string;
+  /** The protocol the key's endpoint speaks, named by the engine that speaks it natively. Which
+   *  engines run the key is `engines`. */
   runtime: string;
   /** `reasoningLevels`: the efforts a self-hosted Claude-runtime model declares it accepts, which
    *  dispatch holds the session to (see declaredEffortLevels). */
@@ -49,87 +45,115 @@ export interface ConfiguredProvider {
   /** Whether an OpenCode session may spend this key too (shared `openCodeKeys`), as GET /providers
    *  decides it: absent from an older server, which reads as no. */
   runsOnOpenCode?: boolean;
+  /** Every engine this key runs on, the one a session naming only the key gets first — the
+   *  server's answer (docs/provider-engine-contract.md §6.3), since only the server, holding the
+   *  key, can tell a Claude subscription token, which runs on Claude Code alone. Absent on a pool
+   *  read as a provider, which runs on its own engine (`runtime`) and nowhere else. */
+  engines?: string[];
 }
 
-const OPENCODE_KEY_CHOICE = `${AgentProvider.OPENCODE}/`;
+/** The engines whose own sign-in on the runner is a credential: the provider slug is the engine's
+ *  name, and only that engine runs it. */
+const LOGIN_ENGINES: readonly string[] = [
+  AgentProvider.CLAUDE,
+  AgentProvider.CODEX,
+  AgentProvider.KIMI,
+  AgentProvider.ANTIGRAVITY,
+];
 
-/**
- * The Provider-menu identity of a configured key run on OpenCode: `opencode/<slug>`. Not a value a
- * session stores — its provider stays `opencode` and the key rides in its model (shared
- * `openCodeKeys`) — but the one the pickers select, list and seed models by. No configured slug can
- * hold a `/`, so it never names anything else.
- */
-export const openCodeKeyChoice = (slug: string): string => `${OPENCODE_KEY_CHOICE}${slug}`;
+/** Whether `provider` is an engine's own sign-in on the runner (its slug is the engine's name). */
+export const isLoginProvider = (provider?: string | null): boolean =>
+  !!provider && LOGIN_ENGINES.includes(provider);
 
-/** The configured key an `opencode/<slug>` choice names, or null for any other identity. */
-export const openCodeChoiceKey = (choice?: string | null): string | null =>
-  choice?.startsWith(OPENCODE_KEY_CHOICE) && choice.length > OPENCODE_KEY_CHOICE.length
-    ? choice.slice(OPENCODE_KEY_CHOICE.length)
-    : null;
-
-/** The Provider-menu identity a session runs on: its provider, except that an OpenCode session whose
- *  model names a configured key is on that key's choice. */
-export const providerChoiceFor = (provider: string, model?: string | null): string => {
-  const key = provider === AgentProvider.OPENCODE ? openCodeKeyOf(model) : null;
-  return key ? openCodeKeyChoice(key.slug) : provider;
-};
-
-/** Resolve a configured provider by slug — built-in slugs never match. */
-const configuredProvider = (
+/** The configured key (or pool) `provider` names. An engine's own sign-in and OpenCode's own config
+ *  never match one: dispatch reads those slugs as built-ins first. */
+const configuredRow = (
   provider?: string | null,
   configured?: ConfiguredProvider[] | null,
 ): ConfiguredProvider | undefined =>
-  provider ? (configured ?? []).find((p) => p.slug === provider) : undefined;
+  provider && !isLoginProvider(provider) && provider !== AgentProvider.OPENCODE
+    ? (configured ?? []).find((p) => p.slug === provider)
+    : undefined;
 
-/** Resolve a persisted provider identity to the built-in runtime that actually executes it. */
-export const runtimeForProvider = (
+/** The engine whose own protocol a row's endpoint speaks — its model table's home. A row still on
+ *  the retired `dsh` runtime holds DeepSeek's Anthropic-compatible endpoint; an unreadable runtime
+ *  keeps the backend's Claude fallback. */
+const nativeEngine = (runtime?: string | null): AgentProvider =>
+  runtime === AgentProvider.CODEX
+    ? AgentProvider.CODEX
+    : runtime === AgentProvider.KIMI
+      ? AgentProvider.KIMI
+      : runtime === AgentProvider.ANTIGRAVITY
+        ? AgentProvider.ANTIGRAVITY
+        : AgentProvider.CLAUDE;
+
+/**
+ * The engines `provider` runs on, the one a session naming only it gets first (the compatibility
+ * table, docs/provider-engine-contract.md §2.1): an engine's own sign-in its engine, OpenCode's own
+ * config OpenCode, a key what GET /providers says, a pool its own engine. The legacy built-in `dsh`
+ * is DeepSeek Harness on the key its workspace's environment holds. Empty for a provider this
+ * account does not have (removed, turned off, not loaded yet).
+ */
+export function providerEngines(
   provider?: string | null,
   configured?: ConfiguredProvider[] | null,
-): AgentProvider => {
-  // A key run on OpenCode is run by OpenCode, whichever CLI the key itself borrows.
-  if (openCodeChoiceKey(provider)) return AgentProvider.OPENCODE;
-  const custom = configuredProvider(provider, configured);
-  // Configured providers borrow Claude, Codex, Kimi or Antigravity; invalid/legacy runtime values
-  // use the same safe Claude fallback as the backend. First-class Kimi and Antigravity are also the
-  // literal built-in slugs below.
-  if (custom) {
-    if (custom.runtime === AgentProvider.CODEX) return AgentProvider.CODEX;
-    if (custom.runtime === AgentProvider.KIMI) return AgentProvider.KIMI;
-    if (custom.runtime === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
-    if (custom.runtime === AgentProvider.DSH) return AgentProvider.DSH;
-    return AgentProvider.CLAUDE;
+): AgentProvider[] {
+  if (!provider) return [];
+  if (isLoginProvider(provider)) return [provider as AgentProvider];
+  if (provider === AgentProvider.OPENCODE) return [AgentProvider.OPENCODE];
+  const row = configuredRow(provider, configured);
+  if (row) {
+    if (row.engines) return row.engines.filter(isEngine);
+    // A row from a payload that predates `engines`: its protocol's engine, and OpenCode where the
+    // server said so; a protocol no engine speaks, none (contract §2.1). A pool is read this way too.
+    if (!keyDialect(row.runtime)) return [];
+    const native = row.runtime === AgentProvider.DSH ? AgentProvider.DSH : nativeEngine(row.runtime);
+    return row.runsOnOpenCode ? [native, AgentProvider.OPENCODE] : [native];
   }
-  const value = provider;
-  if (value === AgentProvider.CODEX) return AgentProvider.CODEX;
-  if (value === AgentProvider.KIMI) return AgentProvider.KIMI;
-  if (value === AgentProvider.OPENCODE) return AgentProvider.OPENCODE;
-  if (value === AgentProvider.ANTIGRAVITY) return AgentProvider.ANTIGRAVITY;
-  if (value === AgentProvider.DSH) return AgentProvider.DSH;
-  return AgentProvider.CLAUDE;
-};
+  return provider === AgentProvider.DSH ? [AgentProvider.DSH] : [];
+}
+
+/** The engine a session naming only `provider` runs on, or null when nothing here can say. */
+export const defaultEngineOf = (
+  provider?: string | null,
+  configured?: ConfiguredProvider[] | null,
+): AgentProvider | null => providerEngines(provider, configured)[0] ?? null;
+
+/** The engine a session runs on: the one it recorded, which never changes — else, for a row an older
+ *  replica wrote, the engine its provider ran on before engines were recorded (contract §1.1), and
+ *  Claude Code when even that provider is gone, as dispatch used to read it. */
+export const sessionEngineOf = (
+  engine: string | null | undefined,
+  provider?: string | null,
+  configured?: ConfiguredProvider[] | null,
+): AgentProvider => (isEngine(engine) ? engine : (defaultEngineOf(provider, configured) ?? AgentProvider.CLAUDE));
+
+/**
+ * A session's (engine, provider, model) with OpenCode's old encoding read the new way: a session an
+ * older client started on a key under OpenCode stored `opencode` and named the key in its model,
+ * `orbit-<slug>/<model>` (contract §3.3). That is the key `<slug>`, with `<model>`.
+ */
+export function sessionPick(
+  engine: AgentProvider,
+  provider: string,
+  model?: string | null,
+): { provider: string; model: string | null | undefined } {
+  const key = engine === AgentProvider.OPENCODE && provider === AgentProvider.OPENCODE ? openCodeKeyOf(model) : null;
+  return key ? { provider: key.slug, model: key.model } : { provider, model };
+}
 
 /** Whether the client can safely derive model capabilities for a persisted provider identity.
- * Built-ins are always known; a custom/removed slug is known only after the provider request has
- * completed successfully (an authoritative empty list then means the backend's Claude fallback). */
+ * An engine's own sign-in and OpenCode's own config are always known; a key or pool slug is known
+ * only after the provider request has completed successfully (an authoritative empty list then
+ * means the key is gone). */
 export const providerIdentityResolved = (
   provider?: string | null,
   configuredProvidersLoaded = false,
 ): boolean =>
   !provider ||
-  provider === AgentProvider.CLAUDE ||
-  provider === AgentProvider.CODEX ||
-  provider === AgentProvider.KIMI ||
+  isLoginProvider(provider) ||
   provider === AgentProvider.OPENCODE ||
-  provider === AgentProvider.ANTIGRAVITY ||
   configuredProvidersLoaded;
-
-/** Provider dropdown options: built-in runtimes followed by the configured providers. */
-export const mergedProviderOptions = (
-  configured?: ConfiguredProvider[] | null,
-): { value: string; label: string }[] => [
-  ...PROVIDER_OPTIONS,
-  ...(configured ?? []).map((p) => ({ value: p.slug, label: p.label })),
-];
 
 // Model options are sourced exclusively from the runner's live model catalog (Codex:
 // `codex debug models`; Claude: `claude -p "/model <alias>"`). There are no static
@@ -172,12 +196,11 @@ export const CONTEXT_WINDOW_BY_MODEL: Record<string, number> = {
   'claude-haiku-4-5': 200_000,
   'kimi-code/kimi-for-coding': 262_144,
 };
-const catalogOptionsForProvider = (
-  provider?: string | null,
+const catalogOptions = (
+  engine: AgentProvider,
   modelCatalog?: RunnerModelCatalog | null,
 ): ModelOption[] | undefined => {
-  const key = (provider ?? 'claude') as keyof RunnerModelCatalog;
-  const rows = modelCatalog?.[key];
+  const rows = modelCatalog?.[engine as keyof RunnerModelCatalog];
   const options = rows
     ?.filter((m) => m.value && m.label)
     .map((m) => ({ value: m.value, label: m.label }));
@@ -234,161 +257,190 @@ export const DEFAULT_MODEL_BY_PROVIDER: Record<string, string> = {
   dsh: '',
 };
 
-export const modelOptionsForProvider = (
+/** A key's (or pool's) own model table, the same on every engine that runs it: what the runner's CLI
+ *  reports for a vendor whose endpoint is that CLI's own (`modelsFromRuntime` — read under the CLI's
+ *  engine, never the slug, so an OpenAI key reads Codex's models and a Gemini key agy's), else the
+ *  row's own list. An empty list stays empty rather than borrowing Claude's: the composer then shows
+ *  the effective fallback as its sole row. A row on the retired `dsh` runtime has no table outside
+ *  DeepSeek Harness. */
+const rowModelOptions = (row: ConfiguredProvider, modelCatalog?: RunnerModelCatalog | null): ModelOption[] => {
+  if (row.modelsFromRuntime && row.runtime !== AgentProvider.DSH) {
+    const live = catalogOptions(nativeEngine(row.runtime), modelCatalog);
+    if (live) return live;
+  }
+  return row.models.filter((m) => m.value && m.label).map((m) => ({ value: m.value, label: m.label }));
+};
+
+/**
+ * The models a session on `engine` with `provider` can pick: the model space is the pair's
+ * (docs/provider-engine-contract.md §2.2). DeepSeek Harness takes the runner's ACP catalogue whichever
+ * DeepSeek key it spends; a key brings its own table to every engine that runs it, OpenCode included
+ * (stored bare — dispatch names the key for OpenCode); an engine's own sign-in, and OpenCode's own
+ * config, the runner's catalogue of that CLI.
+ */
+export const modelOptionsFor = (
+  engine: AgentProvider,
   provider?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
 ): ModelOption[] => {
-  // A key run on OpenCode offers the key's own models, under the OpenCode ids that name the key.
-  const key = openCodeChoiceKey(provider);
-  if (key) {
-    return modelOptionsForProvider(key, modelCatalog, configured).map((option) => ({
-      value: openCodeKeyModel(key, option.value),
-      label: option.label,
-    }));
+  if (engine === AgentProvider.DSH) return catalogOptions(AgentProvider.DSH, modelCatalog) ?? [];
+  const row = configuredRow(provider, configured);
+  if (row) return rowModelOptions(row, modelCatalog);
+  if (engine === AgentProvider.OPENCODE) {
+    return [...OPENCODE_MODEL_OPTIONS, ...(catalogOptions(AgentProvider.OPENCODE, modelCatalog) ?? [])];
   }
-  // A configured provider carries its own model list (from the API), which wins for its slug.
-  const custom = configuredProvider(provider, configured);
-  if (custom) {
-    // …except when the vendor IS the runtime's own endpoint: there the runner's probe of the
-    // installed CLI is more current than any list we ship, so it leads and the stored list is
-    // the fallback. The catalogue is read under the borrowed runtime's key, never the slug, so
-    // an OpenAI provider reads Codex models (and a Gemini one agy's) and can't land in Claude's
-    // namespace.
-    if (custom.modelsFromRuntime) {
-      const runtime = runtimeForProvider(provider, configured);
-      const live = catalogOptionsForProvider(runtime, modelCatalog);
-      if (live) return live;
-    }
-    const options = custom.models
-      .filter((m) => m.value && m.label)
-      .map((m) => ({ value: m.value, label: m.label }));
-    // An empty custom model space must not fall through to Claude's catalog. The composer inserts
-    // the provider's effective fallback as its sole row, keeping a custom Codex picker out of the
-    // Claude model namespace.
-    return options;
-  }
-  if (provider === 'opencode') {
-    return [
-      ...OPENCODE_MODEL_OPTIONS,
-      ...(catalogOptionsForProvider(provider, modelCatalog) ?? []),
-    ];
-  }
+  // The engine's own sign-in — and a provider since removed, whose own table went with it.
   return (
-    catalogOptionsForProvider(provider, modelCatalog) ??
-    (provider === AgentProvider.KIMI
+    catalogOptions(engine, modelCatalog) ??
+    (engine === AgentProvider.KIMI
       ? KIMI_MODEL_OPTIONS
-      : provider === AgentProvider.ANTIGRAVITY
+      : engine === AgentProvider.ANTIGRAVITY
         ? ANTIGRAVITY_MODEL_OPTIONS
         : [])
   );
 };
 
-export const defaultModelForProvider = (
+/** A key's (or pool's) default on any engine that runs it: what the CLI of its own endpoint reports
+ *  for a vendor it speaks to natively, beating the id shipped in the preset, else the row's own. Never
+ *  the Claude default for a key on Codex's protocol: a key owns its model space. */
+const rowDefaultModel = (
+  row: ConfiguredProvider,
+  modelCatalog?: RunnerModelCatalog | null,
+  runtimeDefaultModels?: RuntimeDefaultModels,
+): string => {
+  // A row on the retired `dsh` runtime names no model outside DeepSeek Harness; the runtime picks.
+  if (row.runtime === AgentProvider.DSH) return '';
+  const native = nativeEngine(row.runtime);
+  if (row.modelsFromRuntime) {
+    const live = runtimeDefaultModels?.[native] || catalogOptions(native, modelCatalog)?.[0]?.value;
+    if (live) return live;
+  }
+  return (
+    row.defaultModel ||
+    row.models.find((model) => model.value && model.label)?.value ||
+    DEFAULT_MODEL_BY_PROVIDER[native] ||
+    DEFAULT_MODEL
+  );
+};
+
+/** The model a session on `engine` with `provider` runs when nothing names one — the same pair-wise
+ *  model space as `modelOptionsFor`. */
+export const defaultModelFor = (
+  engine: AgentProvider,
   provider?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string => {
-  // A key run on OpenCode starts on the key's own default, named for OpenCode.
-  const key = openCodeChoiceKey(provider);
-  if (key) return openCodeKeyModel(key, defaultModelForProvider(key, modelCatalog, configured, runtimeDefaultModels));
-  const custom = configuredProvider(provider, configured);
-  // OpenCode picks the model itself when none is passed; '' is the choice, not a missing value.
-  if (!custom && provider === AgentProvider.OPENCODE) {
-    return runtimeDefaultModels?.[AgentProvider.OPENCODE] ?? '';
+  // Harness has no static model space: until a runner reports its catalogue the runtime picks.
+  if (engine === AgentProvider.DSH) {
+    return runtimeDefaultModels?.[AgentProvider.DSH] || catalogOptions(AgentProvider.DSH, modelCatalog)?.[0]?.value || '';
   }
-  // Antigravity resolves like the other built-ins — the runner's reported default, then its
+  const row = configuredRow(provider, configured);
+  if (row) return rowDefaultModel(row, modelCatalog, runtimeDefaultModels);
+  // OpenCode picks the model itself when none is passed; '' is the choice, not a missing value.
+  if (engine === AgentProvider.OPENCODE) return runtimeDefaultModels?.[AgentProvider.OPENCODE] ?? '';
+  // Antigravity resolves like the other engines — the runner's reported default, then its
   // catalogue's first row — except that with neither the answer is agy's own pick (''), which is
   // what dispatch sends too. The generic chain below would read '' as missing and land on Claude.
-  if (!custom && provider === AgentProvider.ANTIGRAVITY) {
+  if (engine === AgentProvider.ANTIGRAVITY) {
     return (
       runtimeDefaultModels?.[AgentProvider.ANTIGRAVITY] ||
-      catalogOptionsForProvider(provider, modelCatalog)?.[0]?.value ||
+      catalogOptions(AgentProvider.ANTIGRAVITY, modelCatalog)?.[0]?.value ||
       ''
     );
   }
-  // A configured provider owns a separate model space even though it borrows a built-in runtime
-  // for execution. Never let the underlying Runtime's Claude/Codex default leak into that space.
-  if (custom) {
-    const customRuntime = runtimeForProvider(provider, configured);
-    // Same precedence as the option list: for a vendor the runtime CLI speaks to natively, what
-    // that CLI reports as its default beats the id we shipped in the preset.
-    if (custom.modelsFromRuntime) {
-      const live =
-        runtimeDefaultModels?.[customRuntime] ||
-        catalogOptionsForProvider(customRuntime, modelCatalog)?.[0]?.value;
-      if (live) return live;
-    }
-    // Harness has no static model space: until a runner reports its catalogue the runtime picks.
-    if (customRuntime === AgentProvider.DSH) return '';
-    return (
-      custom.defaultModel ||
-      custom.models.find((model) => model.value && model.label)?.value ||
-      DEFAULT_MODEL_BY_PROVIDER[customRuntime] ||
-      DEFAULT_MODEL
-    );
-  }
-  // A removed/disabled configured-provider slug is executed by the backend's historical Claude
-  // fallback. Normalize it here too, otherwise the composer can explicitly persist a static
-  // model while silently skipping the runner's reported Claude default.
-  const runtime = runtimeForProvider(provider, configured);
   return (
-    runtimeDefaultModels?.[runtime] ||
-    modelOptionsForProvider(runtime, modelCatalog, configured)[0]?.value ||
-    DEFAULT_MODEL_BY_PROVIDER[runtime] ||
+    runtimeDefaultModels?.[engine] ||
+    modelOptionsFor(engine, engine, modelCatalog)[0]?.value ||
+    DEFAULT_MODEL_BY_PROVIDER[engine] ||
     DEFAULT_MODEL
   );
 };
 
 /**
- * A stored model the provider still offers, or undefined once the runtime has retired it — the
- * picker then falls through to the provider's current default instead of rendering a dead id
- * nobody can select back. Mirrors the server's `livePin` (apiserver providers/custom-provider.ts)
- * so what the pill shows is what dispatch runs, including which pins are left alone: OpenCode owns
- * its own selection, a configured third-party's list is a document rather than a live probe, and
- * an id the Runtime itself reports (`opus`, `opusplan`, a gateway id) is current by definition.
+ * A stored model the pair still offers, or undefined once the runtime has retired it — the picker
+ * then falls through to the current default instead of rendering a dead id nobody can select back.
+ * Mirrors the server's `livePin` (apiserver providers/custom-provider.ts) so what the pill shows is
+ * what dispatch runs, including which pins are left alone: OpenCode owns its own selection, a
+ * third-party key's list is a document rather than a live probe, and an id the Runtime itself
+ * reports (`opus`, `opusplan`, a gateway id) is current by definition. Judged against the catalogue
+ * of the engine that runs it — DeepSeek Harness's own, whichever key it spends.
  */
 export const livePinnedModel = (
   model: string | null | undefined,
+  engine: AgentProvider,
   provider?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string | null | undefined => {
-  // A key's model on OpenCode is OpenCode's selection, which dispatch leaves alone.
-  if (openCodeChoiceKey(provider)) return model;
-  const custom = configuredProvider(provider, configured);
+  if (engine === AgentProvider.OPENCODE) return model;
+  const row = configuredRow(provider, configured);
   // Antigravity's '' is the stand-in for a catalogue not reported yet, not a pick that outlives
   // one: dispatch runs a model-less session on the reported default, so that is what to show.
-  if (!model) return !custom && provider === AgentProvider.ANTIGRAVITY ? undefined : model;
-  if (!custom && provider === AgentProvider.OPENCODE) return model;
-  if (custom && !custom.modelsFromRuntime) return model;
-  const runtime = runtimeForProvider(provider, configured);
-  return isRetiredModel(
-    model,
-    catalogOptionsForProvider(runtime, modelCatalog),
-    runtimeDefaultModels?.[runtime],
-  )
+  if (!model) return !row && engine === AgentProvider.ANTIGRAVITY ? undefined : model;
+  if (engine !== AgentProvider.DSH && row && !row.modelsFromRuntime) return model;
+  const judge = engine === AgentProvider.DSH || !row ? engine : nativeEngine(row.runtime);
+  return isRetiredModel(model, catalogOptions(judge, modelCatalog), runtimeDefaultModels?.[judge])
     ? undefined
     : model;
 };
 
-/** A new interactive session remembers the last explicit model pick for this provider. */
-export const newSessionModelForProvider = (
+/** The key a model picked for `engine` on `provider` is remembered under in
+ *  `User.preferences.defaultModels` (docs/provider-engine-contract.md §6.5). */
+export const defaultModelKey = (engine: string, provider: string): string => `${engine}:${provider}`;
+
+/**
+ * The model last picked for `engine` on `provider`, read in §6.5's order: the pair's own key, then
+ * what an older client remembered under the old keys — `opencode/<slug>` (whose value names the key,
+ * `orbit-<slug>/<model>`) and `opencode` for OpenCode, the bare slug for the engine a provider runs
+ * on by default. Undefined when nothing was picked for it.
+ */
+export function rememberedModel(
+  engine: AgentProvider,
+  provider: string,
+  accountModels?: Record<string, string> | null,
+  configured?: ConfiguredProvider[] | null,
+): string | undefined {
+  if (!accountModels) return undefined;
+  const own = accountModels[defaultModelKey(engine, provider)];
+  if (own !== undefined) return own;
+  if (engine === AgentProvider.OPENCODE) {
+    if (provider === AgentProvider.OPENCODE) {
+      const old = accountModels[AgentProvider.OPENCODE];
+      return old !== undefined && !openCodeKeyOf(old) ? old : undefined;
+    }
+    const named = openCodeKeyOf(accountModels[`${AgentProvider.OPENCODE}/${provider}`]);
+    return named && named.slug === provider ? named.model : undefined;
+  }
+  return defaultEngineOf(provider, configured) === engine ? accountModels[provider] : undefined;
+}
+
+/** A new interactive session remembers the last explicit model pick for this engine and provider. */
+export const newSessionModelFor = (
+  engine: AgentProvider,
   provider: string,
   accountModels?: Record<string, string> | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string =>
-  livePinnedModel(accountModels?.[provider], provider, modelCatalog, configured, runtimeDefaultModels) ??
-  defaultModelForProvider(provider, modelCatalog, configured, runtimeDefaultModels);
+  livePinnedModel(
+    rememberedModel(engine, provider, accountModels, configured),
+    engine,
+    provider,
+    modelCatalog,
+    configured,
+    runtimeDefaultModels,
+  ) ?? defaultModelFor(engine, provider, modelCatalog, configured, runtimeDefaultModels);
 
 /** Match the server's session dispatch precedence without treating OpenCode's empty sentinel as
- * missing: a session override wins, then its owning workspace, then the provider-managed default.
- * A retired pin on either drops out, exactly as it does at dispatch. */
+ * missing: a session override wins, then its owning workspace, then the pair's default. A retired
+ * pin on either drops out, exactly as it does at dispatch. */
 export const effectiveSessionModel = (
+  engine: AgentProvider,
   provider: string,
   sessionModel?: string | null,
   workspaceModel?: string | null,
@@ -397,11 +449,11 @@ export const effectiveSessionModel = (
   runtimeDefaultModels?: RuntimeDefaultModels,
 ): string => {
   const live = (model?: string | null) =>
-    livePinnedModel(model, provider, modelCatalog, configured, runtimeDefaultModels);
+    livePinnedModel(model, engine, provider, modelCatalog, configured, runtimeDefaultModels);
   return (
     live(sessionModel) ??
     live(workspaceModel) ??
-    defaultModelForProvider(provider, modelCatalog, configured, runtimeDefaultModels)
+    defaultModelFor(engine, provider, modelCatalog, configured, runtimeDefaultModels)
   );
 };
 
@@ -471,27 +523,15 @@ export const OPENCODE_EFFORT_OPTIONS = [
 const effortLabel = (level: string): string =>
   level === 'xhigh' ? 'xHigh' : level.charAt(0).toUpperCase() + level.slice(1);
 
-/** The runner catalog row for a runtime whose reasoning levels are model-defined
- *  (call sites gate on that), or undefined when the runner-wide catalog does not report the
- *  model. "No row" means "unknown", never "unsupported": an OpenCode model may be project-scoped,
- *  and an older runner reports no Kimi models at all. */
+/** The runner catalog row for an engine whose reasoning levels are model-defined (call sites gate
+ *  on that), or undefined when the runner-wide catalog does not report the model. "No row" means
+ *  "unknown", never "unsupported": an OpenCode model may be project-scoped — or a key's, which
+ *  OpenCode's own catalogue never lists — and an older runner reports no Kimi models at all. */
 const modelDefinedEffortRow = (
-  provider: string,
+  engine: AgentProvider,
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
-) => {
-  const runtime =
-    provider === 'codex'
-      ? AgentProvider.CODEX
-      : provider === 'kimi'
-        ? AgentProvider.KIMI
-        : provider === 'antigravity'
-          ? AgentProvider.ANTIGRAVITY
-          : AgentProvider.OPENCODE;
-  return modelCatalog?.[runtime]?.find(
-    (entry) => entry.value === model,
-  );
-};
+) => modelCatalog?.[engine as keyof RunnerModelCatalog]?.find((entry) => entry.value === model);
 
 // Kimi has no `minimal`/`medium` and calls Codex's top level `max`, so a value carried in from
 // another runtime maps onto its vocabulary before the model's own list is consulted.
@@ -515,18 +555,20 @@ const ANTIGRAVITY_EFFORT_ALIASES: Record<string, string> = {
 // CLAUDE_EFFORT_ORDER in apiserver common/runtime-provider.ts.
 const CLAUDE_EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max'];
 
-/** The efforts a configured Claude-runtime model declares it accepts (`reasoningLevels` on its
- *  provider row), lowest first, or undefined when it declares nothing. Dispatch holds the session to
- *  exactly this list (apiserver declaredReasoningLevels) — a self-hosted model refuses the rest —
- *  so the picker offers this list rather than Claude's. */
+/** The efforts a key's model declares it accepts on Claude Code (`reasoningLevels` on its row),
+ *  lowest first, or undefined when it declares nothing. Dispatch holds the session to exactly this
+ *  list (apiserver declaredReasoningLevels) — a self-hosted model refuses the rest — so the picker
+ *  offers this list rather than Claude's. Only Claude Code honours a declaration: on any other engine
+ *  the same key's model is that engine's to describe (contract §2.3). */
 const declaredEffortLevels = (
+  engine: AgentProvider,
   provider?: string | null,
   model?: string | null,
   configured?: ConfiguredProvider[] | null,
 ): string[] | undefined => {
-  const custom = configuredProvider(provider, configured);
-  if (!custom || runtimeForProvider(provider, configured) !== AgentProvider.CLAUDE) return undefined;
-  const levels = custom.models.find((entry) => entry.value === model)?.reasoningLevels;
+  const row = configuredRow(provider, configured);
+  if (!row || engine !== AgentProvider.CLAUDE) return undefined;
+  const levels = row.models.find((entry) => entry.value === model)?.reasoningLevels;
   return Array.isArray(levels) ? CLAUDE_EFFORT_ORDER.filter((level) => levels.includes(level)) : undefined;
 };
 
@@ -553,36 +595,34 @@ const dshEffortOptions = (model?: string | null, modelCatalog?: RunnerModelCatal
   return [{ value: '', label: 'Default' }, ...levels.map((level) => ({ value: level, label: effortLabel(level) }))];
 };
 
-export const effortOptionsForProvider = (
+/** The efforts a session on `engine` can pick for `model`. The engine decides the vocabulary, never
+ *  the provider's slug: a key on Codex's protocol offers Codex's levels, a key under OpenCode
+ *  OpenCode's variants (contract §2.3). `provider` matters only for a key's declared levels on Claude
+ *  Code. */
+export const effortOptionsFor = (
+  engine: AgentProvider,
   provider?: string | null,
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
 ) => {
-  if (runtimeForProvider(provider, configured) === AgentProvider.DSH) return dshEffortOptions(model, modelCatalog);
-  const declared = declaredEffortLevels(provider, model, configured);
+  if (engine === AgentProvider.DSH) return dshEffortOptions(model, modelCatalog);
+  const declared = declaredEffortLevels(engine, provider, model, configured);
   if (declared) {
     return CLAUDE_EFFORT_OPTIONS.filter(
       ({ value }) =>
         value === '' || declared.includes(value) || (value === 'ultra' && declared.includes('xhigh')),
     );
   }
-  if (
-    provider !== 'codex' &&
-    provider !== 'opencode' &&
-    provider !== 'kimi' &&
-    provider !== 'antigravity'
-  ) {
-    return CLAUDE_EFFORT_OPTIONS;
-  }
+  if (engine === AgentProvider.CLAUDE) return CLAUDE_EFFORT_OPTIONS;
 
-  const exactModel = modelDefinedEffortRow(provider, model, modelCatalog);
+  const exactModel = modelDefinedEffortRow(engine, model, modelCatalog);
   // A model the runner-wide catalog does not report keeps the generic fallback. An exact row with
   // no levels is authoritative: that model supports Default only.
   if (!exactModel) {
-    if (provider === 'codex') return CODEX_EFFORT_OPTIONS;
-    if (provider === 'antigravity') return ANTIGRAVITY_EFFORT_OPTIONS;
-    return provider === 'kimi' ? KIMI_EFFORT_OPTIONS : OPENCODE_EFFORT_OPTIONS;
+    if (engine === AgentProvider.CODEX) return CODEX_EFFORT_OPTIONS;
+    if (engine === AgentProvider.ANTIGRAVITY) return ANTIGRAVITY_EFFORT_OPTIONS;
+    return engine === AgentProvider.KIMI ? KIMI_EFFORT_OPTIONS : OPENCODE_EFFORT_OPTIONS;
   }
   const unique = [...new Set((exactModel.reasoningLevels ?? []).filter(Boolean))];
   return [
@@ -591,57 +631,50 @@ export const effortOptionsForProvider = (
   ];
 };
 
-export const normalizeEffortForProvider = (
+/** The level a session on `engine` actually runs `effort` at, as dispatch normalizes it by the same
+ *  engine — so the pill never names a level the session would not get. */
+export const normalizeEffortFor = (
+  engine: AgentProvider,
   provider: string | null | undefined,
   effort: string,
   model?: string | null,
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
 ): string => {
-  if (runtimeForProvider(provider, configured) === AgentProvider.DSH) {
+  if (engine === AgentProvider.DSH) {
     return dshEffortOptions(model, modelCatalog).some((option) => option.value === effort) ? effort : '';
   }
   // A level the declaring model lacks is not dropped but moved, exactly as dispatch moves it, so
   // the pill names the level the session actually runs at.
-  const declared = declaredEffortLevels(provider, model, configured);
+  const declared = declaredEffortLevels(engine, provider, model, configured);
   if (declared) {
     const claudeEffort = CLAUDE_EFFORT_OPTIONS.some((option) => option.value === effort) ? effort : '';
     return effortWithinDeclaredLevels(claudeEffort, declared);
   }
+  if (engine === AgentProvider.CLAUDE) {
+    return CLAUDE_EFFORT_OPTIONS.some((option) => option.value === effort) ? effort : '';
+  }
   // Kimi's and Antigravity's closed vocabularies map first; the model's own list below has the
   // last word.
   const normalized =
-    provider === 'kimi'
+    engine === AgentProvider.KIMI
       ? (KIMI_EFFORT_ALIASES[effort] ?? effort)
-      : provider === 'antigravity'
+      : engine === AgentProvider.ANTIGRAVITY
         ? (ANTIGRAVITY_EFFORT_ALIASES[effort] ?? effort)
         : effort;
-
-  if (
-    provider === 'codex' ||
-    provider === 'opencode' ||
-    provider === 'kimi' ||
-    provider === 'antigravity'
-  ) {
-    const exactModel = modelDefinedEffortRow(provider, model, modelCatalog);
-    // The heartbeat catalog is deliberately global, so a project-only model may
-    // be absent. Preserve its variant only in that case; an exact row (including one
-    // with an empty variants object) is authoritative.
-    if (!exactModel) {
-      if (provider === 'antigravity') {
-        return ANTIGRAVITY_EFFORT_OPTIONS.some((option) => option.value === normalized) ? normalized : '';
-      }
-      if (provider !== 'codex') return normalized;
-      return CODEX_EFFORT_OPTIONS.some((option) => option.value === normalized) ? normalized : '';
+  const exactModel = modelDefinedEffortRow(engine, model, modelCatalog);
+  // The heartbeat catalog is deliberately global, so a project-only model may be absent. Preserve
+  // its variant only in that case; an exact row (including one with an empty variants object) is
+  // authoritative.
+  if (!exactModel) {
+    if (engine === AgentProvider.ANTIGRAVITY) {
+      return ANTIGRAVITY_EFFORT_OPTIONS.some((option) => option.value === normalized) ? normalized : '';
     }
-    const levels = exactModel.reasoningLevels ?? [];
-    return normalized === '' || levels.includes(normalized) ? normalized : '';
+    if (engine !== AgentProvider.CODEX) return normalized;
+    return CODEX_EFFORT_OPTIONS.some((option) => option.value === normalized) ? normalized : '';
   }
-
-  const allowed = effortOptionsForProvider(provider, model, modelCatalog).some(
-    (option) => option.value === normalized,
-  );
-  return allowed ? normalized : '';
+  const levels = exactModel.reasoningLevels ?? [];
+  return normalized === '' || levels.includes(normalized) ? normalized : '';
 };
 
 /** Resolve the effort shown by an interactive new-session composer.
@@ -650,7 +683,8 @@ export const normalizeEffortForProvider = (
  * older workspaces still carry the per-workspace default that predated that preference; keep it as
  * a compatibility fallback only. Letting that stale value win would make a freshly picked effort
  * appear to revert the next time the composer opens. An explicit account Default ('') still wins. */
-export const newSessionEffortForProvider = (
+export const newSessionEffortFor = (
+  engine: AgentProvider,
   provider: string | null | undefined,
   accountEffort?: string | null,
   workspaceEffort?: string | null,
@@ -658,13 +692,7 @@ export const newSessionEffortForProvider = (
   modelCatalog?: RunnerModelCatalog | null,
   configured?: ConfiguredProvider[] | null,
 ): string =>
-  normalizeEffortForProvider(
-    provider,
-    accountEffort ?? workspaceEffort ?? '',
-    model,
-    modelCatalog,
-    configured,
-  );
+  normalizeEffortFor(engine, provider, accountEffort ?? workspaceEffort ?? '', model, modelCatalog, configured);
 
 // The permission mode a new session of the workspace starts in.
 export const MODE_OPTIONS = [
@@ -676,9 +704,9 @@ export const MODE_OPTIONS = [
   { value: 'bypassPermissions', label: 'Bypass' },
 ];
 
-/** Whether Auto exists on the runtime behind a persisted provider identity. Resolves the slug and
- *  defers to the same shared answer the server normalizes with, so the picker and dispatch cannot
- *  disagree about which sessions can have it.
+/** Whether Auto exists for `model` on `engine`. Defers to the same shared answer the server
+ *  normalizes with, so the picker and dispatch cannot disagree about which sessions can have it; a
+ *  key (or pool) on Claude Code owns its model space, which Claude's allow-list cannot speak for.
  *
  *  `modelCatalog` is the ASSIGNED runner's, and is where the answer now comes from: Claude gates
  *  Auto per model, and which models have it is a property of the CLI installed on that machine.
@@ -687,37 +715,29 @@ export const MODE_OPTIONS = [
  *  came to be offered Default-only on runners whose CLI would have honored Auto. */
 export const supportsAuto = (
   model: string,
+  engine: AgentProvider,
   provider?: string | null,
   configured?: ConfiguredProvider[] | null,
   modelCatalog?: RunnerModelCatalog | null,
-): boolean =>
-  autoAvailable(
-    runtimeForProvider(provider, configured),
-    model,
-    !!configuredProvider(provider, configured),
-    modelCatalog,
-  );
-/** Whether the runtime behind a provider identity accepts this permission mode at all. Only
- *  DeepSeek Harness refuses modes outright (DSH_PERMISSION_MODES, which the server enforces at
- *  admission): those are not offered rather than caveated, since the session would be rejected. */
-export const permissionModeSupported = (
-  mode: string,
-  provider?: string | null,
-  configured?: ConfiguredProvider[] | null,
-): boolean =>
-  runtimeForProvider(provider, configured) !== AgentProvider.DSH ||
-  (DSH_PERMISSION_MODES as readonly string[]).includes(mode);
+): boolean => autoAvailable(engine, model, !!configuredRow(provider, configured), modelCatalog);
+
+/** Whether `engine` accepts this permission mode at all. Only DeepSeek Harness refuses modes
+ *  outright (DSH_PERMISSION_MODES, which the server enforces at admission): those are not offered
+ *  rather than caveated, since the session would be rejected. */
+export const permissionModeSupported = (mode: string, engine: AgentProvider): boolean =>
+  engine !== AgentProvider.DSH || (DSH_PERMISSION_MODES as readonly string[]).includes(mode);
 
 export const clampPermissionModeForModel = (
   mode: string,
   model: string,
+  engine: AgentProvider,
   provider?: string | null,
   configured?: ConfiguredProvider[] | null,
   modelCatalog?: RunnerModelCatalog | null,
 ): string =>
-  !permissionModeSupported(mode, provider, configured)
+  !permissionModeSupported(mode, engine)
     ? 'default'
-    : mode === 'auto' && !supportsAuto(model, provider, configured, modelCatalog)
+    : mode === 'auto' && !supportsAuto(model, engine, provider, configured, modelCatalog)
       ? 'default'
       : mode;
 

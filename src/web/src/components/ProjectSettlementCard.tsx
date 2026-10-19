@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState, type JSX, type Ref } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Alert, Input, Modal } from 'antd';
 import type { DoneRequest, ProjectDoneRecord, ProjectOpenItemRow, SessionWaitingKind } from '@orbit/shared';
 import { api } from '../api';
 import {
@@ -33,11 +32,16 @@ import {
   projectDoneCardTally,
   projectDoneReceiptTally,
   projectWhyNotDoneTally,
+  whyNotDoneNeedsCallDetail,
+  whyNotDoneWaitingDetail,
   type ProjectDerivedDone,
   type ProjectDoneCounts,
   type ProjectDoneDocument,
 } from '../lib/projectDone';
-import { projectStarted } from '../lib/projectStart';
+import { mainBranchName, projectStarted } from '../lib/projectStart';
+import { Alert } from './ui/Alert';
+import { Dialog } from './ui/Dialog';
+import { Textarea } from './ui/Textarea';
 
 /**
  * WHY this project is not DONE — the projection, rendered.
@@ -591,8 +595,7 @@ export function ProjectSettlementCard({
           <Alert
             className="project-settlement-error"
             type="error"
-            showIcon
-            message={SETTLEMENT_NOT_RECORDED}
+            title={SETTLEMENT_NOT_RECORDED}
             description={error.message}
           />
         ) : null}
@@ -861,6 +864,7 @@ function syntheticDoneGaps(project: ProjectDoneDocument): Array<{
   evidenceRefs?: string[];
 }> {
   const criteria = project.derivedDone?.criteria ?? [];
+  const main = mainBranchName(project.integration?.upstreamRef);
   return criteria
     // NOTHING_TO_LAND and CODELESS are intentional zero-work outcomes, not gaps to paper over
     // with a merge receipt.  Keep genuine work/receipt gaps in the owner-initiated payload.
@@ -872,12 +876,12 @@ function syntheticDoneGaps(project: ProjectDoneDocument): Array<{
     ))
     .map((criterion) => {
       const item = project.acceptanceCriteriaItems?.find((candidate) => candidate.id === criterion.definitionId);
-      const reason = landingReasonLabel(criterion.landingReason);
+      const reason = landingReasonLabel(criterion.landingReason, main);
       return {
         criterionKey: item?.key ?? item?.id ?? criterion.definitionId,
         title: item?.text ?? criterion.definitionId,
         whyNotProven: criterion.satisfied
-          ? `Orbit cannot prove this criterion is on main: ${reason}.`
+          ? `Orbit cannot prove this criterion is on ${main}: ${reason}.`
           : 'Orbit cannot prove this criterion is met by its work yet.',
       };
     });
@@ -966,12 +970,13 @@ function DoneWhenSummary({
   const criteria = project.derivedDone?.criteria ?? [];
   const criteriaCount = counts?.criteria ?? criteria.length;
   const labels = new Map((project.acceptanceCriteriaItems ?? []).map((item) => [item.id, item]));
+  const main = mainBranchName(project.integration?.upstreamRef);
   return (
     <div className="project-done-when">
       <div className="project-done-section-title">
         {PROJECT_DONE_COPY.doneWhen} · {criteriaCount} criteria
       </div>
-      <div className="project-done-tally">{projectDoneCardTally(counts)}</div>
+      <div className="project-done-tally">{projectDoneCardTally(counts, main)}</div>
       {criteriaCount > 0 ? (
         <button
           type="button"
@@ -991,7 +996,7 @@ function DoneWhenSummary({
                 <span className="project-done-gap-number">{item?.ordinal ?? index + 1}</span>
                 <span>{item?.text ?? criterion.definitionId}</span>
                 <span className="project-done-criterion-state">
-                  {criterion.satisfied ? 'met' : 'not met'} · {landingReasonLabel(criterion.landingReason)}
+                  {criterion.satisfied ? 'met' : 'not met'} · {landingReasonLabel(criterion.landingReason, main)}
                 </span>
               </li>
             );
@@ -1055,7 +1060,9 @@ export function ProjectDoneCard({
               ? `${DONE_CARD_RECEIPT}${receiptDateTime ? ` · ${receiptDateTime}` : ''}`
               : `${PROJECT_DONE_COPY.thisProjectIsDone} · ${PROJECT_DONE_COPY.recordedByOrbit}`}
           </p>
-          <p className="project-done-tally">{projectDoneReceiptTally(counts, accepted.length)}</p>
+          <p className="project-done-tally">
+            {projectDoneReceiptTally(counts, accepted.length, mainBranchName(project.integration?.upstreamRef))}
+          </p>
           {accepted.length > 0 ? (
             <details className="project-done-accepted">
               <summary>{DONE_CARD_SEE_ACCEPTED}</summary>
@@ -1099,10 +1106,10 @@ export function ProjectDoneCard({
         <p className="project-done-explanation">
           {PROJECT_DONE_COPY.recordingExplanation}
         </p>
-        {error ? <Alert className="project-settlement-error" type="error" showIcon message="Project was not recorded done" description={error.message} /> : null}
+        {error ? <Alert className="project-settlement-error" type="error" title="Project was not recorded done" description={error.message} /> : null}
         {notYetOpen ? (
           <div className="project-done-not-yet">
-            <Input.TextArea
+            <Textarea
               aria-label={DONE_CARD_MISSING}
               placeholder={DONE_CARD_MISSING}
               value={note}
@@ -1230,7 +1237,9 @@ export function ProjectDoneDialog({
     if (row?.itemId && note.trim()) decline.mutate({ itemId: row.itemId, note });
   };
   return (
-    <Modal open={open} title="" footer={null} onCancel={onClose} width={680} destroyOnClose={false} className="project-done-dialog">
+    // Kept mounted once open, as before: a note half-typed under Not yet is still there when the
+    // dialog comes back. It has no title of its own; the card's head is its heading.
+    <Dialog open={open} title={null} onClose={onClose} width={680} keepMounted className="project-done-dialog">
       {project ? (
         <ProjectDoneCard
           project={project}
@@ -1249,8 +1258,8 @@ export function ProjectDoneDialog({
           onNotYet={submitNotYet}
           onReopen={() => reopen.mutate()}
         />
-      ) : projectRead.isError ? <Alert type="error" showIcon message="Project could not be loaded" description={projectRead.error.message} /> : null}
-    </Modal>
+      ) : projectRead.isError ? <Alert type="error" title="Project could not be loaded" description={projectRead.error.message} /> : null}
+    </Dialog>
   );
 }
 
@@ -1283,6 +1292,7 @@ export function ProjectWhyNotDoneCard({
 }: ProjectWhyNotDoneCardProps): JSX.Element {
   const criteria = project.derivedDone?.criteria ?? [];
   const byKey = new Map((project.acceptanceCriteriaItems ?? []).map((item) => [item.id, item]));
+  const main = mainBranchName(project.integration?.upstreamRef);
   // An unmet criterion is still work even when its landing lane says CODELESS or
   // NOTHING_TO_LAND.  Those two reasons are excluded only once the criterion itself is met: a
   // zero-commit task is then a harmless "nothing to land" outcome, not an item to hand back as a
@@ -1307,7 +1317,7 @@ export function ProjectWhyNotDoneCard({
           <span className="criteria-provenance">{project.doneBy === 'OWNER' ? PROJECT_DONE_COPY.recordedByYou : PROJECT_DONE_COPY.recordedByOrbit}</span>
         </div>
         <div className="approval-body is-questions project-settlement-body">
-          <p className="project-done-tally">{projectWhyNotDoneTally(project.derivedDone)}</p>
+          <p className="project-done-tally">{projectWhyNotDoneTally(project.derivedDone, main)}</p>
         </div>
       </div>
     );
@@ -1334,12 +1344,12 @@ export function ProjectWhyNotDoneCard({
                 {/* An unmet criterion is work still to do: its landing lane (no receipt, no code)
                     describes work that has not happened yet, not work that finished elsewhere. */}
                 <div className="project-why-item-state">
-                  {criterion.satisfied ? landingReasonLabel(criterion.landingReason) : PROJECT_DONE_COPY.notMetYet}
+                  {criterion.satisfied ? landingReasonLabel(criterion.landingReason, main) : PROJECT_DONE_COPY.notMetYet}
                 </div>
                 <div className="project-why-item-detail">
                   {!criterion.satisfied
                     ? PROJECT_DONE_COPY.notMetDetail
-                    : waitingGroup ? PROJECT_DONE_COPY.waitingDetail : PROJECT_DONE_COPY.needsCallDetail}
+                    : waitingGroup ? whyNotDoneWaitingDetail(main) : whyNotDoneNeedsCallDetail(main)}
                 </div>
               </div>
             </li>
@@ -1357,7 +1367,7 @@ export function ProjectWhyNotDoneCard({
       <div className="approval-body is-questions project-settlement-body">
         {group(PROJECT_DONE_COPY.waitingOnWork, waiting, true)}
         {group(PROJECT_DONE_COPY.needsYourCall, needsCall, false)}
-        <p className="project-done-tally">{projectWhyNotDoneTally(project.derivedDone)}</p>
+        <p className="project-done-tally">{projectWhyNotDoneTally(project.derivedDone, main)}</p>
       </div>
       <div className="approval-actions project-settlement-actions">
         {openItems?.doneRequest && onReview ? (

@@ -1,0 +1,1149 @@
+{
+ "config": {
+  "argv": [
+   "/usr/local/bin/node",
+   "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/node_modules/.bin/playwright",
+   "test",
+   "--config",
+   "ui-migration/p53.config.mjs",
+   "-g",
+   "attachments",
+   "--update-snapshots=all"
+  ],
+  "configFile": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web/ui-migration/p53.config.mjs",
+  "rootDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web/ui-migration",
+  "failOnFlakyTests": false,
+  "forbidOnly": false,
+  "fullyParallel": false,
+  "globalSetup": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web/ui-migration/environment.mjs",
+  "globalTeardown": null,
+  "globalTimeout": 0,
+  "grep": {},
+  "grepInvert": null,
+  "maxFailures": 0,
+  "metadata": {
+   "actualWorkers": 1
+  },
+  "preserveOutput": "always",
+  "projects": [
+   {
+    "outputDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-desktop",
+    "name": "chromium-light-desktop",
+    "testDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p53*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-light-phone",
+    "name": "chromium-light-phone",
+    "testDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p53*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-desktop",
+    "name": "chromium-dark-desktop",
+    "testDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p53*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "chromium-dark-phone",
+    "name": "chromium-dark-phone",
+    "testDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p53*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-desktop",
+    "name": "webkit-light-desktop",
+    "testDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p53*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-light-phone",
+    "name": "webkit-light-phone",
+    "testDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p53*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-desktop",
+    "name": "webkit-dark-desktop",
+    "testDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p53*.browser.mjs"
+    ],
+    "timeout": 240000
+   },
+   {
+    "outputDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out",
+    "repeatEach": 1,
+    "retries": 0,
+    "metadata": {
+     "actualWorkers": 1
+    },
+    "id": "webkit-dark-phone",
+    "name": "webkit-dark-phone",
+    "testDir": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web/ui-migration",
+    "testIgnore": [],
+    "testMatch": [
+     "p53*.browser.mjs"
+    ],
+    "timeout": 240000
+   }
+  ],
+  "quiet": false,
+  "reporter": [
+   [
+    "list",
+    null
+   ],
+   [
+    "json",
+    {
+     "outputFile": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/report.json"
+    }
+   ]
+  ],
+  "reportSlowTests": {
+   "max": 5,
+   "threshold": 300000
+  },
+  "shard": null,
+  "tags": [],
+  "updateSnapshots": "all",
+  "updateSourceMethod": "patch",
+  "version": "1.63.0",
+  "workers": 1,
+  "webServer": {
+   "command": "npm run preview -- --host 127.0.0.1 --port 4173 --strictPort",
+   "cwd": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/ref/src/web/",
+   "url": "http://127.0.0.1:4173",
+   "reuseExistingServer": false,
+   "timeout": 30000
+  }
+ },
+ "suites": [
+  {
+   "title": "p53.browser.mjs",
+   "file": "p53.browser.mjs",
+   "column": 0,
+   "line": 0,
+   "specs": [],
+   "suites": [
+    {
+     "title": "P5.3 the session workspace",
+     "file": "p53.browser.mjs",
+     "line": 255,
+     "column": 6,
+     "specs": [
+      {
+       "title": "attachments: pasted, dropped, a picked picture previewed, removed",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 240000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-desktop",
+         "projectName": "chromium-light-desktop",
+         "results": [
+          {
+           "workerIndex": 0,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 7681,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-desktop/p53-attach-uploading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-desktop/p53-attach-chip.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-desktop/p53-attach-hover.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-desktop/p53-attach-preview.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-desktop/p53-drop-hint.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-desktop/p53-attach-file.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T12:30:15.347Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p53-attach-uploading-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-desktop/p53-attach-uploading.png"
+            },
+            {
+             "name": "p53-attach-uploading-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-desktop/p53-attach-uploading-actual.png"
+            },
+            {
+             "name": "p53-attach-chip-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-desktop/p53-attach-chip.png"
+            },
+            {
+             "name": "p53-attach-chip-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-desktop/p53-attach-chip-actual.png"
+            },
+            {
+             "name": "p53-attach-hover-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-desktop/p53-attach-hover.png"
+            },
+            {
+             "name": "p53-attach-hover-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-desktop/p53-attach-hover-actual.png"
+            },
+            {
+             "name": "p53-attach-preview-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-desktop/p53-attach-preview.png"
+            },
+            {
+             "name": "p53-attach-preview-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-desktop/p53-attach-preview-actual.png"
+            },
+            {
+             "name": "p53-drop-hint-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-desktop/p53-drop-hint.png"
+            },
+            {
+             "name": "p53-drop-hint-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-desktop/p53-drop-hint-actual.png"
+            },
+            {
+             "name": "p53-attach-file-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-desktop/p53-attach-file.png"
+            },
+            {
+             "name": "p53-attach-file-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-desktop/p53-attach-file-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-desktop/attachments/computed-styles-and-timings-a8ebcf6aa00750b1f9976a73d3988aef5de5367b.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "0ab64f7c86b954b72899-719b3e0e3e48402cb9ea",
+       "file": "p53.browser.mjs",
+       "line": 371,
+       "column": 3
+      },
+      {
+       "title": "attachments: pasted, dropped, a picked picture previewed, removed",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 240000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-light-phone",
+         "projectName": "chromium-light-phone",
+         "results": [
+          {
+           "workerIndex": 1,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5102,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-phone/p53-attach-uploading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-phone/p53-attach-chip.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-phone/p53-attach-preview.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-phone/p53-drop-hint.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-phone/p53-attach-file.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T12:30:23.616Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p53-attach-uploading-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-phone/p53-attach-uploading.png"
+            },
+            {
+             "name": "p53-attach-uploading-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-phone/p53-attach-uploading-actual.png"
+            },
+            {
+             "name": "p53-attach-chip-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-phone/p53-attach-chip.png"
+            },
+            {
+             "name": "p53-attach-chip-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-phone/p53-attach-chip-actual.png"
+            },
+            {
+             "name": "p53-attach-preview-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-phone/p53-attach-preview.png"
+            },
+            {
+             "name": "p53-attach-preview-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-phone/p53-attach-preview-actual.png"
+            },
+            {
+             "name": "p53-drop-hint-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-phone/p53-drop-hint.png"
+            },
+            {
+             "name": "p53-drop-hint-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-phone/p53-drop-hint-actual.png"
+            },
+            {
+             "name": "p53-attach-file-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-light-phone/p53-attach-file.png"
+            },
+            {
+             "name": "p53-attach-file-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-phone/p53-attach-file-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-light-phone/attachments/computed-styles-and-timings-d5e12aa1d5d4a6ac242204dfaf95383a892664b2.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "0ab64f7c86b954b72899-ea4cb4fdd143200b4aa1",
+       "file": "p53.browser.mjs",
+       "line": 371,
+       "column": 3
+      },
+      {
+       "title": "attachments: pasted, dropped, a picked picture previewed, removed",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 240000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-desktop",
+         "projectName": "chromium-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 2,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 9231,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-desktop/p53-attach-uploading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-desktop/p53-attach-chip.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-desktop/p53-attach-hover.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-desktop/p53-attach-preview.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-desktop/p53-drop-hint.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-desktop/p53-attach-file.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T12:30:29.111Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p53-attach-uploading-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-desktop/p53-attach-uploading.png"
+            },
+            {
+             "name": "p53-attach-uploading-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-desktop/p53-attach-uploading-actual.png"
+            },
+            {
+             "name": "p53-attach-chip-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-desktop/p53-attach-chip.png"
+            },
+            {
+             "name": "p53-attach-chip-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-desktop/p53-attach-chip-actual.png"
+            },
+            {
+             "name": "p53-attach-hover-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-desktop/p53-attach-hover.png"
+            },
+            {
+             "name": "p53-attach-hover-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-desktop/p53-attach-hover-actual.png"
+            },
+            {
+             "name": "p53-attach-preview-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-desktop/p53-attach-preview.png"
+            },
+            {
+             "name": "p53-attach-preview-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-desktop/p53-attach-preview-actual.png"
+            },
+            {
+             "name": "p53-drop-hint-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-desktop/p53-drop-hint.png"
+            },
+            {
+             "name": "p53-drop-hint-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-desktop/p53-drop-hint-actual.png"
+            },
+            {
+             "name": "p53-attach-file-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-desktop/p53-attach-file.png"
+            },
+            {
+             "name": "p53-attach-file-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-desktop/p53-attach-file-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-desktop/attachments/computed-styles-and-timings-c679a5d8d27bf4aa5f4cd1bb1da32f154cdd3e99.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "0ab64f7c86b954b72899-f19747871c38e8d78d67",
+       "file": "p53.browser.mjs",
+       "line": 371,
+       "column": 3
+      },
+      {
+       "title": "attachments: pasted, dropped, a picked picture previewed, removed",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 240000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "chromium-dark-phone",
+         "projectName": "chromium-dark-phone",
+         "results": [
+          {
+           "workerIndex": 3,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 6263,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-phone/p53-attach-uploading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-phone/p53-attach-chip.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-phone/p53-attach-preview.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-phone/p53-drop-hint.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-phone/p53-attach-file.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T12:30:39.003Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p53-attach-uploading-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-phone/p53-attach-uploading.png"
+            },
+            {
+             "name": "p53-attach-uploading-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-phone/p53-attach-uploading-actual.png"
+            },
+            {
+             "name": "p53-attach-chip-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-phone/p53-attach-chip.png"
+            },
+            {
+             "name": "p53-attach-chip-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-phone/p53-attach-chip-actual.png"
+            },
+            {
+             "name": "p53-attach-preview-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-phone/p53-attach-preview.png"
+            },
+            {
+             "name": "p53-attach-preview-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-phone/p53-attach-preview-actual.png"
+            },
+            {
+             "name": "p53-drop-hint-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-phone/p53-drop-hint.png"
+            },
+            {
+             "name": "p53-drop-hint-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-phone/p53-drop-hint-actual.png"
+            },
+            {
+             "name": "p53-attach-file-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/chromium-dark-phone/p53-attach-file.png"
+            },
+            {
+             "name": "p53-attach-file-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-phone/p53-attach-file-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-chromium-dark-phone/attachments/computed-styles-and-timings-7ea3fe06424f212a7e89f932b41c9dc26a95f7af.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "0ab64f7c86b954b72899-d8a6254628876ec7bc2d",
+       "file": "p53.browser.mjs",
+       "line": 371,
+       "column": 3
+      },
+      {
+       "title": "attachments: pasted, dropped, a picked picture previewed, removed",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 240000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-desktop",
+         "projectName": "webkit-light-desktop",
+         "results": [
+          {
+           "workerIndex": 4,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 9939,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-desktop/p53-attach-uploading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-desktop/p53-attach-chip.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-desktop/p53-attach-hover.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-desktop/p53-attach-preview.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-desktop/p53-drop-hint.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-desktop/p53-attach-file.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T12:30:45.877Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p53-attach-uploading-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-desktop/p53-attach-uploading.png"
+            },
+            {
+             "name": "p53-attach-uploading-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-desktop/p53-attach-uploading-actual.png"
+            },
+            {
+             "name": "p53-attach-chip-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-desktop/p53-attach-chip.png"
+            },
+            {
+             "name": "p53-attach-chip-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-desktop/p53-attach-chip-actual.png"
+            },
+            {
+             "name": "p53-attach-hover-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-desktop/p53-attach-hover.png"
+            },
+            {
+             "name": "p53-attach-hover-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-desktop/p53-attach-hover-actual.png"
+            },
+            {
+             "name": "p53-attach-preview-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-desktop/p53-attach-preview.png"
+            },
+            {
+             "name": "p53-attach-preview-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-desktop/p53-attach-preview-actual.png"
+            },
+            {
+             "name": "p53-drop-hint-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-desktop/p53-drop-hint.png"
+            },
+            {
+             "name": "p53-drop-hint-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-desktop/p53-drop-hint-actual.png"
+            },
+            {
+             "name": "p53-attach-file-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-desktop/p53-attach-file.png"
+            },
+            {
+             "name": "p53-attach-file-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-desktop/p53-attach-file-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-desktop/attachments/computed-styles-and-timings-393131a5fd716bc0f650c8c7c81db360eb59320a.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "0ab64f7c86b954b72899-3e58ed0cb3f27f7ab174",
+       "file": "p53.browser.mjs",
+       "line": 371,
+       "column": 3
+      },
+      {
+       "title": "attachments: pasted, dropped, a picked picture previewed, removed",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 240000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-light-phone",
+         "projectName": "webkit-light-phone",
+         "results": [
+          {
+           "workerIndex": 5,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5447,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-phone/p53-attach-uploading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-phone/p53-attach-chip.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-phone/p53-attach-preview.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-phone/p53-drop-hint.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-phone/p53-attach-file.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T12:30:56.258Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p53-attach-uploading-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-phone/p53-attach-uploading.png"
+            },
+            {
+             "name": "p53-attach-uploading-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-phone/p53-attach-uploading-actual.png"
+            },
+            {
+             "name": "p53-attach-chip-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-phone/p53-attach-chip.png"
+            },
+            {
+             "name": "p53-attach-chip-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-phone/p53-attach-chip-actual.png"
+            },
+            {
+             "name": "p53-attach-preview-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-phone/p53-attach-preview.png"
+            },
+            {
+             "name": "p53-attach-preview-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-phone/p53-attach-preview-actual.png"
+            },
+            {
+             "name": "p53-drop-hint-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-phone/p53-drop-hint.png"
+            },
+            {
+             "name": "p53-drop-hint-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-phone/p53-drop-hint-actual.png"
+            },
+            {
+             "name": "p53-attach-file-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-light-phone/p53-attach-file.png"
+            },
+            {
+             "name": "p53-attach-file-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-phone/p53-attach-file-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-light-phone/attachments/computed-styles-and-timings-7e63185933b0787f0367c4c968545b6bf011f4ef.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "0ab64f7c86b954b72899-196e5cf6a9bf7b45470b",
+       "file": "p53.browser.mjs",
+       "line": 371,
+       "column": 3
+      },
+      {
+       "title": "attachments: pasted, dropped, a picked picture previewed, removed",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 240000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-desktop",
+         "projectName": "webkit-dark-desktop",
+         "results": [
+          {
+           "workerIndex": 6,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 8440,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-desktop/p53-attach-uploading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-desktop/p53-attach-chip.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-desktop/p53-attach-hover.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-desktop/p53-attach-preview.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-desktop/p53-drop-hint.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-desktop/p53-attach-file.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T12:31:02.085Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p53-attach-uploading-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-desktop/p53-attach-uploading.png"
+            },
+            {
+             "name": "p53-attach-uploading-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-desktop/p53-attach-uploading-actual.png"
+            },
+            {
+             "name": "p53-attach-chip-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-desktop/p53-attach-chip.png"
+            },
+            {
+             "name": "p53-attach-chip-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-desktop/p53-attach-chip-actual.png"
+            },
+            {
+             "name": "p53-attach-hover-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-desktop/p53-attach-hover.png"
+            },
+            {
+             "name": "p53-attach-hover-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-desktop/p53-attach-hover-actual.png"
+            },
+            {
+             "name": "p53-attach-preview-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-desktop/p53-attach-preview.png"
+            },
+            {
+             "name": "p53-attach-preview-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-desktop/p53-attach-preview-actual.png"
+            },
+            {
+             "name": "p53-drop-hint-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-desktop/p53-drop-hint.png"
+            },
+            {
+             "name": "p53-drop-hint-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-desktop/p53-drop-hint-actual.png"
+            },
+            {
+             "name": "p53-attach-file-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-desktop/p53-attach-file.png"
+            },
+            {
+             "name": "p53-attach-file-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-desktop/p53-attach-file-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-desktop/attachments/computed-styles-and-timings-236f41052b014a711ef10eb39fc8445796dd2558.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "0ab64f7c86b954b72899-57a8e707a2eac4fa1a3b",
+       "file": "p53.browser.mjs",
+       "line": 371,
+       "column": 3
+      },
+      {
+       "title": "attachments: pasted, dropped, a picked picture previewed, removed",
+       "ok": true,
+       "tags": [],
+       "tests": [
+        {
+         "timeout": 240000,
+         "annotations": [],
+         "expectedStatus": "passed",
+         "projectId": "webkit-dark-phone",
+         "projectName": "webkit-dark-phone",
+         "results": [
+          {
+           "workerIndex": 7,
+           "parallelIndex": 0,
+           "status": "passed",
+           "duration": 5526,
+           "errors": [],
+           "stdout": [
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-phone/p53-attach-uploading.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-phone/p53-attach-chip.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-phone/p53-attach-preview.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-phone/p53-drop-hint.png, writing actual.\n"
+            },
+            {
+             "text": "A snapshot doesn't exist at /mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-phone/p53-attach-file.png, writing actual.\n"
+            }
+           ],
+           "stderr": [],
+           "retry": 0,
+           "startTime": "2026-10-10T12:31:11.111Z",
+           "annotations": [],
+           "attachments": [
+            {
+             "name": "p53-attach-uploading-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-phone/p53-attach-uploading.png"
+            },
+            {
+             "name": "p53-attach-uploading-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-phone/p53-attach-uploading-actual.png"
+            },
+            {
+             "name": "p53-attach-chip-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-phone/p53-attach-chip.png"
+            },
+            {
+             "name": "p53-attach-chip-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-phone/p53-attach-chip-actual.png"
+            },
+            {
+             "name": "p53-attach-preview-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-phone/p53-attach-preview.png"
+            },
+            {
+             "name": "p53-attach-preview-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-phone/p53-attach-preview-actual.png"
+            },
+            {
+             "name": "p53-drop-hint-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-phone/p53-drop-hint.png"
+            },
+            {
+             "name": "p53-drop-hint-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-phone/p53-drop-hint-actual.png"
+            },
+            {
+             "name": "p53-attach-file-expected.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-shots/webkit-dark-phone/p53-attach-file.png"
+            },
+            {
+             "name": "p53-attach-file-actual.png",
+             "contentType": "image/png",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-phone/p53-attach-file-actual.png"
+            },
+            {
+             "name": "trace",
+             "contentType": "application/json"
+            },
+            {
+             "name": "computed-styles-and-timings",
+             "contentType": "application/json",
+             "path": "/mnt/data/tmp/34dTUqxH5MjymjtUhs5C5/v1/f1/p53att-ref-out/p53.browser.mjs-P5-3-the-s-7cca7-d-picture-previewed-removed-webkit-dark-phone/attachments/computed-styles-and-timings-afe50383f729b0f615d3eab597c29494a23ffd20.json"
+            }
+           ]
+          }
+         ],
+         "status": "expected"
+        }
+       ],
+       "id": "0ab64f7c86b954b72899-3b941ae0088d96134938",
+       "file": "p53.browser.mjs",
+       "line": 371,
+       "column": 3
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "errors": [],
+ "stats": {
+  "startTime": "2026-10-10T12:30:13.894Z",
+  "duration": 62888.79,
+  "expected": 8,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ }
+}

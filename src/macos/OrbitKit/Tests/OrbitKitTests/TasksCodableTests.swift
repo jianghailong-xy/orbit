@@ -97,7 +97,7 @@ final class TasksCodableTests: XCTestCase {
         XCTAssertFalse(keep.keys.contains("model"))
 
         // Switching provider clears the model with it — a model id only means something inside
-        // one provider's model space (TasksModel.setProvider sends exactly this pair).
+        // one engine and provider's model space (`TaskRunPin.providerRequest` sends the model with it).
         let switched = try jsonObject(UpdateTaskRequest(provider: .set("codex"), model: .clear))
         XCTAssertEqual(switched["provider"] as? String, "codex")
         XCTAssertTrue(switched["model"] is NSNull)

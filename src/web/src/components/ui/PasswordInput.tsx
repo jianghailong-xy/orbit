@@ -2,17 +2,24 @@ import { useState, type KeyboardEvent } from 'react';
 import { EyeInvisibleOutlined, EyeOutlined } from '@ant-design/icons';
 import { Input, type InputProps } from './Input';
 
-export type PasswordInputProps = Omit<InputProps, 'type'>;
+export interface PasswordInputProps extends Omit<InputProps, 'type'> {
+  /** Whether the password shows; given, the toggle asks for a change through `onVisibleChange`. */
+  visible?: boolean;
+  onVisibleChange?: (visible: boolean) => void;
+}
 
 /**
  * A password field with the replaced field's show/hide toggle at its end: a button in the Tab order
  * (Enter or Space), named Show or Hide and pressed while the password shows; pressing it keeps focus
  * and the caret in the field. A `suffix` follows the toggle.
  */
-export function PasswordInput({ suffix, disabled, ...props }: PasswordInputProps) {
-  const [visible, setVisible] = useState(false);
+export function PasswordInput({ suffix, disabled, visible: shownProp, onVisibleChange, ...props }: PasswordInputProps) {
+  const [shownState, setShownState] = useState(false);
+  const visible = shownProp ?? shownState;
   const flip = () => {
-    if (!disabled) setVisible((shown) => !shown);
+    if (disabled) return;
+    if (shownProp === undefined) setShownState(!visible);
+    onVisibleChange?.(!visible);
   };
   const toggle = (
     <span

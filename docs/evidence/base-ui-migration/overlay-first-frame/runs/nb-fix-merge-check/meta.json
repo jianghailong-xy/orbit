@@ -1,0 +1,16 @@
+{
+ "label": "nb-fix-merge-check",
+ "step": "merge-check",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/run",
+ "command": "npm run build -w @orbit/web && npm run test -w @orbit/web",
+ "commit": "c4c94c924e6163abd1bcff74d376899f69c4a8a0",
+ "webChanges": [],
+ "webDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "startedAt": "2026-10-08T11:40:34Z",
+ "endedAt": "2026-10-08T13:36:42+00:00",
+ "loadAverage": {
+  "start": "31.06 31.20 29.21",
+  "end": "11.59 23.16 27.62"
+ },
+ "exitCode": 1
+}

@@ -12,7 +12,7 @@ import {
 } from '@orbit/shared';
 import { randomUUID } from 'crypto';
 import { initializesRuntimeDynamically } from '../common/runtime-provider';
-import { normalizeRuntimeProvider } from '../common/runtime-provider';
+import { sessionEngine } from '../providers/session-engine';
 import { runnerOfflineIsFatal } from '../common/session-scheduling';
 import { retireSessionInboxGeneration } from '../common/session-inbox-fence';
 import { PrismaService } from '../prisma/prisma.service';
@@ -72,14 +72,30 @@ const SWEPT: RunStatus[] = [RunStatus.PENDING, ...LIVE];
  * `status` is not a second opinion: nothing in this control plane ever writes OFFLINE, which only
  * a runner reports about itself on its way out (`runner-api.controller.ts` heartbeat). A crashed
  * machine leaves ONLINE behind, so the heartbeat's age is the whole of the signal.
+ *
+ * Save for one thing the runner says just as surely: `claimedAt`, the session's own claim of the
+ * run (`run_claimed_at`), is the runner process asking for this very run, and one inside the window
+ * is presence. A process that has just started claims at once, while its first heartbeat waits for
+ * the first tick of its 30-second ticker (runner-go runloop.go), so for that long `lastHeartbeatAt`
+ * is still its predecessor's last beat. A managed runner woken from sleep is exactly that, every
+ * time: on the lab's real k3s (task T06, 2026-10-18) the run a woken runner claimed at 00:56:34.7
+ * was finalized `runner offline` at 00:56:35.4, its heartbeat six minutes old from before the sleep.
+ * The finalizing write asks the same of the row it writes (`claimedLongAgo`), under its lock.
  */
 function runnerLooksOffline(
   runner: { status: string; lastHeartbeatAt: Date | null } | null | undefined,
   now: number,
+  claimedAt?: Date | null,
 ): boolean {
   if (!runner) return true;
+  if (claimedAt && now - claimedAt.getTime() <= OFFLINE_AFTER_MS) return false;
   if (runner.status === 'OFFLINE') return true;
   return now - (runner.lastHeartbeatAt?.getTime() ?? 0) > OFFLINE_AFTER_MS;
+}
+
+/** `runnerLooksOffline`'s claim clause as the finalizing write's WHERE: not claimed inside the window. */
+function claimedLongAgo(now: number) {
+  return { OR: [{ runClaimedAt: null }, { runClaimedAt: { lt: new Date(now - OFFLINE_AFTER_MS) } }] };
 }
 
 /**
@@ -153,8 +169,12 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
         status: true,
         provider: true,
         providerBuiltin: true,
+        engine: true,
+        ownerId: true,
         runtimeSessionId: true,
         lastTurnAt: true,
+        // The claim of the current run: presence as much as a heartbeat (runnerLooksOffline).
+        runClaimedAt: true,
         cancelRequestedAt: true,
         endReason: true,
         // §13.6 SU6: whether this run is DOING the task's work or looking at it. Only the first
@@ -175,7 +195,7 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
       databaseRefusedWork || this.databaseRefusedWorkLastSweep;
     for (const s of sessions) {
       try {
-        const offline = runnerLooksOffline(s.assignedRunner, now);
+        const offline = runnerLooksOffline(s.assignedRunner, now, s.runClaimedAt);
         // A runner that hasn't honored a cancel/end in time is wedged. Handle this
         // before ordinary offline liveness so a graceful end remains graceful even if
         // the runner disappeared while tearing down.
@@ -285,15 +305,19 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           }
           continue;
         }
-        // Session.provider is NOT NULL, so there is nothing to inherit here — and a workspace
-        // holds no provider to inherit from (workspace-provider.ts).
-        const provider = normalizeRuntimeProvider(s.provider, s.providerBuiltin);
+        // The engine the session runs on — its own (Session.engine), not the one its slug reads as:
+        // a Codex, Kimi, OpenCode, Antigravity or Harness session on a key or a pool initializes its
+        // runtime the same way the built-in one does, and stalls the same way. One nobody can place
+        // (its credential gone before an engine was recorded) is not judged here.
+        const provider =
+          s.status === RunStatus.RUNNING && !s.runtimeSessionId ? await sessionEngine(this.prisma, s) : null;
         const lastTurn = s.lastTurnAt?.getTime() ?? 0;
         const runtimeStartupGrace =
           provider === AgentProvider.CODEX
             ? CODEX_SHARED_STATE_STARTUP_GRACE_MS
             : DYNAMIC_RUNTIME_STARTUP_GRACE_MS;
         if (
+          provider &&
           initializesRuntimeDynamically(provider) &&
           s.status === RunStatus.RUNNING &&
           !s.runtimeSessionId &&
@@ -433,6 +457,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
           id: sessionId,
           status: { in: opts.expectedStatuses ?? LIVE },
           ...(opts.onlyIfNotCancelling ? { cancelRequestedAt: null } : {}),
+          // The claim half of the re-ask above, on the row this writes: a run claimed inside the
+          // window — since the sweep looked, too — is a runner answering.
+          ...(opts.requireRunnerStillOffline ? claimedLongAgo(Date.now()) : {}),
         },
         // Set cancelRequestedAt too so the heartbeat cancel-drain tells a runner
         // recovering from a partition to stop (the session is already finalized here).

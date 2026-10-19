@@ -1,0 +1,63 @@
+== Scenario 5: remove an account in use (refused), then idle (removed) ==
+before: {"accounts":[{"id":"default","auth":"yes"},{"id":"a70fa033","name":"Work","auth":"yes"}],"accountRemove":{"engine":"codex","account":null,"status":null,"message":null}}
+Default home: digest 422e9bb80221e0d6 (40 entries) /var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+signed in on http://127.0.0.1:4741 as owner@kimi-int.test
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+Kimi account options: ["Automatic\neach new session starts on the account whose quota resets soonest","Default (/var/tmp/kimi-accounts-stack/runners/hpc-kimi/userhome/.kimi-code)\n5h limit 85% · signed in","Work\n5h limit 10% · signed in"]
+workspace kimiAccount: a70fa033
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+session in flight on Work: 34cSzomAEoFbGTINSqcWp
+console.error Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+console.error Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+its runner record: /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033
+shot /var/tmp/kimi-accounts-stack/shots/5-remove-account/5a-turn-in-flight.png
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+shot /var/tmp/kimi-accounts-stack/shots/5-remove-account/5b1-confirm.png
+web → DELETE /api/runners/34cSsjpxU1AVt4w2wGiis/accounts/kimi/a70fa033
+web ← 200 /api/runners/34cSsjpxU1AVt4w2wGiis/accounts/kimi/a70fa033 {"engine":"kimi","account":"a70fa033","status":"pending","message":null}
+after Remove while in use: {"accounts":[{"id":"default","auth":"yes"},{"id":"a70fa033","name":"Work","auth":"yes"}],"accountRemove":{"engine":"kimi","account":"a70fa033","status":"failed","message":"kimi account a70fa033 is in use by a session running on this machine — end that session, then remove it"}}
+Work row as shown: WorkNEXT kimi.com · /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033 Available 5h limit 10% resets 03:46 Weekly limit 10% resets Mon 04:16 Monthly limit 5% resets Sun 08:00 kimi account a70fa033 is in use by a session running on this machine — end that session, then remove it /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033 on hpc-kimi is untouched.
+refusal shown on the card: kimi account a70fa033 is in use by a session running on this machine — end that session, then remove it | /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033 on hpc-kimi is untouched.
+shot /var/tmp/kimi-accounts-stack/shots/5-remove-account/5b2-refused.png
+Work home still on disk: true /var/tmp/kimi-accounts-stack/runners/hpc-kimi/home/kimi-accounts/a70fa033
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+shot /var/tmp/kimi-accounts-stack/shots/5-remove-account/5c1-confirm.png
+web → DELETE /api/runners/34cSsjpxU1AVt4w2wGiis/accounts/kimi/a70fa033
+web ← 200 /api/runners/34cSsjpxU1AVt4w2wGiis/accounts/kimi/a70fa033 {"engine":"kimi","account":"a70fa033","status":"pending","message":null}
+after Remove with the session open but idle: {"accounts":[{"id":"default","auth":"yes"},{"id":"a70fa033","name":"Work","auth":"yes"}],"accountRemove":{"engine":"kimi","account":"a70fa033","status":"failed","message":"kimi account a70fa033 is in use by a session running on this machine — end that session, then remove it"}}
+shot /var/tmp/kimi-accounts-stack/shots/5-remove-account/5c2-refused-open-session.png
+open sessions of the workspace: [{"id":"34cSzomAEoFbGTINSqcWp","status":"AWAITING_INPUT"},{"id":"34cSyeIEYf4tB8LmeGF0k","status":"AWAITING_INPUT"},{"id":"34cSxeJrRGA3AjbPK52Un","status":"AWAITING_INPUT"},{"id":"34cSwYHbY0C3v6c30DsqJ","status":"AWAITING_INPUT"},{"id":"34cSuuxCqlKDnP5r7pEV8","status":"AWAITING_INPUT"}]
+→ POST /api/sessions/34cSzomAEoFbGTINSqcWp/complete ← 201
+→ POST /api/sessions/34cSyeIEYf4tB8LmeGF0k/complete ← 201
+→ POST /api/sessions/34cSxeJrRGA3AjbPK52Un/complete ← 201
+→ POST /api/sessions/34cSwYHbY0C3v6c30DsqJ/complete ← 201
+→ POST /api/sessions/34cSuuxCqlKDnP5r7pEV8/complete ← 201
+runner supervises no session any more: true []
+console.error Warning: [antd: Modal] `destroyOnClose` is deprecated. Please use `destroyOnHidden` instead.
+shot /var/tmp/kimi-accounts-stack/shots/5-remove-account/5d1-confirm.png
+web → DELETE /api/runners/34cSsjpxU1AVt4w2wGiis/accounts/kimi/a70fa033
+web ← 200 /api/runners/34cSsjpxU1AVt4w2wGiis/accounts/kimi/a70fa033 {"engine":"kimi","account":"a70fa033","status":"pending","message":null}
+after Remove while idle: {"accounts":[{"id":"default","auth":"yes"}],"accountRemove":{"engine":"kimi","account":"a70fa033","status":"done","message":null}}
+shot /var/tmp/kimi-accounts-stack/shots/5-remove-account/5d2-removed.png
+runner log (sessions):
+[orbit-runner 2026-10-08T17:16:54.442Z] > interactive run 01a11c84-98f6-74d8-9bce-88e7a44723aa — Scenario 4, round 3, turn 1: started on Automatic.
+[orbit-runner 2026-10-08T17:16:59.238Z] ■ interactive run 01a11c84-98f6-74d8-9bce-88e7a44723aa — failed turn terminal acknowledgement settled
+[orbit-runner 2026-10-08T17:17:28.801Z] > interactive run 01a11c84-98f6-74d8-9bce-88e7a44723aa — Scenario 4, round 3, turn 1: started on Automatic.
+[orbit-runner 2026-10-08T17:17:40.533Z] > interactive run 01a11c85-4d0b-7485-82de-f1a7bf90dfcb — Scenario 5: hold this account — FAKE_KIMI_SLOW 75
+[orbit-runner 2026-10-08T17:19:03.345Z] ■ interactive run 01a11c85-4d0b-7485-82de-f1a7bf90dfcb → SUCCEEDED
+[orbit-runner 2026-10-08T17:19:03.357Z] ■ interactive run 01a11c84-98f6-74d8-9bce-88e7a44723aa → SUCCEEDED
+[orbit-runner 2026-10-08T17:19:20.667Z] > interactive run 01a11c82-5a34-763d-a293-e9d8f1d35aba — Scenario 2: which Kimi account is this session on?
+[orbit-runner 2026-10-08T17:19:20.670Z] > interactive run 01a11c83-55f4-7734-8387-8c5bbcfe233b — Scenario 4, round 1: started on Automatic — which account?
+[orbit-runner 2026-10-08T17:19:20.670Z] > interactive run 01a11c83-fefd-762f-97c7-00e577079535 — Scenario 4, round 2: started on Automatic — which account?
+[orbit-runner 2026-10-08T17:19:20.689Z] ■ interactive run 01a11c82-5a34-763d-a293-e9d8f1d35aba → CANCELLED
+[orbit-runner 2026-10-08T17:19:20.690Z] ■ interactive run 01a11c83-55f4-7734-8387-8c5bbcfe233b → CANCELLED
+[orbit-runner 2026-10-08T17:19:20.697Z] ■ interactive run 01a11c83-fefd-762f-97c7-00e577079535 → CANCELLED
+PASS the removal of an account in use was refused by the runner, with its reason
+PASS the page showed the refusal under the Work row, and Work stays Available
+PASS Work's directory stayed while refused
+PASS with the turn over but the session still open, the removal is still refused
+PASS once every session on it was completed, the removal went through and the account left the report
+PASS Work's directory and record are gone
+PASS Default's home untouched
+SCENARIO 5 PASS

@@ -1,0 +1,411 @@
+tree: /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/base
+head: f78e93f615fceda94eeea0c9cdd400fb44b7949e
+load: 13.24 12.67 11.69 11/3409 2572283
+started: 2026-10-10T18:19:01Z
+
+
+Running 72 tests using 1 worker
+
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-evidence-stale.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-owner-refused.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-criteria-refused.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-strip.png, writing actual.
+  ✓   4 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-review-turns.png, writing actual.
+  ✓   5 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-reopen-refused.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-start-gone.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-question-review.png, writing actual.
+  ✓   8 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-start-live-plan.png, writing actual.
+  ✘   9 [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level (17.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-evidence-stale.png, writing actual.
+  ✓  10 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-owner-refused.png, writing actual.
+  ✓  11 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-criteria-refused.png, writing actual.
+  ✓  12 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (1.6s)
+  -  13 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-review-turns.png, writing actual.
+  ✓  14 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-reopen-refused.png, writing actual.
+  ✓  15 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-start-gone.png, writing actual.
+  ✓  16 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-question-review.png, writing actual.
+  ✓  17 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-start-live-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-start-live-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-light-phone/p43b-card-start-live-graph.png, writing actual.
+  ✓  18 [chromium-light-phone] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-evidence-stale.png, writing actual.
+  ✓  19 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-owner-refused.png, writing actual.
+  ✓  20 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-criteria-refused.png, writing actual.
+  ✓  21 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-strip.png, writing actual.
+  ✓  22 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-review-turns.png, writing actual.
+  ✓  23 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-reopen-refused.png, writing actual.
+  ✓  24 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-start-gone.png, writing actual.
+  ✓  25 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-question-review.png, writing actual.
+  ✓  26 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-start-live-plan.png, writing actual.
+  ✘  27 [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level (19.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-evidence-stale.png, writing actual.
+  ✓  28 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-owner-refused.png, writing actual.
+  ✓  29 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-criteria-refused.png, writing actual.
+  ✓  30 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (2.1s)
+  -  31 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-review-turns.png, writing actual.
+  ✓  32 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-reopen-refused.png, writing actual.
+  ✓  33 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-start-gone.png, writing actual.
+  ✓  34 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-question-review.png, writing actual.
+  ✓  35 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-start-live-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-start-live-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/chromium-dark-phone/p43b-card-start-live-graph.png, writing actual.
+  ✓  36 [chromium-dark-phone] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-evidence-stale.png, writing actual.
+  ✓  37 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-owner-refused.png, writing actual.
+  ✓  38 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-criteria-refused.png, writing actual.
+  ✓  39 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-strip.png, writing actual.
+  ✓  40 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-review-turns.png, writing actual.
+  ✓  41 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-reopen-refused.png, writing actual.
+  ✓  42 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-start-gone.png, writing actual.
+  ✓  43 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-question-review.png, writing actual.
+  ✓  44 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-start-live-plan.png, writing actual.
+  ✘  45 [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level (17.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-evidence-stale.png, writing actual.
+  ✓  46 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-owner-refused.png, writing actual.
+  ✓  47 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-criteria-refused.png, writing actual.
+  ✓  48 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (1.6s)
+  -  49 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-review-turns.png, writing actual.
+  ✓  50 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-reopen-refused.png, writing actual.
+  ✓  51 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-start-gone.png, writing actual.
+  ✓  52 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-question-review.png, writing actual.
+  ✓  53 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-start-live-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-start-live-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-light-phone/p43b-card-start-live-graph.png, writing actual.
+  ✓  54 [webkit-light-phone] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-evidence-stale.png, writing actual.
+  ✓  55 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-owner-refused.png, writing actual.
+  ✓  56 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-criteria-refused.png, writing actual.
+  ✓  57 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-strip.png, writing actual.
+  ✓  58 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-review-turns.png, writing actual.
+  ✓  59 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-reopen-refused.png, writing actual.
+  ✓  60 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-start-gone.png, writing actual.
+  ✓  61 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-question-review.png, writing actual.
+  ✓  62 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-start-live-plan.png, writing actual.
+  ✘  63 [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level (17.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-evidence-refused.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-evidence-stale.png, writing actual.
+  ✓  64 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:41:3 › P4.3b session decision cards › an evidence decision: refused, then out of date (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-owner-typed.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-owner-refused.png, writing actual.
+  ✓  65 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:65:3 › P4.3b session decision cards › an owner confirmation: a review question answered in the owner’s own words, refused (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-criteria-refused.png, writing actual.
+  ✓  66 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:91:3 › P4.3b session decision cards › a criteria decision: refused (1.8s)
+  -  67 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:109:3 › P4.3b session decision cards › the decision strip: what waits on the reader
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-review-turns.png, writing actual.
+  ✓  68 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:127:3 › P4.3b session decision cards › the review turns: the run’s session opened from the request (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-receipt.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-reopen-refused.png, writing actual.
+  ✓  69 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:144:3 › P4.3b session decision cards › a receipt’s Reopen task: asked, refused, and back (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-start-gone.png, writing actual.
+  ✓  70 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:173:3 › P4.3b session decision cards › the start dialog when its request no longer stands (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-question-records.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-question-review.png, writing actual.
+  ✓  71 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:193:3 › P4.3b session decision cards › ended coordinator questions: the records, and an answered one’s review (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-start-live.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-start-live-plan.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-start-live-more.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/f1/harness-base-p43b-cards-shots/webkit-dark-phone/p43b-card-start-live-graph.png, writing actual.
+  ✓  72 [webkit-dark-phone] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level (3.1s)
+
+
+  1) [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('[data-case="live-start"]').locator('.start-card').visible().first().locator('.settlement-card-read')
+    Expected: 1
+    Received: 0
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('[data-case="live-start"]').locator('.start-card').visible().first().locator('.settlement-card-read') with timeout 15000ms
+      - waiting for locator('[data-case="live-start"]').locator('.start-card').visible().first().locator('.settlement-card-read')
+        34 × locator resolved to 0 elements
+           - unexpected value "0"
+
+
+      250 |     await planned.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      251 |     await capture('p43b-card-start-live-plan', { plan: planned });
+    > 252 |     await expect(card.locator('.settlement-card-read')).toHaveCount(1);
+          |                                                         ^
+      253 |     const more = card.locator('.start-card-quote .start-card-link');
+      254 |     if (phone(testInfo)) {
+      255 |       // Cut on a phone: More is there, and opening it leaves Less to close it again.
+        at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/base/src/web/ui-migration/p43b-cards.browser.mjs:252:57
+
+    attachment #1: p43b-card-start-live (image/png) ────────────────────────────────────────────────
+    Expected: ../../../f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-start-live.png
+    Received: ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-chromium-light-desktop/p43b-card-start-live-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: p43b-card-start-live-plan (image/png) ───────────────────────────────────────────
+    Expected: ../../../f1/harness-base-p43b-cards-shots/chromium-light-desktop/p43b-card-start-live-plan.png
+    Received: ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-chromium-light-desktop/p43b-card-start-live-plan-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-chromium-light-desktop/attachments/computed-styles-and-timings-d764fe84eb59e50c6dc2e79f09a8ecd414fb263b.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-chromium-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('[data-case="live-start"]').locator('.start-card').visible().first().locator('.settlement-card-read')
+    Expected: 1
+    Received: 0
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('[data-case="live-start"]').locator('.start-card').visible().first().locator('.settlement-card-read') with timeout 15000ms
+      - waiting for locator('[data-case="live-start"]').locator('.start-card').visible().first().locator('.settlement-card-read')
+        34 × locator resolved to 0 elements
+           - unexpected value "0"
+
+
+      250 |     await planned.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      251 |     await capture('p43b-card-start-live-plan', { plan: planned });
+    > 252 |     await expect(card.locator('.settlement-card-read')).toHaveCount(1);
+          |                                                         ^
+      253 |     const more = card.locator('.start-card-quote .start-card-link');
+      254 |     if (phone(testInfo)) {
+      255 |       // Cut on a phone: More is there, and opening it leaves Less to close it again.
+        at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/base/src/web/ui-migration/p43b-cards.browser.mjs:252:57
+
+    attachment #1: p43b-card-start-live (image/png) ────────────────────────────────────────────────
+    Expected: ../../../f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-start-live.png
+    Received: ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-chromium-dark-desktop/p43b-card-start-live-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: p43b-card-start-live-plan (image/png) ───────────────────────────────────────────
+    Expected: ../../../f1/harness-base-p43b-cards-shots/chromium-dark-desktop/p43b-card-start-live-plan.png
+    Received: ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-chromium-dark-desktop/p43b-card-start-live-plan-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-chromium-dark-desktop/attachments/computed-styles-and-timings-016add733dbf4ef333ada9385372799afab42874.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-chromium-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('[data-case="live-start"]').locator('.start-card').visible().first().locator('.settlement-card-read')
+    Expected: 1
+    Received: 0
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('[data-case="live-start"]').locator('.start-card').visible().first().locator('.settlement-card-read') with timeout 15000ms
+      - waiting for locator('[data-case="live-start"]').locator('.start-card').visible().first().locator('.settlement-card-read')
+        34 × locator resolved to 0 elements
+           - unexpected value "0"
+
+
+      250 |     await planned.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      251 |     await capture('p43b-card-start-live-plan', { plan: planned });
+    > 252 |     await expect(card.locator('.settlement-card-read')).toHaveCount(1);
+          |                                                         ^
+      253 |     const more = card.locator('.start-card-quote .start-card-link');
+      254 |     if (phone(testInfo)) {
+      255 |       // Cut on a phone: More is there, and opening it leaves Less to close it again.
+        at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/base/src/web/ui-migration/p43b-cards.browser.mjs:252:57
+
+    attachment #1: p43b-card-start-live (image/png) ────────────────────────────────────────────────
+    Expected: ../../../f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-start-live.png
+    Received: ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-webkit-light-desktop/p43b-card-start-live-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: p43b-card-start-live-plan (image/png) ───────────────────────────────────────────
+    Expected: ../../../f1/harness-base-p43b-cards-shots/webkit-light-desktop/p43b-card-start-live-plan.png
+    Received: ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-webkit-light-desktop/p43b-card-start-live-plan-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-webkit-light-desktop/attachments/computed-styles-and-timings-1cbacf8861bd3a0b4632685e966ad056c4daf25f.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-webkit-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level 
+
+    Error: expect(locator).toHaveCount(expected) failed
+
+    Locator:  locator('[data-case="live-start"]').locator('.start-card').visible().first().locator('.settlement-card-read')
+    Expected: 1
+    Received: 0
+    Timeout:  15000ms
+
+    Call log:
+      - Expect "toHaveCount" locator('[data-case="live-start"]').locator('.start-card').visible().first().locator('.settlement-card-read') with timeout 15000ms
+      - waiting for locator('[data-case="live-start"]').locator('.start-card').visible().first().locator('.settlement-card-read')
+        34 × locator resolved to 0 elements
+           - unexpected value "0"
+
+
+      250 |     await planned.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      251 |     await capture('p43b-card-start-live-plan', { plan: planned });
+    > 252 |     await expect(card.locator('.settlement-card-read')).toHaveCount(1);
+          |                                                         ^
+      253 |     const more = card.locator('.start-card-quote .start-card-link');
+      254 |     if (phone(testInfo)) {
+      255 |       // Cut on a phone: More is there, and opening it leaves Less to close it again.
+        at /mnt/data/tmp/34Za39RS6A28G7xPqMD0p/v1/base/src/web/ui-migration/p43b-cards.browser.mjs:252:57
+
+    attachment #1: p43b-card-start-live (image/png) ────────────────────────────────────────────────
+    Expected: ../../../f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-start-live.png
+    Received: ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-webkit-dark-desktop/p43b-card-start-live-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: p43b-card-start-live-plan (image/png) ───────────────────────────────────────────
+    Expected: ../../../f1/harness-base-p43b-cards-shots/webkit-dark-desktop/p43b-card-start-live-plan.png
+    Received: ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-webkit-dark-desktop/p43b-card-start-live-plan-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-webkit-dark-desktop/attachments/computed-styles-and-timings-a6b12a23c74177f72d47302a42c680ca9c46aa49.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-webkit-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../f1/harness-base-p43b-cards-out/p43b-cards.browser.mjs-P4--3d188--the-task-graph-or-by-level-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4 failed
+    [chromium-light-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level 
+    [chromium-dark-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level 
+    [webkit-light-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level 
+    [webkit-dark-desktop] › ui-migration/p43b-cards.browser.mjs:222:3 › P4.3b session decision cards › the start card in a conversation: fills the transcript, More and Read all only while cut, the plan as the task graph or by level 
+  4 skipped
+  64 passed (3.6m)
+exit=1
+ended: 2026-10-10T18:22:40Z

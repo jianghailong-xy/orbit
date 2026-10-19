@@ -16,9 +16,9 @@ import (
 // saved on the machine (docs/personal-access-token-design.md §7.2). What made it matter: once the runner's
 // OS user has run `orbit login` in the runner's own ORBIT_HOME (§8), the shell an EXECUTABLE acceptance
 // command or a `!` command runs in, which carries no session, fell to that login — `orbit task list` went
-// to the person's routes with their personal access token, and `orbit wiki check` and `orbit wiki plan
-// check`, which act only as the machine, were refused, so every Wiki maintenance and plan task failed its
-// acceptance.
+// to the person's routes with their personal access token, and the commands that act only as the machine
+// (then `orbit wiki check` and `orbit wiki plan check`; `orbit token list` here) were refused, so every
+// task whose acceptance ran one failed it.
 //
 // Held end to end: the commands run in real shell turns, with this test binary as the `orbit` they call
 // (TestMain), against two control planes — the one the saved login names and the one config.json names.
@@ -26,7 +26,7 @@ import (
 // the runner built, act as the person, as before.
 
 // answerAsRunnerRoutes answers as the runner door does, to the runner's credential alone: the task list,
-// and the check of a plan job that stored its draft.
+// and the machine's service tokens.
 func answerAsRunnerRoutes(r apiRequest) (int, string) {
 	if r.authorization != "Bearer runner-secret" {
 		return http.StatusUnauthorized, `{"message":"invalid runner token","statusCode":401}`
@@ -34,8 +34,8 @@ func answerAsRunnerRoutes(r apiRequest) (int, string) {
 	switch {
 	case r.method == http.MethodGet && r.path == "/api/runner/tasks":
 		return http.StatusOK, `[{"id":"t1","title":"first"}]`
-	case r.method == http.MethodGet && r.path == "/api/runner/wiki/spaces/space-1/plan/check" && r.query == "jobId=job-1":
-		return http.StatusOK, `{"spaceId":"space-1","jobId":"job-1","kind":"draft","outcome":"succeeded","version":2,"ok":true,"problems":[]}`
+	case r.method == http.MethodGet && r.path == "/api/runner/service-tokens":
+		return http.StatusOK, `[{"id":"tok-1","label":"bridge"}]`
 	}
 	return http.StatusNotFound, `{"message":"no such runner route","statusCode":404}`
 }
@@ -54,7 +54,8 @@ func aRunnerWithASavedLogin(t *testing.T) (user, runner *recordingAPI, orbit str
 	return user, runner, shellQuote(orbitCLIExecutable())
 }
 
-const planCheckArgs = " wiki plan check --space space-1 --job job-1"
+// machineOnlyArgs is a command that acts only as the machine: it has no form that acts as the person.
+const machineOnlyArgs = " token list --json"
 
 func TestRunnerStartedShellsActAsTheMachineBesideASavedLogin(t *testing.T) {
 	t.Run("the acceptance shell", func(t *testing.T) {
@@ -78,13 +79,13 @@ func TestRunnerStartedShellsActAsTheMachineBesideASavedLogin(t *testing.T) {
 			t.Errorf("orbit task list sent the runner's control plane %+v, want one GET /api/runner/tasks with the runner credential", seen)
 		}
 
-		exit, out = acceptance(orbit + planCheckArgs)
-		if exit != 0 || !strings.Contains(out, "plan job job-1 stored version 2") || strings.Contains(out, "does not run as you") {
-			t.Fatalf("orbit wiki plan check exited %d:\n%s", exit, out)
+		exit, out = acceptance(orbit + machineOnlyArgs)
+		if exit != 0 || !strings.Contains(out, `"id":"tok-1"`) || strings.Contains(out, "does not run as you") {
+			t.Fatalf("orbit token list exited %d:\n%s", exit, out)
 		}
 		seen = runner.seen()
-		if len(seen) != 2 || seen[1].path != "/api/runner/wiki/spaces/space-1/plan/check" || seen[1].authorization != "Bearer runner-secret" {
-			t.Errorf("the runner's control plane was sent %+v, want the plan check last, with the runner credential", seen)
+		if len(seen) != 2 || seen[1].path != "/api/runner/service-tokens" || seen[1].authorization != "Bearer runner-secret" {
+			t.Errorf("the runner's control plane was sent %+v, want the token list last, with the runner credential", seen)
 		}
 
 		if got := user.seen(); len(got) != 0 {
@@ -144,9 +145,9 @@ func TestRunnerStartedShellsActAsTheMachineBesideASavedLogin(t *testing.T) {
 			t.Errorf("orbit task list in a terminal sent the person's control plane %+v, want GET /api/tasks/page with the saved token", seen)
 		}
 
-		exit, out = terminal(orbit + planCheckArgs)
+		exit, out = terminal(orbit + machineOnlyArgs)
 		if exit == 0 || !strings.Contains(out, "does not run as you") {
-			t.Errorf("orbit wiki plan check ran as the person in a terminal (exit %d):\n%s", exit, out)
+			t.Errorf("orbit token list ran as the person in a terminal (exit %d):\n%s", exit, out)
 		}
 		if got := runner.seen(); len(got) != 0 {
 			t.Errorf("a terminal used the runner's credential: %+v", got)

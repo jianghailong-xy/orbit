@@ -1,16 +1,21 @@
 /**
- * Laying out the shape of a proposed batch.
+ * The shape of a proposed batch.
  *
  * The counts on the approval card say how much a batch costs; they do not say what it *is*. A
  * chain of ten and ten independent tasks produce the same list of titles and behave completely
  * differently, and the shape is the part a person recognises at a glance — "this is a fan-out",
  * "this is a chain", "these are unrelated".
  *
- * Deliberately hand-rolled rather than reaching for a graph library. The batch preview sends at
- * most a dozen nodes (DAG_PREVIEW_TITLES), a card is not pannable, and this repo's one existing
- * xyflow/dagre view cannot even be built here — a layered walk over twelve nodes is smaller than
- * the adapter its alternative would need.
+ * The picture is the project page's own canvas (`ProjectDependencyGraph`, reached through
+ * `BatchPlanGraph`): one component lays out a plan wherever it is drawn, so a card cannot promise
+ * a shape the project page will not draw. What stays here is the rule both read — a task sits one
+ * level after the deepest of what it waits on — which the card's caption quotes ("5 levels, up to
+ * 2 in parallel"), and which the native clients mirror for their level lists.
  */
+import type {
+  ProjectDependencyGraphResponse,
+  ProjectTaskWorkState,
+} from './projectDependencyGraph';
 
 export interface BatchTaskInput {
   title: string;
@@ -23,8 +28,6 @@ export interface GraphNode {
   title: string;
   /** Distance from a root, so prerequisites always sit above what waits on them. */
   layer: number;
-  /** Position within the layer, left to right. */
-  column: number;
   /** Waits on something that already exists outside this batch — it is a root here, not overall. */
   waitsOutside: boolean;
 }
@@ -73,41 +76,23 @@ export function buildBatchGraph(tasks: BatchTaskInput[]): BatchGraph {
     }
   });
 
-  const nextColumn = new Map<number, number>();
-  const nodes: GraphNode[] = tasks.map((t, i) => {
-    const l = layer[i];
-    const column = nextColumn.get(l) ?? 0;
-    nextColumn.set(l, column + 1);
-    return {
-      title: t.title,
-      layer: l,
-      column,
-      waitsOutside: (t.dependsOnTaskIds?.length ?? 0) > 0,
-    };
-  });
+  const nodes: GraphNode[] = tasks.map((t, i) => ({
+    title: t.title,
+    layer: layer[i],
+    waitsOutside: (t.dependsOnTaskIds?.length ?? 0) > 0,
+  }));
+
+  // How many tasks share each layer. `width` is the widest of them — the number of things that can
+  // run at once, which is what decides whether this reads as a chain or a fan-out.
+  const perLayer = new Map<number, number>();
+  for (const node of nodes) perLayer.set(node.layer, (perLayer.get(node.layer) ?? 0) + 1);
 
   return {
     nodes,
     edges,
-    width: Math.max(0, ...[...nextColumn.values()]),
-    depth: nextColumn.size,
+    width: Math.max(0, ...perLayer.values()),
+    depth: perLayer.size,
   };
-}
-
-/**
- * Past these the drawing stops being worth more than the sentence.
- *
- * A card is about 520px wide, so a layer of five 138px nodes scales the labels below eight
- * points — unreadable, and a picture you cannot read is worse than the line of prose that
- * replaces it. Depth is capped for the opposite reason: a chain draws perfectly at any length and
- * says nothing "a chain of 12" does not already say, while eating the whole card.
- */
-export const MAX_DRAWN_WIDTH = 4;
-export const MAX_DRAWN_DEPTH = 6;
-
-/** Whether this batch is worth drawing rather than describing. */
-export function shouldDraw(g: BatchGraph): boolean {
-  return g.edges.length > 0 && g.width <= MAX_DRAWN_WIDTH && g.depth <= MAX_DRAWN_DEPTH;
 }
 
 /**
@@ -130,4 +115,49 @@ export function describeShape(g: BatchGraph): string {
     return `${g.width} in parallel after 1`;
   }
   return `${g.depth} levels, up to ${g.width} in parallel`;
+}
+
+/**
+ * The batch as the project page's canvas draws it: one mark per task, one edge per prerequisite
+ * inside the batch.
+ *
+ * A proposal has no statuses — nothing exists yet — so each mark carries the one reading that is
+ * true of a plan: a task nothing holds back (no prerequisite in the batch, none outside it) is
+ * `READY`, and everything else waits. Work waiting on a task that already exists cannot be drawn
+ * at all — that task is not on this canvas — so it is counted separately for the caller to say in
+ * words, which is what the card did with a dashed box and a tooltip before.
+ */
+export function batchPreviewGraph(tasks: BatchTaskInput[]): {
+  graph: ProjectDependencyGraphResponse;
+  /** Tasks waiting on something that already exists, whose edges no card can draw. */
+  waitsOutside: number;
+} {
+  const shape = buildBatchGraph(tasks);
+  // Refs name the tasks to each other; a task without one is still drawn, under its place in the
+  // window. Both spellings are unique here, which is all the canvas needs of a mark's id.
+  const idOf = tasks.map((task, i) => task.ref ?? `#${i + 1}`);
+  const workStateOf = (node: GraphNode): ProjectTaskWorkState =>
+    node.layer === 0 && !node.waitsOutside ? 'READY' : 'BLOCKED';
+  return {
+    graph: {
+      marks: shape.nodes.map((node, i) => ({
+        kind: 'TASK',
+        id: idOf[i],
+        taskId: idOf[i],
+        title: node.title,
+        // A created task is OPEN, and that is what this card is about to make true.
+        status: 'OPEN',
+        parentTaskId: null,
+        workState: workStateOf(node),
+      })),
+      edges: shape.edges.map((edge) => ({
+        sourceMarkId: idOf[edge.from],
+        targetMarkId: idOf[edge.to],
+      })),
+      taskCount: tasks.length,
+      folded: false,
+      truncated: false,
+    },
+    waitsOutside: shape.nodes.filter((node) => node.waitsOutside).length,
+  };
 }

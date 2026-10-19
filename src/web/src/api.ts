@@ -5,6 +5,7 @@ import type {
   ConfirmationReviewRequestCard,
   ConversationTurnKind,
   OpenItemDeliveryCard,
+  OwnerAnswerCard,
   ProjectStartedCard,
   SessionCapabilities,
   SessionMessageCard,
@@ -15,6 +16,9 @@ import type {
   SessionTurnIntent,
   SessionTurnPlacement,
   TaskStartCard,
+  WikiDocBlockKind,
+  WikiDocFootnoteKind,
+  WikiDocVerdict,
 } from '@orbit/shared';
 // Types only, so the public project page's payload is typed by the cards that draw it.
 import type { ProjectPanoramaBuckets, ProjectPanoramaShape } from './components/ProjectPanoramaHeader';
@@ -26,6 +30,12 @@ import { compatibleUuid as uuid } from './lib/uuid';
 
 const TOKEN_KEY = 'orbit_token';
 const REFRESH_KEY = 'orbit_refresh';
+// While an administrator views Orbit as another user, their own session waits here until the look
+// ends: the token for looking has no refresh token of its own (see startImpersonation).
+const ADMIN_TOKEN_KEY = 'orbit_admin_token';
+const ADMIN_REFRESH_KEY = 'orbit_admin_refresh';
+/** The audience of the token an administrator views Orbit as another user with (apiserver auth/impersonation.ts). */
+const IMPERSONATION_AUDIENCE = 'orbit-impersonation';
 
 // Auto-refresh state (see the "Token auto-refresh" block below). Declared up here so the token
 // accessors can reference the timer without a use-before-define.
@@ -39,6 +49,9 @@ export const getRefreshToken = (): string | null => localStorage.getItem(REFRESH
 export const setSession = (s: { accessToken: string; refreshToken: string }): void => {
   localStorage.setItem(TOKEN_KEY, s.accessToken);
   localStorage.setItem(REFRESH_KEY, s.refreshToken);
+  // A sign-in is nobody's look at another user: no session waits to come back after it.
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+  localStorage.removeItem(ADMIN_REFRESH_KEY);
   scheduleProactiveRefresh();
   // Scope the persistent transcript cache to whoever this token belongs to. Done here rather than
   // from the `me` query so it is bound before the first read: the token itself names the user, so
@@ -50,6 +63,8 @@ export const setSession = (s: { accessToken: string; refreshToken: string }): vo
 export const clearToken = (): void => {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+  localStorage.removeItem(ADMIN_REFRESH_KEY);
   if (refreshTimer !== undefined) {
     clearTimeout(refreshTimer);
     refreshTimer = undefined;
@@ -95,29 +110,80 @@ async function doRefresh(): Promise<boolean> {
   }
 }
 
-/** Decode a JWT's `exp` (seconds since epoch), or null if it can't be read. The payload is
- *  base64url, so map `-_` back to `+/` before atob (which only accepts standard base64). */
-function jwtExp(token: string): number | null {
+/** Decode a JWT's payload, or null if it can't be read. The payload is base64url, so map `-_` back
+ *  to `+/` before atob (which only accepts standard base64). Read unverified: the server re-verifies
+ *  the token regardless, so nothing read here grants anything. */
+function jwtClaims(token: string): Record<string, unknown> | null {
   try {
     const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const { exp } = JSON.parse(atob(b64)) as { exp?: number };
-    return typeof exp === 'number' ? exp : null;
+    const claims: unknown = JSON.parse(atob(b64));
+    return claims && typeof claims === 'object' ? (claims as Record<string, unknown>) : null;
   } catch {
     return null;
   }
 }
 
-/** Decode a JWT's `sub` (the user id), or null if it can't be read. Same base64url handling as
- *  jwtExp above. Only used to scope local caches — the server re-verifies the token regardless,
- *  so reading it unverified here grants nothing. */
+/** Decode a JWT's `exp` (seconds since epoch), or null if it can't be read. */
+function jwtExp(token: string): number | null {
+  const exp = jwtClaims(token)?.exp;
+  return typeof exp === 'number' ? exp : null;
+}
+
+/** Decode a JWT's `sub` (the user id), or null if it can't be read. Only used to scope local caches. */
 function jwtSubject(token: string): string | null {
-  try {
-    const b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-    const { sub } = JSON.parse(atob(b64)) as { sub?: string };
-    return typeof sub === 'string' ? sub : null;
-  } catch {
-    return null;
-  }
+  const sub = jwtClaims(token)?.sub;
+  return typeof sub === 'string' ? sub : null;
+}
+
+/** The user `token` views Orbit as, when it is an administrator's token for looking at another user:
+ *  their email, and when the look ends (seconds since epoch). Null for every other token. */
+function lookOf(token: string | null): { email: string; expiresAt: number } | null {
+  const claims = token ? jwtClaims(token) : null;
+  if (claims?.aud !== IMPERSONATION_AUDIENCE || typeof claims.email !== 'string' || typeof claims.exp !== 'number') return null;
+  return { email: claims.email, expiresAt: claims.exp };
+}
+
+/** The user this browser is viewing Orbit as, read-only, while an administrator's look at another user
+ *  is under way: their email, and when the look ends (seconds since epoch). Null otherwise. */
+export const impersonation = (): { email: string; expiresAt: number } | null => lookOf(getToken());
+
+/**
+ * Start viewing Orbit as another user, with the token POST /admin/users/:id/impersonate answered.
+ * This browser's own session waits aside until stopImpersonation brings it back, and nothing refreshes
+ * meanwhile: the look has no refresh token, and ends with its token. Callers load the app again
+ * afterwards, so nothing read as the administrator stays on screen.
+ */
+export function startImpersonation(accessToken: string): void {
+  const token = getToken();
+  const refreshToken = getRefreshToken();
+  if (token) localStorage.setItem(ADMIN_TOKEN_KEY, token);
+  if (refreshToken) localStorage.setItem(ADMIN_REFRESH_KEY, refreshToken);
+  localStorage.setItem(TOKEN_KEY, accessToken);
+  localStorage.removeItem(REFRESH_KEY);
+  scheduleProactiveRefresh();
+}
+
+/** End the look: the administrator's own session comes back. Callers load the app again afterwards. */
+export function stopImpersonation(): void {
+  const token = localStorage.getItem(ADMIN_TOKEN_KEY);
+  const refreshToken = localStorage.getItem(ADMIN_REFRESH_KEY);
+  localStorage.removeItem(ADMIN_TOKEN_KEY);
+  localStorage.removeItem(ADMIN_REFRESH_KEY);
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+  if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
+  else localStorage.removeItem(REFRESH_KEY);
+  scheduleProactiveRefresh();
+}
+
+/** Call `onChange` when another tab starts or ends a look at another user, so this one can follow it
+ *  rather than go on showing one user's data under the other's token. Returns the unsubscribe. */
+export function onImpersonationChange(onChange: () => void): () => void {
+  const listener = (event: StorageEvent) => {
+    if (event.key === TOKEN_KEY && (lookOf(event.oldValue) || lookOf(event.newValue))) onChange();
+  };
+  window.addEventListener('storage', listener);
+  return () => window.removeEventListener('storage', listener);
 }
 
 /** (Re)arm a timer to refresh ~1 min before the current access token expires. Called on boot, after
@@ -130,7 +196,9 @@ export function scheduleProactiveRefresh(): void {
   if (refreshTimer !== undefined) clearTimeout(refreshTimer);
   refreshTimer = undefined;
   const token = getToken();
-  setTranscriptUser(token ? jwtSubject(token) : null);
+  // Nothing of another user's is kept on this browser's disk while an administrator looks at it, and
+  // the administrator's own cache is left as it was, to come back with them.
+  setTranscriptUser(token && !lookOf(token) ? jwtSubject(token) : null);
   if (!token || !getRefreshToken()) return;
   const exp = jwtExp(token);
   if (exp == null) return;
@@ -149,17 +217,27 @@ declare const __APP_VERSION__: string;
  *  unrecoverable 401 clear the session and bounce to /login. Every token-bearing call goes through
  *  here (the JSON `api()` helper, uploads, and the attachment/artifact blob fetches). */
 export async function authedFetch(input: string, init: RequestInit = {}): Promise<Response> {
-  const withAuth = (): RequestInit => ({
+  const withAuth = (token: string | null): RequestInit => ({
     ...init,
     headers: {
       ...init.headers,
       'x-orbit-client': `web/${__APP_VERSION__}`,
-      ...(getToken() ? { authorization: `Bearer ${getToken()}` } : {}),
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
     },
   });
-  let res = await fetch(input, withAuth());
+  let sent = getToken();
+  let res = await fetch(input, withAuth(sent));
   if (res.status === 401 && (await refreshSession())) {
-    res = await fetch(input, withAuth()); // retry once with the refreshed token
+    sent = getToken();
+    res = await fetch(input, withAuth(sent)); // retry once with the refreshed token
+  }
+  if (res.status === 401 && lookOf(sent)) {
+    // A look at another user that is over (it ran out, or an account was disabled): back to the
+    // administrator's own session, on the page the look was started from. Another request answered
+    // 401 at the same time may have brought it back already, and must not sign the administrator out.
+    if (getToken() === sent) stopImpersonation();
+    location.href = '/admin';
+    return res;
   }
   if (res.status === 401) {
     clearToken();
@@ -170,7 +248,8 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
 
 /** Revoke the stored refresh token server-side (best-effort) — called on explicit sign-out. */
 export async function logoutSession(): Promise<void> {
-  const refreshToken = getRefreshToken();
+  // Signing out while looking at another user signs the administrator out, whose session waits aside.
+  const refreshToken = getRefreshToken() ?? localStorage.getItem(ADMIN_REFRESH_KEY);
   if (!refreshToken) return;
   try {
     await fetch('/api/auth/logout', {
@@ -356,8 +435,13 @@ export const createInteractiveSession = (body: {
   prompt: string;
   assignedRunnerId?: string;
   workspaceId?: string;
-  /** Provider picked on the New Session screen: a built-in engine slug or one of the caller's
-   *  configured providers. Omitted inherits the workspace's, which is the historical behaviour. */
+  /** The engine picked on the New Session screen — the CLI the session runs on for good: `claude`,
+   *  `codex`, `kimi`, `antigravity`, `opencode` or `dsh` (docs/provider-engine-contract.md §6.1). */
+  engine?: string;
+  /** The credential picked for it: the engine's own sign-in (its name), `opencode` for OpenCode's
+   *  own configuration, one of the caller's account pools or keys. It has to be one the engine runs
+   *  (PROVIDER_ENGINE_INCOMPATIBLE otherwise). Omitting both inherits the workspace's last pair, which
+   *  is the historical behaviour. */
   provider?: string;
   model?: string;
   permissionMode?: string;
@@ -371,6 +455,8 @@ export const createInteractiveSession = (body: {
   claudeAccount?: string;
   /** The same again for the built-in Antigravity engine: one of the runner's Google accounts. */
   antigravityAccount?: string;
+  /** The same again for the built-in Kimi engine: one of the runner's Kimi Code accounts. */
+  kimiAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -598,10 +684,10 @@ export const setAvatar = async (photo: Blob): Promise<Me> => {
   return (await res.json()) as Me;
 };
 
-/** The account's profile photo as a data URL. The endpoint is bearer-guarded, so an `<img src>`
- *  pointing at it would 401; a data URL, unlike an object URL, needs no revoking when it changes. */
-export const fetchAvatarDataUrl = async (): Promise<string> => {
-  const res = await authedFetch('/api/users/me/avatar');
+/** A profile photo as a data URL. The endpoints are bearer-guarded, so an `<img src>` pointing at
+ *  one would 401; a data URL, unlike an object URL, needs no revoking when it changes. */
+const fetchPhotoDataUrl = async (path: string): Promise<string> => {
+  const res = await authedFetch(path);
   if (!res.ok) throw new Error(`profile photo: ${res.status}`);
   const blob = await res.blob();
   return await new Promise<string>((resolve, reject) => {
@@ -612,9 +698,25 @@ export const fetchAvatarDataUrl = async (): Promise<string> => {
   });
 };
 
+/** The account's profile photo as a data URL. */
+export const fetchAvatarDataUrl = (): Promise<string> => fetchPhotoDataUrl('/api/users/me/avatar');
+
+/** Another account's profile photo as a data URL, for Admin → Users (`GET /admin/users/:id/avatar`). */
+export const fetchUserAvatarDataUrl = (userId: string): Promise<string> =>
+  fetchPhotoDataUrl(`/api/admin/users/${encodeURIComponent(userId)}/avatar`);
+
 /** Withdraw a still-queued message (only works before the runner picks it up). */
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
   api(`/sessions/${sessionId}/turns/${turnId}`, { method: 'DELETE' });
+
+/** Send a message queued for the next turn into the one running now (the tray's Steer). It becomes
+ *  the steer it would have been had it been sent that way; with no turn to join, or an engine or
+ *  runner that cannot take one, it stays queued and the refusal is CURRENT_WORK_UNAVAILABLE. */
+export const steerQueuedTurn = (sessionId: string, turnId: string) =>
+  api<{ turnId: string; seq: number; kind: ConversationTurnKind; placement: SessionTurnPlacement; targetTurnId?: string }>(
+    `/sessions/${sessionId}/turns/${turnId}/steer`,
+    { method: 'POST' },
+  );
 
 /** The cards a user turn is drawn as, under the names the runner's echo stores them by (apiserver
  *  `TurnCards`, sessions/turn-cards.ts): a queued row carries the same fields its echo will, each
@@ -623,6 +725,9 @@ export interface TurnCards {
   /** An exception item's delivery carries the item's own fields beside its words (`OpenItemDeliveryCard`),
    *  read by the same function the runner's echo is read by. Absent on every turn a person typed. */
   openItemDelivery?: OpenItemDeliveryCard;
+  /** The owner's answer handed to the coordinator (`OwnerAnswerCard`): which item, and when this
+   *  conversation was told. Its words are written for the agent. Absent on every turn a person typed. */
+  ownerAnswer?: OwnerAnswerCard;
   /** The same for the turn that hands a task's run its brief (`TaskStartCard`): a resumed run's — a
    *  run's opening turn is never listed here. */
   taskStart?: TaskStartCard;
@@ -792,7 +897,7 @@ export const updateSessionConfig = (
   },
 ) => api(`/sessions/${sessionId}/config`, { method: 'PATCH', body: config });
 
-/** Move a session on the built-in Codex, Claude or Antigravity engine to another of its runner's
+/** Move a session on the built-in Codex, Claude, Antigravity or Kimi engine to another of its runner's
  *  accounts — which pins it there — or back onto `automatic`. Spawn-only, like a provider: a live
  *  session's engine re-spawns on the new account once no turn is in flight, and an ended one takes it
  *  on its next resume. */
@@ -813,19 +918,34 @@ export const renameSession = (sessionId: string, title: string) =>
  * that arrives just after is filed as a steer — written into the very turn being stopped.
  * Which of those happened would come down to network ordering. Sent together, the message
  * is filed after the drop and delivered as the next turn.
+ *
+ * `options.stopBackgroundWork` is the composer's Stop, and only that: it also ends the
+ * background work the session left running (the runner's jobs, the engine's own shells and
+ * Monitors, its background Workflows). Omitted, this is a plain interrupt — nothing is
+ * killed, and the engine's process, conversation and stdin survive, which is the whole
+ * difference between stopping a turn and ending a session. It rides this request rather
+ * than a second one for the same reason the follow-up does: one press is one decision.
  */
 export const interruptSession = (
   sessionId: string,
   followUp?: { content: string; attachmentIds?: string[] },
+  options?: { stopBackgroundWork?: boolean },
 ) =>
   api<{ ok: true; turnId?: string; seq?: number }>(`/sessions/${sessionId}/interrupt`, {
     method: 'POST',
-    ...(followUp
+    ...(followUp || options?.stopBackgroundWork
       ? {
           body: {
-            clientTurnId: uuid(),
-            content: followUp.content,
-            ...(followUp.attachmentIds?.length ? { attachmentIds: followUp.attachmentIds } : {}),
+            ...(followUp
+              ? {
+                  clientTurnId: uuid(),
+                  content: followUp.content,
+                  ...(followUp.attachmentIds?.length
+                    ? { attachmentIds: followUp.attachmentIds }
+                    : {}),
+                }
+              : {}),
+            ...(options?.stopBackgroundWork ? { stopBackgroundWork: true } : {}),
           },
         }
       : {}),
@@ -971,14 +1091,17 @@ export const armAutoRetry = (sessionId: string, retryAt: Date) =>
   });
 
 // ── Public read-only sharing ──
-// A public link is a `share_link` row of its own: one root (a session, a task or a project), the
-// layers it includes, an expiry, how often it was opened (docs/share-links-design.md §4–§5). The
-// public address is `/s/<token>`. The open link's token also rides on SessionDetail.shareToken.
+// A public link is a `share_link` row of its own: one root (a session, a task, a project or a wiki
+// space), the layers it includes, an expiry, how often it was opened (docs/share-links-design.md
+// §4–§5, §10). The public address is `/s/<token>`. The open link's token also rides on
+// SessionDetail.shareToken.
 
-export type ShareRootKind = 'SESSION' | 'TASK' | 'PROJECT';
+export type ShareRootKind = 'SESSION' | 'TASK' | 'PROJECT' | 'WIKI';
+/** Every kind of root this client draws — what it asks Settings → Shared links for by name. */
+export const SHARE_ROOT_KINDS: readonly ShareRootKind[] = ['SESSION', 'TASK', 'PROJECT', 'WIKI'];
 /** The layers a link can turn on or off; which of them a link has depends on its root. Overview is
  *  not one of them: it is always included. */
-export type ShareLayer = 'taskPages' | 'commentsAndFiles' | 'conversations' | 'toolOutput';
+export type ShareLayer = 'taskPages' | 'commentsAndFiles' | 'conversations' | 'toolOutput' | 'footnotes';
 export type ShareInclude = Partial<Record<ShareLayer, boolean>>;
 /** ACTIVE opens; PAUSED is a session in the Trash (it opens again once restored); ENDED is turned
  *  off or expired, for good. */
@@ -997,13 +1120,15 @@ export interface ShareLink {
   updatedAt: string;
   state: ShareLinkState;
   stateReason: 'TURNED_OFF' | 'EXPIRED' | 'IN_TRASH' | null;
-  /** The root, named and placed: a session root also says where it is filed and when it completed. */
+  /** The root, named and placed: a session root also says where it is filed and when it completed.
+   *  A wiki space has no status; its `slug` is the owner's address for it (`/wiki/<slug>`). */
   root: {
     id: string;
     title: string;
-    status: string;
+    status?: string;
     lifecycleState?: string;
     completedAt?: string | null;
+    slug?: string;
   };
 }
 
@@ -1030,13 +1155,20 @@ export interface ProjectShareCounts {
   transcripts: number;
 }
 
+/** How much a wiki link's layers hold: its written documents, and the footnotes their pages carry. */
+export interface WikiShareCounts {
+  documents: number;
+  footnotes: number;
+}
+
 /** A root's layer counts, whichever kind of root it is. */
-export type ShareCounts = Partial<SessionShareCounts & TaskShareCounts & ProjectShareCounts>;
+export type ShareCounts = Partial<SessionShareCounts & TaskShareCounts & ProjectShareCounts & WikiShareCounts>;
 
 const SHARE_ROOT_PATH: Record<ShareRootKind, string> = {
   SESSION: 'sessions',
   TASK: 'tasks',
   PROJECT: 'projects',
+  WIKI: 'wiki/spaces',
 };
 
 /** A root's link that has not ended (null when it has none), with its layers' counts. */
@@ -1055,8 +1187,10 @@ export const putShareLink = (
 export const turnOffShareLink = (kind: ShareRootKind, id: string) =>
   api(`/${SHARE_ROOT_PATH[kind]}/${id}/share`, { method: 'DELETE' });
 
-/** Every link this account has made, ended ones included, newest first (Settings → Shared links). */
-export const listShareLinks = () => api<{ links: ShareLink[] }>('/share-links');
+/** Every link this account has made, ended ones included, newest first (Settings → Shared links) —
+ *  of every kind this client draws. A server lists only the kinds a client names, so an app that
+ *  predates a kind is never handed one it cannot decode. */
+export const listShareLinks = () => api<{ links: ShareLink[] }>(`/share-links?kind=${SHARE_ROOT_KINDS.join(',')}`);
 
 /** Turn off these links in one request; `count` is how many were still open. */
 export const turnOffShareLinks = (shareLinkIds: string[]) =>
@@ -1203,6 +1337,13 @@ export interface SharedSession {
   scope?: SharedScope;
 }
 
+/** A shared conversation's header as it stands now, and the events it has added since a seq the
+ *  page holds (getSharedEventsAfter). */
+export type SharedSessionNow = Omit<SharedSession, 'hasMore' | 'kind' | 'task' | 'project' | 'scope'> & {
+  /** Where the events after these start; null once these reach the newest. */
+  after: number | null;
+};
+
 /** What a project link opens besides its root page — its tasks with Task pages, its conversations
  *  (its tasks' runs and its coordinator) with Conversations — for the page's links to go to. */
 export interface SharedScope {
@@ -1312,10 +1453,78 @@ export interface SharedTaskRun {
 }
 
 /** What `/s/<token>` opens: a session link's transcript page, or another root's page. */
+/** One written document as a wiki link's home lists it. */
+export interface SharedWikiDocRow {
+  slug: string;
+  /** `<category>.<place>`: `3.1`. */
+  number: string;
+  title: string;
+  /** Its first sentences; null while it has none. */
+  lead: string | null;
+}
+
+/** A wiki link's root page: the space's written documents by category (docs/share-links-design.md
+ *  §10). A category with nothing written, and every document not written yet, is left out. */
+export interface SharedWiki {
+  /** The space's name: its repository's last part, else its title. */
+  name: string;
+  documents: number;
+  categories: { key: string; number: number; title: string; docs: SharedWikiDocRow[] }[];
+}
+
+/** One footnote of a shared document, with Footnotes on: the words it quotes and where they are — a
+ *  repository file's path and lines, or a record's kind, number and time. Nothing that leads back. */
+export interface SharedWikiFootnote {
+  n: number;
+  kind: WikiDocFootnoteKind;
+  verdict: WikiDocVerdict;
+  quote: string | null;
+  path: string | null;
+  lineStart: number | null;
+  lineEnd: number | null;
+  section: string | null;
+  symbol: string | null;
+  excerpt: string | null;
+  seq: number | null;
+  at: string | null;
+  label: string | null;
+  notePath: string | null;
+}
+
+/** One written document as a wiki link shows it: sections written, sentences not withdrawn, their
+ *  footnote numbers and `footnotes` only with Footnotes. A «Not covered» target's `slug` is set only
+ *  when the link opens it. */
+export interface SharedWikiDoc {
+  slug: string;
+  number: string;
+  title: string;
+  question: string;
+  audience: string[];
+  scopeIn: string[];
+  scopeOut: { text: string; docs: { slug: string | null; number: string | null; title: string | null }[] }[];
+  category: { key: string; number: number; title: string };
+  updatedAt: string | null;
+  sections: {
+    key: string;
+    number: number;
+    title: string;
+    blocks: { kind: WikiDocBlockKind; text: string | null; sentences: { text: string; notes: number[] }[] }[];
+  }[];
+  footnotes?: SharedWikiFootnote[];
+}
+
+/** `/s/<token>/d/<slug>`: one of a wiki link's documents, with the link's layers and the wiki's name. */
+export interface SharedWikiDocPage {
+  include: ShareInclude;
+  wiki: { name: string };
+  doc: SharedWikiDoc;
+}
+
 export type SharedRoot =
   | (SharedSession & { kind?: 'SESSION' })
   | { kind: 'TASK'; include: ShareInclude; sharedAt: string; root: SharedTask }
-  | { kind: 'PROJECT'; include: ShareInclude; sharedAt: string; root: SharedProject; scope: SharedScope };
+  | { kind: 'PROJECT'; include: ShareInclude; sharedAt: string; root: SharedProject; scope: SharedScope }
+  | { kind: 'WIKI'; include: ShareInclude; sharedAt: string; root: SharedWiki };
 
 /** One of a project link's tasks (`/s/<token>/t/<id>`): the task as a task link shows its task,
  *  with the link's layers and what it opens. */
@@ -1358,6 +1567,11 @@ export const getSharedSession = (
 export const getSharedProjectTask = (token: string, taskId: string): Promise<SharedProjectTaskPage> =>
   sharedGet<SharedProjectTaskPage>(token, `/tasks/${encodeURIComponent(taskId)}`);
 
+/** One written document of a wiki link, by its slug — anything the link does not open is the dead
+ *  link's 404. Not counted as a view. */
+export const getSharedWikiDoc = (token: string, slug: string): Promise<SharedWikiDocPage> =>
+  sharedGet<SharedWikiDocPage>(token, `/docs/${encodeURIComponent(slug)}`);
+
 /** A page of a shared transcript: the `limit` events just older than `before` (or the newest
  *  when it is absent). Clipped like the rest unless `whole`, which the Download HTML walk asks
  *  for — a saved file has no way to fetch a card's full payload when it is opened. */
@@ -1371,6 +1585,18 @@ export const getSharedEventPage = (
   if (!opts.whole) qs.set('maxPayload', String(MAX_EVENT_PAYLOAD));
   return sharedGet(token, `${sharedConversation(opts.sessionId)}/events?${qs.toString()}`);
 };
+
+/** What a shared conversation has added since `after`, the newest seq the page holds — at most
+ *  `limit` events, oldest first, clipped like the rest — and its header as it stands now. What a
+ *  page following a live conversation asks every few seconds. */
+export const getSharedEventsAfter = (
+  token: string,
+  opts: { after: number; limit: number; sessionId?: string },
+): Promise<SharedSessionNow> =>
+  sharedGet<SharedSessionNow>(
+    token,
+    `${sharedConversation(opts.sessionId)}/events?after=${opts.after}&limit=${opts.limit}&maxPayload=${MAX_EVENT_PAYLOAD}`,
+  );
 
 /** One shared event's untrimmed payload, for a card that arrived `truncated` and was opened. */
 export const getSharedEventFull = (token: string, seq: number, sessionId?: string): Promise<SharedEvent> =>
@@ -1424,6 +1650,9 @@ export interface SessionChangedFile {
  * existing row fields remain open. */
 export type SessionListItem = Record<string, any> & {
   id: string;
+  /** The engine the session runs on, recorded at its creation and never changed (null only when an
+   *  older replica wrote it and nobody can tell). `provider` is the credential it spends. */
+  engine?: string | null;
   /** The folder of its workspace it is filed in; null (or absent, from an older server) for none. */
   folderId?: string | null;
   runState?: string | null;
@@ -1432,6 +1661,11 @@ export type SessionListItem = Record<string, any> & {
   sessionState?: string | null;
   runStatus?: string | null;
   status?: string | null;
+  /** The rolling recap and when the server wrote it (0418), the list's preferred line: shown in
+   *  place of lastAssistantText while it is set. Null (or absent, from an older server) on a
+   *  session no pass has recapped yet. */
+  recapText?: string | null;
+  recapAt?: string | null;
 };
 
 /** The repair conversation attached to a merge recovery on its parent session. */
@@ -1504,12 +1738,19 @@ export interface SessionDetail {
   prompt?: string | null;
   createdAt?: string;
   lastTurnAt?: string | null;
+  /** The rolling recap and when the server wrote it (0418) — the same line the list row carries.
+   *  Null on a session no pass has recapped yet. */
+  recapText?: string | null;
+  recapAt?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
   error?: string | null;
   endReason?: string | null;
   source?: string | null;
   assignedRunnerId: string | null;
+  /** The engine the session runs on, fixed for its life; `provider` is the credential it spends,
+   *  which can move to another one the engine runs (docs/provider-engine-contract.md §6.1). */
+  engine?: string | null;
   provider?: string | null;
   /** The routing decision this task run was planned with; null on any other session. */
   route?: TaskRunRoute | null;
@@ -1543,6 +1784,14 @@ export interface SessionDetail {
   antigravityAccount?: string | null;
   /** See codexAccountPinned. */
   antigravityAccountPinned?: boolean;
+  /** The Kimi Code account picked or chosen for this session; null follows the workspace's. */
+  kimiAccount?: string | null;
+  /** See codexAccountPinned. */
+  kimiAccountPinned?: boolean;
+  /** The Cursor CLI account picked or chosen for this session; null follows the workspace's. */
+  cursorAccount?: string | null;
+  /** See codexAccountPinned. */
+  cursorAccountPinned?: boolean;
   // When the armed auto-retry fires (null = nothing armed), and how many attempts this run of
   // failures has already spent. Drives the transcript's quota / provider-error card.
   retryAt?: string | null;
@@ -1564,6 +1813,10 @@ export interface SessionDetail {
     claudeAccount?: string | null;
     /** The Antigravity Google account this workspace's sessions run on; null is Default. */
     antigravityAccount?: string | null;
+    /** The Kimi Code account this workspace's sessions run on; null is Default. */
+    kimiAccount?: string | null;
+    /** The Cursor CLI account this workspace's sessions run on; null is Default. */
+    cursorAccount?: string | null;
   } | null;
   branch?: string | null;
   baseSha?: string | null;

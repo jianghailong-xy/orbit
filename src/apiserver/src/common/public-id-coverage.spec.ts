@@ -43,18 +43,13 @@ import { RunnerTasksController } from '../runner-api/runner-tasks.controller';
 import { RunnerTaskCompletionEvidenceController } from '../runner-api/runner-task-completion-evidence.controller';
 import { RunnerTaskProgressController } from '../runner-api/runner-task-progress.controller';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
-import { RunnerWikiMaintenanceController } from '../runner-api/runner-wiki-maintenance.controller';
-import { RunnerWikiAnchorsController } from '../runner-api/runner-wiki-anchors.controller';
-import { RunnerWikiArticlesController } from '../runner-api/runner-wiki-articles.controller';
-import { RunnerWikiMaintainController } from '../runner-api/runner-wiki-maintain.controller';
 import { WikiController } from '../wiki/wiki.controller';
 import { WikiArticlesController } from '../wiki/wiki-articles.controller';
 import { WikiRunsController } from '../wiki/wiki-runs.controller';
 import { WikiHealthController } from '../wiki/wiki-health.controller';
+import { WikiJobsController } from '../wiki/wiki-jobs.controller';
 import { WikiPlanController } from '../wiki/wiki-plan.controller';
-import { RunnerWikiPlanController } from '../runner-api/runner-wiki-plan.controller';
 import { WikiDocsController } from '../wiki/wiki-docs.controller';
-import { RunnerWikiDocsController } from '../runner-api/runner-wiki-docs.controller';
 
 // Every id crossing the HTTP boundary arrives from a URL, a human, or a model — pasted out of a
 // client link, echoed from a previous tool result, or invented. The columns behind them are all
@@ -128,28 +123,20 @@ const CONTROLLERS = [
   // controller nothing lists here is a controller whose ids nothing checks.
   WikiController,
   RunnerWikiController,
-  // The maintenance run's routes (migration 0315, contract `maintenance`), on the same runner door.
-  RunnerWikiMaintenanceController,
-  // The anchor re-verification's routes (contract `anchorRules.verify`), on the same runner door.
-  RunnerWikiAnchorsController,
-  // The articles (migration 0317, contract `articles`): the owner's reads and a maintenance run's writes.
+  // The articles (migration 0317, contract `articles`): the owner's reads.
   WikiArticlesController,
-  RunnerWikiArticlesController,
-  // The maintenance job's routes (migration 0320, contract `maintenance.job`): a run's start, its
-  // proposals, its end, and its task's check.
-  RunnerWikiMaintainController,
   // One run's read (contract `reviewModes.run`): a changeset by its id, on the user door.
   WikiRunsController,
   // A space's health (contract `maintenance.health`): what the Wiki home's status line reads.
   WikiHealthController,
-  // The plan (migration 0325, contract `plan`): the owner's reads, edit, confirmation and decisions,
-  // and a maintenance run's read, draft and proposal. `version` is a plan version's number.
+  // A space's server runs and their calls (contract `jobs.read`, P9): what Activity's Runs card reads.
+  WikiJobsController,
+  // The plan (migration 0325, contract `plan`): the owner's reads, edit, confirmation and decisions.
+  // `version` is a plan version's number.
   WikiPlanController,
-  RunnerWikiPlanController,
-  // The documents (migration 0326, contract `docs`): the owner's directory, document and index, and a
-  // maintenance run's read of what is written and its write. `slug` is the plan document's.
+  // The documents (migration 0326, contract `docs`): the owner's directory, document and index. `slug`
+  // is the plan document's.
   WikiDocsController,
-  RunnerWikiDocsController,
 ];
 
 // Nest records one entry per decorated argument under `__routeArguments__`, keyed

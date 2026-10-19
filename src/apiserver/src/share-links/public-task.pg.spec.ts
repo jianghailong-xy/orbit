@@ -503,6 +503,7 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
       ['task page, all layers', await visit()],
       ['conversation', await visit(`/sessions/${pub(succeeded)}`)],
       ['conversation, events', await visit(`/sessions/${pub(succeeded)}/events?limit=2`)],
+      ['conversation, events after a seq', await visit(`/sessions/${pub(succeeded)}/events?after=1`)],
       ['conversation, one event', await visit(`/sessions/${pub(succeeded)}/events/3`)],
     ];
     await layers({ commentsAndFiles: false, conversations: false });
@@ -522,6 +523,7 @@ test('a shared task: an explicit projection, the red line, its layers and its ru
     const conversationRoutes = [
       `/sessions/${pub(succeeded)}`,
       `/sessions/${pub(succeeded)}/events`,
+      `/sessions/${pub(succeeded)}/events?after=1`,
       `/sessions/${pub(succeeded)}/events/1`,
       `/attachments/${pub(runImage)}`,
     ];

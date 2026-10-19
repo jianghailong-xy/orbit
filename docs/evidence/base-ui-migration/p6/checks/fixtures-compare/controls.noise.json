@@ -1,0 +1,194 @@
+{
+ "tests": {
+  "controls.browser.mjs › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › a focused field under the pointer stays hovered and focused; its 601–961px sizes are recorded › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › fixed control states keep the frozen P0 palette › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › fixed control states keep the frozen P0 palette › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › fixed control states keep the frozen P0 palette › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › fixed control states keep the frozen P0 palette › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › fixed control states keep the frozen P0 palette › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › fixed control states keep the frozen P0 palette › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › fixed control states keep the frozen P0 palette › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › fixed control states keep the frozen P0 palette › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › hover and keyboard focus preserve visible control feedback › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › hover and keyboard focus preserve visible control feedback › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › hover and keyboard focus preserve visible control feedback › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › hover and keyboard focus preserve visible control feedback › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › hover and keyboard focus preserve visible control feedback › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › hover and keyboard focus preserve visible control feedback › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › hover and keyboard focus preserve visible control feedback › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › hover and keyboard focus preserve visible control feedback › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › keyboard, labels, loading, disabled and native form values work › chromium-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › keyboard, labels, loading, disabled and native form values work › chromium-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › keyboard, labels, loading, disabled and native form values work › chromium-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › keyboard, labels, loading, disabled and native form values work › chromium-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "interactive-controls": {
+     "equal": false,
+     "pixels": 546,
+     "maxChannelDiff": 130
+    }
+   }
+  },
+  "controls.browser.mjs › keyboard, labels, loading, disabled and native form values work › webkit-dark-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › keyboard, labels, loading, disabled and native form values work › webkit-dark-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "interactive-controls": {
+     "equal": false,
+     "pixels": 516,
+     "maxChannelDiff": 162
+    }
+   }
+  },
+  "controls.browser.mjs › keyboard, labels, loading, disabled and native form values work › webkit-light-desktop": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {}
+  },
+  "controls.browser.mjs › keyboard, labels, loading, disabled and native form values work › webkit-light-phone": {
+   "before": "passed",
+   "after": "passed",
+   "attachments": {
+    "interactive-controls": {
+     "equal": false,
+     "pixels": 516,
+     "maxChannelDiff": 130
+    }
+   }
+  }
+ },
+ "totals": {
+  "tests": 32,
+  "bothPassed": 32,
+  "statusDiffers": 0,
+  "onlyBefore": 0,
+  "onlyAfter": 0,
+  "jsonAttachments": 32,
+  "jsonDiffering": 0,
+  "pngAttachments": 16,
+  "pngEqual": 13,
+  "pngDiffering": 3
+ }
+}

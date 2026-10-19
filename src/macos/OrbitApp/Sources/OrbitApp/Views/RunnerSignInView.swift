@@ -148,10 +148,11 @@ struct RunnerSignInView: View {
     /// code from memory is exactly what people get wrong — over there, all that is left is a paste.
     @ViewBuilder
     private func deviceFlow(_ model: RunnerSignInModel) -> some View {
-        // Kimi's page belongs to one of its two sites, named so the user knows which account it wants.
+        // Kimi's page belongs to one of its two sites, named so the user knows which account it wants —
+        // on a card adding one, the account being added.
         let site = model.site
         VStack(alignment: .leading, spacing: 8) {
-            Text(site?.enterCode ?? "Enter this one-time code on the sign-in page:")
+            Text((model.adding ? site?.enterCodeAdding : site?.enterCode) ?? "Enter this one-time code on the sign-in page:")
                 .font(.orbitLabel).foregroundStyle(.secondary)
             if let code = model.userCode {
                 Text(code)
@@ -179,14 +180,17 @@ struct RunnerSignInView: View {
                 Text("Waiting for you to approve it…").font(.orbitLabel)
             }
             // The wrong site is the one mistake the user can't see until they are on its page: their
-            // account isn't there. Starting over on the other one is a single press.
+            // account isn't there. Starting over on the other one — under the same name, for an account
+            // being added — is a single press.
             HStack(spacing: 16) {
                 cancelButton(model)
                 if let site {
-                    Button(site.other.useInstead) { Task { await model.begin(site: KimiSite.named(site.other, on: model.runner)) } }
-                        .buttonStyle(.borderless)
-                        .font(.orbitLabel)
-                        .disabled(model.busy)
+                    Button(site.other.useInstead) {
+                        Task { await model.begin(accountName: accountName, site: KimiSite.named(site.other, on: model.runner)) }
+                    }
+                    .buttonStyle(.borderless)
+                    .font(.orbitLabel)
+                    .disabled(model.busy)
                 }
             }
         }
@@ -194,7 +198,7 @@ struct RunnerSignInView: View {
 
     /// Idle, or a failed attempt to try again. Signing in fixes this one machine with the account
     /// the user already pays for; there is no second route out on these clients (an API key is
-    /// configured from the web's Providers page), so this is the whole choice.
+    /// configured from the web's Infrastructure page), so this is the whole choice.
     @ViewBuilder
     private func idle(_ model: RunnerSignInModel) -> some View {
         if engine == .kimi {
@@ -206,7 +210,8 @@ struct RunnerSignInView: View {
 
     /// Kimi's sign-in is itself a choice: kimi.com and kimi.ai keep separate accounts, and left to
     /// itself the CLI goes to the site its installer came from. So the press that starts it picks the
-    /// site, and nothing is picked for the user (web RunnerSignIn).
+    /// site, and nothing is picked for the user (web RunnerSignIn). A card adding an account comes
+    /// under its name, which the press signs in under: neither site can be pressed without one.
     @ViewBuilder
     private func kimiSites(_ model: RunnerSignInModel) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -216,7 +221,7 @@ struct RunnerSignInView: View {
             Text(KimiSite.question).font(.orbitLabel)
             ForEach(KimiSite.allCases) { site in
                 Button {
-                    Task { await model.begin(site: KimiSite.named(site, on: model.runner)) }
+                    Task { await model.begin(accountName: accountName, site: KimiSite.named(site, on: model.runner)) }
                 } label: {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         VStack(alignment: .leading, spacing: 1) {
@@ -236,7 +241,7 @@ struct RunnerSignInView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.bordered)
-                .disabled(model.busy || !model.runnerRead)
+                .disabled(model.busy || !model.runnerRead || !nameReady)
             }
             Text(KimiSite.separateAccounts)
                 .font(.orbitLabel)
@@ -397,7 +402,7 @@ private struct PasteBackForm: View {
 ///
 /// The remedy depends on where the credentials live (see `EngineAuth.remedy`): a built-in engine
 /// signs in on the runner itself, OpenCode's provider-specific login can only be run on that
-/// machine, Antigravity connects Gemini in Providers, and any other slug is a configured
+/// machine, Antigravity connects Gemini in Infrastructure, and any other slug is a configured
 /// API key — which these clients can't edit, so the card says where it lives instead of offering a
 /// button that goes nowhere.
 struct AuthErrorCardView: View {
@@ -460,7 +465,7 @@ struct AuthErrorCardView: View {
         case .connectGemini:
             EmptyView()
         case .apiKey(let slug):
-            Text("The API key for \(Text(slug).font(.orbitMono)) was rejected. Update it in Providers on the Orbit web app, then send your message again.")
+            Text("The API key for \(Text(slug).font(.orbitMono)) was rejected. Update it in Infrastructure on the Orbit web app, then send your message again.")
                 .font(.orbitLabel).foregroundStyle(.secondary)
         }
     }
@@ -493,6 +498,7 @@ struct AuthErrorCardView: View {
 struct AntigravityRepairCardView: View {
     let console: ConsoleModel
     let repair: EngineAuth.AntigravityRepair
+    @Environment(AppModel.self) private var app
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
 
@@ -529,17 +535,18 @@ struct AntigravityRepairCardView: View {
                             .buttonStyle(.borderedProminent)
                             .disabled(!console.canInstallAntigravity)
                     }
-                    Button("Open in Providers") {
-                        if let url = console.antigravityProvidersURL { openURL(url) }
+                    // This runner's Antigravity page, in the app: where it is installed and signed in.
+                    Button("Open in Infrastructure") {
+                        if let runnerID = console.runnerID { app.openRunnerEngine(runnerID, engine: "antigravity") }
                     }
                     .buttonStyle(.bordered)
-                    .disabled(console.antigravityProvidersURL == nil)
+                    .disabled(console.runnerID == nil)
                 }
             }
             .font(.orbitLabel)
         }
         .padding(10)
-        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .composerBandWash(.orange, opacity: 0.08)
         .task { await console.refreshAntigravityRepairContext() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await console.refreshAntigravityRepairContext() } }
@@ -558,7 +565,7 @@ struct AntigravityRepairCardView: View {
 
 /// A DeepSeek Harness session that could not run, as the remedy rather than the runner's sentence
 /// (web's `DshRepairCard`). Its credential is a configured key, never a sign-in on the runner, so a
-/// key problem is fixed on that key's page in Providers; everything else is about the machine.
+/// key problem is fixed on that key's page, from Infrastructure; everything else is about the machine.
 struct DshRepairCardView: View {
     let console: ConsoleModel
     let repair: DshRuntime.Repair
@@ -580,7 +587,9 @@ struct DshRepairCardView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(title, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.orange).font(.orbitProse.bold())
-            Text(repair.detail)
+            // A rejected key is named — `the DeepSeek key “DeepSeek 2”` — since one DeepSeek key runs on
+            // Claude Code, OpenCode and DeepSeek Harness alike, and there can be several (board 8).
+            Text(repair.detail(keyName: console.sessionKeyName))
                 .font(.orbitLabel).foregroundStyle(.secondary)
             HStack {
                 if repair.isKeyProblem {
@@ -600,7 +609,7 @@ struct DshRepairCardView: View {
             .font(.orbitLabel)
         }
         .padding(10)
-        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 10))
+        .composerBandWash(.orange, opacity: 0.08)
         .accessibilityIdentifier("dsh-repair-\(repair.rawValue)")
     }
 }

@@ -1,0 +1,344 @@
+date 2026-10-09T01:46:08Z
+branch head d49a8749be97c5654ca35230e1fa4087a199a98e
+origin/main 5b794d64381f29722b0276c27d82f4c5252866b5
+origin/project/34ZZeq0e3IR65GVm2kAs7 797bf06d19191acbae1d25ca2709a04bc4531ea8
+project tip in branch: no
+== git merge-tree --write-tree HEAD origin/main
+d02befbaf0081e172c6597aedeec7e5ec3be370b
+merge-tree exit 0
+== commits on origin/main not in the branch
+5b794d643 Merge refs/heads/project/34ZZeq0e3IR65GVm2kAs7 into refs/heads/main
+797bf06d1 Merge refs/heads/main into refs/heads/orbit/antd-647048
+748632d6b docs(evidence): submenu geometry against the replaced AntD submenu
+945098b11 docs(mocks): answered coordinator question keeps its question and options
+a9af35f33 Merge refs/heads/project/34ZZn8fmemArxvl2CsCFp into refs/heads/main
+4c00ae136 Merge refs/heads/orbit/a13e-robolectric-managementpaneltest-wai-2b83e8 into refs/heads/project/34ZZn8fmemArxvl2CsCFp
+97530c9ea Merge refs/heads/main into refs/heads/project/34ZZn8fmemArxvl2CsCFp
+a5c99e27f Merge refs/heads/project/34ZZeq0e3IR65GVm2kAs7 into refs/heads/main
+d91a0dd48 feat(start-card): 720px cap, toggles only when cut, plan as the task graph
+5f4ce64a3 docs(mocks): start card width, its toggles, and the plan as a task graph
+12fdef2f7 Merge origin/main into orbit/antd-647048
+561bffd75 fix(web): place submenus where the replaced AntD submenus were
+1f889cc61 test(web): compare submenu geometry with the replaced AntD submenu
+e7885ac3b test(android): give A12c's Wiki tests' waits a minute too
+03fd8fd6a Merge the A13e test waits onto project/34ZZn8fmemArxvl2CsCFp at 04f1c8b88
+ef3793c9e test(android): wait for the failed reads' answers, not only for the reads, before asserting on them
+fa9f552ea test(android): give the update and Wiki server-execution tests' waits a minute too
+fbe56d1f4 Merge the A13e test waits onto project/34ZZn8fmemArxvl2CsCFp at 694018c21
+753628dd0 test(android): give WikiShellTest's settled reads and the SSE watchdog test room on a loaded host
+36329176d test(android): give the A03c login page tests' waits a minute too
+9b3a768a5 Merge the A13e test waits onto project/34ZZn8fmemArxvl2CsCFp at b03031e89
+16be0d4a3 test(android): give the runner engine page's waits a minute too
+ed99d3c17 Merge the A13e test waits onto project/34ZZn8fmemArxvl2CsCFp at f9f0fa19b
+d62389bfb test(android): give tests that wait on the wall clock a minute
+== files the merge brings into the branch (git diff --name-only HEAD <merged tree>)
+docs/evidence/base-ui-migration/submenu-geometry/README.md
+docs/evidence/base-ui-migration/submenu-geometry/checks/check-owners-12fdef2f7.txt
+docs/evidence/base-ui-migration/submenu-geometry/checks/check-owners-216897fa6.txt
+docs/evidence/base-ui-migration/submenu-geometry/checks/merge-tree-origin-main.txt
+docs/evidence/base-ui-migration/submenu-geometry/probe/run-probe.sh
+docs/evidence/base-ui-migration/submenu-geometry/probe/threshold.browser.mjs
+docs/evidence/base-ui-migration/submenu-geometry/probe/threshold.py
+docs/evidence/base-ui-migration/submenu-geometry/probe/tree.config.mjs
+docs/evidence/base-ui-migration/submenu-geometry/runs/choices/environment.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/choices/geometry.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/choices/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/choices/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/choices/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/geometry-before/environment.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/geometry-before/geometry.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/geometry-before/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/geometry-before/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/geometry-before/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/held-frames/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/held-frames/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/held-frames/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/merge-check/output-summary.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/merge-check/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/overlays/environment.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/overlays/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/overlays/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/overlays/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-after/environment.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-after/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-after/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-after/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-before/environment.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-before/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-before/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-before/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0/environment.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-after/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-after/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-after/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-after/threshold.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-before/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-before/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-before/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-before/threshold.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/tsc-before/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/tsc-fix/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/vitebuild-after/output-tail.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/vitebuild-after/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/vitebuild-before/output-tail.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/vitebuild-before/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/slim.py
+docs/evidence/base-ui-migration/submenu-geometry/summarize.py
+docs/evidence/base-ui-migration/submenu-geometry/tables.py
+docs/evidence/base-ui-migration/submenu-geometry/verify.py
+docs/mocks/coordinator-question-answered/1-today.png
+docs/mocks/coordinator-question-answered/2-proposal.png
+docs/mocks/coordinator-question-answered/3-other-endings.png
+docs/mocks/coordinator-question-answered/4-decide.png
+docs/mocks/coordinator-question-answered/5-landing.png
+docs/mocks/coordinator-question-answered/board.html
+docs/mocks/coordinator-question-answered/phone-new-sheet-note.png
+docs/mocks/coordinator-question-answered/phone-new-sheet.png
+docs/mocks/coordinator-question-answered/phone-new.png
+docs/mocks/coordinator-question-answered/phone-today-sheet.png
+docs/mocks/coordinator-question-answered/phone-today.png
+docs/mocks/start-card-web-width/01-board.html
+docs/mocks/start-card-web-width/01-board.png
+docs/mocks/start-card-web-width/01a-today.png
+docs/mocks/start-card-web-width/01b-proposal.png
+docs/mocks/start-card-web-width/01c-proposal-card.png
+docs/mocks/start-card-web-width/01d-long-why.png
+docs/mocks/start-card-web-width/01e-long-why-open.png
+docs/mocks/start-card-web-width/01f-short-criteria.png
+docs/mocks/start-card-web-width/01g-window-1280.png
+docs/mocks/start-card-web-width/01h-width-640.png
+docs/mocks/start-card-web-width/01h-width-720.png
+docs/mocks/start-card-web-width/01h-width-880.png
+docs/mocks/start-card-web-width/02-plan-graph.html
+docs/mocks/start-card-web-width/02-plan-graph.png
+docs/mocks/start-card-web-width/02a-plan-list.png
+docs/mocks/start-card-web-width/02b-plan-graph.png
+docs/mocks/start-card-web-width/02c-plan-list-link.png
+docs/mocks/start-card-web-width/02d-full-screen.png
+docs/mocks/start-card-web-width/02e-plan-graph-lr.png
+docs/mocks/start-card-web-width/02f-plan-graph-lr-wide.png
+src/android/app/src/test/kotlin/io/orbitd/android/DirectoryReviewTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/MainActivityTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/auth/GoogleSignInFlowTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/composer/AttachmentImportReviewTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/management/ManagementPanelTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/management/ManagementShellTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/management/RunnerEnginePageTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/realtime/RealtimeLifecycleTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/update/UpdateUiTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/watch/WatchDestinationTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/watch/WatchScreensTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiIncrementShellTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiPlanEditDragTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiScreensTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiServerExecutionShotsTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiShellTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiStoreHttpTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiTalkBackWordsTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiWritesTest.kt
+src/android/core/src/test/kotlin/io/orbitd/android/core/net/HttpTransportTest.kt
+src/android/core/src/test/kotlin/io/orbitd/android/core/realtime/EventTransportTest.kt
+src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift
+src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectGraphView.swift
+src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectsView.swift
+src/macos/OrbitApp/Sources/OrbitApp/Views/SessionProjectPage.swift
+src/macos/OrbitKit/Sources/OrbitKit/App/StartProject.swift
+src/macos/OrbitKit/Tests/OrbitKitTests/StartProjectCardCopyParityTests.swift
+src/macos/OrbitKit/Tests/OrbitKitTests/StartProjectTests.swift
+src/macos/OrbitKit/Tests/OrbitKitTests/StartProjectWiringTests.swift
+src/web/src/components/ProjectDependencyGraph.test.tsx
+src/web/src/components/ProjectDependencyGraph.tsx
+src/web/src/components/StartPlanGraph.tsx
+src/web/src/components/StartProjectCard.test.tsx
+src/web/src/components/StartProjectCard.tsx
+src/web/src/components/ui/Floating.css
+src/web/src/components/ui/Floating.ts
+src/web/src/components/ui/Menu.tsx
+src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx
+src/web/src/index.css
+src/web/src/lib/projectStart.ts
+src/web/ui-migration/choices-first-frame.browser.mjs
+src/web/ui-migration/choices-submenu-geometry.browser.mjs
+== of them under src/web or src/shared
+src/web/src/components/ProjectDependencyGraph.test.tsx
+src/web/src/components/ProjectDependencyGraph.tsx
+src/web/src/components/StartPlanGraph.tsx
+src/web/src/components/StartProjectCard.test.tsx
+src/web/src/components/StartProjectCard.tsx
+src/web/src/components/ui/Floating.css
+src/web/src/components/ui/Floating.ts
+src/web/src/components/ui/Menu.tsx
+src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx
+src/web/src/index.css
+src/web/src/lib/projectStart.ts
+src/web/ui-migration/choices-first-frame.browser.mjs
+src/web/ui-migration/choices-submenu-geometry.browser.mjs
+== this batch's files in that list
+none
+== this batch's files: merged tree against the branch head (empty = kept as the branch has them)
+== the project tip: git merge-tree --write-tree HEAD origin/project/34ZZeq0e3IR65GVm2kAs7
+d02befbaf0081e172c6597aedeec7e5ec3be370b
+merge-tree exit 0
+project tip in origin/main: yes
+== commits on the project tip not in the branch
+797bf06d1 Merge refs/heads/main into refs/heads/orbit/antd-647048
+748632d6b docs(evidence): submenu geometry against the replaced AntD submenu
+945098b11 docs(mocks): answered coordinator question keeps its question and options
+a9af35f33 Merge refs/heads/project/34ZZn8fmemArxvl2CsCFp into refs/heads/main
+4c00ae136 Merge refs/heads/orbit/a13e-robolectric-managementpaneltest-wai-2b83e8 into refs/heads/project/34ZZn8fmemArxvl2CsCFp
+97530c9ea Merge refs/heads/main into refs/heads/project/34ZZn8fmemArxvl2CsCFp
+a5c99e27f Merge refs/heads/project/34ZZeq0e3IR65GVm2kAs7 into refs/heads/main
+d91a0dd48 feat(start-card): 720px cap, toggles only when cut, plan as the task graph
+5f4ce64a3 docs(mocks): start card width, its toggles, and the plan as a task graph
+12fdef2f7 Merge origin/main into orbit/antd-647048
+561bffd75 fix(web): place submenus where the replaced AntD submenus were
+1f889cc61 test(web): compare submenu geometry with the replaced AntD submenu
+e7885ac3b test(android): give A12c's Wiki tests' waits a minute too
+03fd8fd6a Merge the A13e test waits onto project/34ZZn8fmemArxvl2CsCFp at 04f1c8b88
+ef3793c9e test(android): wait for the failed reads' answers, not only for the reads, before asserting on them
+fa9f552ea test(android): give the update and Wiki server-execution tests' waits a minute too
+fbe56d1f4 Merge the A13e test waits onto project/34ZZn8fmemArxvl2CsCFp at 694018c21
+753628dd0 test(android): give WikiShellTest's settled reads and the SSE watchdog test room on a loaded host
+36329176d test(android): give the A03c login page tests' waits a minute too
+9b3a768a5 Merge the A13e test waits onto project/34ZZn8fmemArxvl2CsCFp at b03031e89
+== files that merge brings into the branch
+docs/evidence/base-ui-migration/submenu-geometry/README.md
+docs/evidence/base-ui-migration/submenu-geometry/checks/check-owners-12fdef2f7.txt
+docs/evidence/base-ui-migration/submenu-geometry/checks/check-owners-216897fa6.txt
+docs/evidence/base-ui-migration/submenu-geometry/checks/merge-tree-origin-main.txt
+docs/evidence/base-ui-migration/submenu-geometry/probe/run-probe.sh
+docs/evidence/base-ui-migration/submenu-geometry/probe/threshold.browser.mjs
+docs/evidence/base-ui-migration/submenu-geometry/probe/threshold.py
+docs/evidence/base-ui-migration/submenu-geometry/probe/tree.config.mjs
+docs/evidence/base-ui-migration/submenu-geometry/runs/choices/environment.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/choices/geometry.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/choices/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/choices/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/choices/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/geometry-before/environment.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/geometry-before/geometry.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/geometry-before/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/geometry-before/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/geometry-before/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/held-frames/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/held-frames/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/held-frames/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/merge-check/output-summary.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/merge-check/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/overlays/environment.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/overlays/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/overlays/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/overlays/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-after/environment.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-after/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-after/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-after/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-before/environment.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-before/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-before/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0-before/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0/environment.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/p0/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-after/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-after/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-after/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-after/threshold.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-before/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-before/report.summary.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-before/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/threshold-before/threshold.json
+docs/evidence/base-ui-migration/submenu-geometry/runs/tsc-before/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/tsc-fix/output.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/vitebuild-after/output-tail.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/vitebuild-after/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/vitebuild-before/output-tail.txt
+docs/evidence/base-ui-migration/submenu-geometry/runs/vitebuild-before/run.txt
+docs/evidence/base-ui-migration/submenu-geometry/slim.py
+docs/evidence/base-ui-migration/submenu-geometry/summarize.py
+docs/evidence/base-ui-migration/submenu-geometry/tables.py
+docs/evidence/base-ui-migration/submenu-geometry/verify.py
+docs/mocks/coordinator-question-answered/1-today.png
+docs/mocks/coordinator-question-answered/2-proposal.png
+docs/mocks/coordinator-question-answered/3-other-endings.png
+docs/mocks/coordinator-question-answered/4-decide.png
+docs/mocks/coordinator-question-answered/5-landing.png
+docs/mocks/coordinator-question-answered/board.html
+docs/mocks/coordinator-question-answered/phone-new-sheet-note.png
+docs/mocks/coordinator-question-answered/phone-new-sheet.png
+docs/mocks/coordinator-question-answered/phone-new.png
+docs/mocks/coordinator-question-answered/phone-today-sheet.png
+docs/mocks/coordinator-question-answered/phone-today.png
+docs/mocks/start-card-web-width/01-board.html
+docs/mocks/start-card-web-width/01-board.png
+docs/mocks/start-card-web-width/01a-today.png
+docs/mocks/start-card-web-width/01b-proposal.png
+docs/mocks/start-card-web-width/01c-proposal-card.png
+docs/mocks/start-card-web-width/01d-long-why.png
+docs/mocks/start-card-web-width/01e-long-why-open.png
+docs/mocks/start-card-web-width/01f-short-criteria.png
+docs/mocks/start-card-web-width/01g-window-1280.png
+docs/mocks/start-card-web-width/01h-width-640.png
+docs/mocks/start-card-web-width/01h-width-720.png
+docs/mocks/start-card-web-width/01h-width-880.png
+docs/mocks/start-card-web-width/02-plan-graph.html
+docs/mocks/start-card-web-width/02-plan-graph.png
+docs/mocks/start-card-web-width/02a-plan-list.png
+docs/mocks/start-card-web-width/02b-plan-graph.png
+docs/mocks/start-card-web-width/02c-plan-list-link.png
+docs/mocks/start-card-web-width/02d-full-screen.png
+docs/mocks/start-card-web-width/02e-plan-graph-lr.png
+docs/mocks/start-card-web-width/02f-plan-graph-lr-wide.png
+src/android/app/src/test/kotlin/io/orbitd/android/DirectoryReviewTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/MainActivityTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/auth/GoogleSignInFlowTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/composer/AttachmentImportReviewTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/management/ManagementPanelTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/management/ManagementShellTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/management/RunnerEnginePageTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/realtime/RealtimeLifecycleTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/update/UpdateUiTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/watch/WatchDestinationTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/watch/WatchScreensTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiIncrementShellTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiPlanEditDragTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiScreensTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiServerExecutionShotsTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiShellTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiStoreHttpTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiTalkBackWordsTest.kt
+src/android/app/src/test/kotlin/io/orbitd/android/wiki/WikiWritesTest.kt
+src/android/core/src/test/kotlin/io/orbitd/android/core/net/HttpTransportTest.kt
+src/android/core/src/test/kotlin/io/orbitd/android/core/realtime/EventTransportTest.kt
+src/macos/OrbitApp/Sources/OrbitApp/Views/ApprovalCards.swift
+src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectGraphView.swift
+src/macos/OrbitApp/Sources/OrbitApp/Views/ProjectsView.swift
+src/macos/OrbitApp/Sources/OrbitApp/Views/SessionProjectPage.swift
+src/macos/OrbitKit/Sources/OrbitKit/App/StartProject.swift
+src/macos/OrbitKit/Tests/OrbitKitTests/StartProjectCardCopyParityTests.swift
+src/macos/OrbitKit/Tests/OrbitKitTests/StartProjectTests.swift
+src/macos/OrbitKit/Tests/OrbitKitTests/StartProjectWiringTests.swift
+src/web/src/components/ProjectDependencyGraph.test.tsx
+src/web/src/components/ProjectDependencyGraph.tsx
+src/web/src/components/StartPlanGraph.tsx
+src/web/src/components/StartProjectCard.test.tsx
+src/web/src/components/StartProjectCard.tsx
+src/web/src/components/ui/Floating.css
+src/web/src/components/ui/Floating.ts
+src/web/src/components/ui/Menu.tsx
+src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx
+src/web/src/index.css
+src/web/src/lib/projectStart.ts
+src/web/ui-migration/choices-first-frame.browser.mjs
+src/web/ui-migration/choices-submenu-geometry.browser.mjs
+== this batch's files in that list
+none
+== P4.3b's a0b33edff (not yet on the project line): git merge-tree --write-tree HEAD a0b33edff
+1f35208645b013e1b0cb64d35203b3ff0fa83f90
+merge-tree exit 0
+on origin/project: no, on origin/main: no
+(end)

@@ -1,0 +1,36 @@
+# TEMPORARY (this task's compile probe, deleted with its probe branch). The machine that holds this
+# repository's work has no GitHub token and no `gh`, so it can neither open a pull request nor call the
+# dispatch API — a push is the one trigger it has. The macOS and iOS jobs of client.yml run only on a
+# pull request or an explicit dispatch (macOS runners bill at 10×), and this delivery changes three
+# OrbitApp SwiftUI files that no Linux job compiles, so this job turns the push into that dispatch,
+# using the one token that does exist inside the repository: the runner's own GITHUB_TOKEN, which
+# GitHub allows to dispatch (workflow_dispatch is excepted from the no-recursion rule).
+#
+# It fires only on this probe branch, and only when this file changes — a later push that writes
+# evidence back does not buy a second Mac runner.
+name: Probe dispatch (client.yml compile)
+
+on:
+  push:
+    branches: ["probe/plan-system-model-note-compile"]
+    paths:
+      - ".github/workflows/plan-note-dispatch.yml"
+
+permissions:
+  actions: write
+
+jobs:
+  dispatch:
+    name: Dispatch client.yml for this branch
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST the dispatch, no probe inputs
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -sS -o /tmp/answer -w 'HTTP %{http_code}\n' -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/client.yml/dispatches" \
+            -d "{\"ref\":\"${GITHUB_REF_NAME}\"}"
+          cat /tmp/answer

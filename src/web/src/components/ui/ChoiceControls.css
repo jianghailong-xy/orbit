@@ -233,6 +233,9 @@
   position: relative;
   display: inline-block;
   width: 44px;
+  /* Never narrower than its track, as the replaced switch's min-width kept it: long text beside it in
+     a flex row cannot squeeze it. */
+  min-width: 44px;
   height: 22px;
   border: 0;
   border-radius: 100px;
@@ -246,6 +249,7 @@
 .orbit-switch[data-size='small'] {
   --orbit-switch-handle-size: 12px;
   width: 28px;
+  min-width: 28px;
   height: 16px;
   line-height: 16px;
 }
@@ -330,6 +334,25 @@
 
 .orbit-radio-group[data-variant='button'] > .orbit-choice:active:has([data-checked]):not(:has([data-disabled])) {
   color: var(--orbit-control-primary-active);
+  border-color: var(--orbit-control-primary-active);
+}
+
+/* Solid: the checked button filled with the primary colour. */
+.orbit-radio-group[data-variant='button'][data-button-style='solid'] > .orbit-choice:has([data-checked]):not(:has([data-disabled])) {
+  color: var(--orbit-control-on-primary);
+  background: var(--orbit-control-primary);
+  border-color: var(--orbit-control-primary);
+}
+
+.orbit-radio-group[data-variant='button'][data-button-style='solid'] > .orbit-choice:hover:has([data-checked]):not(:has([data-disabled])) {
+  color: var(--orbit-control-on-primary);
+  background: var(--orbit-control-primary-hover);
+  border-color: var(--orbit-control-primary-hover);
+}
+
+.orbit-radio-group[data-variant='button'][data-button-style='solid'] > .orbit-choice:active:has([data-checked]):not(:has([data-disabled])) {
+  color: var(--orbit-control-on-primary);
+  background: var(--orbit-control-primary-active);
   border-color: var(--orbit-control-primary-active);
 }
 

@@ -1,0 +1,1317 @@
+{
+ "records": [
+  "2026-10-07.json",
+  "2026-10-07b.json",
+  "2026-10-07c.json",
+  "2026-10-07d.json",
+  "2026-10-08.json",
+  "2026-10-08b.json"
+ ],
+ "before": {
+  "baseline": {
+   "commit": "534e4831b5ed117afe5ecfdba6b3e55bbb42f3bd",
+   "scopeHash": "43552b101f992991867868257749418b70f486f87b06798443eebb15c0c48016"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P4.3a": 83,
+   "P4.3b": 30,
+   "P4.4": 55,
+   "P5.1": 28,
+   "P5.2": 11,
+   "P5.3": 94,
+   "P6": 38
+  },
+  "unowned": [],
+  "pending": [],
+  "p43a": [
+   {
+    "path": "src/web/src/components/MentionDeliveryNotes.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectAcceptanceCard.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/ProjectAcceptanceCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectBlockers.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/ProjectBlockers.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectChainProgress.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectCoordinatorCard.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/ProjectCoordinatorCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectGoalCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectPanoramaHeader.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/ProjectPanoramaHeader.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectProgressStatus.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/ProjectProgressStatus.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectReadyToRun.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/ProjectReadyToRun.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectRunSettings.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectSections.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/ProjectSections.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectShareControls.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/ProjectShareControls.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/ProjectsToolbar.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/TaskAttributionCard.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/TaskDependencyList.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/components/TaskScheduleEditor.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/components/TaskScheduleEditor.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 1429,
+    "kind": "antd-reference",
+    "text": "/* Qualified by antd's own class: its injected menu styles outrank a single-class rule. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 1430,
+    "kind": "ant-class",
+    "text": ".ant-dropdown-menu.tasks-scope-menu {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 1708,
+    "kind": "ant-class",
+    "text": ".ant-segmented-item-selected .seg-count {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 10717,
+    "kind": "antd-reference",
+    "text": "/* The two lines, one under the other; the class makes these rules outrank antd's own"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 10718,
+    "kind": "ant-class",
+    "text": "`.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 10724,
+    "kind": "ant-class",
+    "text": ".project-run-settings .project-run-lines .ant-radio-wrapper {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 10728,
+    "kind": "ant-class",
+    "text": ".project-run-settings .project-run-lines .ant-radio {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17506,
+    "kind": "ant-class",
+    "text": ".project-detail-meta .ant-tag {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17733,
+    "kind": "ant-class",
+    "text": ".project-goal-heading .ant-typography {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17744,
+    "kind": "ant-class",
+    "text": ".project-goal-empty.ant-typography {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17760,
+    "kind": "ant-class",
+    "text": ".project-blockers-heading.ant-typography {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17770,
+    "kind": "ant-class",
+    "text": ".project-blockers-summary.ant-typography {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 17799,
+    "kind": "ant-class",
+    "text": ".project-blockers-headline .ant-tag {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18025,
+    "kind": "ant-class",
+    "text": ".project-ready-heading.ant-typography {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18035,
+    "kind": "ant-class",
+    "text": ".project-ready-summary.ant-typography {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18353,
+    "kind": "ant-class",
+    "text": ".project-run-settings-grid .project-run-lines .ant-radio-wrapper-disabled {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18357,
+    "kind": "ant-class",
+    "text": ".project-run-settings-grid .project-run-lines .ant-radio-wrapper-disabled .ant-radio-disabled + span {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18360,
+    "kind": "ant-class",
+    "text": ".project-run-settings-grid .project-run-lines .ant-radio-disabled.ant-radio-checked .ant-radio-inner {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18364,
+    "kind": "ant-class",
+    "text": ".project-run-settings-grid .project-run-lines .ant-radio-disabled.ant-radio-checked .ant-radio-inner::after {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18371,
+    "kind": "ant-class",
+    "text": ".project-run-settings-grid .project-integration-setting.is-warn .ant-input {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18409,
+    "kind": "antd-reference",
+    "text": "/* A task row has flexible copy followed by a fixed count and, sometimes, a disclosure. AntD's"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18425,
+    "kind": "ant-class",
+    "text": ".project-task-row-meta .ant-list-item-meta-content {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18450,
+    "kind": "antd-reference",
+    "text": "under .ant-list to outrank AntD's own item padding without !important. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18450,
+    "kind": "ant-class",
+    "text": "under .ant-list to outrank AntD's own item padding without !important. */"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18451,
+    "kind": "ant-class",
+    "text": ".ant-list .project-task-row.is-openable {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18681,
+    "kind": "ant-class",
+    "text": ".acceptance-held-up-action .ant-typography code {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18727,
+    "kind": "ant-class",
+    "text": ".acceptance-more-meta.ant-typography {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18749,
+    "kind": "ant-class",
+    "text": ".acceptance-card.ant-card {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18754,
+    "kind": "ant-class",
+    "text": ":root[data-theme='dark'] .acceptance-card.ant-card {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18759,
+    "kind": "ant-class",
+    "text": ".acceptance-card.has-meter .ant-card-head {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18764,
+    "kind": "ant-class",
+    "text": ".acceptance-card .ant-card-head {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18767,
+    "kind": "ant-class",
+    "text": ".acceptance-card .ant-card-head-wrapper {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18770,
+    "kind": "ant-class",
+    "text": ".acceptance-card .ant-card-head-title {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18814,
+    "kind": "ant-class",
+    "text": ".acceptance-more-button.ant-btn {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18822,
+    "kind": "ant-class",
+    "text": ".acceptance-more-button.ant-btn:hover {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18835,
+    "kind": "ant-class",
+    "text": ".acceptance-more-meta.ant-typography {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18919,
+    "kind": "ant-class",
+    "text": ".projects-toolbar-filter .ant-segmented-item {"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18927,
+    "kind": "antd-reference",
+    "text": "projects-redesign.html: 11px of row padding (set inline, where it beats AntD's own"
+   },
+   {
+    "path": "src/web/src/index.css",
+    "line": 18932,
+    "kind": "antd-reference",
+    "text": "already been renamed under us once (antd 5 → 6). */"
+   },
+   {
+    "path": "src/web/src/pages/ProjectCoordinatorSection.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProjectDetailPanorama.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProjectTasksTopology.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProjectsPage.delete.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProjectsPage.newTask.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProjectsPage.status.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProjectsPage.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProjectsPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/ProjectsPagePhone.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/ProjectsPageToolbar.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/TaskDetailPage.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/TaskListView.createdIn.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/TaskListView.outsideProjects.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/TaskListView.scopeMenu.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/TaskListView.taskUrl.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/TaskListView.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/TaskListView.tsx",
+    "category": "production"
+   },
+   {
+    "path": "src/web/src/pages/TaskRoute.test.tsx",
+    "category": "test"
+   },
+   {
+    "path": "src/web/src/pages/TaskRoute.tsx",
+    "category": "production"
+   }
+  ]
+ },
+ "after": {
+  "baseline": {
+   "commit": "d9e720533c5c004ab7b2b1a4294112618a63bb02",
+   "scopeHash": "1c4f9f5b6dd184d6304b7b405de3aa4662d39e53d5140efd59064c6f2998b01f"
+  },
+  "owners": {
+   "KEEP": 1,
+   "P4.3b": 30,
+   "P4.4": 55,
+   "P5.1": 28,
+   "P5.2": 11,
+   "P5.3": 94,
+   "P6": 38
+  },
+  "unowned": [],
+  "pending": [],
+  "p43a": []
+ },
+ "counts": {
+  "scannedFiles": [
+   752,
+   752
+  ],
+  "productionFiles": [
+   378,
+   378
+  ],
+  "testFiles": [
+   372,
+   372
+  ],
+  "antdProductionFiles": [
+   79,
+   59
+  ],
+  "antdTestFiles": [
+   64,
+   57
+  ],
+  "antSelectorTestFiles": [
+   42,
+   29
+  ],
+  "antClassTestFiles": [
+   47,
+   30
+  ],
+  "iconProductionFiles": [
+   111,
+   112
+  ],
+  "iconTestFiles": [
+   0,
+   0
+  ],
+  "relevantSourceFiles": [
+   277,
+   248
+  ],
+  "retirementBlockingFiles": [
+   196,
+   152
+  ]
+ },
+ "hitLines": {
+  "ant-class": [
+   307,
+   222
+  ],
+  "ant-design-support": [
+   19,
+   19
+  ],
+  "ant-selector": [
+   285,
+   215
+  ],
+  "antd-reference": [
+   299,
+   237
+  ],
+  "icon-class": [
+   81,
+   82
+  ],
+  "icon-reference": [
+   122,
+   123
+  ],
+  "imperative-confirm": [
+   12,
+   11
+  ],
+  "imperative-feedback": [
+   221,
+   221
+  ],
+  "internal-ref": [
+   4,
+   4
+  ],
+  "provider": [
+   77,
+   70
+  ],
+  "rc-support": [
+   233,
+   233
+  ],
+  "ref-focus": [
+   28,
+   28
+  ],
+  "theme": [
+   2,
+   2
+  ],
+  "use-app": [
+   9,
+   6
+  ],
+  "use-token": [
+   1,
+   1
+  ]
+ },
+ "files": {
+  "src/web/src/components/MentionDeliveryNotes.tsx": {
+   "before": {
+    "antdImports": [
+     "Tooltip"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectAcceptanceCard.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "antd-reference": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectAcceptanceCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Card",
+     "Skeleton",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ProjectBlockers.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2,
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectBlockers.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Input",
+     "Modal",
+     "Tag",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectChainProgress.tsx": {
+   "before": {
+    "antdImports": [
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectCoordinatorCard.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectCoordinatorCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Dropdown",
+     "Space"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ProjectGoalCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ProjectPanoramaHeader.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectPanoramaHeader.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Spin",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ProjectProgressStatus.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 2,
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectProgressStatus.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Input",
+     "Modal"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectReadyToRun.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 4,
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectReadyToRun.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Popconfirm",
+     "Spin",
+     "Tag",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 4
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 4
+    }
+   }
+  },
+  "src/web/src/components/ProjectRunSettings.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Button",
+     "Input",
+     "InputNumber",
+     "Radio",
+     "Select",
+     "Spin",
+     "Switch"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectSections.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectSections.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "List"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ProjectShareControls.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/ProjectShareControls.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Dropdown"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/ProjectsToolbar.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Input",
+     "Segmented"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/TaskAttributionCard.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "Card",
+     "Skeleton",
+     "Tag",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/TaskDependencyList.tsx": {
+   "before": {
+    "antdImports": [
+     "Popconfirm"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/components/TaskScheduleEditor.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/components/TaskScheduleEditor.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Input",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "imperative-feedback": 4
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "imperative-feedback": 4
+    }
+   }
+  },
+  "src/web/src/index.css": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 113,
+     "ant-selector": 113,
+     "antd-reference": 34,
+     "icon-class": 26
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 80,
+     "ant-selector": 80,
+     "antd-reference": 28,
+     "icon-class": 27
+    }
+   }
+  },
+  "src/web/src/pages/ProjectCoordinatorSection.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 6,
+     "ant-selector": 6,
+     "antd-reference": 7,
+     "provider": 1,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProjectDetailPanorama.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProjectTasksTopology.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProjectsPage.delete.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 3
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProjectsPage.newTask.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 4,
+     "provider": 1,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProjectsPage.status.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 3,
+     "ant-selector": 2,
+     "antd-reference": 4
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProjectsPage.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 5
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/ProjectsPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Alert",
+     "App",
+     "Button",
+     "Empty",
+     "List",
+     "Modal",
+     "Popconfirm",
+     "Select",
+     "Spin",
+     "Tag",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 2,
+     "icon-reference": 1,
+     "imperative-confirm": 1,
+     "use-app": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1
+    }
+   }
+  },
+  "src/web/src/pages/ProjectsPagePhone.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2,
+     "antd-reference": 1,
+     "icon-class": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-class": 1
+    }
+   }
+  },
+  "src/web/src/pages/ProjectsPageToolbar.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 11,
+     "ant-selector": 11,
+     "antd-reference": 3
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/TaskDetailPage.tsx": {
+   "before": {
+    "antdImports": [
+     "Button",
+     "Input",
+     "Typography"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "imperative-feedback": 2
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "imperative-feedback": 2
+    }
+   }
+  },
+  "src/web/src/pages/TaskListView.createdIn.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/TaskListView.outsideProjects.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/TaskListView.scopeMenu.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "ant-class": 4,
+     "ant-selector": 2,
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/TaskListView.taskUrl.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/TaskListView.test.tsx": {
+   "before": {
+    "antdImports": [
+     "App"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "provider": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/TaskListView.tsx": {
+   "before": {
+    "antdImports": [
+     "Avatar",
+     "Button",
+     "Checkbox",
+     "Dropdown",
+     "Input",
+     "InputNumber",
+     "MenuProps",
+     "Modal",
+     "Popconfirm",
+     "Segmented",
+     "Select",
+     "Spin",
+     "Tag",
+     "Tooltip"
+    ],
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "imperative-feedback": 11
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {
+     "icon-reference": 1,
+     "imperative-feedback": 11
+    }
+   }
+  },
+  "src/web/src/pages/TaskRoute.test.tsx": {
+   "before": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 1,
+     "ant-selector": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  },
+  "src/web/src/pages/TaskRoute.tsx": {
+   "before": {
+    "antdImports": [
+     "Spin"
+    ],
+    "hitKinds": {
+     "antd-reference": 1
+    }
+   },
+   "after": {
+    "antdImports": [],
+    "hitKinds": {}
+   }
+  }
+ }
+}

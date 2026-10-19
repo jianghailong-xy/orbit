@@ -1,6 +1,7 @@
 # 分享链接：会话 / 任务 / 项目的公开只读链接
 
 状态：设计已定（2026-09-25），按项目「分享能力」分 9 张任务落地。效果图在 `docs/mocks/share-links/01–07`（HTML 源 + PNG）。
+2026-10-07 加了第四种根对象：wiki space（§10，效果图 08–09）。§1–§9 说的「三种根」都按四种读，§10 写明 wiki 的不同之处。
 本文是执行会话的契约：写代码前读它；实现与本文冲突时，先在任务评论里说清楚再改，别悄悄偏离。
 
 ## 1. 模型：一个链接 = 一个根对象 + 勾选的层
@@ -62,6 +63,7 @@
 - `GET /shared/:token`：返回 `{kind, include, sharedAt, root}`。
   - 会话根：保留旧字段（title、各状态字段、createdAt、workspaceName），另加 `events` = 尾部一页、`hasMore`，旧页面照样能渲染。
 - `GET /shared/:token/events?before=&limit=`：翻页。`GET /shared/:token/events/:seq`：取单条全文。
+  - `GET /shared/:token/events?after=&limit=`：某条之后的新事件，从旧到新；响应里的 `after` 是下一页的游标，到最新时为 null。同时带上根页的头部字段（title、各状态字段等）的当前值，公开页跟随进行中的会话时，一次请求就能拿到新内容和新状态。
   - 这两条只对会话根生效。范围内的其他会话走 `/shared/:token/sessions/:sessionId/...`，形状相同。
 - `GET /shared/:token/tasks/:taskId`：项目链接内的任务页，要求 Task pages 已勾选，且任务属于该项目。
 - `GET /shared/:token/sessions/:sessionId`（以及 `/events`）：范围内的对话记录。要求勾了 Conversations，并且会话是范围内任务的 Run，或本项目的协调会话。会话在回收站 → 404。
@@ -87,6 +89,8 @@
 - **项目页**：app 项目页的 16 个区块只保留 7 个，顺序不变：Header（去掉三个动作）→ Work overview（去掉横幅；Coordinator 卡整张不出现，勾了 Conversations 时换成一行「Coordinator conversation ›」）→ Goal → Task graph → Chain progress → Acceptance criteria（文案一字不改）→ Tasks（去掉 New task 和判据摘录）。手机宽度沿用 web 手机布局。
 - **任务页**：区块顺序照 app 的任务面板：Header（结果 + 判定方式 + 时间）→ Dependencies → Description → Acceptance → Runs → Comments（要勾选）。Runs 只列状态、时间和时长；勾了 Conversations 才出现「View conversation ›」，否则写「Conversation not shared」。
 - **对话页**：现有 Transcript 组件不改，只接一个「按范围解析链接」的 resolver。页头显示会话状态；Download HTML 保留。
+  - 会话还在进行时，页面跟随新内容（`events?after=`）：Queued / Running 每 4 秒拉一次；Awaiting reply / Interrupted 每 30 秒一次；刚拉到新内容的下一次也是 4 秒。会话结束或已 Completed、又没有新内容时停止。
+  - 后台标签页不拉，回到前台立刻补上。读者停在底部时跟到最新，往上翻着时位置不动。
 
 ## 8. 入口与文案（英文 UI）
 
@@ -110,3 +114,31 @@
 ## 9. 不做（本期）
 
 Snapshot；「People signed in to this Orbit」；agent 通过 MCP 创建公开链接（以后要做也必须走确认卡）；搜索引擎收录开关（一律 noindex）；公开页上的评论和反应。
+
+## 10. Wiki 链接（2026-10-07）
+
+一个链接打开一个 wiki space（一个代码库的 wiki）：首页加每篇已经写好的文档，只读、免登录。效果图 `docs/mocks/share-links/08-wiki-share`（入口、对话框、Shared links、iOS）和 `09-public-wiki`（公开页）。
+
+- **根对象与存储**：`share_link.wiki_space_id`（迁移 0403）。外键是复合的 `(wiki_space_id, owner_id) → wiki_space (id, owner_id)`，`ON DELETE CASCADE`，所以链接只能挂在自己的 space 上，删 space 链接一起删。一元根 CHECK 扩到四列，另加 `(wiki_space_id) WHERE revoked_at IS NULL` 的部分唯一索引。
+- **层**：Overview 锁定，即 `Documents`，数量是已写的篇数。只有一层可选：`Footnotes`，默认关。
+  - 关：公开页只有正文，没有角标，也没有脚注表。
+  - 开：显示引文、代码摘录、文件路径和行号，以及记录的类型、编号和时间。
+  - 不论开关都不出现：SHA、记录 id、会话 / 任务 / 项目的 id 和标题、via entry，以及 Open on GitHub 这类链接。`merge_receipt` 和 `owner_decision` 两类脚注整条不公开（§6）。人写的评论署名 Owner。
+  - 编号在公开页上从 1 重新排，去掉的不留空号。
+  - 风险句和 Conversations 同一句：`Can include command output and file contents.`。
+  - 数量按文档页的编号规则算：同一篇里同一出处只算一个，不含撤回的句子和上面两类记录。
+- **公开的内容**：首页按大类列已写的文档（编号、标题、导语）。文档页是 app 文档页做减法：去掉目录栏、Needs review 横幅、逐句标记、已撤回的句子、Rewrite pending、没写的小节、Entries 区。更新时间只写日期，不写 commit 和 plan 版本。
+- **不公开**：没写的文档（连标题都不出现）、原则组、Browse / A–Z、Activity、Review、Settings、Plan、运行记录、条目详情。名字只写仓库地址的最后一段，没有仓库的写 space 标题；仓库地址本身不出现。
+- **Not covered 的链接**：指向的文档已经写好就链到它的公开页，没写只显示编号。
+- **接口**
+  - 所有者：`GET|PUT|DELETE /wiki/spaces/:id/share`。
+  - 公开：
+    - `GET /shared/:token` 返回 `{kind: 'WIKI', include, sharedAt, root: {name, documents, categories}}`；
+    - `GET /shared/:token/docs/:slug` 返回 `{include, wiki: {name}, doc}`，不计访问次数；
+    - 别的公开路由对 wiki 链接一律回死链接的 404，没写的文档、计划里没有的文档也是。
+- **ORBIT_WIKI**：对所有者关闭时，所有者接口回 wiki 自己的 404（`WIKI_DISABLED`），公开页回死链接的 404。链接本身不结束，开回来就恢复。
+- **列表兼容**：`GET /share-links?kind=SESSION,TASK,PROJECT,WIKI` 只列点名的种类（逗号分隔或重复参数）。不带 `kind` 时只列前三种：已经装在手机上的 iOS 版本按封闭集解码 kind，碰到不认识的一种整页都读不出来。web 和新版 iOS / macOS 点名四种；以后再加种类也照此办理。
+- **入口**
+  - web：wiki 页头的 `Share`，位置在 Settings 和 New entry 之间；开着链接时换成 `Shared · Live` 胶囊。
+  - iOS / macOS：wiki 首页工具栏加一个地球，位置在 Activity 和 Settings 之间，开着链接时是绿的。
+  - 面板和对话框与另外三种根同一个。Shared links 里多一种 `W`，地点行只写 `Wiki`。

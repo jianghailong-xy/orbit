@@ -1,5 +1,4 @@
 import { queryOptions, useQuery } from '@tanstack/react-query';
-import { Typography } from 'antd';
 import { api } from '../api';
 import type {
   ProjectPanoramaBuckets,
@@ -254,9 +253,9 @@ export function ChainProgressStrip({
           )}
         </span>
         {next ? (
-          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+          <span className="orbit-typography orbit-typography-secondary" style={{ fontSize: 13 }}>
             Next → {next.title}
-          </Typography.Text>
+          </span>
         ) : null}
       </div>
     </section>

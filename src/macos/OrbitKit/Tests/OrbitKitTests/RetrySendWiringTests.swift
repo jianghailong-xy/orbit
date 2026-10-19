@@ -105,6 +105,37 @@ final class RetrySendWiringTests: XCTestCase {
                            + "field on its way out is the bug this file exists for")
     }
 
+    /// A card that would press into the server's own re-send may not promise from the window.
+    ///
+    /// The window cannot see turn attribution, or whether a message was already answered — so a card
+    /// quoting a bubble that is another session's (or the absent words of a run) had its press
+    /// answered with "this session has no message for a retry to re-send" (2026-10-07, session
+    /// 34b78GE7Ud2aXWq8H1JsU: a weekly limit killed a turn nobody sent, and the chooser refuses to
+    /// walk past it). So the client asks whenever the window holds nothing of the READER's, and
+    /// renders the server's answer — words, nothing, or `nothingToResend`, which is the Continue
+    /// card. Written so that promising from the window again turns one of these red.
+    func testTheCardAsksTheServerUnlessTheWindowHoldsTheReadersOwnWords() throws {
+        let console = try source(Self.consolePath)
+        let accessor = try section(console, from: "var retryWordsAreTheReaders: Bool {",
+                                   to: "/// What a retry sends")
+        XCTAssertTrue(accessor.contains("!lastUserMessageText.isEmpty && lastUserMessage.sessionMessage == nil"),
+                      "whose words the window holds is not read off the window alone")
+        let text = try section(console, from: "var retryMessageText: String {",
+                               to: "func refreshRetryText")
+        XCTAssertTrue(text.contains("retryWordsAreTheReaders ? lastUserMessageText : serverRetryText"),
+                      "what a retry sends no longer prefers the server's answer when the window's "
+                          + "words are somebody else's")
+        let fetch = try section(console, from: "func refreshRetryText() async {",
+                                to: "func retryLastMessage")
+        XCTAssertTrue(fetch.contains("guard !retryWordsAreTheReaders"),
+                      "the ask is not gated on the window's words being the reader's: a card is "
+                          + "promising again from its own window")
+        let card = try source(Self.cardPath)
+        XCTAssertTrue(card.contains("nothingToResend: console.retryContinues"),
+                      "the continue state is not the server's answer AND the window's — a frozen "
+                          + "answer from an earlier look would claim words the reader can send")
+    }
+
     /// The card names the provider whose outage it is — the SESSION's, never the composer's pending
     /// pick. Choosing another provider for the next turn is exactly what a person does when a quota
     /// is spent, and it renamed an outage that had already happened: a card about claude's spent
@@ -144,17 +175,17 @@ final class RetrySendWiringTests: XCTestCase {
         let resolved = try section(console,
                                    from: "var retryMessageText: String {",
                                    to: "func refreshRetryText")
-        XCTAssertTrue(resolved.contains("loaded.isEmpty ? serverRetryText : loaded"),
-                      "what is on screen wins when there is something on screen, and the server's "
-                          + "answer stands in only when there is not")
+        XCTAssertTrue(resolved.contains("retryWordsAreTheReaders ? lastUserMessageText : serverRetryText"),
+                      "the reader's own words on screen win, and the server's answer stands in when "
+                          + "there are none — or when what the window holds is somebody else's")
         let fetch = try section(console,
                                 from: "func refreshRetryText() async {",
                                 to: "func retryLastMessage")
         XCTAssertTrue(fetch.contains("api.retryMessage(sessionID: sessionID)"),
                       "asked of the door that answers with the sweep's own chooser")
-        XCTAssertTrue(fetch.contains("guard lastUserMessageText.isEmpty"),
-                      "and asked only when the window came up empty — otherwise this is a request "
-                          + "on every session anybody opens")
+        XCTAssertTrue(fetch.contains("guard !retryWordsAreTheReaders"),
+                      "and asked only when the window holds nothing of the READER's — otherwise this "
+                          + "is a request on every session anybody opens")
     }
 
     /// A retry carries the files the message was sent with.
@@ -266,8 +297,9 @@ final class RetrySendWiringTests: XCTestCase {
         XCTAssertFalse(web.contains("sendMutate({ content: retryText, images: [] })"),
                        "\(Self.workspacePath)'s card retry still sends an empty array, which is the "
                            + "behaviour this end was aligned to and the one both are leaving")
-        XCTAssertTrue(web.contains("attachmentIds: retry.attachmentIds"),
-                      "\(Self.workspacePath)'s retry carries the ids of the turn it re-sends")
+        XCTAssertTrue(web.contains("attachmentIds: retryIsTheReaders ? retry.attachmentIds : []"),
+                      "\(Self.workspacePath)'s retry carries the ids of the turn it re-sends — and "
+                          + "none when the words came from the server's answer, which has no bubble here")
         XCTAssertTrue(console.contains("overrideAttachments:"),
                       "\(Self.consolePath)'s retry hands the send path the same thing")
     }
@@ -285,10 +317,11 @@ final class RetrySendWiringTests: XCTestCase {
         let console = try source(Self.consolePath)
         let retry = try section(console, from: "func retryLastMessage() async {",
                                 to: "private func resendFromSession() async {")
-        XCTAssertTrue(retry.contains("RetryRoute.of(loadedText: last.text, loadedSender: last.sessionMessage,"),
-                      "the route is decided off the same bubble the words are read off")
+        XCTAssertTrue(retry.contains("loadedText: readers ? last.text : \"\""),
+                      "the route still reads the bubble's words from the window — but only words the "
+                          + "reader's own bubble carries may be sent from here")
         XCTAssertTrue(retry.contains("serverText: serverRetryText, serverSender: serverRetrySender)"),
-                      "and off the server's answer when the window holds no bubble")
+                      "and off the server's answer when the window holds no bubble of the reader's")
         let serverCase = try section(retry, from: "case .serverResend:", to: "case .send(")
         XCTAssertTrue(serverCase.contains("await resendFromSession()"))
         XCTAssertFalse(serverCase.contains("send(overrideText:"),

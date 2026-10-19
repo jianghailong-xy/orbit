@@ -1,0 +1,911 @@
+==> reusing this worktree's lockfile-compatible installation
+==> tsc /root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/node_modules/.bin/tsc (Version 7.0.2)
+==> building @orbit/shared
+==> require.resolve('@orbit/shared') from src/apiserver = /root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/src/shared/dist/index.js
+==> require.resolve('@orbit/shared') from src/web = /root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/src/shared/dist/index.js
+==> OK: /root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f is ready to build and test
+==> building the test tree (rm -rf build first)
+==> provisioning pccspec-pg-277052-5561 (postgres:16-alpine, PGDATA on tmpfs)
+==> PostgreSQL 16.15 on 127.0.0.1:34125, system_identifier=7697748936974004265
+==> prisma migrate deploy (template pccspec_tpl)
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+==> 428 migrations applied
+########## docker-backend.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_1 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748936974004265 version=16.15
+# Subtest: the manager drives a mapping on DockerBackend, through the restricted channel
+    # Subtest: (1) provisioning: a docker mapping, the channel's identities, the guard before the one container, a host-derived budget
+    ok 1 - (1) provisioning: a docker mapping, the channel's identities, the guard before the one container, a host-derived budget
+      ---
+      duration_ms: 123.911856
+      type: 'test'
+      ...
+    # Subtest: (2) sleep ends on Docker's report and the removal, compute is released only then, and a wake uses the same volume
+    ok 2 - (2) sleep ends on Docker's report and the removal, compute is released only then, and a wake uses the same volume
+      ---
+      duration_ms: 79.37051
+      type: 'test'
+      ...
+    # Subtest: (3) an accepted drain that overruns its drain time is stopped, and still ends only on the report and the removal
+    ok 3 - (3) an accepted drain that overruns its drain time is stopped, and still ends only on the report and the removal
+      ---
+      duration_ms: 50.215637
+      type: 'test'
+      ...
+    # Subtest: (4) an abnormal exit fails the runner on Docker's report, and a retry replaces it on the same volume
+    ok 4 - (4) an abnormal exit fails the runner on Docker's report, and a retry replaces it on the same volume
+      ---
+      duration_ms: 44.587034
+      type: 'test'
+      ...
+    # Subtest: (5) a container removed outside the channel fences, and only an operator's host check moves it on
+    ok 5 - (5) a container removed outside the channel fences, and only an operator's host check moves it on
+      ---
+      duration_ms: 41.937822
+      type: 'test'
+      ...
+    # Subtest: (6) a disabled owner's runner that does not stop by itself is stopped past the drain time
+    ok 6 - (6) a disabled owner's runner that does not stop by itself is stopped past the drain time
+      ---
+      duration_ms: 28.333656
+      type: 'test'
+      ...
+    # Subtest: (7) a budget with room for one runner admits one; the second waits, then starts once the first sleeps
+    ok 7 - (7) a budget with room for one runner admits one; the second waits, then starts once the first sleeps
+      ---
+      duration_ms: 54.869722
+      type: 'test'
+      ...
+    # Subtest: (8) a Kubernetes mapping in the same database is neither listed nor driven by the Docker manager
+    ok 8 - (8) a Kubernetes mapping in the same database is neither listed nor driven by the Docker manager
+      ---
+      duration_ms: 13.889984
+      type: 'test'
+      ...
+    # Subtest: (9) the channel unreachable is a backoff; a volume over its disk limit is FAILED with that reason
+    ok 9 - (9) the channel unreachable is a backoff; a volume over its disk limit is FAILED with that reason
+      ---
+      duration_ms: 34.054169
+      type: 'test'
+      ...
+    # Subtest: (10) a READY or DRAINING runner the channel does not answer for is left as it was: nothing spent
+    ok 10 - (10) a READY or DRAINING runner the channel does not answer for is left as it was: nothing spent
+      ---
+      duration_ms: 70.930346
+      type: 'test'
+      ...
+    # Subtest: (11) an upgrade's new image: the running container is left as it is, and the next generation after a sleep is made from it
+    ok 11 - (11) an upgrade's new image: the running container is left as it is, and the next generation after a sleep is made from it
+      ---
+      duration_ms: 50.120843
+      type: 'test'
+      ...
+    # Subtest: (12) why an upgrade recreates the apiserver first: a channel already on the new image refuses the previous apiserver
+    ok 12 - (12) why an upgrade recreates the apiserver first: a channel already on the new image refuses the previous apiserver
+      ---
+      duration_ms: 28.325626
+      type: 'test'
+      ...
+    1..12
+ok 1 - the manager drives a mapping on DockerBackend, through the restricted channel
+  ---
+  duration_ms: 665.181188
+  type: 'test'
+  ...
+1..1
+# tests 13
+# suites 0
+# pass 13
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 856.701316
+SPEC_EXIT=0
+==== docker-backend.pg.spec.ts tests=13 pass=13 fail=0 skipped=0 
+########## managed-runner-account-disabled.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_2 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748936974004265 version=16.15
+# Subtest: a disabled account's managed runner is put to sleep and kept there, against a fake cluster
+    # Subtest: (1) nothing is provisioned for a disabled owner: recorded, waiting, volume created or starting, each sleeps and gives back its compute
+    ok 1 - (1) nothing is provisioned for a disabled owner: recorded, waiting, volume created or starting, each sleeps and gives back its compute
+      ---
+      duration_ms: 316.871889
+      type: 'test'
+      ...
+    # Subtest: (2) a Pod create whose answer was lost keeps its compute and is not tried again; the Pod it made late is drained
+    ok 2 - (2) a Pod create whose answer was lost keeps its compute and is not tried again; the Pod it made late is drained
+      ---
+      duration_ms: 72.721936
+      type: 'test'
+      ...
+    # Subtest: (3) a running instance drains to sleep at once and is never called off; compute goes back only after the stop proof
+    ok 3 - (3) a running instance drains to sleep at once and is never called off; compute goes back only after the stop proof
+      ---
+      duration_ms: 288.645906
+      type: 'test'
+      ...
+    # Subtest: (4) nothing wakes it while the account is disabled, and every owner write is 403 ACCOUNT_DISABLED with nothing written
+    ok 4 - (4) nothing wakes it while the account is disabled, and every owner write is 403 ACCOUNT_DISABLED with nothing written
+      ---
+      duration_ms: 162.868777
+      type: 'test'
+      ...
+    1..4
+ok 1 - a disabled account's managed runner is put to sleep and kept there, against a fake cluster
+  ---
+  duration_ms: 885.007448
+  type: 'test'
+  ...
+1..1
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1070.586992
+SPEC_EXIT=0
+==== managed-runner-account-disabled.pg.spec.ts tests=5 pass=5 fail=0 skipped=0 
+########## managed-runner-backend.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_3 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748936974004265 version=16.15
+# Subtest: the manager drives a mapping on a run backend with no Kubernetes in it
+    # Subtest: (1) provisioning records the backend's location, identities and credential, and admits from its pool
+    ok 1 - (1) provisioning records the backend's location, identities and credential, and admits from its pool
+      ---
+      duration_ms: 127.135158
+      type: 'test'
+      ...
+    # Subtest: (2) it sleeps on the backend's stop report and wakes on the same volume
+    ok 2 - (2) it sleeps on the backend's stop report and wakes on the same volume
+      ---
+      duration_ms: 73.960595
+      type: 'test'
+      ...
+    # Subtest: (3) the gate fences an instance gone or declared exited without its host's report
+    ok 3 - (3) the gate fences an instance gone or declared exited without its host's report
+      ---
+      duration_ms: 54.873107
+      type: 'test'
+      ...
+    # Subtest: (4) a disabled owner's runner is drained to sleep and not woken
+    ok 4 - (4) a disabled owner's runner is drained to sleep and not woken
+      ---
+      duration_ms: 33.220515
+      type: 'test'
+      ...
+    # Subtest: (5) the backend's budget admits one runner; the second waits, then runs once the first sleeps
+    ok 5 - (5) the backend's budget admits one runner; the second waits, then runs once the first sleeps
+      ---
+      duration_ms: 63.915576
+      type: 'test'
+      ...
+    # Subtest: (6) a transient backend failure backs off; a definite one fails with the backend's code
+    ok 6 - (6) a transient backend failure backs off; a definite one fails with the backend's code
+      ---
+      duration_ms: 34.391717
+      type: 'test'
+      ...
+    1..6
+ok 1 - the manager drives a mapping on a run backend with no Kubernetes in it
+  ---
+  duration_ms: 430.911808
+  type: 'test'
+  ...
+1..1
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 623.316273
+SPEC_EXIT=0
+==== managed-runner-backend.pg.spec.ts tests=7 pass=7 fail=0 skipped=0 
+########## managed-runner-boot.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_4 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748936974004265 version=16.15
+# Subtest: managed runners off: the production server starts without Kubernetes or Ceph credentials and nothing managed happens
+    # Subtest: (A) absent: bootstrap, login and refresh, the reads, the refused writes, and a self-managed runner
+    ok 1 - (A) absent: bootstrap, login and refresh, the reads, the refused writes, and a self-managed runner
+      ---
+      duration_ms: 1648.018212
+      type: 'test'
+      ...
+    # Subtest: (B) explicitly false: the same answers on the existing account and runner, and a configured profile is never read
+    ok 2 - (B) explicitly false: the same answers on the existing account and runner, and a configured profile is never read
+      ---
+      duration_ms: 848.439266
+      type: 'test'
+      ...
+    # Subtest: (C) an unreadable value is off, and said once in the log
+    ok 3 - (C) an unreadable value is off, and said once in the log
+      ---
+      duration_ms: 833.735134
+      type: 'test'
+      ...
+    # Subtest: (D) on without a profile: unavailable, login unaffected, and no kubeconfig or in-cluster credential is read
+    ok 4 - (D) on without a profile: unavailable, login unaffected, and no kubeconfig or in-cluster credential is read
+      ---
+      duration_ms: 852.316144
+      type: 'test'
+      ...
+    1..4
+ok 1 - managed runners off: the production server starts without Kubernetes or Ceph credentials and nothing managed happens
+  ---
+  duration_ms: 4198.613061
+  type: 'test'
+  ...
+1..1
+# tests 5
+# suites 0
+# pass 5
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 24235.417232
+SPEC_EXIT=0
+==== managed-runner-boot.pg.spec.ts tests=5 pass=5 fail=0 skipped=0 
+########## managed-runner-capacity.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_5 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748936974004265 version=16.15
+# Subtest: managed runner capacity admission: persistent, atomic reservations of a fixed budget
+    # Subtest: (1) eight owners, four replicas at once, three active users: exactly three admitted, and the pool is the sum of the shares
+    ok 1 - (1) eight owners, four replicas at once, three active users: exactly three admitted, and the pool is the sum of the shares
+      ---
+      duration_ms: 262.790493
+      type: 'test'
+      ...
+    # Subtest: (2) the decision is the pool's: a CPU budget for two admits two, whatever the runners' session slots say
+    ok 2 - (2) the decision is the pool's: a CPU budget for two admits two, whatever the runners' session slots say
+      ---
+      duration_ms: 107.472813
+      type: 'test'
+      ...
+    # Subtest: (3) storage is reserved per volume and kept asleep: a sleeping runner frees compute, not its storage
+    ok 3 - (3) storage is reserved per volume and kept asleep: a sleeping runner frees compute, not its storage
+      ---
+      duration_ms: 192.592389
+      type: 'test'
+      ...
+    # Subtest: (4) a release rescans the waiting intents at once, oldest first; nothing is removed to make room
+    ok 4 - (4) a release rescans the waiting intents at once, oldest first; nothing is removed to make room
+      ---
+      duration_ms: 180.637139
+      type: 'test'
+      ...
+    # Subtest: (5) a provisioning that fails for good gives its compute back; a retry is admitted again, or waits
+    ok 5 - (5) a provisioning that fails for good gives its compute back; a retry is admitted again, or waits
+      ---
+      duration_ms: 142.818397
+      type: 'test'
+      ...
+    # Subtest: (6) a restart with a larger budget moves the pool, and the waiting intent is admitted
+    ok 6 - (6) a restart with a larger budget moves the pool, and the waiting intent is admitted
+      ---
+      duration_ms: 98.268726
+      type: 'test'
+      ...
+    1..6
+ok 1 - managed runner capacity admission: persistent, atomic reservations of a fixed budget
+  ---
+  duration_ms: 1034.255682
+  type: 'test'
+  ...
+1..1
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1229.57964
+SPEC_EXIT=0
+==== managed-runner-capacity.pg.spec.ts tests=7 pass=7 fail=0 skipped=0 
+########## managed-runner-existing.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_6 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748936974004265 version=16.15
+# Subtest: managed runners switched off with existing state: nothing is stopped, deleted, cleaned up or revoked, across a restart
+    # Subtest: first boot, with the variable absent
+    ok 1 - first boot, with the variable absent
+      ---
+      duration_ms: 31070.647187
+      type: 'test'
+      ...
+    # Subtest: restart, with the variable explicitly false
+    ok 2 - restart, with the variable explicitly false
+      ---
+      duration_ms: 30766.603085
+      type: 'test'
+      ...
+    1..2
+ok 1 - managed runners switched off with existing state: nothing is stopped, deleted, cleaned up or revoked, across a restart
+  ---
+  duration_ms: 62078.610388
+  type: 'test'
+  ...
+1..1
+# tests 3
+# suites 0
+# pass 3
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 82186.87105
+SPEC_EXIT=0
+==== managed-runner-existing.pg.spec.ts tests=3 pass=3 fail=0 skipped=0 
+########## managed-runner-fencing.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_7 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748936974004265 version=16.15
+# Subtest: managed runner single-writer gate: no new generation without a stop proof or a fencing receipt
+    # Subtest: (1) a Pod that vanished unobserved fences: no new generation, credential, Secret or Pod; the disk kept; nothing moves it
+    ok 1 - (1) a Pod that vanished unobserved fences: no new generation, credential, Secret or Pod; the disk kept; nothing moves it
+      ---
+      duration_ms: 190.036785
+      type: 'test'
+      ...
+    # Subtest: (2) a terminal phase the control plane wrote (PodGC) is not the kubelet’s report: FENCING
+    ok 2 - (2) a terminal phase the control plane wrote (PodGC) is not the kubelet’s report: FENCING
+      ---
+      duration_ms: 63.229459
+      type: 'test'
+      ...
+    # Subtest: (3) a stale heartbeat, an OFFLINE runner and an expired lease authorize nothing
+    ok 3 - (3) a stale heartbeat, an OFFLINE runner and an expired lease authorize nothing
+      ---
+      duration_ms: 73.986649
+      type: 'test'
+      ...
+    # Subtest: (4) the kubelet’s report, the Pod deleted and the volume detached authorize generation 2 — not one step before the volume detaches
+    ok 4 - (4) the kubelet’s report, the Pod deleted and the volume detached authorize generation 2 — not one step before the volume detaches
+      ---
+      duration_ms: 163.233395
+      type: 'test'
+      ...
+    # Subtest: (5) a fencing receipt opens the gate only bound to the predecessor and its volume, and complete; the volume must still detach
+    ok 5 - (5) a fencing receipt opens the gate only bound to the predecessor and its volume, and complete; the volume must still detach
+      ---
+      duration_ms: 187.707404
+      type: 'test'
+      ...
+    # Subtest: (6) two managers racing the advance make one generation, one Secret and one Pod
+    ok 6 - (6) two managers racing the advance make one generation, one Secret and one Pod
+      ---
+      duration_ms: 176.911133
+      type: 'test'
+      ...
+    # Subtest: (7) no Pod without the admission guard; a failing guard admits nothing; unauthorized Pods racing the manager are all refused
+    ok 7 - (7) no Pod without the admission guard; a failing guard admits nothing; unauthorized Pods racing the manager are all refused
+      ---
+      duration_ms: 168.542142
+      type: 'test'
+      ...
+    1..7
+ok 1 - managed runner single-writer gate: no new generation without a stop proof or a fencing receipt
+  ---
+  duration_ms: 1075.086715
+  type: 'test'
+  ...
+# Subtest: managed runner instance binding over HTTP: the authorized instance only, a predecessor refused, self-managed runners unchanged
+    # Subtest: (H1) the authorized instance: heartbeat, claim, inbox, events and lease calls pass the guard
+    ok 1 - (H1) the authorized instance: heartbeat, claim, inbox, events and lease calls pass the guard
+      ---
+      duration_ms: 77.356683
+      type: 'test'
+      ...
+    # Subtest: (H1b) a disabled account’s managed runner is refused 403 ACCOUNT_DISABLED even from its authorized instance; enabled again, it is served
+    ok 2 - (H1b) a disabled account’s managed runner is refused 403 ACCOUNT_DISABLED even from its authorized instance; enabled again, it is served
+      ---
+      duration_ms: 15.469188
+      type: 'test'
+      ...
+    # Subtest: (H2) after its stop is proven and generation 2 starts, every call of generation 1 is refused
+    ok 3 - (H2) after its stop is proven and generation 2 starts, every call of generation 1 is refused
+      ---
+      duration_ms: 106.176511
+      type: 'test'
+      ...
+    # Subtest: (H3) a fenced instance’s credential stops working at once
+    ok 4 - (H3) a fenced instance’s credential stops working at once
+      ---
+      duration_ms: 16.800286
+      type: 'test'
+      ...
+    # Subtest: (H4) a self-managed runner keeps its protocol: no instance needed, and any instance it sends is ignored
+    ok 5 - (H4) a self-managed runner keeps its protocol: no instance needed, and any instance it sends is ignored
+      ---
+      duration_ms: 28.044889
+      type: 'test'
+      ...
+    # Subtest: (H5) the admission webhook over HTTP: the API server’s token and a review in, a decision out
+    ok 6 - (H5) the admission webhook over HTTP: the API server’s token and a review in, a decision out
+      ---
+      duration_ms: 3.403175
+      type: 'test'
+      ...
+    # Subtest: (H6) shutdown: the real Kubernetes client was never built
+    ok 7 - (H6) shutdown: the real Kubernetes client was never built
+      ---
+      duration_ms: 4.678119
+      type: 'test'
+      ...
+    1..7
+ok 2 - managed runner instance binding over HTTP: the authorized instance only, a predecessor refused, self-managed runners unchanged
+  ---
+  duration_ms: 1492.947517
+  type: 'test'
+  ...
+1..2
+# tests 16
+# suites 0
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2847.675979
+SPEC_EXIT=0
+==== managed-runner-fencing.pg.spec.ts tests=16 pass=16 fail=0 skipped=0 
+########## managed-runner-manager.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_8 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748936974004265 version=16.15
+# Subtest: managed runner manager: unique mapping and idempotent reconciliation against a fake cluster
+    # Subtest: (1) concurrent ensures: one mapping, runner and workspace; racing managers: one PVC, Secret and Pod
+    ok 1 - (1) concurrent ensures: one mapping, runner and workspace; racing managers: one PVC, Secret and Pod
+      ---
+      duration_ms: 272.562768
+      type: 'test'
+      ...
+    # Subtest: (2) a create that commits and then times out is adopted; one that never committed is retried
+    ok 2 - (2) a create that commits and then times out is adopted; one that never committed is retried
+      ---
+      duration_ms: 328.091989
+      type: 'test'
+      ...
+    # Subtest: (3) partial failures keep what succeeded: a Secret refused, a Pod refused, then both
+    ok 3 - (3) partial failures keep what succeeded: a Secret refused, a Pod refused, then both
+      ---
+      duration_ms: 68.811368
+      type: 'test'
+      ...
+    # Subtest: (4) a restarted manager takes over a dead replica, adopts what it created, and finds stored intents
+    ok 4 - (4) a restarted manager takes over a dead replica, adopts what it created, and finds stored intents
+      ---
+      duration_ms: 57.050202
+      type: 'test'
+      ...
+    # Subtest: (5) retry exhaustion leaves FAILED and retryable; an explicit retry resumes the same mapping
+    ok 5 - (5) retry exhaustion leaves FAILED and retryable; an explicit retry resumes the same mapping
+      ---
+      duration_ms: 77.177718
+      type: 'test'
+      ...
+    # Subtest: (6) another owner’s, another UID’s or another class’s PVC is a conflict; a vanished or re-handled volume too
+    ok 6 - (6) another owner’s, another UID’s or another class’s PVC is a conflict; a vanished or re-handled volume too
+      ---
+      duration_ms: 328.148814
+      type: 'test'
+      ...
+    # Subtest: (7) a manager whose lease expired mid-pass is superseded, and nothing is created twice
+    ok 7 - (7) a manager whose lease expired mid-pass is superseded, and nothing is created twice
+      ---
+      duration_ms: 428.860922
+      type: 'test'
+      ...
+    # Subtest: (8) another account can neither read nor act on the mapping, its runner or its volume
+    ok 8 - (8) another account can neither read nor act on the mapping, its runner or its volume
+      ---
+      duration_ms: 96.459591
+      type: 'test'
+      ...
+    # Subtest: (9) releasing compute never deletes the runner row, its workspace or its volume; the replacement is the next generation
+    ok 9 - (9) releasing compute never deletes the runner row, its workspace or its volume; the replacement is the next generation
+      ---
+      duration_ms: 120.109749
+      type: 'test'
+      ...
+    # Subtest: (10) enrollment by name never takes over a managed runner; a replaced Pod is not adopted
+    ok 10 - (10) enrollment by name never takes over a managed runner; a replaced Pod is not adopted
+      ---
+      duration_ms: 65.892763
+      type: 'test'
+      ...
+    # Subtest: (11) a missing profile leaves the feature unavailable: nothing constructed, nothing written
+    ok 11 - (11) a missing profile leaves the feature unavailable: nothing constructed, nothing written
+      ---
+      duration_ms: 1.900697
+      type: 'test'
+      ...
+    # Subtest: (12) the startup deadline fails a silent instance; a retry waits on the same Pod again
+    ok 12 - (12) the startup deadline fails a silent instance; a retry waits on the same Pod again
+      ---
+      duration_ms: 84.575794
+      type: 'test'
+      ...
+    # Subtest: (13) over HTTP: authentication first, 202 for the owner, and another account refused whatever it names
+    ok 13 - (13) over HTTP: authentication first, 202 for the owner, and another account refused whatever it names
+      ---
+      duration_ms: 69.254156
+      type: 'test'
+      ...
+    1..13
+ok 1 - managed runner manager: unique mapping and idempotent reconciliation against a fake cluster
+  ---
+  duration_ms: 2108.730937
+  type: 'test'
+  ...
+1..1
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 12435.009427
+SPEC_EXIT=0
+==== managed-runner-manager.pg.spec.ts tests=14 pass=14 fail=0 skipped=0 
+########## managed-runner-recovery.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_9 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748936974004265 version=16.15
+# Subtest: managed runner recovery: restarts, visibility, a held volume and a restored one, on both backends
+    # Subtest: (1) an instance its host reports stopped is started again by itself: the next generation, the same volume and runner [kubernetes]
+    ok 1 - (1) an instance its host reports stopped is started again by itself: the next generation, the same volume and runner [kubernetes]
+      ---
+      duration_ms: 248.51727
+      type: 'test'
+      ...
+    # Subtest: (1) an instance its host reports stopped is started again by itself: the next generation, the same volume and runner [docker]
+    ok 2 - (1) an instance its host reports stopped is started again by itself: the next generation, the same volume and runner [docker]
+      ---
+      duration_ms: 61.491542
+      type: 'test'
+      ...
+    # Subtest: (2) a crash loop spends the attempt budget and ends FAILED; the retry starts afresh; a runner that stayed up starts its count again [kubernetes]
+    ok 3 - (2) a crash loop spends the attempt budget and ends FAILED; the retry starts afresh; a runner that stayed up starts its count again [kubernetes]
+      ---
+      duration_ms: 364.916398
+      type: 'test'
+      ...
+    # Subtest: (2) a crash loop spends the attempt budget and ends FAILED; the retry starts afresh; a runner that stayed up starts its count again [docker]
+    ok 4 - (2) a crash loop spends the attempt budget and ends FAILED; the retry starts afresh; a runner that stayed up starts its count again [docker]
+      ---
+      duration_ms: 109.778189
+      type: 'test'
+      ...
+    # Subtest: (3) out of memory is logged and said to the owner while it restarts and once the budget is spent [kubernetes]
+    ok 5 - (3) out of memory is logged and said to the owner while it restarts and once the budget is spent [kubernetes]
+      ---
+      duration_ms: 218.111455
+      type: 'test'
+      ...
+    # Subtest: (3) out of memory is logged and said to the owner while it restarts and once the budget is spent [docker]
+    ok 6 - (3) out of memory is logged and said to the owner while it restarts and once the budget is spent [docker]
+      ---
+      duration_ms: 53.800939
+      type: 'test'
+      ...
+    # Subtest: (4) an instance that stops after its owner asked it to sleep goes to sleep [kubernetes]
+    ok 7 - (4) an instance that stops after its owner asked it to sleep goes to sleep [kubernetes]
+      ---
+      duration_ms: 73.683664
+      type: 'test'
+      ...
+    # Subtest: (4) an instance that stops after its owner asked it to sleep goes to sleep [docker]
+    ok 8 - (4) an instance that stops after its owner asked it to sleep goes to sleep [docker]
+      ---
+      duration_ms: 20.416401
+      type: 'test'
+      ...
+    # Subtest: (5) a wake while something else holds the volume waits, and completes by itself once the volume is free [kubernetes]
+    ok 9 - (5) a wake while something else holds the volume waits, and completes by itself once the volume is free [kubernetes]
+      ---
+      duration_ms: 154.575541
+      type: 'test'
+      ...
+    # Subtest: (5) a wake while something else holds the volume waits, and completes by itself once the volume is free [docker]
+    ok 10 - (5) a wake while something else holds the volume waits, and completes by itself once the volume is free [docker]
+      ---
+      duration_ms: 93.800254
+      type: 'test'
+      ...
+    # Subtest: (6) a volume lost while asleep fails the wake; restored as recorded, it can be retried and the runner continues on it [kubernetes]
+    ok 11 - (6) a volume lost while asleep fails the wake; restored as recorded, it can be retried and the runner continues on it [kubernetes]
+      ---
+      duration_ms: 154.180556
+      type: 'test'
+      ...
+    # Subtest: (6) a volume lost while asleep fails the wake; restored as recorded, it can be retried and the runner continues on it [docker]
+    ok 12 - (6) a volume lost while asleep fails the wake; restored as recorded, it can be retried and the runner continues on it [docker]
+      ---
+      duration_ms: 59.249644
+      type: 'test'
+      ...
+    # Subtest: (7) a start at the channel's cap on containers waits for room, and starts by itself once a container is removed [docker]
+    ok 13 - (7) a start at the channel's cap on containers waits for room, and starts by itself once a container is removed [docker]
+      ---
+      duration_ms: 98.561858
+      type: 'test'
+      ...
+    # Subtest: (8) a backend that does not answer spends nothing while the runner only looks; one that cannot be reached at all spends nothing while it is started either [kubernetes]
+    ok 14 - (8) a backend that does not answer spends nothing while the runner only looks; one that cannot be reached at all spends nothing while it is started either [kubernetes]
+      ---
+      duration_ms: 580.936717
+      type: 'test'
+      ...
+    # Subtest: (8) a backend that does not answer spends nothing while the runner only looks; one that cannot be reached at all spends nothing while it is started either [docker]
+    ok 15 - (8) a backend that does not answer spends nothing while the runner only looks; one that cannot be reached at all spends nothing while it is started either [docker]
+      ---
+      duration_ms: 257.191881
+      type: 'test'
+      ...
+    # Subtest: (9) a Pod an operator deletes keeps its kubelet's report until the manager has used it; one gone without a report still fences [kubernetes]
+    ok 16 - (9) a Pod an operator deletes keeps its kubelet's report until the manager has used it; one gone without a report still fences [kubernetes]
+      ---
+      duration_ms: 248.825685
+      type: 'test'
+      ...
+    1..16
+ok 1 - managed runner recovery: restarts, visibility, a held volume and a restored one, on both backends
+  ---
+  duration_ms: 2844.05582
+  type: 'test'
+  ...
+1..1
+# tests 17
+# suites 0
+# pass 17
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3035.774231
+SPEC_EXIT=0
+==== managed-runner-recovery.pg.spec.ts tests=17 pass=17 fail=0 skipped=0 
+########## managed-runner-sign-in.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_10 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748936974004265 version=16.15
+# Subtest: managed runners at sign-in: off changes nothing; on, sign-in records intent and the first session runs on a supplied runtime
+    # Subtest: (A) off — absent, then explicitly false: bootstrap and sign-ins answer as before, and nothing managed is written
+    ok 1 - (A) off — absent, then explicitly false: bootstrap and sign-ins answer as before, and nothing managed is written
+      ---
+      duration_ms: 2232.331151
+      type: 'test'
+      ...
+    # Subtest: (B) boot: enabled with a valid profile, over the fake cluster, in a scrubbed environment
+    ok 2 - (B) boot: enabled with a valid profile, over the fake cluster, in a scrubbed environment
+      ---
+      duration_ms: 398.418697
+      type: 'test'
+      ...
+    # Subtest: (B1) bootstrap and login are the sign-ins; opening an account, refresh, logout, a password change and the reads are not
+    ok 3 - (B1) bootstrap and login are the sign-ins; opening an account, refresh, logout, a password change and the reads are not
+      ---
+      duration_ms: 198.707643
+      type: 'test'
+      ...
+    # Subtest: (B2) end to end: sign-in → intent → provisioning → READY on the supplied runtime → the default workspace → a first session the runner claims
+    ok 4 - (B2) end to end: sign-in → intent → provisioning → READY on the supplied runtime → the default workspace → a first session the runner claims
+      ---
+      duration_ms: 1383.808933
+      type: 'test'
+      ...
+    # Subtest: (B3) concurrent and repeated sign-ins add nothing; a default the owner removed stays removed
+    ok 5 - (B3) concurrent and repeated sign-ins add nothing; a default the owner removed stays removed
+      ---
+      duration_ms: 2932.349423
+      type: 'test'
+      ...
+    # Subtest: (B4) an account with workspaces keeps its order, first workspace, deep links and own default; nothing is matched by name
+    ok 6 - (B4) an account with workspaces keeps its order, first workspace, deep links and own default; nothing is matched by name
+      ---
+      duration_ms: 1263.244379
+      type: 'test'
+      ...
+    # Subtest: (B5) provisioning that fails never breaks a sign-in, and an explicit ensure or retry provisions
+    ok 7 - (B5) provisioning that fails never breaks a sign-in, and an explicit ensure or retry provisions
+      ---
+      duration_ms: 4066.878103
+      type: 'test'
+      ...
+    # Subtest: (B6) nothing installed and signed in: MODEL_UNAVAILABLE, no first session on any engine, READY once one is signed in
+    ok 8 - (B6) nothing installed and signed in: MODEL_UNAVAILABLE, no first session on any engine, READY once one is signed in
+      ---
+      duration_ms: 2273.800819
+      type: 'test'
+      ...
+    # Subtest: (B7) the eligibility decision governs both sign-in and explicit ensure
+    ok 9 - (B7) the eligibility decision governs both sign-in and explicit ensure
+      ---
+      duration_ms: 88.598538
+      type: 'test'
+      ...
+    # Subtest: (B) shutdown: the real Kubernetes client was never built
+    ok 10 - (B) shutdown: the real Kubernetes client was never built
+      ---
+      duration_ms: 77.002684
+      type: 'test'
+      ...
+    # Subtest: (C) no supply until the startup deadline: FAILED with MODEL_UNAVAILABLE, retryable; a retry once one is signed in is READY
+    ok 11 - (C) no supply until the startup deadline: FAILED with MODEL_UNAVAILABLE, retryable; a retry once one is signed in is READY
+      ---
+      duration_ms: 116.496
+      type: 'test'
+      ...
+    1..11
+ok 1 - managed runners at sign-in: off changes nothing; on, sign-in records intent and the first session runs on a supplied runtime
+  ---
+  duration_ms: 15081.694617
+  type: 'test'
+  ...
+1..1
+# tests 12
+# suites 0
+# pass 12
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 22539.90837
+SPEC_EXIT=0
+==== managed-runner-sign-in.pg.spec.ts tests=12 pass=12 fail=0 skipped=0 
+########## managed-runner-sleep.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_11 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748936974004265 version=16.15
+# Subtest: managed runner idle sleep and wake against a fake cluster
+    # Subtest: (1) nothing sleeps while there is work, or while the instance cannot vouch for itself
+    ok 1 - (1) nothing sleeps while there is work, or while the instance cannot vouch for itself
+      ---
+      duration_ms: 322.339101
+      type: 'test'
+      ...
+    # Subtest: (2) idle: it drains, the instance accepts and exits, and only the kubelet's report of that stop puts it to sleep
+    ok 2 - (2) idle: it drains, the instance accepts and exits, and only the kubelet's report of that stop puts it to sleep
+      ---
+      duration_ms: 108.346608
+      type: 'test'
+      ...
+    # Subtest: (3) demand wakes it on the same volume and runner, as the next generation
+    ok 3 - (3) demand wakes it on the same volume and runner, as the next generation
+      ---
+      duration_ms: 135.21787
+      type: 'test'
+      ...
+    # Subtest: (4) demand before the instance accepts calls the drain off; an acceptance after it is refused
+    ok 4 - (4) demand before the instance accepts calls the drain off; an acceptance after it is refused
+      ---
+      duration_ms: 70.408737
+      type: 'test'
+      ...
+    # Subtest: (5) demand after it accepted is kept: the stop finishes and the runner wakes at once to serve it
+    ok 5 - (5) demand after it accepted is kept: the stop finishes and the runner wakes at once to serve it
+      ---
+      duration_ms: 121.179525
+      type: 'test'
+      ...
+    # Subtest: (6) an instance that does not accept in time, or reports work, keeps running: the drain is called off
+    ok 6 - (6) an instance that does not accept in time, or reports work, keeps running: the drain is called off
+      ---
+      duration_ms: 90.416146
+      type: 'test'
+      ...
+    # Subtest: (7) a draining instance whose Pod vanishes without the kubelet's report is fenced
+    ok 7 - (7) a draining instance whose Pod vanishes without the kubelet's report is fenced
+      ---
+      duration_ms: 63.507498
+      type: 'test'
+      ...
+    # Subtest: (8) the sweep wakes a sleeping runner whose work no hook announced
+    ok 8 - (8) the sweep wakes a sleeping runner whose work no hook announced
+      ---
+      duration_ms: 128.110202
+      type: 'test'
+      ...
+    # Subtest: (9) the owner's explicit sleep and wake
+    ok 9 - (9) the owner's explicit sleep and wake
+      ---
+      duration_ms: 123.177681
+      type: 'test'
+      ...
+    1..9
+ok 1 - managed runner idle sleep and wake against a fake cluster
+  ---
+  duration_ms: 1210.592702
+  type: 'test'
+  ...
+1..1
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1399.605015
+SPEC_EXIT=0
+==== managed-runner-sleep.pg.spec.ts tests=10 pass=10 fail=0 skipped=0 
+########## managed-runner-wake.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_12 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748936974004265 version=16.15
+# Subtest: managed runners wake on demand and sleep through the real application
+    # Subtest: (1) a message to a parked session wakes it, and the woken runner claims the turn
+    ok 1 - (1) a message to a parked session wakes it, and the woken runner claims the turn
+      ---
+      duration_ms: 3457.197987
+      type: 'test'
+      ...
+    # Subtest: (2) an executable task wakes it: Run Now of a task assigned to its workspace
+    ok 2 - (2) an executable task wakes it: Run Now of a task assigned to its workspace
+      ---
+      duration_ms: 3561.744703
+      type: 'test'
+      ...
+    # Subtest: (3) scheduled work wakes it: a due session wakeup, and a task whose run time came
+    ok 3 - (3) scheduled work wakes it: a due session wakeup, and a task whose run time came
+      ---
+      duration_ms: 5846.341529
+      type: 'test'
+      ...
+    # Subtest: (4) a watch wakes it: its delivery to a parked observer session
+    ok 4 - (4) a watch wakes it: its delivery to a parked observer session
+      ---
+      duration_ms: 7488.675168
+      type: 'test'
+      ...
+    # Subtest: (5) auto retry: waiting for capacity spends no attempt and never gives up; then the retry goes, once
+    ok 5 - (5) auto retry: waiting for capacity spends no attempt and never gives up; then the retry goes, once
+      ---
+      duration_ms: 3667.958029
+      type: 'test'
+      ...
+    # Subtest: (6) reviving an ended session queues it for the waking runner instead of refusing it as offline
+    ok 6 - (6) reviving an ended session queues it for the waking runner instead of refusing it as offline
+      ---
+      duration_ms: 3509.517681
+      type: 'test'
+      ...
+    # Subtest: (7) a self-managed runner is dispatched as ever with the switch on
+    ok 7 - (7) a self-managed runner is dispatched as ever with the switch on
+      ---
+      duration_ms: 30.860113
+      type: 'test'
+      ...
+    # Subtest: (8) a disabled account: drained to sleep by the loop, woken by nothing until it is enabled again
+    ok 8 - (8) a disabled account: drained to sleep by the loop, woken by nothing until it is enabled again
+      ---
+      duration_ms: 11638.814016
+      type: 'test'
+      ...
+    # Subtest: no real Kubernetes client was built or used
+    ok 9 - no real Kubernetes client was built or used
+      ---
+      duration_ms: 0.157406
+      type: 'test'
+      ...
+    1..9
+ok 1 - managed runners wake on demand and sleep through the real application
+  ---
+  duration_ms: 40285.745003
+  type: 'test'
+  ...
+1..1
+# tests 10
+# suites 0
+# pass 10
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 40591.45565
+SPEC_EXIT=0
+==== managed-runner-wake.pg.spec.ts tests=10 pass=10 fail=0 skipped=0 
+==> OK: 12 spec(s) witnessed against PostgreSQL 16.15, no skips
+==> removing pccspec-pg-277052-5561

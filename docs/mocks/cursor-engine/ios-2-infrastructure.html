@@ -1,0 +1,106 @@
+<!doctype html>
+<!-- Design board iOS 2 (T0, Cursor engine): Settings → Infrastructure, the runner page's Engines and the
+     Cursor CLI engine page with its accounts. 393 × 852 pt on ../antigravity-accounts/kit.css. "改后" is the
+     proposal, drawn from today's InfrastructureSections.swift, SkillsRunnersView.swift, RunnerPageParts.swift
+     and RunnerEnginePage.swift. macOS is the same SwiftUI; Android follows. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>iOS 2 · Infrastructure, runner page and the Cursor CLI engine page</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<link rel="stylesheet" href="../antigravity-accounts/kit.css">
+<link rel="stylesheet" href="../provider-engine-decoupling/board.css">
+<link rel="stylesheet" href="board.css">
+<script src="../provider-engine-decoupling/glyphs.js"></script>
+<script src="../provider-engine-decoupling/board.js"></script>
+<script src="../antigravity-accounts/kit.js"></script>
+<script src="kit.js"></script>
+</head>
+<body class="m">
+<section class="board m-sheet" style="width:1980px">
+  <h1 class="m-h1 zh">iOS 2 · Infrastructure：概览加 Cursor CLI；机器页多一行 Cursor CLI；引擎页列出每个账号和它的额度，读不到的写「Usage unavailable」</h1>
+  <p class="m-sub zh">规则同 Web 2：Cursor CLI 是能登多个账号的 engine（Default + 新加的账号、NEXT、Automatic），额度按账号读，付费套餐显示账期内的已用比例和账期结束时间，Free 套餐的请求上限读不到就写「Usage unavailable」而不是 0%。版本是 Orbit 固定的 <code>2026.10.14-941492e</code>，写「pinned」。机器页上 Cursor CLI 排在最后。iOS 的「Update Engines Now」不碰 Cursor（版本跟 runner 走）。数据同 Web 板。Android 跟这张稿。灰色字母标现在的问题，橙色数字标改动。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">① 设置 → Infrastructure，机器页，Cursor CLI 引擎页</div>
+    <div class="phones">
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>Infrastructure：概览第 7 行</div><div id="p1"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>机器页 hpc：Engines 最后一行</div><div id="p2"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>Cursor CLI 引擎页：两个账号</div><div id="p3"></div></div>
+      <div class="ph-wrap"><div class="lbl zh"><span class="m-k new">改后</span>机器的四种状态（机器页上的这一行）</div><div class="cuts" id="p4"></div></div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh">② 差异</div>
+    <div id="notes"></div>
+  </div>
+</section>
+<script>
+/* ① Infrastructure, scrolled to the engine overview */
+const needs = iSection({ header: 'Needs you', rows: [
+  `<div class="r" id="needs"><div class="nr"><span class="nr-dot"></span><div class="nr-t"><b>Cursor CLI</b> is signed out on <b>build-box</b><div class="nr-s">Sessions there can’t use it</div></div><span class="bb prom">Sign in</span></div></div>`,
+] });
+const overview = iSection({ header: 'What your agents can run on', rows: [
+  ovRow('anthropic', 'Claude Code', true, ['<b>Subscription</b> · hpc ×2, mac-studio, build-box', `<b>API key</b> · ${ks([['DeepSeek', 'DeepSeek V4 Pro'], ['Z.AI (GLM)', 'GLM-5.2']])}`]),
+  ovRow('openai', 'Codex', true, ['<b>Subscription</b> · hpc, mac-studio, build-box']),
+  ovRow('kimi', 'Kimi Code', true, ['<b>Subscription</b> · hpc', `<b>API key</b> · ${ks([['Kimi (Moonshot)', 'Kimi K2.7 Code']])}`]),
+  ovRow('antigravity', 'Antigravity CLI', true, ['<b>Subscription</b> · hpc', `<b>API key</b> · ${ks([['Gemini', 'Gemini 3.8 Flash']])}`]),
+  ovRow('opencode', 'OpenCode', true, [`<b>API key</b> · ${ks([['DeepSeek', 'DeepSeek V4 Pro'], ['Gemini', 'Gemini 3.8 Flash']])}…`]),
+  ovRow('deepseek', 'DeepSeek Harness', true, ['<b>API key</b> · DeepSeek']),
+  ovRow('cursor', 'Cursor CLI', true, ['<b>Subscription</b> · hpc ×2', `<b>API key</b> · ${ks([['Cursor', 'Auto']])}`], 'ovcur'),
+], footer: 'Every engine, and everything that can pay for it right now.' });
+document.getElementById('p1').innerHTML = sheetPhone({ title: 'Infrastructure', id: 'ph1', body: needs + overview });
+
+/* ② the runner page's Engines */
+const eRow = (mark, name, sub, chevron = true, id = '') => iRow({ id, mark, title: name, sub, chevron });
+const cursorEngineRow = (sub, extra = '', windows = null, chevron = true, id = 'currow') => `<div class="r eng" id="${id}"><div class="e">
+  <div class="e-l">${iEng('cursor', 28)}<div class="e-m"><div class="e-n">Cursor CLI</div><div class="e-s">${sub}</div>${extra}${windows ? wins(windows) : ''}</div></div>${chevron ? IC.chev : ''}</div></div>`;
+const machine = iSection({ header: 'Engines', trailing: 'Checked 2 min ago', rows: [
+  eRow(iEng('claude'), 'Claude Code', '2.1.302 · <span class="ok">2 accounts signed in</span>'),
+  eRow(iEng('codex'), 'Codex', '0.164.0 · <span class="ok">Signed in</span>'),
+  eRow(iEng('kimi'), 'Kimi Code', '2.1.4 · kimi.ai · <span class="ok">Signed in</span>'),
+  eRow(iEng('opencode'), 'OpenCode', '1.18.40'),
+  eRow(iEng('antigravity'), 'Antigravity CLI', '1.3.4 · <span class="ok">Signed in</span>'),
+  eRow(iEng('dsh'), 'DeepSeek Harness', '0.2.0 · Uses API keys'),
+  cursorEngineRow('2026.10.14-941492e · <span class="ok">2 accounts signed in</span>', '<div class="e-s" style="margin-top:4px">Next: Team</div>', [{ label: 'Monthly limit', pct: 34, resets: 'Resets Sun, Oct 3 at 12:00 AM' }]),
+], footer: 'Orbit keeps these CLIs updated every 30 min — Cursor CLI stays on the version Orbit pins. Sign-ins live on this machine — a session spends that subscription, nothing to paste.' });
+document.getElementById('p2').innerHTML = sheetPhone({ title: 'hpc', id: 'ph2', body: machine });
+
+/* ③ the Cursor CLI engine page */
+const enginePage = cursorHead()
+  + section({ header: 'Accounts', id: 'accs', rows: [...cursorAccounts(), btnRow('Add Account')] })
+  + `<div class="s-f">${CURSOR_ENGINE_FOOTER}</div>`;
+document.getElementById('p3').innerHTML = sheetPhone({ title: 'Cursor CLI', id: 'ph3', body: enginePage });
+
+/* ④ the four states, as the runner page's row says them */
+const cut = (label, row) => `<div class="cut-l zh">${label}</div><div class="ph cutbox"><div class="s-card">${row}</div></div>`;
+document.getElementById('p4').innerHTML =
+  cut('没装：引擎页给「Install Cursor CLI」', cursorEngineRow('Not installed', '', null, false, 's1')) +
+  cut('没登录：Default 掉线，行上直接给 Sign In', cursorEngineRow('2026.10.14-941492e · <span class="warn">Signed out</span>', '<span class="cap" style="padding:5px 12px;font-size:14px">Sign In</span>', null, true, 's2')) +
+  cut('runner 早于 Cursor', cursorEngineRow('<span class="warn">Update runner</span>', '<div class="e-s">This runner predates Cursor CLI. It updates itself when no session is running on it.</div>', null, false, 's3')) +
+  cut('不是固定版本：引擎页给「Reinstall Cursor CLI」', cursorEngineRow('2026.10.16-e3cb207 · <span class="warn">Unsupported version</span>', '<div class="e-s">Orbit runs Cursor CLI 2026.10.14-941492e. Sessions here can’t start until it is reinstalled.</div>', null, true, 's4'));
+
+finish();
+requestAnimationFrame(() => {
+  const ph = (id) => document.getElementById(id);
+  scrollPhone(ph('ph1'), '#ovcur', 520);
+  ring(ph('ph1'), '#ovcur', 1, 2);
+  scrollPhone(ph('ph2'), '#currow', 470);
+  ring(ph('ph2'), '#currow', 2, 2);
+  ring(ph('ph3'), '#acc-def .a-na', 3, 3);
+  ring(ph('ph3'), '#acc-team .ws', 4, 3);
+  ring(ph('ph3'), '#accs .r.btn', 5, 2);
+});
+document.getElementById('notes').innerHTML = notes([
+  [1, '<b>概览第 7 行</b>：「Subscription · hpc ×2」「API key · Cursor <span style="opacity:.7">Auto</span>」，规则同 Web 2 ①。没登录时顶上「Needs you」多一行（今天按登录 engine 逐个列）。'],
+  [2, '<b>机器页 Cursor CLI 行</b>：版本、「2 accounts signed in」、「Next: Team」和它的一个窗口（同今天 Claude / Kimi 多账号的写法）。底部说明补半句：Cursor CLI 不随「every 30 min」更新，版本跟 runner。'],
+  [3, '<b>读不到的额度</b>：Default 下写「Free plan · Usage unavailable — Cursor doesn’t report how many of the Free plan’s requests are left.」，不画条。'],
+  [4, '<b>读得到的额度</b>：Team 一个窗口「Monthly limit 34%」，重置在账期结束。NEXT 标在 Team 上（Automatic 下一个新会话会落到这里）。'],
+  [5, '<b>Add Account</b>：runner 声明 <code>cursor-account-login/v1</code> 才出现；流程见 iOS 3。D4 若选「只支持 Default」，这一行不出现，Accounts 标题改回「Sign-In」（同今天 Kimi 在旧 runner 上）。'],
+  ['·', '<b>四种状态</b>的措辞同 Web 2 ④；没装和版本不符在引擎页给按钮（「Install Cursor CLI」「Reinstall Cursor CLI」），runner 太旧只有说明。'],
+]);
+</script>
+</body>
+</html>

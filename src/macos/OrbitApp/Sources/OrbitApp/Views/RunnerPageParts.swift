@@ -11,8 +11,8 @@ import OrbitKit
 // `RunnerPageFormat`), where they are tested; iOS and macOS draw these same views.
 
 /// The inks the runner pages speak in: the mock's on light — the system green/orange/red read too
-/// faint on white — and the system colours on dark. The same inks the Providers pages' `PoolTone`
-/// uses; that one lives with the iOS-only pool pages, and these pages are macOS's as well.
+/// faint on white — and the system colours on dark. The same inks `PoolTone` (InfrastructureSections)
+/// uses; that one lived with the iOS-only pool pages when these were drawn, and these are macOS's too.
 enum RunnerInk {
     static let green = Color(light: Color(red: 0.141, green: 0.541, blue: 0.239), dark: .green)   // #248A3D
     static let amber = Color(light: Color(red: 0.702, green: 0.353, blue: 0), dark: .orange)      // #B35A00

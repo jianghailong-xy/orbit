@@ -1,0 +1,360 @@
+[WebServer] (node:2240803) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 80 tests using 1 worker
+
+(node:2240943) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-delete-confirm.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (6.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-comment-mention.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (4.1s)
+  ✓   3 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (874ms)
+  ✓   4 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-reopen-refused.png, writing actual.
+  ✓   5 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-share-turn-off.png, writing actual.
+  ✓   6 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (3.6s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-share-error.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-p0-share-focused.png, writing actual.
+  ✓   8 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-account-open.png, writing actual.
+  ✓   9 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-desktop/pilot-antigravity-account-open.png, writing actual.
+  ✓  10 [chromium-light-desktop] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.3s)
+(node:2243117) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-delete-confirm.png, writing actual.
+  ✓  11 [chromium-light-phone] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-comment-mention.png, writing actual.
+  ✓  12 [chromium-light-phone] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (3.8s)
+  ✓  13 [chromium-light-phone] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (893ms)
+  ✓  14 [chromium-light-phone] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-reopen-refused.png, writing actual.
+  ✓  15 [chromium-light-phone] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-share-turn-off.png, writing actual.
+  ✓  16 [chromium-light-phone] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-share-error.png, writing actual.
+  ✓  17 [chromium-light-phone] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-p0-share-focused.png, writing actual.
+  ✓  18 [chromium-light-phone] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-account-open.png, writing actual.
+  ✓  19 [chromium-light-phone] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-light-phone/pilot-antigravity-account-open.png, writing actual.
+  ✓  20 [chromium-light-phone] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.2s)
+(node:2244857) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-delete-confirm.png, writing actual.
+  ✓  21 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (5.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-comment-mention.png, writing actual.
+  ✓  22 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (4.0s)
+  ✓  23 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (768ms)
+  ✓  24 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-reopen-refused.png, writing actual.
+  ✓  25 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-share-turn-off.png, writing actual.
+  ✓  26 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-share-error.png, writing actual.
+  ✓  27 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (2.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-p0-share-focused.png, writing actual.
+  ✓  28 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-account-open.png, writing actual.
+  ✓  29 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-desktop/pilot-antigravity-account-open.png, writing actual.
+  ✓  30 [chromium-dark-desktop] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.2s)
+(node:2247083) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-delete-confirm.png, writing actual.
+  ✓  31 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (5.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-comment-mention.png, writing actual.
+  ✓  32 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (3.8s)
+  ✓  33 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (904ms)
+  ✓  34 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-reopen-refused.png, writing actual.
+  ✓  35 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-share-turn-off.png, writing actual.
+  ✓  36 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-share-error.png, writing actual.
+  ✓  37 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-p0-share-focused.png, writing actual.
+  ✓  38 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (1.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-account-open.png, writing actual.
+  ✓  39 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/chromium-dark-phone/pilot-antigravity-account-open.png, writing actual.
+  ✓  40 [chromium-dark-phone] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.2s)
+(node:2251782) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-delete-confirm.png, writing actual.
+  ✓  41 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (6.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-comment-mention.png, writing actual.
+  ✓  42 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (5.1s)
+  ✓  43 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.2s)
+  ✓  44 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-reopen-refused.png, writing actual.
+  ✓  45 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-share-turn-off.png, writing actual.
+  ✓  46 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (4.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-share-error.png, writing actual.
+  ✓  47 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-p0-share-focused.png, writing actual.
+  ✓  48 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-account-open.png, writing actual.
+  ✓  49 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-desktop/pilot-antigravity-account-open.png, writing actual.
+  ✓  50 [webkit-light-desktop] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.9s)
+(node:2256608) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-delete-confirm.png, writing actual.
+  ✓  51 [webkit-light-phone] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (5.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-comment-mention.png, writing actual.
+  ✓  52 [webkit-light-phone] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (4.3s)
+  ✓  53 [webkit-light-phone] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.1s)
+  ✓  54 [webkit-light-phone] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-reopen-refused.png, writing actual.
+  ✓  55 [webkit-light-phone] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.6s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-share-turn-off.png, writing actual.
+  ✓  56 [webkit-light-phone] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (3.8s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-share-error.png, writing actual.
+  ✓  57 [webkit-light-phone] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-p0-share-focused.png, writing actual.
+  ✓  58 [webkit-light-phone] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-account-open.png, writing actual.
+  ✓  59 [webkit-light-phone] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-light-phone/pilot-antigravity-account-open.png, writing actual.
+  ✓  60 [webkit-light-phone] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.5s)
+(node:2261262) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-delete-confirm.png, writing actual.
+  ✓  61 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (6.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-comment-mention.png, writing actual.
+  ✓  62 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (5.2s)
+  ✓  63 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.1s)
+  ✓  64 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-reopen-refused.png, writing actual.
+  ✓  65 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-share-turn-off.png, writing actual.
+  ✓  66 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (4.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-share-error.png, writing actual.
+  ✓  67 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-p0-share-focused.png, writing actual.
+  ✓  68 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-account-open.png, writing actual.
+  ✓  69 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-desktop/pilot-antigravity-account-open.png, writing actual.
+  ✓  70 [webkit-dark-desktop] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (2.0s)
+(node:2266967) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-detail.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-field-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-assignee-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-suggested-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-provider-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-model-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-list-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-list-search.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-run-hint.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-delete-confirm.png, writing actual.
+  ✓  71 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:71:3 › task detail pilot › fields, pickers and the panel header (5.6s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-dependencies.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-dependency-view-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-dependency-list.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-prerequisite-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-inputs.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-remove-confirm.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-comment-mention.png, writing actual.
+  ✓  72 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:152:3 › task detail pilot › dependencies, inputs and comments (4.3s)
+  ✓  73 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:232:3 › task detail pilot › a failed upload says so and leaves the list as it was (1.2s)
+  ✓  74 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:256:3 › task detail pilot › files dropped on Add file are each uploaded (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-reopen.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-reopen-refused.png, writing actual.
+  ✓  75 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:294:3 › task detail pilot › reopening a stopped task, refused and then backed out of (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-share-private.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-share-access-menu.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-share-public.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-share-conversations.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-share-expiry-open.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-share-turn-off.png, writing actual.
+  ✓  76 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:319:3 › share dialog pilot › from Only you to a public link and back (3.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-share-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-share-error.png, writing actual.
+  ✓  77 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:381:3 › share dialog pilot › loading and a read that failed (3.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-p0-share-focused.png, writing actual.
+  ✓  78 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:413:3 › P0 share dialog, focused alike › same element focused before the shot (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-account-open.png, writing actual.
+  ✓  79 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:428:3 › workspace account pilot › the Claude account picker of a new workspace (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-antigravity-account.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-pilot/shots/webkit-dark-phone/pilot-antigravity-account-open.png, writing actual.
+  ✓  80 [webkit-dark-phone] › ui-migration/pilot.browser.mjs:454:3 › workspace account pilot › the Antigravity account picker: Default on the Gemini key, a Google account with what is left (1.6s)
+
+  80 passed (3.4m)

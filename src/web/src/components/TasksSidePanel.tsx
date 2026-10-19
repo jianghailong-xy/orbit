@@ -32,7 +32,6 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
-import { Avatar, Dropdown, Tooltip } from 'antd';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useLocation, useMatch, useNavigate, useSearchParams } from 'react-router-dom';
 import type {
@@ -70,6 +69,9 @@ import {
 import { wikiShown, wikiWaitingOnYou } from '../lib/wiki';
 import { wikiWaiting, writeWikiFromWorkspace } from '../lib/wikiSpace';
 import { SidebarNavIcon } from './SidebarNavIcon';
+import { Avatar } from './ui/Avatar';
+import { Menu } from './ui/Menu';
+import { Tooltip } from './ui/Tooltip';
 
 const IS_MAC_PLATFORM =
   typeof navigator !== 'undefined' &&
@@ -144,10 +146,12 @@ const TOP: TopNavItem[] = [
   { key: 'wiki', icon: <SidebarNavIcon name="wiki" />, label: 'Wiki' },
   // No Following here: its watches are the waits agents keep for their own sessions, already shown
   // in each session's header and Watching strip, and those are what link to /following.
-  { key: 'runners', icon: <SidebarNavIcon name="runners" />, label: 'Runners' },
-  // Providers is for everyone: each user manages their own (BYOK) list; admins additionally
-  // manage the shared ones on the same page.
-  { key: 'providers', icon: <SidebarNavIcon name="providers" />, label: 'Providers' },
+  // Infrastructure is where agents run and whose quota they spend — what the Runners and Providers
+  // rows used to split between them: the user's own machines and API keys, and the account pools
+  // they own or were added to. Shared providers (those with no owner) are not on it, an admin's
+  // included: admins manage them through /api/admin/providers alone, and the UI manages only each
+  // user's own (PROVIDERS_BASE).
+  { key: 'infrastructure', icon: <SidebarNavIcon name="runners" />, label: 'Infrastructure' },
 ];
 
 // The left sidebar is user-resizable; the chosen width persists across refreshes.
@@ -159,6 +163,13 @@ const MIN_SIDEBAR_WIDTH = 200;
 const MAX_SIDEBAR_WIDTH = 480;
 const clampWidth = (w: number): number =>
   Math.min(MAX_SIDEBAR_WIDTH, Math.max(MIN_SIDEBAR_WIDTH, w));
+
+/** Infrastructure's own page, and the pages under the Runners and Providers addresses it took over. */
+export function isInfrastructureRoute(pathname: string): boolean {
+  return ['/infrastructure', '/runners', '/providers'].some(
+    (root) => pathname === root || pathname.startsWith(`${root}/`),
+  );
+}
 
 /** The first nine Workspace rows own the matching global Cmd/Ctrl + number shortcut. */
 export function workspaceShortcutLabel(index: number, isMac = IS_MAC_PLATFORM): string | null {
@@ -205,7 +216,7 @@ export interface Runner {
   displayName?: string | null;
   online?: boolean;
   maxConcurrent?: number;
-  // Persisted order of the Runners page's cards; null until assigned by migration or a reorder.
+  // Persisted order of Infrastructure's machine cards; null until assigned by migration or a reorder.
   position?: number | null;
   // Live sessions currently occupying this runner's slots (of maxConcurrent).
   activeSessions?: number;
@@ -236,7 +247,7 @@ export interface Runner {
   runsAsRoot?: boolean | null;
   // Where this runner's updates of itself stand, as it last reported: why it is or isn't on the
   // latest release, and the last update it installed. undefined/null = a runner too old to report
-  // it, which the Runners page judges by runsAsRoot as it always has.
+  // it, which runnerAttention judges by runsAsRoot as it always has.
   selfUpdate?: RunnerSelfUpdate | null;
   // Free-space floor in MB (PATCH minFreeDiskMb): below it this machine takes no new task runs.
   // null = no floor.
@@ -399,8 +410,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   }, [onWiki, hereWorkspaceId]);
 
   // Workspace/session routes have no proxy parent in TOP: a resolved Workspace highlights its own
-  // row, while an unresolved deep link briefly leaves the fixed nav unselected. Runner management
-  // remains scoped to Runners.
+  // row, while an unresolved deep link briefly leaves the fixed nav unselected. A machine's page, a
+  // key's and a pool's are Infrastructure's, under the addresses Runners and Providers gave them.
   const routeKey = projectPageKey
     ? projectPageKey
     : activeWorkspaceId
@@ -409,8 +420,8 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
         loc.pathname.startsWith('/sessions/') ||
         loc.pathname.startsWith('/agents/')
       ? ''
-      : loc.pathname.startsWith('/runner')
-        ? 'runners'
+      : isInfrastructureRoute(loc.pathname)
+        ? 'infrastructure'
         : loc.pathname.startsWith('/projects/')
           ? (projectRowKey ?? 'projects')
           // Every wiki route — a space, a topic, an entry's drawer, Review — is the Wiki's own
@@ -490,7 +501,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   };
 
   // Runners carry the computed `online` flag and the names the rows show. Poll on the same 15s
-  // cadence as the Runners page so status stays in sync while the sidebar is up.
+  // cadence as a machine's page so status stays in sync while the sidebar is up.
   const runners = useQuery({
     queryKey: ['runners'],
     queryFn: () => api<Runner[]>('/runners'),
@@ -514,7 +525,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
   // runner is metadata on each row, not a sort key.
   const orderedWorkspaces = useMemo(() => orderWorkspaces(workspaces.data ?? []), [workspaces.data]);
 
-  // Each drop is saved at once, the Runners page's way: the rows (and their ⌘N) move immediately,
+  // Each drop is saved at once, the machine cards' way: the rows (and their ⌘N) move immediately,
   // the server's list settles it, and a refusal puts them back.
   const qc = useQueryClient();
   const message = useToast();
@@ -910,117 +921,114 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
       </div>
 
       <div className="tp-user">
-        <Dropdown
-          trigger={['click']}
-          placement="topLeft"
+        <Menu
+          side="top"
+          align="start"
           open={accountMenuOpen}
           onOpenChange={setAccountMenuOpen}
-          menu={{
-            className: 'tp-account-menu',
-            items: [
-              {
-                key: 'profile',
-                className: 'tp-account-profile',
-                label: (
-                  <span className="tp-account-profile-content">
-                    <Avatar
-                      size={36}
-                      src={avatar.data}
-                      icon={<UserOutlined />}
-                      style={{ background: 'var(--brand)', flex: 'none' }}
-                    />
-                    <span className="tp-account-identity">
-                      <span className="tp-account-name">
-                        {me.data?.name || me.data?.email || 'Profile'}
-                      </span>
-                      <span className="tp-account-detail">
-                        {me.data?.name && me.data.name !== me.data.email ? me.data.email : 'View profile'}
-                      </span>
+          popupClassName="tp-account-menu"
+          items={[
+            {
+              key: 'profile',
+              className: 'tp-account-profile',
+              label: (
+                <span className="tp-account-profile-content">
+                  <Avatar
+                    size={36}
+                    src={avatar.data}
+                    icon={<UserOutlined />}
+                    style={{ background: 'var(--brand)', flex: 'none' }}
+                  />
+                  <span className="tp-account-identity">
+                    <span className="tp-account-name">
+                      {me.data?.name || me.data?.email || 'Profile'}
+                    </span>
+                    <span className="tp-account-detail">
+                      {me.data?.name && me.data.name !== me.data.email ? me.data.email : 'View profile'}
                     </span>
                   </span>
-                ),
-                onClick: () => navigate('/settings/profile'),
-              },
-              { type: 'divider' },
-              {
-                key: 'appearance',
-                icon: <BgColorsOutlined />,
-                label: (
-                  <span className="tp-account-appearance-label">
-                    <span>Appearance</span>
-                    <span className="tp-account-current-theme">
-                      {mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark'}
-                    </span>
+                </span>
+              ),
+              onSelect: () => navigate('/settings/profile'),
+            },
+            { type: 'separator', key: 'identity' },
+            {
+              key: 'appearance',
+              icon: <BgColorsOutlined />,
+              label: (
+                <span className="tp-account-appearance-label">
+                  <span>Appearance</span>
+                  <span className="tp-account-current-theme">
+                    {mode === 'system' ? 'System' : mode === 'light' ? 'Light' : 'Dark'}
                   </span>
-                ),
-                children: (
-                  [
-                    { key: 'system', label: 'System' },
-                    { key: 'light', label: 'Light' },
-                    { key: 'dark', label: 'Dark' },
-                  ] as { key: ThemeMode; label: string }[]
-                ).map((it) => ({
-                  key: `theme-${it.key}`,
-                  label: it.label,
-                  icon:
-                    mode === it.key ? (
-                      <CheckOutlined />
-                    ) : (
-                      <span style={{ display: 'inline-block', width: 14 }} />
-                    ),
-                  onClick: () => {
-                    if (mode !== it.key) setMode(it.key);
+                </span>
+              ),
+              children: (
+                [
+                  { key: 'system', label: 'System' },
+                  { key: 'light', label: 'Light' },
+                  { key: 'dark', label: 'Dark' },
+                ] as { key: ThemeMode; label: string }[]
+              ).map((it) => ({
+                key: `theme-${it.key}`,
+                label: it.label,
+                icon:
+                  mode === it.key ? (
+                    <CheckOutlined />
+                  ) : (
+                    <span style={{ display: 'inline-block', width: 14 }} />
+                  ),
+                onSelect: () => {
+                  if (mode !== it.key) setMode(it.key);
+                },
+              })),
+            },
+            {
+              key: 'settings',
+              icon: <SettingOutlined />,
+              label: 'Settings',
+              onSelect: () => navigate('/settings'),
+            },
+            // User management, for admins only. It opens a settings page as the row above does, so
+            // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
+            // Admin stays reachable with the panel collapsed.
+            ...(me.data?.role === 'ADMIN'
+              ? [
+                  {
+                    key: 'admin',
+                    icon: <TeamOutlined />,
+                    label: 'Admin',
+                    onSelect: () => navigate('/admin'),
                   },
-                })),
-              },
-              {
-                key: 'settings',
-                icon: <SettingOutlined />,
-                label: 'Settings',
-                onClick: () => navigate('/settings'),
-              },
-              // User management, for admins only. It opens a settings page as the row above does, so
-              // it sits in that row's group. The menu opens from the collapsed rail's avatar too, so
-              // Admin stays reachable with the panel collapsed.
-              ...(me.data?.role === 'ADMIN'
-                ? [
-                    {
-                      key: 'admin',
-                      icon: <TeamOutlined />,
-                      label: 'Admin',
-                      onClick: () => navigate('/admin'),
-                    },
-                  ]
-                : []),
-              { type: 'divider' },
-              {
-                key: 'logout',
-                icon: <LogoutOutlined />,
-                label: 'Log out',
-                danger: true,
-                onClick: logout,
-              },
-            ],
-          }}
-        >
-          <button
-            type="button"
-            className={`tp-user-trigger ${accountMenuOpen ? 'open' : ''}`}
-            aria-label={`Account menu, ${me.data?.name || me.data?.email || 'Profile'}`}
-            aria-haspopup="menu"
-            aria-expanded={accountMenuOpen}
-          >
-            <Avatar
-              size={32}
-              src={avatar.data}
-              icon={<UserOutlined />}
-              style={{ background: 'var(--brand)', flex: 'none' }}
-            />
-            {me.data && (
-              <span className="tp-user-name">{me.data.name || me.data.email}</span>
-            )}
-          </button>
-        </Dropdown>
+                ]
+              : []),
+            { type: 'separator', key: 'session' },
+            {
+              key: 'logout',
+              icon: <LogoutOutlined />,
+              label: 'Log out',
+              danger: true,
+              onSelect: () => void logout(),
+            },
+          ]}
+          trigger={
+            <button
+              type="button"
+              className={`tp-user-trigger ${accountMenuOpen ? 'open' : ''}`}
+              aria-label={`Account menu, ${me.data?.name || me.data?.email || 'Profile'}`}
+            >
+              <Avatar
+                size={32}
+                src={avatar.data}
+                icon={<UserOutlined />}
+                style={{ background: 'var(--brand)', flex: 'none' }}
+              />
+              {me.data && (
+                <span className="tp-user-name">{me.data.name || me.data.email}</span>
+              )}
+            </button>
+          }
+        />
       </div>
 
       <div
@@ -1112,7 +1120,7 @@ export function WorkspaceStateMark({
     if (badge) return badge;
     const title = runnerLabel ? `${runnerLabel} is offline` : 'Runner offline';
     return (
-      <Tooltip title={title}>
+      <Tooltip content={title}>
         <DisconnectOutlined
           className="tp-rail-offline"
           aria-label={title}
@@ -1124,7 +1132,7 @@ export function WorkspaceStateMark({
   if (running) {
     return (
       <>
-        <Tooltip title="Running">
+        <Tooltip content="Running">
           <LoadingOutlined
             className="tp-rail-running"
             spin
@@ -1143,7 +1151,7 @@ export function WorkspaceStateMark({
     const title = `${jobs} background ${jobs === 1 ? 'job' : 'jobs'} running`;
     return (
       <>
-        <Tooltip title={title}>
+        <Tooltip content={title}>
           <CodeOutlined
             // In the collapsed rail this mark sits at the avatar's corner like the spinner it
             // replaces, and the desktop rule below turns it into a quiet dot there.
@@ -1237,7 +1245,7 @@ export function WorkspaceRow({
       >
         <FolderOutlined aria-hidden="true" />
         {offline && (
-          <Tooltip title={offlineTitle}>
+          <Tooltip content={offlineTitle}>
             <DisconnectOutlined
               className="tp-workspace-icon-offline"
               aria-hidden="true"
@@ -1274,7 +1282,7 @@ export function WorkspaceRow({
 }
 
 /** A Workspace row while the list is being arranged, dragged by its handle with the pointer or the
- *  keyboard — the Runners page's `SortableRunnerCard` idiom. */
+ *  keyboard — the idiom of Infrastructure's machine cards (`RunnerEngineCard`). */
 function SortableWorkspaceRow({
   workspace,
   disabled,

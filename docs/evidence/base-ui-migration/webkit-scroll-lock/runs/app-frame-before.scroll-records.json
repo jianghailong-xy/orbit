@@ -1,0 +1,4658 @@
+[
+ {
+  "project": "chromium-light-desktop",
+  "test": "a notice leaves the document one viewport high, with no scrollbar of its own",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: expect(received).toBe(expected) // Object.is equality /  / Expected: 900 / Received: 901"
+  ],
+  "document": {
+   "before": {
+    "pageScrollTop": 0,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   "after": {
+    "pageScrollTop": 1128,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  }
+ },
+ {
+  "project": "chromium-light-desktop",
+  "test": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-desktop",
+  "test": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-desktop",
+  "test": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-desktop",
+  "test": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-desktop",
+  "test": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-desktop",
+  "test": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-desktop",
+  "test": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-desktop",
+  "test": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-phone",
+  "test": "a notice leaves the document one viewport high, with no scrollbar of its own",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: expect(received).toBe(expected) // Object.is equality /  / Expected: 844 / Received: 845"
+  ],
+  "document": {
+   "before": {
+    "pageScrollTop": 0,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   "after": {
+    "pageScrollTop": 1216,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  }
+ },
+ {
+  "project": "chromium-light-phone",
+  "test": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1566,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1566,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1566,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1566,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1566,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1566,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-phone",
+  "test": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1566,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1566,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1566,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1566,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1566,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1566,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-phone",
+  "test": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1606,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1606,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1606,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1606,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1606,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1606,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-phone",
+  "test": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1606,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1606,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1606,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1606,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1606,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1606,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-phone",
+  "test": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1646,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1646,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1646,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1646,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1646,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1646,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-phone",
+  "test": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1646,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1646,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1646,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1646,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1646,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1646,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-phone",
+  "test": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1686,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1686,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1686,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1686,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1686,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1686,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-light-phone",
+  "test": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1686,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1686,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1686,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1686,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1686,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1686,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-desktop",
+  "test": "a notice leaves the document one viewport high, with no scrollbar of its own",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: expect(received).toBe(expected) // Object.is equality /  / Expected: 900 / Received: 901"
+  ],
+  "document": {
+   "before": {
+    "pageScrollTop": 0,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   "after": {
+    "pageScrollTop": 1128,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  }
+ },
+ {
+  "project": "chromium-dark-desktop",
+  "test": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-desktop",
+  "test": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-desktop",
+  "test": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-desktop",
+  "test": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-desktop",
+  "test": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-desktop",
+  "test": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-desktop",
+  "test": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-desktop",
+  "test": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1530,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-phone",
+  "test": "a notice leaves the document one viewport high, with no scrollbar of its own",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: expect(received).toBe(expected) // Object.is equality /  / Expected: 844 / Received: 845"
+  ],
+  "document": {
+   "before": {
+    "pageScrollTop": 0,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   "after": {
+    "pageScrollTop": 1216,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  }
+ },
+ {
+  "project": "chromium-dark-phone",
+  "test": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1566,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1566,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1566,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1566,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1566,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1566,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-phone",
+  "test": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1566,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1566,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1566,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1566,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1566,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1566,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-phone",
+  "test": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1606,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1606,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1606,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1606,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1606,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1606,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-phone",
+  "test": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1606,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1606,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1606,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1606,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1606,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1606,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-phone",
+  "test": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1646,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1646,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1646,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1646,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1646,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1646,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-phone",
+  "test": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1646,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1646,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1646,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1646,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1646,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1646,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-phone",
+  "test": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1686,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1686,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1686,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1686,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1686,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1686,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "chromium-dark-phone",
+  "test": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1686,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1686,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1686,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1686,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1686,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1686,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-desktop",
+  "test": "a notice leaves the document one viewport high, with no scrollbar of its own",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: expect(received).toBe(expected) // Object.is equality /  / Expected: 900 / Received: 901"
+  ],
+  "document": {
+   "before": {
+    "pageScrollTop": 0,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   "after": {
+    "pageScrollTop": 1134,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  }
+ },
+ {
+  "project": "webkit-light-desktop",
+  "test": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: Orbit dialog open after a notice /  / expect(received).toBe(expected) // Object.is equality / ",
+   "Error: Orbit dialog closed after a notice /  / expect(received).toBe(expected) // Object.is equality / "
+  ],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 0,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "scrollbar-gutter: stable; overflow: hidden scroll; scroll-behavior: unset;",
+    "bodyStyle": "position: relative; height: 100dvh; width: calc(-8px + 100vw); box-sizing: border-box; overflow: hidden; scroll-behavior: unset;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 0,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-desktop",
+  "test": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-desktop",
+  "test": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: Orbit right drawer open after a notice /  / expect(received).toBe(expected) // Object.is equality / ",
+   "Error: Orbit right drawer closed after a notice /  / expect(received).toBe(expected) // Object.is equality / "
+  ],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 0,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "scrollbar-gutter: stable; overflow: hidden scroll; scroll-behavior: unset;",
+    "bodyStyle": "position: relative; height: 100dvh; width: calc(-8px + 100vw); box-sizing: border-box; overflow: hidden; scroll-behavior: unset;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 0,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-desktop",
+  "test": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-desktop",
+  "test": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: Orbit bottom drawer open after a notice /  / expect(received).toBe(expected) // Object.is equality / ",
+   "Error: Orbit bottom drawer closed after a notice /  / expect(received).toBe(expected) // Object.is equality / "
+  ],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 0,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "scrollbar-gutter: stable; overflow: hidden scroll; scroll-behavior: unset;",
+    "bodyStyle": "position: relative; height: 100dvh; width: calc(-8px + 100vw); box-sizing: border-box; overflow: hidden; scroll-behavior: unset;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 0,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-desktop",
+  "test": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-desktop",
+  "test": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: Orbit confirm open after a notice /  / expect(received).toBe(expected) // Object.is equality / ",
+   "Error: Orbit confirm closed after a notice /  / expect(received).toBe(expected) // Object.is equality / "
+  ],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 0,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "scrollbar-gutter: stable; overflow: hidden scroll; scroll-behavior: unset;",
+    "bodyStyle": "position: relative; height: 100dvh; width: calc(-8px + 100vw); box-sizing: border-box; overflow: hidden; scroll-behavior: unset;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 0,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-desktop",
+  "test": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-phone",
+  "test": "a notice leaves the document one viewport high, with no scrollbar of its own",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: expect(received).toBe(expected) // Object.is equality /  / Expected: 844 / Received: 845"
+  ],
+  "document": {
+   "before": {
+    "pageScrollTop": 0,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   "after": {
+    "pageScrollTop": 1222,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  }
+ },
+ {
+  "project": "webkit-light-phone",
+  "test": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1572,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1572,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1572,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1572,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1572,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1572,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-phone",
+  "test": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1572,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1572,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1572,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1572,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1572,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1572,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-phone",
+  "test": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1612,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1612,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1612,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1612,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1612,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1612,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-phone",
+  "test": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1612,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1612,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1612,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1612,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1612,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1612,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-phone",
+  "test": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1652,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1652,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1652,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1652,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1652,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1652,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-phone",
+  "test": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1652,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1652,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1652,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1652,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1652,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1652,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-phone",
+  "test": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1692,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1692,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1692,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1692,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1692,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1692,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-light-phone",
+  "test": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1692,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1692,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1692,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1692,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1692,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1692,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-desktop",
+  "test": "a notice leaves the document one viewport high, with no scrollbar of its own",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: expect(received).toBe(expected) // Object.is equality /  / Expected: 900 / Received: 901"
+  ],
+  "document": {
+   "before": {
+    "pageScrollTop": 0,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   "after": {
+    "pageScrollTop": 1134,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  }
+ },
+ {
+  "project": "webkit-dark-desktop",
+  "test": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: Orbit dialog open after a notice /  / expect(received).toBe(expected) // Object.is equality / ",
+   "Error: Orbit dialog closed after a notice /  / expect(received).toBe(expected) // Object.is equality / "
+  ],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 0,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "scrollbar-gutter: stable; overflow: hidden scroll; scroll-behavior: unset;",
+    "bodyStyle": "position: relative; height: 100dvh; width: calc(-8px + 100vw); box-sizing: border-box; overflow: hidden; scroll-behavior: unset;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 0,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-desktop",
+  "test": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-desktop",
+  "test": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: Orbit right drawer open after a notice /  / expect(received).toBe(expected) // Object.is equality / ",
+   "Error: Orbit right drawer closed after a notice /  / expect(received).toBe(expected) // Object.is equality / "
+  ],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 0,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "scrollbar-gutter: stable; overflow: hidden scroll; scroll-behavior: unset;",
+    "bodyStyle": "position: relative; height: 100dvh; width: calc(-8px + 100vw); box-sizing: border-box; overflow: hidden; scroll-behavior: unset;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 0,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-desktop",
+  "test": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-desktop",
+  "test": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: Orbit bottom drawer open after a notice /  / expect(received).toBe(expected) // Object.is equality / ",
+   "Error: Orbit bottom drawer closed after a notice /  / expect(received).toBe(expected) // Object.is equality / "
+  ],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 0,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "scrollbar-gutter: stable; overflow: hidden scroll; scroll-behavior: unset;",
+    "bodyStyle": "position: relative; height: 100dvh; width: calc(-8px + 100vw); box-sizing: border-box; overflow: hidden; scroll-behavior: unset;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 0,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-desktop",
+  "test": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-desktop",
+  "test": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: Orbit confirm open after a notice /  / expect(received).toBe(expected) // Object.is equality / ",
+   "Error: Orbit confirm closed after a notice /  / expect(received).toBe(expected) // Object.is equality / "
+  ],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 0,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "scrollbar-gutter: stable; overflow: hidden scroll; scroll-behavior: unset;",
+    "bodyStyle": "position: relative; height: 100dvh; width: calc(-8px + 100vw); box-sizing: border-box; overflow: hidden; scroll-behavior: unset;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 0,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-desktop",
+  "test": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 900,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1536,
+    "documentHeight": 901,
+    "viewportHeight": 900,
+    "documentScrollbar": 8,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-phone",
+  "test": "a notice leaves the document one viewport high, with no scrollbar of its own",
+  "status": "failed",
+  "retry": 0,
+  "errors": [
+   "Error: expect(received).toBe(expected) // Object.is equality /  / Expected: 844 / Received: 845"
+  ],
+  "document": {
+   "before": {
+    "pageScrollTop": 0,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   "after": {
+    "pageScrollTop": 1222,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  }
+ },
+ {
+  "project": "webkit-dark-phone",
+  "test": "Orbit dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1572,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1572,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1572,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1572,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1572,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1572,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-phone",
+  "test": "AntD dialog leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1572,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1572,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1572,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1572,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1572,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1572,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-phone",
+  "test": "Orbit right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1612,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1612,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1612,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1612,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1612,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1612,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-phone",
+  "test": "AntD right drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1612,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1612,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1612,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1612,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1612,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1612,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-phone",
+  "test": "Orbit bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1652,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1652,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1652,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1652,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1652,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1652,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-phone",
+  "test": "AntD bottom drawer leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1652,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1652,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1652,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1652,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1652,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1652,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-phone",
+  "test": "Orbit confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1692,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1692,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1692,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1692,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1692,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": "overflow: hidden;"
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1692,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ },
+ {
+  "project": "webkit-dark-phone",
+  "test": "AntD confirm leaves the page where it was scrolled, before and after a notice",
+  "status": "passed",
+  "retry": 0,
+  "errors": [],
+  "scroll-positions": [
+   {
+    "when": "before a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1692,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "open",
+    "pageScrollTop": 1692,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "before a notice",
+    "step": "closed",
+    "pageScrollTop": 1692,
+    "documentHeight": 844,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "scrolled",
+    "pageScrollTop": 1692,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "open",
+    "pageScrollTop": 1692,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   },
+   {
+    "when": "after a notice",
+    "step": "closed",
+    "pageScrollTop": 1692,
+    "documentHeight": 845,
+    "viewportHeight": 844,
+    "documentScrollbar": 0,
+    "htmlStyle": "",
+    "bodyStyle": ""
+   }
+  ]
+ }
+]

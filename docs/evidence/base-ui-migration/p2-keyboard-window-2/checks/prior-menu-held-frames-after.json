@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/prior-menu-held-frames.config.mjs --project chromium-light-desktop --project chromium-light-phone --project chromium-dark-desktop --project chromium-dark-phone --project webkit-light-desktop --project webkit-light-phone --project webkit-dark-desktop --project webkit-dark-phone'",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "069601b675c735a69263f4a75f8d4349c0877c77",
+ "webTree": "34ebe07972ab9680cad0775ad5f4169c39b5f98b",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-07T15:15:30.647572+00:00",
+ "endedAt": "2026-10-07T15:16:50.125129+00:00",
+ "loadAverage": {
+  "start": [
+   28.0205078125,
+   28.87646484375,
+   23.3330078125
+  ],
+  "end": [
+   18.40771484375,
+   25.7138671875,
+   22.685546875
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "4cf27d068676a75c16240639de21b1ea905c61de06f6d9dc595c3ee9e4b843a0",
+ "outputBytes": 17525,
+ "raw": "/var/tmp/kw2-246921c8/runs/prior-menu-held-frames-after",
+ "stats": {
+  "expected": 80,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 78860.39600000001,
+  "samples": 0
+ }
+}

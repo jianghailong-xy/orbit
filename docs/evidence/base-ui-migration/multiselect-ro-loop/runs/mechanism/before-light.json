@@ -1,0 +1,841 @@
+{
+ "tree": "/root/.orbit/worktrees/17f5fa0c-dee8-55a3-9637-1996a39597e0",
+ "theme": "light",
+ "runs": [
+  {
+   "errors": [
+    {
+     "step": "tap Ops",
+     "message": "ResizeObserver loop completed with undelivered notifications."
+    }
+   ],
+   "boxes": {
+    "beforeOps": {
+     "field": {
+      "top": 662,
+      "bottom": 686,
+      "height": 24
+     },
+     "list": {
+      "top": 690,
+      "bottom": 826,
+      "height": 136
+     },
+     "side": "bottom",
+     "viewport": 844,
+     "scrollY": 0
+    },
+    "afterOps": {
+     "field": {
+      "top": 662,
+      "bottom": 706,
+      "height": 44
+     },
+     "list": {
+      "top": 522,
+      "bottom": 658,
+      "height": 136
+     },
+     "side": "top",
+     "viewport": 844,
+     "scrollY": 0
+    }
+   },
+   "log": [
+    {
+     "t": 437,
+     "frame": 11,
+     "step": "fill docs",
+     "kind": "new",
+     "id": 1,
+     "by": "autoUpdate < react_stack_bottom_frame < runWithFiberInDEV",
+     "side": "bottom"
+    },
+    {
+     "t": 437,
+     "frame": 11,
+     "step": "fill docs",
+     "kind": "observe",
+     "id": 1,
+     "target": "div.orbit-select.orbit-multi",
+     "depth": 8
+    },
+    {
+     "t": 437,
+     "frame": 11,
+     "step": "fill docs",
+     "kind": "observe",
+     "id": 1,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 447,
+     "frame": 12,
+     "step": "fill docs",
+     "kind": "callback",
+     "id": 1,
+     "side": "bottom",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       8,
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       4,
+       200,
+       40
+      ]
+     ]
+    },
+    {
+     "t": 447,
+     "frame": 12,
+     "step": "fill docs",
+     "kind": "unobserve",
+     "id": 1,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner"
+    },
+    {
+     "t": 447,
+     "frame": 12,
+     "step": "fill docs",
+     "kind": "callback-end",
+     "id": 1,
+     "side": "bottom"
+    },
+    {
+     "t": 487,
+     "frame": 13,
+     "step": "Enter picks Docs",
+     "kind": "observe",
+     "id": 1,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 487,
+     "frame": 13,
+     "step": "Enter picks Docs",
+     "kind": "callback",
+     "id": 1,
+     "side": "bottom",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       4,
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 487,
+     "frame": 13,
+     "step": "Enter picks Docs",
+     "kind": "callback-end",
+     "id": 1,
+     "side": "bottom"
+    },
+    {
+     "t": 648,
+     "frame": 25,
+     "step": "tap Ops",
+     "kind": "callback",
+     "id": 1,
+     "side": "bottom",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       8,
+       188,
+       40
+      ]
+     ]
+    },
+    {
+     "t": 648,
+     "frame": 25,
+     "step": "tap Ops",
+     "kind": "unobserve",
+     "id": 1,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner"
+    },
+    {
+     "t": 648,
+     "frame": 25,
+     "step": "tap Ops",
+     "kind": "callback-end",
+     "id": 1,
+     "side": "bottom"
+    },
+    {
+     "t": 653,
+     "frame": 25,
+     "step": "tap Ops",
+     "kind": "disconnect",
+     "id": 1
+    },
+    {
+     "t": 653,
+     "frame": 25,
+     "step": "tap Ops",
+     "kind": "new",
+     "id": 2,
+     "by": "autoUpdate < react_stack_bottom_frame < runWithFiberInDEV",
+     "side": "top"
+    },
+    {
+     "t": 653,
+     "frame": 25,
+     "step": "tap Ops",
+     "kind": "observe",
+     "id": 2,
+     "target": "div.orbit-select.orbit-multi",
+     "depth": 8
+    },
+    {
+     "t": 653,
+     "frame": 25,
+     "step": "tap Ops",
+     "kind": "observe",
+     "id": 2,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 655,
+     "frame": 25,
+     "step": "tap Ops",
+     "kind": "error",
+     "message": "ResizeObserver loop completed with undelivered notifications.",
+     "side": "top"
+    },
+    {
+     "t": 670,
+     "frame": 26,
+     "step": "tap Ops",
+     "kind": "callback",
+     "id": 2,
+     "side": "top",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       8,
+       188,
+       40
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       4,
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 670,
+     "frame": 26,
+     "step": "tap Ops",
+     "kind": "unobserve",
+     "id": 2,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner"
+    },
+    {
+     "t": 670,
+     "frame": 26,
+     "step": "tap Ops",
+     "kind": "callback-end",
+     "id": 2,
+     "side": "top"
+    },
+    {
+     "t": 679,
+     "frame": 27,
+     "step": "tap Ops",
+     "kind": "observe",
+     "id": 2,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 679,
+     "frame": 27,
+     "step": "tap Ops",
+     "kind": "callback",
+     "id": 2,
+     "side": "top",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       4,
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 679,
+     "frame": 27,
+     "step": "tap Ops",
+     "kind": "callback-end",
+     "id": 2,
+     "side": "top"
+    },
+    {
+     "t": 780,
+     "frame": 33,
+     "step": "Backspace",
+     "kind": "callback",
+     "id": 2,
+     "side": "top",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       8,
+       188,
+       20
+      ]
+     ]
+    },
+    {
+     "t": 780,
+     "frame": 33,
+     "step": "Backspace",
+     "kind": "unobserve",
+     "id": 2,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner"
+    },
+    {
+     "t": 780,
+     "frame": 33,
+     "step": "Backspace",
+     "kind": "callback-end",
+     "id": 2,
+     "side": "top"
+    },
+    {
+     "t": 797,
+     "frame": 34,
+     "step": "Escape",
+     "kind": "observe",
+     "id": 2,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 799,
+     "frame": 34,
+     "step": "Escape",
+     "kind": "disconnect",
+     "id": 2
+    },
+    {
+     "t": 870,
+     "frame": 40,
+     "step": "reopen, untick Docs",
+     "kind": "new",
+     "id": 3,
+     "by": "autoUpdate < react_stack_bottom_frame < runWithFiberInDEV",
+     "side": "bottom"
+    },
+    {
+     "t": 870,
+     "frame": 40,
+     "step": "reopen, untick Docs",
+     "kind": "observe",
+     "id": 3,
+     "target": "div.orbit-select.orbit-multi",
+     "depth": 8
+    },
+    {
+     "t": 870,
+     "frame": 40,
+     "step": "reopen, untick Docs",
+     "kind": "observe",
+     "id": 3,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 877,
+     "frame": 41,
+     "step": "reopen, untick Docs",
+     "kind": "callback",
+     "id": 3,
+     "side": "bottom",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       8,
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       4,
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 877,
+     "frame": 41,
+     "step": "reopen, untick Docs",
+     "kind": "unobserve",
+     "id": 3,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner"
+    },
+    {
+     "t": 877,
+     "frame": 41,
+     "step": "reopen, untick Docs",
+     "kind": "callback-end",
+     "id": 3,
+     "side": "bottom"
+    },
+    {
+     "t": 888,
+     "frame": 42,
+     "step": "reopen, untick Docs",
+     "kind": "observe",
+     "id": 3,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 888,
+     "frame": 42,
+     "step": "reopen, untick Docs",
+     "kind": "callback",
+     "id": 3,
+     "side": "bottom",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       4,
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 888,
+     "frame": 42,
+     "step": "reopen, untick Docs",
+     "kind": "callback-end",
+     "id": 3,
+     "side": "bottom"
+    },
+    {
+     "t": 977,
+     "frame": 49,
+     "step": "tick Bug, Escape",
+     "kind": "disconnect",
+     "id": 3
+    }
+   ]
+  },
+  {
+   "errors": [
+    {
+     "step": "tap Ops",
+     "message": "ResizeObserver loop completed with undelivered notifications."
+    }
+   ],
+   "boxes": {
+    "beforeOps": {
+     "field": {
+      "top": 662,
+      "bottom": 686,
+      "height": 24
+     },
+     "list": {
+      "top": 690,
+      "bottom": 826,
+      "height": 136
+     },
+     "side": "bottom",
+     "viewport": 844,
+     "scrollY": 0
+    },
+    "afterOps": {
+     "field": {
+      "top": 662,
+      "bottom": 706,
+      "height": 44
+     },
+     "list": {
+      "top": 522,
+      "bottom": 658,
+      "height": 136
+     },
+     "side": "top",
+     "viewport": 844,
+     "scrollY": 0
+    }
+   },
+   "log": [
+    {
+     "t": 413,
+     "frame": 11,
+     "step": "fill docs",
+     "kind": "new",
+     "id": 1,
+     "by": "autoUpdate < react_stack_bottom_frame < runWithFiberInDEV",
+     "side": "bottom"
+    },
+    {
+     "t": 413,
+     "frame": 11,
+     "step": "fill docs",
+     "kind": "observe",
+     "id": 1,
+     "target": "div.orbit-select.orbit-multi",
+     "depth": 8
+    },
+    {
+     "t": 413,
+     "frame": 11,
+     "step": "fill docs",
+     "kind": "observe",
+     "id": 1,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 422,
+     "frame": 12,
+     "step": "fill docs",
+     "kind": "callback",
+     "id": 1,
+     "side": "bottom",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       8,
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       4,
+       200,
+       40
+      ]
+     ]
+    },
+    {
+     "t": 422,
+     "frame": 12,
+     "step": "fill docs",
+     "kind": "unobserve",
+     "id": 1,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner"
+    },
+    {
+     "t": 422,
+     "frame": 12,
+     "step": "fill docs",
+     "kind": "callback-end",
+     "id": 1,
+     "side": "bottom"
+    },
+    {
+     "t": 462,
+     "frame": 13,
+     "step": "Enter picks Docs",
+     "kind": "observe",
+     "id": 1,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 462,
+     "frame": 13,
+     "step": "Enter picks Docs",
+     "kind": "callback",
+     "id": 1,
+     "side": "bottom",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       4,
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 462,
+     "frame": 13,
+     "step": "Enter picks Docs",
+     "kind": "callback-end",
+     "id": 1,
+     "side": "bottom"
+    },
+    {
+     "t": 641,
+     "frame": 26,
+     "step": "tap Ops",
+     "kind": "callback",
+     "id": 1,
+     "side": "bottom",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       8,
+       188,
+       40
+      ]
+     ]
+    },
+    {
+     "t": 641,
+     "frame": 26,
+     "step": "tap Ops",
+     "kind": "unobserve",
+     "id": 1,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner"
+    },
+    {
+     "t": 641,
+     "frame": 26,
+     "step": "tap Ops",
+     "kind": "callback-end",
+     "id": 1,
+     "side": "bottom"
+    },
+    {
+     "t": 645,
+     "frame": 26,
+     "step": "tap Ops",
+     "kind": "disconnect",
+     "id": 1
+    },
+    {
+     "t": 645,
+     "frame": 26,
+     "step": "tap Ops",
+     "kind": "new",
+     "id": 2,
+     "by": "autoUpdate < react_stack_bottom_frame < runWithFiberInDEV",
+     "side": "top"
+    },
+    {
+     "t": 645,
+     "frame": 26,
+     "step": "tap Ops",
+     "kind": "observe",
+     "id": 2,
+     "target": "div.orbit-select.orbit-multi",
+     "depth": 8
+    },
+    {
+     "t": 645,
+     "frame": 26,
+     "step": "tap Ops",
+     "kind": "observe",
+     "id": 2,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 646,
+     "frame": 26,
+     "step": "tap Ops",
+     "kind": "error",
+     "message": "ResizeObserver loop completed with undelivered notifications.",
+     "side": "top"
+    },
+    {
+     "t": 656,
+     "frame": 27,
+     "step": "tap Ops",
+     "kind": "callback",
+     "id": 2,
+     "side": "top",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       8,
+       188,
+       40
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       4,
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 656,
+     "frame": 27,
+     "step": "tap Ops",
+     "kind": "unobserve",
+     "id": 2,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner"
+    },
+    {
+     "t": 656,
+     "frame": 27,
+     "step": "tap Ops",
+     "kind": "callback-end",
+     "id": 2,
+     "side": "top"
+    },
+    {
+     "t": 672,
+     "frame": 28,
+     "step": "tap Ops",
+     "kind": "observe",
+     "id": 2,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 672,
+     "frame": 28,
+     "step": "tap Ops",
+     "kind": "callback",
+     "id": 2,
+     "side": "top",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       4,
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 672,
+     "frame": 28,
+     "step": "tap Ops",
+     "kind": "callback-end",
+     "id": 2,
+     "side": "top"
+    },
+    {
+     "t": 778,
+     "frame": 34,
+     "step": "Escape",
+     "kind": "disconnect",
+     "id": 2
+    },
+    {
+     "t": 849,
+     "frame": 41,
+     "step": "reopen, untick Docs",
+     "kind": "new",
+     "id": 3,
+     "by": "autoUpdate < react_stack_bottom_frame < runWithFiberInDEV",
+     "side": "bottom"
+    },
+    {
+     "t": 849,
+     "frame": 41,
+     "step": "reopen, untick Docs",
+     "kind": "observe",
+     "id": 3,
+     "target": "div.orbit-select.orbit-multi",
+     "depth": 8
+    },
+    {
+     "t": 849,
+     "frame": 41,
+     "step": "reopen, untick Docs",
+     "kind": "observe",
+     "id": 3,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 857,
+     "frame": 42,
+     "step": "reopen, untick Docs",
+     "kind": "callback",
+     "id": 3,
+     "side": "bottom",
+     "entries": [
+      [
+       "div.orbit-select.orbit-multi",
+       8,
+       188,
+       20
+      ],
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       4,
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 857,
+     "frame": 42,
+     "step": "reopen, untick Docs",
+     "kind": "unobserve",
+     "id": 3,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner"
+    },
+    {
+     "t": 857,
+     "frame": 42,
+     "step": "reopen, untick Docs",
+     "kind": "callback-end",
+     "id": 3,
+     "side": "bottom"
+    },
+    {
+     "t": 865,
+     "frame": 43,
+     "step": "reopen, untick Docs",
+     "kind": "observe",
+     "id": 3,
+     "target": "div.orbit-floating-positioner.orbit-choice-positioner",
+     "depth": 4
+    },
+    {
+     "t": 865,
+     "frame": 43,
+     "step": "reopen, untick Docs",
+     "kind": "callback",
+     "id": 3,
+     "side": "bottom",
+     "entries": [
+      [
+       "div.orbit-floating-positioner.orbit-choice-positioner",
+       4,
+       200,
+       136
+      ]
+     ]
+    },
+    {
+     "t": 865,
+     "frame": 43,
+     "step": "reopen, untick Docs",
+     "kind": "callback-end",
+     "id": 3,
+     "side": "bottom"
+    },
+    {
+     "t": 954,
+     "frame": 49,
+     "step": "tick Bug, Escape",
+     "kind": "disconnect",
+     "id": 3
+    }
+   ]
+  }
+ ]
+}

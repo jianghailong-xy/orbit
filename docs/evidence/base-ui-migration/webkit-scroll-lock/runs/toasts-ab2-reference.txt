@@ -1,0 +1,163 @@
+[WebServer] (node:1245159) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 80 tests using 1 worker
+
+(node:1245493) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (5.8s)
+  ✓   2 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (5.5s)
+  ✓   3 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (3.5s)
+  ✓   4 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.4s)
+(node:1247520) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.5s)
+  ✓   6 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.3s)
+  ✓   7 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.7s)
+  ✓   8 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.7s)
+(node:1249492) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.9s)
+  ✓  10 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.9s)
+  ✓  11 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.8s)
+  ✓  12 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.9s)
+(node:1251242) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (3.0s)
+  ✓  14 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.9s)
+  ✓  15 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.9s)
+  ✓  16 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.8s)
+(node:1252997) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  17 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.7s)
+  ✓  18 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.7s)
+  ✓  19 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.7s)
+  ✓  20 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.6s)
+(node:1254557) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  21 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.7s)
+  ✓  22 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (3.0s)
+  ✓  23 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.8s)
+  ✓  24 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.7s)
+(node:1256317) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  25 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.9s)
+  ✓  26 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.8s)
+  ✓  27 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.9s)
+  ✓  28 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.5s)
+(node:1258174) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  29 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (3.0s)
+  ✓  30 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.5s)
+  ✓  31 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.9s)
+  ✓  32 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.5s)
+(node:1260000) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  33 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.7s)
+  ✓  34 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.8s)
+  ✓  35 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.7s)
+  ✓  36 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.6s)
+(node:1261599) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  37 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.5s)
+  ✓  38 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.8s)
+  ✓  39 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.9s)
+  ✓  40 [webkit-light-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.4s)
+(node:1263388) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  41 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (3.0s)
+  ✓  42 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.6s)
+  ✓  43 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.6s)
+  ✓  44 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.5s)
+(node:1265281) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  45 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.6s)
+  ✓  46 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.8s)
+  ✓  47 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (3.0s)
+  ✓  48 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.4s)
+(node:1267007) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  49 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.7s)
+  ✓  50 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.8s)
+  ✓  51 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.8s)
+  ✓  52 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.4s)
+(node:1268822) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  53 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.6s)
+  ✓  54 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.9s)
+  ✓  55 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.8s)
+  ✓  56 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.5s)
+(node:1270644) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  57 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.9s)
+  ✓  58 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (3.2s)
+  ✘  59 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.9s)
+(node:1271980) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  60 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.8s)
+(node:1272454) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  61 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.9s)
+  ✓  62 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.8s)
+  ✓  63 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.9s)
+  ✓  64 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.5s)
+(node:1274248) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  65 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (3.0s)
+  ✓  66 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.6s)
+  ✓  67 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.7s)
+  ✓  68 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.7s)
+(node:1276202) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  69 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.7s)
+  ✓  70 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.3s)
+  ✓  71 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.8s)
+  ✓  72 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.5s)
+(node:1278023) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  73 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.5s)
+  ✓  74 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.4s)
+  ✓  75 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.5s)
+  ✓  76 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.2s)
+(node:1280060) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  77 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Dialog opening and closing (2.6s)
+  ✓  78 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Drawer opening and closing (2.6s)
+  ✓  79 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing (2.3s)
+  ✓  80 [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Confirmation opening and closing (2.1s)
+
+
+  1) [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing 
+
+    Error: the real popup animation must exist; it is paused only for the screenshot
+
+    expect(received).toBeGreaterThan(expected)
+
+    Expected: > 0
+    Received:   0
+
+      218 |         expect(frozen.count).toBe(0);
+      219 |       } else {
+    > 220 |         expect(frozen.count, 'the real popup animation must exist; it is paused only for the screenshot').toBeGreaterThan(0);
+          |                                                                                                           ^
+      221 |       }
+      222 |       await page.mouse.move(0, 0);
+      223 |       // Only the popup/backdrop are frozen. Let button hover colors settle so
+        at /var/tmp/34cBi-ref/src/web/ui-migration/toasts-lifecycle.browser.mjs:220:107
+
+    Error Context: .toasts-results/toasts-lifecycle.browser.m-6e713--drawer-opening-and-closing-webkit-dark-desktop-repeat4/error-context.md
+
+    attachment #6: trace (application/zip) ─────────────────────────────────────────────────────────
+    .toasts-results/toasts-lifecycle.browser.m-6e713--drawer-opening-and-closing-webkit-dark-desktop-repeat4/trace.zip
+    Usage:
+
+        npx playwright show-trace .toasts-results/toasts-lifecycle.browser.m-6e713--drawer-opening-and-closing-webkit-dark-desktop-repeat4/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  1 failed
+    [webkit-dark-desktop] › ui-migration/toasts-lifecycle.browser.mjs:192:3 › notification pixels stay intact through Bottom drawer opening and closing 
+  79 passed (4.1m)
+15b7b56093139c7b502e6618e9700ef78c9cccba
+exit 1 start 2026-10-09T00:34:09Z end 2026-10-09T00:38:14Z

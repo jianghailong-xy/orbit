@@ -10,12 +10,15 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -1120,9 +1123,38 @@ type kimiActiveTurn struct {
 	orbitTurnID string
 	text        strings.Builder
 	thought     strings.Builder
-	seenTools   map[string]bool
-	doneTools   map[string]bool
-	plans       int // plan updates seen this turn; makes each one a distinct tool id
+	// textFlushed and thoughtFlushed mark how far into each buffer the durable transcript
+	// already goes; the stretch past the mark has only left the runner as live deltas.
+	textFlushed    int
+	thoughtFlushed int
+	seenTools      map[string]bool
+	doneTools      map[string]bool
+	plans          int // plan updates seen this turn; makes each one a distinct tool id
+}
+
+// Kimi's deltas carry no ordering across kinds, so the transcript's order is the runner's to
+// make: a stretch is closed the moment the stream moves to output of another kind, landing
+// its durable block where it happened — the shape claude's per-block events already have.
+// Buffering the whole turn instead, as this replaced, rendered every thought after every
+// tool call whatever the true order was, and the live drafts above one stretch of reply text
+// could hold a later stretch of reasoning.
+//
+// At most one buffer holds an open stretch at any moment: starting one flushes the other, so
+// a tool call or the turn's end finds one or none to close.
+func (a *kimiActiveTurn) flushThought(emit emitFn) {
+	all := a.thought.String()
+	if thought := strings.TrimSpace(all[a.thoughtFlushed:]); thought != "" {
+		emit(evThinking, map[string]interface{}{"text": thought})
+	}
+	a.thoughtFlushed = len(all)
+}
+
+func (a *kimiActiveTurn) flushText(emit emitFn) {
+	all := a.text.String()
+	if text := strings.TrimSpace(all[a.textFlushed:]); text != "" {
+		emit(evAssistant, map[string]interface{}{"text": text})
+	}
+	a.textFlushed = len(all)
 }
 
 // kimiUsageGauge holds the session's last context reading: usage_update's `used` over its `size`.
@@ -1219,12 +1251,14 @@ func withKimiContextWindow(payload map[string]interface{}, job *ClaimedSession, 
 
 // kimiTurnEndPayload closes the turn with the session's last reading: the occupancy Kimi reported,
 // over the window Kimi named beside it. Kimi bills no cost and runs one ACP prompt per Orbit turn,
-// so the other two are constants.
-func kimiTurnEndPayload(gauge *kimiUsageGauge, subtype string, job *ClaimedSession) map[string]interface{} {
+// so the other two are constants but for `numTurns`, which is 0 for the one prompt Kimi answered
+// without opening a turn at all (kimiTurnOutcome): nothing ran and nothing was read, which is the
+// shape the control plane re-sends on its own retry ladder instead of redelivering at once.
+func kimiTurnEndPayload(gauge *kimiUsageGauge, subtype string, numTurns int, job *ClaimedSession) map[string]interface{} {
 	tokens, window := gauge.read()
 	return withKimiContextWindow(map[string]interface{}{
 		"subtype":       subtype,
-		"numTurns":      1,
+		"numTurns":      numTurns,
 		"costUsd":       0,
 		"contextTokens": tokens,
 	}, job, window)
@@ -1275,11 +1309,13 @@ func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, a
 	switch kind {
 	case "agent_message_chunk":
 		if text := kimiContentText(update["content"]); text != "" {
+			a.flushThought(emit)
 			a.text.WriteString(text)
 			emit(evTextDelta, map[string]interface{}{"text": text})
 		}
 	case "agent_thought_chunk":
 		if text := kimiContentText(update["content"]); text != "" {
+			a.flushText(emit)
 			a.thought.WriteString(text)
 			emit(evThinkingDelta, map[string]interface{}{"text": text})
 		}
@@ -1287,6 +1323,8 @@ func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, a
 		id := firstString(update, "toolCallId", "tool_call_id")
 		if id != "" && !a.seenTools[id] {
 			a.seenTools[id] = true
+			a.flushThought(emit)
+			a.flushText(emit)
 			name := firstString(update, "title")
 			input := firstPresent(update, "rawInput", "raw_input")
 			emit(evToolUse, map[string]interface{}{"id": id, "name": name, "input": input})
@@ -1303,6 +1341,8 @@ func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, a
 		id := firstString(update, "toolCallId", "tool_call_id")
 		if id != "" && (status == "completed" || status == "failed") && !a.doneTools[id] {
 			a.doneTools[id] = true
+			a.flushThought(emit)
+			a.flushText(emit)
 			emit(evToolResult, map[string]interface{}{
 				"toolUseId": id,
 				"content":   kimiToolOutput(update),
@@ -1318,6 +1358,8 @@ func handleKimiNotification(sessionID string, msg kimiRPCMessage, emit emitFn, a
 		if len(rows) == 0 {
 			return
 		}
+		a.flushThought(emit)
+		a.flushText(emit)
 		a.plans++
 		id := fmt.Sprintf("kimi-plan-%d", a.plans)
 		emit(evToolUse, map[string]interface{}{
@@ -1343,6 +1385,192 @@ type kimiPromptResult struct {
 	turnID string
 	result map[string]interface{}
 	err    error
+	// outcome is what the turn's own record said about it (kimiTurnOutcome): the prompt Kimi
+	// answered `end_turn` is the one case its answer does not describe.
+	outcome kimiTurnOutcome
+}
+
+// kimiQuotaExhaustedError is the error Kimi records a turn ending on when its provider says the
+// account's quota is spent: a 429 its own classifier reads as one (classifyKimiQuotaError — code
+// exceeded_current_quota_error, or wording such as "exceeded your current quota"; OpenAI's
+// insufficient_quota too).
+const kimiQuotaExhaustedError = "APIProviderQuotaExhaustedError"
+
+// kimiNoTurn is what a prompt Kimi answered without opening a turn is reported failed with. Kimi's
+// ACP queues a prompt its agent's loop is not idle for and answers the prompt `end_turn` on the spot
+// (packages/acp-server: agent.prompt() resolving `undefined` — "no turn launched (hook-blocked / not
+// runnable)" — settles with end_turn), so no turn of this prompt's own ever reaches the wire. It is
+// not a turn that ran and said nothing — nothing ran — and the control plane owed an answer to the
+// message would otherwise be delivered again and again to an engine answering every one of them the
+// same way. Reported failed with no engine turn behind it (numTurns 0), which is the shape the
+// control plane re-sends on its own retry ladder instead of redelivering at once.
+const kimiNoTurn = "Kimi Code did not run this turn: the prompt was accepted without a turn starting"
+
+// kimiTurnOutcomeWait bounds how long a turn's end is looked for in its wire once the prompt is
+// answered: Kimi writes that record a moment after it answers — within 70 ms on kimi 2.1.1.
+const kimiTurnOutcomeWait = 2 * time.Second
+
+// kimiTurnWire is the main agent's wire of session id in home, and how much of it there is: where the
+// records of the turn about to be prompted begin. "" when the session's directory cannot be found.
+func kimiTurnWire(home, id string) (string, int64) {
+	dir := kimiSessionDirIn(home, id)
+	if dir == "" {
+		return "", 0
+	}
+	wire := filepath.Join(dir, "agents", "main", "wire.jsonl")
+	var from int64
+	if info, err := os.Stat(wire); err == nil {
+		from = info.Size()
+	}
+	return wire, from
+}
+
+// kimiTurnOutcome is what the turn's own record says about a prompt Kimi answered `end_turn`.
+//
+// It has to be read at all because Kimi's ACP answers a FAILED turn as end_turn and says nothing of
+// why — its own comment: "failed → end_turn (with the out-of-band error logged by the caller)" — so
+// the wire is the only place the reason exists. Reporting only the one error this used to name (the
+// account's usage limit) left every other failed turn looking exactly like a turn that ran and
+// completed with nothing to say: no assistant event, no result, no error. The control plane owes the
+// person an answer to a message with none of those, so it delivered the same message again —
+// seconds apart, unbacked-off, for as long as the provider kept failing (2026-10-10: one turn redelivered
+// 67 times in three minutes) — and nothing anywhere said why.
+type kimiTurnOutcome struct {
+	// read is false when the session's wire could not be read at all: nothing is knowable about this
+	// prompt, and the turn stands as the runner has always reported it.
+	read bool
+	// ran is true when a turn opened for this prompt reached its end record. False with read true is
+	// the prompt Kimi never ran (kimiNoTurn).
+	ran bool
+	// failure is the sentence the turn failed with, "" when it did not fail.
+	failure string
+}
+
+// readKimiTurnOutcome reads the outcome of the turn this prompt opened, waiting up to
+// kimiTurnOutcomeWait for its end record. A record that reaches the wire a moment after the answer
+// is waited for; one that never does, with the prompt answered, is a turn that never opened.
+func readKimiTurnOutcome(ctx context.Context, wire string, from int64) kimiTurnOutcome {
+	if wire == "" {
+		return kimiTurnOutcome{}
+	}
+	deadline := time.Now().Add(kimiTurnOutcomeWait)
+	for {
+		if ended, ok := kimiTurnEnded(wire, from); ok {
+			if ended.Reason != "failed" {
+				return kimiTurnOutcome{read: true, ran: true}
+			}
+			return kimiTurnOutcome{read: true, ran: true, failure: kimiFailureSentence(ended.Error)}
+		}
+		if !time.Now().Before(deadline) {
+			// Answered `end_turn` with no turn on the wire behind it: the engine's agent was not idle
+			// (or had no model), queued the prompt, and settled the answer without launching anything.
+			return kimiTurnOutcome{read: true}
+		}
+		select {
+		case <-ctx.Done():
+			// Shutting down: the prompt's fate is the redelivery's to decide, not this reading's.
+			return kimiTurnOutcome{}
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+}
+
+// kimiFailureSentence is how a turn Kimi recorded as failed is reported, from the name and message
+// of the record's error. The account's usage limit keeps the words the control plane and every
+// client read as a spent quota (USAGE_LIMIT_ERROR_MARKERS, "hit your usage limit") — Kimi gives none
+// of its own on this path — so a session on Automatic is moved to another account with room and
+// re-sent, as a Codex one is, and Kimi's own message follows them. Every other name Kimi has
+// (APIProviderRateLimitError, APIProviderOverloadedError, APIConnectionError, APIContextOverflowError,
+// APIStatusError, …) keeps its own name and words: the sentence is what a person reads and what the
+// control plane decides the failure was from, and inventing a shape for it — a status code this
+// record does not carry, the words of another engine's classifier — would classify a failure by a
+// guess.
+func kimiFailureSentence(err *kimiTurnError) string {
+	if err == nil {
+		return "Kimi Code failed this turn"
+	}
+	message := strings.TrimSpace(err.Message)
+	if err.Name == kimiQuotaExhaustedError {
+		sentence := "You've hit your usage limit on this Kimi Code account"
+		if message != "" {
+			sentence += " — " + message
+		}
+		return sentence
+	}
+	sentence := "Kimi Code failed this turn"
+	if err.Name != "" {
+		sentence += " (" + err.Name + ")"
+	}
+	if message != "" {
+		sentence += ": " + clip(message, kimiRPCErrorDataMax)
+	}
+	return sentence
+}
+
+// kimiTurnError is the error a turn.ended record carries when the turn failed: the engine's own
+// name for it and the provider's sentence.
+type kimiTurnError struct {
+	Name    string `json:"name"`
+	Message string `json:"message"`
+}
+
+// kimiTurnSaidNothing: whether the turn's stream carried no text, no reasoning, no tool call and no
+// plan. The other half of "this prompt never opened a turn" (kimiNoTurn) — a prompt the engine
+// queued instead of running sends no notification of any kind before its `end_turn`, so a turn
+// whose stream is silent and whose record is missing is one that never started.
+func kimiTurnSaidNothing(turn *kimiActiveTurn) bool {
+	return strings.TrimSpace(turn.text.String()) == "" &&
+		strings.TrimSpace(turn.thought.String()) == "" &&
+		len(turn.seenTools) == 0 &&
+		turn.plans == 0
+}
+
+// kimiTurnRecord is what is read of the records Kimi writes to an agent's wire as one of its turns
+// opens (turn.prompt) and ends (turn.ended, whose error says why a failed one failed).
+type kimiTurnRecord struct {
+	Type    string          `json:"type"`
+	AgentID string          `json:"agentId"`
+	TurnID  json.RawMessage `json:"turnId"`
+	Reason  string          `json:"reason"`
+	Error   *kimiTurnError  `json:"error"`
+}
+
+// kimiTurnEnded reads, from the whole lines of wire past from, the turn.ended of the main agent's turn
+// that opens there: the one its first turn.prompt names. By number, because the end of the turn before
+// can be written after from too, when it took longer to reach the wire than it was waited for. False
+// while it is not there yet.
+func kimiTurnEnded(wire string, from int64) (kimiTurnRecord, bool) {
+	f, err := os.Open(wire)
+	if err != nil {
+		return kimiTurnRecord{}, false
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.NewSectionReader(f, from, 1<<62))
+	if err != nil {
+		return kimiTurnRecord{}, false
+	}
+	// A line still being written is not read until it is whole.
+	end := bytes.LastIndexByte(data, '\n')
+	if end < 0 {
+		return kimiTurnRecord{}, false
+	}
+	var turn json.RawMessage
+	for _, line := range bytes.Split(data[:end], []byte{'\n'}) {
+		if !bytes.Contains(line, []byte(`"turn.`)) {
+			continue
+		}
+		var rec kimiTurnRecord
+		if json.Unmarshal(line, &rec) != nil || rec.AgentID != "main" || len(rec.TurnID) == 0 {
+			continue
+		}
+		switch {
+		case rec.Type == "turn.prompt" && turn == nil:
+			turn = rec.TurnID
+		case rec.Type == "turn.ended" && turn != nil && bytes.Equal(rec.TurnID, turn):
+			return rec, true
+		}
+	}
+	return kimiTurnRecord{}, false
 }
 
 func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), _ bool, bg *bgTailer, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
@@ -1355,10 +1583,30 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		emit(evError, map[string]interface{}{"message": msg})
 		return stFailed, true, false
 	}
+	// The account's home: the KIMI_CODE_HOME the session's environment names, else Default's.
 	realHome, err := effectiveKimiHome(envWithAgent(job.Agent.Env), execDir)
 	if err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to resolve the Kimi home directory: " + err.Error()})
 		return stFailed, true, false
+	}
+	if err := ensureKimiHomeStores(realHome); err != nil {
+		emit(evError, map[string]interface{}{"message": "failed to prepare the Kimi home: " + err.Error()})
+		return stFailed, true, false
+	}
+	// A session that has run resumes what it said on whichever of this machine's Kimi accounts said it
+	// last — one moved here by hand, or off an account whose usage limit stopped it — so that is carried
+	// into this account first. One that cannot be carried is not resumed from an older copy here, which
+	// would drop the turns it had since without anybody knowing: the run fails, and this account's
+	// sessions are as they were.
+	if job.RuntimeSessionID != "" {
+		var recorded string
+		if meta := readSessionMeta(filepath.Join(scratchDir, "meta.json")); meta != nil {
+			recorded = meta.KimiCodeHome
+		}
+		if _, err := carryKimiConversation(realHome, job.RuntimeSessionID, recorded); err != nil {
+			emit(evError, map[string]interface{}{"message": "failed to bring this session's Kimi conversation to the account it now runs on: " + err.Error()})
+			return stFailed, true, false
+		}
 	}
 	kimiHome, err := prepareKimiHomeOverlay(scratchDir, realHome)
 	if err != nil {
@@ -1441,7 +1689,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 	}
 	job.RuntimeSessionID = sessionID
 	expectedSessionID.Store(sessionID)
-	writeSessionMeta(scratchDir, job, execDir)
+	writeKimiSessionMeta(scratchDir, job, execDir)
 	if err := app.configureSession(ctx, sessionID, job.Agent); err != nil {
 		emit(evError, map[string]interface{}{"message": "failed to configure Kimi session: " + err.Error()})
 		return stFailed, true, false
@@ -1452,6 +1700,12 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 		"provider":  providerKimi,
 		"runtime":   "acp",
 	})
+	// ACP reports nothing of what a sub-agent does while an Agent call runs — its card spins
+	// blank for minutes. The wires under the session's agents/ hold that work as it happens;
+	// the relay re-emits it parent-stamped, so the card fills as the sub-agent runs. Its stop
+	// must precede the overlay's removal: the wires are read through it.
+	subRelay := startKimiSubRelay(ctx, kimiSessionDirIn(realHome, sessionID), scratchDir, emit)
+	defer subRelay.stop()
 	pollCtx, pollCancel := context.WithCancel(ctx)
 	defer pollCancel()
 	inboxCh := make(chan *RunInboxResponse, 8)
@@ -1508,6 +1762,13 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 
 		status, subtype := stSucceeded, "completed"
 		resultText := strings.TrimSpace(turn.text.String())
+		// Kimi answers a failed turn as ended and says nothing of why, so what the turn's own record
+		// holds is reported as its error, as Codex reports its own, with whatever the turn said before
+		// it. A prompt Kimi answered without opening a turn at all (kimiTurnOutcome) is a failure with
+		// no engine turn behind it: reported as one, and counted as none, which is the shape the
+		// control plane re-sends on its own retry ladder rather than redelivering at once.
+		numTurns := 1
+		var errorText string
 		if done.err != nil {
 			status, subtype = stFailed, "error"
 			resultText = done.err.Error()
@@ -1518,23 +1779,35 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				status, subtype = stInterrupted, "interrupted"
 			case "refusal":
 				status, subtype = stFailed, "refusal"
+			default:
+				switch {
+				case done.outcome.failure != "":
+					status, subtype, errorText = stFailed, "error", done.outcome.failure
+				// A record the wire did not have is only a turn that never opened when the stream
+				// showed nothing at all for it: a turn that said or did anything is one the record
+				// merely reached the wire late for, and stands as it always has.
+				case done.outcome.read && !done.outcome.ran && kimiTurnSaidNothing(turn):
+					status, subtype, errorText, numTurns = stFailed, "error", kimiNoTurn, 0
+				}
 			}
 		}
-		if thought := strings.TrimSpace(turn.thought.String()); thought != "" {
-			emit(evThinking, map[string]interface{}{"text": thought})
+		// Whatever the turn was in the middle of when it ended is the only stretch not yet
+		// persisted; everything earlier landed where the stream moved past it.
+		turn.flushThought(emit)
+		turn.flushText(emit)
+		if errorText != "" {
+			emit(evError, map[string]interface{}{"message": errorText})
 		}
-		if text := strings.TrimSpace(turn.text.String()); text != "" {
-			emit(evAssistant, map[string]interface{}{"text": text})
-		}
-		emit(evTurnEnd, kimiTurnEndPayload(gauge, subtype, job))
+		emit(evTurnEnd, kimiTurnEndPayload(gauge, subtype, numTurns, job))
 		liveFiles, livePatches := liveDiff(job.WT)
 		liveBaseSha := job.WT.baseSha()
 		if completeErr := completeTurn(TurnCompleteRequest{
 			TurnID:           done.turnID,
 			Status:           status,
 			Result:           resultText,
+			Error:            errorText,
 			Subtype:          subtype,
-			NumTurns:         1,
+			NumTurns:         numTurns,
 			RuntimeSessionID: sessionID,
 			IsolationStatus:  job.IsolationStatus,
 			ChangedFiles:     liveFiles,
@@ -1655,6 +1928,7 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				turnID := resp.TurnID
 				interruptRequested = false
 				app.beginPermissionTurn()
+				wire, wireFrom := kimiTurnWire(realHome, sessionID)
 				pending, writeAck, promptErr := app.queueRequest("session/prompt", map[string]interface{}{
 					"sessionId": sessionID,
 					"prompt":    prepared.blocks,
@@ -1682,8 +1956,13 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 						app.forget(pending.id)
 						waitErr = ctx.Err()
 					}
+					// A failed turn is answered as end_turn, and only then is its record read.
+					var outcome kimiTurnOutcome
+					if waitErr == nil && strings.EqualFold(firstString(result, "stopReason", "stop_reason"), "end_turn") {
+						outcome = readKimiTurnOutcome(ctx, wire, wireFrom)
+					}
 					select {
-					case promptDone <- kimiPromptResult{turnID: turnID, result: result, err: waitErr}:
+					case promptDone <- kimiPromptResult{turnID: turnID, result: result, err: waitErr, outcome: outcome}:
 					case <-ctx.Done():
 					}
 				}()
@@ -1725,6 +2004,9 @@ func runKimiSessionProcess(ctx context.Context, shutdownCtx context.Context, t *
 				setTurn("")
 
 			case "interrupt":
+				// RunInterruptRequest.stopBackgroundWork — the composer's Stop ends this
+				// session's background work with the turn; see bgTailer.stopBackgroundWork.
+				stopBackgroundWorkForTurn(bg, resp)
 				emit(evInterrupt, map[string]interface{}{})
 				interruptRequested = true
 				app.cancelPermissions()

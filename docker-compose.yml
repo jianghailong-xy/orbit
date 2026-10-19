@@ -15,6 +15,13 @@ services:
     container_name: orbit-postgres
     restart: unless-stopped
     logging: *logging
+    # Docker's default 64MB /dev/shm is smaller than the ~67MB dynamic shared memory segment
+    # VACUUM allocates (maintenance_work_mem-sized). On 2026-10-09 a manual VACUUM on the
+    # production box died with `could not resize shared memory segment ... to 67145440 bytes:
+    # No space left on device` — and PG16 parallelizes VACUUM automatically on any table over
+    # min_parallel_table_scan_size (8MB), so even a plain VACUUM hits it. The official postgres
+    # image documents 256MB as the recommended size; evidence in docs/postgres-runtime-settings.md §6.
+    shm_size: "256m"
     # The image's entrypoint only fixes up PGDATA's ownership, so create and chown the
     # archive here — still as root — before it drops to the postgres user. Without this
     # archive_command cannot write into the bind mount and WAL archiving stalls.
@@ -205,6 +212,16 @@ services:
       FCM_CLIENT_EMAIL: "${FCM_CLIENT_EMAIL:-}"
       FCM_PRIVATE_KEY: "${FCM_PRIVATE_KEY:-}"
       FCM_ANDROID_PACKAGE: "${FCM_ANDROID_PACKAGE:-io.orbitd.android}"
+      # Optional: managed runners (docs/self-hosting.md, "Managed runners"): every account gets a runner of its own,
+      # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install
+      # (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed
+      # runners keeps them off. The profile read here, the Docker channel's token and its socket are the files in
+      # ORBIT_MANAGED_RUNNERS_DIR, mounted below.
+      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
+      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json
+    volumes:
+      # Read-only. With ORBIT_MANAGED_RUNNERS_DIR unset, /dev/null stands in, so nothing is created on the host.
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"
     depends_on:
       postgres:
         condition: service_healthy
@@ -217,6 +234,34 @@ services:
       timeout: 5s
       retries: 12
       start_period: 40s
+
+  # The wiki's model calls, run on the server (docs/wiki-server-execution-design.md §4.1; the account owner added this
+  # service on 2026-10-07): the apiserver's image and code with another entry point. It serves no port and applies no
+  # migration — it starts once the apiserver, which applies them on boot, is healthy. The System model's address and
+  # key are given to this service and no other: the apiserver reads the model's name and state from the row this one
+  # writes (wiki_model_status). Until the wiki's executor is switched to the server, probing the model is all it does.
+  wiki-worker:
+    image: orbit-apiserver:local
+    container_name: orbit-wiki-worker
+    restart: unless-stopped
+    logging: *logging
+    command: node src/apiserver/dist/wiki-worker/main.js
+    # Time to stop cleanly, not to drain: a deploy does not wait for a model request in flight (design §13, item 1).
+    stop_grace_period: 30s
+    environment:
+      DATABASE_URL: "postgresql://orbit:orbit@postgres:5432/orbit?schema=public"
+      # Optional: the System model — an endpoint speaking the Anthropic Messages API (vLLM's /v1/messages), its key, and
+      # the model's name; all three, or the wiki has no System model. Give an address this container can reach: its own
+      # 127.0.0.1 is itself, so a model on the host needs a LAN or tunnel address. These are not ANTHROPIC_* names, which
+      # an agent session carries and Compose would prefer to .env (src/apiserver/src/wiki/wiki-compose-env.spec.ts).
+      ORBIT_WIKI_MODEL_BASE_URL: "${ORBIT_WIKI_MODEL_BASE_URL:-}"
+      ORBIT_WIKI_MODEL_API_KEY: "${ORBIT_WIKI_MODEL_API_KEY:-}"
+      ORBIT_WIKI_MODEL: "${ORBIT_WIKI_MODEL:-}"
+      # Model requests in flight at once, across every space.
+      ORBIT_WIKI_MODEL_CONCURRENCY: "${ORBIT_WIKI_MODEL_CONCURRENCY:-4}"
+    depends_on:
+      apiserver:
+        condition: service_healthy
 
   web:
     build:
@@ -260,6 +305,40 @@ services:
       - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # Managed runners on this host's Docker (docs/self-hosting.md, "Managed runners"): the restricted Docker channel
+  # (deploy/managed-runner/docker-channel), the one process given the Docker socket. It makes each account's runner
+  # container and data volume from its own template, and touches nothing without its instance's label. The apiserver
+  # reaches it only through its unix socket in ORBIT_MANAGED_RUNNERS_DIR, and it needs no network of its own.
+  # It runs only under the managed-runners-docker profile, which a fresh install switches on in .env
+  # (scripts/install-server.sh) and an upgrade never does.
+  docker-channel:
+    profiles: [managed-runners-docker]
+    build:
+      context: .
+      dockerfile: deploy/managed-runner/docker-channel/Dockerfile
+    image: orbit-docker-channel:local
+    container_name: orbit-docker-channel
+    restart: unless-stopped
+    logging: *logging
+    network_mode: none
+    # The disk the storage budget is measured on: an empty volume of the channel's own, read-only, which Docker keeps
+    # beside every runner's data volume whatever filesystem its data root is on. This container sees neither the data
+    # root nor what is in it.
+    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"
+      - type: volume
+        target: /var/lib/orbit-docker-volumes
+        read_only: true
+    healthcheck:
+      # Serving: its socket takes a connection. Every request on it still needs the token.
+      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect('/var/lib/orbit-managed-runners/channel.sock')"]
       interval: 5s
       timeout: 5s
       retries: 6

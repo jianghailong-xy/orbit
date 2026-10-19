@@ -1,0 +1,18 @@
+{"at": "2026-10-17T12:10:04Z", "body": {"needsSetup": true}, "status": 200, "step": "setup-status"}
+{"at": "2026-10-17T12:10:04Z", "status": 201, "step": "bootstrap (first account, a sign-in)"}
+{"at": "2026-10-17T12:10:04Z", "managedRunners": {"contractVersion": 1, "enabled": false}, "status": 200, "step": "capabilities (authenticated) on the previous version"}
+{"at": "2026-10-17T12:10:04Z", "desiredState": null, "enabled": false, "heartbeatStatus": null, "initialProvider": null, "managementState": "NOT_PROVISIONED", "reason": "MANAGED_RUNNER_DISABLED", "runnerId": null, "step": "admin's status after its sign-in", "usable": false, "workspaceId": null}
+{"at": "2026-10-17T12:10:04Z", "status": 201, "step": "admin creates account second"}
+{"account": "second", "at": "2026-10-17T12:10:04Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T12:10:04Z", "desiredState": null, "enabled": false, "heartbeatStatus": null, "initialProvider": null, "managementState": "NOT_PROVISIONED", "reason": "MANAGED_RUNNER_DISABLED", "runnerId": null, "step": "second's status after its sign-in", "usable": false, "workspaceId": null}
+{"at": "2026-10-17T12:10:04Z", "rows": [], "step": "managed_runner rows on the previous version"}
+{"account": "admin", "at": "2026-10-17T12:21:43Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T12:21:43Z", "managedRunners": {"contractVersion": 1, "enabled": false}, "status": 200, "step": "capabilities (authenticated) after the upgrade"}
+{"at": "2026-10-17T12:21:43Z", "desiredState": null, "enabled": false, "heartbeatStatus": null, "initialProvider": null, "managementState": "NOT_PROVISIONED", "reason": "MANAGED_RUNNER_DISABLED", "runnerId": null, "step": "admin's status after a sign-in", "usable": false, "workspaceId": null}
+{"account": "second", "at": "2026-10-17T12:21:43Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T12:21:43Z", "desiredState": null, "enabled": false, "heartbeatStatus": null, "initialProvider": null, "managementState": "NOT_PROVISIONED", "reason": "MANAGED_RUNNER_DISABLED", "runnerId": null, "step": "second's status after a sign-in", "usable": false, "workspaceId": null}
+{"at": "2026-10-17T12:21:43Z", "status": 201, "step": "admin creates account third"}
+{"account": "third", "at": "2026-10-17T12:21:43Z", "status": 201, "step": "login"}
+{"at": "2026-10-17T12:21:43Z", "desiredState": null, "enabled": false, "heartbeatStatus": null, "initialProvider": null, "managementState": "NOT_PROVISIONED", "reason": "MANAGED_RUNNER_DISABLED", "runnerId": null, "step": "third's status after its sign-in", "usable": false, "workspaceId": null}
+{"at": "2026-10-17T12:21:43Z", "reason": {"code": "MANAGED_RUNNER_DISABLED", "message": "Managed runners are not enabled on this Orbit server (ORBIT_MANAGED_RUNNERS_ENABLED), so nothing was written.", "retryable": false}, "status": 404, "step": "third asks for one (ensure)"}
+{"at": "2026-10-17T12:22:28Z", "rows": [], "step": "managed_runner rows after the upgrade and three sign-ins"}

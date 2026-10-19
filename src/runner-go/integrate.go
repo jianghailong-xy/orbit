@@ -83,11 +83,20 @@ type integrationResult struct {
 	// ancestor of the upstream tip this job fetched (migration 0346). It is the one fact the control
 	// plane lets such an answer out of a criterion's landing on — see J-S3 below.
 	SourceOnUpstream *bool
-	FilesChanged     *int
-	Checks           []IntegrationCheckResult
-	Conflicts        []string
-	ErrorCode        string
-	ErrorDetail      map[string]any
+	// SourceFullyApplied is set with NOTHING_TO_LAND too, and only there: true when the branch carried
+	// commits of its own and the base already had every one of them, false when it carried none
+	// (migration 0410). The two answers both push nothing, and the control plane has to be able to
+	// tell them apart — see J-S4 below.
+	SourceFullyApplied *bool
+	FilesChanged       *int
+	Checks             []IntegrationCheckResult
+	Conflicts          []string
+	ErrorCode          string
+	ErrorDetail        map[string]any
+	// Interrupted is a job this runner stopped because the runner itself is stopping
+	// (runIntegrationJobUntil): it pushed nothing, so it is handed back rather than answered, and
+	// Phase says where it was. Never part of a report.
+	Interrupted bool
 }
 
 // integrationReporter is what runIntegrationJob tells about each step it reaches. The runloop
@@ -105,6 +114,16 @@ type integrationReporter func(phase string, moved *IntegrationUpstreamMoved)
 // before the push leaves the target ref exactly as it was — which is the claim the CONFLICT and
 // CHECK_FAILED items make to a person, so it must be true rather than merely intended.
 func runIntegrationJob(cmd IntegrationJobCommand, report integrationReporter) integrationResult {
+	return runIntegrationJobUntil(context.Background(), cmd, report)
+}
+
+// runIntegrationJobUntil is runIntegrationJob for a runner that may have to stop before the job is
+// done (runloop.go's shutdown). When stop ends, the job stops at the first step that would otherwise
+// keep it: a round not yet begun is not begun, and the tree's recipe or a check still running is ended
+// with its whole process tree. The job then answers Interrupted, and its scratch worktree goes as on
+// every other exit. Git steps are not cut short, and a job whose checks have passed goes on to its
+// push and its verification: those take seconds, and finishing them is cheaper than doing it all again.
+func runIntegrationJobUntil(stop context.Context, cmd IntegrationJobCommand, report integrationReporter) integrationResult {
 	if cmd.CancelRequested {
 		return integrationResult{State: "CANCELLED", Phase: "FETCH"}
 	}
@@ -136,8 +155,11 @@ func runIntegrationJob(cmd IntegrationJobCommand, report integrationReporter) in
 	}
 	var last integrationResult
 	for round := 0; round <= integrationRefetchRounds; round++ {
+		if stop.Err() != nil {
+			return integrationResult{Interrupted: true, Phase: "FETCH"}
+		}
 		removeIntegrationWorktree(repoRoot, scratch)
-		last = one(cmd, repoRoot, scratch, report)
+		last = one(stop, cmd, repoRoot, scratch, report)
 		// The one thing worth doing again inside a single job: the target moved between the check
 		// and the push, so the tree that was tested is no longer the tree that would land. Re-read
 		// the refs and re-run the checks on the new combination (§2.5 J5).
@@ -152,7 +174,7 @@ func runIntegrationJob(cmd IntegrationJobCommand, report integrationReporter) in
 // integrateOnce is one pass over the steps: fetch, absorb upstream, rebase or merge, check, push,
 // verify. Split out so a lost push race can repeat the whole of it against fresh tips rather than
 // patching up half-finished state.
-func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report integrationReporter) integrationResult {
+func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scratch string, report integrationReporter) integrationResult {
 	remote := cmd.RemoteName
 	if remote == "" {
 		remote = "origin"
@@ -283,6 +305,9 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 			// with no commit, on a line ahead of main, held its criterion off LANDED for ever).
 			onUpstream := isAncestor(scratch, sourceSha, upstreamSha)
 			result.SourceOnUpstream = &onUpstream
+			// The branch carried no commit of its own, so none of it was applied anywhere (J-S4).
+			fullyApplied := false
+			result.SourceFullyApplied = &fullyApplied
 			return result
 		}
 		// Nothing to land, and the absorb commit is discarded with the worktree: a merge of
@@ -318,9 +343,37 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 		if cmd.SessionBaseSha != "" && isAncestor(scratch, cmd.SessionBaseSha, sourceSha) && !isAncestor(scratch, cmd.SessionBaseSha, fork) {
 			onto = cmd.SessionBaseSha
 		}
+		// Counted before the replay: afterwards the range is all that tells the two empty results
+		// below apart.
+		replayed := countCommits(scratch, onto, sourceSha)
 		rebased, conflicts, err := integrationRebase(scratch, base, onto, sourceSha)
 		if err != nil {
 			result.State, result.Phase, result.Conflicts = "CONFLICT", "REBASE", conflicts
+			return result
+		}
+		if rebased == base {
+			// THE REPLAY CAME BACK AT THE BASE, so there is nothing to push: the push would be a no-op
+			// and VERIFY would pass on it. That is what wrote a LANDED receipt for every task of a
+			// line rebuilt from main's tip after main had taken the project's work in by another
+			// route (2026-10-09, project 34PBlWiEZytRLTcPufJht). Each branch carried commits, git
+			// dropped every one as "patch contents already upstream", and the line never moved.
+			//
+			// Two branches come back here, and the control plane must not read them as one. One
+			// carried commits, and the base already had every one of them (`sourceFullyApplied`):
+			// the work is on the target, as copies rather than as these commits. The other carried
+			// none, because the session started on a commit the target does not have and made
+			// nothing, so J-S3 never saw an empty tip. That one is J-S3's empty branch, measured
+			// the same way (0300, 0346).
+			//
+			// Only on this path. A MERGE comes back at the base only when the source is already in
+			// it, and J-S4 merges such a source only after J-S2 absorbed the current upstream into the
+			// source itself. There the base is that absorb, a commit the target does not have yet,
+			// and pushing it is the landing.
+			result.State, result.Phase = "NOTHING_TO_LAND", "REBASE"
+			onUpstream := isAncestor(scratch, sourceSha, upstreamSha)
+			result.SourceOnUpstream = &onUpstream
+			fullyApplied := replayed > 0
+			result.SourceFullyApplied = &fullyApplied
 			return result
 		}
 		tested = rebased
@@ -333,13 +386,19 @@ func integrateOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report i
 		// The tree the checks are about to run in gets its own environment recipe first. A tree
 		// that could not be prepared has measured nothing, so it stops the job instead of letting
 		// the checks fail for a reason that is not the work's.
-		if err := prepareIntegrationTree(scratch); err != nil {
+		if err := prepareIntegrationTree(stop, scratch); err != nil {
+			if errors.Is(err, errIntegrationInterrupted) {
+				return integrationResult{Interrupted: true, Phase: "CHECK"}
+			}
 			markUnprepared(&result, err)
 			return result
 		}
 	}
 	for _, spec := range cmd.Checks {
-		outcome := runIntegrationCheck(scratch, spec)
+		outcome, interrupted := runIntegrationCheckUntil(stop, scratch, spec)
+		if interrupted {
+			return integrationResult{Interrupted: true, Phase: "CHECK"}
+		}
 		result.Checks = append(result.Checks, outcome)
 		if outcome.ExitCode == nil || *outcome.ExitCode != spec.ExpectedExitCode {
 			// Nothing is pushed. The branch a person is looking at is untouched, which is what the
@@ -490,7 +549,7 @@ func sourceCarriesAnEarlierAbsorb(dir, sourceSha, targetSha, upstreamSha string)
 // rather than a merge that carries it, which is what "the same commits on main, no merge" means to a
 // person reading the log. Both are held to the same rule afterwards: what lands is the tree that
 // passed the checks, or nothing lands.
-func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report integrationReporter) integrationResult {
+func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scratch string, report integrationReporter) integrationResult {
 	remote := cmd.RemoteName
 	if remote == "" {
 		remote = "origin"
@@ -549,9 +608,10 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 	// M-T12: an automatic landing — the project's Automatic setting confirmed it, nobody pressed
 	// Merge — is authorized for one combination: this source onto the upstream tip its check ran
 	// against. With the upstream anywhere else there is nothing it may land, and it does not do what
-	// a landing the owner confirmed does (M5), re-check the new tip and merge it: it merges nothing,
-	// reports READY, and the owner is asked. A landing that names no checked tip has nothing to be
-	// held to, and lands nothing either.
+	// a landing the owner confirmed does (M5), re-check the new tip and merge it: it merges nothing
+	// and reports READY. The control plane then checks the candidate again on the new tip and reads
+	// the Automatic rule again over that check — or asks the owner, once main has kept moving. A
+	// landing that names no checked tip has nothing to be held to, and lands nothing either.
 	if landing && cmd.Automatic && (cmd.UpstreamShaChecked == "" || cmd.UpstreamShaChecked != upstreamSha) {
 		result.State, result.Phase = "READY", "MERGE"
 		return result
@@ -632,13 +692,19 @@ func promoteOnce(cmd IntegrationJobCommand, repoRoot, scratch string, report int
 			report("CHECK", nil)
 			// M-S3's checks run on the same kind of tree J-S5's do, and need the same recipe: a
 			// promotion of a TASK_BRANCH runs the task's own acceptance command (M-F2).
-			if err := prepareIntegrationTree(scratch); err != nil {
+			if err := prepareIntegrationTree(stop, scratch); err != nil {
+				if errors.Is(err, errIntegrationInterrupted) {
+					return integrationResult{Interrupted: true, Phase: "CHECK"}
+				}
 				markUnprepared(&result, err)
 				return result
 			}
 		}
 		for _, spec := range cmd.Checks {
-			outcome := runIntegrationCheck(scratch, spec)
+			outcome, interrupted := runIntegrationCheckUntil(stop, scratch, spec)
+			if interrupted {
+				return integrationResult{Interrupted: true, Phase: "CHECK"}
+			}
 			result.Checks = append(result.Checks, outcome)
 			if outcome.ExitCode == nil || *outcome.ExitCode != spec.ExpectedExitCode {
 				result.State, result.Phase = "CHECK_FAILED", "CHECK"
@@ -813,21 +879,27 @@ const integrationPrepareTimeout = 10 * time.Minute
 //
 // A repository without the recipe is not prepared and not refused: the checks run in exactly the
 // tree git produced, which is what every case before this one measured.
-func prepareIntegrationTree(scratch string) error {
+//
+// stop is the runner's own stop (runIntegrationJobUntil): when it ends, the recipe is ended with its
+// whole process tree and errIntegrationInterrupted is answered, which is not a fact about the tree.
+func prepareIntegrationTree(stop context.Context, scratch string) error {
 	script := filepath.Join(scratch, filepath.FromSlash(integrationPrepareScript))
 	if info, err := os.Stat(script); err != nil || info.IsDir() {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), integrationPrepareTimeout)
+	ctx, cancel := context.WithTimeout(stop, integrationPrepareTimeout)
 	defer cancel()
 	started := time.Now()
 	// The same shell the checks get (`bash -lc`, runner environment): what the recipe lays down has
 	// to be what those commands resolve against, PATH and all.
 	cmd := exec.CommandContext(ctx, "bash", "-lc", "bash "+integrationPrepareScript)
 	cmd.Dir = scratch
-	cmd.WaitDelay = 5 * time.Second
+	configureSessionProcessTree(cmd)
 	output, err := cmd.CombinedOutput()
-	if ctx.Err() != nil {
+	if stoppedByTheRunner(ctx, err) {
+		return errIntegrationInterrupted
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return fmt.Errorf("%s did not finish within %s: %s",
 			integrationPrepareScript, integrationPrepareTimeout, tailOf(string(output), 2000))
 	}
@@ -852,21 +924,47 @@ func markUnprepared(result *integrationResult, err error) {
 	}
 }
 
+// errIntegrationInterrupted is what a step answers when the runner's stop ended it
+// (runIntegrationJobUntil): not a fact about the work, so never reported as one.
+var errIntegrationInterrupted = errors.New("the runner is stopping")
+
+// stoppedByTheRunner reports a command that ctx's parent, the runner's stop, ended: its context was
+// cancelled rather than run out of budget, and the process did not exit by itself first — one that
+// did has an answer, and it is reported as any other.
+func stoppedByTheRunner(ctx context.Context, runErr error) bool {
+	if !errors.Is(ctx.Err(), context.Canceled) || runErr == nil {
+		return false
+	}
+	var exitErr *exec.ExitError
+	return !errors.As(runErr, &exitErr) || exitErr.ExitCode() < 0
+}
+
 // runIntegrationCheck runs one command in the scratch worktree under its own budget.
 //
 // `bash -lc` and the runner's own environment, deliberately: this is the platform's check, not the
 // agent's turn, and it must not inherit a session's credentials or its provider configuration.
 func runIntegrationCheck(scratch string, spec IntegrationCheckSpec) IntegrationCheckResult {
+	result, _ := runIntegrationCheckUntil(context.Background(), scratch, spec)
+	return result
+}
+
+// runIntegrationCheckUntil is runIntegrationCheck under the runner's stop: when stop ends first, the
+// check is ended and answers interrupted rather than a result, since it measured nothing.
+//
+// The command leads a process group of its own and is ended with its whole tree, on its budget as on
+// the stop: `bash -lc` forks, and a check ended by its parent's PID alone left its children running in
+// the very worktree that is about to be removed.
+func runIntegrationCheckUntil(stop context.Context, scratch string, spec IntegrationCheckSpec) (IntegrationCheckResult, bool) {
 	budget := time.Duration(spec.TimeoutSeconds) * time.Second
 	if spec.TimeoutSeconds <= 0 {
 		budget = time.Hour
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	ctx, cancel := context.WithTimeout(stop, budget)
 	defer cancel()
 	started := time.Now()
 	cmd := exec.CommandContext(ctx, "bash", "-lc", spec.Command)
 	cmd.Dir = scratch
-	cmd.WaitDelay = 5 * time.Second
+	configureSessionProcessTree(cmd)
 	output, runErr := cmd.CombinedOutput()
 	result := IntegrationCheckResult{
 		Name:             spec.Name,
@@ -875,9 +973,12 @@ func runIntegrationCheck(scratch string, spec IntegrationCheckSpec) IntegrationC
 		DurationMs:       time.Since(started).Milliseconds(),
 		OutputTail:       tailOf(string(output), integrationOutputTail),
 	}
-	if ctx.Err() != nil {
+	if stoppedByTheRunner(ctx, runErr) {
+		return result, true
+	}
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		result.TimedOut = true
-		return result
+		return result, false
 	}
 	var exitErr *exec.ExitError
 	switch {
@@ -896,7 +997,7 @@ func runIntegrationCheck(scratch string, spec IntegrationCheckSpec) IntegrationC
 		// carries the reason.
 		result.OutputTail = tailOf(result.OutputTail+"\n"+runErr.Error(), integrationOutputTail)
 	}
-	return result
+	return result, false
 }
 
 // removeIntegrationWorktree takes the scratch worktree out of the repository's administrative list
@@ -927,12 +1028,19 @@ func removeIntegrationWorktree(repoRoot, scratch string) {
 // on by going to look at the branch — and the promotion it was a step of went BLOCKED over a race
 // it would have won a moment later.
 func integrationFetch(repoRoot, remote, ref string) error {
+	return fetchRetryingRefLock(repoRoot, remote, ref)
+}
+
+// fetchRetryingRefLock runs `git fetch <args>` in dir, trying again while the only thing in the way
+// was another process holding a ref this fetch writes. Shared with the SOURCE resolution
+// (source.go), whose fetch moves the same remote-tracking refs.
+func fetchRetryingRefLock(dir string, args ...string) error {
 	var err error
 	for attempt := 0; attempt < integrationFetchLockAttempts; attempt++ {
 		if attempt > 0 {
 			integrationFetchLockPause(integrationFetchLockWait << (attempt - 1))
 		}
-		if _, err = git(repoRoot, "fetch", remote, ref); err == nil || !isRefLockConflict(err) {
+		if _, err = git(dir, append([]string{"fetch"}, args...)...); err == nil || !isRefLockConflict(err) {
 			return err
 		}
 	}
@@ -1020,13 +1128,20 @@ func tailOf(s string, n int) string {
 
 // runIntegrationJobAndReport does one job and tells the control plane what it came to.
 //
-// The report is the only thing that matters here, so it is retried: a job that did the work and
-// could not say so would be re-claimed after its lease expired and would do the whole thing again,
-// including an hour of checks. A 4xx is NOT retried — that is the control plane saying this
-// process's claim moved on, and the right answer to that is to stop.
-func runIntegrationJobAndReport(t *Transport, job IntegrationJobCommand) {
+// The report is the only thing that matters here, so it is retried — with capped backoff, for as long
+// as this process lives, and over a copy on disk that survives it — until the control plane takes it
+// or refuses it for good (integration_result_spool.go). A job that did the work and could not say so
+// would be re-claimed after its lease expired and would do the whole thing again, including an hour of
+// checks; and one the control plane cannot be told about at all is held RUNNING by it for a lease
+// owner that never comes back.
+//
+// stop is when the runner's shutdown stops waiting for the job (runloop.go): the work stops
+// (runIntegrationJobUntil), and so do the sends of a report, which then stays spooled for the next
+// start rather than pretending the send was the last word. A job stopped before its push is handed
+// back instead of answered, with sends bounded by handBack, which outlives stop.
+func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, job IntegrationJobCommand) {
 	logln("integration job", job.JobID, job.Kind, job.SourceRef, "->", job.TargetRef)
-	result := runIntegrationJob(job, func(phase string, moved *IntegrationUpstreamMoved) {
+	result := runIntegrationJobUntil(stop, job, func(phase string, moved *IntegrationUpstreamMoved) {
 		// Best effort: the lease renewal matters, the phase is for a reader, and the work carries
 		// on either way. The one report that is more than a phase is `upstreamMoved` — the control
 		// plane moves the promotion to RECHECKING on it (§3.3 M-T7) — and it is best effort too:
@@ -1038,40 +1153,68 @@ func runIntegrationJobAndReport(t *Transport, job IntegrationJobCommand) {
 			UpstreamMoved:   moved,
 		})
 	})
-	body := IntegrationJobResultRequest{
-		ClaimGeneration:  job.ClaimGeneration,
-		LeaseOwner:       job.LeaseOwner,
-		State:            result.State,
-		Phase:            result.Phase,
-		SourceSha:        result.SourceSha,
-		TargetShaBefore:  result.TargetShaBefore,
-		UpstreamSha:      result.UpstreamSha,
-		MainSyncSha:      result.MainSyncSha,
-		TestedSha:        result.TestedSha,
-		TestedTreeSha:    result.TestedTreeSha,
-		LandedSha:        result.LandedSha,
-		LandedTreeSha:    result.LandedTreeSha,
-		AheadOfUpstream:  result.AheadOfUpstream,
-		SourceOnUpstream: result.SourceOnUpstream,
-		FilesChanged:     result.FilesChanged,
-		Checks:           result.Checks,
-		Conflicts:        result.Conflicts,
-		ErrorCode:        result.ErrorCode,
-		ErrorDetail:      result.ErrorDetail,
+	if result.Interrupted {
+		logln("integration job", job.JobID, "stopped in", result.Phase,
+			"because this runner is stopping; nothing was pushed and its worktree is gone, so it is handed back to be run again")
+		handBackIntegrationJob(handBack, t, job)
+		return
 	}
-	for attempt := 0; attempt < 5; attempt++ {
-		answer, err := t.integrationJobResult(job.JobID, body)
-		if err == nil {
-			logln("integration job", job.JobID, "reported", result.State,
-				fmt.Sprintf("accepted=%v receipts=%d", answer.Accepted, len(answer.ReceiptIDs)))
+	body := IntegrationJobResultRequest{
+		ClaimGeneration:    job.ClaimGeneration,
+		LeaseOwner:         job.LeaseOwner,
+		State:              result.State,
+		Phase:              result.Phase,
+		SourceSha:          result.SourceSha,
+		TargetShaBefore:    result.TargetShaBefore,
+		UpstreamSha:        result.UpstreamSha,
+		MainSyncSha:        result.MainSyncSha,
+		TestedSha:          result.TestedSha,
+		TestedTreeSha:      result.TestedTreeSha,
+		LandedSha:          result.LandedSha,
+		LandedTreeSha:      result.LandedTreeSha,
+		AheadOfUpstream:    result.AheadOfUpstream,
+		SourceOnUpstream:   result.SourceOnUpstream,
+		SourceFullyApplied: result.SourceFullyApplied,
+		FilesChanged:       result.FilesChanged,
+		Checks:             result.Checks,
+		Conflicts:          result.Conflicts,
+		ErrorCode:          result.ErrorCode,
+		ErrorDetail:        result.ErrorDetail,
+	}
+	deliverIntegrationResult(stop, t, job.JobID, body)
+}
+
+// handBackIntegrationJob gives a claimed job back to the control plane (contract §2.2 J-T11), for a
+// job this process will not finish and has pushed nothing for: one handed to it after its stop began,
+// or one it stopped before the push (runIntegrationJobUntil). The control plane puts it back in the
+// queue for the next heartbeat that asks for work — this runner's next process, since a job runs
+// where its workspace is — instead of holding it RUNNING until the lease runs out ten minutes after
+// its last report, which is what a runner that stopped without a word costs.
+//
+// Tried until the control plane answers or ctx ends. A refusal ends it too: 409 says the claim had
+// already moved on or the job was already written down, and 404 is a job this runner cannot see or a
+// control plane too old to take one back; either way the lease hands the job on as it always did.
+func handBackIntegrationJob(ctx context.Context, t *Transport, job IntegrationJobCommand) {
+	body := IntegrationJobReleaseRequest{ClaimGeneration: job.ClaimGeneration, LeaseOwner: job.LeaseOwner}
+	for attempt := 1; ; attempt++ {
+		answer, err := t.integrationJobRelease(ctx, job.JobID, body)
+		switch {
+		case err == nil && answer.Released:
+			logln("integration job", job.JobID, "handed back; the next heartbeat that asks for work is handed it again")
+			return
+		case err == nil:
+			logln("integration job", job.JobID, "was not handed back: it ended", answer.State)
+			return
+		case !integrationResultWorthSendingAgain(err):
+			logln("integration job", job.JobID, "could not be handed back, so its lease hands it on when it runs out:", err)
+			return
+		case ctx.Err() != nil:
+			logln("integration job", job.JobID, "was not handed back before this runner stopped, so its lease hands it on when it runs out:", err)
 			return
 		}
-		var httpErr *transportHTTPError
-		if errors.As(err, &httpErr) && httpErr.statusCode >= 400 && httpErr.statusCode < 500 {
-			logln("integration job", job.JobID, "result refused:", err)
-			return
-		}
-		logln("integration job", job.JobID, "result not delivered, retrying:", err)
-		time.Sleep(time.Duration(attempt+1) * 2 * time.Second)
+		wait := integrationResultRetry.wait(attempt)
+		logln("integration job", job.JobID, fmt.Sprintf("hand-back not delivered on attempt %d:", attempt), err,
+			"trying again in", wait.Round(100*time.Millisecond))
+		integrationResultRetry.sleep(ctx, wait)
 	}
 }

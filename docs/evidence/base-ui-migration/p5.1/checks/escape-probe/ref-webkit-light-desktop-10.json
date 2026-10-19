@@ -1,0 +1,301 @@
+{
+ "pointer": {
+  "x": null
+ },
+ "at1": [
+  {
+   "cls": "ant-popover ant-popover-hidden ant-popover-     ant-popover-placement-topRight",
+   "w": 0,
+   "h": 0,
+   "vis": "visible",
+   "op": "1",
+   "display": "none"
+  }
+ ],
+ "at2": [
+  {
+   "cls": "ant-popover ant-popover-hidden ant-popover-     ant-popover-placement-topRight",
+   "w": 0,
+   "h": 0,
+   "vis": "visible",
+   "op": "1",
+   "display": "none"
+  }
+ ],
+ "escLog": [
+  [
+   36,
+   "mouseout",
+   "div.cu-rc-meta",
+   ""
+  ],
+  [
+   36,
+   "mouseover",
+   "span.",
+   ""
+  ],
+  [
+   36,
+   "mouseenter",
+   "div.cu-rc-actions",
+   ""
+  ],
+  [
+   36,
+   "mouseenter",
+   "button.ant-btn.ant-btn-default.ant-btn-color-default",
+   ""
+  ],
+  [
+   36,
+   "mouseenter",
+   "span.",
+   ""
+  ],
+  [
+   37,
+   "mousemove",
+   "span.",
+   ""
+  ],
+  [
+   39,
+   "focusin",
+   "button.ant-btn.ant-btn-default.ant-btn-color-default",
+   ""
+  ],
+  [
+   39,
+   "click",
+   "span.",
+   ""
+  ],
+  [
+   45,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 413.859375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   45,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 413.859375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   45,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 413.859375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   45,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 413.859375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   45,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 413.859375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   45,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 413.859375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   45,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 413.859375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   45,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 413.859375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   45,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 413.859375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   45,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 413.859375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   45,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 413.859375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   45,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 413.859375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   54,
+   "focusin",
+   "button.ant-btn.ant-btn-primary.ant-btn-color-primary",
+   ""
+  ],
+  [
+   55,
+   "style",
+   "ant-popover ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 374.359375px; inset: auto 118px 61px auto; box-sizing: border-box;"
+  ],
+  [
+   80,
+   "mouseout",
+   "section.cu-rc",
+   ""
+  ],
+  [
+   80,
+   "mouseover",
+   "button.ant-btn.ant-btn-primary.ant-btn-color-primary",
+   ""
+  ],
+  [
+   80,
+   "mouseenter",
+   "button.ant-btn.ant-btn-primary.ant-btn-color-primary",
+   ""
+  ],
+  [
+   176,
+   "-- before Escape"
+  ],
+  [
+   178,
+   "keydown",
+   "button.ant-btn.ant-btn-primary.ant-btn-color-primary",
+   "Escape"
+  ],
+  [
+   178,
+   "focusin",
+   "button.composer-pill.composer-usage.full",
+   ""
+  ],
+  [
+   181,
+   "style",
+   "ant-popover ant-zoom-big-leave ant-zoom-big-leave-start ant-zoom-big ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 374.359375px; inset: auto 118px 61px auto; box-sizing: border-box; pointer-events: none;"
+  ],
+  [
+   181,
+   "class",
+   "ant-popover ant-zoom-big-leave ant-zoom-big-leave-start ant-zoom-big ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 374.359375px; inset: auto 118px 61px auto; box-sizing: border-box; pointer-events: none;"
+  ],
+  [
+   181,
+   "class",
+   "ant-popover ant-zoom-big-leave ant-zoom-big-leave-start ant-zoom-big ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 374.359375px; inset: auto 118px 61px auto; box-sizing: border-box; pointer-events: none;"
+  ],
+  [
+   208,
+   "class",
+   "ant-popover ant-zoom-big-leave ant-zoom-big-leave-active ant-zoom-big ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 374.359375px; inset: auto 118px 61px auto; box-sizing: border-box; pointer-events: none;"
+  ],
+  [
+   288,
+   "mouseout",
+   "button.ant-btn.ant-btn-primary.ant-btn-color-primary",
+   ""
+  ],
+  [
+   289,
+   "mouseover",
+   "textarea.ant-input.ant-input-borderless.ant-input-css-var",
+   ""
+  ],
+  [
+   289,
+   "mouseenter",
+   "div.",
+   ""
+  ],
+  [
+   289,
+   "mouseenter",
+   "div.ant-app",
+   ""
+  ],
+  [
+   289,
+   "mouseenter",
+   "div.app-shell",
+   ""
+  ],
+  [
+   289,
+   "mouseenter",
+   "main.app-main",
+   ""
+  ],
+  [
+   289,
+   "mouseenter",
+   "div.app-view",
+   ""
+  ],
+  [
+   289,
+   "mouseenter",
+   "div.workspace-split.show-conversation",
+   ""
+  ],
+  [
+   289,
+   "mouseenter",
+   "div.workspace-view",
+   ""
+  ],
+  [
+   289,
+   "mouseenter",
+   "div.workspace-composer",
+   ""
+  ],
+  [
+   289,
+   "mouseenter",
+   "div.composer-box",
+   ""
+  ],
+  [
+   289,
+   "mouseenter",
+   "div.composer-field",
+   ""
+  ],
+  [
+   289,
+   "mouseenter",
+   "textarea.ant-input.ant-input-borderless.ant-input-css-var",
+   ""
+  ],
+  [
+   428,
+   "class",
+   "ant-popover ant-popover-hidden ant-popover- ant-popover-placement-topRight",
+   "--arrow-x: 309.984375px; --arrow-y: 374.359375px; inset: auto 118px 61px auto; box-sizing: border-box; pointer-events: none;"
+  ]
+ ]
+}

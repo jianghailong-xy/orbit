@@ -1,0 +1,20 @@
+== disk facts at 2026-10-17T17:08:42Z, checkout 1f5bc9cec63f75ae5f76a4e4fb264ed2abed1488
+-- filesystems: Docker's data root, the checkout and the channel's state directory (bytes)
+/var/lib/docker: type=ext2/ext3 blocks=3875398791 blocksize=4096 free=3732190229 fsid=b035fd6ae24482e4
+/work/orbit: type=tmpfs blocks=786432 blocksize=4096 free=624513 fsid=11d28d787da4d6de
+/work/orbit/data/managed-runners/state: type=tmpfs blocks=786432 blocksize=4096 free=624513 fsid=11d28d787da4d6de
+  Filesystem           Type       1-blocks       Used Available Use% Mounted on
+  /dev/sdb             ext4       15873633447936 426556518400 15287051149312   3% /evidence
+  tmpfs                tmpfs      3221225472 663220224 2558005248  21% /work
+-- docker-channel: its command and mounts
+cmd=["serve","--config","/var/lib/orbit-managed-runners/channel.json"] image=orbit-docker-channel:local
+bind name= source=/work/orbit/data/managed-runners -> /var/lib/orbit-managed-runners rw=true
+bind name= source=/var/run/docker.sock -> /var/run/docker.sock rw=true
+
+-- no probe volume mounted in docker-channel
+-- the channel's /v1/info (host and limits)
+{"body": {"diskCheckSeconds": 120, "host": {"cpus": 24, "disk": {"freeBytes": 2558005248, "path": "/var/lib/orbit-managed-runners/state", "totalBytes": 3221225472}, "managedVolumeBytes": 0, "memoryBytes": 16102998016, "name": "d8-host", "serverVersion": "29.8.2"}, "image": "sha256:8973532c2a46837c18e001d8352e356a1ea6c98f485b31f1bc9111c7fd5ebccc", "instanceId": "orbit-812f52a3", "limits": {"maxConcurrent": 8, "maxCpuMillis": 4000, "maxMemoryBytes": 8589934592, "maxPids": 4096, "maxTmpBytes": 2147483648, "maxVolumeBytes": 107374182400}, "network": {"interContainer": false, "internal": false, "name": "orbit-managed-runners"}, "schemaVersion": 1, "stopGraceSeconds": 240}, "request": "GET /v1/info", "sent": null, "status": 200}
+-- the capacity pool the apiserver derived (bytes), if it has one yet
+storage_usable_bytes=2558226432 | storage_headroom_bytes=322122548 | pods=2 | durable_bytes_reserved=0 | updated_at=2026-10-17 17:08:23.865+00
+-- docker-channel's log lines about the disk, the cap and /tmp
+2026-10-17T17:08:21Z orbit-docker-channel: instance orbit-812f52a3 serving on /var/lib/orbit-managed-runners/channel.sock; image sha256:8973532c2a46837c18e001d8352e356a1ea6c98f485b31f1bc9111c7fd5ebccc, network orbit-managed-runners

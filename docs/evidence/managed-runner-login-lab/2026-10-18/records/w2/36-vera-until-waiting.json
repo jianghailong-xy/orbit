@@ -1,0 +1,27 @@
+{
+  "at": "2026-10-17T23:39:43.650+00:00",
+  "changes": [
+    [
+      "2026-10-17T23:39:43.650+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": null,
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": null,
+        "management_state": "WAITING_CAPACITY",
+        "pod": null,
+        "reason": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+        "revision": 2,
+        "runner_status": "OFFLINE",
+        "workspace_bound": true
+      }
+    ]
+  ],
+  "owner": "vera",
+  "reached": {
+    "reason": null,
+    "state": "WAITING_CAPACITY"
+  }
+}

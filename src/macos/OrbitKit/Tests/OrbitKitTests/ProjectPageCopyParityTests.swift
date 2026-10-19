@@ -48,6 +48,17 @@ final class ProjectPageCopyParityTests: XCTestCase {
         XCTAssertTrue(web.contains(literal), "\(file) no longer says \(literal)", line: line)
     }
 
+    /// Whether one of this end's words names main, and that word as the browser writes it for whichever
+    /// branch is the project's main branch: each `main` put back as the template's `${main}`. A project
+    /// on main then reads the same word at both ends.
+    private static func namesMain(_ word: String) -> Bool {
+        word.range(of: "\\bmain\\b", options: .regularExpression) != nil
+    }
+
+    private static func onMainBranch(_ word: String) -> String {
+        word.replacingOccurrences(of: "\\bmain\\b", with: "${main}", options: .regularExpression)
+    }
+
     func testWorkOverviewWords() throws {
         let web = try source(Self.panorama)
         let integrating = ProjectPanoramaBuckets(running: 1, ready: 1, blocked: 1, awaitingVerification: 1,
@@ -59,13 +70,20 @@ final class ProjectPageCopyParityTests: XCTestCase {
             + ProjectPage.overviewCells(integrating, taskCount: 9, line: .projectBranch, started: false)
             + ProjectPage.overviewCells(ProjectPanoramaBuckets(), taskCount: 0, line: nil, started: false)
         for cell in cells {
-            assertSays(web, "label: '\(cell.label)'", in: Self.panorama)
+            // A lane about the project's main branch names it: `${main}`, main on a project on main.
+            assertSays(web, Self.namesMain(cell.label) ? "label: `\(Self.onMainBranch(cell.label))`" : "label: '\(cell.label)'",
+                       in: Self.panorama)
             if cell.key == "blocked", cell.footnote.hasPrefix("1 waiting") {
                 assertSays(web, "`${buckets.waitingForLanding} waiting for a prerequisite to land`", in: Self.panorama)
+            } else if Self.namesMain(cell.footnote) {
+                assertSays(web, "`\(Self.onMainBranch(cell.footnote))`", in: Self.panorama)
             } else {
                 assertSays(web, "'\(cell.footnote)'", in: Self.panorama)
             }
         }
+        // …which is the integration read's, main until it answers.
+        assertSays(web, "integrationLanes(loaded, integrationLine ?? null, mainBranch)", in: Self.panorama)
+        assertSays(web, "mainBranch={mainBranchName(integration.data?.upstreamRef)}", in: Self.panorama)
         assertSays(web, "'waiting on dependencies'", in: Self.panorama)
         assertSays(web, "% complete`", in: Self.panorama)
         // Ready on a project nobody has started (mock board3 ②), in both shapes of the card.
@@ -81,7 +99,7 @@ final class ProjectPageCopyParityTests: XCTestCase {
     func testAProjectNobodyStartedIsTaggedNotStarted() throws {
         let web = try source(Self.page)
         assertSays(web, "{p.status === 'OPEN' && started === false ? (", in: Self.page)
-        assertSays(web, "<Tag color=\"default\">{NOT_STARTED}</Tag>", in: Self.page)
+        assertSays(web, "<Badge>{NOT_STARTED}</Badge>", in: Self.page)
         let words = try source("src/web/src/lib/projectStart.ts")
         assertSays(words, "export const NOT_STARTED = '\(StartProject.notStarted)';", in: "src/web/src/lib/projectStart.ts")
     }
@@ -111,7 +129,10 @@ final class ProjectPageCopyParityTests: XCTestCase {
             XCTAssertEqual(ProjectPage.criterionWork(c, integrationRef: nil)?.landing, words)
             assertSays(web, "\(landing): '\(words)'", in: Self.acceptance)
         }
-        assertSays(web, "tail: 'not on main yet'", in: Self.acceptance)
+        // Met on the project branch is not yet on the project's main branch, which the document names.
+        assertSays(web, "tail: `\(Self.onMainBranch("not on main yet"))`", in: Self.acceptance)
+        assertSays(web, "landing === 'LANDED' ? `\(Self.onMainBranch("on main"))`", in: Self.acceptance)
+        assertSays(web, "mainBranch={mainBranchName(detail.data?.integration?.upstreamRef)}", in: Self.acceptance)
         assertSays(web, "'the project branch'", in: Self.acceptance)
     }
 
@@ -188,7 +209,7 @@ final class ProjectPageCopyParityTests: XCTestCase {
     /// project is done, who recorded it — in `doneProvenance`'s words.
     func testTheHeaderSaysReadyToCloseAndWhoRecordedItDone() throws {
         let web = try source(Self.page)
-        assertSays(web, "<Tag color=\"gold\">{PROJECT_DONE_COPY.readyToClose}</Tag>", in: Self.page)
+        assertSays(web, "<Badge tone=\"gold\">{PROJECT_DONE_COPY.readyToClose}</Badge>", in: Self.page)
         // …only while the coordinator's request stands, not for every OPEN project (the browser since
         // 1f85c0afe; this client's `ProjectDone.readyToClose`).
         assertSays(web, "{p.status === 'OPEN' && doneRequest ? (", in: Self.page)
@@ -204,8 +225,11 @@ final class ProjectPageCopyParityTests: XCTestCase {
 
     func testIntegrationLineWords() throws {
         let web = try source(Self.integration)
+        // How far ahead of the project's main branch, and when it last synced with it: `{main}` is
+        // that branch by name, main on a project on main.
         for phrase in ["PASSING: { text: '✓ passing'", "FAILING: { text: '✕ failing'", "UNKNOWN: { text: 'not checked'",
-                       "ahead of main", "synced with main", "at last measurement", "Last landing check", "Running jobs"] {
+                       "ahead of {main}", "synced with {main}", "const main = mainBranchName(view.upstreamRef);",
+                       "at last measurement", "Last landing check", "Running jobs"] {
             assertSays(web, phrase, in: Self.integration)
         }
     }

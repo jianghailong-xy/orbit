@@ -39,6 +39,7 @@ import {
   WATCH_RESOURCE_KINDS,
   WATCH_STATES,
   toUuid,
+  uuidToBase62,
 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -797,13 +798,15 @@ test('a watch carries its targets\' titles, and none for a target its account ca
 });
 
 /** A run of `taskId` in `status`, the way dispatch opens one: what the task list's overlays read. */
-async function run(h: Harness, ownerId: string, taskId: string, status: 'RUNNING' | 'PENDING'): Promise<void> {
+async function run(h: Harness, ownerId: string, taskId: string, status: 'RUNNING' | 'PENDING'): Promise<string> {
+  const id = randomUUID();
   await h.sql.query(
     `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","task_id","status",
                            "dispatch_origin","starts_task_work","updated_at")
      VALUES ($1,'a run of it','p',$2,$2,$3,$4,'USER',TRUE,now())`,
-    [randomUUID(), ownerId, taskId, status],
+    [id, ownerId, taskId, status],
   );
+  return id;
 }
 
 /**
@@ -852,6 +855,81 @@ test('a watch carries where each target stands, as its own list says it', { skip
   assert.equal(listed.get(idle), null, "a target of another account's stands nowhere");
   assert.deepEqual(listed.get(busy), { status: 'OPEN', running: true, queued: false });
   assert.deepEqual(listed.get(live), { status: 'RUNNING', running: true, queued: false });
+});
+
+/**
+ * A session target names the task its session runs (`sessions.task_id`), by that task's public id,
+ * title and standing as a TASK target on it reads them, so a client can draw a task and its run session
+ * as one. A session that runs nothing names no task, and neither does a conversation an @-mention opened
+ * about a task (`context_task_id`): it is about the task without running it. A task this account
+ * cannot read is named by nothing, like a target's title.
+ */
+test('a session target names the task its session runs, and no other', { skip, timeout: 120_000 }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'run sessions');
+  const other = await account(h, 'where the task moved');
+  const work = await task(h, owner.id, 'OPEN');
+  await h.sql.query(`UPDATE "task" SET "title" = 'Fold the run into its task' WHERE "id" = $1`, [work]);
+  const runOfWork = await run(h, owner.id, work, 'RUNNING');
+  const plain = await session(h, owner.id, { status: 'RUNNING' });
+  const mention = await session(h, owner.id, { status: 'AWAITING_INPUT' });
+  await h.sql.query(
+    `UPDATE "session" SET "context_task_id" = $2, "starts_task_work" = FALSE WHERE "id" = $1`,
+    [mention, work],
+  );
+
+  const overSessions = await create(
+    h,
+    owner,
+    watchBody(sessions([runOfWork, plain, mention]), { predicate: ALL_SETTLED }),
+    'a watch over a run, a session that runs nothing and a mention conversation',
+  );
+  const overTask = await create(h, owner, watchBody(tasks([work])), 'a watch over the task itself');
+
+  type Named = { targetResourceId: string; targetTitle: string | null; targetTask: unknown };
+  const named = (targets: Named[]) => new Map(targets.map((t) => [toUuid(t.targetResourceId), t.targetTask]));
+  const theTask = {
+    id: uuidToBase62(work),
+    publicId: uuidToBase62(work),
+    title: 'Fold the run into its task',
+    status: { status: 'OPEN', running: true, queued: false },
+  };
+  const created = named(overSessions.targets);
+  assert.deepEqual(created.get(runOfWork), theTask, 'the run names its task, standing running while the run is RUNNING');
+  assert.equal(created.get(plain), null, 'a session that runs no task names none');
+  assert.equal(created.get(mention), null, 'a conversation about a task does not run it');
+  assert.deepEqual(overTask.targets[0].targetStatus, theTask.status, 'the task stands as a TASK target on it does');
+  assert.equal(overTask.targets[0].targetTask, null, 'a TASK target names no other task');
+
+  // The single read and the list read name the same task, and so does the create's own answer.
+  const one = await call(h, owner.bearer, 'GET', `/watches/${overSessions.id}`);
+  expectStatus(one, 200, 'the watch over the sessions reads back');
+  const list = await call(h, owner.bearer, 'GET', '/watches');
+  expectStatus(list, 200, 'the list reads back');
+  const listed = (list.body as Array<{ id: string; targets: Named[] }>).find((w) => w.id === overSessions.id);
+  assert.ok(listed, 'the list holds the watch over the sessions');
+  assert.deepEqual(listed.targets, one.body.targets, 'the list read and the single read agree');
+  assert.deepEqual(named(one.body.targets), created, 'the reads name what the create named');
+
+  // The standing is the task's as it is now: the run failed, and the task with it.
+  await h.sql.query(`UPDATE "session" SET "status" = 'FAILED', "finished_at" = now() WHERE "id" = $1`, [runOfWork]);
+  await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = $1`, [work]);
+  const ended = await call(h, owner.bearer, 'GET', `/watches/${overSessions.id}`);
+  expectStatus(ended, 200, 'the watch reads back after the run ended');
+  assert.deepEqual(
+    named(ended.body.targets).get(runOfWork),
+    { ...theTask, status: { status: 'FAILED', running: false, queued: false } },
+    'the run names its task as it now stands',
+  );
+
+  // Moved to another account, the task is named by nothing; the run is still named by its own title.
+  await h.sql.query(`UPDATE "task" SET "owner_id" = $2 WHERE "id" = $1`, [work, other.id]);
+  const moved = await call(h, owner.bearer, 'GET', '/watches');
+  expectStatus(moved, 200, 'the list reads back after the task moved');
+  const afterMove = (moved.body as Array<{ id: string; targets: Named[] }>).find((w) => w.id === overSessions.id)!;
+  const runTarget = afterMove.targets.find((t) => toUuid(t.targetResourceId) === runOfWork)!;
+  assert.equal(runTarget.targetTask, null, "a task of another account's is named by nothing");
+  assert.equal(runTarget.targetTitle, 'a run of it', 'the session itself is still named');
 });
 
 // ── lifecycle ───────────────────────────────────────────────────────────────────────────────────

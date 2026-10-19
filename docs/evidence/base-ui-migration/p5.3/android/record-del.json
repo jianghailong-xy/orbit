@@ -1,0 +1,202 @@
+{
+ "tree": "del",
+ "chrome": "versionName=133.0.6943.137",
+ "steps": [
+  {
+   "step": "session opened",
+   "ok": true,
+   "path": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+  },
+  {
+   "step": "composer tapped: Gboard up, the composer above it",
+   "ok": true,
+   "keyboard": true,
+   "active": "textarea Reply…",
+   "vv": [
+    471,
+    312
+   ],
+   "box": [
+    373,
+    455
+   ],
+   "inner": 783
+  },
+  {
+   "step": "typed “hello” on Gboard’s keys",
+   "ok": true,
+   "value": "Hello",
+   "events": {
+    "keydown:Unidentified:229": 5,
+    "beforeinput:insertText:": 5
+   }
+  },
+  {
+   "step": "Gboard’s Enter sends",
+   "ok": true,
+   "value": "",
+   "sent": "Hello",
+   "keys": [
+    "keydown:Unidentified:229",
+    "keydown:Enter:13"
+   ],
+   "keyboard": true
+  },
+  {
+   "step": "system Back: the keyboard goes, the page stays",
+   "ok": true,
+   "keyboard": false,
+   "path": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+  },
+  {
+   "step": "header ⋯ tapped: its menu",
+   "ok": true,
+   "trigger": {
+    "hover": true,
+    "background": "rgba(0, 0, 0, 0.04)"
+   },
+   "focus": "menu Find in session · Ctrl FTagsDe"
+  },
+  {
+   "step": "a tap outside closes it",
+   "ok": true,
+   "focus": "button "
+  },
+  {
+   "step": "mode list tapped",
+   "ok": true,
+   "options": [
+    "Default",
+    "Plan",
+    "Accept Edits",
+    "Auto",
+    "Don't Ask",
+    "Bypass"
+   ],
+   "hover": true
+  },
+  {
+   "step": "a tap outside closes it",
+   "ok": true
+  },
+  {
+   "step": "Find: its field focused with the keyboard up, one match",
+   "ok": true,
+   "focus": "input Find in session",
+   "keyboard": true,
+   "value": "Interface",
+   "marks": [
+    "interface"
+   ]
+  },
+  {
+   "step": "Find closed",
+   "ok": true
+  },
+  {
+   "step": "+ → Image → the photo picker → a thumbnail",
+   "ok": true,
+   "items": [
+    "File",
+    "Image",
+    "Shell",
+    "Skill",
+    "Command"
+   ],
+   "picker": "com.google.android.photopicker/com.android.photopicker.MainActivity",
+   "back": "com.android.chrome/org.chromium.chrome.browser.ChromeTabbedActivity",
+   "thumbs": 1
+  },
+  {
+   "step": "thumbnail tapped: the preview",
+   "ok": true,
+   "buttons": [
+    "Close",
+    "Flip vertically",
+    "Flip horizontally",
+    "Rotate left",
+    "Rotate right",
+    "Zoom out",
+    "Zoom in"
+   ],
+   "focus": "button Close"
+  },
+  {
+   "step": "two fingers spread: the picture zooms",
+   "ok": true,
+   "before": 1,
+   "after": 3.67,
+   "touches": [
+    "touchstart:1",
+    "touchstart:2",
+    "touchend:1",
+    "touchend:0"
+   ]
+  },
+  {
+   "step": "Close tapped: the preview goes, focus back on the thumbnail",
+   "ok": true,
+   "focus": "SPAN.orbit-image"
+  },
+  {
+   "step": "× on the thumbnail removes it",
+   "ok": true
+  },
+  {
+   "step": "the list; a held press: the row’s menu at the finger, no text selected",
+   "ok": true,
+   "path": "/workspaces/2zwQZ2hd93IvLb59t6p1s",
+   "menu": {
+    "rect": [
+     129.14,
+     531.05,
+     240,
+     218
+    ],
+    "items": [
+     "CompleteCtrl D",
+     "Pin",
+     "Rename…",
+     "Share…",
+     "Move…",
+     "Delete"
+    ],
+    "selection": ""
+   },
+   "focus": "menu CompleteCtrl DPinRename…Share…"
+  },
+  {
+   "step": "Pin from it",
+   "ok": true
+  },
+  {
+   "step": "system Back: from the conversation to the list",
+   "ok": true,
+   "opened": "/sessions/2zwQZ2hd93IvLb59t6uY6",
+   "back": "/workspaces/2zwQZ2hd93IvLb59t6p1s"
+  },
+  {
+   "step": "edge swipe back: from the conversation to the list",
+   "ok": true,
+   "opened": "/sessions/2zwQZ2hd93IvLb59t6uY6",
+   "back": "/workspaces/2zwQZ2hd93IvLb59t6p1s"
+  },
+  {
+   "step": "a link to record 1: it is in sight",
+   "ok": true,
+   "top": 81,
+   "bottom": 164,
+   "viewport": 783
+  },
+  {
+   "step": "a session that is not there: Not found, Go home by a tap",
+   "ok": true,
+   "path": "/workspaces/2zwQZ2hd93IvLb59t6uYC"
+  },
+  {
+   "step": "a held press on a reply selects a word",
+   "ok": true,
+   "selected": "existing"
+  }
+ ]
+}

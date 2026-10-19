@@ -1,0 +1,272 @@
+{
+  "approvalCards": [
+    {
+      "ID": "approval-1",
+      "Body": {
+        "input": {
+          "command": "git push origin HEAD:refs/heads/published",
+          "description": "publish the branch",
+          "justification": "publish the branch",
+          "sandbox_permissions": "danger-full-access"
+        },
+        "toolName": "bash",
+        "toolUseId": "call_p4_3"
+      },
+      "Status": "DENIED",
+      "Polls": 2,
+      "LatePoll": false
+    }
+  ],
+  "controlPlane": [
+    {
+      "agent": "",
+      "body": {
+        "input": {
+          "command": "git push origin HEAD:refs/heads/published",
+          "description": "publish the branch",
+          "justification": "publish the branch",
+          "sandbox_permissions": "danger-full-access"
+        },
+        "toolName": "bash",
+        "toolUseId": "call_p4_3"
+      },
+      "method": "POST",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals",
+      "session": ""
+    },
+    {
+      "agent": "",
+      "body": null,
+      "method": "GET",
+      "path": "/api/runner/sessions/p4-orbit-session/approvals/approval-1",
+      "session": ""
+    }
+  ],
+  "facts": {
+    "commitAllowedWithoutCard": true,
+    "pushCards": 1,
+    "pushed": false
+  },
+  "modelRequests": 4,
+  "orbitEvents": [
+    {
+      "payload": {
+        "argv": [
+          "--profile",
+          "acp",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealAutoRoutineEscalation1711703700/001/dsh-home/orbit.patch.json",
+          "--patch",
+          "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealAutoRoutineEscalation1711703700/001/dsh-home/orbit-agent.patch.json"
+        ],
+        "cliVersion": "0.2.0-rc.2",
+        "configHash": "662495021e3a24bf88d8ed13e6bf19fdb03baa9ce9cdaf030853857db40416af",
+        "dshHome": "/tmp/orbit-dsh-p4-OFKGjI/TestDshRealAutoRoutineEscalation1711703700/001/dsh-home",
+        "executable": "/tmp/orbit-dsh-p4-OFKGjI/install/node_modules/.bin/dsh",
+        "provider": "dsh",
+        "runtime": "acp",
+        "subtype": "launch"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "cliVersion": "0.2.0-rc.2",
+        "provider": "dsh",
+        "resumed": false,
+        "runtime": "acp",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "sessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "text": "Commit the change, then publish it."
+      },
+      "turn": "t1",
+      "type": "user"
+    },
+    {
+      "payload": {
+        "contextTokens": 47448,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_1",
+        "input": {
+          "command": "printf 'session change\\n' \u003e change.txt \u0026\u0026 git add change.txt \u0026\u0026 git commit -q -m 'session change' \u0026\u0026 git log --oneline -1",
+          "description": "commit the change"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "bash",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "status": "in_progress",
+        "toolCallId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "[stderr]\nfatal: Unable to create '/root/.orbit-dsh-p4-routine-2042766138/repo/.git/worktrees/worktree/index.lock': Permission denied\n[sandbox: file access denied under workspace-write mode]\n[sandbox: escalation available — retry this exact command once with sandbox_permissions (the narrowest wider mode that suffices) + justification; the approval prompt asks the user]\n[exit code: 128]",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "status": "completed",
+        "toolCallId": "call_p4_1",
+        "toolUseId": "call_p4_1"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 47643,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_2",
+        "input": {
+          "command": "printf 'session change\\n' \u003e change.txt \u0026\u0026 git add change.txt \u0026\u0026 git commit -q -m 'session change' \u0026\u0026 git log --oneline -1",
+          "description": "commit the change",
+          "justification": "the worktree's index lives in the main repository's .git",
+          "sandbox_permissions": "danger-full-access"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "bash",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "status": "in_progress",
+        "toolCallId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "name": "bash",
+        "provider": "dsh",
+        "reason": "Auto allows a routine command in the workspace to run outside the file sandbox once",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "subtype": "permission_auto_allowed",
+        "toolCallId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "0d3fc02 session change\n",
+        "isError": false,
+        "localTurnId": "t1",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "status": "completed",
+        "toolCallId": "call_p4_2",
+        "toolUseId": "call_p4_2"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "contextTokens": 47709,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call_p4_3",
+        "input": {
+          "command": "git push origin HEAD:refs/heads/published",
+          "description": "publish the branch",
+          "justification": "publish the branch",
+          "sandbox_permissions": "danger-full-access"
+        },
+        "kind": "other",
+        "localTurnId": "t1",
+        "name": "bash",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "status": "in_progress",
+        "toolCallId": "call_p4_3"
+      },
+      "turn": "t1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Error: the user rejected escalating this command to \"danger-full-access\"; it stays denied, so stop and explain instead of working around it",
+        "isError": true,
+        "localTurnId": "t1",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "status": "failed",
+        "toolCallId": "call_p4_3",
+        "toolUseId": "call_p4_3"
+      },
+      "turn": "t1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "localTurnId": "t1",
+        "messageId": "fa6c32ef-62eb-491e-b36e-e22ee66392f7",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "text": "P4 routine answer"
+      },
+      "turn": "t1",
+      "type": "assistant"
+    },
+    {
+      "payload": {
+        "contextTokens": 47765,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "subtype": "context"
+      },
+      "turn": "t1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "contextTokens": 47765,
+        "contextWindow": 1000000,
+        "localTurnId": "t1",
+        "numTurns": 1,
+        "runtimeSessionId": "10bfee69-a41e-4ead-88f4-513b29420922",
+        "stopReason": "end_turn",
+        "subtype": "completed"
+      },
+      "turn": "t1",
+      "type": "turn_end"
+    }
+  ],
+  "permissionMode": "auto",
+  "scenario": "TestDshRealAutoRoutineEscalation"
+}

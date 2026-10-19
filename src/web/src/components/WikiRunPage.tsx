@@ -2,10 +2,12 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CloseOutlined, DownOutlined, MessageOutlined, RollbackOutlined, SyncOutlined } from '@ant-design/icons';
-import { App, Button, Dropdown } from 'antd';
 import type { WikiRejectReason } from '@orbit/shared';
 import { relTime } from './Transcript';
 import { WikiDot, WikiTrustBadge } from './WikiMarks';
+import { Button } from './ui/Button';
+import { useConfirm } from './ui/ConfirmDialog';
+import { Menu } from './ui/Menu';
 import { wikiChangesetQuery } from '../lib/queries';
 import {
   WIKI_REJECT_MENU,
@@ -67,14 +69,14 @@ export function WikiRunDrawer({
   const byId = useMemo(() => new Map((changeset?.entries ?? []).map((entry) => [entry.id, entry])), [changeset]);
   const summary = useMemo(() => (changeset ? wikiRunSummary(changeset) : null), [changeset]);
   const navigate = useNavigate();
-  const revert = useRevertRun(spaceSlug);
+  const [revert, revertConfirmation] = useRevertRun(spaceSlug);
 
   if (!changeset || !summary) {
     return (
       <aside className="wk-drawer" aria-label={WIKI_VIEW_RUN} aria-busy={read.isPending}>
         <div className="tdp-head">
           <div className="tdp-head-main" />
-          <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
+          <Button variant="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
         </div>
       </aside>
     );
@@ -91,7 +93,7 @@ export function WikiRunDrawer({
           <div className="tdp-title">{wikiAppliedChanges(summary.applied)}</div>
           <div className="wk-run-meta">{wikiRunWhen(changeset.createdAt)}</div>
         </div>
-        <Button type="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
+        <Button variant="text" icon={<CloseOutlined />} onClick={onClose} aria-label="Close" />
       </div>
       <div className="wk-run-actions">
         <Button
@@ -119,6 +121,7 @@ export function WikiRunDrawer({
       <RunGroup title={WIKI_RUN_ADDED} rows={summary.added} spaceSlug={spaceSlug} entries={byId} />
       <RunGroup title={WIKI_RUN_AMENDED} rows={summary.amended} spaceSlug={spaceSlug} entries={byId} />
       <RunGroup title={WIKI_RUN_REINFORCED} rows={summary.reinforced} spaceSlug={spaceSlug} entries={byId} />
+      {revertConfirmation}
     </aside>
   );
 }
@@ -197,21 +200,14 @@ export function WikiRejectMenu({
   children: React.ReactElement;
 }) {
   return (
-    <Dropdown
-      trigger={['click']}
-      menu={{
-        items: [
-          ...WIKI_REJECT_MENU.map(({ reason, label }) => ({ key: reason, label })),
-          { type: 'divider' as const },
-          { key: 'foot', label: <span className="wk-menu-foot">{WIKI_REJECT_ON_RECORD}</span>, disabled: true },
-        ],
-        onClick: ({ key }) => {
-          if (key !== 'foot') onReject(key as WikiRejectReason);
-        },
-      }}
-    >
-      {children}
-    </Dropdown>
+    <Menu
+      items={[
+        ...WIKI_REJECT_MENU.map(({ reason, label }) => ({ key: reason, label, onSelect: () => onReject(reason) })),
+        { type: 'separator', key: 'divider' },
+        { key: 'foot', label: <span className="wk-menu-foot">{WIKI_REJECT_ON_RECORD}</span>, disabled: true },
+      ]}
+      trigger={children}
+    />
   );
 }
 
@@ -233,26 +229,27 @@ export function useRejectEntry() {
 
 /**
  * Revert run…: the confirm that says what will happen — the server's own count of what the revert
- * undoes — then the revert, and back to the space the run was opened from.
+ * undoes — then the revert, and back to the space the run was opened from. The confirmation is the
+ * second value, rendered where the hook is used.
  */
 export function useRevertRun(spaceSlug: string) {
-  const { modal } = App.useApp();
+  const [confirm, confirmation] = useConfirm();
   const toast = useToast();
   const navigate = useNavigate();
   const write = useWikiWrite((changesetId: string) => revertWikiChangeset(changesetId));
-  return (changesetId: string, summary: Pick<WikiRunSummary, 'revertAdds' | 'revertAmends'>) => {
-    modal.confirm({
+  const revert = (changesetId: string, summary: Pick<WikiRunSummary, 'revertAdds' | 'revertAmends'>) => {
+    void confirm({
       title: WIKI_REVERT_TITLE,
-      content: (
+      description: (
         <div className="wk-revert-body">
           <p>{wikiRevertBody(summary)}</p>
           <p>{WIKI_REVERT_KEEPS}</p>
         </div>
       ),
-      okText: WIKI_REVERT_RUN_CONFIRM,
-      okButtonProps: { danger: true },
+      confirmText: WIKI_REVERT_RUN_CONFIRM,
+      danger: true,
       cancelText: WIKI_CANCEL,
-      onOk: async () => {
+      onConfirm: async () => {
         try {
           await write.mutateAsync(changesetId);
           toast.success(WIKI_REVERTED);
@@ -263,6 +260,7 @@ export function useRevertRun(spaceSlug: string) {
       },
     });
   };
+  return [revert, confirmation] as const;
 }
 
 /**
@@ -291,7 +289,7 @@ export function WikiRunTimelineRow({
 }) {
   const read = useQuery(wikiChangesetQuery(changesetId));
   const summary = useMemo(() => (read.data ? wikiRunSummary(read.data) : null), [read.data]);
-  const revert = useRevertRun(spaceSlug);
+  const [revert, revertConfirmation] = useRevertRun(spaceSlug);
   const counts = summary ? wikiRunCounts(summary) : [];
   return (
     <li className="wk-tl-run">
@@ -314,6 +312,7 @@ export function WikiRunTimelineRow({
           )}
         </div>
       </div>
+      {revertConfirmation}
     </li>
   );
 }
@@ -322,9 +321,8 @@ export function WikiRunTimelineRow({
 export function WikiRejectButton({ onReject, size }: { onReject: (reason: WikiRejectReason) => void; size?: 'small' }) {
   return (
     <WikiRejectMenu onReject={onReject}>
-      <Button danger size={size}>
+      <Button className="wk-reject-btn" danger size={size} icon={<DownOutlined />} iconPlacement="end">
         {WIKI_REVIEW_REJECT}
-        <DownOutlined />
       </Button>
     </WikiRejectMenu>
   );

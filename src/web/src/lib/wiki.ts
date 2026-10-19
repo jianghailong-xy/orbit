@@ -29,6 +29,7 @@ import {
   type WikiEntryKind,
   type WikiEntryRevision,
   type WikiKind,
+  type WikiOpDecision,
   type WikiRejectReason,
   type WikiSource,
   type WikiSpace,
@@ -388,6 +389,34 @@ export function wikiDecidedToast(op: string, action: WikiDecideAction): string {
 export const WIKI_SETTINGS_SAVED = 'Wiki settings saved';
 /** A Review answer the server refused: what failed, with its reason on the line under it. */
 export const WIKI_DECIDE_FAILED = "Couldn't record your answer";
+/** A Review answer the server recorded without applying it (`wikiDecisionRefusal`): the reason said
+ *  under WIKI_DECIDE_FAILED, never the answer's own word. Android's sentences, and OrbitKit's. */
+export const WIKI_DECIDE_CONFLICT = 'Nothing was applied: the entry changed after this was proposed.';
+export const WIKI_DECIDE_INACTIVE = 'Nothing was applied: the entry is no longer active.';
+export const WIKI_DECIDE_WITHDRAWN = 'Nothing was applied: the proposal was withdrawn.';
+/** What the server recorded for the op a decide answered: the answer is the changeset, every op with
+ *  its `decision`. Null when the answer does not hold the op. */
+export function wikiRecordedDecision(answer: WikiChangeset | null | undefined, opId: string): WikiOpDecision | null {
+  return answer?.ops?.find((one) => one.id === opId)?.decision ?? null;
+}
+/**
+ * A decide the server answered 200 but recorded as applying nothing, as the reason to say in place of
+ * the answer's toast; null when the answer did what was asked. `conflict` is an amend, supersede or
+ * retire whose entry moved past the revision it was written against — or, for a challenge, an entry no
+ * longer active — and `withdrawn` a proposal that went with its entry. Except a challenge's Retire: the
+ * retire takes every op still waiting on the entry with it, the challenge it answers included, so
+ * `withdrawn` there is the answer done.
+ */
+export function wikiDecisionRefusal(decision: WikiOpDecision | null, op: string, action: WikiDecideAction): string | null {
+  switch (decision) {
+    case 'conflict':
+      return op === 'challenge' ? WIKI_DECIDE_INACTIVE : WIKI_DECIDE_CONFLICT;
+    case 'withdrawn':
+      return op === 'challenge' && action === 'retire' ? null : WIKI_DECIDE_WITHDRAWN;
+    default:
+      return null;
+  }
+}
 export const WIKI_ACCEPT_NOTE = 'Accepting makes it Confirmed';
 export const WIKI_WEB_DERIVED_NOTE = 'Web-derived is never auto-accepted';
 export const WIKI_REJECT_REASON_FOOT = 'The reason goes back to the session that proposed it.';

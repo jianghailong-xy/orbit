@@ -1,0 +1,18 @@
+== 1-pool-security-boundary.pg.spec.tap: 16 results in ds-balance-pg-branch, 16 in ds-balance-pg-main; failing 6 vs 6
+   not ok in both: (A3) a provider-switch reload re-spawns another owner's session with none of the pool's tokens
+   not ok in both: (A3) a restarted runner's reclaim rebuilds another owner's session with none of the pool's tokens
+   not ok in both: (A3) the claim hands another owner's session none of the pool's tokens, whether it names the pool or a member
+   not ok in both: (C) a person she added to a pool of her ChatGPT accounts reads them at any route as she does — they run their sessions too (2026-10-03) — bar OpenAI's own id of an account, which no response names to anyone
+   not ok in both: (C) …and those responses are every route the providers controllers declare
+   not ok in both: account pools' security boundary, on real PostgreSQL
+== 2-codex-login-scope.pg.spec.tap: 11 results in ds-balance-pg-branch, 11 in ds-balance-pg-main; failing 4 vs 4
+   not ok in both: a pool holding several accounts reads them all — `logins`, oldest first — and `login` is the first of them
+   not ok in both: a pool of one's own ChatGPT login, at every door — its owner's, and nobody it does not hold's
+   not ok in both: the page reads the account by its email and four characters, and never says a missing quota is a refusal
+   not ok in both: the sign-in doors are the owner’s: a stranger’s poll of a pool they cannot see is that pool not existing
+== 3-pool-admission-closure.pg.spec.tap: 8 results in ds-balance-pg-branch, 8 in ds-balance-pg-main; failing 3 vs 3
+   not ok in both: (3) a pool that loses its last account that can run under a session still dispatches it, on the Claude default — and the transcript names the pool and where the run went
+   not ok in both: (4) no session payload that carries a pool's member holds a credential or an endpoint — the lists, the detail, the transcript, the turns, the search
+   not ok in both: an account pool's admission, closed at every door, on real PostgreSQL
+== 4-provider-pool-usage.pg.spec.tap: 6 results in ds-balance-pg-branch, 6 in ds-balance-pg-main; failing 0 vs 0
+SAME FAILURES

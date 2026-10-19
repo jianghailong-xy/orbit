@@ -55,7 +55,7 @@ struct AutoRetryCardView: View {
                                      provider: console.outageProvider,
                                      runnerName: console.runnerName,
                                      hasRetryText: !retryText.isEmpty,
-                                     nothingToResend: console.serverNothingToResend,
+                                     nothingToResend: console.retryContinues,
                                      now: now,
                                      takenOver: console.autoRetryTakenOver)
         VStack(alignment: .leading, spacing: 8) {

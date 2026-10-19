@@ -25,6 +25,7 @@ describe('control-plane protocol', () => {
       RunEventType.STATUS,
       RunEventType.TEXT_DELTA,
       RunEventType.TURN_END,
+      RunEventType.PROMPT_SUGGESTION,
       RunEventType.APPROVAL_REQUEST,
       RunEventType.BACKGROUND_TASK,
       RunEventType.QUEUED_TURNS_CHANGED,

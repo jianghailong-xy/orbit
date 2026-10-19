@@ -1,0 +1,2098 @@
+argv: env TASKS_TOOLBAR_OUTPUT=/mnt/data/tmp/34coPBqt8gi229cVNds0E/runs3/resident-base-r1-out npx playwright test --config ui-migration/tasks-toolbar.config.mjs
+tree: base
+head: d580e572d11b8535ae6ab12186a92c2a840ab1d3
+uncommitted:
+?? src/web/ui-migration/tasks-toolbar.browser.mjs
+?? src/web/ui-migration/tasks-toolbar.config.mjs
+load: 30.03 31.91 29.99 47/4126 3669270
+memory: 2724 MB available
+disk: / 7895M available, TMPDIR /mnt/data/tmp/34coPBqt8gi229cVNds0E/tmp
+started: 2026-10-10T03:46:51Z
+
+
+Running 48 tests using 1 worker
+
+  ✓   1 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 1) (1.4s)
+  ✓   2 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 1) (1.1s)
+  ✓   3 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 1) (1.3s)
+  ✓   4 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 2) (985ms)
+  ✓   5 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 2) (911ms)
+  ✓   6 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 2) (896ms)
+  ✓   7 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 3) (814ms)
+  ✓   8 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 3) (979ms)
+  ✓   9 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 3) (1.0s)
+  ✓  10 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 4) (969ms)
+  ✓  11 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 4) (1.1s)
+  ✓  12 [chromium-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 4) (979ms)
+  ✓  13 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 1) (1.0s)
+  ✓  14 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 1) (943ms)
+  ✓  15 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 1) (860ms)
+  ✓  16 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 2) (779ms)
+  ✓  17 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 2) (882ms)
+  ✓  18 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 2) (966ms)
+  ✓  19 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 3) (614ms)
+  ✓  20 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 3) (823ms)
+  ✓  21 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 3) (956ms)
+  ✓  22 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 4) (726ms)
+  ✓  23 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 4) (863ms)
+  ✓  24 [chromium-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 4) (1.3s)
+  ✘  25 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 1) (1.8s)
+  ✘  26 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 1) (1.8s)
+  ✘  27 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 1) (1.9s)
+  ✘  28 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 2) (1.3s)
+  ✘  29 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 2) (1.8s)
+  ✘  30 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 2) (1.9s)
+  ✘  31 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 3) (1.7s)
+  ✘  32 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 3) (1.3s)
+  ✘  33 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 3) (1.9s)
+  ✘  34 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 4) (1.7s)
+  ✘  35 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 4) (1.6s)
+  ✘  36 [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 4) (2.4s)
+  ✘  37 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 1) (1.7s)
+  ✘  38 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 1) (1.9s)
+  ✘  39 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 1) (1.7s)
+  ✘  40 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 2) (1.3s)
+  ✘  41 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 2) (1.6s)
+  ✘  42 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 2) (1.5s)
+  ✘  43 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 3) (1.5s)
+  ✘  44 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 3) (1.6s)
+  ✘  45 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 3) (2.1s)
+  ✓  46 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 4) (1.2s)
+  ✘  47 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 4) (1.5s)
+  ✘  48 [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 4) (2.0s)
+
+
+  1) [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 1) 
+
+    Error: Space with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    Error: Space with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-1--webkit-light-desktop/attachments/computed-styles-and-timings-807bebe963c086e2ff2468cc792db3c962be2dfc.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-1--webkit-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-1--webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-1--webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 1) 
+
+    Error: a row checked with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: a row checked with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: the task closed: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    Error: the task closed: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a99c1-then-the-task-closed-run-1--webkit-light-desktop/attachments/computed-styles-and-timings-ec08867e883bb135f4d1476902ec01e71c8aa664.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a99c1-then-the-task-closed-run-1--webkit-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a99c1-then-the-task-closed-run-1--webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a99c1-then-the-task-closed-run-1--webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 1) 
+
+    Error: the window widened to 1920px: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window widened to 1920px: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window back at 1280px: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    Error: the window back at 1280px: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    attachment #5: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--fbca4-widened-and-narrowed-run-1--webkit-light-desktop/attachments/computed-styles-and-timings-e6bf1b41ca3987262d90ea56c8a97d8a8b4943e4.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--fbca4-widened-and-narrowed-run-1--webkit-light-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--fbca4-widened-and-narrowed-run-1--webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--fbca4-widened-and-narrowed-run-1--webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 2) 
+
+    Error: Space with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    Error: Space with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-2--webkit-light-desktop/attachments/computed-styles-and-timings-166cd1910ec9b1d00353dcbdec001371f36e436a.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-2--webkit-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-2--webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-2--webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 2) 
+
+    Error: a row checked with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: a row checked with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: the task closed: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    Error: the task closed: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--6617b-then-the-task-closed-run-2--webkit-light-desktop/attachments/computed-styles-and-timings-1fcaedae26ebc47b358402c6235907482243a2b1.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--6617b-then-the-task-closed-run-2--webkit-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--6617b-then-the-task-closed-run-2--webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--6617b-then-the-task-closed-run-2--webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 2) 
+
+    Error: the window widened to 1920px: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window widened to 1920px: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window back at 1280px: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    Error: the window back at 1280px: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    attachment #5: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--ef073-widened-and-narrowed-run-2--webkit-light-desktop/attachments/computed-styles-and-timings-62277da0c640144e37e4baa8bc55cb7e9ed9c396.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--ef073-widened-and-narrowed-run-2--webkit-light-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--ef073-widened-and-narrowed-run-2--webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--ef073-widened-and-narrowed-run-2--webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 3) 
+
+    Error: Space with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    Error: Space with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-3--webkit-light-desktop/attachments/computed-styles-and-timings-577d346ecc94dec5634f61b04579ee91d42c95b8.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-3--webkit-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-3--webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-3--webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 3) 
+
+    Error: a row checked with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: a row checked with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: the task closed: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    Error: the task closed: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c4a7f-then-the-task-closed-run-3--webkit-light-desktop/attachments/computed-styles-and-timings-fd176149c5766b15f5bc5fa6c3c6790047616804.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c4a7f-then-the-task-closed-run-3--webkit-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c4a7f-then-the-task-closed-run-3--webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c4a7f-then-the-task-closed-run-3--webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 3) 
+
+    Error: the window widened to 1920px: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window widened to 1920px: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window back at 1280px: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    Error: the window back at 1280px: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    attachment #5: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--5459a-widened-and-narrowed-run-3--webkit-light-desktop/attachments/computed-styles-and-timings-826c26cd7b5f4af632f9480eb254dc52761fb100.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--5459a-widened-and-narrowed-run-3--webkit-light-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--5459a-widened-and-narrowed-run-3--webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--5459a-widened-and-narrowed-run-3--webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 4) 
+
+    Error: Space with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    Error: Space with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-4--webkit-light-desktop/attachments/computed-styles-and-timings-3ab7d9432d0744a62aef56b6236fa7a888dacc97.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-4--webkit-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-4--webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-4--webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 4) 
+
+    Error: a row checked with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: a row checked with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: the task closed: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    Error: the task closed: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c9bc9-then-the-task-closed-run-4--webkit-light-desktop/attachments/computed-styles-and-timings-f879d1d0f77266efb28308f43940d67d085ef059.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c9bc9-then-the-task-closed-run-4--webkit-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c9bc9-then-the-task-closed-run-4--webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c9bc9-then-the-task-closed-run-4--webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 4) 
+
+    Error: the window widened to 1920px: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window widened to 1920px: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window back at 1280px: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    Error: the window back at 1280px: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    attachment #5: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a53c9-widened-and-narrowed-run-4--webkit-light-desktop/attachments/computed-styles-and-timings-94cab299b51dc679834109b005397d3c17baee75.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a53c9-widened-and-narrowed-run-4--webkit-light-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a53c9-widened-and-narrowed-run-4--webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a53c9-widened-and-narrowed-run-4--webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13) [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 1) 
+
+    Error: Space with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    Error: Space with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-1--webkit-dark-desktop/attachments/computed-styles-and-timings-b4404413cca17ad48837685483a32c599c714096.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-1--webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-1--webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-1--webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  14) [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 1) 
+
+    Error: a row checked with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: a row checked with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: the task closed: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    Error: the task closed: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a99c1-then-the-task-closed-run-1--webkit-dark-desktop/attachments/computed-styles-and-timings-a18f7d00310fafaf4be9565c043ce156b9a168da.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a99c1-then-the-task-closed-run-1--webkit-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a99c1-then-the-task-closed-run-1--webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a99c1-then-the-task-closed-run-1--webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  15) [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 1) 
+
+    Error: the window widened to 1920px: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window widened to 1920px: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window back at 1280px: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    Error: the window back at 1280px: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    attachment #5: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--fbca4-widened-and-narrowed-run-1--webkit-dark-desktop/attachments/computed-styles-and-timings-63cb467d495cc5626b834c11e0569bed49a8ee06.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--fbca4-widened-and-narrowed-run-1--webkit-dark-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--fbca4-widened-and-narrowed-run-1--webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--fbca4-widened-and-narrowed-run-1--webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  16) [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 2) 
+
+    Error: Space with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    Error: Space with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-2--webkit-dark-desktop/attachments/computed-styles-and-timings-ca7f432249f73f303603efd28affe860bbdf6c2c.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-2--webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-2--webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-2--webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  17) [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 2) 
+
+    Error: a row checked with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: a row checked with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: the task closed: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    Error: the task closed: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--6617b-then-the-task-closed-run-2--webkit-dark-desktop/attachments/computed-styles-and-timings-49f6dfdbd4c61c31548ef47d2cbcffb04f911972.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--6617b-then-the-task-closed-run-2--webkit-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--6617b-then-the-task-closed-run-2--webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--6617b-then-the-task-closed-run-2--webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  18) [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 2) 
+
+    Error: the window widened to 1920px: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window widened to 1920px: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window back at 1280px: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    Error: the window back at 1280px: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    attachment #5: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--ef073-widened-and-narrowed-run-2--webkit-dark-desktop/attachments/computed-styles-and-timings-dcbb8a62d671584730267b913f1a9dc0c6810331.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--ef073-widened-and-narrowed-run-2--webkit-dark-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--ef073-widened-and-narrowed-run-2--webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--ef073-widened-and-narrowed-run-2--webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  19) [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 3) 
+
+    Error: Space with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    Error: Space with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:62:5
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-3--webkit-dark-desktop/attachments/computed-styles-and-timings-7a3c6be3ef6cb11993d90b7afdfa40e2b5b6e50f.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-3--webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-3--webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs-a-task-open-Space-checks-it-run-3--webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  20) [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 3) 
+
+    Error: a row checked with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: a row checked with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: the task closed: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    Error: the task closed: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c4a7f-then-the-task-closed-run-3--webkit-dark-desktop/attachments/computed-styles-and-timings-dfa141b40093a697e6714df135cc50f2ef5a7ceb.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c4a7f-then-the-task-closed-run-3--webkit-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c4a7f-then-the-task-closed-run-3--webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c4a7f-then-the-task-closed-run-3--webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  21) [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 3) 
+
+    Error: the window widened to 1920px: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window widened to 1920px: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window back at 1280px: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    Error: the window back at 1280px: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    attachment #5: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--5459a-widened-and-narrowed-run-3--webkit-dark-desktop/attachments/computed-styles-and-timings-6185a57b46b1cb35c09e94008eab92b0c818a943.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--5459a-widened-and-narrowed-run-3--webkit-dark-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--5459a-widened-and-narrowed-run-3--webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--5459a-widened-and-narrowed-run-3--webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  22) [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 4) 
+
+    Error: a row checked with a task open: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: a row checked with a task open: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:71:5
+
+    Error: the task closed: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    Error: the task closed: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:74:5
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c9bc9-then-the-task-closed-run-4--webkit-dark-desktop/attachments/computed-styles-and-timings-155986501316bebd8b659545f5314ce5fd822acf.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c9bc9-then-the-task-closed-run-4--webkit-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c9bc9-then-the-task-closed-run-4--webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--c9bc9-then-the-task-closed-run-4--webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  23) [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 4) 
+
+    Error: the window widened to 1920px: the toolbar is as tall as the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 34
+    Received: 42
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window widened to 1920px: the list starts the toolbar's margin below the bar ({"toolbar":42,"toolbarMargin":8,"bar":34,"barBottom":177.84375,"barScrollbar":0,"barOverflows":false,"listTop":193.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 185.84375
+    Received: 193.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:88:5
+
+    Error: the window back at 1280px: the toolbar is as tall as the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 42
+    Received: 34
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      47 |   const scrollbar = overflowing && testInfo.project.use.browserName === 'webkit' ? 8 : 0;
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+    > 49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+         |                                                                                         ^
+      50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+      51 | }
+      52 |
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:49:89)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    Error: the window back at 1280px: the list starts the toolbar's margin below the bar ({"toolbar":34,"toolbarMargin":8,"bar":42,"barBottom":185.84375,"barScrollbar":8,"barOverflows":true,"listTop":185.84375})
+
+    expect(received).toBeCloseTo(expected, precision)
+
+    Expected: 193.84375
+    Received: 185.84375
+
+    Expected precision:    0
+    Expected difference: < 0.5
+    Received difference:   8
+
+      48 |   expect(geometry.barScrollbar, `${step}: the bar's own scrollbar (${seen})`).toBe(scrollbar);
+      49 |   expect.soft(geometry.toolbar, `${step}: the toolbar is as tall as the bar (${seen})`).toBeCloseTo(geometry.bar, 0);
+    > 50 |   expect.soft(geometry.listTop, `${step}: the list starts the toolbar's margin below the bar (${seen})`).toBeCloseTo(geometry.barBottom + geometry.toolbarMargin, 0);
+         |                                                                                                          ^
+      51 | }
+      52 |
+      53 | for (let run = 1; run <= RUNS; run += 1) {
+        at check (/mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:50:106)
+        at /mnt/data/tmp/34coPBqt8gi229cVNds0E/base/src/web/ui-migration/tasks-toolbar.browser.mjs:90:5
+
+    attachment #5: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a53c9-widened-and-narrowed-run-4--webkit-dark-desktop/attachments/computed-styles-and-timings-0dbad340b095b056b5e0e2caf1e0b66f0937ce2f.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a53c9-widened-and-narrowed-run-4--webkit-dark-desktop/error-context.md
+
+    attachment #7: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a53c9-widened-and-narrowed-run-4--webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/resident-base-r1-out/tasks-toolbar.browser.mjs--a53c9-widened-and-narrowed-run-4--webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  23 failed
+    [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 1) 
+    [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 1) 
+    [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 1) 
+    [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 2) 
+    [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 2) 
+    [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 2) 
+    [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 3) 
+    [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 3) 
+    [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 3) 
+    [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 4) 
+    [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 4) 
+    [webkit-light-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 4) 
+    [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 1) 
+    [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 1) 
+    [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 1) 
+    [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 2) 
+    [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 2) 
+    [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 2) 
+    [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:54:3 › a task open, Space checks it (run 3) 
+    [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 3) 
+    [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 3) 
+    [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:65:3 › a task open, a row checked, then the task closed (run 4) 
+    [webkit-dark-desktop] › ui-migration/tasks-toolbar.browser.mjs:77:3 › a row checked, then a task opened, the window widened and narrowed (run 4) 
+  25 passed (1.5m)
+exit=1
+load: 30.45 31.71 30.11 12/3973 3701224
+ended: 2026-10-10T03:48:22Z

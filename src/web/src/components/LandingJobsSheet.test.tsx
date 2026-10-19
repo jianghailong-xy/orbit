@@ -169,7 +169,12 @@ describe('the list of jobs in flight', () => {
     expect(rows().map((entry) => entry.getAttribute('data-job'))).toEqual(['job-c5', 'job-merge']);
 
     const c5 = row('job-c5')!;
-    expect(c5.querySelector('.project-landing')?.className).toBe('project-landing project-landing-timed-out');
+    // The row wears the merged line's head (owner decision 2026-10-11): the mark, the word, the
+    // clock — here the state, because a timed-out job has no clock left that moves — and the
+    // state, the wait and the freshness in one line under both.
+    expect(c5.querySelector('.landing-head')?.className).toBe('landing-head is-timed-out');
+    expect(c5.querySelector('.landing-head-title')?.textContent).toBe('Landing');
+    expect(c5.querySelector('.landing-head-right')?.textContent).toBe('Timed out');
     for (const text of ['Landing', 'Timed out', C5, 'No report for', '110m', 'limit 10m']) {
       expect(c5.textContent).toContain(text);
     }
@@ -183,7 +188,7 @@ describe('the list of jobs in flight', () => {
 
     // The merge into main lands no task: word, state and wait alone, nothing to press, no chevron.
     const mergeRow = row('job-merge')!;
-    for (const text of ['Merge to main', 'queued', 'Queued for', '41m 8s']) expect(mergeRow.textContent).toContain(text);
+    for (const text of ['Merge to main', 'queued', '41m 8s']) expect(mergeRow.textContent).toContain(text);
     expect(mergeRow.querySelector('a')).toBeNull();
     expect(mergeRow.querySelector('.landing-jobs-chev')).toBeNull();
     expect(mergeRow.querySelector('button')).toBeNull();
@@ -217,7 +222,7 @@ describe('the list of jobs in flight', () => {
     await settle();
     expect(rows().map((entry) => entry.getAttribute('data-job'))).toEqual(['job-c5-2', 'job-merge']);
     const next = row('job-c5-2')!;
-    expect(next.querySelector('.project-landing')?.className).toBe('project-landing');
+    expect(next.querySelector('.landing-head')?.className).toBe('landing-head');
     expect(next.textContent).toContain('queued');
     expect(next.querySelector('.landing-jobs-detail')?.textContent).toBe('Generation 2 · retried by you at 21:57');
     expect(retryButton('job-c5-2')).toBeNull();
@@ -258,22 +263,34 @@ describe('the list of jobs in flight', () => {
 });
 
 describe('the landing rows that open the list', () => {
-  it('opens it from the Work overview’s row', async () => {
+  it('opens it from the Work overview’s card', async () => {
     await mount(<ProjectPanoramaHeader projectId={PROJECT} projectStatus="OPEN" />);
-    const press = document.querySelector<HTMLButtonElement>('[data-project-block="work-overview"] button.project-landing-press');
+    const press = document.querySelector<HTMLButtonElement>(
+      '[data-project-block="work-overview"] button.spl-press');
     expect(press?.getAttribute('type')).toBe('button');
-    expect(press?.textContent).toContain('2 jobs · 1 timed out');
+    expect(press?.getAttribute('aria-haspopup')).toBe('dialog');
+    // The head counts the jobs, the row each one is in the body, and the lead's own state is the
+    // head's — the same read the list under it draws.
+    expect(press?.querySelector('.landing-head-title')?.textContent).toBe('Landing 2 jobs · 1 timed out');
+    // Each row is its job's title and its own state word — the lead's running one in the brand,
+    // the queued one grey.
+    expect([...(press?.querySelectorAll('.spl-jobs li') ?? [])].map((row) => [
+      row.querySelector('span:first-child')?.textContent, row.querySelector('span:last-child')?.textContent,
+    ])).toEqual([[C5, 'Timed out'], ['', 'queued']]);
     expect(dialog()).toBeNull();
-    await click(press, 'the Work overview’s landing row');
+    await click(press, 'the Work overview’s landing card');
     expect(dialog()?.querySelector('.orbit-overlay-title')?.textContent).toBe('2 jobs in flight');
     expect(rows()).toHaveLength(2);
   });
 
-  it('keeps the Work overview’s row a line to read from a server that does not list its jobs', async () => {
+  it('keeps the Work overview’s card a read from a server that does not list its jobs', async () => {
     integration = view(undefined, job({ timedOut: false }));
     await mount(<ProjectPanoramaHeader projectId={PROJECT} projectStatus="OPEN" />);
-    expect(document.querySelector('[data-project-block="work-overview"] .project-landing')).not.toBeNull();
-    expect(document.querySelector('.project-landing-press')).toBeNull();
+    const card = document.querySelector('[data-project-block="work-overview"] .session-project-landing');
+    expect(card).not.toBeNull();
+    // Nothing to open, so nothing to press: the same card, as a read.
+    expect(card?.querySelector('button.spl-press')).toBeNull();
+    expect(card?.querySelector('div.spl-press')).not.toBeNull();
   });
 
   it('opens it from the merge card’s row while a merge job is in flight', async () => {
@@ -282,7 +299,10 @@ describe('the landing rows that open the list', () => {
     await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
     const card = document.querySelector<HTMLElement>('.session-project-merge');
     expect(card?.getAttribute('data-shape')).toBe('checking');
-    const press = card!.querySelector<HTMLButtonElement>('button.project-landing-press');
+    // The row is the merged line's anatomy (owner decision 2026-10-11): the head, the whole row
+    // the press that opens the jobs, and no chevron.
+    expect(card!.querySelector('.landing-head.is-running')).not.toBeNull();
+    const press = card!.querySelector<HTMLButtonElement>('button.landing-head-press');
     expect(press?.textContent).toContain('Merge check');
     await click(press, 'the merge card’s landing row');
     expect(dialog()?.querySelector('.orbit-overlay-title')?.textContent).toBe('2 jobs in flight');
@@ -293,7 +313,7 @@ describe('the landing rows that open the list', () => {
     integration = view(undefined, merge({ kind: 'CHECK_PROMOTION', state: 'RUNNING', phase: 'CHECK',
       startedAt: instant(NOW - 80_000), heartbeatAt: instant(NOW - 5_000), timedOut: false }));
     await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
-    expect(document.querySelector('.session-project-merge .project-landing')).not.toBeNull();
-    expect(document.querySelector('.project-landing-press')).toBeNull();
+    expect(document.querySelector('.session-project-merge .landing-head')).not.toBeNull();
+    expect(document.querySelector('.landing-head-press')).toBeNull();
   });
 });

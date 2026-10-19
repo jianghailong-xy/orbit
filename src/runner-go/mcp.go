@@ -54,8 +54,8 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
-	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (a Wiki maintenance
-	// run, wiki_maintenance_session.go). Nil serves every tool.
+	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (the runner-hosted job an
+	// owner's wait is handed to, handOffOwnerWait). Nil serves every tool.
 	onlyTools map[string]bool
 	// How long the engine lets one tool call run before it reports the call failed (ORBIT_MCP_CALL_TIMEOUT_SECONDS);
 	// 0 when it waits for as long as the call takes. See handOffOwnerWait.
@@ -81,6 +81,36 @@ func mcpCallTimeoutFromEnv() time.Duration {
 // engine's deadline, leaving the rest for the round-trips around the wait. 0 means no cap.
 func longestInlineWait(callTimeout time.Duration) time.Duration {
 	return callTimeout / 2
+}
+
+// envMCPTools names the only tools `orbit mcp` serves, comma-separated, when it is set: the job an owner's
+// wait is handed to sets it to the one tool that job waits in (handOffOwnerWait).
+const envMCPTools = "ORBIT_MCP_TOOLS"
+
+// mcpToolsFromEnv is ORBIT_MCP_TOOLS as a set, or nil when it is not set: every tool.
+func mcpToolsFromEnv() map[string]bool {
+	raw, ok := os.LookupEnv(envMCPTools)
+	if !ok {
+		return nil
+	}
+	only := map[string]bool{}
+	for _, name := range strings.Split(raw, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			only[name] = true
+		}
+	}
+	return only
+}
+
+// onlyMCPTools keeps the tools `only` names, in the order they are listed.
+func onlyMCPTools(tools []map[string]interface{}, only map[string]bool) []map[string]interface{} {
+	kept := make([]map[string]interface{}, 0, len(only))
+	for _, tool := range tools {
+		if name, _ := tool["name"].(string); only[name] {
+			kept = append(kept, tool)
+		}
+	}
+	return kept
 }
 
 func mcpPermissionPromptEnabled() bool {
@@ -253,7 +283,8 @@ const taskModelHintDescription = "Suggested difficulty tier: S = mechanical edit
 	"XL = architecture design, long unattended work, or repeated failures at L (Opus · max). " +
 	"Codex uses the same default model with low/medium/high/xhigh for S/M/L/XL. " +
 	"modelHint is a suggestion that failures can escalate; model is a hard pin that takes precedence. " +
-	"The engine is still specified with provider. Omit to preserve the suggestion on update; null clears it."
+	"To pin the engine (the CLI) or the provider (the credential), use engine and provider. " +
+	"Omit to preserve the suggestion on update; null clears it."
 
 // The range of a task's priority: the server's TASK_PRIORITY_MIN/MAX, which are the INTEGER
 // column's own, stated in the schema for the same reason as the bounds above.
@@ -916,7 +947,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("title is required", true)
 		}
 		body := map[string]interface{}{"title": title}
-		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
+		copyIfPresent(body, args, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "verification", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "handoff")
 		if err := requireHandoffNamesItsDestination(body); err != nil {
 			return toolResult(err.Error(), true)
 		}
@@ -961,7 +992,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				return toolResult(fmt.Sprintf("tasks[%d]: title is required", i), true)
 			}
 			body := map[string]interface{}{"title": title}
-			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
+			copyIfPresent(body, item, "description", "attachmentIds", "listId", "projectId", "fixesOpenItemId", "parentTaskId", "verifiesTaskId", "acceptanceCriteria", "criterionKey", "codeless", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "assigneeId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "dependsOnTaskIds", "autoRunWhenReady", "completionPolicy", "labels", "supersedesTaskId", "ref", "dependsOnRefs", "parentRef", "verifiesRef", "handoff")
 			// Per item, because a crossing is per item: one plan can file most of its work at home
 			// and one piece of it over the line, and the item that crosses is the one that has to
 			// name where it is going.
@@ -988,7 +1019,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 
 	case "task_batch_pin":
 		body := map[string]interface{}{}
-		copyIfPresent(body, args, "taskIds", "projectId", "listId", "labels", "provider", "model")
+		copyIfPresent(body, args, "taskIds", "projectId", "listId", "labels", "engine", "provider", "model")
 		raw, err := s.t.pinTasksBatch(s.agentID, s.sessionID, body)
 		if err != nil {
 			// Verbatim. The two refusals this door has of its own are the codes the server sends
@@ -1008,7 +1039,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		// gives it all three outcomes for free: absent stays absent (the task keeps what it says),
 		// a string is forwarded as given, and an explicit null survives as null rather than being
 		// mistaken for "not supplied" — that last one is the whole clear path.
-		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "fixesOpenItemId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "provider", "model", "modelHint", "modelHintReason", "acceptanceCriteria", "criterionKey", "codeless", "codelessReason", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
+		copyIfPresent(body, args, "title", "description", "status", "listId", "projectId", "fixesOpenItemId", "assigneeId", "parentTaskId", "verifiesTaskId", "dueDate", "runAt", "engine", "provider", "model", "modelHint", "modelHintReason", "acceptanceCriteria", "criterionKey", "codeless", "codelessReason", "completionCriterion", "completionCriterionOverrideReason", "ownerConfirmationReason", "ownerConfirmationReasonNote", "acceptanceCommand", "acceptanceExpectedExitCode", "acceptanceTimeoutSeconds", "dependsOnTaskIds", "autoRunWhenReady", "priority", "completionPolicy", "verdict", "labels", "supersededByTaskId", "terminalReason", "handoff")
 		if len(body) == 0 {
 			return toolResult("no fields to update", true)
 		}
@@ -1075,7 +1106,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		if body == "" {
 			return toolResult("body is required", true)
 		}
-		raw, err := s.t.commentTask(id, s.agentID, body)
+		raw, err := s.t.commentTask(id, s.agentID, s.sessionID, body)
 		if err != nil {
 			return toolResult("comment failed: "+err.Error(), true)
 		}
@@ -1183,7 +1214,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 	case "provider_create":
 		body := map[string]interface{}{}
 		copyIfPresent(body, args, "label", "runtime", "baseUrl", "apiKey", "models", "defaultModel")
-		for _, required := range []string{"label", "baseUrl", "apiKey", "models"} {
+		for _, required := range providerCreateRequired(body) {
 			if _, ok := body[required]; !ok {
 				return toolResult(required+" is required", true)
 			}
@@ -1300,7 +1331,7 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("prompt is required", true)
 		}
 		body := map[string]interface{}{"prompt": prompt}
-		copyIfPresent(body, args, "title", "model", "provider", "permissionMode")
+		copyIfPresent(body, args, "title", "model", "engine", "provider", "permissionMode")
 		// Route to a target agent: an explicit agentId wins; else an @-mentioned agentName
 		// (resolved to that owner's agent server-side); else default to the current agent.
 		if id := getString(args, "agentId"); id != "" {
@@ -1957,6 +1988,9 @@ func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[st
 		Title       string `json:"title"`
 		Integration struct {
 			MergeCheckCommand string `json:"mergeCheckCommand"`
+			// The project's main branch by name, which the card's note says every merge into is
+			// still checked; null with no repository bound.
+			UpstreamRef *string `json:"upstreamRef"`
 		} `json:"integration"`
 	}
 	if err := json.Unmarshal(projectRaw, &project); err != nil {
@@ -2031,6 +2065,7 @@ func skipMergeCheckFacts(t *Transport, projectID, taskID, reason string) (map[st
 		"failure":      summary,
 		"generation":   landing.Generation,
 		"reason":       reason,
+		"mainBranch":   project.Integration.UpstreamRef,
 	}, nil
 }
 
@@ -2410,13 +2445,25 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"account owner in the Orbit app, never by an agent. FAILED remains writable as a run's " +
 			"conservative self-report.",
 	}
+	// A provider is where a run's credential comes from and an engine is the CLI that runs it
+	// (docs/provider-engine-contract.md §0); a task pins either, both or neither.
 	providerProp := map[string]interface{}{
-		"type":        []string{"string", "null"},
-		"description": "Run this task on a specific provider: a built-in engine slug (\"claude\", \"codex\", \"kimi\", \"opencode\") or one of the owner's configured provider slugs. Omit (or pass null) to start where the assignee's project last started, which is almost always right — only pin one when the task genuinely needs that provider. Changing it makes the next run start a fresh session instead of continuing the previous one.",
+		"type": []string{"string", "null"},
+		"description": "Pin where this task's runs get their credential: an engine's own sign-in on the runner (\"claude\", \"codex\", \"kimi\", \"antigravity\"), \"opencode\" for OpenCode's own configuration, an account pool, or one of the owner's API keys — provider_list shows every slug with the engines it can run. " +
+			"Named without `engine`, it also pins the engine that provider runs on by default (a key on its own protocol's CLI), which is what a provider pin always meant; the built-in \"dsh\" is DeepSeek Harness on the owner's first enabled DeepSeek key. " +
+			"Omit (or pass null) to start where the assignee's project last started, which is almost always right — only pin one when the task genuinely needs that credential. Changing it makes the next run start a fresh session instead of continuing the previous one.",
+	}
+	engineProp := map[string]interface{}{
+		"type": []string{"string", "null"},
+		"enum": nullableEngineEnum(),
+		"description": "Pin the CLI this task's runs use: \"claude\" (Claude Code), \"codex\" (Codex), \"kimi\" (Kimi Code), \"antigravity\" (Antigravity CLI), \"opencode\" (OpenCode), \"dsh\" (DeepSeek Harness) or \"cursor\" (Cursor CLI). " +
+			"With `provider` the two must be a pair that runs: a provider can run only the engines provider_list names for it, and any other is refused PROVIDER_ENGINE_INCOMPATIBLE. " +
+			"Alone it keeps the task's provider pin, which then has to run on it; with no provider pin the run uses that engine's own credential — its sign-in on the runner, OpenCode's own configuration, or for \"dsh\" the owner's first enabled DeepSeek key (refused DEEPSEEK_KEY_REQUIRED without one). " +
+			"Omit to leave the engine to the provider pin or, with neither, to where the assignee's project last started; on task_update and task_batch_pin null clears only the engine pin.",
 	}
 	modelProp := map[string]interface{}{
 		"type":        []string{"string", "null"},
-		"description": "Run this task on a specific model id within its provider's model space (e.g. \"claude-opus-5\"). Omit (or pass null) to use the provider's own default. An id the provider doesn't have will fail at run time, not here.",
+		"description": "Run this task on a specific model id within the model space of the engine and provider it runs on (e.g. \"claude-opus-5\"). Omit (or pass null) to use their default. An id they don't offer is caught when the run starts, not here.",
 	}
 	modelHintProp := map[string]interface{}{
 		"type":        []string{"string", "null"},
@@ -2727,14 +2774,19 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	// The fields provider_create and provider_update both write.
 	providerRuntimeProp := map[string]interface{}{
 		"type": "string",
-		"enum": []string{"claude", "codex", "kimi"},
-		"description": "The coding engine that drives it: claude (the default; an endpoint serving the Anthropic " +
-			"Messages API, e.g. vLLM's /v1/messages), codex (the OpenAI Responses API) or kimi (Moonshot's API).",
+		"enum": providerProtocols,
+		"description": "The protocol the endpoint speaks (the field keeps its old name): claude (the default; the " +
+			"Anthropic Messages API, e.g. vLLM's /v1/messages), codex (the OpenAI Responses API), kimi (Moonshot's API), " +
+			"antigravity (the Gemini API) or cursor (a Cursor User API Key, which needs no baseUrl or models: it goes in " +
+			"under the Cursor preset, on Cursor's own API, and its models are Cursor CLI's own on each runner). It decides " +
+			"which engines can run the key rather than naming one: the protocol's own CLI and OpenCode, DeepSeek Harness " +
+			"too for a DeepSeek key, only Claude Code for a Claude subscription token, and only Cursor CLI for a Cursor " +
+			"key (provider_list's `engines`).",
 	}
 	providerBaseURLProp := map[string]interface{}{
 		"type": "string",
-		"description": "The endpoint as that engine will call it, e.g. http://127.0.0.1:8000 — resolved on the machine " +
-			"the session runs on.",
+		"description": "The endpoint as an engine running on the key will call it, e.g. http://127.0.0.1:8000 — resolved on " +
+			"the machine the session runs on. Required on create, but for a Cursor key, which is on Cursor's own API.",
 	}
 	providerAPIKeyProp := map[string]interface{}{
 		"type":        "string",
@@ -2742,7 +2794,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 	}
 	providerModelsProp := map[string]interface{}{
 		"type":        "array",
-		"description": "The models it serves; on update this replaces the whole list.",
+		"description": "The models it serves; on update this replaces the whole list. Required on create, but for a Cursor key.",
 		"items": obj(map[string]interface{}{
 			"value": map[string]interface{}{"type": "string", "description": "The model id the endpoint serves, passed to the engine as its model (e.g. qwen3.8-27b-fp8)."},
 			"label": str,
@@ -2753,7 +2805,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"reasoningLevels": map[string]interface{}{
 				"type":  "array",
 				"items": map[string]interface{}{"type": "string", "enum": []string{"low", "medium", "high", "xhigh", "max"}},
-				"description": "claude runtime only: the efforts this model accepts. Every session's effort is moved onto " +
+				"description": "Claude Code only: the efforts this model accepts. Every session's effort is moved onto " +
 					"the nearest of them — no effort counts as high, what Claude Code sends by default — and [] means the " +
 					"model takes no effort at all. Omit it and effort is passed through unchanged.",
 			},
@@ -2832,6 +2884,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		"A time already past is started by the next scan. " +
 		"task_start ignores runAt and starts the task immediately, and that run clears runAt as well."
 	runAtProp := map[string]interface{}{"type": "string", "description": runAtDescription}
+	// What autoRunWhenReady never does, stated once for task_create, every task_create_batch item and
+	// task_update. No automatic starter selects a task in no project that has no prerequisites — the
+	// dependency sweep wants an edge, the independent release a project — and "all of its zero
+	// prerequisites are DONE" reads as ready to anybody who has not been told (2026-10-16: two such
+	// tasks, left on the default true, sat OPEN for 12 minutes and 4 hours until somebody started them).
+	autoRunUnfiledNoPrerequisites := "A task in no project that has no prerequisites is never started by this flag, however ready it looks: start it with task_start, or give it a runAt."
 	updateRunAtProp := map[string]interface{}{
 		"type":        []string{"string", "null"},
 		"description": "Omit to leave the schedule as it is, null to cancel it, a date-time to set or move it. " + runAtDescription,
@@ -2936,6 +2994,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			"acceptanceTimeoutSeconds": acceptanceTimeoutSecondsProp,
 			"dueDate":                  str,
 			"runAt":                    runAtProp,
+			"engine":                   engineProp,
 			"provider":                 providerProp,
 			"model":                    modelProp,
 			"modelHint":                modelHintProp,
@@ -2947,7 +3006,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			"autoRunWhenReady": map[string]interface{}{
 				"type":        "boolean",
-				"description": "Start this task without a manual start once it is ready (default true): once all its prerequisites are DONE, and — for a task in a project — once the project has started, even with no prerequisites at all. Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start. For a task in no project it only matters when there are prerequisites.",
+				"description": "Start this task without a manual start once it is ready (default true): once all its prerequisites are DONE, and — for a task in a project — once the project has started, even with no prerequisites at all. " + autoRunUnfiledNoPrerequisites + " Needs an assignee bound to a runner. Set false to leave it OPEN for a human/agent to start.",
 			},
 			"completionPolicy": map[string]interface{}{
 				"type":        "string",
@@ -3039,7 +3098,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_evidence_list",
-			"description": "List the task's explicit structured completion-evidence revisions in stable task-local order. This reads the evidence ledger directly; comments, final replies and Session lifecycle state are not evidence.",
+			"description": "List the task's explicit structured completion-evidence revisions in stable task-local order, each carrying its decision — a SEND_BACK's note included — once it has been answered. This reads the evidence ledger directly; comments, final replies and Session lifecycle state are not evidence.",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
@@ -3061,7 +3120,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_evidence_decide",
-			"description": "Record THIS session's decision about one version of another task's completion evidence: CONFIRM that the evidence settles the criterion it quotes, or SEND_BACK with a note saying what the next revision has to show. It writes one row and nothing else — no task status, no session state, no comment, no notification. Five things are checked at decision time and each refusal names what to do instead: the revision you answer must still be the task's LATEST (EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED — read task_evidence_list again and decide the current one); the criterion the evidence quotes must still be worded the way the project states it today (EVIDENCE_JUDGMENT_CRITERION_MOVED — the standard moved, so ask for evidence against the new one); this session must not have done the work being judged (EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION — a run cannot decide its own evidence, which is what makes a CONFIRM a check rather than a signature on your own homework); a session that acts for one project — its coordinator, a judgment session opened for it, a run of one of its tasks — must not decide a task that is in another project (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT — a task's evidence is decided from the project it is in now, and a task moved out takes its undecided evidence with it, so the project it left can no longer decide it); and SEND_BACK must carry a note. One version is decided once: answering it again says the same thing or is refused as already decided. Outside a project, the session that filed an EVIDENCE_JUDGMENT task is handed each revision its run submits (an <orbit-evidence-review> message naming the taskId and evidenceRevision): deciding it is that session's job, and the account owner is asked only if it has not decided within 30 minutes or has ended.",
+			"description": "Record THIS session's decision about one version of another task's completion evidence: CONFIRM that the evidence settles the criterion it quotes, or SEND_BACK with a note saying what the next revision has to show. It writes one row and the status that row derives (a CONFIRM of an EVIDENCE_JUDGMENT task's current revision settles it DONE); a SEND_BACK's note is then delivered to the run that submitted the revision as a platform message, so the next attempt knows what to show, and the decision — note included — is readable on the revision in task_evidence_list. Five things are checked at decision time and each refusal names what to do instead: the revision you answer must still be the task's LATEST (EVIDENCE_JUDGMENT_EVIDENCE_SUPERSEDED — read task_evidence_list again and decide the current one); the criterion the evidence quotes must still be worded the way the project states it today (EVIDENCE_JUDGMENT_CRITERION_MOVED — the standard moved, so ask for evidence against the new one); this session must not have done the work being judged (EVIDENCE_JUDGMENT_REQUIRES_INDEPENDENT_SESSION — a run cannot decide its own evidence, which is what makes a CONFIRM a check rather than a signature on your own homework); a session that acts for one project — its coordinator, a judgment session opened for it, a run of one of its tasks — must not decide a task that is in another project (EVIDENCE_JUDGMENT_TASK_IN_ANOTHER_PROJECT — a task's evidence is decided from the project it is in now, and a task moved out takes its undecided evidence with it, so the project it left can no longer decide it); and SEND_BACK must carry a note. One version is decided once: answering it again says the same thing or is refused as already decided. Outside a project, the session that filed an EVIDENCE_JUDGMENT task is handed each revision its run submits (an <orbit-evidence-review> message naming the taskId and evidenceRevision): deciding it is that session's job, and the account owner is asked only if it has not decided within 30 minutes or has ended.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId": taskIDProp,
 				"decision": map[string]interface{}{
@@ -3077,7 +3136,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"type":        "string",
 					"minLength":   1,
 					"maxLength":   4000,
-					"description": "Required on SEND_BACK: what the next evidence revision has to show. Nothing else is written, so this note is the only thing the next attempt has to aim at. Optional on CONFIRM.",
+					"description": "Required on SEND_BACK: what the next evidence revision has to show. It is delivered to the run that submitted the revision as a platform message, so it is what the next attempt aims at. Optional on CONFIRM.",
 				},
 			}, "decision", "evidenceRevision"),
 		},
@@ -3520,6 +3579,18 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "With PROJECT_BRANCH only: the branch as a full ref (refs/heads/…). " +
 						"Leave it out for refs/heads/project/<project id>.",
 				},
+				"upstreamRef": map[string]interface{}{
+					"type": "string",
+					"description": "The project's main branch, as a full ref (refs/heads/…): the branch its " +
+						"tasks start from and its finished work is finally merged into, with either line. " +
+						"Leave it out when project_get's integration.lastMainBranch has a value: the account " +
+						"owner has already chosen one for this repository. When it is null, run `git " +
+						"symbolic-ref --short refs/remotes/origin/HEAD` in your checkout and send the name it " +
+						"prints after origin/ as refs/heads/<name> (origin/master becomes refs/heads/master); if " +
+						"that fails, leave it out. It is only a suggestion: the owner's card puts their own " +
+						"last choice for this repository ahead of it, and nothing is written until they press " +
+						"Start.",
+				},
 				"automatic": map[string]interface{}{
 					"type": "boolean",
 					"description": "Whether you run the project for the owner: you decide when each task is " +
@@ -3539,6 +3610,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "The command run on the combined tree before anything lands — on the " +
 						"project branch and again before main. Leave it out for none; with Automatic on a " +
 						"project branch that is a warning, since the branch would merge into main untested.",
+				},
+				"mergeCheckTimeoutSeconds": map[string]interface{}{
+					"type":    "integer",
+					"minimum": 1,
+					"description": "That check's budget in seconds — how long it may run on the combined " +
+						"tree before the landing is stopped. Leave it out for the one-hour default. A " +
+						"suggestion like the command: the owner's card opens with what you send and may " +
+						"change it before pressing Start.",
 				},
 				"why": map[string]interface{}{
 					"type": "string",
@@ -3841,7 +3920,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_batch_pin",
-			"description": "Re-pin many tasks at once: set `provider` and/or `model` on every task a selector matches, in ONE request that writes only the rows whose pin really changes. The door for \"change the model of every task in this project\" — task_update can only spell that as one call per task, which is a hundred thousand round trips and as many non-HOT rewrites of rows whose model did not change: the project this exists for re-pinned 109,875 tasks one PATCH at a time, 81,219 of them inside one pg_stat_statements window, at 91.4 shared buffers and 7.4 kB of WAL each. Measured on a throwaway fixture carrying this table's real 29 indexes, walking a hundred thousand rows that way takes 218.6 s against a single project-scoped UPDATE's 31.0 s, for the same rows written. A row already carrying the target value is not written at all, so its `updated_at` is not bumped: that column's one reader is the project list's lastActivityAt, and skipping no-ops makes it more accurate, not less. `taskIds` and the filter NARROW each other — a caller naming both gets the intersection — and at least one of `taskIds`, `projectId`, `listId` or `labels` is required: a request naming none is refused (PIN_BATCH_NO_SELECTOR) rather than read as \"every task this owner has\". `provider`/`model` are three-state exactly as on task_update — omitted leaves the current pin alone, null returns the task to inheriting its assignee workspace's, a string pins it — and naming neither is refused (PIN_BATCH_NOTHING_TO_WRITE). Tasks with a run in flight are re-pinned like any other: this writes the task row only, a run already holding the task keeps the model it started on, and the disagreement is reported when the NEXT run starts, as TASK_RUN_PIN_CONFLICT. Returns `{changed}`: how many rows were actually written.",
+			"description": "Re-pin many tasks at once: set `engine`, `provider` and/or `model` on every task a selector matches, in ONE request that writes only the rows whose pin really changes. The door for \"change the model of every task in this project\" — task_update can only spell that as one call per task, which is a hundred thousand round trips and as many non-HOT rewrites of rows whose model did not change: the project this exists for re-pinned 109,875 tasks one PATCH at a time, 81,219 of them inside one pg_stat_statements window, at 91.4 shared buffers and 7.4 kB of WAL each. Measured on a throwaway fixture carrying this table's real 29 indexes, walking a hundred thousand rows that way takes 218.6 s against a single project-scoped UPDATE's 31.0 s, for the same rows written. A row already carrying the target value is not written at all, so its `updated_at` is not bumped: that column's one reader is the project list's lastActivityAt, and skipping no-ops makes it more accurate, not less. `taskIds` and the filter NARROW each other — a caller naming both gets the intersection — and at least one of `taskIds`, `projectId`, `listId` or `labels` is required: a request naming none is refused (PIN_BATCH_NO_SELECTOR) rather than read as \"every task this owner has\". `engine`/`provider`/`model` are three-state exactly as on task_update — omitted leaves the current pin alone, null returns the task to inheriting its assignee workspace's, a string pins it — and naming none of them is refused (PIN_BATCH_NOTHING_TO_WRITE). A provider is checked once against the engine it is written with (named alone, it pins the engine it runs on by default); an engine named alone keeps each task's provider pin, so it is checked against every provider pin the selection holds, and the whole batch is refused, naming those that cannot run on it. Tasks with a run in flight are re-pinned like any other: this writes the task row only, a run already holding the task keeps the model it started on, and the disagreement is reported when the NEXT run starts, as TASK_RUN_PIN_CONFLICT. Returns `{changed}`: how many rows were actually written.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskIds": map[string]interface{}{
 					"type":        "array",
@@ -3862,13 +3941,14 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"items":       map[string]interface{}{"type": "string"},
 					"description": "Re-pin every task carrying ALL of these labels. Matched exactly, case included; task_labels reports how each one is actually spelled.",
 				},
+				"engine":   engineProp,
 				"provider": providerProp,
 				"model":    modelProp,
 			}),
 		},
 		{
 			"name":        "task_update",
-			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. A write that lands a task on OWNER_CONFIRMED in no project, or in a project whose Automatic is off — by changing the criterion, the project or the criterion it serves — needs ownerConfirmationReason (stored or sent), or it is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected. The account owner writes it directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project unless it asks for the move with `handoff`: the server then files a move request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is, and the account owner's confirmation moves the task at once, with nothing to send again (read the request with project_crossings; `handoff` says who may ask and which moves are refused). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
+			"description": "Update a task's fields. Direct status DONE is refused for every actor; the refusal names the declared EXECUTABLE, VERIFICATION, EVIDENCE_JUDGMENT, or OWNER_CONFIRMED path, and an OWNER_CONFIRMED task is confirmed only by the account owner in the Orbit app. A write that lands a task on OWNER_CONFIRMED in no project, or in a project whose Automatic is off — by changing the criterion, the project or the criterion it serves — needs ownerConfirmationReason (stored or sent), or it is refused 409 OWNER_CONFIRMATION_REASON_REQUIRED and nothing is written. FAILED remains writable as a run's conservative self-report. When setting `description`, write it as a self-contained, executable prompt an agent can act on without prior context (background, files involved, steps) — what would PROVE the task done goes in `acceptanceCriteria`, not into the prompt. `acceptanceCriteria` is editable for the whole life of the task, which is where it usually gets written: omit it to leave the current criteria untouched, pass a string to replace them, pass null to clear them. It states what settles THIS task, not the project it is filed under (project_get). `parentTaskId` moves this task under another one you own (same project, never itself or one of its own subtasks) — membership only, with no effect on when it runs. `projectId` re-files this task under another project, or null takes it out of every project — how a mis-filing is corrected. The account owner writes it directly; a session acting under a project scope is refused UNMAPPED_PROJECT_WORK for null and PROJECT_SCOPE_MISMATCH for another project unless it asks for the move with `handoff`: the server then files a move request, answers CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING and leaves the task where it is, and the account owner's confirmation moves the task at once, with nothing to send again (read the request with project_crossings; `handoff` says who may ask and which moves are refused). Pass null for assigneeId/listId/parentTaskId/projectId/dueDate/runAt/engine/provider/model/modelHint/modelHintReason to clear them. `codeless: true` declares that the task produces no code, which takes it out of its acceptance criterion's landing: it needs `codelessReason` in the same call, and is refused for a task that already has commits of its own.",
 			"inputSchema": obj(map[string]interface{}{
 				"taskId":      taskIDProp,
 				"title":       str,
@@ -3885,6 +3965,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"parentTaskId":       updateParentTaskIDProp,
 				"dueDate":            map[string]interface{}{"type": []string{"string", "null"}},
 				"runAt":              updateRunAtProp,
+				"engine":             engineProp,
 				"provider":           providerProp,
 				"model":              modelProp,
 				"modelHint":          modelHintProp,
@@ -3922,7 +4003,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"autoRunWhenReady": map[string]interface{}{
 					"type":        "boolean",
-					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner.",
+					"description": "Once all prerequisites are DONE, auto-run this task without a manual start. Needs an assignee bound to a runner. " + autoRunUnfiledNoPrerequisites,
 				},
 				"priority": map[string]interface{}{
 					"type":        []string{"integer", "null"},
@@ -4081,25 +4162,32 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name": "provider_list",
-			"description": "List the provider slugs `provider` accepts here — the built-in engines (builtin true) " +
-				"plus the ones configured on this account, each with the runtime it borrows and the models it " +
-				"offers. Read this before pinning a `provider` on a task or session: a configured provider's " +
-				"slug is derived from its label, not chosen, so it cannot be guessed from the vendor's name, " +
-				"and a slug that is not on this list is refused with \"provider not available\".",
+			"description": "List the provider slugs `provider` accepts here. A provider is where a session's credential " +
+				"comes from; the engine is the CLI that runs it (claude, codex, kimi, antigravity, opencode, dsh). Each " +
+				"entry carries `engines`: the engines it can run, the one it runs on when no `engine` is named first. The " +
+				"built-in entries (builtin true) are each engine's own sign-in on the runner — opencode is OpenCode's own " +
+				"configuration, and dsh is DeepSeek Harness on the owner's first enabled DeepSeek key; the rest are this " +
+				"account's API keys, each with the protocol its endpoint speaks (`runtime`) and the models it offers, and " +
+				"its account pools. One key can run on several engines: a DeepSeek key on Claude Code, OpenCode and " +
+				"DeepSeek Harness. Read this before pinning a `provider` or an `engine` on a task or session: a key's slug " +
+				"is derived from its label, not chosen, so it cannot be guessed from the vendor's name, and a slug that is " +
+				"not on this list is refused with \"provider not available\".",
 			"inputSchema": obj(map[string]interface{}{}),
 		},
 		{
 			"name": "provider_create",
-			"description": "Configure a provider on this account — typically a self-hosted endpoint, such as a local vLLM " +
-				"serving the Anthropic Messages API — so sessions and tasks can run on it by the slug this returns " +
-				"(derived from `label`, and listed by provider_list). A provider holds a credential and is the account " +
+			"description": "Configure a provider on this account — an API key and the endpoint it is for, typically a " +
+				"self-hosted endpoint such as a local vLLM serving the Anthropic Messages API — so sessions and tasks can " +
+				"get their credential from it by the slug this returns (derived from `label`, and listed by provider_list " +
+				"with the engines it can run, which its `runtime` protocol decides). A provider holds a credential and is the account " +
 				"owner's to add: if they have not asked for this one, do NOT call this tool — ask them and end your turn. " +
 				"It puts the provider on a confirmation card in front of the owner, with the key shown only as set, and " +
 				"BLOCKS until they answer: nothing is written if they decline, so do not create it another way. `baseUrl` " +
 				"is resolved on the machine each session runs on, so http://127.0.0.1:8000 is that runner's own port — " +
 				"run the session on an agent whose runner hosts the endpoint. The key is stored encrypted and no read " +
 				"returns it, this tool's answer included (`hasApiKey`); like every tool input it is recorded in this " +
-				"conversation, so for a real secret prefer `orbit provider create --api-key-file -`.",
+				"conversation, so for a real secret prefer `orbit provider create --api-key-file -`. A Cursor User API Key " +
+				"(`runtime` cursor) takes only `label` and `apiKey`, and runs on Cursor CLI alone.",
 			"inputSchema": obj(map[string]interface{}{
 				"label":        map[string]interface{}{"type": "string", "description": "Display name; the slug is derived from it."},
 				"runtime":      providerRuntimeProp,
@@ -4107,15 +4195,16 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"apiKey":       providerAPIKeyProp,
 				"models":       providerModelsProp,
 				"defaultModel": map[string]interface{}{"type": "string", "description": "The model a session that names none runs on; defaults to the first of `models`."},
-			}, "label", "baseUrl", "apiKey", "models"),
+			}, "label", "apiKey"),
 		},
 		{
 			"name": "provider_update",
 			"description": "Change one of this account's own providers, named by the slug provider_list shows — never a " +
 				"shared one. Pass only what changes: `models` REPLACES the whole list, and an omitted `apiKey` keeps the " +
-				"stored key. It puts the change on a confirmation card in front of the account owner (a new key shown " +
-				"only as set) and BLOCKS until they answer: nothing is written if they decline. A running session keeps " +
-				"the endpoint it was started with until it next restarts.",
+				"stored key. A `runtime` (protocol) change is refused while an open session or a task pin uses the key on " +
+				"an engine the new protocol cannot run. It puts the change on a confirmation card in front of the account " +
+				"owner (a new key shown only as set) and BLOCKS until they answer: nothing is written if they decline. A " +
+				"running session keeps the endpoint it was started with until it next restarts.",
 			"inputSchema": obj(map[string]interface{}{
 				"slug":         map[string]interface{}{"type": "string", "description": "The provider's slug, as provider_list shows it."},
 				"label":        str,
@@ -4129,9 +4218,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		{
 			"name": "provider_delete",
 			"description": "Remove one of this account's own providers, named by the slug provider_list shows. New sessions " +
-				"and tasks can no longer name it, and one already pinned to it runs on the built-in claude engine — the " +
-				"runner's own sign-in — the next time it starts. It puts the deletion on a confirmation card in front of " +
-				"the account owner and BLOCKS until they answer: nothing is removed if they decline.",
+				"and tasks can no longer name it, and nothing already on it moves to another engine or to the runner's own " +
+				"sign-in: its sessions keep their engine and wait, as on a disabled provider, until they are switched to " +
+				"another provider that engine runs, and a task pinned to it cannot start again until it is re-pinned. It " +
+				"puts the deletion on a confirmation card in front of the account owner and BLOCKS until they answer: " +
+				"nothing is removed if they decline.",
 			"inputSchema": obj(map[string]interface{}{
 				"slug": map[string]interface{}{"type": "string", "description": "The provider's slug, as provider_list shows it."},
 			}, "slug"),
@@ -4209,7 +4300,17 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"agentName": map[string]interface{}{"type": "string", "description": "Route to an agent by name (e.g. from an @mention). Resolved to that owner's agent; ignored if agentId is set."},
 					"title":     str,
 					"model":     str,
-					"provider":  map[string]interface{}{"type": "string", "description": "Run this session on a specific provider: a built-in engine slug (\"claude\", \"codex\", \"kimi\", \"opencode\") or one of the owner's configured provider slugs. Omit to start where the target agent's project last started — an agent has no provider of its own."},
+					"engine": map[string]interface{}{
+						"type": "string",
+						"enum": append([]string{}, engineNames...),
+						"description": "The CLI that runs the session: \"claude\" (Claude Code), \"codex\" (Codex), \"kimi\" (Kimi Code), \"antigravity\" (Antigravity CLI), \"opencode\" (OpenCode), \"dsh\" (DeepSeek Harness) or \"cursor\" (Cursor CLI). It is the session's for life: a session never changes engine, so another engine means another session. " +
+							"With `provider` the two must be a pair that runs: a provider can run only the engines provider_list names for it, and any other is refused PROVIDER_ENGINE_INCOMPATIBLE. " +
+							"Alone, it runs on that engine's own credential — its sign-in on the runner, OpenCode's own configuration, or for \"dsh\" the owner's first enabled DeepSeek key (refused DEEPSEEK_KEY_REQUIRED without one). " +
+							"Omit it to run on the engine `provider` runs on by default, or with neither, where the target agent's project last started.",
+					},
+					"provider": map[string]interface{}{"type": "string", "description": "Where the session's credential comes from: an engine's own sign-in on the runner (\"claude\", \"codex\", \"kimi\", \"antigravity\"), \"opencode\" for OpenCode's own configuration, an account pool, or one of the owner's API keys — provider_list shows every slug with the engines it can run. " +
+						"Named without `engine`, it runs on the engine that provider runs on by default, as it always did: a sign-in on its own engine, a key on its own protocol's CLI (a DeepSeek key on Claude Code), and the built-in \"dsh\" as DeepSeek Harness on the owner's first enabled DeepSeek key. " +
+						"Omit both to start where the target agent's project last started — an agent has no engine or provider of its own."},
 					// The enum is what a model actually chooses from, so it lists only the modes this
 					// machine can run — a root runner drops "bypassPermissions", which claude refuses
 					// under root by exiting during startup. Offering it there is how a sub-session got
@@ -4288,12 +4389,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "agent_list",
-				"description": "List this owner's agents/workspaces (id, name, workDir, runner, and the provider the project last ran on). Use the list to discover which agent to route a sub-task to — resolve an @mention to a name/id, then pass it to session_create (agentName or agentId).",
+				"description": "List this owner's agents/workspaces (id, name, workDir, runner, and the engine and provider the project last ran on: lastEngine, lastProvider). Use the list to discover which agent to route a sub-task to — resolve an @mention to a name/id, then pass it to session_create (agentName or agentId).",
 				"inputSchema": obj(map[string]interface{}{}),
 			},
 			map[string]interface{}{
 				"name":        "agent_create",
-				"description": "Create a new agent/workspace under this owner, bound to the current runner unless runnerId is given — e.g. to stand up a specialized sub-agent to delegate to. An agent has no provider of its own, so pass `provider` to session_create when a session needs a specific one. NOTE: the orchestration permission cannot be set here; only a human can grant it in the web UI.",
+				"description": "Create a new agent/workspace under this owner, bound to the current runner unless runnerId is given — e.g. to stand up a specialized sub-agent to delegate to. An agent has no engine or provider of its own, so pass `engine` and/or `provider` to session_create when a session needs a specific one. NOTE: the orchestration permission cannot be set here; only a human can grant it in the web UI.",
 				"inputSchema": obj(map[string]interface{}{
 					"name":               str,
 					"description":        str,
@@ -4308,7 +4409,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 			},
 			map[string]interface{}{
 				"name":        "agent_update",
-				"description": "Update an existing agent's fields (name, system prompt, workDir, etc.). An agent has no provider to set — that is per session. Cannot change the orchestration permission (human-only, web UI).",
+				"description": "Update an existing agent's fields (name, system prompt, workDir, etc.). An agent has no engine or provider to set — those are per session. Cannot change the orchestration permission (human-only, web UI).",
 				"inputSchema": obj(map[string]interface{}{
 					"agentId":            map[string]interface{}{"type": "string", "description": "Agent id to update."},
 					"name":               str,

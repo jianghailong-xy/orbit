@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 
@@ -135,13 +144,17 @@ function migrations(): Array<{ dir: string; sql: string }> {
  *
  * `--others --exclude-standard` is load-bearing: plain `git ls-files` reports the INDEX, so a file
  * written but not yet staged is invisible and the scan goes green on a tree it never read.
+ * Parameterised by root so the scan can be run against a throwaway repository as well as this one.
  */
-function scannableFiles(): string[] {
+function scannableFiles(root: string = ROOT): string[] {
   const listed = execFileSync(
     'git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'],
-    { cwd: ROOT, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
+    { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
   ).split('\0').filter(Boolean);
   return listed.filter((file) => !file.startsWith('src/apiserver/prisma/migrations/')
+    // Frozen evidence reports record what was run at the time, for the same reason the migration
+    // ledger is excluded above: they are history, not a live caller.
+    && !file.startsWith('docs/evidence/')
     && !file.includes('/build/')
     && !file.includes('/dist/')
     && !file.startsWith('node_modules/'));
@@ -290,16 +303,17 @@ test('(s) the project acceptance gate lost its judgment-result reader and gained
 });
 
 // (t) --------------------------------------------------------------------------------------------
-test('(t) nothing in the tree still reads or writes the five tables, raw SQL included', () => {
+/** Every line of the tree at `root` that still names one of the removed relations. */
+function judgmentTableOffenders(root: string = ROOT): string[] {
   const names = [...DROPPED_JUDGMENT_TABLES, ...DROPPED_JUDGMENT_VIEWS];
   const camel = ['taskJudgmentRequest', 'taskExecutableJudgmentResult', 'taskJudgmentInboxItem',
     'taskJudgmentPushDelivery', 'taskJudgmentBackfillBatch'];
   const offenders: string[] = [];
-  for (const file of scannableFiles()) {
+  for (const file of scannableFiles(root)) {
     if (EVIDENCE.has(file)) continue;
     let source: string;
     try {
-      source = read(file);
+      source = readFileSync(path.join(root, file), 'utf8');
     } catch {
       continue;
     }
@@ -311,7 +325,34 @@ test('(t) nothing in the tree still reads or writes the five tables, raw SQL inc
       }
     }
   }
-  assert.deepEqual(offenders, [], 'live references to the removed relations remain');
+  return offenders;
+}
+
+test('(t) nothing in the tree still reads or writes the five tables, raw SQL included', () => {
+  assert.deepEqual(judgmentTableOffenders(), [], 'live references to the removed relations remain');
+});
+
+test('(t) negative control: a frozen evidence log is history, a live read under src/ is not', () => {
+  // The two lines that failed a landing: an evidence log of a full local migration run lists the
+  // 0181 directory, whose name contains `task_judgment_request`. Beside it, the read this scan
+  // exists to catch. A throwaway repository holds both, so the answer does not depend on this tree.
+  const root = mkdtempSync(path.join(tmpdir(), 'task-judgment-removal-scan-'));
+  try {
+    execFileSync('git', ['init', '--quiet'], { cwd: root, stdio: 'ignore' });
+    const log = 'docs/evidence/integration-run/logs/migrate.txt';
+    const reader = 'src/apiserver/src/tasks/judgment-reader.ts';
+    const callSite = 'const rows = await prisma.$queryRaw`SELECT id FROM task_judgment_request`;';
+    mkdirSync(path.join(root, path.dirname(log)), { recursive: true });
+    writeFileSync(path.join(root, log),
+      'Applying migration `0181_task_judgment_request`\n  └─ 0181_task_judgment_request/\n');
+    mkdirSync(path.join(root, path.dirname(reader)), { recursive: true });
+    writeFileSync(path.join(root, reader), `${callSite}\n`);
+
+    assert.deepEqual(judgmentTableOffenders(root), [`${reader}: ${callSite}`],
+      'the evidence log must not be an offender, and the live read under src/ must still be one');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 // The removal is a subtraction of the machine only: no statement in it can reach a preserved row.

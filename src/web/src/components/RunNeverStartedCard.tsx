@@ -66,7 +66,7 @@ export const NEVER_STARTED_ACTION_LABEL: Readonly<Record<NeverStartedActionId, s
   'start-again': 'Start it again',
   'send-again': 'Send it again',
   install: 'Install',
-  'open-providers': 'Open Providers',
+  'open-providers': 'Open Infrastructure',
   'open-runner': 'Open the runner',
   'chat-about': 'Chat about this',
 };
@@ -128,9 +128,12 @@ export interface NeverStartedFacts {
 
 export interface NeverStartedInput {
   session: NeverStartedSession & { engineStartedAt?: string | null };
-  /** The built-in runtime that would execute this session (`runtimeForProvider`), for the
+  /** The engine that would execute this session — its own, recorded at its creation — for the
    *  engine-named sentences below. */
   runtime: string;
+  /** The key the session runs on, as a sentence names it (`the DeepSeek key “DeepSeek 2”`,
+   *  sessionProviderChoices' keyName), for the sentence about a key its vendor rejected. */
+  keyName?: string | null;
   /** The machine, as the user named it — the repair cards' `runnerName`. */
   runnerName?: string | null;
 }
@@ -162,18 +165,19 @@ const MACHINE_COPY = {
   upgradeWhy: 'Waiting for a newer runner', // DshRepairCard / AntigravityRepairCard, updateRunner
   /** AntigravityRepairCard's updateRunner body's second sentence, with this card's one subject. */
   upgradeClause: 'The runner updates itself when no session is running on it, and this run starts then.',
-  notInstalledBody: 'Install it from Providers, then send your message again.', // both repair cards
+  notInstalledBody: 'Install it from Infrastructure, then send your message again.', // both repair cards
   unsupportedWhy: (machine: string) => `DeepSeek Harness can’t run on ${machine}`, // DshRepairCard
   unsupportedBody:
     'DeepSeek Harness 0.2.0-rc.2 runs on Linux x64 runners with Node 26 only. Move this work to a runner that can.',
-  dshKeyWhy: 'DeepSeek Harness needs an API key', // DshRepairCard
-  dshKeyBody: 'This session has no DeepSeek Harness key to run on. Add or re-enable the key in Providers, then send your message again.',
+  dshKeyWhy: 'DeepSeek Harness needs a DeepSeek key', // DshRepairCard
+  dshKeyBody: 'This session has no DeepSeek key to run on. Add or re-enable a DeepSeek key in Infrastructure, then send your message again.',
   dshBadKeyWhy: 'DeepSeek rejected this API key', // DshRepairCard
-  dshBadKeyBody:
-    'Update the key in Providers, then send your message again. Connecting a key does not check it — the first request does.',
+  /** DshRepairCard's, naming the key when the session's is known. */
+  dshBadKeyBody: (keyName: string | null | undefined) =>
+    `Update ${keyName ?? 'the DeepSeek key'} in Infrastructure, then send your message again.`,
   antigravityAuthWhy: 'Antigravity needs authentication', // AntigravityRepairCard
   antigravityAuthBody:
-    'Sign in with Google on this runner, or connect a Gemini API key in Providers.',
+    'Sign in with Google on this runner, or connect a Gemini API key in Infrastructure.',
   offlineWhy: 'The runner holding this session went offline',
   offlineBody: (machine: string) =>
     `${machine} stopped reporting while this run was starting. Nothing was produced, and nothing was sent anywhere.`,
@@ -282,7 +286,7 @@ function machineCause(input: NeverStartedInput, error: string): NeverStartedFact
       subject: null,
       detail: null,
       why: bad ? MACHINE_COPY.dshBadKeyWhy : MACHINE_COPY.dshKeyWhy,
-      body: bad ? MACHINE_COPY.dshBadKeyBody : MACHINE_COPY.dshKeyBody,
+      body: bad ? MACHINE_COPY.dshBadKeyBody(input.keyName) : MACHINE_COPY.dshKeyBody,
       next: null,
       actions: ['open-providers', task ? 'start-again' : 'send-again'],
       foot: MACHINE_COPY.waitingFoot,
@@ -313,8 +317,8 @@ function machineCause(input: NeverStartedInput, error: string): NeverStartedFact
       why: `${engineName(runtime)} isn’t installed on ${machine}`,
       body: MACHINE_COPY.notInstalledBody,
       next: null,
-      // The install is a Providers press, and only the host knows whether it can make one for this
-      // engine — an id it cannot perform draws no button at all.
+      // The install is a machine's engine-row press, and only the host knows whether it can make
+      // one for this engine — an id it cannot perform draws no button at all.
       actions: ['install', 'open-runner'],
       foot: MACHINE_COPY.waitingFoot,
     };

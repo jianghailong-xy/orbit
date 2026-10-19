@@ -1,0 +1,13 @@
+{
+  "queuedAt": "2026-10-18T04:19:30.675+00:00",
+  "registeredAt": "2026-10-18T04:19:30.649+00:00",
+  "runnerId": "01a14d3c-76de-7059-9113-dad1938c5444",
+  "runnerPublicId": "34hrI0gq9A1AGuGOxWcfE",
+  "session": {
+    "engine": "claude",
+    "provider": "claude",
+    "status": "PENDING"
+  },
+  "sessionId": "34hrI0jZXg2zIUyDCSJxU",
+  "workspaceId": "34hrI0iP0okTkeWX6DP8Q"
+}

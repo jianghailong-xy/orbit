@@ -139,11 +139,17 @@ export function dispatchAllowedTools(
  * matches the rules it was started with the way Kimi's bridge does — never a command prefix — so it
  * is in the same position as Kimi, and this is also how an "always allow" given during a session
  * covers the next call of that session.
+ *
+ * Cursor CLI asks over ACP, and its own "allow always" is never chosen: it would allowlist the whole
+ * program a command starts with (`git status` would let `git push` through), wider than the rule a
+ * person approves here (docs/cursor-runtime-contract.md §5.2). So its runner answers once, and a
+ * person's "always allow" covers the next call here, as for the runtimes above.
  */
 const SERVER_MATCHED_RUNTIMES: ReadonlySet<string> = new Set([
   AgentProvider.CODEX,
   AgentProvider.KIMI,
   AgentProvider.ANTIGRAVITY,
+  AgentProvider.CURSOR,
 ]);
 
 /** Whether this runtime's approvals are matched here at all — checked before the rules are even

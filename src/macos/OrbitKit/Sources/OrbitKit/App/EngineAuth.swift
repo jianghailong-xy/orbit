@@ -55,11 +55,11 @@ public enum EngineAuth {
         /// can't express (the runner refuses such a request outright — `loginFlowFor` in login.go),
         /// so the card names the command to run on that machine instead of a button that can't work.
         case runCommand(String)
-        /// A runner that cannot relay Google sign-in can use a Gemini API key in Providers.
+        /// A runner that cannot relay Google sign-in can use a Gemini API key in Infrastructure.
         case connectGemini
         /// Any other slug is a control-plane–configured provider, i.e. an API key to fix. These
-        /// clients have no Providers screen, so the card says where the key lives rather than
-        /// offering an action it can't perform.
+        /// clients have no key editor (their Infrastructure page only lists the keys), so the card
+        /// says where the key lives rather than offering an action it can't perform.
         case apiKey(slug: String)
     }
 
@@ -102,11 +102,11 @@ public enum EngineAuth {
                                        runnerVersion: String?) -> String {
         switch repair {
         case .needsKey:
-            return "Sign in with Google on this runner, or connect a Gemini API key in Providers."
+            return "Sign in with Google on this runner, or connect a Gemini API key in Infrastructure."
         case .updateRunner:
             let version = runnerVersion?.isEmpty == false ? runnerVersion! : "an unknown version"
             return "\(machineName(runnerName)) runs Orbit runner \(version); Antigravity needs 0.1.209 or newer. The runner updates itself when no session is running on it, and this session starts then."
-        case .notInstalled: return "Install it from Providers, then send your message again."
+        case .notInstalled: return "Install it from Infrastructure, then send your message again."
         }
     }
 

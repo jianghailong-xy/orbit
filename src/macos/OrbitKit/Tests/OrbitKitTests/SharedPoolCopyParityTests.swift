@@ -90,7 +90,7 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(row, "key.enabled ? '\(SharedPoolPage.disableKey)' : '\(SharedPoolPage.enableKey)'", in: Self.accountPools)
         assertSays(row, "title={`\(SharedPoolPage.removeKeyTitle(key(label: "${key.label}")))`}", in: Self.accountPools)
         assertSays(row, "description=\"\(SharedPoolPage.removeKeyNote)\"", in: Self.accountPools)
-        assertSays(row, "okText=\"\(SharedPoolPage.remove)\"", in: Self.accountPools)
+        assertSays(row, "confirmText=\"\(SharedPoolPage.remove)\"", in: Self.accountPools)
         // "No keys yet — …", in the web's one sentence for both kinds of pool.
         assertSays(row, "No {shared ? 'keys' : 'accounts'}\(SharedPoolPage.noKeys.dropFirst("No keys".count))",
                    in: Self.accountPools)
@@ -153,7 +153,7 @@ final class SharedPoolCopyParityTests: XCTestCase {
         assertSays(card, "label: '\(SharedPoolPage.removeFromPool)', danger: true", in: Self.sharedPool)
         let someone = SharedPoolPerson(userId: "u", name: "${person.name}")
         assertSays(card, "title: `\(SharedPoolPage.removePersonTitle(someone, in: pool("${pool.label}")))`", in: Self.sharedPool)
-        assertSays(card, "content: '\(SharedPoolPage.removePersonNote)'", in: Self.sharedPool)
+        assertSays(card, "description: '\(SharedPoolPage.removePersonNote)',", in: Self.sharedPool)
     }
 
     /// "Add a key", step by step, and "Replace key".
@@ -192,7 +192,7 @@ final class SharedPoolCopyParityTests: XCTestCase {
 
         let refused = key(label: "${poolKey.label}")
         assertSays(dialog, "title={`\(AddPoolKey.replaceTitle(refused))`}", in: Self.sharedPool)
-        assertSays(dialog, "okText=\"\(SharedPoolPage.replaceKey)\"", in: Self.sharedPool)
+        assertSays(dialog, "> \(SharedPoolPage.replaceKey) </Button>", in: Self.sharedPool)
         let lead = AddPoolKey.replaceLead(key(label: "{poolKey.label}", fingerprint: "{poolKey.fingerprint}"))
         assertSays(dialog, "> \(lead) </div>", in: Self.sharedPool)
         assertSays(dialog, "message.success(`\(AddPoolKey.replaced(refused, in: pool("${pool.label}")))`)", in: Self.sharedPool)
@@ -263,11 +263,13 @@ final class SharedPoolCopyParityTests: XCTestCase {
         XCTAssertEqual(ProviderPools.asProviders([drawn]).first?.runtime, "codex")
 
         // The picker's row: a choice on that CLI, wearing how many keys it holds.
-        let choices = SessionProviderChoices.choices(configured: providers, pools: [drawn])
+        let choices = SessionProviderChoices.providers(for: "codex", sources: ChoiceSources(configured: providers, pools: [drawn]))
         let tile = try XCTUnwrap(choices.first { $0.slug == "team-codex" })
         let choicesSource = try web(Self.sessionProviderChoices)
+        assertSays(choicesSource, "const poolEngine = (pool: PoolChoiceSource): AgentProvider =>",
+                   in: Self.sessionProviderChoices)
         assertSays(choicesSource,
-                   "const runtime = pool.shared || pool.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;",
+                   "pool.shared || pool.engine === AgentProvider.CODEX ? AgentProvider.CODEX : AgentProvider.CLAUDE;",
                    in: Self.sessionProviderChoices)
         assertSays(choicesSource, "poolUnit: 'key' as const", in: Self.sessionProviderChoices)
         assertSays(choicesSource, "poolUnit?: 'key';", in: Self.sessionProviderChoices)

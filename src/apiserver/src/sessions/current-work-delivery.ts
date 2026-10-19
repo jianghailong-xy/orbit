@@ -12,6 +12,8 @@ export type CurrentWorkSteerTransaction = TransactionSurface<{
 
 export const CURRENT_WORK_TARGET_COMPLETED = 'CURRENT_WORK_TARGET_COMPLETED';
 export const CURRENT_WORK_INTERRUPTED = 'CURRENT_WORK_INTERRUPTED';
+/** The receipt's words for a steer a Stop overtook, wherever the Stop is learned of. */
+export const CURRENT_WORK_INTERRUPTED_REASON = 'CURRENT_WORK was not delivered because the session was interrupted.';
 export const CURRENT_WORK_SESSION_ENDED = 'CURRENT_WORK_SESSION_ENDED';
 export const CURRENT_WORK_SESSION_FINALIZED = 'CURRENT_WORK_SESSION_FINALIZED';
 export const CURRENT_WORK_SESSION_REAPED = 'CURRENT_WORK_SESSION_REAPED';
@@ -19,6 +21,9 @@ export const CURRENT_WORK_RUNTIME_REJECTED = 'CURRENT_WORK_RUNTIME_REJECTED';
 
 interface TerminalizeOptions {
   targetTurnIds?: readonly string[];
+  /** Only these steers: a runner's report answers for the one message it names, never for a sibling
+   *  still on its way into a turn that may yet read it. */
+  turnIds?: readonly string[];
   /** Exact runner-flushed target completion and runner-loss teardown may settle a leased row when
    * no strict acknowledged receipt exists. User interrupt/live-end passes false and settles only
    * PENDING rows because an acknowledgement may still be buffered in the resident process. */
@@ -78,9 +83,10 @@ export function acknowledgedRuntimeTurnIds(
  * What it costs: the row stops recording that it was ever a steer, so a missed steer leaves no
  * audit. That is the legacy sweep's trade too, and a red bubble no one can act on is not an audit.
  *
- * Only here. An interrupt is the person overtaking their own message; a finalized, ended or reaped
- * session has no queue left to re-enter; and a runner that vanished cannot prove the engine did
- * not read it, so requeueing there could say the same thing twice.
+ * Only here, and only for a target nobody stopped (`stopOvertookTarget`). An interrupt is the person
+ * overtaking their own message; a finalized, ended or reaped session has no queue left to re-enter;
+ * and a runner that vanished cannot prove the engine did not read it, so requeueing there could say
+ * the same thing twice.
  */
 export async function requeueUnreadCurrentWorkSteers(
   tx: CurrentWorkSteerTransaction,
@@ -126,6 +132,38 @@ export async function requeueUnreadCurrentWorkSteers(
   return rows.map((row) => row.id);
 }
 
+/** The one read {@link stopOvertookTarget} makes, and so all a double for it has to supply. */
+export type StopReadTransaction = TransactionSurface<{
+  conversationTurn: ['findFirst'];
+}>;
+
+/**
+ * Whether somebody pressed Stop while this target was the turn running: an `interrupt` turn filed
+ * after it. A CURRENT_WORK steer still unread when such a target ends is not delivered, and it is not
+ * put back in the queue either: requeued, it would run as a turn of its own straight after the Stop
+ * (owner, 2026-10-16).
+ *
+ * Read off the interrupt's own row rather than off how the target ended, because the row is the one
+ * fact every boundary that decides a steer has. A runner reports its unread steers before the target's
+ * own completion (runner-go session.go, the target fence), and one older than this rule hands every
+ * one back as `steer_requeue`, whatever ended the turn. It also covers a Stop that lost the race to
+ * the turn's own end: the steer was still waiting to be read when the person stopped.
+ *
+ * `SessionsService.interrupt` files the only `interrupt` turns, and a target still running when one
+ * is filed is the turn it stops: anything queued at that moment was dropped or retired with the queue.
+ */
+export async function stopOvertookTarget(
+  tx: StopReadTransaction,
+  sessionId: string,
+  targetSeq: number,
+): Promise<boolean> {
+  const stop = await tx.conversationTurn.findFirst({
+    where: { sessionId, kind: 'interrupt', seq: { gt: targetSeq } },
+    select: { id: true },
+  });
+  return stop != null;
+}
+
 /**
  * Settle explicit CURRENT_WORK steers that have no durable runtime acknowledgement.
  *
@@ -151,6 +189,7 @@ export async function terminalizePendingCurrentWorkSteers(
       sendIntent: 'CURRENT_WORK',
       deliveryStatus: null,
       ...(options.targetTurnIds ? { targetTurnId: { in: [...options.targetTurnIds] } } : {}),
+      ...(options.turnIds ? { id: { in: [...options.turnIds] } } : {}),
     },
     orderBy: { seq: 'asc' },
     select: { id: true, targetTurnId: true, status: true },

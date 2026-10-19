@@ -1,0 +1,45 @@
+{
+ "report": {
+  "light": {
+   "rows": [
+    {
+     "title": "Rebuilding the transcript page",
+     "line": "Running task_create…",
+     "label": null
+    },
+    {
+     "title": "Drawer shadow fix",
+     "line": "Fixed the drawer shadow on the collapsed drawer and re-ran the web suite — everything passes.",
+     "label": null
+    },
+    {
+     "title": "Recap on the session list row",
+     "line": "Recap · 5:38 PM Moved the recap onto the session list row with its timestamp; the three states are covered and the web suite is green.",
+     "label": "Recap · 5:38 PM"
+    }
+   ],
+   "errors": []
+  },
+  "dark": {
+   "rows": [
+    {
+     "title": "Rebuilding the transcript page",
+     "line": "Running task_create…",
+     "label": null
+    },
+    {
+     "title": "Drawer shadow fix",
+     "line": "Fixed the drawer shadow on the collapsed drawer and re-ran the web suite — everything passes.",
+     "label": null
+    },
+    {
+     "title": "Recap on the session list row",
+     "line": "Recap · 5:38 PM Moved the recap onto the session list row with its timestamp; the three states are covered and the web suite is green.",
+     "label": "Recap · 5:38 PM"
+    }
+   ],
+   "errors": []
+  }
+ },
+ "problems": []
+}

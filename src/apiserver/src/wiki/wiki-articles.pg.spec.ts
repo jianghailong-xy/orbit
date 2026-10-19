@@ -1,6 +1,8 @@
 /**
- * The articles (criterion 9; contracts/wiki.contract.json `articles`, migration 0317), over real HTTP
- * and against a real PostgreSQL.
+ * The articles (criterion 9; contracts/wiki.contract.json `articles`, migration 0317), against a real
+ * PostgreSQL: the owner's reads and an agent's doors over real HTTP, and the writer — the server's own
+ * `articles` job, the one caller that plans, reads and writes a topic's articles (`articles.who.write`) —
+ * in process, as the wiki worker calls it (`wikiArticlesJobPrincipal`).
  *
  * What criterion 9's verification method asks, each read back from the doors and from the database:
  *
@@ -15,7 +17,7 @@
  * paths before the slug it names and before its words (the demo filed a database write under
  * "sessions"); an article past 900 characters is cut back to it; a topic is split into an overview
  * and subtopic parts; a space with no topic is given the default ones, each with its display name
- * and category; and only a maintenance run of the space, or the server's own import, writes.
+ * and category; and only the server's own articles job, or its import, writes.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-articles.pg.spec.ts
  *
@@ -28,7 +30,7 @@ import { after, test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
+import { HttpException, type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
@@ -43,15 +45,14 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { RunnerWikiArticlesController } from '../runner-api/runner-wiki-articles.controller';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
-import { assignTopics, pathClaim, splitSentences, WikiArticles } from './wiki-articles';
+import { assignTopics, pathClaim, splitSentences, WikiArticles, wikiArticlesJobPrincipal } from './wiki-articles';
 import { WikiArticlesController } from './wiki-articles.controller';
 import { appendWikiContext } from './wiki-push';
 import type { WikiRollout } from './wiki-rollout';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiController } from './wiki.controller';
-import { WikiRefusalError, WikiService, type WikiPrincipal } from './wiki.service';
+import { WikiService, type WikiPrincipal } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -89,7 +90,7 @@ function boot(): Promise<Harness> {
     const articles = new WikiArticles(prisma as unknown as PrismaService, recorder);
 
     @Module({
-      controllers: [WikiController, WikiArticlesController, RunnerWikiController, RunnerWikiArticlesController],
+      controllers: [WikiController, WikiArticlesController, RunnerWikiController],
       providers: [
         { provide: WikiService, useValue: service },
         { provide: WikiArticles, useValue: articles },
@@ -168,6 +169,19 @@ function expectStatus(answer: Answer, status: number, why: string): void {
   assert.equal(answer.status, status, `${why}: answered ${answer.status} ${JSON.stringify(answer.body).slice(0, 800)}`);
 }
 
+/**
+ * What one of the writer's calls answers, in the shape a door's answer has: its result, or the refusal it
+ * threw with the status the contract gives that refusal (`refusalRules.status`).
+ */
+async function serve(work: Promise<unknown>): Promise<Answer> {
+  try {
+    return { status: 200, body: await work };
+  } catch (error) {
+    if (!(error instanceof HttpException)) throw error;
+    return { status: error.getStatus(), body: error.getResponse() };
+  }
+}
+
 // ── fixtures ────────────────────────────────────────────────────────────────────────────────────
 
 interface Account {
@@ -214,17 +228,6 @@ async function session(h: Harness, ownerId: string, workspaceId: string, runnerI
   return id;
 }
 
-async function task(h: Harness, ownerId: string, listId: string, assigneeId: string): Promise<string> {
-  const id = randomUUID();
-  await h.sql.query(
-    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","status","assignee_id","list_id",
-                         "completion_criterion","updated_at")
-     VALUES ($1,'Wiki maintenance run',$2,'USER',$2,'OPEN'::task_status,$3,$4,'OWNER_CONFIRMED',now())`,
-    [id, ownerId, assigneeId, listId],
-  );
-  return id;
-}
-
 /** A space the owner makes through the door, bound to a workspace of theirs. */
 async function space(h: Harness, owner: Account, workspaceId: string, title = 'An article space'): Promise<string> {
   const made = await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', { title });
@@ -233,14 +236,6 @@ async function space(h: Harness, owner: Account, workspaceId: string, title = 'A
   const bound = await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${id}/workspaces`, { workspaceId });
   expectStatus(bound, 200, 'the owner binds the workspace');
   return id;
-}
-
-/** A maintenance run of the space: maintenance turned on by the owner, a task in its list, and that task's session. */
-async function maintenanceRun(h: Harness, owner: Account, spaceId: string, workspaceId: string, runnerId: string): Promise<string> {
-  const on = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: true, workspaceId } });
-  expectStatus(on, 200, 'the owner turns maintenance on');
-  const listId = toUuid(on.body.settings.maintenance.listId as string);
-  return session(h, owner.id, workspaceId, runnerId, await task(h, owner.id, listId, workspaceId));
 }
 
 /** A concept: what the owner writes when an entry has no code to point at. */
@@ -301,9 +296,19 @@ async function rawEntry(h: Harness, ownerId: string, spaceId: string, shape: { s
   return id;
 }
 
-/** One topic's generation input, read as the maintenance run reads it. */
-async function input(h: Harness, who: Caller, spaceId: string, slug: string): Promise<Answer> {
-  return call(h, who, 'GET', `/runner/wiki/spaces/${spaceId}/articles/${slug}/input`);
+/** Which topics need their articles written, as the server's articles job plans them. */
+async function articlePlan(h: Harness, writer: WikiPrincipal, spaceId: string): Promise<Answer> {
+  return serve(h.articles.plan(writer, spaceId));
+}
+
+/** One topic's generation input, read as the server's articles job reads it. */
+async function input(h: Harness, writer: WikiPrincipal, spaceId: string, slug: string): Promise<Answer> {
+  return serve(h.articles.input(writer, spaceId, slug));
+}
+
+/** One topic's articles, written as the server's articles job writes them. */
+async function write(h: Harness, writer: WikiPrincipal, spaceId: string, slug: string, body: unknown): Promise<Answer> {
+  return serve(h.articles.write(writer, spaceId, slug, body));
 }
 
 /** The entry ids an input answer carries, as uuids. */
@@ -321,8 +326,8 @@ async function checkValues(h: Harness, table: string, constraint: string): Promi
 }
 
 /**
- * One scene every test reads: an owner, their runner, a bound workspace, a space with maintenance on
- * and a maintenance run of it, an ordinary session of the same workspace, and entries whose topics
+ * One scene every test reads: an owner, their runner, a bound workspace, a space, the principal the
+ * server's articles job writes it as, an ordinary session of the same workspace, and entries whose topics
  * each step of membership decides.
  */
 interface Scene {
@@ -330,7 +335,8 @@ interface Scene {
   runner: { id: string; token: string };
   ws: string;
   spaceId: string;
-  maintainer: Caller;
+  /** The server's articles job (`wikiArticlesJobPrincipal`): the space's maintenance, with no session and no user. */
+  writer: WikiPrincipal;
   ordinary: string;
   e: {
     /** Anchored in the write inventory, naming "sessions" and talking about sessions: the database's by path. */
@@ -361,7 +367,6 @@ function setUp(h: Harness): Promise<Scene> {
     const machine = await runner(h, owner.id);
     const ws = await workspace(h, owner.id);
     const spaceId = await space(h, owner, ws);
-    const maintenanceSession = await maintenanceRun(h, owner, spaceId, ws, machine.id);
     const ordinary = await session(h, owner.id, ws, machine.id);
     const [dbPath, dbWords, web, webPage, declared, wikiAbs, wikiA, wikiB] = await ownerAdds(h, owner, spaceId, [
       pitfall(
@@ -401,7 +406,7 @@ function setUp(h: Harness): Promise<Scene> {
       runner: machine,
       ws,
       spaceId,
-      maintainer: { runner: machine.token, session: maintenanceSession },
+      writer: wikiArticlesJobPrincipal(owner.id),
       ordinary,
       e: { dbPath, dbWords, web, webPage, declared, wikiAbs, wikiA, wikiB, tainted, proposed },
     };
@@ -429,8 +434,8 @@ test('a space with no topic is given the default ones, and an entry is filed by 
   assert.deepEqual(WIKI_ARTICLE_CATEGORY_KEYS, CONTRACT.articles.categories.map((c: any) => c.key));
 
   const before = h.published.length;
-  const plan = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/article-plan`);
-  expectStatus(plan, 200, 'the maintenance run asks for its plan');
+  const plan = await articlePlan(h, s.writer, s.spaceId);
+  expectStatus(plan, 200, 'the articles job asks for its plan');
   assert.equal(plan.body.seeded, WIKI_DEFAULT_TOPICS.length, 'a space with no topic is given the default ones');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   assert.deepEqual(plan.body.topics.map((t: any) => t.slug), WIKI_DEFAULT_TOPICS.map((t) => t.slug), 'in the default order');
@@ -452,26 +457,26 @@ test('a space with no topic is given the default ones, and an entry is filed by 
   );
 
   // A second plan seeds nothing more.
-  const again = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/article-plan`);
+  const again = await articlePlan(h, s.writer, s.spaceId);
   expectStatus(again, 200, 'a second plan');
   assert.equal(again.body.seeded, 0);
   assert.equal(await h.prisma.wikiTopic.count({ where: { spaceId: s.spaceId } }), WIKI_DEFAULT_TOPICS.length);
 
   // Membership, read off each topic's input.
-  const database = await input(h, s.maintainer, s.spaceId, 'database');
+  const database = await input(h, s.writer, s.spaceId, 'database');
   expectStatus(database, 200, 'the database topic\'s input');
   assert.deepEqual(new Set(inputIds(database)), new Set([s.e.dbPath, s.e.dbWords]),
     'the write-inventory pitfall is the database\'s by its path, though it names "sessions" and talks about sessions; the Prisma concept by its words');
-  const sessions = await input(h, s.maintainer, s.spaceId, 'sessions');
+  const sessions = await input(h, s.writer, s.spaceId, 'sessions');
   assert.deepEqual(inputIds(sessions), [], 'nothing is filed under sessions by the slug it names when its path says otherwise');
-  assert.deepEqual(new Set(inputIds(await input(h, s.maintainer, s.spaceId, 'web-client'))), new Set([s.e.web, s.e.webPage]),
+  assert.deepEqual(new Set(inputIds(await input(h, s.writer, s.spaceId, 'web-client'))), new Set([s.e.web, s.e.webPage]),
     'a convention by its scope, a pitfall by its anchor');
-  assert.deepEqual(inputIds(await input(h, s.maintainer, s.spaceId, 'workflow-owner')), [s.e.declared], 'no path: the slug it names');
-  assert.deepEqual(new Set(inputIds(await input(h, s.maintainer, s.spaceId, 'wiki'))), new Set([s.e.wikiAbs, s.e.wikiA, s.e.wikiB]),
+  assert.deepEqual(inputIds(await input(h, s.writer, s.spaceId, 'workflow-owner')), [s.e.declared], 'no path: the slug it names');
+  assert.deepEqual(new Set(inputIds(await input(h, s.writer, s.spaceId, 'wiki'))), new Set([s.e.wikiAbs, s.e.wikiA, s.e.wikiB]),
     'a worktree\'s absolute path is read relative to the repository, and src/runner-go/wiki is longer than src/runner-go/');
-  assert.deepEqual(inputIds(await input(h, s.maintainer, s.spaceId, 'runner')), [], 'the longest prefix wins');
+  assert.deepEqual(inputIds(await input(h, s.writer, s.spaceId, 'runner')), [], 'the longest prefix wins');
   // Neither the tainted entry nor the proposal is in any topic.
-  const everyInput = await Promise.all(WIKI_DEFAULT_TOPICS.map((topic) => input(h, s.maintainer, s.spaceId, topic.slug)));
+  const everyInput = await Promise.all(WIKI_DEFAULT_TOPICS.map((topic) => input(h, s.writer, s.spaceId, topic.slug)));
   const filed = everyInput.flatMap(inputIds);
   assert.ok(!filed.includes(s.e.tainted), 'a tainted entry is not written from');
   assert.ok(!filed.includes(s.e.proposed), 'a proposal is not written from');
@@ -550,8 +555,8 @@ test('a space with no topic is given the default ones, and an entry is filed by 
 test('a write keeps only footnotes to the topic\'s entries, deletes a sentence left without one, and stops at 900 characters', { skip }, async () => {
   const h = await boot();
   const s = await setUp(h);
-  await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/article-plan`);
-  const database = await input(h, s.maintainer, s.spaceId, 'database');
+  await articlePlan(h, s.writer, s.spaceId);
+  const database = await input(h, s.writer, s.spaceId, 'database');
   expectStatus(database, 200, 'the input');
   const dangling = randomUUID();
   const markdown = [
@@ -568,7 +573,7 @@ test('a write keeps only footnotes to the topic\'s entries, deletes a sentence l
     '- 迁移按号排列，合并前要核对撞号[2]。',
   ].join('\n');
   const before = h.published.length;
-  const written = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/articles/database`, writeBody(database.body.entrySetSha256, [{
+  const written = await write(h, s.writer, s.spaceId, 'database', writeBody(database.body.entrySetSha256, [{
     part: 0,
     kind: 'article',
     title: '数据库写入治理',
@@ -576,7 +581,7 @@ test('a write keeps only footnotes to the topic\'s entries, deletes a sentence l
     // [1] and [2] the topic's; [3] another topic's; [4] no entry at all — in either spelling of an id.
     notes: [b62(s.e.dbPath), s.e.dbWords, b62(s.e.web), dangling],
   }]));
-  expectStatus(written, 200, 'the maintenance run writes the database article');
+  expectStatus(written, 200, 'the articles job writes the database article');
   assert.equal(written.body.written, true);
   assert.equal(written.body.unchanged, false);
   assert.deepEqual(written.body.parts[0].stats, {
@@ -595,7 +600,7 @@ test('a write keeps only footnotes to the topic\'s entries, deletes a sentence l
   expectStatus(article, 200, 'the owner reads the article');
   assert.equal(article.body.kind, 'article');
   assert.equal(article.body.title, '数据库写入治理');
-  assert.deepEqual(article.body.topic, { slug: 'database', title: '数据库与 Prisma', category: 'data', categoryTitle: 'Data & backend' });
+  assert.deepEqual(article.body.topic, { slug: 'database', title: 'Database & Prisma', category: 'data', categoryTitle: 'Data & backend' });
   assert.deepEqual(article.body.blocks, [
     {
       heading: null,
@@ -623,11 +628,11 @@ test('a write keeps only footnotes to the topic\'s entries, deletes a sentence l
   assert.deepEqual(article.body.parts, []);
 
   // Past 900 characters the tail of the longest block goes, and the lead stays.
-  const web = await input(h, s.maintainer, s.spaceId, 'web-client');
+  const web = await input(h, s.writer, s.spaceId, 'web-client');
   const long = (n: number) => `这是一句关于 Web 客户端请求约定的长句，第 ${n} 句，它解释 lib 模块为什么一律走 api 模块发请求而不是直接调用 fetch，这样测试才能统一拦截[${n % 2 === 0 ? 1 : 2}]。`;
   const lead = '导语只有一句，说明本文讲 Web 客户端的请求约定[1]。';
   const body = ['# Web 客户端请求约定', lead, '## 约定', ...Array.from({ length: 8 }, (_u, i) => long(i + 1)), '## 常见的坑', ...Array.from({ length: 6 }, (_u, i) => long(i + 20))].join('\n');
-  const capped = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/articles/web-client`, writeBody(web.body.entrySetSha256, [{
+  const capped = await write(h, s.writer, s.spaceId, 'web-client', writeBody(web.body.entrySetSha256, [{
     part: 0, kind: 'article', title: 'Web 客户端请求约定', markdown: body, notes: [s.e.web, s.e.webPage],
   }]));
   expectStatus(capped, 200, 'a long article is written');
@@ -650,23 +655,23 @@ test('an entry set that did not change is not written again; one that changed is
   const h = await boot();
   const s = await setUp(h);
   const topic = await h.prisma.wikiTopic.findFirstOrThrow({ where: { spaceId: s.spaceId, slug: 'workflow-owner' }, select: { id: true } });
-  const first = await input(h, s.maintainer, s.spaceId, 'workflow-owner');
+  const first = await input(h, s.writer, s.spaceId, 'workflow-owner');
   const sha1 = first.body.entrySetSha256 as string;
   const one = (text: string) => [{ part: 0, kind: 'article', title: '与 owner 协作', markdown: `# 与 owner 协作\n${text}[1]。`, notes: [s.e.declared] }];
-  const written = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/articles/workflow-owner`, writeBody(sha1, one('回复一律用中文')));
+  const written = await write(h, s.writer, s.spaceId, 'workflow-owner', writeBody(sha1, one('回复一律用中文')));
   expectStatus(written, 200, 'the first write');
   assert.equal(written.body.written, true);
   const stored = await h.prisma.wikiTopicSummary.findFirstOrThrow({ where: { topicId: topic.id, part: 0 } });
   assert.equal(stored.entrySetSha256, sha1);
 
   // The same entries: the plan says unchanged, and a write rewrites nothing.
-  const plan = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/article-plan`);
+  const plan = await articlePlan(h, s.writer, s.spaceId);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const planned = plan.body.topics.find((t: any) => t.slug === 'workflow-owner');
   assert.equal(planned.changed, false, 'the article was written from exactly these entries');
   assert.equal(planned.articleSha256, sha1);
   const before = h.published.length;
-  const again = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/articles/workflow-owner`, writeBody(sha1, one('这次写了别的话')));
+  const again = await write(h, s.writer, s.spaceId, 'workflow-owner', writeBody(sha1, one('这次写了别的话')));
   expectStatus(again, 200, 'a write from the same entries');
   assert.equal(again.body.unchanged, true);
   assert.equal(again.body.written, false);
@@ -682,26 +687,26 @@ test('an entry set that did not change is not written again; one that changed is
     ops: [{ op: 'amend', entryId: s.e.declared, baseRevision: 1, changes: { summary: 'owner 读中文，回复、评论和提交说明一律用中文。' } }],
   });
   expectStatus(amended, 200, 'the owner amends the entry');
-  const replan = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/article-plan`);
+  const replan = await articlePlan(h, s.writer, s.spaceId);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const changed = replan.body.topics.find((t: any) => t.slug === 'workflow-owner');
   assert.equal(changed.changed, true, 'an amended entry changes the set');
   assert.notEqual(changed.entrySetSha256, sha1);
-  const second = await input(h, s.maintainer, s.spaceId, 'workflow-owner');
+  const second = await input(h, s.writer, s.spaceId, 'workflow-owner');
   const sha2 = second.body.entrySetSha256 as string;
   assert.equal(sha2, changed.entrySetSha256);
   assert.equal(second.body.articleSha256, sha1);
 
   // A write that names the stored set is still unchanged; one that names neither set is stale.
-  const old = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/articles/workflow-owner`, writeBody(sha1, one('旧的')));
+  const old = await write(h, s.writer, s.spaceId, 'workflow-owner', writeBody(sha1, one('旧的')));
   assert.equal(old.body.unchanged, true);
-  const stale = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/articles/workflow-owner`,
+  const stale = await write(h, s.writer, s.spaceId, 'workflow-owner',
     writeBody(createHash('sha256').update('another set').digest('hex'), one('读的不是现在的条目')));
   expectStatus(stale, 409, 'a write from entries the topic no longer has');
   assert.equal(stale.body.code, 'WIKI_ARTICLE_STALE');
   assert.equal((await h.prisma.wikiTopicSummary.findFirstOrThrow({ where: { topicId: topic.id, part: 0 } })).id, stored.id, 'nothing written');
 
-  const rewritten = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/articles/workflow-owner`, writeBody(sha2, one('回复、评论和提交说明一律用中文')));
+  const rewritten = await write(h, s.writer, s.spaceId, 'workflow-owner', writeBody(sha2, one('回复、评论和提交说明一律用中文')));
   expectStatus(rewritten, 200, 'the write from the changed set');
   assert.equal(rewritten.body.written, true);
   const replaced = await h.prisma.wikiTopicSummary.findMany({ where: { topicId: topic.id } });
@@ -709,7 +714,7 @@ test('an entry set that did not change is not written again; one that changed is
   assert.notEqual(replaced[0].id, stored.id);
   assert.equal(replaced[0].entrySetSha256, sha2);
   assert.deepEqual(replaced[0].citations, [{ n: 1, entryId: s.e.declared, revision: 2 }], 'cited at the revision it was written from');
-  const final = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/article-plan`);
+  const final = await articlePlan(h, s.writer, s.spaceId);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   assert.equal(final.body.topics.find((t: any) => t.slug === 'workflow-owner').changed, false);
 });
@@ -719,8 +724,8 @@ test('an entry set that did not change is not written again; one that changed is
 test('a split topic is an overview and its subtopic parts; a part with no footnote left is dropped', { skip }, async () => {
   const h = await boot();
   const s = await setUp(h);
-  const wiki = await input(h, s.maintainer, s.spaceId, 'wiki');
-  const written = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/articles/wiki`, writeBody(wiki.body.entrySetSha256, [
+  const wiki = await input(h, s.writer, s.spaceId, 'wiki');
+  const written = await write(h, s.writer, s.spaceId, 'wiki', writeBody(wiki.body.entrySetSha256, [
     { part: 0, kind: 'overview', title: 'Wiki 模块', markdown: '# Wiki\n本主题讲 Wiki 的写入与维护[1]。核实调用不开 thinking[2]。', notes: [s.e.wikiA, s.e.wikiAbs] },
     // A subtopic may cite any entry of its topic, not only its own group's.
     { part: 1, kind: 'subtopic', title: 'Articles and dossiers', markdown: '# Articles\n文章写入只认维护会话[1]。案卷先脱敏再截断[2]。', notes: [s.e.wikiA, s.e.wikiB], entries: [s.e.wikiA, b62(s.e.wikiAbs)] },
@@ -790,10 +795,10 @@ test('an article is a view: not in the push block, never a source, and not what 
   const [anchored] = await ownerAdds(h, s.owner, s.spaceId, [
     convention('worktree 里先铺 overlay', '新 worktree 先跑 worktree-overlay.sh 再编译。', 'scripts/worktree-overlay.sh'),
   ]);
-  const own = await input(h, s.maintainer, s.spaceId, topic);
+  const own = await input(h, s.writer, s.spaceId, topic);
   assert.deepEqual(inputIds(own), [anchored]);
   const phrase = '紫色长颈鹿只在这篇文章里出现';
-  const written = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/articles/${topic}`, writeBody(own.body.entrySetSha256, [
+  const written = await write(h, s.writer, s.spaceId, topic, writeBody(own.body.entrySetSha256, [
     { part: 0, kind: 'article', title: 'Worktree overlay', markdown: `# Worktree\n${phrase}，新 worktree 先铺 overlay[1]。`, notes: [anchored] },
   ]));
   expectStatus(written, 200, 'the article');
@@ -858,69 +863,56 @@ test('an article is a view: not in the push block, never a source, and not what 
 
 // ── 6. who writes ───────────────────────────────────────────────────────────────────────────────
 
-test('only a maintenance run of the space, or the server\'s own import, writes articles', { skip }, async () => {
+test('only the server\'s own articles job, or its import, writes articles: no door does, and no other principal', { skip }, async () => {
   const h = await boot();
   const s = await setUp(h);
-  const own = await input(h, s.maintainer, s.spaceId, 'workflow-owner');
+  const own = await input(h, s.writer, s.spaceId, 'workflow-owner');
   const body = writeBody(own.body.entrySetSha256, [{ part: 0, kind: 'article', title: 'x', markdown: '用中文回复[1]。', notes: [s.e.declared] }]);
+
+  // The runner door has no route that plans, reads or writes an article — not for a session of the bound
+  // workspace, and not for a headless call.
   const routes: Array<[string, string, unknown?]> = [
     ['POST', `/runner/wiki/spaces/${s.spaceId}/article-plan`],
     ['GET', `/runner/wiki/spaces/${s.spaceId}/articles/workflow-owner/input`],
     ['POST', `/runner/wiki/spaces/${s.spaceId}/articles/workflow-owner`, body],
   ];
-
-  // An ordinary session of the owner, on the owner's runner, in the bound workspace.
   for (const [method, route, payload] of routes) {
-    const answer = await call(h, { runner: s.runner.token, session: s.ordinary }, method, route, payload);
-    expectStatus(answer, 403, `an ordinary session: ${method} ${route}`);
-    assert.equal(answer.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
-  }
-  // Headless: no session at all.
-  for (const [method, route, payload] of routes) {
-    expectStatus(await call(h, { runner: s.runner.token }, method, route, payload), 400, `headless: ${method} ${route}`);
-  }
-  // A maintenance run of another space of the same owner.
-  const otherWs = await workspace(h, s.owner.id);
-  const otherSpace = await space(h, s.owner, otherWs, 'Another space of the owner');
-  const otherRun = await maintenanceRun(h, s.owner, otherSpace, otherWs, s.runner.id);
-  for (const [method, route, payload] of routes) {
-    const answer = await call(h, { runner: s.runner.token, session: otherRun }, method, route, payload);
-    expectStatus(answer, 403, `another space's maintenance run: ${method} ${route}`);
-    assert.equal(answer.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
-  }
-  // Another owner's maintenance run, on their own runner, against this space: a plain 404.
-  const stranger = await account(h, 'stranger');
-  const theirRunner = await runner(h, stranger.id);
-  const theirWs = await workspace(h, stranger.id);
-  const theirSpace = await space(h, stranger, theirWs, 'The stranger\'s space');
-  const theirRun = await maintenanceRun(h, stranger, theirSpace, theirWs, theirRunner.id);
-  for (const [method, route, payload] of routes) {
-    expectStatus(await call(h, { runner: theirRunner.token, session: theirRun }, method, route, payload), 404, `another owner: ${method} ${route}`);
+    expectStatus(await call(h, { runner: s.runner.token, session: s.ordinary }, method, route, payload), 404, `a session: ${method} ${route}`);
+    expectStatus(await call(h, { runner: s.runner.token }, method, route, payload), 404, `headless: ${method} ${route}`);
   }
   // The user door has no route that writes an article, for the owner or anybody.
   for (const method of ['POST', 'PUT', 'PATCH']) {
     expectStatus(await call(h, { bearer: s.owner.bearer }, method, `/wiki/spaces/${s.spaceId}/articles/workflow-owner`, body), 404,
       `the owner ${method}s an article on the user door`);
   }
-  assert.equal(await h.prisma.wikiTopicSummary.count({ where: { topic: { spaceId: s.spaceId, slug: 'workflow-owner' }, entrySetSha256: own.body.entrySetSha256, title: 'x' } }), 0,
-    'none of them wrote anything');
 
-  // In the server's own process: the import principal writes; the owner's and an agent's do not.
-  const importer: WikiPrincipal = { origin: 'import', ownerId: s.owner.id, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
+  // In the server's own process: the owner's principal, an agent's, and any principal that carries a session
+  // are not writers — refused before anything is read or written.
   const refusedAs = async (principal: WikiPrincipal, why: string) => {
-    await assert.rejects(h.articles.write(principal, s.spaceId, 'workflow-owner', body), (error: unknown) => {
-      assert.ok(error instanceof WikiRefusalError, `${why}: refused with a wiki code, not ${String(error)}`);
-      assert.equal(error.refusal.code, 'WIKI_NOT_MAINTENANCE_SESSION', why);
-      return true;
-    });
+    for (const asked of [
+      () => h.articles.plan(principal, s.spaceId),
+      () => h.articles.input(principal, s.spaceId, 'workflow-owner'),
+      () => h.articles.write(principal, s.spaceId, 'workflow-owner', body),
+    ]) {
+      await assert.rejects(asked(), /written by the server's own articles job or import/u, why);
+    }
   };
   await refusedAs({ origin: 'owner', ownerId: s.owner.id, userId: s.owner.id, sessionId: null, toolCallId: null }, 'the owner principal');
   await refusedAs({ origin: 'agent', ownerId: s.owner.id, userId: null, sessionId: s.ordinary, toolCallId: null }, 'an agent');
-  await refusedAs({ origin: 'maintenance', ownerId: s.owner.id, userId: null, sessionId: s.ordinary, toolCallId: null }, 'an ordinary session calling itself maintenance');
+  await refusedAs({ origin: 'maintenance', ownerId: s.owner.id, userId: null, sessionId: s.ordinary, toolCallId: null }, 'a session calling itself maintenance');
   await refusedAs({ origin: 'import', ownerId: s.owner.id, userId: null, sessionId: s.ordinary, toolCallId: null }, 'an import that carries a session');
+  assert.equal(await h.prisma.wikiTopicSummary.count({ where: { topic: { spaceId: s.spaceId, slug: 'workflow-owner' }, entrySetSha256: own.body.entrySetSha256, title: 'x' } }), 0,
+    'none of them wrote anything');
+
+  // The writers of another owner do not find this space: the plain 404.
+  const stranger = await account(h, 'stranger');
+  const importer: WikiPrincipal = { origin: 'import', ownerId: s.owner.id, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
   await assert.rejects(h.articles.write({ ...importer, ownerId: stranger.id }, s.spaceId, 'workflow-owner', body), /no such wiki space/u,
     'the import principal of another owner does not find this space');
+  await assert.rejects(h.articles.plan(wikiArticlesJobPrincipal(stranger.id), s.spaceId), /no such wiki space/u,
+    "another owner's articles job does not find this space");
 
+  // The import the server's own container runs writes, as the articles job does.
   const planned = await h.articles.plan(importer, s.spaceId);
   assert.equal(planned.spaceId, s.spaceId);
   const fromImport = await h.articles.input(importer, s.spaceId, 'workflow-owner');
@@ -936,8 +928,8 @@ test('another owner reads none of it: every read is a 404', { skip }, async () =
   const h = await boot();
   const s = await setUp(h);
   // Make sure there is something to read.
-  const own = await input(h, s.maintainer, s.spaceId, 'web-client');
-  await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/articles/web-client`, writeBody(own.body.entrySetSha256, [
+  const own = await input(h, s.writer, s.spaceId, 'web-client');
+  await write(h, s.writer, s.spaceId, 'web-client', writeBody(own.body.entrySetSha256, [
     { part: 0, kind: 'article', title: 'Web 客户端', markdown: 'lib 里一律走 api 模块[1]。', notes: [s.e.web] },
   ]));
   expectStatus(await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/articles/web-client`), 200, 'the owner reads it');

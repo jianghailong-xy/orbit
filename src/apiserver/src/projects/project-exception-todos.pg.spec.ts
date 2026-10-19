@@ -1133,6 +1133,48 @@ test('settling one task answers its item and leaves another task\'s item OPEN',
     }
   });
 
+test('the owner’s own run-again press picks a FAILED task up, and answers its failure item RETRIED',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'run-again', 'PARKED');
+      const a = await attempt(stack, w, 'run-again', { taskStatus: TaskStatus.IN_PROGRESS });
+      await failTurn(stack, w, a);
+      assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.FAILED);
+      const item = await onlyItemFor(stack.db, w, a.taskId, 'the failed attempt');
+      assert.equal(item.state, 'OPEN', 'the failure is owed until something answers it');
+
+      // The press a FAILED task's Retry makes (`taskFailureDoors` names `/tasks/:id/execute`): the
+      // owner's own door — the very route Run now presses — and NOT the integration retry, which
+      // this task can never survive. `decideIntegrationRetry` refuses anything that is not DONE,
+      // deliberately: a landing delivers a finished task's work, and this is the task that failed.
+      const press = await stack.tasks.execute(w.ownerId, a.taskId, undefined, randomUUID());
+      assert.equal(press.ok, true, `the owner's run-again press was refused: ${JSON.stringify(press)}`);
+
+      // A run is away on the task again: the failure is cleared, and the live run holds the task.
+      assert.equal(await taskStatus(stack.db, a.taskId), TaskStatus.IN_PROGRESS);
+      const started = press as { sessionId: string };
+      const run = await stack.db.session.findUniqueOrThrow({
+        where: { id: started.sessionId },
+        select: { taskId: true, startsTaskWork: true, status: true },
+      });
+      assert.equal(run.taskId, a.taskId);
+      assert.equal(run.startsTaskWork, true, 'the press starts run work, not a conversation');
+      assert.ok(['PENDING', 'RUNNING'].includes(run.status), `the run is live: ${run.status}`);
+      assert.notEqual(started.sessionId, a.sessionId, 'a fresh run, not the attempt that failed');
+
+      // And the failure item is answered by that fact (§4.2's fourth fact, `resolveByFact`): a run
+      // is away, so what the item was owed has happened. Nothing is left standing behind the press.
+      const answered = await onlyItemFor(stack.db, w, a.taskId, 'the run-again press');
+      assert.equal(answered.state, 'RESOLVED');
+      assert.equal(answered.resolution, 'RETRIED');
+      assert.equal(answered.resolvedBy, 'PLATFORM');
+      assert.ok(answered.resolvedAt, 'an answered item carries when it was answered');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
 test('a merge conflict opens one item owned by the coordinator, and queues it on the coordinator',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
@@ -1642,7 +1684,7 @@ test('the message an integration item is delivered as carries what its payload k
       const [reported] = await itemTurns(stack.db, checked.coordinatorSessionId!);
       assert.ok(reported, 'the item was not queued on the coordinator');
       assert.ok(
-        reported.content?.includes('MERGE_CHECK 的退出码是 2'),
+        reported.content?.includes('MERGE_CHECK exited with code 2'),
         `the message does not say which check failed and what it returned — ${reported.content}`,
       );
       assert.ok(
@@ -1865,10 +1907,16 @@ async function retryCoordinator(stack: Stack, w: World): Promise<void> {
   });
   // The runner's claim of a revived conversation, which `claimed` stands in for on a live one: it is
   // RUNNING, and owned by the process this fixture reports as — no lease owner — rather than by the
-  // hand-off the revive leaves on it for whichever process takes it next.
-  await stack.db.session.updateMany({
-    where: { id: coordinator, status: RunStatus.PENDING },
-    data: { status: RunStatus.RUNNING, inboxLeaseOwner: null },
+  // hand-off the revive leaves on it for whichever process takes it next. The transaction declares
+  // it reads the session's recorded engine, which migration 0414 requires of every PENDING -> RUNNING
+  // write (`common/session-scheduling.ts`): without it the claim is dropped in silence, `updateMany`
+  // answers 0 and nothing at all is claimed.
+  await stack.db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.session.updateMany({
+      where: { id: coordinator, status: RunStatus.PENDING },
+      data: { status: RunStatus.RUNNING, inboxLeaseOwner: null },
+    });
   });
   const delivered = await dequeue(stack, coordinator, w.runnerId);
   assert.equal(delivered?.turnId, retried.turnId, 'the retried turn was handed to the runner');
@@ -2062,8 +2110,13 @@ test('delivering an item spends nothing of the coordinator\'s fuse budget', { sk
     const [queued] = await itemTurns(stack.db, coordinator);
     assert.ok(queued, `nothing was queued — ${await factsAbout(stack.db, w, t.taskId)}`);
 
-    // The runner claims the conversation, the engine reads the item and ends that turn.
-    await stack.db.session.update({ where: { id: coordinator }, data: { status: RunStatus.RUNNING } });
+    // The runner claims the conversation, the engine reads the item and ends that turn. The
+    // transaction declares it reads the session's recorded engine, as migration 0414 requires of
+    // every PENDING -> RUNNING write (`common/session-scheduling.ts`).
+    await stack.db.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+      await tx.session.update({ where: { id: coordinator }, data: { status: RunStatus.RUNNING } });
+    });
     const handed = await dequeue(stack, coordinator, w.runnerId);
     assert.equal(handed?.turnId, queued.id);
     await stack.db.runEvent.create({

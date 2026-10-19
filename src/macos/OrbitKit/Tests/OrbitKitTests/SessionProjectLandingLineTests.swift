@@ -59,11 +59,21 @@ final class SessionProjectLandingLineTests: XCTestCase {
                        SessionLine(text: "Landing 2 jobs · rebasing · 4m", tone: .running))
     }
 
+    /// A runner that has stopped reporting says exactly that, in the state slot — and never reads
+    /// as a timeout, which is the job's own verdict and lives in the server's `blockingReason`.
     func testAStalledRunnerGoesQuietAndOlderServersFallBackToTheCount() {
         let stalled = ProjectListIntegration(line: .main, ref: "main", activeJobCount: 1, inFlight:
             ProjectIntegrationInFlight(state: "RUNNING", startedAt: ago(30), kind: "CHECK_PROMOTION",
                                        phase: "CHECK", heartbeatAt: ago(11)))
-        XCTAssertEqual(SessionProjectCopy.landingLine(stalled, now: now)?.tone, .queued)
+        XCTAssertEqual(SessionProjectCopy.landingLine(stalled, now: now),
+                       SessionLine(text: "Merge check · no report for 11m · 30m", tone: .queued))
+        XCTAssertFalse(SessionProjectCopy.landingLine(stalled, now: now)!.text.lowercased().contains("timed out"))
+        // A claim whose runner has not reported once says that; one that is reporting keeps its phase.
+        let never = ProjectListIntegration(line: .main, ref: "main", activeJobCount: 1, inFlight:
+            ProjectIntegrationInFlight(taskTitle: "P5", state: "RUNNING", startedAt: ago(4),
+                                       kind: "LAND_TASK", phase: "FETCH"))
+        XCTAssertEqual(SessionProjectCopy.landingLine(never, now: now),
+                       SessionLine(text: "Landing · no report yet · 4m · P5", tone: .queued))
         XCTAssertEqual(SessionProjectCopy.landingLine(ProjectListIntegration(line: .main, ref: "main", activeJobCount: 1), now: now),
                        SessionLine(text: "Landing · 1 job", tone: .queued))
         XCTAssertNil(SessionProjectCopy.landingLine(ProjectListIntegration(line: .main, ref: "main", activeJobCount: 0), now: now))
@@ -91,6 +101,28 @@ final class SessionProjectLandingLineTests: XCTestCase {
         let out = row([session("worker", role: .task)], project(queued()))
         XCTAssertEqual(out?.line.text, "Merge to main · queued · 13m")
         XCTAssertEqual(out?.target, .project("p1"))
+    }
+
+    /// A merge and a sync name the project's main branch: the one the sidebar row carries
+    /// (`GET /projects/sidebar`'s `mainBranch`), main for a row that names none. Web:
+    /// `sessionProjectLanding.test.ts` › "the landing line, by the project's main branch".
+    func testTheLineNamesTheProjectsMainBranch() {
+        XCTAssertEqual(SessionProjectCopy.landingLine(queued(), now: now, main: "master"),
+                       SessionLine(text: "Merge to master · queued · 13m", tone: .queued))
+        let syncing = ProjectListIntegration(line: .projectBranch, ref: "project/p1", activeJobCount: 1, inFlight:
+            ProjectIntegrationInFlight(taskTitle: "P5", state: "RUNNING", startedAt: ago(4),
+                                       kind: "LAND_TASK", phase: "MAIN_SYNC", heartbeatAt: ago(0)))
+        XCTAssertEqual(SessionProjectCopy.landingLine(syncing, now: now, main: "master"),
+                       SessionLine(text: "Landing · syncing master · 4m · P5", tone: .running))
+        XCTAssertEqual(SessionProjectCopy.landingLine(syncing, now: now)?.text, "Landing · syncing main · 4m · P5")
+
+        // Through the project row, off the sidebar row's own read.
+        let summary = ProjectSummary(id: "p1", title: "Project one", lastActivityAt: ago(1),
+                                     attention: ProjectListAttention(), integration: queued(),
+                                     taskCounts: ProjectSidebarTaskCounts(done: 12, failed: 0, total: 15),
+                                     mainBranch: "master")
+        XCTAssertEqual(row([session("coordinator", role: .coordinator)], summary)?.line.text,
+                       "Merge to master · queued · 13m")
     }
 
     func testNothingLandingLeavesTheCoordinatorsLineAlone() {

@@ -1,0 +1,13 @@
+{
+ "command": "cd /root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370 && git log --oneline -1 && bash docs/evidence/base-ui-migration/p2-keyboard-window-2/inventory-check.sh",
+ "runner": "mcp__orbit__bg_run",
+ "bgJobId": "bgj_362cd3f49665",
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "commit": "00e6a8c6b34355f45c20327e14b98a2ad2992a4f",
+ "webTree": "d8ae59f026644577041afea38b5994da1eef0f9f",
+ "outputLastWritten": "2026-10-08T03:11:42.762905+00:00",
+ "exitCode": 0,
+ "outputSha256": "390e2bb7c849100ec0909775bb48c4e85b12831f2da384fd99ab2166b6a72c54",
+ "outputBytes": 6098,
+ "note": "On the branch rebased onto origin/main c7efa24cb (00e6a8c6b): 2026-10-07d.json rebuilds byte for byte from the audit of its scan (37efe2490, the same audited sources as HEAD). verify-record.mjs stops, as expected, at its second check on the 8 use points main brought without an owner (DeepSeekBalance.tsx, ProjectDoneConversation.test.tsx, RunnerEngines.accountFold.test.tsx, StartProjectCard.test.tsx, WorkspaceView.neverStarted.test.tsx, index.css 6624, 6625, 10626; the same 8 as origin/main alone; the coordinator gave all 8 to P4.2, six to be recorded in its 2026-10-07c.json). With a stand-in record written only in the scratch copy (never committed) that gives exactly those 8 points the owner \"P4.2 (stand-in)\", verify-record.mjs passes for 2026-10-07d.json: 1 file entry matches the audit, read after 3 earlier records, 0 unowned, 0 pending, P0.1 baseline clean. --check-owners on HEAD: the 8 points (expected); audit-antd-selfcheck.mjs and verify-antd-inventory.mjs pass."
+}

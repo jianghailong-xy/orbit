@@ -1,0 +1,189 @@
+{
+ "steps": 48,
+ "checks": 261,
+ "failedSteps": [],
+ "from": "2026-10-18T12:29:59.569+00:00",
+ "to": "2026-10-18T13:06:23.439+00:00",
+ "phaseSeconds": {
+  "facts": 6.9,
+  "setup": 4.1,
+  "off-unset": 248.1,
+  "off-false": 152.5,
+  "on-provision": 55.5,
+  "capacity": 0.4,
+  "sessions": 244.4,
+  "sleep": 187.6,
+  "wake": 64.2,
+  "rebuild": 33.5,
+  "controller": 201.5,
+  "image": 163.7,
+  "backup": 246.5,
+  "off-again": 564.5,
+  "final": 10.4
+ },
+ "measures": {
+  "provision": {
+   "ann": {
+    "mappingToPvc": -0.6,
+    "retryToPod": 6.3,
+    "podToRunnerStarted": 11.0,
+    "runnerStartedToReady": 23.1
+   },
+   "bob": {
+    "mappingToPvc": -0.6,
+    "retryToPod": 6.3,
+    "podToRunnerStarted": 11.0,
+    "runnerStartedToReady": 23.1
+   }
+  },
+  "signIns": {
+   "count": 16,
+   "slowestMs": 236.3,
+   "failedWithin": {
+    "ann": 5.5,
+    "bob": 0.0
+   }
+  },
+  "firstSessions": {
+   "ann": 2.4,
+   "bob": 2.3
+  },
+  "busy": {
+   "ann": {
+    "secondsSinceBusyStart": 110.0,
+    "sleep": {
+     "code": "MANAGED_RUNNER_BUSY",
+     "status": 409
+    }
+   },
+   "bob": {
+    "secondsSinceBusyStart": 110.1,
+    "sleep": {
+     "code": "MANAGED_RUNNER_BUSY",
+     "status": 409
+    }
+   }
+  },
+  "idleSleep": {
+   "ann": {
+    "drainAskedToAsleep": 40.4,
+    "busyEndToDrainAsked": 96.0,
+    "busyEndToAsleep": 136.5
+   },
+   "bob": {
+    "drainAskedToAsleep": 40.4,
+    "busyEndToDrainAsked": 96.0,
+    "busyEndToAsleep": 136.5
+   }
+  },
+  "capacity": {
+   "cyWaited": "WAITING_CAPACITY",
+   "cyReadyAfter": 13.1,
+   "firstSleep": "2026-10-18T12:44:08.201+00:00",
+   "cyPvc": "2026-10-18T12:44:08Z"
+  },
+  "wakes": {
+   "annMessage": 10.4,
+   "bobTaskAfterDue": 5.1
+  },
+  "rebuild": {
+   "ann": 14.7,
+   "bob": 25.0
+  },
+  "controller": {
+   "killedAt": "2026-10-18T12:47:13.935+00:00",
+   "bobAtKill": {
+    "generation": 4,
+    "management_state": "STARTING",
+    "pod_uid": "782f2877-9a17-44db-b14c-d81478cbc775",
+    "resource_operation_kind": "CREATE_POD",
+    "resource_operation_state": "COMPLETED"
+   },
+   "apiserversStartedIn": 6.9,
+   "killToBobReady": 12.5,
+   "bobReadyOnPod": "782f2877",
+   "bobPodAdopted": true,
+   "podCreatesInTheWindow": 1,
+   "annPodKept": true
+  },
+  "image": {
+   "rollback": {
+    "pinned": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+    "nextPod": {
+     "imageIDs": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+     ],
+     "spec": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+     ],
+     "uid": "f27b33d9-2c1c-460a-b8f7-12ec6cf8be6b"
+    }
+   },
+   "forward": {
+    "pinned": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+    "nextPod": {
+     "imageIDs": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312"
+     ],
+     "spec": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312"
+     ],
+     "uid": "9f389de8-9abe-430f-a6fb-40041929e1a4"
+    }
+   }
+  },
+  "backup": {
+   "disableToAsleep": 33.8,
+   "exportSeconds": 7.8,
+   "copySeconds": 0.3,
+   "gzipBytes": 26976011,
+   "imageBytes": 2147483648,
+   "verifyOfflineSeconds": 4.3,
+   "restoreSeconds": 25.8,
+   "writeSeconds": 17.9
+  },
+  "offAgain": {
+   "unset": 90,
+   "false": 90
+  },
+  "final": {
+   "mostPodsPerVolume": {
+    "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36": 1,
+    "mr-data-01a14f03-ec5a-749b-9877-e882a1a198eb": 1,
+    "mr-data-01a14f04-a624-724f-b618-252c0e3e8e26": 1
+   },
+   "generationsSeen": {
+    "ann": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7
+    ],
+    "bob": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ],
+    "cy": [
+     1,
+     2,
+     3
+    ]
+   },
+   "timelineLines": 207,
+   "gate": {
+    "PVC create": 3,
+    "Pod create": 14,
+    "Secret create": 14,
+    "admission probe": 16,
+    "other (reads, patches, deletes)": 3024
+   }
+  }
+ }
+}

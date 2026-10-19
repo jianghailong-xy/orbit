@@ -1,0 +1,14 @@
+{
+ "before": {
+  "row": "Watching 2 targets · 2 running · 0/2 done",
+  "header": "Watching 2 targets · Open · just now",
+  "watching": 1,
+  "tasks": "Tasks 11 running · 1/2 done▸"
+ },
+ "after": {
+  "row": "Watching Android: tapping a notification opens the session it names",
+  "header": "Watching 1 target · Open · just now",
+  "watching": 0,
+  "tasks": "Tasks 11 running · 1/2 done▸"
+ }
+}

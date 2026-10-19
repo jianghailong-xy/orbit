@@ -189,6 +189,16 @@ func configureEngineCommandTree(cmd *exec.Cmd) { configureSessionProcessTree(cmd
 // stop waits for an install already under way. Nothing is cancelled — see the type comment.
 func (r *installRelay) stop() { r.wg.Wait() }
 
+// inFlight is 1 while an install or update runs, for the managed workload report (managed_sleep.go).
+func (r *installRelay) inFlight() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.running {
+		return 1
+	}
+	return 0
+}
+
 // installEngineNow runs one engine's recommended installer and reports what happened.
 //
 // Same command ensureEngine uses, minus the register-time consent gate: pressing Install in the
@@ -204,6 +214,14 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 		ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
 		defer cancel()
 		if err := installDsh(ctx, proxyVars); err != nil {
+			return InstallResultRequest{Status: installFailed, Command: spec.installCmd, Message: err.Error()}
+		}
+		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
+	}
+	if spec.bin == providerCursor {
+		ctx, cancel := context.WithTimeout(context.Background(), engineInstallTimeout)
+		defer cancel()
+		if err := installCursor(ctx, proxyVars); err != nil {
 			return InstallResultRequest{Status: installFailed, Command: spec.installCmd, Message: err.Error()}
 		}
 		return InstallResultRequest{Status: installDone, Command: spec.installCmd}
@@ -282,6 +300,9 @@ func installEngineNow(spec engineSpec) InstallResultRequest {
 func ensureEngine(ctx context.Context, bin string, notify func(string)) string {
 	if bin == providerDsh {
 		return ensureDsh(ctx, notify)
+	}
+	if bin == providerCursor {
+		return ensureCursor(ctx, notify)
 	}
 	if engineRunnable(bin) {
 		return ""
@@ -392,6 +413,20 @@ func engineAuthPreflight(bin string, agentEnv map[string]string) string {
 	if bin == providerOpenCode {
 		return ""
 	}
+	// Cursor CLI runs on the credential its launch chooses (cursorLaunchCredential): a key, the login of the
+	// account the session borrows, or the workspace's own. It is read here the way the launch reads it,
+	// without asking Cursor: `agent models` would put a network round trip in front of every session.
+	if bin == providerCursor {
+		job := &ClaimedSession{Provider: providerCursor, Agent: AgentExecConfig{Provider: providerCursor, Env: agentEnv}}
+		credential, _, err := cursorLaunchCredential(job)
+		if err != nil {
+			return err.Error()
+		}
+		if credential == "" && !hasInjectedCredentials(bin, agentEnv) {
+			return cursorSignedOutMessage()
+		}
+		return ""
+	}
 	if hasInjectedCredentials(bin, agentEnv) {
 		return ""
 	}
@@ -441,6 +476,16 @@ func sessionEngineAuth(bin, path string, agentEnv map[string]string) authState {
 	// one answer however it is reached.
 	dir := strings.TrimSpace(envValue(envWithAgent(agentEnv), kind.varName))
 	if dir == "" {
+		// Claude Code's Default is asked with no CLAUDE_CONFIG_DIR, the way the relay signs it in, the
+		// Providers probe asks it and the session's claude is spawned. On a Mac, naming Default's own
+		// directory asks another login: the CLI keeps it in a Keychain item named by whether that
+		// variable is set at all (claudeKeychainService), so ~/.claude named outright is an item no
+		// sign-in into Default ever writes. Asked that way, every Default session on a Mac was refused
+		// as signed out while the Providers page said Signed in, and signing in again from the
+		// session's card changed nothing (a MacBook Pro runner, 2026-10-09).
+		if bin == providerClaude {
+			return probeAuthIn(ctx, bin, path, envWithAgent(agentEnv))
+		}
 		def, err := defaultAccountSlot(kind)
 		if err != nil {
 			return authUnknown
@@ -472,6 +517,11 @@ func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 		return false
 	case providerAntigravity:
 		keys = []string{"GEMINI_API_KEY"}
+	case providerCursor:
+		// A Cursor API key saved in Orbit, or a key or token of the workspace's own, which the session's
+		// CLI runs on (cursor_launch.go cursorLaunchCredential) — the control plane's sign-in preflight
+		// counts the same two.
+		keys = []string{cursorAPIKeyVar, "CURSOR_API_KEY", "CURSOR_AUTH_TOKEN"}
 	}
 	for _, k := range keys {
 		if strings.TrimSpace(agentEnv[k]) != "" {
@@ -488,6 +538,11 @@ func hasInjectedCredentials(bin string, agentEnv map[string]string) bool {
 func lookEngine(engine string) (string, bool) {
 	if engine == providerDsh {
 		p, err := dshExecutablePath()
+		return p, err == nil
+	}
+	// The pinned build in Orbit's version directory, never a Cursor CLI the user put on PATH.
+	if engine == providerCursor {
+		p, err := cursorExecutablePath()
 		return p, err == nil
 	}
 	exe := engine

@@ -280,7 +280,9 @@ function retryTask(holder: OpenItemDoorAssignee, resolving: boolean): OpenItemDo
   })];
 }
 
-function retryPromotion(holder: OpenItemDoorAssignee, resolving: boolean): OpenItemDoor[] {
+/** The candidate's re-check. Only a failure a rerun answers has this door: a CONFLICT has none, so
+ * no cell that holds one lists it (`decidePromotionRetry` refuses a conflict with 409). */
+function retryPromotion(holder: OpenItemDoorAssignee): OpenItemDoor[] {
   const owner = holder === 'OWNER';
   return [door(holder, 'integration-retry-promotion', 'integration_retry', owner ? 'ROUTE' : 'MCP', 'RERUN', ['RETRIED'], {
     action: 'RETRY',
@@ -288,7 +290,7 @@ function retryPromotion(holder: OpenItemDoorAssignee, resolving: boolean): OpenI
     route: owner
       ? '/projects/:id/promotions/:promotionId/integration/retry'
       : '/runner/projects/:id/promotions/:promotionId/integration/retry',
-    resolving,
+    resolving: true,
   })];
 }
 
@@ -304,11 +306,17 @@ function taskRepair(holder: OpenItemDoorAssignee, action?: OpenItemAction): Open
 }
 
 function taskFailureDoors(holder: OpenItemDoorAssignee): OpenItemDoor[] {
+  const owner = holder === 'OWNER';
   return [
-    door(holder, 'task-start', 'task_start', 'MCP', 'RERUN', ['RETRIED'], {
+    // Run the task again — the step this cell's RETRY is. The coordinator's door is the
+    // `task_start` tool; the owner's is their own route, the same press Run now makes, because an
+    // agent's tool is not a door the owner holds and a card must not lead with a press its holder
+    // cannot make (§4.7). Both clients send this cell's RETRY through whichever of the two the
+    // row's holder owns; every other cell keeps the integration reruns.
+    door(holder, 'task-start', 'task_start', owner ? 'ROUTE' : 'MCP', 'RERUN', ['RETRIED'], {
       action: 'RETRY',
-      mcp: 'task_start',
-      route: '/runner/tasks/:id/execute',
+      mcp: owner ? undefined : 'task_start',
+      route: owner ? '/tasks/:id/execute' : '/runner/tasks/:id/execute',
     }),
     door(holder, 'task-create', 'task_create', 'MCP', 'RERUN', ['SUCCESSOR_FILED'], {
       action: 'RETRY',
@@ -478,7 +486,10 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     if (assignee === 'COORDINATOR') doors.push(openCoordinator(assignee), openTaskSession(assignee));
     else doors.push(askAgain(assignee), openTaskSession(assignee));
     if (failureClass !== 'CONFLICT') doors.push(...retryTask(assignee, true));
-    doors.push(...taskRepair(assignee), cancelTask(assignee, false), handClose(assignee));
+    // `task_comment` is the send-back's first half — the review's own message tells the coordinator
+    // to write there what has to change, then `task_reopen` — so this cell carries it too.
+    doors.push(...taskRepair(assignee), cancelTask(assignee, false), commentOnTask(assignee),
+      handClose(assignee));
     return doors;
   }
 
@@ -502,7 +513,9 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
   // replaying the same source cannot repair it, so the table names the concrete branch-changing
   // operation that does.
   if (promotionFailure) {
-    doors.push(...retryPromotion(assignee, failureClass !== 'CONFLICT'));
+    // A conflict answers to a branch that changed, and the re-check refuses it: the door is not in
+    // this cell at all, so neither `actions` nor the message can offer a press that would 409.
+    if (failureClass !== 'CONFLICT') doors.push(...retryPromotion(assignee));
     doors.push(review(assignee, false));
     if (assignee === 'COORDINATOR') doors.push(askOwner(assignee));
     if (assignee === 'OWNER') doors.push(askAgain(assignee));
@@ -515,12 +528,18 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     // The conflict belongs to the project line.  The coordinator records the narrow re-open recipe
     // before changing the task generation; sending the task back to redo its own work is not the
     // remedy for a conflict that happened before that work was examined.
+    // `reopenTask` carries no RETRY action: on a conflict that press is the rerun the server
+    // refuses, and the card's way in is `Open task session` (§4.7, mock 7's rule 1).
     doors.push(openCoordinator(assignee), openTaskSession(assignee), commentOnTask(assignee),
-      reopenTask(assignee, 'RETRY'), cancelTask(assignee, false));
+      reopenTask(assignee), cancelTask(assignee, false));
   } else if ((sourceJob === 'LAND_TASK' || sourceJob === 'MAIN_SYNC') && assignee === 'COORDINATOR') {
-    doors.push(openCoordinator(assignee), openTaskSession(assignee));
+    // Revision 13: what only the owner can decide while the coordinator handles the item is asked,
+    // and the item stays the coordinator's (§4.6, §4.7) — the same door the candidate's cells have.
+    doors.push(openCoordinator(assignee), openTaskSession(assignee), askOwner(assignee));
     if (failureClass === 'CONFLICT') {
-      doors.push(...taskRepair(assignee, 'RETRY'));
+      // A conflict's rework doors stay doors — the message's recipe names them — but none of them
+      // wears the RETRY action, whose press is the landing rerun a conflict is refused.
+      doors.push(...taskRepair(assignee));
     } else {
       doors.push(...retryTask(assignee, true));
       // These are the task-level rework doors named by the message. They resolve by reopening or
@@ -532,7 +551,7 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     doors.push(askAgain(assignee), openTaskSession(assignee),
       cancelTask(assignee, sourceJob !== 'LAND_TASK'));
     if (failureClass === 'CONFLICT') {
-      doors.push(...taskRepair(assignee, 'RETRY'));
+      doors.push(...taskRepair(assignee));
     } else if (sourceJob === 'LAND_TASK' || sourceJob === 'MAIN_SYNC') {
       doors.push(...retryTask(assignee, true));
     }
@@ -657,37 +676,43 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
     && doors.some((candidate) => candidate.action === action && candidate.holder === assignee));
 }
 
-/** Select the executable names used in the prose.  It intentionally includes a non-resolving
- * retry name: the current message contract explains why that door cannot accept a conflict. */
-export function openItemDoorMessageNames(input: OpenItemDoorInput): {
-  retryMcp: string;
-  resolveMcp: string;
-  askOwnerMcp: string;
-  handOverMcp: string;
-  taskCommentMcp: string;
-  taskStartMcp: string;
-  taskCreateMcp: string;
-  taskUpdateMcp: string;
-  taskReopenMcp: string;
-  taskGetMcp: string;
-} {
+/**
+ * The executable names the prose may use: the doors THIS cell really has, and null for every door
+ * it does not. There is deliberately no fallback to a literal name — a name the cell does not hold
+ * is a press the server would refuse (a rerun of a conflict, a retry of a landing that is not a
+ * failed landing), and the message builders omit the sentence instead of writing one out.
+ *
+ * The messages are written for the COORDINATOR whatever the row's own assignee: an item that has
+ * become the owner's is read back to the coordinator as what it may ask for, never as a door held
+ * by somebody else.
+ */
+export interface OpenItemDoorMessageNames {
+  retryMcp: string | null;
+  resolveMcp: string | null;
+  askOwnerMcp: string | null;
+  handOverMcp: string | null;
+  taskCommentMcp: string | null;
+  taskStartMcp: string | null;
+  taskCreateMcp: string | null;
+  taskUpdateMcp: string | null;
+  taskReopenMcp: string | null;
+  taskGetMcp: string | null;
+}
+
+export function openItemDoorMessageNames(input: OpenItemDoorInput): OpenItemDoorMessageNames {
   const doors = doorsForOpenItem({ ...input, assignee: 'COORDINATOR' });
-  const named = (mcp: string, fallback: string): string =>
-    doors.find((candidate) => candidate.mcp === mcp)?.mcp ?? fallback;
-  const retry = doors.find((candidate) => candidate.mcp === 'integration_retry');
-  const resolve = doors.find((candidate) => candidate.mcp === 'open_item_resolve');
-  const ask = doors.find((candidate) => candidate.mcp === 'ask_owner');
-  const handOverDoor = doors.find((candidate) => candidate.mcp === 'open_item_hand_over');
+  const named = (mcp: string): string | null =>
+    doors.find((candidate) => candidate.implemented && candidate.mcp === mcp)?.mcp ?? null;
   return {
-    retryMcp: retry?.mcp ?? 'integration_retry',
-    resolveMcp: resolve?.mcp ?? 'open_item_resolve',
-    askOwnerMcp: ask?.mcp ?? 'ask_owner',
-    handOverMcp: handOverDoor?.mcp ?? 'open_item_hand_over',
-    taskCommentMcp: named('task_comment', 'task_comment'),
-    taskStartMcp: named('task_start', 'task_start'),
-    taskCreateMcp: named('task_create', 'task_create'),
-    taskUpdateMcp: named('task_update', 'task_update'),
-    taskReopenMcp: named('task_reopen', 'task_reopen'),
-    taskGetMcp: named('task_get', 'task_get'),
+    retryMcp: named('integration_retry'),
+    resolveMcp: named('open_item_resolve'),
+    askOwnerMcp: named('ask_owner'),
+    handOverMcp: named('open_item_hand_over'),
+    taskCommentMcp: named('task_comment'),
+    taskStartMcp: named('task_start'),
+    taskCreateMcp: named('task_create'),
+    taskUpdateMcp: named('task_update'),
+    taskReopenMcp: named('task_reopen'),
+    taskGetMcp: named('task_get'),
   };
 }

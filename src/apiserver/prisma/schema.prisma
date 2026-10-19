@@ -293,6 +293,10 @@ model User {
   preferences           Json      @default("{}")
   // Access role. MEMBER (default) for everyone; ADMIN unlocks the user-management area.
   role                  String    @default("MEMBER")
+  // When an administrator disabled the account; null while it is enabled (docs/google-sign-in-design.md
+  // §5.5, migration 0396). A disabled account cannot sign in, refresh or use any credential it holds,
+  // and nothing it owns is deleted: enabling it again lets it back in.
+  disabledAt            DateTime? @map("disabled_at")
   // DEPRECATED, unread: a Claude subscription token (`claude setup-token`) the control plane used
   // to hold and inject on every runner. Claude now authenticates per runner — a session that finds
   // no local login surfaces the sign-in card (RunnerSignIn) — so nothing writes or reads these.
@@ -373,8 +377,13 @@ model RefreshToken {
   // Non-null once the token is consumed (rotated) or revoked (logout / theft-triggered family
   // kill); a dead token presented again is treated as replay.
   revokedAt DateTime? @map("revoked_at")
+  // The login session: minted at sign-in, carried by every rotation and by the access JWT (`sid`).
+  // Live while one of its tokens is unrevoked and unexpired (docs/push-login-session-design.md).
+  // NULL on tokens issued before 0425; their next rotation starts one.
+  loginSessionId String? @map("login_session_id") @db.Uuid
 
   @@index([userId])
+  @@index([loginSessionId])
   @@map("refresh_token")
 }
 
@@ -566,6 +575,9 @@ model DeviceToken {
   environment String   @default("production")
   bundleId    String   @map("bundle_id")
   installationId String? @map("installation_id") // Android install UUID, stable across token/account changes
+  // The login session that registered it; nothing is pushed once that session has ended. NULL: no
+  // session was named (registered before 0425), pushed to as before (docs/push-login-session-design.md).
+  loginSessionId String? @map("login_session_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -593,7 +605,7 @@ model DeviceToken {
 model ClientVersion {
   userId     String   @map("user_id") @db.Uuid
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// 'web' | 'ios' | 'macos' — the client kind, from the `X-Orbit-Client` header.
+  /// 'web' | 'ios' | 'macos' | 'android' — the client kind, from the `X-Orbit-Client` header.
   kind       String
   version    String
   lastSeenAt DateTime @updatedAt @map("last_seen_at")
@@ -751,6 +763,12 @@ model Runner {
   loginMessage  String?   @map("login_message")
   // When the current relay started, so an abandoned one can be timed out.
   loginAt       DateTime? @map("login_at")
+  // When the link loginUrl holds stops working, as the runner reports it (migration 0427): Cursor
+  // CLI's `agent login` waits on its one link for about 27 minutes. NULL when the runner names none.
+  loginExpiresAt DateTime? @map("login_expires_at")
+  // Why a `failed` sign-in failed, when a client answers it differently (migration 0427): `expired`
+  // is the link running out before anyone signed in with it. NULL for every other failure.
+  loginReason   String?   @map("login_reason")
 
   // Removing a Codex account slot from this machine — the one relay that takes an account away
   // rather than adding one. The same shape as the sign-in relay above and for the same reason: the
@@ -799,6 +817,12 @@ model Runner {
   // reads as no active lease and not draining.
   heartbeatLeaseOwner String?  @map("heartbeat_lease_owner") @db.Uuid
   heartbeatDraining   Boolean? @map("heartbeat_draining")
+  /// What a managed runner's instance last said it was doing (migration 0413, @orbit/shared
+  /// ManagedRunnerWorkload): turns, background jobs, operations and unflushed events, how long it
+  /// has had none, and which generation and Pod said so. Written by a heartbeat of the authorized
+  /// instance only, as NULL when it omits the field; a self-managed runner's row is never written.
+  /// Idle sleep needs it fresh and from the current instance: missing or stale, nothing sleeps.
+  managedWorkload     Json?    @map("managed_workload")
 
   sessions Session[]
   // Workspaces `orbit register` minted for this machine (one per project dir + tool).
@@ -978,6 +1002,15 @@ model Workspace {
   // `default`, never a path. Same rules as codexAccount above; dispatch hands the slot's directory to
   // the runner as ORBIT_ANTIGRAVITY_GOOGLE_DIR.
   antigravityAccount  String?   @map("antigravity_account")
+  // Which Kimi Code account this workspace's Kimi sessions run on (migration 0408): the id of a slot
+  // the runner added (8 lowercase hex) or `default`, never a path. Same rules as codexAccount above;
+  // dispatch hands the slot's directory to the runner as KIMI_CODE_HOME.
+  kimiAccount         String?   @map("kimi_account")
+  // Which Cursor CLI account this workspace's Cursor CLI sessions run on (migration 0427): the id of
+  // an account the runner added (8 lowercase hex) or `default`, never a path. Same rules as
+  // codexAccount above; dispatch hands the account's directory to the runner as
+  // ORBIT_CURSOR_ACCOUNT_DIR.
+  cursorAccount       String?   @map("cursor_account")
   agentKey            String?   @map("agent_key")
   enabled             Boolean   @default(true)
   // When workDir is NOT a git repo, the runner auto-`git init`s it (default .gitignore +
@@ -1038,6 +1071,8 @@ model Workspace {
   sessionFolders SessionFolder[]
   /// Set when this is a managed runner's default workspace (migration 0399).
   managedRunnerDefault ManagedRunner? @relation("ManagedRunnerDefaultWorkspace")
+  /// The wiki repository operations read in this workspace's checkout (migration 0402).
+  wikiRepoOps WikiRepoOp[]
 
   /// The key a wiki binding's composite foreign key names (migration 0307), so a space can only be
   /// bound to its own owner's workspaces. `id` alone is already unique.
@@ -1057,9 +1092,9 @@ enum ManagedRunnerDesiredState {
   @@map("managed_runner_desired_state")
 }
 
-/// How far the manager has got with a mapping. Only the manager advances it. This version moves
-/// REQUESTED → PROVISIONING → STARTING → READY, and to FAILED; the other values are the contract's
-/// states for capacity, sleep, fencing and deletion, which later work fills in.
+/// How far the manager has got with a mapping. Only the manager advances it: REQUESTED, WAITING_CAPACITY,
+/// PROVISIONING, STARTING, READY, DRAINING, SLEEPING, FENCING and FAILED (migration 0413's capacity, wake
+/// and sleep included); DELETING and DELETED are the contract's deletion states, which later work fills in.
 enum ManagedRunnerManagementState {
   REQUESTED
   WAITING_CAPACITY
@@ -1100,10 +1135,17 @@ model ManagedRunner {
   /// The execution incarnation the Pod is created for. Monotonic; only a proven stop or fencing
   /// receipt may advance it, which this version never does.
   generation         Int                          @default(1)
-  /// Compare-and-set counter: every write of this row is `WHERE revision = <read>` and bumps it.
+  /// Compare-and-set counter: every manager and owner write of this row is `WHERE revision = <read>`
+  /// and bumps it. Two writes of their own columns are predicate writes instead and leave it: demand
+  /// (`demandRevision`, `lastDemandAt`, RUNNING desired) and a drained instance's `stopAcknowledgedAt`.
   revision           Int                          @default(1)
+  /// The run backend that made this mapping's volume and instances, and alone drives them
+  /// (managed-runner-backend.ts): `kubernetes` — every mapping before migration 0430 — or `docker`.
+  /// A CHECK holds it to those two; a manager leaves another backend's mappings as they are.
+  backend            String                       @default("kubernetes")
   /// The configured cluster and namespace the PVC lives in, fixed at creation. With `pvcName`
   /// (`mr-data-<runner uuid>`, held by a CHECK) this is the location no second mapping can take.
+  /// On Docker: the profile's cluster key and the channel's instance, and the volume's name.
   clusterKey         String                       @map("cluster_key")
   namespace          String
   pvcName            String                       @map("pvc_name")
@@ -1117,11 +1159,27 @@ model ManagedRunner {
   podUid             String?                      @map("pod_uid")
   nodeName           String?                      @map("node_name")
   nodeUid            String?                      @map("node_uid")
-  /// Capacity reservation, demand and model supply: kept for the admission, wake and first-session
-  /// work that follows; nothing in this version writes them.
+  /// The share of the environment's capacity this mapping holds (managed-runner-capacity.ts,
+  /// migration 0413): storage while its volume exists, compute from admission until its instance is
+  /// proven stopped. Written only together with `managed_runner_capacity`, in one transaction.
   reservation        Json?
+  /// Demand: bumped by every piece of work addressed to this runner while the switch is on
+  /// (managed-runner-demand.ts), whatever the state. Sleep compares it before it stops anything.
   demandRevision     Int                          @default(0) @map("demand_revision")
   lastDemandAt       DateTime?                    @map("last_demand_at") @db.Timestamptz(3)
+  /// The capacity pool's revision when admission last refused this mapping (WAITING_CAPACITY): a
+  /// later revision — a release, or a changed budget — makes it look again before its retry time.
+  capacityRevision    Int?                        @map("capacity_revision")
+  /// DRAINING: the demand revision seen when the drain began. Demand past it before the stop is
+  /// asked for ends the drain; demand after that wakes the runner again once it has stopped.
+  drainDemandRevision Int?                        @map("drain_demand_revision")
+  /// DRAINING: when the instance was asked to stop for sleep. Null until then: up to that moment
+  /// the drain can still be called off without anything having stopped.
+  stopRequestedAt     DateTime?                   @map("stop_requested_at") @db.Timestamptz(3)
+  /// DRAINING: when the instance, with nothing to do, accepted the stop. Set by its heartbeat only
+  /// while the drain stands and no demand has come since it began; from then on the drain cannot be
+  /// called off, and the instance exits on its own.
+  stopAcknowledgedAt  DateTime?                   @map("stop_acknowledged_at") @db.Timestamptz(3)
   initialProvider    String?                      @map("initial_provider")
   resourceProfileId  String?                      @map("resource_profile_id")
   /// The one resource operation in flight: which (`CREATE_PVC`, `CREATE_SECRET`, `CREATE_POD`,
@@ -1130,8 +1188,9 @@ model ManagedRunner {
   resourceOperationId    String?                  @map("resource_operation_id")
   resourceOperationKind  String?                  @map("resource_operation_kind")
   resourceOperationState String?                  @map("resource_operation_state")
-  /// Bounded retry of transient failures: attempts spent, when the next may start, and the startup
-  /// deadline STARTING is held to. All from the configured profile, persisted so a restart keeps them.
+  /// Bounded retry of transient failures and of restarts after an instance stopped: attempts spent in
+  /// a row, when the next may start, and the startup deadline STARTING is held to. All from the
+  /// configured profile, persisted so a restart keeps them.
   attempt            Int                          @default(0)
   nextAttemptAt      DateTime?                    @map("next_attempt_at") @db.Timestamptz(3)
   startupDeadlineAt  DateTime?                    @map("startup_deadline_at") @db.Timestamptz(3)
@@ -1155,6 +1214,41 @@ model ManagedRunner {
   @@unique([runnerId, ownerId], map: "managed_runner_runner_id_owner_id_key")
   @@unique([defaultWorkspaceId, ownerId], map: "managed_runner_default_workspace_id_owner_id_key")
   @@map("managed_runner")
+}
+
+/// The fixed capacity budget of one managed runner environment and what is reserved from it now
+/// (migration 0413, docs/managed-runner-design.md "Resource admission model supply and isolation";
+/// managed-runner-capacity.ts). One row per cluster key and namespace. The totals are the profile's,
+/// written when the manager first uses the pool and whenever a restart brings other totals; the
+/// reserved columns change only in the transaction that records a mapping's share, by a conditional
+/// UPDATE that admits only while every dimension fits. CHECKs keep every reserved figure at zero or
+/// above, so no share is ever given back twice. Nothing here is observed usage or session slots.
+model ManagedRunnerCapacity {
+  id                     String   @id @db.Uuid
+  clusterKey             String   @map("cluster_key")
+  namespace              String
+  cpuMillis              BigInt   @map("cpu_millis")
+  memoryBytes            BigInt   @map("memory_bytes")
+  ephemeralBytes         BigInt   @map("ephemeral_bytes")
+  pods                   Int
+  attachments            Int
+  activeUsers            Int      @map("active_users")
+  storageUsableBytes     BigInt   @map("storage_usable_bytes")
+  storageHeadroomBytes   BigInt   @map("storage_headroom_bytes")
+  cpuMillisReserved      BigInt   @default(0) @map("cpu_millis_reserved")
+  memoryBytesReserved    BigInt   @default(0) @map("memory_bytes_reserved")
+  ephemeralBytesReserved BigInt   @default(0) @map("ephemeral_bytes_reserved")
+  podsReserved           Int      @default(0) @map("pods_reserved")
+  attachmentsReserved    Int      @default(0) @map("attachments_reserved")
+  activeUsersReserved    Int      @default(0) @map("active_users_reserved")
+  durableBytesReserved   BigInt   @default(0) @map("durable_bytes_reserved")
+  /// Moves with every reservation, release and change of totals: what a waiting intent compares.
+  revision               Int      @default(1)
+  createdAt              DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt              DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([clusterKey, namespace], map: "managed_runner_capacity_pool_key")
+  @@map("managed_runner_capacity")
 }
 
 /// WHO does the work — an identity, and nothing about where it runs.
@@ -1357,6 +1451,14 @@ model Session {
   // Materialized from the owning agent. Only needed to distinguish first-class Kimi from a
   // stale old-replica write that still uses the former custom-provider slug `kimi`.
   providerBuiltin      Boolean   @default(false) @map("provider_builtin")
+  // The engine — the CLI on the runner that produces this session's runtimeSessionId (claude, codex,
+  // kimi, antigravity, opencode, dsh, and since migration 0426 cursor) — while `provider` is only where
+  // its credential comes from (migration 0414, docs/provider-engine-contract.md §1.1; held to those
+  // values by session_engine_check). Written at insert, and never changed
+  // after that: the database refuses it (session_engine_immutable), and a new engine is a new session.
+  // NULL only on a row an older API replica wrote or one the backfill could not place; every door
+  // derives those by the old rules (providers/session-engine.ts), and a claim records what it derived.
+  engine               String?
   // Only for a session whose provider is an account pool (migration 0268): the ModelProvider its last
   // claim dispatched on, which the next claim stays on until that member is spent or refused
   // (QueueService.resolvePoolMember). No relation: a member deleted or taken out of the pool matches
@@ -1393,6 +1495,14 @@ model Session {
   // (Workspace.antigravityAccount).
   antigravityAccount       String?  @map("antigravity_account")
   antigravityAccountPinned Boolean  @default(false) @map("antigravity_account_pinned")
+  // Its Kimi Code account, the same pair again (migration 0408); NULL follows the workspace's
+  // (Workspace.kimiAccount).
+  kimiAccount              String?  @map("kimi_account")
+  kimiAccountPinned        Boolean  @default(false) @map("kimi_account_pinned")
+  // Its Cursor CLI account, the same pair again (migration 0427); NULL follows the workspace's
+  // (Workspace.cursorAccount).
+  cursorAccount            String?  @map("cursor_account")
+  cursorAccountPinned      Boolean  @default(false) @map("cursor_account_pinned")
   // The only runner-engine generation allowed to dequeue this session's inbox. Retired values
   // remain here as tombstones until the next activation, so legacy NULL polls stay fenced.
   inboxLeaseGeneration String?   @map("inbox_lease_generation") @db.Uuid
@@ -1459,6 +1569,15 @@ model Session {
   // event ingestion. Lets the session list show a last-reply line without querying the
   // (high-volume, append-only) run_event table per row. null until the first reply.
   lastAssistantText    String?   @map("last_assistant_text")
+  // Denormalized rolling recap: a sentence or two on what the session did, how it was verified
+  // and what comes next, which the session list prefers to lastAssistantText. Generated by the
+  // server when the session settles; each pass folds the previous recap and the run_events after
+  // recapEventSeq into a new one. recapEventSeq is that cursor (the seq of the last run_event the
+  // recap covers) and recapAt is when the recap was written. All three null until the first
+  // recap (0418).
+  recapText            String?   @map("recap_text")
+  recapAt              DateTime? @map("recap_at")
+  recapEventSeq        Int?      @map("recap_event_seq")
   // Denormalized "frontier" activity for the sidebar's live status line: the tool
   // name when a tool_use is the latest durable event (in flight, no tool_result yet),
   // cleared back to null on any other frontier (assistant text, tool_result, turn end).
@@ -1775,8 +1894,9 @@ model Session {
   mergeReceipts         SessionMergeReceipt[]
   /// Exception items queued on this conversation (migration 0278).
   openItemDeliveries    ProjectOpenItemDelivery[]
-  /// Integration jobs whose source branch is this session's (migration 0281).
-  integrationJobs       ProjectIntegrationJob[]
+  /// Integration jobs whose source branch is this session's (migration 0281) are found by
+  /// `project_integration_job.session_id`, which is a history reference with no foreign key and so
+  /// has no relation to declare here (0424).
   /// `[K3]`: the attempt this session IS, if it is one (migration 0139). At most one — a session is
   /// one attempt or none, never a second try at the same thing.
   attempt               TaskAttempt?
@@ -1830,9 +1950,13 @@ model ShareLink {
   task      Task?    @relation(fields: [taskId], references: [id], onDelete: Cascade)
   projectId String?  @map("project_id") @db.Uuid
   project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  /// A wiki space (0403): its home and every document written for it. Reached through the space's
+  /// (id, owner_id) key, as every table of the wiki is, so a link is only ever rooted at its owner's.
+  wikiSpaceId String?    @map("wiki_space_id") @db.Uuid
+  wikiSpace   WikiSpace? @relation(fields: [wikiSpaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "share_link_wiki_space_fkey")
 
-  /// The ticked layers: `taskPages`, `commentsAndFiles`, `conversations`, `toolOutput`. A key that is
-  /// absent reads as its default (contract §1), so this records choices, not the defaults.
+  /// The ticked layers: `taskPages`, `commentsAndFiles`, `conversations`, `toolOutput`, `footnotes`. A
+  /// key that is absent reads as its default (contract §1), so this records choices, not the defaults.
   include       Json      @default("{}")
   /// NULL = never. Lazy: the public door compares it on every read.
   expiresAt     DateTime? @map("expires_at") @db.Timestamptz(3)
@@ -2710,6 +2834,10 @@ model ProjectCodebase {
 
   /// Where this line comes FROM: the default baseline ref for an ordinary project code task.
   upstreamRef String @map("upstream_ref")
+  /// When the account owner chose `upstreamRef` (0422): every owner write that names one records
+  /// it. Null while the project stands on the default, or on the choice a new binding carried over
+  /// from the owner's last one for the same repository (`project-integration-line.ts#bind`).
+  upstreamRefChosenAt DateTime? @map("upstream_ref_chosen_at") @db.Timestamptz(3)
   /// Where it goes TO: the default merge target for a finished project task. Written equal to
   /// `upstreamRef` unless somebody says otherwise, and never rewritten by a merge (SR44) — a
   /// one-off "merge this elsewhere" writes `session.mergeTarget` and nothing here.
@@ -2767,6 +2895,9 @@ model ProjectCodebase {
   /// schema cannot spell.
   @@index([projectId], map: "project_codebase_project_idx")
   @@index([authorityRunnerId], map: "project_codebase_authority_runner_idx")
+  /// The owner's last choice of main branch for a repository: what a new binding starts from (L6).
+  /// PARTIAL in the migration (`WHERE upstream_ref_chosen_at IS NOT NULL`), like the runner one.
+  @@index([ownerId, canonicalRepoUrl, upstreamRefChosenAt(sort: Desc)], map: "project_codebase_upstream_choice_idx")
   @@map("project_codebase")
 }
 
@@ -2800,13 +2931,23 @@ model ProjectIntegrationJob {
   /// second generation exists because somebody asked for one, or because the task branch moved.
   generation Int @default(1)
 
-  /// SET NULL, not CASCADE: the audit of what the platform pushed outlives the row that asked for it.
+  /// The task this job is about. A HISTORY REFERENCE WITH NO RELATION (0423), as `retryOfJobId` below
+  /// is: a finished job is never rewritten (`project_integration_job_terminal_guard`, J4), so 0281's
+  /// `ON DELETE SET NULL` here was an UPDATE the guard refused — deleting a task that had landed
+  /// anything rolled back whole and answered 500 — and on a queued job it was one
+  /// `project_integration_job_land_task_chk` refused instead. The audit of what the platform pushed
+  /// outlives the row that asked for it, so the id stays, naming a task that may be gone. Read it as
+  /// "which task this was about", never as a row that is there; `project_integration_job_task_idx`
+  /// is the way in.
   taskId      String?  @map("task_id") @db.Uuid
-  task        Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
   /// The source work session — never the landing session contract revision 12 adds (§2.9);
-  /// routing, base SHA, the claim guard and receipts read it.
+  /// routing, base SHA, the claim guard and receipts read it. A HISTORY REFERENCE WITH NO RELATION
+  /// (0424), for `taskId`'s reason: 0281's `ON DELETE SET NULL` here was an UPDATE J4 refused, so
+  /// purging a session a finished job was about rolled back whole — and with it the whole hourly
+  /// Trash purge. The id stays, naming a session that may be gone: a reader looks the session up and
+  /// reads "not found" as the NULL the key used to write, and never copies a gone one into a column
+  /// that is a foreign key (`session_merge_receipt.session_id`).
   sessionId   String?  @map("session_id") @db.Uuid
-  session     Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   promotionId String?  @map("promotion_id") @db.Uuid
 
   /// J1's key: the canonical repository URL and the target ref, so two PROJECTS landing into one
@@ -2845,6 +2986,11 @@ model ProjectIntegrationJob {
   /// an ancestor of the upstream (migration 0346). The only fact on which §1.4 lets such an answer
   /// out of a criterion's roll-up; NULL is "not measured" and withholds.
   sourceOnUpstream Boolean? @map("source_on_upstream")
+  /// The runner's measurement, taken when it answers NOTHING_TO_LAND, of whether the branch carried
+  /// commits of its own that the base already had, every one of them (migration 0410): TRUE says the
+  /// work is on the target and nothing was pushed because nothing was missing, FALSE says the branch
+  /// carried nothing. NULL is "not measured", read exactly as before the column existed.
+  sourceFullyApplied Boolean? @map("source_fully_applied")
 
   /// `[{ name, command, expectedExitCode, exitCode, timedOut, durationMs, outputTail }]`.
   checks      Json     @default("[]")
@@ -2916,7 +3062,8 @@ model ProjectIntegrationJob {
 /// No Prisma relations, deliberately. Everything this table is read with is addressed by its own
 /// scalars, and a relation field would put a back-reference on five models — `Project`, `Task`,
 /// `Session`, `User`, `ProjectCodebase` — that nothing traverses. The foreign keys are in the
-/// migration, where the database enforces them.
+/// migration, where the database enforces them — except `taskId` and `sessionId`, which are history
+/// references with no foreign key since 0424 (below).
 model ProjectPromotion {
   id         String @id @default(uuid(7)) @db.Uuid
   projectId  String @map("project_id") @db.Uuid
@@ -2926,6 +3073,12 @@ model ProjectPromotion {
   /// PROJECT_BRANCH is the ordinary source; TASK_BRANCH is what a MAIN-line project promotes,
   /// because it has no branch of its own to accumulate on (appendix A-Q7).
   sourceKind String  @map("source_kind")
+  /// The task and the work session this candidate is about. HISTORY REFERENCES (0424), as on
+  /// `ProjectIntegrationJob`: a terminal promotion is never rewritten
+  /// (`project_promotion_terminal_guard`), so 0286's `ON DELETE SET NULL` was an UPDATE the guard
+  /// refused — deleting the task or purging the session rolled back whole — and on a live
+  /// `TASK_BRANCH` candidate it was one `project_promotion_task_branch_chk` refused instead. Either
+  /// may name a row that is gone; look it up, and read "not found" as the NULL the key used to write.
   taskId     String? @map("task_id") @db.Uuid
   sessionId  String? @map("session_id") @db.Uuid
 
@@ -2950,6 +3103,11 @@ model ProjectPromotion {
 
   checks    Json     @default("[]")
   conflicts String[] @default([])
+  /// Why the last job blocked this candidate: ALREADY_LANDED, CHECK_FAILED, CONFLICT or ERROR
+  /// (migration 0409, a CHECK), written with BLOCKED and cleared when its check is queued again. NULL
+  /// on a candidate blocked before the column existed, whose reason is still read off `checks` and
+  /// `conflicts`.
+  blockedReason String? @map("blocked_reason")
 
   state      String  @default("CHECKING")
   checkJobId String? @map("check_job_id") @db.Uuid
@@ -4519,6 +4677,11 @@ model Task {
   // the next run start a fresh session rather than continue the last one, since a session's
   // provider is fixed for its lifetime (see TasksService.runAgentOnTask).
   provider         String?
+  // The engine pin beside the credential pin (migration 0414, docs/provider-engine-contract.md §1.2):
+  // which CLI the task's runs execute on, one of the session's engines (task_engine_check, widened to
+  // `cursor` by 0426). Backfilled from the provider pin, so a pinned task means what it meant before; an
+  // older replica's run on exactly the pinned credential takes it at insert (session_engine_from_task_pin).
+  engine           String?
   model            String?
   // Suggested tier, separate from the model pin. The migration checks S/M/L/XL or NULL.
   modelHint        String?     @map("model_hint")
@@ -4812,8 +4975,9 @@ model Task {
   @@index([runAt], map: "task_run_at_idx")
   /// The exception items about this task (migration 0278).
   openItems ProjectOpenItem[]
-  /// Every attempt the platform made to land this task's branch (migration 0281).
-  integrationJobs ProjectIntegrationJob[]
+  /// Every attempt the platform made to land this task's branch (migration 0281) is found by
+  /// `project_integration_job.task_id`, which is a history reference with no foreign key and so has
+  /// no relation to declare here (0423). `readLandingJobsByTask` is the read.
 
   @@index([creatorType, creatorId])
   /// Both dispatcher questions about a verification — "is one already in flight for this
@@ -5770,6 +5934,12 @@ model TaskComment {
   /// 1 files a `TaskCommentMentionDelivery` row per mentioned agent in the same transaction. The
   /// column exists so a rolling deploy cannot deliver one comment twice or lose one entirely.
   mentionDeliveryVersion Int    @default(0) @map("mention_delivery_version") @db.SmallInt
+  /// The run an agent wrote this from (migration 0416): its session, and the `TaskAttempt` that
+  /// session is when it is one of THIS task's. Snapshots rather than relations, like
+  /// `TaskCompletionEvidence`'s source ids: purging the session cascades to its attempt, and the
+  /// comment keeps naming the run. Null from the app, outside a session, and from the platform.
+  sessionId  String?     @map("session_id") @db.Uuid
+  attemptId  String?     @map("attempt_id") @db.Uuid
   createdAt  DateTime    @default(now()) @map("created_at")
 
   deliveries TaskCommentMentionDelivery[]
@@ -5930,6 +6100,12 @@ model ModelProvider {
   enabled       Boolean  @default(true)
   // Picker display order; NULL sorts last.
   position      Int?
+  // A Cursor key's last check (migration 0428): what Cursor CLI on a runner last answered `agent models`
+  // with it — VALID, INVALID (Cursor refused the key) or UNREACHABLE (Cursor's API could not be reached
+  // to ask) — and when. NULL until a runner reports one, and again once the key is replaced. Only a
+  // Cursor key is ever checked.
+  keyCheckState String?   @map("key_check_state")
+  keyCheckedAt  DateTime? @map("key_checked_at")
   // NULL = a shared provider (admin-managed): visible in, and dispatchable for, admins' sessions
   // only (usableProviderScope). Set = a personal (BYOK) provider: visible in, and dispatchable for,
   // only its owner's sessions. Slugs stay globally unique either way, so dispatch-by-slug is never
@@ -5939,6 +6115,8 @@ model ModelProvider {
   // The account pools this provider is a member of. Joining one adds a way to dispatch it and
   // takes nothing away: the row keeps its own slug and can still be pinned on its own.
   poolMemberships ProviderPoolMember[]
+  // The retired provider names that resolve to this key (ProviderSlugAlias).
+  aliases       ProviderSlugAlias[]
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -5947,6 +6125,68 @@ model ModelProvider {
   @@unique([id, ownerId], map: "model_provider_id_owner_id_key")
   @@index([ownerId])
   @@map("model_provider")
+}
+
+/// A retired provider name (migration 0415, docs/provider-engine-contract.md §1.5): the slug of a
+/// `deepseek-harness` row that was merged into a DeepSeek key or became one under another slug. It
+/// resolves to that key on the engine the old slug ran on, so a caller still naming it gets what it got
+/// before; nothing lists it, and whatever stores a provider stores the key's own slug. It is a name in
+/// the one dispatch namespace — the `*_dispatch_slug_guard` triggers refuse a key, a pool or an alias
+/// whose slug one of the others holds — and deleting its key deletes it.
+model ProviderSlugAlias {
+  slug       String        @id
+  providerId String        @map("provider_id") @db.Uuid
+  provider   ModelProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  // The engine the old slug ran on: `dsh` (provider_slug_alias_engine_check).
+  engine     String
+  // MERGED or RENAMED (provider_slug_alias_reason_check).
+  reason     String
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([providerId])
+  @@map("provider_slug_alias")
+}
+
+/// One execution of the provider/engine migration (migration 0419, docs/provider-engine-contract.md
+/// §7.6, providers/provider-engine-migration.ts), which the API server runs when it starts. A full scan
+/// that left nothing behind is the completion marker (`complete`; one per version, a partial unique
+/// index in the migration's SQL); a later start only folds the `deepseek-harness` rows an older replica
+/// made since (`fullScan` false).
+model ProviderEngineMigrationRun {
+  id         String    @id @default(uuid(7)) @db.Uuid
+  version    Int
+  fullScan   Boolean   @map("full_scan")
+  complete   Boolean   @default(false)
+  startedAt  DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt DateTime? @map("finished_at") @db.Timestamptz(3)
+  // Counts per step and action, and what was left for the next start.
+  summary    Json?
+  report     ProviderEngineMigrationReport[]
+
+  @@map("provider_engine_migration_run")
+}
+
+/// One line of a provider/engine migration run's report (migration 0419): what a step did to one row —
+/// its values before and after, never key material — or why it left it.
+model ProviderEngineMigrationReport {
+  id        BigInt                     @id @default(autoincrement())
+  runId     String                     @map("run_id") @db.Uuid
+  run       ProviderEngineMigrationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  step      String
+  // The table the line is about, and the row in it (a preference line: the user and the key).
+  tableName String                     @map("table_name")
+  rowId     String?                    @map("row_id")
+  ownerId   String?                    @map("owner_id") @db.Uuid
+  // provider_engine_migration_report_action_check: MERGED, CONVERTED, ALIASED, REWRITTEN, NOOP,
+  // SKIPPED_CHANGED, UNRESOLVED, LEGACY_DSH_ENV_KEY, LEGACY_DSH_NO_KEY, INCONSISTENT, SAME, CHANGED.
+  action    String
+  before    Json?
+  after     Json?
+  note      String?
+  createdAt DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([runId, id], map: "provider_engine_migration_report_run_id_idx")
+  @@map("provider_engine_migration_report")
 }
 
 /// An account pool (migration 0265): several of one owner's Claude subscription providers, dispatched
@@ -6494,12 +6734,22 @@ model WikiSpace {
   dossiers   WikiDossier[]
   /// The maintenance runs its trigger made (0320).
   maintenanceRuns WikiMaintenanceRun[]
+  /// The jobs the server runs for it and the model calls those jobs make (0401).
+  jobs            WikiJob[]
+  modelRequests   WikiModelRequest[]
+  /// The repository operations its jobs ask a runner for, and the snapshot index they cache (0402).
+  repoOps         WikiRepoOp[]
+  repoSnapshot    WikiRepoSnapshot?
+  /// The whole files read at a commit, one row per (space, sha, path): the read cache (0406).
+  repoFiles       WikiRepoFile[]
   /// Its plan's versions and the changes proposed to it (0325).
   plans           WikiPlan[]
   planProposals   WikiPlanProposal[]
   planJobs        WikiPlanJob[]
   /// Its documents, written section by section from the confirmed plan (0326).
   docs            WikiDoc[]
+  /// Its public links, live and ended (0403).
+  shareLinks      ShareLink[]
 
   /// The key every child's composite foreign key names.
   @@unique([id, ownerId], map: "wiki_space_id_owner_id_key")
@@ -6770,6 +7020,10 @@ model WikiChangeset {
   /// `owner` | `agent` | `maintenance` | `import` | `watch`.
   origin     String
   sessionId  String? @map("session_id") @db.Uuid
+  /// The wiki_job whose pipeline recorded it, for a run the server made (0407): a maintenance run's
+  /// changesets are one run to the circuit breaker, and the server's run has no session to be one by. A
+  /// history reference with no foreign key, as wiki_maintenance_run.job_id is; NULL for every session's.
+  jobId      String? @map("job_id") @db.Uuid
   toolCallId String? @map("tool_call_id") @db.Uuid
   rationale  String?
   /// The owner's key and the digest of the normalized request, set together: the same key with the
@@ -6914,7 +7168,11 @@ model WikiMaintenanceRun {
   spaceId         String    @map("space_id") @db.Uuid
   ownerId         String    @map("owner_id") @db.Uuid
   space           WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_maintenance_run_space_fkey")
-  taskId          String    @unique(map: "wiki_maintenance_run_task_id_key") @map("task_id") @db.Uuid
+  /// The task that made it, or NULL for a run a wiki job ran (migration 0401). `wiki_maintenance_run_maker_chk`
+  /// holds the row to exactly one maker: a task (the path until P8/P10) or a job (the server path), never both.
+  taskId          String?   @unique(map: "wiki_maintenance_run_task_id_key") @map("task_id") @db.Uuid
+  /// The wiki_job that ran it (0401): a history reference with no foreign key, as task_id is.
+  jobId           String?   @map("job_id") @db.Uuid
   /// `backlog` | `age` for a task the trigger made; NULL for a run of a task somebody else put in the list.
   due             String?
   backlog         Int       @default(0)
@@ -7013,6 +7271,9 @@ model WikiPlan {
   model       String?
   /// History references with no foreign key: the maintenance run that drafted it, the owner who made it.
   authorSessionId   String?   @map("author_session_id") @db.Uuid
+  /// The wiki_job that drafted it when the server ran the plan job (0404): a history reference with no
+  /// foreign key, exactly one of it and author_session_id for a maintenance version (`wiki_plan_author_chk`).
+  authorJobId       String?   @map("author_job_id") @db.Uuid
   authorUserId      String?   @map("author_user_id") @db.Uuid
   confirmedByUserId String?   @map("confirmed_by_user_id") @db.Uuid
   confirmedAt       DateTime? @map("confirmed_at") @db.Timestamptz(3)
@@ -7109,8 +7370,10 @@ model WikiPlanProposal {
   /// `[{ kind, id }, …]`: the entries and sessions that led to it.
   facts           Json
   gate            Json
-  /// A history reference: the maintenance run that filed it.
-  authorSessionId String    @map("author_session_id") @db.Uuid
+  /// A history reference: the maintenance run that filed it — a session's, or the server's wiki job (0407,
+  /// where `wiki_plan_proposal_author_chk` holds exactly one of the two).
+  authorSessionId String?   @map("author_session_id") @db.Uuid
+  authorJobId     String?   @map("author_job_id") @db.Uuid
   decidedByUserId String?   @map("decided_by_user_id") @db.Uuid
   decidedAt       DateTime? @map("decided_at") @db.Timestamptz(3)
   decisionNote    String?   @map("decision_note")
@@ -7134,7 +7397,7 @@ model WikiPlanJob {
   space        WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_plan_job_space_fkey")
   /// `draft` | `revise` | `build`.
   kind         String
-  /// `space_created` | `owner`: the fact that asked for it.
+  /// `space_created` | `owner` | `support` (an administrator, 0429): what asked for it.
   trigger      String
   /// A revision's instructions: the owner's words.
   instructions String?
@@ -7145,6 +7408,10 @@ model WikiPlanJob {
   heldAt       DateTime? @map("held_at") @db.Timestamptz(3)
   /// The task it made. A history reference with no foreign key, as a maintenance run's is.
   taskId       String?   @unique(map: "wiki_plan_job_task_id_key") @map("task_id") @db.Uuid
+  /// The wiki_job that ran it on the server (0401), as a maintenance run's job_id is. Exactly one of the two
+  /// makers is set once it is past 'queued'/'held' (`wiki_plan_job_maker_chk`), and a made or ended job names one
+  /// (`wiki_plan_job_made_chk`, restated over both makers in 0405).
+  jobId        String?   @map("job_id") @db.Uuid
   madeAt       DateTime? @map("made_at") @db.Timestamptz(3)
   /// The session that runs it, when it started, and the gate round it is on.
   sessionId    String?   @map("session_id") @db.Uuid
@@ -7165,6 +7432,9 @@ model WikiPlanJob {
   draft        Json?
   /// A build's progress while it runs: `{ docs: { done, total }, current: { slug, title } | null }` (0340).
   progress     Json?
+  /// What a server-run draft drafts from, kept at its first run so a replay asks the same (0404): the snapshot's
+  /// sha, the plan's materials and the texts the snapshot does not carry. NULL for every task-run job.
+  materials    Json?
   requestedByUserId String?  @map("requested_by_user_id") @db.Uuid
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -7298,4 +7568,260 @@ model WikiDocFootnote {
   @@unique([id, ownerId], map: "wiki_doc_footnote_id_owner_id_key")
   @@unique([sentenceId, position], map: "wiki_doc_footnote_sentence_id_position_key")
   @@map("wiki_doc_footnote")
+}
+
+/// The System model as the wiki-worker last found it, and the worker's heartbeat (migration 0400, contract
+/// `systemModel.status`; docs/wiki-server-execution-design.md §5.3). Exactly one row, id 1: the worker writes
+/// it, the apiserver only reads it. No column holds the endpoint's address or its key.
+model WikiModelStatus {
+  id           Int       @id @default(1) @db.SmallInt
+  /// `up` | `down` | `auth_failed` | `unconfigured`.
+  state        String
+  /// ORBIT_WIKI_MODEL; NULL only while unconfigured.
+  model        String?
+  /// When the state began: kept while the state and the model stay what they were.
+  since        DateTime  @db.Timestamptz(3)
+  /// Why the state is not `up`, naming neither the address nor the key; NULL exactly while up.
+  lastError    String?   @map("last_error")
+  /// The last probe of `{base}/health`; NULL while unconfigured.
+  checkedAt    DateTime? @map("checked_at") @db.Timestamptz(3)
+  /// The worker's heartbeat, written with every probe. Stale past `workerStaleSeconds`, the read answers
+  /// `worker_not_running`.
+  workerSeenAt DateTime  @map("worker_seen_at") @db.Timestamptz(3)
+
+  @@map("wiki_model_status")
+}
+
+/// One unit of wiki work the server runs for a space (migration 0401, contract `jobs`;
+/// docs/wiki-server-execution-design.md §5.1). The wiki-worker claims it the way the Watch delivery
+/// worker claims a delivery — `UPDATE … FROM (SELECT … FOR UPDATE SKIP LOCKED)`, a fresh lease
+/// generation per claim, every later write a compare-and-set on that generation — holds one space's
+/// single running job at a time (a partial unique index over `space_id`), and ends it with what it
+/// reported. At most one kind runs today (`smoke`, the queue's own end-to-end probe); the pipeline
+/// kinds arrive with the phases that implement them.
+model WikiJob {
+  id      String    @id @default(uuid(7)) @db.Uuid
+  ownerId String    @map("owner_id") @db.Uuid
+  spaceId String    @map("space_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_job_space_fkey")
+  /// `verify` | `articles` | `import` | `plan_draft` | `plan_revise` | `docs_build` | `maintain` | `smoke`.
+  kind  String
+  /// The job's own material: what to verify, draft, build — never the model's address or key.
+  input Json   @default("{}")
+  /// Owner-initiated work sorts above background maintenance.
+  priority Int @default(0)
+  /// `queued` | `running` | `waiting` | `succeeded` | `failed` | `cancelled`.
+  state String @default("queued")
+  /// `repo` | `model` while waiting; NULL otherwise.
+  waitingFor String? @map("waiting_for")
+  /// How many times this job has been retried after an infra failure.
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime? @map("next_attempt_at") @db.Timestamptz(3)
+  /// The lease: the three together exactly while running, cleared by every settle (a CHECK holds both ways).
+  leaseOwner      String?   @map("lease_owner") @db.Uuid
+  leaseGeneration String?   @map("lease_generation") @db.Uuid
+  leaseDeadlineAt DateTime? @map("lease_deadline_at") @db.Timestamptz(3)
+  progress        Json?     @map("progress")
+  report          Json?
+  error           String?
+  /// `infra` | `content`: whose a failed attempt was.
+  failureKind String?   @map("failure_kind")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  startedAt   DateTime? @map("started_at") @db.Timestamptz(3)
+  endedAt     DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  requests WikiModelRequest[]
+  repoOps  WikiRepoOp[]
+
+  /// The claim's order: priority first, then longest-waiting (partial, over queued rows).
+  @@index([priority(sort: Desc), createdAt, id], map: "wiki_job_claim_idx")
+  /// The lease-expiry sweep, as the migration creates it: partial over running rows.
+  @@index([leaseDeadlineAt], map: "wiki_job_lease_expiry_idx")
+  /// One running job per space: what the claim skips a busy space by, and what holds it anyway —
+  /// a partial unique index the migration creates (`wiki_job_space_running_key`), which Prisma's own
+  /// index syntax cannot express, so it lives in the SQL and nowhere else.
+  @@map("wiki_job")
+}
+
+/// One model call a wiki job makes (migration 0401, contract `modelQueue`;
+/// docs/wiki-server-execution-design.md §5.2). `(job_id, step, unit, attempt)` — the unique key — IS the
+/// request: replaying a pipeline reuses the answer a succeeded row already holds, or waits for the row
+/// still in flight, so a restart re-issues no call that answered. The queue's global concurrency is held
+/// by the claim transaction (an advisory lock, a count of running rows with a live lease, then at most
+/// the difference taken by priority, then enqueued_at, SKIP LOCKED), and the `partial` a call had
+/// received when its lease ran out is kept across the requeue.
+model WikiModelRequest {
+  id      String  @id @default(uuid(7)) @db.Uuid
+  jobId   String  @map("job_id") @db.Uuid
+  job     WikiJob @relation(fields: [jobId], references: [id], onDelete: Cascade, map: "wiki_model_request_job_fkey")
+  ownerId String  @map("owner_id") @db.Uuid
+  spaceId String  @map("space_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_model_request_space_fkey")
+  /// Where in the job's pipeline this call sits, and which unit of it: the request's own address.
+  step String
+  unit String
+  /// Which attempt of that unit this row is (a redo moves to the next), and how many times this row was tried.
+  attempt  Int @default(1)
+  attempts Int @default(0)
+  priority Int @default(0)
+  /// `{ system, prompt, maxTokens }` and its sha256, so a replay proves it is the same call.
+  request       Json   @map("request")
+  requestSha256 String @map("request_sha256") @db.Char(64)
+  /// `queued` | `running` | `succeeded` | `failed` | `cancelled`.
+  state String @default("queued")
+  /// The lease: the three together exactly while running, cleared by every settle (a CHECK holds both ways).
+  leaseOwner      String?   @map("lease_owner") @db.Uuid
+  leaseGeneration String?   @map("lease_generation") @db.Uuid
+  leaseDeadlineAt DateTime? @map("lease_deadline_at") @db.Timestamptz(3)
+  enqueuedAt      DateTime  @default(now()) @map("enqueued_at") @db.Timestamptz(3)
+  /// The backoff a retryable failure set: the row is not due before this.
+  notBefore DateTime? @map("not_before") @db.Timestamptz(3)
+  startedAt DateTime? @map("started_at") @db.Timestamptz(3)
+  endedAt   DateTime? @map("ended_at") @db.Timestamptz(3)
+  answer    String?
+  /// What had arrived when the call was interrupted; kept across a requeue.
+  partial      String?
+  /// How `answer` and `partial` read back (0412, contract `modelQueue.answerEncoding`): `text` as they are, or
+  /// `base64` — the text's UTF-8 bytes, for one with a U+0000 in it, which Postgres cannot keep in text.
+  answerEncoding  String @default("text") @map("answer_encoding")
+  partialEncoding String @default("text") @map("partial_encoding")
+  inputTokens  Int?    @map("input_tokens")
+  outputTokens Int?    @map("output_tokens")
+  httpStatus   Int?    @map("http_status")
+  error        String?
+  /// `retryable` | `unauthorized` | `other`: the class the client gave the failure.
+  errorKind String? @map("error_kind")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  /// The request IS its identity (design §5.2): enqueuing the same call again meets the row it already has.
+  @@unique([jobId, step, unit, attempt], map: "wiki_model_request_unit_key")
+  @@index([priority(sort: Desc), enqueuedAt, id], map: "wiki_model_request_claim_idx")
+  /// The lease-expiry sweep, as the migration creates it: partial over running rows.
+  @@index([leaseDeadlineAt], map: "wiki_model_request_lease_expiry_idx")
+  @@index([jobId, step, unit], map: "wiki_model_request_job_idx")
+  @@index([state, endedAt], map: "wiki_model_request_state_idx")
+  @@map("wiki_model_request")
+}
+
+/// One repository operation a wiki job asks a runner for (migration 0402, contract `repoOps`;
+/// docs/wiki-server-execution-design.md §7). The server never touches a repository — the credentials are
+/// on the runners — so a step that needs to know what the repository says asks the machine its space's
+/// workspace runs on: a snapshot to be built once per commit, a bounded read, a diff, or the anchor
+/// checks. Claimed in the heartbeat response the way the integration queue is, and settled by a
+/// compare-and-set on (lease_owner, claim_generation).
+model WikiRepoOp {
+  id      String  @id @default(uuid(7)) @db.Uuid
+  jobId   String  @map("job_id") @db.Uuid
+  job     WikiJob @relation(fields: [jobId], references: [id], onDelete: Cascade, map: "wiki_repo_op_job_fkey")
+  ownerId String  @map("owner_id") @db.Uuid
+  spaceId String  @map("space_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_repo_op_space_fkey")
+  /// The checkout read: the workspace whose work directory it is, and the machine it runs on (written by
+  /// the claim, which is also what the result route's fence reads).
+  workspaceId String     @map("workspace_id") @db.Uuid
+  workspace   Workspace  @relation(fields: [workspaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_repo_op_workspace_fkey")
+  runnerId    String?    @map("runner_id") @db.Uuid
+  /// `snapshot` | `read` | `diff` | `anchors`.
+  kind String
+  /// What the kind reads — a read's paths and limits, a diff's two commits, a snapshot's skip sha.
+  input Json   @default("{}")
+  /// `queued` | `running` | `succeeded` | `failed` | `cancelled`.
+  state String @default("queued")
+  /// The claim: together exactly while running (a CHECK holds it both ways), and the fence every settle
+  /// is a compare-and-set on.
+  leaseOwner      String?   @map("lease_owner") @db.Uuid
+  claimGeneration Int       @default(0) @map("claim_generation")
+  claimedAt       DateTime? @map("claimed_at") @db.Timestamptz(3)
+  heartbeatAt     DateTime? @map("heartbeat_at") @db.Timestamptz(3)
+  result          Json?
+  error           String?
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+  endedAt         DateTime? @map("ended_at") @db.Timestamptz(3)
+
+  fragments WikiRepoOpFragment[]
+
+  /// The claim's order, and the rows a machine may take over (partial, as the migration creates them).
+  @@index([createdAt, id], map: "wiki_repo_op_claim_idx")
+  @@index([heartbeatAt], map: "wiki_repo_op_stale_idx")
+  @@index([jobId, createdAt], map: "wiki_repo_op_job_idx")
+  @@map("wiki_repo_op")
+}
+
+/// The pieces of a snapshot too large for one request body, staged under the operation that uploads
+/// them and removed with it. Staged rather than written into the cache: a cache is only ever written
+/// whole, so an upload that dies halfway leaves the space's snapshot as it was.
+model WikiRepoOpFragment {
+  opId    String    @map("op_id") @db.Uuid
+  op      WikiRepoOp @relation(fields: [opId], references: [id], onDelete: Cascade, map: "wiki_repo_op_fragment_op_fkey")
+  ordinal Int
+  content String
+
+  @@id([opId, ordinal])
+  @@map("wiki_repo_op_fragment")
+}
+
+/// The space's snapshot index — the commit it was read at, its size, its sha256 and how many fragments
+/// hold it. ONE ROW PER SPACE: a newer snapshot replaces the last one whole, which is what "only the
+/// most recent one is kept" means (design §7, §9), and the rows are deleted with the space.
+model WikiRepoSnapshot {
+  spaceId String    @id @map("space_id") @db.Uuid
+  ownerId String    @map("owner_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_repo_snapshot_space_fkey")
+  /// The commit the index was read at, the sha256 of its bytes, and its size.
+  sha           String @db.Char(40)
+  digest        String @db.Char(64)
+  sizeBytes     BigInt @map("size_bytes")
+  fragmentCount Int    @map("fragment_count")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  fragments WikiRepoSnapshotFragment[]
+
+  @@unique([spaceId, ownerId], map: "wiki_repo_snapshot_space_owner_key")
+  @@map("wiki_repo_snapshot")
+}
+
+/// The index itself, in fragments: concatenated by ordinal, exactly the bytes the snapshot's digest names.
+model WikiRepoSnapshotFragment {
+  spaceId String @map("space_id") @db.Uuid
+  snapshot WikiRepoSnapshot @relation(fields: [spaceId], references: [spaceId], onDelete: Cascade, map: "wiki_repo_snapshot_fragment_snapshot_fkey")
+  ordinal Int
+  content String
+
+  @@id([spaceId, ordinal])
+  @@map("wiki_repo_snapshot_fragment")
+}
+
+/// One file's text at a commit — the read cache (0406, contract `repoOps.read` and `.cache`, design §7).
+/// A read answers with the whole file at the sha (owner 2026-10-08); the server keeps it by
+/// (space, sha, path) so the same text is never read twice. `state` is `found` (the whole file), `cut` (the
+/// bounded window an older runner answers with, a miss for a whole-file runner), `missing` or `too_large`.
+/// Deleted with the space, and a new snapshot landing drops every row of another sha.
+model WikiRepoFile {
+  id      String    @id @default(uuid(7)) @db.Uuid
+  ownerId String    @map("owner_id") @db.Uuid
+  spaceId String    @map("space_id") @db.Uuid
+  space   WikiSpace @relation(fields: [spaceId, ownerId], references: [id, ownerId], onDelete: Cascade, map: "wiki_repo_file_space_fkey")
+  /// The commit the file was read at, and its path in that tree.
+  sha  String @db.Char(40)
+  path String
+  /// `found` | `cut` | `missing` | `too_large`.
+  state String
+  /// The text, for `found` and `cut`; empty otherwise. At most the file cap, so one row is one file.
+  content String @default("")
+  /// How `content` reads back (0412, contract `repoOps.storedText`): `text` as it is, or `base64` — the text's
+  /// UTF-8 bytes, for a file with a U+0000 in it, which Postgres cannot keep in text.
+  contentEncoding String @default("text") @map("content_encoding")
+  /// The file's size in bytes at the sha: the whole file's, even when only its head was answered.
+  sizeBytes BigInt @default(0) @map("size_bytes")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([spaceId, sha, path], map: "wiki_repo_file_space_sha_path_key")
+  @@index([spaceId, sha], map: "wiki_repo_file_space_sha_idx")
+  @@map("wiki_repo_file")
 }

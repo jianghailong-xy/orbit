@@ -1,0 +1,30 @@
+19:45:37Z host MemAvailable 11054 MiB (floor 2048 MiB): booting
+19:45:37Z started orbit-mr-lab.service (cgroup /system.slice/orbit-mr-lab.service)
+19:46:06Z SSH is up: 7.0.0-34-generic
+host kernel modules rbd/nbd/ceph/libceph loaded: none
+VM: running, qemu pid 74027, cgroup /system.slice/orbit-mr-lab.service
+qemu listens on: 127.0.0.1:16222 127.0.0.1:16443
+unit orbit-mr-lab: memory.current 1146 MiB, memory.peak 1147 MiB, swap 0 MiB, memory.max 6979321856
+host: MemAvailable 9937 MiB, SwapFree 34031 MiB
+guest (virtio-balloon): {"guestMiB": {"stat-available-memory": 5262, "stat-free-memory": 4993, "stat-total-memory": 5920, "stat-disk-caches": 469}, "lastUpdate": 1792266368}
+guest: {"cephHealth":"HEALTH_WARN","osdsUp":0,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"problems":["k3s is not active","orbit-lab-rbd-release is not active","Ceph is HEALTH_WARN","not every OSD is up"]}
+k3s node orbit-mr-lab Ready: unknown (null)
+deployment/ceph-csi-operator-controller-manager: 0/0 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 0/0 available
+daemonset/rbd.csi.ceph.com-nodeplugin: 0/0 available
+not healthy: k3s is not active;orbit-lab-rbd-release is not active;Ceph is HEALTH_WARN;not every OSD is up;node not Ready;deployment/ceph-csi-operator-controller-manager not available;deployment/rbd.csi.ceph.com-ctrlplugin not available;daemonset/rbd.csi.ceph.com-nodeplugin not available;no StorageClass runner-data;no namespace orbit-mr-test
+guest: {"cephHealth":"HEALTH_OK","osdsUp":3,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"problems":[]}
+k3s node orbit-mr-lab Ready: True (v1.36.5+k3s1)
+deployment/ceph-csi-operator-controller-manager: 0/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin: 1/1 available
+not healthy: deployment/ceph-csi-operator-controller-manager not available
+guest: {"cephHealth":"HEALTH_OK","osdsUp":3,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"problems":[]}
+k3s node orbit-mr-lab Ready: True (v1.36.5+k3s1)
+deployment/ceph-csi-operator-controller-manager: 1/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin: 1/1 available
+healthy: k3s, Ceph (3 OSDs, HEALTH_OK), Ceph-CSI, StorageClass runner-data, namespace orbit-mr-test
+19:47:11Z [trim] page cache dropped; 1293 MiB used, 746 MiB cache, 4118 MiB free
+unit orbit-mr-lab: memory.current 2961 MiB, memory.peak 3077 MiB, swap 0 MiB, memory.max 6979321856
+host: MemAvailable 8124 MiB, SwapFree 34031 MiB

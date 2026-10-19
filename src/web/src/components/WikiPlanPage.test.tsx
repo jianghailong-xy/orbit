@@ -5,9 +5,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WikiDocsDirectory, WikiPlanJob, WikiPlanProposal, WikiPlanState, WikiPlanVersion } from '@orbit/shared';
+import { WIKI_EXECUTOR_READ, type WikiDocsDirectory, type WikiPlanJob, type WikiPlanProposal, type WikiPlanState, type WikiPlanVersion } from '@orbit/shared';
 import { WikiPage } from '../pages/WikiPage';
 import { ToastViewport } from './ToastViewport';
 import { clearToasts } from '../lib/toastStore';
@@ -51,6 +50,25 @@ function shared(): Shared {
 }
 
 const SHARED = shared();
+
+/** The server-execution fixture (P9): the plan's words while the server executes the account. */
+function serverShared(): {
+  plan: {
+    drafter: string;
+    note: string;
+    emptyNote: string;
+    emptyText: string;
+    redraftNotes: Array<{ from: { version: number; inForce: boolean } | null; says: string }>;
+  };
+} {
+  const path = [
+    resolve(process.cwd(), '../shared/src/wiki-server-execution.fixture.json'),
+    resolve(process.cwd(), 'src/shared/src/wiki-server-execution.fixture.json'),
+  ].find((candidate) => existsSync(candidate))!;
+  return JSON.parse(readFileSync(path, 'utf8'));
+}
+
+const SERVER = serverShared();
 const SPACE_ID = '0196f000-0000-7000-8000-000000000001';
 const WORKSPACE_ID = '0196f000-0000-7000-8000-00000000000a';
 const RUNNER_ID = '0196f000-0000-7000-8000-00000000000b';
@@ -70,11 +88,7 @@ const SPACE = {
 const RUN_SESSION = '0196f000-0000-7000-8000-0000000000c1';
 const ENTRY_FACT = '0196f000-0000-7000-8000-0000000000c2';
 const SESSION_FACT = '0196f000-0000-7000-8000-0000000000c3';
-const linkable = (job: WikiPlanJob): WikiPlanJob => ({
-  ...job,
-  sessionId: job.sessionId ? RUN_SESSION : null,
-  waitingFor: job.waitingFor ? { ...job.waitingFor, sessionId: RUN_SESSION } : null,
-});
+const linkable = (job: WikiPlanJob): WikiPlanJob => ({ ...job, sessionId: job.sessionId ? RUN_SESSION : null });
 const PROPOSALS: WikiPlanProposal[] = SHARED.plan.proposals.map((proposal) => ({
   ...proposal,
   facts: proposal.facts.map((fact) => (fact.kind === 'entry' ? { ...fact, id: ENTRY_FACT } : fact.kind === 'session' ? { ...fact, id: SESSION_FACT } : fact)),
@@ -111,6 +125,7 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
     if (path.endsWith('/decide')) return reply(200, { proposal: SHARED.plan.proposals[0], draft: { ...SHARED.plan.versions.v2, version: 2 } });
     if (/\/plan\/versions\/\d+\/confirm$/.test(path)) return reply(200, { ...SHARED.plan.versions.v2, status: 'confirmed' });
     if (path === `${space}/plan/edits`) return reply(200, { ...SHARED.plan.versions.v2, version: 3 });
+    if (/\/plan\/versions\/\d+\/build$/.test(path)) return reply(200, { created: true, job: SHARED.plan.jobs.writingQueued });
     return reply(404, { message: `${method} ${url} is not in this fixture` });
   }
   if (path === '/api/wiki/spaces') return reply(200, [SPACE]);
@@ -121,7 +136,18 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   if (path === `${space}/articles`) return reply(200, { spaceId: SPACE_ID, categories: [], uncategorized: [] });
   if (path === `${space}/entries`) return reply(200, []);
   if (path === `${space}/timeline`) return reply(200, { items: [] });
-  if (path === `${space}/health`) return reply(404, {});
+  if (path === `${space}/health`) {
+    return serverExecutes
+      ? reply(200, {
+          spaceId: SPACE_ID, entries: 0,
+          maintenance: {
+            look: 'off', enabled: false, lastOkAt: null, lastRunAt: null, consecutiveFailures: 0, backlog: 0, oldestPendingAt: null,
+            lagSeconds: 0, dailyLimitReached: false, held: null, running: null, lastRun: null, lastFailure: null,
+          },
+          executor: WIKI_EXECUTOR_READ,
+        })
+      : reply(404, {});
+  }
   if (path.startsWith('/api/wiki/review')) {
     return reply(200, [
       {
@@ -137,6 +163,8 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
 }
 
 let phone = false;
+/** Whether the health read says the server executes the account's wiki, as every server since P11 does; else a 404. */
+let serverExecutes = true;
 let container: HTMLDivElement;
 let root: Root;
 
@@ -146,6 +174,7 @@ beforeEach(() => {
   phone = false;
   plan = stateOf('none');
   runnerOnline = true;
+  serverExecutes = true;
   answers = {};
   writes.length = 0;
   mounted = false;
@@ -197,20 +226,18 @@ async function open(path: string): Promise<void> {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[path]}>
-          <AntApp>
-            <Routes>
-              <Route path="/wiki/:space" element={<WikiPage route="home" />} />
-              <Route path="/wiki/:space/activity" element={<WikiPage route="activity" />} />
-              <Route path="/wiki/:space/plan" element={<WikiPage route="plan" />} />
-              <Route path="/wiki/:space/plan/d/:doc" element={<WikiPage route="planDoc" />} />
-              <Route path="/wiki/:space/plan/d/:doc/:section" element={<WikiPage route="planSection" />} />
-              <Route path="/wiki/:space/settings" element={<span>settings</span>} />
-              <Route path="/wiki/review" element={<span>review</span>} />
-              <Route path="/runners" element={<span>runners</span>} />
-              <Route path="/sessions/:id" element={<span>session</span>} />
-            </Routes>
-            <Where />
-          </AntApp>
+          <Routes>
+            <Route path="/wiki/:space" element={<WikiPage route="home" />} />
+            <Route path="/wiki/:space/activity" element={<WikiPage route="activity" />} />
+            <Route path="/wiki/:space/plan" element={<WikiPage route="plan" />} />
+            <Route path="/wiki/:space/plan/d/:doc" element={<WikiPage route="planDoc" />} />
+            <Route path="/wiki/:space/plan/d/:doc/:section" element={<WikiPage route="planSection" />} />
+            <Route path="/wiki/:space/settings" element={<span>settings</span>} />
+            <Route path="/wiki/review" element={<span>review</span>} />
+            <Route path="/runners" element={<span>runners</span>} />
+            <Route path="/sessions/:id" element={<span>session</span>} />
+          </Routes>
+          <Where />
           <ToastViewport />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -243,9 +270,9 @@ describe('the plan page, by what its job is doing', () => {
     await vi.waitFor(() => expect(planPage()?.querySelector('.wk-pl-empty')).toBeTruthy());
     const empty = planPage().querySelector('.wk-pl-empty')!;
     expect(text('b', empty)).toEqual(['No plan yet']);
-    expect(text('.note', empty)).toEqual([
-      'Runs as a task in the Wiki maintenance list, on orbit · wikova with local-vllm — usually 1–2 hours. Until you confirm a plan, the Wiki shows its topic articles.',
-    ]);
+    // The body names the drafter as the System model, and the note says where and how long it runs (owner's call 2026-10-08).
+    expect(text('p', empty)).toEqual([SERVER.plan.emptyText]);
+    expect(text('.note', empty)).toEqual([SERVER.plan.emptyNote]);
     await press(button('Draft plan', empty));
     expect(writes.map((row) => `${row.method} ${row.path}`)).toEqual([`POST /api/wiki/spaces/${SPACE_ID}/plan/redraft`]);
     expect(writes[0].body).toEqual({});
@@ -254,10 +281,23 @@ describe('the plan page, by what its job is doing', () => {
     await vi.waitFor(() => expect(document.body.textContent).toContain('Redraft asked for — it runs as a Wiki maintenance task'));
   });
 
+  it('says what a draft on its way is doing, and who drafts it again: the System model', async () => {
+    plan = stateOf('noneDrafting');
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(jobCard()).toEqual([`Drafting ${SERVER.plan.drafter} · attempt 1 of 3 · started 12m ago View run`]));
+    // Redraft…: the dialog's sentence has the System model as its subject, not the space's provider.
+    plan = stateOf('changes');
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(button('Redraft…', planPage())).toBeTruthy());
+    await press(button('Redraft…', planPage()));
+    await vi.waitFor(() => expect(document.querySelector('.wk-pl-modal-p')).toBeTruthy());
+    expect(spaced(document.querySelector('.wk-pl-modal-p')!)).toBe(SERVER.plan.redraftNotes[1].says);
+  });
+
   it('says what a draft on its way is doing: queued, drafting, held — for the server’s reasons or the runner offline', async () => {
     const cases: Array<[string, boolean | null, string[]]> = [
-      ['noneQueued', true, ['Queued starts after the Wiki maintenance run that’s going now (started 4m ago) View run']],
-      ['noneDrafting', true, ['Drafting local-vllm · attempt 1 of 3 · started 12m ago View run']],
+      ['noneQueued', true, ['Queued starts after the Wiki maintenance run that’s going now']],
+      ['noneDrafting', true, [`Drafting ${SERVER.plan.drafter} · attempt 1 of 3 · started 12m ago View run`]],
       ['noneHeld', true, ['Held No maintenance workspace is set up — a draft runs where maintenance runs. Set up maintenance']],
       ['noneOffline', false, ['Held The maintenance runner is offline — the draft starts once it’s back. View runners']],
     ];
@@ -304,6 +344,69 @@ describe('the plan page, by what its job is doing', () => {
     const gate = planPage().querySelector('.wk-pl-check.fail:not(.wk-pl-job)')!;
     expect(text('.wk-pl-ck .n', gate)).toEqual(['Documents', 'Protected documents', 'References', 'Fields']);
     expect(text('.wk-pl-err .at', gate)).toEqual(['2.1 §2', '3.1 §1', '2.1 §2']);
+  });
+});
+
+describe('Update documents: the version in force’s documents asked for again (contract `plan.jobs.rebuild`)', () => {
+  const acts = (): HTMLElement => planPage().querySelector<HTMLElement>('.wk-pl-acts')!;
+
+  it('after the writing stopped short, asks the owner’s door for the documents of the version in force again', async () => {
+    plan = stateOf('writingStopped');
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(button('Update documents', acts())?.disabled).toBe(false));
+    // In the head's actions, after Redraft…; the card still says what stopped.
+    expect([...acts().querySelectorAll('button')].map((node) => node.textContent?.trim())).toEqual(['Redraft…', 'Update documents']);
+    expect(jobCard()).toEqual(['Writing documents didn’t finish the run was cut off at 120 turns · Wiki maintenance writes what’s left on its next run View run']);
+    await press(button('Update documents', acts()));
+    expect(writes.map((row) => `${row.method} ${row.path} ${JSON.stringify(row.body)}`)).toEqual([`POST /api/wiki/spaces/${SPACE_ID}/plan/versions/1/build {}`]);
+    // The owner's door only: nothing here speaks for a session.
+    expect(Object.keys(writes[0].headers).filter((name) => /session/i.test(name))).toEqual([]);
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Updating the documents of v1'));
+  });
+
+  it('says so when a build of the version was already on its way, and what refused it otherwise', async () => {
+    plan = stateOf('inForce');
+    answers[`/api/wiki/spaces/${SPACE_ID}/plan/versions/1/build`] = () => reply(200, { created: false, job: SHARED.plan.jobs.writing });
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(button('Update documents', acts())?.disabled).toBe(false));
+    await press(button('Update documents', acts()));
+    await vi.waitFor(() => expect(document.body.textContent).toContain('The documents are already being written'));
+
+    // The version shown went out of force meanwhile (contract `plan.jobs.rebuild.version`).
+    answers[`/api/wiki/spaces/${SPACE_ID}/plan/versions/1/build`] = () =>
+      reply(409, { code: 'WIKI_PLAN_STALE', message: 'version 1 is superseded: version 2 is the plan in force, and its documents are the ones written' });
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(button('Update documents', acts())?.disabled).toBe(false));
+    await press(button('Update documents', acts()));
+    await vi.waitFor(() => expect(document.body.textContent).toContain('Couldn’t update the documents'));
+    expect(document.body.textContent).toContain('version 1 is superseded: version 2 is the plan in force');
+  });
+
+  it('is greyed while the version’s build is queued, held or running', async () => {
+    for (const name of ['writingQueued', 'writingHeld', 'writing']) {
+      plan = stateOf(name);
+      await open('/wiki/orbit/plan');
+      await vi.waitFor(() => expect(button('Update documents', acts()), name).toBeTruthy());
+      expect(button('Update documents', acts())?.disabled, name).toBe(true);
+    }
+  });
+
+  it('is drawn only on the version in force, and only while the server executes the account', async () => {
+    // A read that does not say the server executes the account's wiki draws no Update documents (`plan.jobs.rebuild.when`).
+    serverExecutes = false;
+    plan = stateOf('writingStopped');
+    await open('/wiki/orbit/plan');
+    await vi.waitFor(() => expect(button('Redraft…', planPage())).toBeTruthy());
+    expect(button('Update documents', planPage())).toBeUndefined();
+    // A draft, and a draft that failed: not the version in force.
+    serverExecutes = true;
+    for (const name of ['draftReady', 'draftFailed']) {
+      plan = stateOf(name);
+      await open('/wiki/orbit/plan');
+      await vi.waitFor(() => expect(button('Redraft…', planPage()), name).toBeTruthy());
+      expect(button('Update documents', planPage()), name).toBeUndefined();
+    }
+    expect(writes).toEqual([]);
   });
 });
 

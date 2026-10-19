@@ -1,0 +1,40 @@
+[WebServer] (node:1480649) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 16 tests using 1 worker
+
+(node:1481898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 [chromium-light-desktop] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Setting saved (1.2s)
+  ✓   2 [chromium-light-desktop] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Name saved (782ms)
+(node:1482818) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   3 [chromium-light-phone] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Setting saved (910ms)
+  ✓   4 [chromium-light-phone] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Name saved (965ms)
+(node:1483581) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   5 [chromium-dark-desktop] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Setting saved (1.4s)
+  ✓   6 [chromium-dark-desktop] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Name saved (896ms)
+(node:1484700) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   7 [chromium-dark-phone] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Setting saved (803ms)
+  ✓   8 [chromium-dark-phone] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Name saved (900ms)
+(node:1485590) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   9 [webkit-light-desktop] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Setting saved (1.2s)
+  ✓  10 [webkit-light-desktop] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Name saved (2.0s)
+(node:1487050) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  11 [webkit-light-phone] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Setting saved (1.3s)
+  ✓  12 [webkit-light-phone] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Name saved (1.6s)
+(node:1487918) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  13 [webkit-dark-desktop] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Setting saved (1.0s)
+  ✓  14 [webkit-dark-desktop] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Name saved (1.1s)
+(node:1488729) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  15 [webkit-dark-phone] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Setting saved (1.5s)
+  ✓  16 [webkit-dark-phone] › ui-migration/probe-announce-duplicate.browser.mjs:16:3 › announce duplicate: Name saved (1.2s)
+
+  16 passed (39.9s)
+exit 0

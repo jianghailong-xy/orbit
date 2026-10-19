@@ -7,21 +7,27 @@ import { RunEventType } from '@orbit/shared';
  * off" removes from a transcript. docs/share-links-design.md §1, §3 and §4 are the contract.
  */
 
-export type ShareRootKind = 'SESSION' | 'TASK' | 'PROJECT';
+export type ShareRootKind = 'SESSION' | 'TASK' | 'PROJECT' | 'WIKI';
 
-export type ShareLayer = 'taskPages' | 'commentsAndFiles' | 'conversations' | 'toolOutput';
+/** Every kind, in the order the contract lists them. */
+export const SHARE_ROOT_KINDS: readonly ShareRootKind[] = ['SESSION', 'TASK', 'PROJECT', 'WIKI'];
+
+export type ShareLayer = 'taskPages' | 'commentsAndFiles' | 'conversations' | 'toolOutput' | 'footnotes';
 
 export type ShareInclude = Partial<Record<ShareLayer, boolean>>;
 
 /**
  * The layers each kind of link has, with the value a layer takes when the owner never chose one
- * (contract §1). Overview is not here: it is always included and cannot be turned off. Tool output
- * defaults on everywhere; on a task or a project link it only matters once Conversations is on.
+ * (contract §1, §10). Overview is not here: it is always included and cannot be turned off — on a
+ * wiki link that is the home and its written documents. Tool output defaults on everywhere; on a
+ * task or a project link it only matters once Conversations is on. A wiki's Footnotes — the quotes
+ * and code excerpts its sentences cite — default off, as Conversations do.
  */
 export const LAYER_DEFAULTS: Readonly<Record<ShareRootKind, Readonly<ShareInclude>>> = {
   SESSION: { toolOutput: true },
   TASK: { commentsAndFiles: false, conversations: false, toolOutput: true },
   PROJECT: { taskPages: true, commentsAndFiles: false, conversations: false, toolOutput: true },
+  WIKI: { footnotes: false },
 };
 
 /** The kind's layers with what is stored laid over their defaults. A stored key the kind does not

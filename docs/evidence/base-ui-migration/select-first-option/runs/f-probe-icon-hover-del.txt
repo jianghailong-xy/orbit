@@ -1,0 +1,215 @@
+argv: env PROBE_OUTPUT=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-probe-icon-hover-del-out PROBE_PORT=4521 npx playwright test --config ui-migration/probe.config.mjs ui-migration/probe-icon-hover.browser.mjs
+tree: /mnt/data/tmp/34coPBk43ULRuisicUTAy/del HEAD a755f816a1800280719ecabf060bd6b7ad271776
+uncommitted: 
+start: 2026-10-10T01:51:15Z load: 52.02 52.83 46.44
+mem: 4011M available, swap 18338M free
+disk: / 20570M available
+cgroup: 0::/system.slice/run-p2330499-i61013387.scope
+P0 expected screenshots: 44 P0.2 originals, 183 main drift references, 25 accepted migration differences.
+
+Running 32 tests using 1 worker
+
+PROBE chromium-light-desktop dialog Close AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"32x32","radius":"4px"}
+PROBE chromium-light-desktop dialog Close AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0.06)","color":"rgb(31, 35, 41)","size":"32x32","radius":"4px"}
+PROBE chromium-light-desktop dialog Close AntD active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0.15)","color":"rgb(31, 35, 41)","size":"32x32","radius":"4px"}
+PROBE chromium-light-desktop dialog Close Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"32x32","radius":"4px"}
+PROBE chromium-light-desktop dialog Close Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0.06)","color":"rgb(31, 35, 41)","size":"32x32","radius":"4px"}
+PROBE chromium-light-desktop dialog Close Orbit active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0.15)","color":"rgb(31, 35, 41)","size":"32x32","radius":"4px"}
+  ✓   1 [chromium-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: dialog Close (4.4s)
+PROBE chromium-light-desktop right drawer Close AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"24x24","radius":"4px"}
+PROBE chromium-light-desktop right drawer Close AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0.06)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+PROBE chromium-light-desktop right drawer Close AntD active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0.15)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+PROBE chromium-light-desktop right drawer Close Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"24x24","radius":"4px"}
+PROBE chromium-light-desktop right drawer Close Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0.04)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+PROBE chromium-light-desktop right drawer Close Orbit active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0.15)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+  ✓   2 [chromium-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: right drawer Close (3.0s)
+PROBE chromium-light-desktop bottom drawer Close AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"24x24","radius":"4px"}
+PROBE chromium-light-desktop bottom drawer Close AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0.06)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+PROBE chromium-light-desktop bottom drawer Close AntD active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0.15)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+PROBE chromium-light-desktop bottom drawer Close Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"24x24","radius":"4px"}
+PROBE chromium-light-desktop bottom drawer Close Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0.04)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+PROBE chromium-light-desktop bottom drawer Close Orbit active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0.15)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+  ✓   3 [chromium-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: bottom drawer Close (3.5s)
+PROBE chromium-light-desktop icon-only button AntD rest {"hovered":false,"active":false,"background":"rgb(255, 255, 255)","color":"rgb(31, 35, 41)","size":"32x32","radius":"6px"}
+PROBE chromium-light-desktop icon-only button AntD hover {"hovered":true,"active":false,"background":"rgb(255, 255, 255)","color":"rgb(92, 146, 255)","size":"32x32","radius":"6px"}
+PROBE chromium-light-desktop icon-only button AntD active {"hovered":true,"active":true,"background":"rgb(255, 255, 255)","color":"rgb(33, 82, 217)","size":"32x32","radius":"6px"}
+PROBE chromium-light-desktop icon-only button Orbit rest {"hovered":false,"active":false,"background":"rgb(255, 255, 255)","color":"rgb(31, 35, 41)","size":"32x32","radius":"6px"}
+PROBE chromium-light-desktop icon-only button Orbit hover {"hovered":true,"active":false,"background":"rgb(255, 255, 255)","color":"rgb(92, 146, 255)","size":"32x32","radius":"6px"}
+PROBE chromium-light-desktop icon-only button Orbit active {"hovered":true,"active":true,"background":"rgb(255, 255, 255)","color":"rgb(33, 82, 217)","size":"32x32","radius":"6px"}
+  ✓   4 [chromium-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: icon-only button (2.9s)
+PROBE chromium-light-desktop copy icon AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(51, 112, 255)","size":"11.890625x18.703125","radius":"0px"}
+PROBE chromium-light-desktop copy icon AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(133, 177, 255)","size":"11.890625x18.703125","radius":"0px"}
+PROBE chromium-light-desktop copy icon AntD active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0)","color":"rgb(33, 82, 217)","size":"11.890625x18.703125","radius":"0px"}
+PROBE chromium-light-desktop copy icon Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(51, 112, 255)","size":"11.890625x18.703125","radius":"0px"}
+PROBE chromium-light-desktop copy icon Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(133, 177, 255)","size":"11.890625x18.703125","radius":"0px"}
+PROBE chromium-light-desktop copy icon Orbit active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0)","color":"rgb(33, 82, 217)","size":"11.890625x18.703125","radius":"0px"}
+  ✓   5 [chromium-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: copy icon (3.9s)
+PROBE chromium-light-desktop input clear AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgba(0, 0, 0, 0.25)","size":"12x12","radius":"0px"}
+PROBE chromium-light-desktop input clear AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"12x12","radius":"0px"}
+PROBE chromium-light-desktop input clear Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgba(0, 0, 0, 0.25)","size":"12x12","radius":"0px"}
+PROBE chromium-light-desktop input clear Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"12x12","radius":"0px"}
+  ✓   6 [chromium-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: input clear (3.6s)
+PROBE chromium-light-desktop multiple chip remove AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"10x14","radius":"0px"}
+PROBE chromium-light-desktop multiple chip remove AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(31, 35, 41)","size":"10x14","radius":"0px"}
+PROBE chromium-light-desktop multiple chip remove Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"10x10","radius":"0px"}
+PROBE chromium-light-desktop multiple chip remove Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(31, 35, 41)","size":"10x10","radius":"0px"}
+  ✓   7 [chromium-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: multiple chip remove (2.5s)
+PROBE chromium-light-desktop select clear AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgba(0, 0, 0, 0.25)","size":"12x12","radius":"0px"}
+PROBE chromium-light-desktop select clear AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"12x12","radius":"0px"}
+PROBE chromium-light-desktop select clear Orbit rest {"hovered":false,"active":false,"background":"rgb(255, 255, 255)","color":"rgba(0, 0, 0, 0.25)","size":"12x12","radius":"50%"}
+PROBE chromium-light-desktop select clear Orbit hover {"hovered":true,"active":false,"background":"rgb(255, 255, 255)","color":"rgb(100, 106, 115)","size":"12x12","radius":"50%"}
+  ✓   8 [chromium-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: select clear (2.3s)
+PROBE chromium-dark-desktop dialog Close AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"32x32","radius":"4px"}
+PROBE chromium-dark-desktop dialog Close AntD hover {"hovered":true,"active":false,"background":"rgba(255, 255, 255, 0.12)","color":"rgb(201, 206, 213)","size":"32x32","radius":"4px"}
+PROBE chromium-dark-desktop dialog Close AntD active {"hovered":true,"active":true,"background":"rgba(255, 255, 255, 0.18)","color":"rgb(201, 206, 213)","size":"32x32","radius":"4px"}
+PROBE chromium-dark-desktop dialog Close Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"32x32","radius":"4px"}
+PROBE chromium-dark-desktop dialog Close Orbit hover {"hovered":true,"active":false,"background":"rgba(255, 255, 255, 0.12)","color":"rgb(201, 206, 213)","size":"32x32","radius":"4px"}
+PROBE chromium-dark-desktop dialog Close Orbit active {"hovered":true,"active":true,"background":"rgba(255, 255, 255, 0.18)","color":"rgb(201, 206, 213)","size":"32x32","radius":"4px"}
+  ✓   9 [chromium-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: dialog Close (3.8s)
+PROBE chromium-dark-desktop right drawer Close AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"24x24","radius":"4px"}
+PROBE chromium-dark-desktop right drawer Close AntD hover {"hovered":true,"active":false,"background":"rgba(255, 255, 255, 0.12)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+PROBE chromium-dark-desktop right drawer Close AntD active {"hovered":true,"active":true,"background":"rgba(255, 255, 255, 0.18)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+PROBE chromium-dark-desktop right drawer Close Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"24x24","radius":"4px"}
+PROBE chromium-dark-desktop right drawer Close Orbit hover {"hovered":true,"active":false,"background":"rgba(255, 255, 255, 0.08)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+PROBE chromium-dark-desktop right drawer Close Orbit active {"hovered":true,"active":true,"background":"rgba(255, 255, 255, 0.18)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+  ✓  10 [chromium-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: right drawer Close (3.7s)
+PROBE chromium-dark-desktop bottom drawer Close AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"24x24","radius":"4px"}
+PROBE chromium-dark-desktop bottom drawer Close AntD hover {"hovered":true,"active":false,"background":"rgba(255, 255, 255, 0.12)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+PROBE chromium-dark-desktop bottom drawer Close AntD active {"hovered":true,"active":true,"background":"rgba(255, 255, 255, 0.18)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+PROBE chromium-dark-desktop bottom drawer Close Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"24x24","radius":"4px"}
+PROBE chromium-dark-desktop bottom drawer Close Orbit hover {"hovered":true,"active":false,"background":"rgba(255, 255, 255, 0.08)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+PROBE chromium-dark-desktop bottom drawer Close Orbit active {"hovered":true,"active":true,"background":"rgba(255, 255, 255, 0.18)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+  ✓  11 [chromium-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: bottom drawer Close (3.5s)
+PROBE chromium-dark-desktop icon-only button AntD rest {"hovered":false,"active":false,"background":"rgb(43, 43, 46)","color":"rgb(201, 206, 213)","size":"32x32","radius":"6px"}
+PROBE chromium-dark-desktop icon-only button AntD hover {"hovered":true,"active":false,"background":"rgb(43, 43, 46)","color":"rgb(85, 133, 232)","size":"32x32","radius":"6px"}
+PROBE chromium-dark-desktop icon-only button AntD active {"hovered":true,"active":true,"background":"rgb(43, 43, 46)","color":"rgb(40, 80, 173)","size":"32x32","radius":"6px"}
+PROBE chromium-dark-desktop icon-only button Orbit rest {"hovered":false,"active":false,"background":"rgb(43, 43, 46)","color":"rgb(201, 206, 213)","size":"32x32","radius":"6px"}
+PROBE chromium-dark-desktop icon-only button Orbit hover {"hovered":true,"active":false,"background":"rgb(43, 43, 46)","color":"rgb(85, 133, 232)","size":"32x32","radius":"6px"}
+PROBE chromium-dark-desktop icon-only button Orbit active {"hovered":true,"active":true,"background":"rgb(43, 43, 46)","color":"rgb(40, 80, 173)","size":"32x32","radius":"6px"}
+  ✓  12 [chromium-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: icon-only button (3.8s)
+PROBE chromium-dark-desktop copy icon AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(46, 98, 220)","size":"11.890625x18.703125","radius":"0px"}
+PROBE chromium-dark-desktop copy icon AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(34, 61, 126)","size":"11.890625x18.703125","radius":"0px"}
+PROBE chromium-dark-desktop copy icon AntD active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0)","color":"rgb(40, 80, 173)","size":"11.890625x18.703125","radius":"0px"}
+PROBE chromium-dark-desktop copy icon Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(46, 98, 220)","size":"11.890625x18.703125","radius":"0px"}
+PROBE chromium-dark-desktop copy icon Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(34, 61, 126)","size":"11.890625x18.703125","radius":"0px"}
+PROBE chromium-dark-desktop copy icon Orbit active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0)","color":"rgb(40, 80, 173)","size":"11.890625x18.703125","radius":"0px"}
+  ✓  13 [chromium-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: copy icon (6.2s)
+PROBE chromium-dark-desktop input clear AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgba(255, 255, 255, 0.25)","size":"12x12","radius":"0px"}
+PROBE chromium-dark-desktop input clear AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"12x12","radius":"0px"}
+PROBE chromium-dark-desktop input clear Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgba(255, 255, 255, 0.25)","size":"12x12","radius":"0px"}
+PROBE chromium-dark-desktop input clear Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"12x12","radius":"0px"}
+  ✓  14 [chromium-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: input clear (3.4s)
+PROBE chromium-dark-desktop multiple chip remove AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"10x14","radius":"0px"}
+PROBE chromium-dark-desktop multiple chip remove AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(201, 206, 213)","size":"10x14","radius":"0px"}
+PROBE chromium-dark-desktop multiple chip remove Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"10x10","radius":"0px"}
+PROBE chromium-dark-desktop multiple chip remove Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(201, 206, 213)","size":"10x10","radius":"0px"}
+  ✓  15 [chromium-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: multiple chip remove (3.1s)
+PROBE chromium-dark-desktop select clear AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgba(255, 255, 255, 0.25)","size":"12x12","radius":"0px"}
+PROBE chromium-dark-desktop select clear AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"12x12","radius":"0px"}
+PROBE chromium-dark-desktop select clear Orbit rest {"hovered":false,"active":false,"background":"rgb(43, 43, 46)","color":"rgba(255, 255, 255, 0.25)","size":"12x12","radius":"50%"}
+PROBE chromium-dark-desktop select clear Orbit hover {"hovered":true,"active":false,"background":"rgb(43, 43, 46)","color":"rgb(167, 173, 182)","size":"12x12","radius":"50%"}
+  ✓  16 [chromium-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: select clear (2.8s)
+PROBE webkit-light-desktop dialog Close AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"32x32","radius":"4px"}
+PROBE webkit-light-desktop dialog Close AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0.06)","color":"rgb(31, 35, 41)","size":"32x32","radius":"4px"}
+PROBE webkit-light-desktop dialog Close AntD active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0.15)","color":"rgb(31, 35, 41)","size":"32x32","radius":"4px"}
+PROBE webkit-light-desktop dialog Close Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"32x32","radius":"4px"}
+PROBE webkit-light-desktop dialog Close Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0.06)","color":"rgb(31, 35, 41)","size":"32x32","radius":"4px"}
+PROBE webkit-light-desktop dialog Close Orbit active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0.15)","color":"rgb(31, 35, 41)","size":"32x32","radius":"4px"}
+  ✓  17 [webkit-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: dialog Close (3.5s)
+PROBE webkit-light-desktop right drawer Close AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"24x24","radius":"4px"}
+PROBE webkit-light-desktop right drawer Close AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0.06)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+PROBE webkit-light-desktop right drawer Close AntD active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0.15)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+PROBE webkit-light-desktop right drawer Close Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"24x24","radius":"4px"}
+PROBE webkit-light-desktop right drawer Close Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0.04)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+PROBE webkit-light-desktop right drawer Close Orbit active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0.15)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+  ✓  18 [webkit-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: right drawer Close (2.9s)
+PROBE webkit-light-desktop bottom drawer Close AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"24x24","radius":"4px"}
+PROBE webkit-light-desktop bottom drawer Close AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0.06)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+PROBE webkit-light-desktop bottom drawer Close AntD active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0.15)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+PROBE webkit-light-desktop bottom drawer Close Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"24x24","radius":"4px"}
+PROBE webkit-light-desktop bottom drawer Close Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0.04)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+PROBE webkit-light-desktop bottom drawer Close Orbit active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0.15)","color":"rgb(31, 35, 41)","size":"24x24","radius":"4px"}
+  ✓  19 [webkit-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: bottom drawer Close (2.3s)
+PROBE webkit-light-desktop icon-only button AntD rest {"hovered":false,"active":false,"background":"rgb(255, 255, 255)","color":"rgb(31, 35, 41)","size":"32x32","radius":"6px"}
+PROBE webkit-light-desktop icon-only button AntD hover {"hovered":true,"active":false,"background":"rgb(255, 255, 255)","color":"rgb(92, 146, 255)","size":"32x32","radius":"6px"}
+PROBE webkit-light-desktop icon-only button AntD active {"hovered":true,"active":true,"background":"rgb(255, 255, 255)","color":"rgb(33, 82, 217)","size":"32x32","radius":"6px"}
+PROBE webkit-light-desktop icon-only button Orbit rest {"hovered":false,"active":false,"background":"rgb(255, 255, 255)","color":"rgb(31, 35, 41)","size":"32x32","radius":"6px"}
+PROBE webkit-light-desktop icon-only button Orbit hover {"hovered":true,"active":false,"background":"rgb(255, 255, 255)","color":"rgb(92, 146, 255)","size":"32x32","radius":"6px"}
+PROBE webkit-light-desktop icon-only button Orbit active {"hovered":true,"active":true,"background":"rgb(255, 255, 255)","color":"rgb(33, 82, 217)","size":"32x32","radius":"6px"}
+  ✓  20 [webkit-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: icon-only button (1.9s)
+PROBE webkit-light-desktop copy icon AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(51, 112, 255)","size":"11.890625x18.671875","radius":"0px"}
+PROBE webkit-light-desktop copy icon AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(133, 177, 255)","size":"11.890625x18.671875","radius":"0px"}
+PROBE webkit-light-desktop copy icon AntD active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0)","color":"rgb(33, 82, 217)","size":"11.890625x18.671875","radius":"0px"}
+PROBE webkit-light-desktop copy icon Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(51, 112, 255)","size":"11.890625x18.671875","radius":"0px"}
+PROBE webkit-light-desktop copy icon Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(133, 177, 255)","size":"11.890625x18.671875","radius":"0px"}
+PROBE webkit-light-desktop copy icon Orbit active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0)","color":"rgb(33, 82, 217)","size":"11.890625x18.671875","radius":"0px"}
+  ✓  21 [webkit-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: copy icon (3.0s)
+PROBE webkit-light-desktop input clear AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgba(0, 0, 0, 0.25)","size":"12x12","radius":"0px"}
+PROBE webkit-light-desktop input clear AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"12x12","radius":"0px"}
+PROBE webkit-light-desktop input clear Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgba(0, 0, 0, 0.25)","size":"12x12","radius":"0px"}
+PROBE webkit-light-desktop input clear Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"12x12","radius":"0px"}
+  ✓  22 [webkit-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: input clear (2.3s)
+PROBE webkit-light-desktop multiple chip remove AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"10x14","radius":"0px"}
+PROBE webkit-light-desktop multiple chip remove AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(31, 35, 41)","size":"10x14","radius":"0px"}
+PROBE webkit-light-desktop multiple chip remove Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"10x10","radius":"0px"}
+PROBE webkit-light-desktop multiple chip remove Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(31, 35, 41)","size":"10x10","radius":"0px"}
+  ✓  23 [webkit-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: multiple chip remove (1.8s)
+PROBE webkit-light-desktop select clear AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgba(0, 0, 0, 0.25)","size":"12x12","radius":"0px"}
+PROBE webkit-light-desktop select clear AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(143, 149, 158)","size":"12x12","radius":"0px"}
+PROBE webkit-light-desktop select clear Orbit rest {"hovered":false,"active":false,"background":"rgb(255, 255, 255)","color":"rgba(0, 0, 0, 0.25)","size":"12x12","radius":"50%"}
+PROBE webkit-light-desktop select clear Orbit hover {"hovered":true,"active":false,"background":"rgb(255, 255, 255)","color":"rgb(100, 106, 115)","size":"12x12","radius":"50%"}
+  ✓  24 [webkit-light-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: select clear (1.9s)
+PROBE webkit-dark-desktop dialog Close AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"32x32","radius":"4px"}
+PROBE webkit-dark-desktop dialog Close AntD hover {"hovered":true,"active":false,"background":"rgba(255, 255, 255, 0.12)","color":"rgb(201, 206, 213)","size":"32x32","radius":"4px"}
+PROBE webkit-dark-desktop dialog Close AntD active {"hovered":true,"active":true,"background":"rgba(255, 255, 255, 0.18)","color":"rgb(201, 206, 213)","size":"32x32","radius":"4px"}
+PROBE webkit-dark-desktop dialog Close Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"32x32","radius":"4px"}
+PROBE webkit-dark-desktop dialog Close Orbit hover {"hovered":true,"active":false,"background":"rgba(255, 255, 255, 0.12)","color":"rgb(201, 206, 213)","size":"32x32","radius":"4px"}
+PROBE webkit-dark-desktop dialog Close Orbit active {"hovered":true,"active":true,"background":"rgba(255, 255, 255, 0.18)","color":"rgb(201, 206, 213)","size":"32x32","radius":"4px"}
+  ✓  25 [webkit-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: dialog Close (3.1s)
+PROBE webkit-dark-desktop right drawer Close AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"24x24","radius":"4px"}
+PROBE webkit-dark-desktop right drawer Close AntD hover {"hovered":true,"active":false,"background":"rgba(255, 255, 255, 0.12)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+PROBE webkit-dark-desktop right drawer Close AntD active {"hovered":true,"active":true,"background":"rgba(255, 255, 255, 0.18)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+PROBE webkit-dark-desktop right drawer Close Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"24x24","radius":"4px"}
+PROBE webkit-dark-desktop right drawer Close Orbit hover {"hovered":true,"active":false,"background":"rgba(255, 255, 255, 0.08)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+PROBE webkit-dark-desktop right drawer Close Orbit active {"hovered":true,"active":true,"background":"rgba(255, 255, 255, 0.18)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+  ✓  26 [webkit-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: right drawer Close (2.1s)
+PROBE webkit-dark-desktop bottom drawer Close AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"24x24","radius":"4px"}
+PROBE webkit-dark-desktop bottom drawer Close AntD hover {"hovered":true,"active":false,"background":"rgba(255, 255, 255, 0.12)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+PROBE webkit-dark-desktop bottom drawer Close AntD active {"hovered":true,"active":true,"background":"rgba(255, 255, 255, 0.18)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+PROBE webkit-dark-desktop bottom drawer Close Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"24x24","radius":"4px"}
+PROBE webkit-dark-desktop bottom drawer Close Orbit hover {"hovered":true,"active":false,"background":"rgba(255, 255, 255, 0.08)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+PROBE webkit-dark-desktop bottom drawer Close Orbit active {"hovered":true,"active":true,"background":"rgba(255, 255, 255, 0.18)","color":"rgb(201, 206, 213)","size":"24x24","radius":"4px"}
+  ✓  27 [webkit-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: bottom drawer Close (2.1s)
+PROBE webkit-dark-desktop icon-only button AntD rest {"hovered":false,"active":false,"background":"rgb(43, 43, 46)","color":"rgb(201, 206, 213)","size":"32x32","radius":"6px"}
+PROBE webkit-dark-desktop icon-only button AntD hover {"hovered":true,"active":false,"background":"rgb(43, 43, 46)","color":"rgb(85, 133, 232)","size":"32x32","radius":"6px"}
+PROBE webkit-dark-desktop icon-only button AntD active {"hovered":true,"active":true,"background":"rgb(43, 43, 46)","color":"rgb(40, 80, 173)","size":"32x32","radius":"6px"}
+PROBE webkit-dark-desktop icon-only button Orbit rest {"hovered":false,"active":false,"background":"rgb(43, 43, 46)","color":"rgb(201, 206, 213)","size":"32x32","radius":"6px"}
+PROBE webkit-dark-desktop icon-only button Orbit hover {"hovered":true,"active":false,"background":"rgb(43, 43, 46)","color":"rgb(85, 133, 232)","size":"32x32","radius":"6px"}
+PROBE webkit-dark-desktop icon-only button Orbit active {"hovered":true,"active":true,"background":"rgb(43, 43, 46)","color":"rgb(40, 80, 173)","size":"32x32","radius":"6px"}
+  ✓  28 [webkit-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: icon-only button (1.8s)
+PROBE webkit-dark-desktop copy icon AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(46, 98, 220)","size":"11.890625x18.671875","radius":"0px"}
+PROBE webkit-dark-desktop copy icon AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(34, 61, 126)","size":"11.890625x18.671875","radius":"0px"}
+PROBE webkit-dark-desktop copy icon AntD active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0)","color":"rgb(40, 80, 173)","size":"11.890625x18.671875","radius":"0px"}
+PROBE webkit-dark-desktop copy icon Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(46, 98, 220)","size":"11.890625x18.671875","radius":"0px"}
+PROBE webkit-dark-desktop copy icon Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(34, 61, 126)","size":"11.890625x18.671875","radius":"0px"}
+PROBE webkit-dark-desktop copy icon Orbit active {"hovered":true,"active":true,"background":"rgba(0, 0, 0, 0)","color":"rgb(40, 80, 173)","size":"11.890625x18.671875","radius":"0px"}
+  ✓  29 [webkit-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: copy icon (3.1s)
+PROBE webkit-dark-desktop input clear AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgba(255, 255, 255, 0.25)","size":"12x12","radius":"0px"}
+PROBE webkit-dark-desktop input clear AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"12x12","radius":"0px"}
+PROBE webkit-dark-desktop input clear Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgba(255, 255, 255, 0.25)","size":"12x12","radius":"0px"}
+PROBE webkit-dark-desktop input clear Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"12x12","radius":"0px"}
+  ✓  30 [webkit-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: input clear (2.4s)
+PROBE webkit-dark-desktop multiple chip remove AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"10x14","radius":"0px"}
+PROBE webkit-dark-desktop multiple chip remove AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(201, 206, 213)","size":"10x14","radius":"0px"}
+PROBE webkit-dark-desktop multiple chip remove Orbit rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"10x10","radius":"0px"}
+PROBE webkit-dark-desktop multiple chip remove Orbit hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(201, 206, 213)","size":"10x10","radius":"0px"}
+  ✓  31 [webkit-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: multiple chip remove (1.8s)
+PROBE webkit-dark-desktop select clear AntD rest {"hovered":false,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgba(255, 255, 255, 0.25)","size":"12x12","radius":"0px"}
+PROBE webkit-dark-desktop select clear AntD hover {"hovered":true,"active":false,"background":"rgba(0, 0, 0, 0)","color":"rgb(139, 144, 153)","size":"12x12","radius":"0px"}
+PROBE webkit-dark-desktop select clear Orbit rest {"hovered":false,"active":false,"background":"rgb(43, 43, 46)","color":"rgba(255, 255, 255, 0.25)","size":"12x12","radius":"50%"}
+PROBE webkit-dark-desktop select clear Orbit hover {"hovered":true,"active":false,"background":"rgb(43, 43, 46)","color":"rgb(167, 173, 182)","size":"12x12","radius":"50%"}
+  ✓  32 [webkit-dark-desktop] › ui-migration/probe-icon-hover.browser.mjs:64:67 › icon button hover: select clear (2.1s)
+
+  32 passed (2.7m)
+end: 2026-10-10T01:54:21Z load: 52.71 53.48 47.89
+exit=0

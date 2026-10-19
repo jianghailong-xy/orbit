@@ -1,0 +1,23 @@
+argv: env P32_BASE_CONFIG=overlays.config.mjs P32_PORT=4511 P32_OUTPUT=/mnt/data/tmp/34coPBk43ULRuisicUTAy/runs/f-close-hover-del-out npx playwright test --config ui-migration/port.config.mjs ui-migration/overlays-close-hover.browser.mjs
+tree: /mnt/data/tmp/34coPBk43ULRuisicUTAy/del HEAD a755f816a1800280719ecabf060bd6b7ad271776
+uncommitted: 
+start: 2026-10-09T20:53:19Z load: 45.30 47.36 53.08
+mem: 3537M available, swap 3609M free
+disk: / 7342M available
+cgroup: 0::/system.slice/run-p3125517-i57616987.scope
+P0 expected screenshots: 44 P0.2 originals, 183 main drift references, 25 accepted migration differences.
+
+Running 8 tests using 1 worker
+
+  ✓  1 [chromium-light-desktop] › ui-migration/overlays-close-hover.browser.mjs:30:1 › the dialog Close takes the replaced modal Close hover background (4.9s)
+  ✓  2 [chromium-light-phone] › ui-migration/overlays-close-hover.browser.mjs:30:1 › the dialog Close takes the replaced modal Close hover background (4.2s)
+  ✓  3 [chromium-dark-desktop] › ui-migration/overlays-close-hover.browser.mjs:30:1 › the dialog Close takes the replaced modal Close hover background (6.7s)
+  ✓  4 [chromium-dark-phone] › ui-migration/overlays-close-hover.browser.mjs:30:1 › the dialog Close takes the replaced modal Close hover background (2.7s)
+  ✓  5 [webkit-light-desktop] › ui-migration/overlays-close-hover.browser.mjs:30:1 › the dialog Close takes the replaced modal Close hover background (4.5s)
+  ✓  6 [webkit-light-phone] › ui-migration/overlays-close-hover.browser.mjs:30:1 › the dialog Close takes the replaced modal Close hover background (2.9s)
+  ✓  7 [webkit-dark-desktop] › ui-migration/overlays-close-hover.browser.mjs:30:1 › the dialog Close takes the replaced modal Close hover background (2.6s)
+  ✓  8 [webkit-dark-phone] › ui-migration/overlays-close-hover.browser.mjs:30:1 › the dialog Close takes the replaced modal Close hover background (2.5s)
+
+  8 passed (47.6s)
+end: 2026-10-09T20:54:09Z load: 46.28 47.37 52.78
+exit=0

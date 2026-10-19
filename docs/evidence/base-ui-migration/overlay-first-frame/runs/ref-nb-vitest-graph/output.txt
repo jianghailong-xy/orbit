@@ -1,0 +1,12 @@
+
+ RUN  v5.0.2 /mnt/data/tmp/overlay-first-frame-34brok/ref/src/web
+
+ ✓ src/components/ProjectTasksGraph.test.tsx (2 tests) 12709ms
+   ✓ ProjectTasksGraph (1)
+     ✓ draws the graph on its own, with nothing for the reader to select first 12600ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  00:34:18
+   Duration  66.53s (environment 66%, tests 22%, transform 7%, import 4%, worker 1%)
+

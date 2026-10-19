@@ -166,6 +166,12 @@ const evidenceInclude = {
     select: { idempotencyKey: true },
   },
   legacyImport: true,
+  // One per revision by `task_evidence_decision_evidence_key`, with the SEND_BACK note on it: the
+  // reason a revision was sent back is every session's to read, not only the deciding session's.
+  decisions: {
+    take: 1,
+    select: { decision: true, note: true, decidedAt: true, decidedByType: true },
+  },
 } satisfies Prisma.TaskCompletionEvidenceInclude;
 
 type EvidenceRow = Prisma.TaskCompletionEvidenceGetPayload<{ include: typeof evidenceInclude }>;
@@ -210,6 +216,7 @@ function response(row: EvidenceRow, receipt?: EvidenceReceipt): TaskCompletionEv
     revision: row.revision.toString(),
     idempotencyKeys: row.idempotencyKeys.map(({ idempotencyKey }) => idempotencyKey),
     legacyImport: legacyImportResponse(row.legacyImport),
+    decision: row.decisions[0] ?? null,
     citations: receipt?.citations ?? null,
     criterionMatch: receipt?.criterionMatch ?? null,
   };
@@ -658,9 +665,13 @@ export class TaskCompletionEvidenceService {
    * sufficient; DONE follows from it through the same evaluator the other two criteria use, under
    * the Task mutex this unit already holds, and past 0193's fence, which goes and finds the same
    * CONFIRM for itself before admitting the write. Nothing else moves: no Session state, no
-   * comment, no notification, and none of the delivery machinery migration 0228 removed.
-   * SEND_BACK writes its row and its note and nothing else; the task is untouched, so it stays
-   * OPEN waiting for the next revision — the absence of a write is the whole of "keep going".
+   * comment, and none of the delivery machinery migration 0228 removed.
+   * SEND_BACK writes its row and its note, and the task is untouched, so it stays OPEN waiting for
+   * the next revision — and after commit the note is handed to the run that submitted the revision
+   * (`EvidenceReviewService.deliverSendBack`), because a "keep going" nobody is told about keeps
+   * nothing going: until 2026-10-09 the note went nowhere, and a send-back read as a stall to the
+   * run and to a project's coordinator alike. The decision rides the revision in `list`, so any
+   * session can read why.
    *
    * The four checks run in the order authority, subject, standard: may this caller answer at all
    * (independent of the work, and acting for the project the task is in), is it answering the
@@ -826,6 +837,16 @@ export class TaskCompletionEvidenceService {
       resync: false,
     });
     await this.nudgeCoordinatorRow(ownerId, taskId);
+
+    // A SEND_BACK's note is the next attempt's only brief, and the run that submitted the revision
+    // is the one who must see it. After the same commit, exactly where the revision's own delivery
+    // goes on submit; a fault is logged and never reported as a failed decision, the note staying
+    // readable on the revision in `list`.
+    if (committed.decision.decision === 'SEND_BACK') {
+      await this.evidenceReviews?.deliverSendBack(ownerId, taskId, committed.decision.id)
+        .catch((error) => this.logger.warn(`send-back of task ${taskId} was not handed to its run: `
+          + `${error instanceof Error ? error.message : error}`));
+    }
 
     // The immediate successor edge for the task this decision settled, after commit and outside
     // the retried closure, exactly where the EXECUTABLE comparison puts its own. Losing it costs

@@ -70,6 +70,7 @@ const ENGINE_COPY: Record<string, { label: string; envVar: string; sessions: str
   claude: { label: 'Claude account', envVar: 'CLAUDE_CONFIG_DIR', sessions: 'Claude' },
   // agy takes no variable for it: the runner's own, which picks the sign-in a session runs on.
   antigravity: { label: 'Antigravity account', envVar: 'ORBIT_ANTIGRAVITY_GOOGLE_DIR', sessions: 'Antigravity' },
+  kimi: { label: 'Kimi account', envVar: 'KIMI_CODE_HOME', sessions: 'Kimi' },
 };
 
 /**

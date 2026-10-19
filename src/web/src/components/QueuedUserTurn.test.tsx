@@ -2,13 +2,13 @@
 import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   ConfirmationReturnCard,
   ConfirmationReviewRequestCard,
   OpenItemDeliveryCard,
+  OwnerAnswerCard,
   ProjectStartedCard,
   SessionMessageCard,
   SessionReplyCard,
@@ -65,10 +65,21 @@ const ITEM: OpenItemDeliveryCard = {
   check: null,
   errorCode: null,
   failure: null,
-  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'],
+  // A conflict's cell holds no rerun door (`decideIntegrationRetry` refuses one), so the server
+  // lists none here: the card is what the server sends, and `Retry the task` is not in it.
+  actions: ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'CANCEL_TASK'],
   landing: { receipts: 0, state: 'NOT_KNOWN', upstream: 'main', integration: 'main' },
 };
 const ITEM_TOLD = '【例外待办】Merge conflict: 回填历史 user 事件的 controlPlaneNote\n\n合并时冲突，请处理。';
+
+const ANSWER: OwnerAnswerCard = {
+  itemId: '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a70',
+  kind: 'COORDINATOR_QUESTION',
+  sessionId: '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a71',
+  deliveredAt: '2026-10-06T05:39:58.000Z',
+};
+const ANSWER_TOLD = 'From Orbit · owner answer: you asked "Merge now, or wait for the review?". '
+  + 'The owner answered: Wait for the review (2026-10-06T05:39:57.512Z).';
 
 const TASK: TaskStartCard = {
   taskId: '01a0cca7-8609-70ed-a0e2-d4b55b832b60',
@@ -204,6 +215,17 @@ const CASES: Case[] = [
     acceptable: true,
   },
   {
+    name: 'the owner’s answer handed to the coordinator',
+    field: 'ownerAnswer',
+    row: { turnId: 'turn-answer', content: ANSWER_TOLD, createdAt: TS, ownerAnswer: ANSWER, authoredByOrbit: true },
+    echo: { text: ANSWER_TOLD, ownerAnswer: ANSWER },
+    root: '.owner-answer',
+    queuedMark: '.owner-answer.is-queued',
+    slot: '.owner-answer-queued',
+    actions: ['Cancel'],
+    acceptable: true,
+  },
+  {
     name: 'a resumed run’s brief',
     field: 'taskStart',
     row: { turnId: 'turn-brief', content: BRIEF, createdAt: TS, taskStart: TASK, authoredByOrbit: true },
@@ -274,9 +296,10 @@ const CASES: Case[] = [
     name: 'a wake a watch queued',
     row: { turnId: 'turn-watch', content: WAKE, createdAt: TS, authoredByOrbit: true },
     echo: { text: WAKE },
-    root: '.watch-wake-wrap',
+    // The background line's classes (`.bgwake-row`, `.bgwake-queued`…) under a root of the watch's own.
+    root: '.watch-wake',
     queuedMark: '.watch-wake.is-queued',
-    slot: '.watch-wake-queued',
+    slot: '.bgwake-queued',
     // A wake's Cancel: withdrawing it is for good, so it says so (WorkspaceView.queuedTurnWake).
     actions: ['Withdraw wake'],
     acceptable: true,
@@ -309,7 +332,7 @@ const CASES: Case[] = [
 const mounted: { root: Root; el: HTMLDivElement }[] = [];
 let client: QueryClient;
 
-/** Something drawn the way the console draws it: under a router, a query client and AntD's App. */
+/** Something drawn the way the console draws it: under a router and a query client. */
 async function draw(node: ReactNode): Promise<HTMLDivElement> {
   const el = document.createElement('div');
   document.body.appendChild(el);
@@ -319,7 +342,7 @@ async function draw(node: ReactNode): Promise<HTMLDivElement> {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <AntApp>{node}</AntApp>
+          {node}
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -502,6 +525,7 @@ describe('a turn on the queue is drawn as the card its echo is', () => {
   it('carries every card the snapshot carried onto the placeholder, not a hand-copied few', () => {
     const cards: Required<TurnCards> = {
       openItemDelivery: ITEM,
+      ownerAnswer: ANSWER,
       taskStart: TASK,
       projectStarted: STARTED,
       confirmationReviewRequest: REVIEW_REQUEST,
@@ -687,9 +711,7 @@ describe('the console’s queued tail', { timeout: 60_000 }, () => {
       root.render(
         <QueryClientProvider client={client}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-            <AntApp>
-              <WorkspaceView runner={RUNNER} />
-            </AntApp>
+            <WorkspaceView runner={RUNNER} />
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -699,8 +721,13 @@ describe('the console’s queued tail', { timeout: 60_000 }, () => {
     const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
     env.IS_REACT_ACT_ENVIRONMENT = false;
     try {
+      // Every card Orbit queued is in the tail; the reader's message and their `!cmd` wait in the
+      // tray above the composer instead (`inPendingTray`).
       await vi.waitFor(
-        () => expect(el.querySelectorAll('.chat-queued-meta')).toHaveLength(CASES.length + 1),
+        () => {
+          expect(el.querySelectorAll('.chat-queued-meta')).toHaveLength(CASES.length - 1);
+          expect(el.querySelectorAll('.pending-tray-row')).toHaveLength(2);
+        },
         { timeout: 20_000, interval: 20 },
       );
     } finally {
@@ -716,12 +743,14 @@ describe('the console’s queued tail', { timeout: 60_000 }, () => {
       expect(line.querySelector('.chat-queued-tag')?.textContent, c.name).toBe('Queued for next turn');
       expect([...line.querySelectorAll('a')].map((a) => a.textContent), c.name).toEqual(c.actions);
     }
-    // The two the reader typed are their own bubbles, exactly as the queue always drew them.
-    const bubbles = [...el.querySelectorAll<HTMLElement>('.chat-queued')];
-    expect(bubbles.map((b) => b.className)).toEqual(['chat-msg chat-user chat-queued', 'chat-msg chat-user chat-queued']);
-    expect(bubbles[0].querySelector('.md')?.textContent?.trim()).toBe(TYPED);
-    expect(bubbles[1].querySelector('.chat-queued-cmd')?.textContent).toBe('!npm test -w @orbit/web');
+    // The two the reader typed are rows of the tray, each with its way back, and the `!cmd` reads
+    // as the command it will run.
+    const rows = [...el.querySelectorAll<HTMLElement>('.pending-tray-row')];
+    expect(rows.map((r) => r.querySelector('.pending-tray-text')?.textContent)).toEqual([TYPED, '!npm test -w @orbit/web']);
+    expect(rows[1].querySelector('.pending-tray-text')?.classList.contains('is-shell')).toBe(true);
+    expect(rows.map((r) => r.querySelector('.pending-tray-state')?.textContent)).toEqual(['Queued for next turn', 'Queued for next turn']);
+    expect(rows.map((r) => r.querySelector('[aria-label="Withdraw"]') !== null)).toEqual([true, true]);
     // And nothing anybody else wrote is drawn as the reader's message.
-    expect(el.querySelectorAll('.chat-user')).toHaveLength(2);
+    expect(el.querySelectorAll('.chat-user')).toHaveLength(0);
   });
 });
