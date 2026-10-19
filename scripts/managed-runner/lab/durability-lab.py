@@ -1027,13 +1027,13 @@ def cmd_report(args):
         records[f"{found['phase']}/{found['step']}"] = found
     get = lambda key: (records.get(key) or {}).get('result') or {}
     measures = {}
-    for run in RUNS:
+    for run, phase in [(run, run) for run in RUNS] + [('after', 'again')]:  # the after run done again is phase again's
         try:
-            measures[run] = {'secondsBeforeTheCut': get(f'{run}/last')['secondsBeforeTheCut'], 'left': get(f'{run}/left')['summary'],
-                             'lastTurnResumed': get(f'{run}/resume')['lastTurnResumed'], 'runnerLog': get(f'{run}/resume')['runnerLog'],
-                             'failover': get(f'{run}/fence').get('seconds')}
+            measures[phase] = {'secondsBeforeTheCut': get(f'{phase}/last')['secondsBeforeTheCut'], 'left': get(f'{phase}/left')['summary'],
+                               'lastTurnResumed': get(f'{phase}/resume')['lastTurnResumed'], 'runnerLog': get(f'{phase}/resume')['runnerLog'],
+                               'failover': get(f'{phase}/fence').get('seconds')}
         except (KeyError, TypeError) as error:
-            measures[run] = f'unavailable: {type(error).__name__} {error}'
+            measures[phase] = f'unavailable: {type(error).__name__} {error}'
     print(json.dumps({'steps': len(steps), 'checks': sum(line['checks'] for line in steps), 'failedSteps': [f"{l['phase']}/{l['step']}" for l in steps if not l['ok']],
                       'from': steps[0]['startedAt'] if steps else None, 'to': max(r['endedAt'] for r in records.values()) if records else None,
                       'phaseSeconds': {phase: round(sum(l['seconds'] for l in steps if l['phase'] == phase), 1) for phase in dict.fromkeys(l['phase'] for l in steps)},
