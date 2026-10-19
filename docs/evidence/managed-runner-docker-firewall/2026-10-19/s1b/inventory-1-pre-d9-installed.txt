@@ -1,0 +1,16 @@
+== inventory 1-pre-d9-installed at 2026-10-19T07:22:11Z, checkout 20eaa14b75997ec9e33221e82241166316c3d6ff
+-- managed runner containers
+-- the stack
+orbit-gateway	running	Up 13 seconds (healthy)	nginx:alpine
+orbit-wiki-worker	running	Up 19 seconds	orbit-apiserver:local
+orbit-web	running	Up 19 seconds (healthy)	s1b-web
+orbit-pgbackup	running	Up 40 seconds	postgres:16-alpine
+orbit-apiserver	running	Up 40 seconds (healthy)	orbit-apiserver:local
+orbit-postgres	running	Up 2 minutes (healthy)	postgres:16-alpine
+-- managed_runner rows
+-- .env lines about managed runners
+65:# installed without them keeps managed runners off. ORBIT_MANAGED_RUNNERS_ENABLED=false switches them off: no
+67:# ORBIT_MANAGED_RUNNERS_ENABLED=true
+68:# ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+69:# COMPOSE_PROFILES=managed-runners-docker
+86:ORBIT_MANAGED_RUNNERS_ENABLED=false

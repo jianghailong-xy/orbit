@@ -104,8 +104,8 @@ Every request needs `Authorization: Bearer <token>`. Anything else is refused wi
   only while the firewall service's `firewall/status.json` says its rules are in force: `"enforced"`,
   not past its `validUntil`, from this boot (`bootId`), and for the bridge and gateway the configured
   network has now. Otherwise the create is `503 FIREWALL_NOT_ENFORCED` with the reason, before
-  anything is made, and the manager retries it as a transient failure; a container made and never
-  started is left for the manager. Reads, stops and removals go on regardless, and so does the
+  anything is made; the manager waits on it as on `CONTAINER_LIMIT`, spending none of the runner's
+  attempts, and a container made and never started is left for the manager. Reads, stops and removals go on regardless, and so does the
   single-container guard's dry run. Without `firewall/config.json` nothing changes.
 
 ## Disk limit

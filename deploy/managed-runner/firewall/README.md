@@ -50,8 +50,10 @@ touches `INPUT`. After a host restart there are none until the service, which Do
 
 It keeps a status file, `status.json` beside its configuration: `"enforced"` with how long that holds (three check
 intervals), `"failing"` and why, `"starting"` or `"stopped"`. The Docker channel reads it before it creates or starts
-any runner container, and refuses (`503 FIREWALL_NOT_ENFORCED`, which the manager retries) unless it says the rules are
-in force now, since the host last started, for the bridge the network has now. So a runner never starts unprotected,
+any runner container, and refuses (`503 FIREWALL_NOT_ENFORCED`) unless it says the rules are in force now, since the
+host last started, for the bridge the network has now. The manager then waits, as it waits for room on the host: it
+asks again every `lifecycle.capacityRetrySeconds`, spends none of the runner's attempts, and the runner starts by itself
+once the firewall is back. So a runner never starts unprotected,
 neither during a host's boot nor while the service cannot write its rules, nor after the network was made again with
 another bridge. Its health check is the same reading (`status`).
 

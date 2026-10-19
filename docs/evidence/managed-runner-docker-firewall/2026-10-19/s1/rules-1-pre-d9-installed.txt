@@ -1,0 +1,28 @@
+== rules at 2026-10-19T06:57:46Z: 1-pre-d9-installed
+-- iptables backend: iptables v1.8.13 (nf_tables); Docker's firewall backend: {"Driver":"iptables","Info":[["EnableUserlandProxy","true"],["UserlandProxyPath","/usr/local/bin/docker-proxy"]]}
+-- managed runners' network
+id=75117e1ea77f3f4876bd8e6b632156c42c1a92eecd7494a5f2b88fb68cd1bf5b ipv6=false options={"com.docker.network.bridge.enable_icc":"false"} ipam=[{"Gateway":"172.19.0.1","Subnet":"172.19.0.0/16"}]
+-- iptables: jumps into ORBIT-MR-* (INPUT, DOCKER-USER, FORWARD) and the chains
+-P INPUT ACCEPT
+-P FORWARD ACCEPT
+-A FORWARD -j DOCKER-USER
+-A FORWARD -j DOCKER-FORWARD
+-N DOCKER-USER
+iptables: No chain/target/match by that name.
+iptables: No chain/target/match by that name.
+-- ip6tables: jumps into ORBIT-MR-* (INPUT, DOCKER-USER, FORWARD) and the chains
+-P INPUT ACCEPT
+-P FORWARD ACCEPT
+-A FORWARD -j DOCKER-USER
+-A FORWARD -j DOCKER-FORWARD
+-N DOCKER-USER
+ip6tables: No chain/target/match by that name.
+ip6tables: No chain/target/match by that name.
+-- nat DOCKER chain (the published port's DNAT)
+-N DOCKER
+-A DOCKER ! -i br-e18d5741014b -p tcp -m tcp --dport 2086 -j DNAT --to-destination 172.20.0.7:80
+-- the firewall's service
+-- the firewall's status file
+cat: can't open '/work/s1/data/managed-runners/firewall/status.json': No such file or directory
+-- the firewall's configuration
+cat: can't open '/work/s1/data/managed-runners/firewall/config.json': No such file or directory

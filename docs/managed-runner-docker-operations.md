@@ -374,8 +374,8 @@ The Compose services come back by their restart policy. Managed runner container
 - **The firewall.** Docker's own restart leaves the managed runners' firewall rules where they are: Docker never
   flushes `DOCKER-USER` and never touches `INPUT`. A host restart takes them away, and `managed-runner-firewall`, which
   Docker starts again with the rest of the stack, writes them again within seconds. Until it reports them in force
-  for this boot, the Docker channel refuses every runner container (`503 FIREWALL_NOT_ENFORCED`, which the manager
-  retries), so no runner starts before its rules. Measured on 2026-10-19 (task D9) for both restarts, and with the
+  for this boot, the Docker channel refuses every runner container (`503 FIREWALL_NOT_ENFORCED`), and the manager waits
+  without spending the runner's attempts, so no runner starts before its rules. Measured on 2026-10-19 (task D9) for both restarts, and with the
   firewall service stopped on purpose ([The managed runners' firewall](#the-managed-runners-firewall)).
 
 - **A runner that was running** is started again by itself once the apiserver is back. The manager records Docker's
@@ -470,33 +470,31 @@ grep '"serverUrl"' data/managed-runners/profile.json      # http://<that gateway
 
 ## What a managed runner can reach
 
-Measured from inside runner containers, both on the HPC host's Docker and in a default deployment.
+Measured from inside runner containers, as the runner's user, on an isolated Docker host on 2026-10-19 (task D9,
+[evidence](evidence/managed-runner-docker-firewall/2026-10-19/README.md)), with the firewall a new deployment has and
+without it (`--no-managed-runner-firewall`, and every deployment installed before the firewall existed). D5's
+measurements of 2026-10-17, on the HPC host's own Docker and in a default deployment, are the "without" column.
 
-**Unreachable:**
+| From a runner | With the firewall | Without it |
+| --- | --- | --- |
+| The gateway's published port 2086 at the network's gateway (how it reaches this deployment) | reached | reached |
+| The internet: public HTTPS (a Git host, a model's endpoint) and DNS | reached | reached |
+| Every other port of this host, on any of its addresses: the network's gateway, docker0, other networks' gateways, its LAN address (sshd, rpcbind, a UDP service) | refused | **reached** |
+| The private network behind this host: other machines' services (another host's sshd, a model endpoint) | refused, unless [allowed](#let-runners-reach-an-internal-model-endpoint) | **reached** |
+| The cloud metadata address (169.254.169.254) and the rest of 169.254/16, 100.64/10, 10/8, 172.16/12, 192.168/16 | refused | where something answers, reached |
+| Anything over IPv6 | refused (the network is IPv4-only, and IPv6 is off on the runner's interface) | none (the same) |
+| Another account's runner (the network's inter-container traffic is off) | unreachable | unreachable |
+| The stack's own containers (apiserver, Postgres, web; another network, and their names do not resolve) | unreachable | unreachable |
+| The channel (it has no network at all), Docker's API (no socket inside, nothing on TCP 2375/2376) | unreachable | unreachable |
+| This host's loopback-only services (the runner's 127.0.0.1 is its own) | unreachable | unreachable |
 
-- another account's runner (the network's inter-container traffic is off);
-- the stack's own containers (apiserver, Postgres, web; a different network, and their names do not resolve);
-- containers on other Docker networks;
-- the channel (it has no network at all);
-- Docker's API (no socket inside; nothing on TCP 2375/2376);
-- the host's loopback-only services;
-- the cloud metadata address.
+"Refused" is immediate: the connection fails with "No route to host" (`EHOSTUNREACH`), which is the firewall
+answering. Everything here holds with Docker's userland proxy on or off, through Docker and host restarts, and on the
+nft and the legacy iptables backends.
 
-**Reachable:**
-
-- the internet, which a runner needs for its model and Git hosts;
-- the gateway's published port, which is how it reaches the apiserver;
-- **every service the host listens to on its other addresses**. On the HPC host that was sshd (22) and rpcbind (111)
-  through the network's gateway, docker0 and the host's LAN address. Through the host's routing, the LAN behind it is
-  reachable too.
-
-Every account can run code in its runner. On a deployment open to sign-up, decide what a runner may reach:
-
-- keep host services bound to loopback, or firewall them for the managed runners' bridge (`INPUT` from its
-  interface, except port 2086);
-- and drop its traffic to private ranges you do not want reached (`DOCKER-USER`).
-
-Orbit does not change the host's firewall.
+Every account can run code in its runner, and on a deployment open to sign-up that means anyone. Keep the firewall on,
+or firewall the managed runners' network yourself: `INPUT` from its bridge except port 2086 at its gateway, and its
+traffic to private ranges (`DOCKER-USER`). Keep host services bound to loopback either way.
 
 ## The managed runners' firewall
 
@@ -573,7 +571,8 @@ sed -i 's/^COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall$/COMP
 ```
 
 The rules stay in force until they are removed (below) or the host restarts: nothing writes them again. To turn it on
-again, `scripts/install-server.sh --enable-managed-runner-firewall`.
+again, `scripts/install-server.sh --enable-managed-runner-firewall`. That is also how a deployment takes a newer
+firewall program after an upgrade, which never rebuilds or restarts it: off, then on again, from the upgraded checkout.
 
 ### Remove its rules
 
@@ -594,10 +593,13 @@ done
 
 ### When it is not in force
 
-Runners do not start: their owners read "A transient infrastructure error interrupted provisioning; it is retried
-automatically", the channel logs `no runner container is started: the managed runners' host firewall is not in force
-(...)` (`docker compose logs docker-channel`), and `docker compose ps` shows `managed-runner-firewall` unhealthy. Its log
-says why (`docker compose logs managed-runner-firewall`):
+Runners do not start, and wait: their owners read "The Docker host's firewall for managed runners is not in force, so
+this runner is not started yet. It starts by itself once an operator has the firewall running again." The channel logs
+`no runner container is started: the managed runners' host firewall is not in force (...)` (`docker compose logs
+docker-channel`), the apiserver logs `FIREWALL_NOT_ENFORCED` once per runner, and `docker compose ps` shows
+`managed-runner-firewall` unhealthy. A runner waiting there spends none of its attempts, and is asked again every
+`lifecycle.capacityRetrySeconds` (60 seconds): once the firewall reports its rules in force, it starts by itself. The
+firewall's log says what is wrong (`docker compose logs managed-runner-firewall`):
 
 - **It is stopped:** `docker compose up -d managed-runner-firewall`.
 - **"Docker's chains are in neither iptables backend":** Docker was switched to its nftables backend, or to
