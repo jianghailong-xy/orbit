@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -292,6 +293,68 @@ func TestSweepNeverReclaimsMergeRecoveryCheckout(t *testing.T) {
 	gcWorktrees(f.transport, map[string]bool{}, diskUnderTheFloor())
 	requireCheckoutOnDisk(t, repair, "a retained reviewed candidate must survive session GC")
 	requireCheckoutReclaimed(t, doomed, "ordinary terminal checkouts remain reclaimable")
+}
+
+// An integration job's scratch tree now lives under the worktrees directory, and the control plane
+// answers every directory there that is not a session id as removable. It must still be excluded:
+// the job using it is running, and reclaiming the tree would delete the working directory its check
+// is executing in. The prefix is excluded before anything stages a scratch tree there — the order
+// is the point, and the sweep here is the session sweep, not the scratch sweep that knows the
+// in-flight set.
+func TestSweepNeverTouchesTheIntegrationScratchWorktree(t *testing.T) {
+	f := newGCFixture(t)
+	scratch := filepath.Join(worktreesDir(), integrateScratchPrefix+"job-landing")
+	mustGit(t, f.repo, "worktree", "add", "-q", "-b", "orbit/"+integrateScratchPrefix+"job-landing", scratch)
+	doomed := f.checkout(t, "sess-completed")
+
+	gcWorktrees(f.transport, map[string]bool{}, diskUnderTheFloor())
+
+	requireCheckoutOnDisk(t, scratch, "a landing's scratch worktree is not a leftover session checkout")
+	requireCheckoutReclaimed(t, doomed, "its terminal neighbour still goes, so the sweep did run")
+}
+
+// The same exclusion while the landing is actually running: a check is executing in the scratch
+// tree when the sweep passes. The check must survive to its verdict and the job must land.
+func TestTheSweepNeverTouchesTheScratchOfARunningLanding(t *testing.T) {
+	f := newGCFixture(t)
+	r := newIntegrationRepo(t)
+	r.checkoutNew("project/line", "main")
+	r.push("project/line")
+	r.checkoutNew("task/running", "main")
+	r.write("running.txt", "the task's work\n")
+	r.commit("task work")
+	r.push("task/running")
+	r.checkout("main")
+
+	release := filepath.Join(t.TempDir(), "release")
+	job := r.command("task/running", "project/line", IntegrationCheckSpec{
+		Name: "MERGE_CHECK", Command: fmt.Sprintf("while [ ! -e %q ]; do sleep 0.05; done", release),
+		ExpectedExitCode: 0, TimeoutSeconds: 120,
+	})
+	// The runner's own root, which is the directory the sweep reads.
+	job.scratchRoot = ""
+	done := make(chan integrationResult, 1)
+	go func() { done <- runIntegrationJob(job, silent) }()
+	scratch := filepath.Join(worktreesDir(), integrateScratchPrefix+job.JobID)
+	waitForPath(t, scratch)
+
+	gcWorktrees(f.transport, map[string]bool{}, diskUnderTheFloor())
+	if _, err := os.Stat(scratch); err != nil {
+		t.Fatalf("the session sweep removed the scratch of a landing that is running: %v", err)
+	}
+
+	if err := os.WriteFile(release, []byte("go\n"), 0o644); err != nil {
+		t.Fatalf("release the check: %v", err)
+	}
+	select {
+	case result := <-done:
+		if result.State != "LANDED" {
+			t.Fatalf("state = %s (%s %s), want LANDED: the running landing must not be disturbed",
+				result.State, result.ErrorCode, result.Phase)
+		}
+	case <-time.After(60 * time.Second):
+		t.Fatal("the landing never finished")
+	}
 }
 
 // A session this runner is driving is never a candidate, whatever the server would say about it
