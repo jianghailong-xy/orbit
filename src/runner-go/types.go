@@ -543,6 +543,11 @@ type IntegrationJobCommand struct {
 	Automatic       bool                   `json:"automatic,omitempty"`
 	Checks          []IntegrationCheckSpec `json:"checks"`
 	CancelRequested bool                   `json:"cancelRequested"`
+	// scratchRoot is where this job stages its throwaway worktree; empty means the runner's
+	// worktreesDir. It is never on the wire and no control plane sets it: it exists so a test
+	// that runs in parallel — and so cannot set ORBIT_HOME for the whole process — can give each
+	// case a root of its own.
+	scratchRoot string
 }
 
 // IntegrationCheckSpec is one command to run on the combined tree before anything is pushed.
