@@ -963,8 +963,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	operationsInFlight := func() int { return heartbeatOps.inFlight() + install.inFlight() }
 	// The heartbeat's operations are stopped when the stop's budget for them runs out
 	// (shutdownSequence), not when the claim loop ends; what is handed back then is sent until the
-	// stop's deadline.
-	opsCtx, interruptOps := context.WithCancel(context.Background())
+	// stop's deadline. The cause says it was THIS runner stopping, which is a different fact from a
+	// landing cancelled on the control plane's request (integrate.go's context causes).
+	opsCtx, stopOps := context.WithCancelCause(context.Background())
+	interruptOps := func() { stopOps(errIntegrationInterrupted) }
 	defer interruptOps()
 	handBackCtx, stopHandBacks := context.WithCancel(context.Background())
 	defer stopHandBacks()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,14 @@ import (
 // (docs/project-integration-line-contract.md §2.3 J-T2). Its apiserver twin is
 // INTEGRATION_JOB_CLAIM in src/apiserver/src/projects/project-integration-job.ts.
 const integrationJobCapabilityV1 = "integration-job/v1"
+
+// The capability that says this runner speaks the periodic progress protocol
+// (docs/project-integration-line-contract.md §2.2 J-T4): a report inside every 30 seconds while it
+// works, a synchronous phase = PUSH report before it pushes, and a stop request read off every
+// answer. A claim made by a runner that declared it records progress_protocol = v2; every other
+// claim is legacy and keeps the old shape. Its apiserver twin is INTEGRATION_PROGRESS_V2 in
+// src/apiserver/src/projects/project-integration-job.ts.
+const integrationProgressV2Capability = "integration-progress/v2"
 
 // The capability that says this runner honours an automatic landing's one extra rule (§3.3 M-T12):
 // land only onto the upstream tip the check ran against, and hand the candidate back untouched when
@@ -65,9 +74,47 @@ const integrationOutputTail = 16 * 1024
 // checkout's refs at once.
 var integrationLocks sync.Map
 
-func integrationLock(repoRoot, targetRef string) *sync.Mutex {
-	actual, _ := integrationLocks.LoadOrStore(repoRoot+"\x00"+targetRef, &sync.Mutex{})
-	return actual.(*sync.Mutex)
+func integrationLock(repoRoot, targetRef string) *integrationLocalLock {
+	actual, _ := integrationLocks.LoadOrStore(repoRoot+"\x00"+targetRef, &integrationLocalLock{token: make(chan struct{}, 1)})
+	return actual.(*integrationLocalLock)
+}
+
+// integrationLocalLock is a mutex a waiting job can give up on. A v2 claim reports step =
+// WAITING_LOCAL_LOCK while it waits and must stop within 30 seconds of a cancellation (§2.2 J-T4),
+// which a sync.Mutex cannot do: its Lock has no door for the context.
+//
+// One token in a one-slot channel: sending takes the lock, receiving frees it.
+type integrationLocalLock struct {
+	token chan struct{}
+}
+
+func (l *integrationLocalLock) Lock() {
+	l.token <- struct{}{}
+}
+
+// LockContext takes the lock, or answers false when ctx ended first: a cancelled claim stops the
+// job here rather than waiting for the job ahead of it.
+func (l *integrationLocalLock) LockContext(ctx context.Context) bool {
+	select {
+	case l.token <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (l *integrationLocalLock) Unlock() {
+	<-l.token
+}
+
+// TryLock answers whether the lock is free right now, without waiting.
+func (l *integrationLocalLock) TryLock() bool {
+	select {
+	case l.token <- struct{}{}:
+		return true
+	default:
+		return false
+	}
 }
 
 // integrationResult is what one job came to, in the shape the report sends.
@@ -101,6 +148,10 @@ type integrationResult struct {
 	// (runIntegrationJobUntil): it pushed nothing, so it is handed back rather than answered, and
 	// Phase says where it was. Never part of a report.
 	Interrupted bool
+	// Stopped is a job whose claim the control plane no longer has: a progress report was refused
+	// 409 STALE_CLAIM, 409 ALREADY_FINAL or 404 (§2.2 J-T4). The job kills what it is running and
+	// reports nothing — there is no claim left to answer — and is not handed back either.
+	Stopped bool
 }
 
 // integrationReporter is what runIntegrationJob tells about each step it reaches. The runloop
@@ -128,6 +179,24 @@ func runIntegrationJob(cmd IntegrationJobCommand, report integrationReporter) in
 // every other exit. Git steps are not cut short, and a job whose checks have passed goes on to its
 // push and its verification: those take seconds, and finishing them is cheaper than doing it all again.
 func runIntegrationJobUntil(stop context.Context, cmd IntegrationJobCommand, report integrationReporter) integrationResult {
+	return runIntegrationJobUntilWithProgress(stop, cmd, report, nil)
+}
+
+// integrationProgressSender is one report to the control plane: the transport's POST, or a test's
+// stand-in. It takes a context because a report being sent when the job ends is abandoned rather
+// than waited on.
+type integrationProgressSender func(ctx context.Context, req IntegrationJobProgressRequest) (*IntegrationJobProgressResponse, error)
+
+// runIntegrationJobUntilWithProgress is runIntegrationJobUntil with the v2 progress protocol
+// (§2.2 J-T4). sender is nil for a legacy claim and for every caller that is not the runloop; a job
+// carrying reportBeforePush then reports every 25 seconds while it waits for the local lock, runs
+// the tree's recipe and runs its checks, reads a stop request off every answer, and asks
+// synchronously before it pushes.
+//
+// The job's own context is a CHILD of stop with a cause (context.WithCancelCause), because the two
+// ways a job ends early are not the same fact: the runner stopping hands the claim back to be run
+// again (J-T11), while a cancellation the control plane asked for is answered CANCELLED (J-T12).
+func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJobCommand, report integrationReporter, sender integrationProgressSender) integrationResult {
 	if cmd.CancelRequested {
 		return integrationResult{State: "CANCELLED", Phase: "FETCH"}
 	}
@@ -143,8 +212,21 @@ func runIntegrationJobUntil(stop context.Context, cmd IntegrationJobCommand, rep
 			"detail": fmt.Sprintf("%s is not a git checkout: %v", workDir, err),
 		})
 	}
+	jobCtx, cancelJob := context.WithCancelCause(stop)
+	defer cancelJob(nil)
+	var progress *integrationProgress
+	if cmd.ReportBeforePush && sender != nil {
+		progress = newIntegrationProgress(jobCtx, cancelJob, cmd, sender)
+		defer progress.close()
+	}
+	// The local lock is what a second job of this process waits on; v2 says so while it waits.
 	lock := integrationLock(repoRoot, cmd.TargetRef)
-	lock.Lock()
+	if progress != nil {
+		progress.beginStep("FETCH", "WAITING_LOCAL_LOCK", nil, nil)
+	}
+	if !lock.LockContext(jobCtx) {
+		return integrationStoppedResult(jobCtx, "FETCH")
+	}
 	defer lock.Unlock()
 
 	scratch := integrationScratchPath(cmd)
@@ -169,13 +251,20 @@ func runIntegrationJobUntil(stop context.Context, cmd IntegrationJobCommand, rep
 		// worth trying again inside a single job is losing a race for the ref it is writing.
 		one = promoteOnce
 	}
+	reached := report
+	if progress != nil {
+		reached = progress.phaseReached
+	}
 	var last integrationResult
 	for round := 0; round <= integrationRefetchRounds; round++ {
-		if stop.Err() != nil {
-			return integrationResult{Interrupted: true, Phase: "FETCH"}
+		if jobCtx.Err() != nil {
+			return integrationStoppedResult(jobCtx, "FETCH")
+		}
+		if progress != nil {
+			progress.setRound(round + 1)
 		}
 		removeIntegrationWorktree(repoRoot, scratch)
-		last = one(stop, cmd, repoRoot, scratch, report)
+		last = one(jobCtx, cmd, repoRoot, scratch, reached, progress)
 		// The one thing worth doing again inside a single job: the target moved between the check
 		// and the push, so the tree that was tested is no longer the tree that would land. Re-read
 		// the refs and re-run the checks on the new combination (§2.5 J5).
@@ -190,7 +279,7 @@ func runIntegrationJobUntil(stop context.Context, cmd IntegrationJobCommand, rep
 // integrateOnce is one pass over the steps: fetch, absorb upstream, rebase or merge, check, push,
 // verify. Split out so a lost push race can repeat the whole of it against fresh tips rather than
 // patching up half-finished state.
-func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scratch string, report integrationReporter) integrationResult {
+func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scratch string, report integrationReporter, progress *integrationProgress) integrationResult {
 	remote := cmd.RemoteName
 	if remote == "" {
 		remote = "origin"
@@ -402,18 +491,18 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 		// The tree the checks are about to run in gets its own environment recipe first. A tree
 		// that could not be prepared has measured nothing, so it stops the job instead of letting
 		// the checks fail for a reason that is not the work's.
-		if err := prepareIntegrationTree(stop, scratch); err != nil {
-			if errors.Is(err, errIntegrationInterrupted) {
-				return integrationResult{Interrupted: true, Phase: "CHECK"}
+		if err := prepareIntegrationTree(stop, scratch, progress); err != nil {
+			if stopped, ok := integrationStopResult(err, "CHECK"); ok {
+				return stopped
 			}
 			markUnprepared(&result, err)
 			return result
 		}
 	}
-	for _, spec := range cmd.Checks {
-		outcome, interrupted := runIntegrationCheckUntil(stop, scratch, spec)
-		if interrupted {
-			return integrationResult{Interrupted: true, Phase: "CHECK"}
+	for index, spec := range cmd.Checks {
+		outcome, stopErr := runIntegrationCheckTracked(stop, scratch, spec, index+1, len(cmd.Checks), progress)
+		if stopErr != nil {
+			return integrationStepEnded(stopErr, "CHECK")
 		}
 		result.Checks = append(result.Checks, outcome)
 		if outcome.ExitCode == nil || *outcome.ExitCode != spec.ExpectedExitCode {
@@ -446,6 +535,23 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 
 	// ── J-S6 PUSH ─────────────────────────────────────────────────────────────────────────────
 	report("PUSH", nil)
+	if progress != nil {
+		// §2.2 J-T4's push boundary: a v2 claim asks before it pushes and pushes only on a clear
+		// answer. Nothing about the tree changes between here and the push — the check that would
+		// refuse it (J-S6a) already ran above.
+		switch progress.reportPush(stop) {
+		case integrationPushReportCancelled:
+			return integrationResult{State: "CANCELLED", Phase: "PUSH"}
+		case integrationPushReportStopped:
+			return integrationResult{Stopped: true, Phase: "PUSH"}
+		case integrationPushReportInterrupted:
+			return integrationResult{Interrupted: true, Phase: "PUSH"}
+		case integrationPushReportUnreachable:
+			return errorResult("PUSH", "PUSH_REPORT_UNREACHABLE", map[string]any{
+				"detail": "the synchronous PUSH report could not be delivered within the lease window; nothing was pushed",
+			})
+		}
+	}
 	// mergeLock, not only the per-target lock above: this is the same repository root's refs that
 	// a session's own "merge to main" moves, and the two must not interleave.
 	mergeLock.Lock()
@@ -565,7 +671,7 @@ func sourceCarriesAnEarlierAbsorb(dir, sourceSha, targetSha, upstreamSha string)
 // rather than a merge that carries it, which is what "the same commits on main, no merge" means to a
 // person reading the log. Both are held to the same rule afterwards: what lands is the tree that
 // passed the checks, or nothing lands.
-func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scratch string, report integrationReporter) integrationResult {
+func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scratch string, report integrationReporter, progress *integrationProgress) integrationResult {
 	remote := cmd.RemoteName
 	if remote == "" {
 		remote = "origin"
@@ -708,18 +814,18 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 			report("CHECK", nil)
 			// M-S3's checks run on the same kind of tree J-S5's do, and need the same recipe: a
 			// promotion of a TASK_BRANCH runs the task's own acceptance command (M-F2).
-			if err := prepareIntegrationTree(stop, scratch); err != nil {
-				if errors.Is(err, errIntegrationInterrupted) {
-					return integrationResult{Interrupted: true, Phase: "CHECK"}
+			if err := prepareIntegrationTree(stop, scratch, progress); err != nil {
+				if stopped, ok := integrationStopResult(err, "CHECK"); ok {
+					return stopped
 				}
 				markUnprepared(&result, err)
 				return result
 			}
 		}
-		for _, spec := range cmd.Checks {
-			outcome, interrupted := runIntegrationCheckUntil(stop, scratch, spec)
-			if interrupted {
-				return integrationResult{Interrupted: true, Phase: "CHECK"}
+		for index, spec := range cmd.Checks {
+			outcome, stopErr := runIntegrationCheckTracked(stop, scratch, spec, index+1, len(cmd.Checks), progress)
+			if stopErr != nil {
+				return integrationStepEnded(stopErr, "CHECK")
 			}
 			result.Checks = append(result.Checks, outcome)
 			if outcome.ExitCode == nil || *outcome.ExitCode != spec.ExpectedExitCode {
@@ -745,6 +851,22 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 		return result
 	}
 	report("PUSH", nil)
+	if progress != nil {
+		// M-S4's synchronous report, the same rule as J-S6's (§2.2 J-T4): a v2 claim asks before it
+		// pushes and pushes only on a clear answer.
+		switch progress.reportPush(stop) {
+		case integrationPushReportCancelled:
+			return integrationResult{State: "CANCELLED", Phase: "PUSH"}
+		case integrationPushReportStopped:
+			return integrationResult{Stopped: true, Phase: "PUSH"}
+		case integrationPushReportInterrupted:
+			return integrationResult{Interrupted: true, Phase: "PUSH"}
+		case integrationPushReportUnreachable:
+			return errorResult("PUSH", "PUSH_REPORT_UNREACHABLE", map[string]any{
+				"detail": "the synchronous PUSH report could not be delivered within the lease window; nothing was pushed",
+			})
+		}
+	}
 	mergeLock.Lock()
 	// The same push for both kinds, and it is a fast-forward either way: a merge commit and a rebased
 	// commit both carry the upstream tip as an ancestor. What differs is the commit being pushed, not
@@ -839,7 +961,10 @@ func conflictPaths(dir string) []string {
 
 // integrationPush moves the target ref to `tested`, and only forwards: no --force, and the local
 // authority spelling passes the expected old value so the update is refused if it moved.
-func integrationPush(repoRoot, scratch, remote, targetRef, tested, expectedBefore string, local bool) error {
+//
+// A variable so a test can watch whether a push was attempted at all: the one thing the synchronous
+// PUSH report has to prevent when its answer is a stop (§2.2 J-T4).
+var integrationPush = func(repoRoot, scratch, remote, targetRef, tested, expectedBefore string, local bool) error {
 	if local {
 		_, err := git(repoRoot, "update-ref", targetRef, tested, expectedBefore)
 		return err
@@ -898,7 +1023,10 @@ const integrationPrepareTimeout = 10 * time.Minute
 //
 // stop is the runner's own stop (runIntegrationJobUntil): when it ends, the recipe is ended with its
 // whole process tree and errIntegrationInterrupted is answered, which is not a fact about the tree.
-func prepareIntegrationTree(stop context.Context, scratch string) error {
+//
+// progress is the v2 claim's reporter (§2.2 J-T4) and nil for a legacy one: the recipe is the long
+// step such a claim says it is on (step = PREPARE) and whose output silence it reports.
+func prepareIntegrationTree(stop context.Context, scratch string, progress *integrationProgress) error {
 	script := filepath.Join(scratch, filepath.FromSlash(integrationPrepareScript))
 	if info, err := os.Stat(script); err != nil || info.IsDir() {
 		return nil
@@ -908,19 +1036,24 @@ func prepareIntegrationTree(stop context.Context, scratch string) error {
 	started := time.Now()
 	// The same shell the checks get (`bash -lc`, runner environment): what the recipe lays down has
 	// to be what those commands resolve against, PATH and all.
-	cmd := exec.CommandContext(ctx, "bash", "-lc", "bash "+integrationPrepareScript)
-	cmd.Dir = scratch
-	configureSessionProcessTree(cmd)
-	output, err := cmd.CombinedOutput()
-	if stoppedByTheRunner(ctx, err) {
-		return errIntegrationInterrupted
+	output, runErr, stopErr := runIntegrationCommand(ctx, scratch, "bash "+integrationPrepareScript,
+		func(out *integrationOutput) {
+			if progress != nil {
+				progress.beginStep("CHECK", "PREPARE", nil, out)
+			}
+		})
+	if progress != nil {
+		progress.endStep()
 	}
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	if stopErr != nil {
+		return stopErr
+	}
+	if errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
 		return fmt.Errorf("%s did not finish within %s: %s",
-			integrationPrepareScript, integrationPrepareTimeout, tailOf(string(output), 2000))
+			integrationPrepareScript, integrationPrepareTimeout, tailOf(output.text(), 2000))
 	}
-	if err != nil {
-		return fmt.Errorf("%s failed (%v): %s", integrationPrepareScript, err, tailOf(string(output), 2000))
+	if runErr != nil {
+		return fmt.Errorf("%s failed (%v): %s", integrationPrepareScript, runErr, tailOf(output.text(), 2000))
 	}
 	logln("integration: prepared", scratch, "with", integrationPrepareScript,
 		fmt.Sprintf("in %dms", time.Since(started).Milliseconds()))
@@ -941,14 +1074,78 @@ func markUnprepared(result *integrationResult, err error) {
 }
 
 // errIntegrationInterrupted is what a step answers when the runner's stop ended it
-// (runIntegrationJobUntil): not a fact about the work, so never reported as one.
+// (runIntegrationJobUntil): not a fact about the work, so never reported as one. The claim is handed
+// back (J-T11) and the next process runs the job again.
 var errIntegrationInterrupted = errors.New("the runner is stopping")
 
-// stoppedByTheRunner reports a command that ctx's parent, the runner's stop, ended: its context was
-// cancelled rather than run out of budget, and the process did not exit by itself first — one that
-// did has an answer, and it is reported as any other.
+// errIntegrationCancelled is what a step answers when the control plane asked the job to stop
+// (§2.2 J-T4, J-T12): the process group is killed, nothing is pushed, and the job answers CANCELLED
+// rather than being handed back.
+var errIntegrationCancelled = errors.New("the control plane asked this job to stop")
+
+// errIntegrationClaimLost is what a step answers when a progress report was refused 409
+// STALE_CLAIM, 409 ALREADY_FINAL or 404 (§2.2 J-T4): the claim was taken over, released, abandoned
+// or written down, so there is nobody left to report to — not even a CANCELLED.
+var errIntegrationClaimLost = errors.New("this claim is no longer ours")
+
+// integrationCauseOutcome names the way a job's context ended, when it ended for a reason other
+// than a step's own budget: the three sentinels above, or nil while there is no such cause. A plain
+// cancellation (context.Canceled, or the runner's stop) is the runner stopping.
+func integrationCauseOutcome(ctx context.Context) error {
+	cause := context.Cause(ctx)
+	switch {
+	case cause == nil, errors.Is(cause, context.DeadlineExceeded):
+		return nil
+	case errors.Is(cause, errIntegrationCancelled):
+		return errIntegrationCancelled
+	case errors.Is(cause, errIntegrationClaimLost):
+		return errIntegrationClaimLost
+	default:
+		return errIntegrationInterrupted
+	}
+}
+
+// integrationStoppedResult is the job's answer once its context ended: the cause says which of the
+// three facts it is.
+func integrationStoppedResult(ctx context.Context, phase string) integrationResult {
+	switch integrationCauseOutcome(ctx) {
+	case errIntegrationCancelled:
+		return integrationResult{State: "CANCELLED", Phase: phase}
+	case errIntegrationClaimLost:
+		return integrationResult{Stopped: true, Phase: phase}
+	default:
+		return integrationResult{Interrupted: true, Phase: phase}
+	}
+}
+
+// integrationStopResult turns a step's sentinel error into the job's answer: true when err is one
+// of the three endings, with the result that ending reports.
+func integrationStopResult(err error, phase string) (integrationResult, bool) {
+	switch {
+	case errors.Is(err, errIntegrationCancelled):
+		return integrationResult{State: "CANCELLED", Phase: phase}, true
+	case errors.Is(err, errIntegrationClaimLost):
+		return integrationResult{Stopped: true, Phase: phase}, true
+	case errors.Is(err, errIntegrationInterrupted):
+		return integrationResult{Interrupted: true, Phase: phase}, true
+	}
+	return integrationResult{}, false
+}
+
+// integrationStepEnded is integrationStopResult for a step that only ever answers one of the three
+// endings: the result that ending reports.
+func integrationStepEnded(err error, phase string) integrationResult {
+	if result, ok := integrationStopResult(err, phase); ok {
+		return result
+	}
+	return integrationResult{Interrupted: true, Phase: phase}
+}
+
+// stoppedByTheRunner reports a command that the runner's own stop ended: its context was cancelled
+// by the runner rather than run out of budget or cancelled by the control plane, and the process did
+// not exit by itself first — one that did has an answer, and it is reported as any other.
 func stoppedByTheRunner(ctx context.Context, runErr error) bool {
-	if !errors.Is(ctx.Err(), context.Canceled) || runErr == nil {
+	if integrationCauseOutcome(ctx) != errIntegrationInterrupted || runErr == nil {
 		return false
 	}
 	var exitErr *exec.ExitError
@@ -971,6 +1168,14 @@ func runIntegrationCheck(scratch string, spec IntegrationCheckSpec) IntegrationC
 // the stop: `bash -lc` forks, and a check ended by its parent's PID alone left its children running in
 // the very worktree that is about to be removed.
 func runIntegrationCheckUntil(stop context.Context, scratch string, spec IntegrationCheckSpec) (IntegrationCheckResult, bool) {
+	result, stopErr := runIntegrationCheckTracked(stop, scratch, spec, 1, 1, nil)
+	return result, stopErr != nil
+}
+
+// runIntegrationCheckTracked is runIntegrationCheckUntil with the v2 progress protocol: index and
+// count place this check in the run, and progress carries it, its budget and its output silence to
+// the control plane while the check runs (§2.2 J-T4).
+func runIntegrationCheckTracked(stop context.Context, scratch string, spec IntegrationCheckSpec, index, count int, progress *integrationProgress) (IntegrationCheckResult, error) {
 	budget := time.Duration(spec.TimeoutSeconds) * time.Second
 	if spec.TimeoutSeconds <= 0 {
 		budget = time.Hour
@@ -978,23 +1183,34 @@ func runIntegrationCheckUntil(stop context.Context, scratch string, spec Integra
 	ctx, cancel := context.WithTimeout(stop, budget)
 	defer cancel()
 	started := time.Now()
-	cmd := exec.CommandContext(ctx, "bash", "-lc", spec.Command)
-	cmd.Dir = scratch
-	configureSessionProcessTree(cmd)
-	output, runErr := cmd.CombinedOutput()
+	check := &IntegrationJobCurrentCheck{
+		Name:          spec.Name,
+		Index:         index,
+		Count:         count,
+		BudgetSeconds: int(budget / time.Second),
+		StartedAt:     started.UTC().Format(time.RFC3339Nano),
+	}
+	output, runErr, stopErr := runIntegrationCommand(ctx, scratch, spec.Command, func(out *integrationOutput) {
+		if progress != nil {
+			progress.beginStep("CHECK", "", check, out)
+		}
+	})
+	if progress != nil {
+		progress.endStep()
+	}
 	result := IntegrationCheckResult{
 		Name:             spec.Name,
 		Command:          spec.Command,
 		ExpectedExitCode: spec.ExpectedExitCode,
 		DurationMs:       time.Since(started).Milliseconds(),
-		OutputTail:       tailOf(string(output), integrationOutputTail),
+		OutputTail:       tailOf(output.text(), integrationOutputTail),
 	}
-	if stoppedByTheRunner(ctx, runErr) {
-		return result, true
+	if stopErr != nil {
+		return result, stopErr
 	}
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	if errors.Is(context.Cause(ctx), context.DeadlineExceeded) {
 		result.TimedOut = true
-		return result, false
+		return result, nil
 	}
 	var exitErr *exec.ExitError
 	switch {
@@ -1013,7 +1229,393 @@ func runIntegrationCheckUntil(stop context.Context, scratch string, spec Integra
 		// carries the reason.
 		result.OutputTail = tailOf(result.OutputTail+"\n"+runErr.Error(), integrationOutputTail)
 	}
-	return result, false
+	return result, nil
+}
+
+// integrationOutput is one command's combined stdout and stderr, kept as it is written: the last
+// integrationOutputTail bytes for the result, and — what the v2 progress report needs — when that
+// output last moved and how much of it there has been (§2.2 J-T4).
+//
+// The same model bg_run's tailer reports (`idleMs` in background_job.go), and for the same reason:
+// a silence is only measurable if the writes are seen as they happen, which CombinedOutput does not
+// show — it returns once, at the end. That is also why a command that exits 0 while a child it
+// started still holds the pipe used to come back as a failure (ErrWaitDelay, below).
+type integrationOutput struct {
+	mu        sync.Mutex
+	tail      []byte
+	bytes     int64
+	started   time.Time
+	lastWrite time.Time
+}
+
+func newIntegrationOutput() *integrationOutput {
+	return &integrationOutput{started: time.Now()}
+}
+
+func (o *integrationOutput) Write(p []byte) (int, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.lastWrite = time.Now()
+	o.bytes += int64(len(p))
+	o.tail = append(o.tail, p...)
+	// Trim in chunks rather than on every write, so a chatty check does not copy its tail once
+	// per line; text() answers exactly the last integrationOutputTail bytes either way.
+	if len(o.tail) > 2*integrationOutputTail {
+		o.tail = append([]byte(nil), o.tail[len(o.tail)-integrationOutputTail:]...)
+	}
+	return len(p), nil
+}
+
+// idleMillis is how long this command has produced nothing as of at, never negative: a clock that
+// stepped backwards while output was being written must not report a silence it has not had.
+func (o *integrationOutput) idleMillis(at time.Time) int64 {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	since := o.lastWrite
+	if since.IsZero() {
+		since = o.started
+	}
+	if idle := at.Sub(since); idle > 0 {
+		return idle.Milliseconds()
+	}
+	return 0
+}
+
+func (o *integrationOutput) size() int64 {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.bytes
+}
+
+func (o *integrationOutput) text() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if len(o.tail) <= integrationOutputTail {
+		return string(o.tail)
+	}
+	return string(o.tail[len(o.tail)-integrationOutputTail:])
+}
+
+// runIntegrationCommand runs one command with its output tracked as it is written, and answers what
+// the command came to and, when the job itself is ending, why.
+//
+// ErrWaitDelay IS A NORMAL END. A command that exits 0 while a child it started still holds the
+// output pipe makes Wait run out its WaitDelay and answer exec.ErrWaitDelay; the command succeeded,
+// and the child is not the job's to leave running. The process group is killed after EVERY end — a
+// recipe or a check that started a server or a watcher must not outlive the tree it ran in — and
+// ErrWaitDelay is then reported as the zero exit it is (contract §1.6 V6: a healthy tree or check
+// that leaves a child holding the output is not a failure).
+func runIntegrationCommand(ctx context.Context, dir, command string, onStart func(*integrationOutput)) (*integrationOutput, error, error) {
+	output := newIntegrationOutput()
+	cmd := exec.CommandContext(ctx, "bash", "-lc", command)
+	cmd.Dir = dir
+	configureSessionProcessTree(cmd)
+	cmd.Stdout = output
+	cmd.Stderr = output
+	if onStart != nil {
+		onStart(output)
+	}
+	runErr := cmd.Run()
+	// Normal end or not, what the command left behind in its process group goes now.
+	_ = terminateSessionProcessTree(cmd)
+	if errors.Is(runErr, exec.ErrWaitDelay) {
+		runErr = nil
+	}
+	switch cause := integrationCauseOutcome(ctx); cause {
+	case errIntegrationCancelled, errIntegrationClaimLost:
+		// A stop request is honoured even when the command happened to exit as it arrived: nothing
+		// is pushed after one (§2.2 J-T4).
+		return output, runErr, cause
+	}
+	if stoppedByTheRunner(ctx, runErr) {
+		return output, runErr, errIntegrationInterrupted
+	}
+	return output, runErr, nil
+}
+
+// integrationProgressEvery is how often a v2 claim says it is still working: the contract asks for
+// a report inside every 30 seconds (§2.2 J-T4), and 25 leaves room for one slow answer before the
+// next is due.
+const integrationProgressEvery = 25 * time.Second
+
+// integrationPushReportBudget is how long the synchronous PUSH report is retried before the job
+// gives up and ends ERROR / PUSH_REPORT_UNREACHABLE without pushing (§2.2 J-T4). The claim's lease
+// is ten minutes (INTEGRATION_CLAIM_STALE_MS on the control plane), and a report that cannot be
+// delivered inside one is a claim this process no longer holds.
+const integrationPushReportBudget = 10 * time.Minute
+
+// integrationPushReport is what the synchronous report before a push came to.
+type integrationPushReport int
+
+const (
+	// integrationPushReportClear: 200 and nobody asked this job to stop. The push may go.
+	integrationPushReportClear integrationPushReport = iota
+	// integrationPushReportCancelled: the answer carried cancelRequested. Nothing is pushed and the
+	// job answers CANCELLED (J-T12).
+	integrationPushReportCancelled
+	// integrationPushReportStopped: 409 STALE_CLAIM / ALREADY_FINAL or 404. Nothing is pushed and
+	// nothing is reported: the claim is no longer this process's.
+	integrationPushReportStopped
+	// integrationPushReportInterrupted: the runner itself is stopping. Nothing is pushed and the
+	// claim is handed back (J-T11).
+	integrationPushReportInterrupted
+	// integrationPushReportUnreachable: no answer inside the lease window. Nothing is pushed, and the
+	// job ends ERROR / PUSH_REPORT_UNREACHABLE with its result spooled for the next start.
+	integrationPushReportUnreachable
+)
+
+// integrationProgress is a v2 claim's periodic report (§2.2 J-T4): one ticker goroutine says what
+// step the job is on and how idle its output is, reads the control plane's answer, and ends the job
+// when that answer says to stop. It is what makes a job stoppable within 30 seconds and a long
+// check visibly alive.
+//
+// The job keeps working exactly as it did; the only places it consults this are the ones the
+// contract names — the local lock wait, the tree's recipe, each check, and the synchronous PUSH
+// report.
+type integrationProgress struct {
+	cmd    IntegrationJobCommand
+	send   integrationProgressSender
+	cancel context.CancelCauseFunc
+	// sendCtx is the job's context: a send is abandoned when the job ends, and a cancellation
+	// arriving from the control plane ends the send that carried it.
+	sendCtx   context.Context
+	stopSends context.CancelFunc
+
+	mu        sync.Mutex
+	phase     string
+	step      string
+	round     int
+	check     *IntegrationJobCurrentCheck
+	output    *integrationOutput
+	stepAt    time.Time
+	afterPush bool
+	noted     bool
+
+	done chan struct{}
+	wg   sync.WaitGroup
+}
+
+func newIntegrationProgress(jobCtx context.Context, cancel context.CancelCauseFunc, cmd IntegrationJobCommand, send integrationProgressSender) *integrationProgress {
+	sendCtx, stopSends := context.WithCancel(jobCtx)
+	p := &integrationProgress{
+		cmd: cmd, send: send, cancel: cancel,
+		sendCtx: sendCtx, stopSends: stopSends, done: make(chan struct{}),
+		// A job always starts in FETCH, and a tick that beat the first beginStep must still name
+		// a phase the control plane accepts.
+		phase: "FETCH",
+	}
+	p.wg.Add(1)
+	go p.tick()
+	return p
+}
+
+func (p *integrationProgress) every() time.Duration {
+	if p.cmd.progressEvery > 0 {
+		return p.cmd.progressEvery
+	}
+	return integrationProgressEvery
+}
+
+func (p *integrationProgress) pushBudget() time.Duration {
+	if p.cmd.pushReportBudget > 0 {
+		return p.cmd.pushReportBudget
+	}
+	return integrationPushReportBudget
+}
+
+// tick is the periodic half: it reports whatever the state says, without changing it.
+func (p *integrationProgress) tick() {
+	defer p.wg.Done()
+	ticker := time.NewTicker(p.every())
+	defer ticker.Stop()
+	for {
+		select {
+		case <-p.done:
+			return
+		case <-ticker.C:
+			resp, err := p.send(p.sendCtx, p.request())
+			p.handleAnswer(resp, err)
+		}
+	}
+}
+
+// close ends the ticker and whatever send is in flight, and waits for the goroutine. Called on
+// every exit, so no report outlives its job.
+func (p *integrationProgress) close() {
+	close(p.done)
+	p.stopSends()
+	p.wg.Wait()
+}
+
+// request is what the state says right now, in the shape the progress route takes.
+func (p *integrationProgress) request() IntegrationJobProgressRequest {
+	p.mu.Lock()
+	req := IntegrationJobProgressRequest{
+		ClaimGeneration: p.cmd.ClaimGeneration,
+		LeaseOwner:      p.cmd.LeaseOwner,
+		Phase:           p.phase,
+		Step:            p.step,
+		Round:           p.round,
+	}
+	check := p.check
+	output := p.output
+	stepAt := p.stepAt
+	p.mu.Unlock()
+	if check != nil {
+		current := *check
+		req.Check = &current
+	}
+	if output != nil {
+		idle := output.idleMillis(time.Now())
+		size := output.size()
+		req.OutputIdleMs = &idle
+		req.OutputBytes = &size
+	} else if !stepAt.IsZero() {
+		idle := time.Since(stepAt).Milliseconds()
+		if idle < 0 {
+			idle = 0
+		}
+		req.OutputIdleMs = &idle
+	}
+	return req
+}
+
+// beginStep moves the job onto a named sub-step and says so at once: a step that lasts less than
+// one tick must still be visible, and WAITING_LOCAL_LOCK has to be on the wire before the lock can
+// block.
+func (p *integrationProgress) beginStep(phase, step string, check *IntegrationJobCurrentCheck, output *integrationOutput) {
+	p.mu.Lock()
+	p.phase, p.step, p.check, p.output = phase, step, check, output
+	p.stepAt = time.Now()
+	p.mu.Unlock()
+	resp, err := p.send(p.sendCtx, p.request())
+	p.handleAnswer(resp, err)
+}
+
+// endStep leaves the named sub-step. The next report either names a new one or says none.
+func (p *integrationProgress) endStep() {
+	p.mu.Lock()
+	p.step, p.check, p.output = "", nil, nil
+	p.mu.Unlock()
+}
+
+func (p *integrationProgress) setRound(round int) {
+	p.mu.Lock()
+	p.round = round
+	p.mu.Unlock()
+}
+
+// phaseReached is the step-boundary report, with the moved upstream when a confirmed promotion is
+// redoing its merge on a new tip (M-T7). The PUSH boundary is not sent here: it is synchronous, and
+// reportPush is what asks and waits (§2.2 J-T4).
+func (p *integrationProgress) phaseReached(phase string, moved *IntegrationUpstreamMoved) {
+	p.mu.Lock()
+	// A phase boundary ends whatever named sub-step was in flight: WAITING_LOCAL_LOCK ends when the
+	// lock is taken, and PREPARE and a check end before the next phase is reported.
+	p.phase, p.step, p.check, p.output = phase, "", nil, nil
+	p.stepAt = time.Now()
+	p.mu.Unlock()
+	if phase == "PUSH" {
+		return
+	}
+	req := p.request()
+	req.UpstreamMoved = moved
+	resp, err := p.send(p.sendCtx, req)
+	p.handleAnswer(resp, err)
+}
+
+// handleAnswer reads the stop signal in the other direction. A transient failure is nothing: the
+// next tick says the same thing again. A stop request ends the job's checks with their process
+// groups; a refused claim ends it with nothing left to report.
+func (p *integrationProgress) handleAnswer(resp *IntegrationJobProgressResponse, err error) {
+	if err != nil {
+		if integrationProgressStopSignal(err) {
+			p.cancelWith(errIntegrationClaimLost)
+		}
+		return
+	}
+	if resp == nil || !resp.CancelRequested {
+		return
+	}
+	p.mu.Lock()
+	afterPush := p.afterPush
+	p.mu.Unlock()
+	if !afterPush {
+		// Once this claim is past its push boundary a cancellation is refused upstream (M-T10),
+		// and the result is what happened rather than what was asked (M-T8).
+		p.cancelWith(errIntegrationCancelled)
+	}
+}
+
+// cancelWith ends the job with a cause. The first ending is the one logged: the ticker and a
+// boundary report can both see the same answer.
+func (p *integrationProgress) cancelWith(cause error) {
+	p.mu.Lock()
+	noted := p.noted
+	p.noted = true
+	p.mu.Unlock()
+	if !noted {
+		switch {
+		case errors.Is(cause, errIntegrationCancelled):
+			logln("integration job", p.cmd.JobID,
+				"was asked to stop by the control plane; killing what it is running and answering CANCELLED")
+		case errors.Is(cause, errIntegrationClaimLost):
+			logln("integration job", p.cmd.JobID,
+				"is no longer this process's claim; killing what it is running and reporting nothing")
+		}
+	}
+	p.cancel(cause)
+}
+
+// reportPush is J-S6 / M-S4's synchronous report: phase = PUSH, then wait for the control plane's
+// answer before anything is pushed. It retries only what can clear on its own (a network failure,
+// a 5xx, a timeout); the lease window is its budget, and past it the job ends without pushing.
+func (p *integrationProgress) reportPush(ctx context.Context) integrationPushReport {
+	p.mu.Lock()
+	p.phase, p.step, p.check, p.output = "PUSH", "", nil, nil
+	p.stepAt = time.Now()
+	p.mu.Unlock()
+	started := time.Now()
+	for attempt := 1; ; attempt++ {
+		resp, err := p.send(ctx, p.request())
+		switch {
+		case err == nil && resp != nil && !resp.CancelRequested:
+			p.mu.Lock()
+			p.afterPush = true
+			p.mu.Unlock()
+			return integrationPushReportClear
+		case err == nil:
+			p.cancelWith(errIntegrationCancelled)
+			return integrationPushReportCancelled
+		case integrationProgressStopSignal(err):
+			p.cancelWith(errIntegrationClaimLost)
+			return integrationPushReportStopped
+		case ctx.Err() != nil:
+			switch integrationCauseOutcome(ctx) {
+			case errIntegrationCancelled:
+				return integrationPushReportCancelled
+			case errIntegrationClaimLost:
+				return integrationPushReportStopped
+			}
+			return integrationPushReportInterrupted
+		case time.Since(started) >= p.pushBudget():
+			logln("integration job", p.cmd.JobID,
+				"could not deliver its synchronous PUSH report within the lease window; nothing is pushed:", err)
+			return integrationPushReportUnreachable
+		}
+		wait := integrationResultRetry.wait(attempt)
+		logln("integration job", p.cmd.JobID, fmt.Sprintf("PUSH report not delivered on attempt %d:", attempt),
+			err, "trying again in", wait.Round(100*time.Millisecond))
+		integrationResultRetry.sleep(ctx, wait)
+	}
+}
+
+// integrationProgressStopSignal reports the answers that mean this claim is gone: 409 STALE_CLAIM,
+// 409 ALREADY_FINAL and 404 (§2.2 J-T4). None is retried as a transient error.
+func integrationProgressStopSignal(err error) bool {
+	var httpErr *transportHTTPError
+	return errors.As(err, &httpErr) &&
+		(httpErr.statusCode == http.StatusNotFound || httpErr.statusCode == http.StatusConflict)
 }
 
 // integrationScratchPath is where one job's throwaway worktree is staged: under
@@ -1227,22 +1829,40 @@ func tailOf(s string, n int) string {
 // back instead of answered, with sends bounded by handBack, which outlives stop.
 func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, job IntegrationJobCommand) {
 	logln("integration job", job.JobID, job.Kind, job.SourceRef, "->", job.TargetRef)
-	result := runIntegrationJobUntil(stop, job, func(phase string, moved *IntegrationUpstreamMoved) {
+	// A v2 claim's reports go through one sender that carries the claim fence and reads the answer
+	// (§2.2 J-T4); a legacy claim's phase reports stay exactly as they were — best effort, and the
+	// answer discarded.
+	var sender integrationProgressSender
+	if job.ReportBeforePush {
+		sender = func(ctx context.Context, req IntegrationJobProgressRequest) (*IntegrationJobProgressResponse, error) {
+			req.ClaimGeneration = job.ClaimGeneration
+			req.LeaseOwner = job.LeaseOwner
+			return t.integrationJobProgress(ctx, job.JobID, req)
+		}
+	}
+	result := runIntegrationJobUntilWithProgress(stop, job, func(phase string, moved *IntegrationUpstreamMoved) {
 		// Best effort: the lease renewal matters, the phase is for a reader, and the work carries
 		// on either way. The one report that is more than a phase is `upstreamMoved` — the control
 		// plane moves the promotion to RECHECKING on it (§3.3 M-T7) — and it is best effort too:
 		// the result that follows carries the upstream this job actually merged onto regardless.
-		_ = t.integrationJobProgress(job.JobID, IntegrationJobProgressRequest{
+		_, _ = t.integrationJobProgress(stop, job.JobID, IntegrationJobProgressRequest{
 			ClaimGeneration: job.ClaimGeneration,
 			LeaseOwner:      job.LeaseOwner,
 			Phase:           phase,
 			UpstreamMoved:   moved,
 		})
-	})
+	}, sender)
 	if result.Interrupted {
 		logln("integration job", job.JobID, "stopped in", result.Phase,
 			"because this runner is stopping; nothing was pushed and its worktree is gone, so it is handed back to be run again")
 		handBackIntegrationJob(handBack, t, job)
+		return
+	}
+	if result.Stopped {
+		// §2.2 J-T4: a 409 STALE_CLAIM / ALREADY_FINAL or a 404 means the claim is not this
+		// process's any more. Nothing was pushed, and there is nobody left to report to.
+		logln("integration job", job.JobID, "stopped in", result.Phase,
+			"because its claim is no longer this process's; nothing was pushed and nothing is reported")
 		return
 	}
 	body := IntegrationJobResultRequest{

@@ -85,6 +85,7 @@ func init() {
 		sessionSourcePinV1,
 		codexRateLimitResetCapabilityV1,
 		integrationJobCapabilityV1,
+		integrationProgressV2Capability,
 		promotionAutomaticLandCapabilityV1,
 		codexAccountLoginCapabilityV1,
 		antigravityGoogleLoginCapabilityV1,
@@ -675,11 +676,16 @@ func (t *Transport) mergeResult(sessionID string, b MergeResultRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/merge-result", b, nil, 15*time.Second)
 }
 
-// integrationJobProgress renews a claimed job's lease and records the step it reached. Short
-// timeout and a plain error: a progress report that does not arrive costs nothing but the lease,
-// and the job's own work carries on regardless (docs/project-integration-line-contract.md §2.3).
-func (t *Transport) integrationJobProgress(jobID string, b IntegrationJobProgressRequest) error {
-	return t.do(nil, "POST", "/runner/integration-jobs/"+jobID+"/progress", b, nil, 15*time.Second)
+// integrationJobProgress renews a claimed job's lease and records the step it reached, and answers
+// what the control plane said (§2.2 J-T4). The answer is the stop signal in the other direction:
+// cancelRequested is a stop request, and a 409 or 404 is a claim that is no longer this process's.
+// A legacy claim's calls are best effort and ignore both, as they always have.
+func (t *Transport) integrationJobProgress(ctx context.Context, jobID string, b IntegrationJobProgressRequest) (*IntegrationJobProgressResponse, error) {
+	var out IntegrationJobProgressResponse
+	if err := t.do(ctx, "POST", "/runner/integration-jobs/"+jobID+"/progress", b, &out, 15*time.Second); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // integrationJobRelease hands a claimed job back (contract §2.2 J-T11): released, it is queued for the
