@@ -2,7 +2,11 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Prisma, TaskStatus } from '@prisma/client';
 import {
   uuidToBase62,
+  type IntegrationCheckResult,
+  type IntegrationJobGeneration,
+  type IntegrationJobState,
   type ProjectBranchCandidates,
+  type ProjectIntegrationRead,
   type ProjectIntegrationSettings as SharedProjectIntegrationSettings,
   type ProjectIntegrationView as SharedProjectIntegrationView,
   type ProjectLastMainBranch,
@@ -10,10 +14,15 @@ import {
   type ProjectIntegrationInFlight,
   type ProjectIntegrationJob,
   type ProjectIntegrationCheck,
+  type ProjectLandTask,
+  type ProjectPromotionIntegrationRead,
   type IntegrationJobBlockingReason,
   type IntegrationJobKind,
   type IntegrationJobLiveness,
   type IntegrationJobPhase,
+  type PromotionBlockedReason,
+  type PromotionSourceKind,
+  type PromotionState,
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
@@ -961,6 +970,289 @@ export async function readInFlightJobs(
   jobId?: string,
 ): Promise<ProjectIntegrationJob<Date>[]> {
   return (await readInFlightJobsForProjects(prisma, [projectId], jobId)).get(projectId) ?? [];
+}
+
+/** The page selectors `GET /runner/projects/:id/integration` reserves for the timeline and log
+ *  reads (contract §2.2 J-T4, §2.9 LS6). */
+export interface IntegrationReadSelectors {
+  jobId?: string;
+  claim?: number;
+  round?: number;
+  check?: number;
+  cursor?: string;
+}
+
+/** One merge candidate's row, before its newest jobs are attached. */
+interface PromotionReadRow {
+  promotionId: string;
+  sourceKind: string;
+  sourceRef: string;
+  upstreamRef: string;
+  state: string;
+  blockedReason: string | null;
+  checks: unknown;
+  mergedSha: string | null;
+  mergedAt: Date | null;
+  confirmedByUserId: string | null;
+  confirmedAutomatically: boolean;
+}
+
+/** One `CHECK_PROMOTION` or `LAND_PROMOTION` row, as the candidate read attaches it. */
+interface PromotionJobRow {
+  promotionId: string;
+  id: string;
+  kind: string;
+  generation: number;
+  state: string;
+  phase: string | null;
+  errorCode: string | null;
+  taskId: string | null;
+  taskTitle: string | null;
+  round: number | null;
+  currentCheck: unknown;
+  createdAt: Date;
+  claimedAt: Date | null;
+  heartbeatAt: Date | null;
+  finishedAt: Date | null;
+}
+
+/**
+ * The candidates an agent's integration read lists (§3.2, §3.6): the live ones — a check or a merge
+ * in flight, or a card waiting on its owner — the blocked ones, and the one merged last. Bounded by
+ * the queue and by what failed, never by the project's merge history.
+ *
+ * Each candidate carries its newest `CHECK_PROMOTION` and newest `LAND_PROMOTION` generation, which
+ * is what "the most recent check and merge" is: the newest of each kind, not the newest row overall,
+ * because a candidate's merge follows its check and both are part of the same decision.
+ */
+export async function readProjectPromotionIntegrationViews(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  projectId: string,
+): Promise<ProjectPromotionIntegrationRead<Date>[]> {
+  const candidates = await prisma.$queryRaw<PromotionReadRow[]>(Prisma.sql`
+    WITH active AS (
+      SELECT DISTINCT j."promotion_id"
+        FROM "project_integration_job" j
+       WHERE j."project_id" = ${projectId}::uuid
+         AND j."promotion_id" IS NOT NULL
+         AND j."state" IN ('QUEUED', 'RUNNING')
+    ),
+    last_merged AS (
+      SELECT p."id"
+        FROM "project_promotion" p
+       WHERE p."project_id" = ${projectId}::uuid
+         AND p."state" = 'MERGED'
+       ORDER BY p."merged_at" DESC NULLS LAST, p."id" DESC
+       LIMIT 1
+    )
+    SELECT p."id" AS "promotionId", p."source_kind" AS "sourceKind",
+           p."source_ref" AS "sourceRef", p."upstream_ref" AS "upstreamRef",
+           p."state", p."blocked_reason" AS "blockedReason", p."checks",
+           p."merged_sha" AS "mergedSha", p."merged_at" AS "mergedAt",
+           p."confirmed_by_user_id" AS "confirmedByUserId",
+           p."confirmed_automatically" AS "confirmedAutomatically"
+      FROM "project_promotion" p
+     WHERE p."project_id" = ${projectId}::uuid
+       AND (p."state" IN ('CHECKING', 'READY', 'CONFIRMED', 'RECHECKING', 'BLOCKED')
+            OR p."id" IN (SELECT "promotion_id" FROM active)
+            OR p."id" IN (SELECT "id" FROM last_merged))
+     ORDER BY p."created_at" DESC, p."id" DESC`);
+  if (candidates.length === 0) return [];
+
+  const ids = Prisma.join(candidates.map((row) => Prisma.sql`${row.promotionId}::uuid`));
+  const jobs = await prisma.$queryRaw<PromotionJobRow[]>(Prisma.sql`
+    SELECT DISTINCT ON (j."promotion_id", j."kind")
+           j."promotion_id" AS "promotionId", j."id", j."kind", j."generation", j."state",
+           j."phase", j."error_code" AS "errorCode", j."task_id" AS "taskId",
+           t."title" AS "taskTitle", j."round", j."current_check" AS "currentCheck",
+           j."created_at" AS "createdAt", j."claimed_at" AS "claimedAt",
+           j."heartbeat_at" AS "heartbeatAt", j."finished_at" AS "finishedAt"
+      FROM "project_integration_job" j
+      LEFT JOIN "task" t ON t."id" = j."task_id"
+     WHERE j."project_id" = ${projectId}::uuid
+       AND j."promotion_id" IN (${ids})
+     ORDER BY j."promotion_id", j."kind", j."generation" DESC, j."created_at" DESC, j."id" DESC`);
+
+  const byCandidate = new Map<string, { check: PromotionJobRow | null; land: PromotionJobRow | null }>();
+  for (const row of jobs) {
+    const pair = byCandidate.get(row.promotionId) ?? { check: null, land: null };
+    if (row.kind === 'CHECK_PROMOTION') pair.check = row;
+    else if (row.kind === 'LAND_PROMOTION') pair.land = row;
+    byCandidate.set(row.promotionId, pair);
+  }
+
+  return candidates.map((candidate) => {
+    const pair = byCandidate.get(candidate.promotionId);
+    return {
+      promotionId: candidate.promotionId,
+      sourceKind: candidate.sourceKind as PromotionSourceKind,
+      sourceRef: candidate.sourceRef,
+      upstreamRef: candidate.upstreamRef,
+      state: candidate.state as PromotionState,
+      blockedReason: candidate.blockedReason as PromotionBlockedReason | null,
+      checks: Array.isArray(candidate.checks) ? candidate.checks as IntegrationCheckResult[] : [],
+      merged: candidate.mergedSha && candidate.mergedAt
+        ? {
+          sha: candidate.mergedSha,
+          at: candidate.mergedAt,
+          automatic: candidate.confirmedAutomatically,
+          byUserId: candidate.confirmedByUserId,
+        }
+        : null,
+      check: pair?.check ? promotionGenerationOf(pair.check) : null,
+      land: pair?.land ? promotionGenerationOf(pair.land) : null,
+    };
+  });
+}
+
+/** One promotion job row as a generation: the attempt's number, where it got to, the round and the
+ *  check it stopped in, and its error code. Why a stopped candidate blocked is the candidate's own
+ *  `blockedReason`, which travels beside these rows. */
+function promotionGenerationOf(row: PromotionJobRow): IntegrationJobGeneration<Date> {
+  return {
+    jobId: row.id,
+    kind: row.kind as IntegrationJobKind,
+    generation: row.generation,
+    state: row.state as IntegrationJobState,
+    phase: row.phase as IntegrationJobPhase | null,
+    errorCode: row.errorCode,
+    taskId: row.taskId,
+    taskTitle: row.taskTitle,
+    promotionId: row.promotionId,
+    round: row.round,
+    check: currentCheckOf(row.currentCheck),
+    blockingReason: null,
+    queuedAt: row.createdAt,
+    startedAt: row.claimedAt ?? row.createdAt,
+    heartbeatAt: row.heartbeatAt,
+    finishedAt: row.finishedAt,
+  };
+}
+
+/**
+ * `GET /runner/projects/:id/integration` — the agent read of a project's line (§2.2 J-T4, §2.9
+ * LS6), composed from the same reads every other surface uses: `readInFlightJobs` for the queue and
+ * `readProjectLandTaskViews` (and so `readTaskIntegrationViews`) for each task's newest attempt. The
+ * caller has established that the project is the reader's and that the acting session belongs to it.
+ *
+ * `generations` is the three reads folded into one list of current attempts: a job in the queue is
+ * one, each task's newest landing is one, and each candidate's newest check and merge are one.
+ */
+export async function readProjectIntegrationRead(
+  prisma: Pick<PrismaService, '$queryRaw' | 'projectCodebase'>,
+  project: { id: string; title: string; exceptionEscalationSeconds: number },
+  selectors: IntegrationReadSelectors,
+): Promise<ProjectIntegrationRead<Date>> {
+  const [settings, queue, landTasks, promotionViews] = await Promise.all([
+    readProjectCodebase(prisma, project.id).then((row) =>
+      projectIntegrationView(row, project.exceptionEscalationSeconds)),
+    readInFlightJobs(prisma, project.id),
+    readProjectLandTaskViews(prisma, project.id),
+    readProjectPromotionIntegrationViews(prisma, project.id),
+  ]);
+  const promotions = attachQueueFacts(promotionViews, queue);
+  return {
+    projectId: project.id,
+    projectTitle: project.title,
+    line: settings,
+    queue,
+    generations: currentAttempts(queue, landTasks, promotions),
+    landTasks,
+    promotions,
+    pagination: {
+      jobId: selectors.jobId ?? null,
+      claim: selectors.claim ?? null,
+      round: selectors.round ?? null,
+      check: selectors.check ?? null,
+      cursor: selectors.cursor ?? null,
+    },
+  };
+}
+
+/** A candidate's generations get the queue's own facts when they are still in it: one attempt is
+ *  described by one reason, whether the reader reached it through the queue or through its
+ *  candidate. */
+function attachQueueFacts(
+  promotions: ProjectPromotionIntegrationRead<Date>[],
+  queue: ProjectIntegrationJob<Date>[],
+): ProjectPromotionIntegrationRead<Date>[] {
+  const byJob = new Map(queue.map((job) => [job.jobId, job]));
+  const withFacts = (generation: IntegrationJobGeneration<Date> | null) => {
+    if (!generation) return null;
+    const job = byJob.get(generation.jobId);
+    return job
+      ? {
+        ...generation,
+        round: job.round ?? generation.round,
+        check: job.check ?? generation.check,
+        blockingReason: job.blockingReason ?? null,
+      }
+      : generation;
+  };
+  return promotions.map((promotion) => ({
+    ...promotion,
+    check: withFacts(promotion.check),
+    land: withFacts(promotion.land),
+  }));
+}
+
+/** Every current attempt once, in the order the three reads returned them. A job in the queue is
+ *  already there with its blocking reason and its live check; a stopped one is added from the task
+ *  or candidate read that carries it, so no generation is stated twice or in two voices. */
+function currentAttempts(
+  queue: ProjectIntegrationJob<Date>[],
+  landTasks: ProjectLandTask<Date>[],
+  promotions: ProjectPromotionIntegrationRead<Date>[],
+): IntegrationJobGeneration<Date>[] {
+  const byJob = new Map<string, IntegrationJobGeneration<Date>>();
+  for (const job of queue) {
+    byJob.set(job.jobId, {
+      jobId: job.jobId,
+      kind: job.kind,
+      generation: job.generation,
+      state: job.state,
+      phase: job.phase,
+      errorCode: null,
+      taskId: job.taskId,
+      taskTitle: job.taskTitle,
+      promotionId: job.promotionId ?? null,
+      round: job.round ?? null,
+      check: job.check ?? null,
+      blockingReason: job.blockingReason ?? null,
+      queuedAt: job.queuedAt,
+      startedAt: job.startedAt,
+      heartbeatAt: job.heartbeatAt,
+      finishedAt: null,
+    });
+  }
+  for (const { taskId, taskTitle, integration } of landTasks) {
+    const job = integration.landTask;
+    if (!job || byJob.has(job.jobId)) continue;
+    byJob.set(job.jobId, {
+      jobId: job.jobId,
+      kind: 'LAND_TASK',
+      generation: Number(job.generation),
+      state: job.state,
+      phase: job.phase,
+      errorCode: job.errorCode ?? null,
+      taskId,
+      taskTitle,
+      promotionId: null,
+      round: null,
+      check: null,
+      blockingReason: job.blockingReason,
+      queuedAt: job.queuedAt,
+      startedAt: job.startedAt,
+      heartbeatAt: job.heartbeatAt,
+      finishedAt: job.finishedAt,
+    });
+  }
+  for (const promotion of promotions) {
+    for (const generation of [promotion.check, promotion.land]) {
+      if (generation && !byJob.has(generation.jobId)) byJob.set(generation.jobId, generation);
+    }
+  }
+  return [...byJob.values()];
 }
 
 /** The last attempt's check evidence, not the success of its push or the state of the current tip.

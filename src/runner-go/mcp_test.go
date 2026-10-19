@@ -257,6 +257,66 @@ func TestMCPIntegrationAbandonRequiresTheJobAndAReason(t *testing.T) {
 	}
 }
 
+func TestMCPProjectIntegrationGetReadsTheLineUnderTheActingSession(t *testing.T) {
+	if !hasMCPTool(toolDescriptors(false, false), "project_integration_get") {
+		t.Fatalf("project_integration_get missing from the base tools")
+	}
+	var gotMethod, gotPath, gotJob, gotCursor, gotSession string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotJob = r.URL.Query().Get("jobId")
+		gotCursor = r.URL.Query().Get("cursor")
+		gotSession = r.Header.Get("X-Orbit-Session-Id")
+		w.Write([]byte(`{"projectId":"p1","queue":[],"generations":[]}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_integration_get", map[string]interface{}{
+		"projectId": "p1", "jobId": "j1", "cursor": "c1",
+	})
+	if res["isError"] == true {
+		t.Fatalf("project_integration_get returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodGet || gotPath != "/api/runner/projects/p1/integration" {
+		t.Fatalf("project_integration_get hit %s %s", gotMethod, gotPath)
+	}
+	// The page selectors travel as the query the server reserved them under.
+	if gotJob != "j1" || gotCursor != "c1" {
+		t.Fatalf("the page selectors sent = jobId %q, cursor %q", gotJob, gotCursor)
+	}
+	// The acting session is the second half of the gate: the line is read as a session in the
+	// project, and the server checks it against the project's own membership.
+	if gotSession != "coordinator" {
+		t.Fatalf("the session header = %q", gotSession)
+	}
+}
+
+func TestMCPProjectIntegrationGetRequiresAProjectAndASession(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	for name, mcp := range map[string]*mcpServer{
+		"no project": {taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")},
+		"no session": {taskID: "t1", agentID: "a1", t: NewTransport(srv.URL, "tok")},
+	} {
+		args := map[string]interface{}{}
+		if name != "no project" {
+			args["projectId"] = "p1"
+		}
+		if res := mcp.callTool("project_integration_get", args); res["isError"] != true {
+			t.Errorf("%s was accepted: %#v", name, res)
+		}
+	}
+	if called {
+		t.Fatal("the read was sent without the project and the session it needs")
+	}
+}
+
 func TestMCPConfirmationReviewToolsPostTheInputUnderTheReviewingSession(t *testing.T) {
 	for _, tool := range []string{"task_confirmation_review", "task_confirmation_return"} {
 		if !hasMCPTool(toolDescriptors(false, false), tool) {

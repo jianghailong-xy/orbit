@@ -1320,6 +1320,42 @@ func (t *Transport) getProject(id string) (json.RawMessage, error) {
 	return out, err
 }
 
+// getProjectIntegration reads a project's integration line as a session in the project (contract
+// §2.2 J-T4, §2.9 LS6): the queue, the three job kinds, why each waits, each task's newest landing
+// and each merge candidate's newest check and merge. READ ONLY.
+//
+// The session header is the authority the server checks against project membership; jobId and
+// cursor are the page selectors the timeline and check-log reads will use, reserved by revision 12.
+// This is the door that replaces a coordinator querying the production database: the alternative to
+// calling it is not a smaller answer, it is an ungoverned one.
+func (t *Transport) getProjectIntegration(sessionID, id, jobID, cursor string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("reading a project's integration line needs a session: it is read as a session in the project")
+	}
+	if jobID != "" {
+		if err := validatePathSegmentID(jobID); err != nil {
+			return nil, err
+		}
+	}
+	query := url.Values{}
+	if jobID != "" {
+		query.Set("jobId", jobID)
+	}
+	if cursor != "" {
+		query.Set("cursor", cursor)
+	}
+	path := "/runner/projects/" + url.PathEscape(id) + "/integration"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "GET", path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // getTaskAttribution reads unit L7's attribution boundary for one task: the project the work
 // counts towards (title, Base62 id, status), where it was NOTICED (evidence, and labelled as
 // evidence — §3 SC7 is explicit that finding work somewhere grants no authority to write there),
