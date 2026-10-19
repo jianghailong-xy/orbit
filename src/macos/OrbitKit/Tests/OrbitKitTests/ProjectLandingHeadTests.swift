@@ -150,21 +150,21 @@ final class ProjectLandingHeadTests: XCTestCase {
     func testTheFiveReadingsDrawTheStepClockAndTheServersLiveness() {
         XCTAssertEqual(v6(liveness: "LIVE", check: acceptance).head,
                        ProjectPage.LandingHead(right: "1m 50s of 60m", isClock: true,
-                                               detail: "checking · claim 1 · round 1 of 3 · output 6s ago"))
+                                               detail: "checking · output 6s ago · claim 1 · round 1 of 3"))
         XCTAssertEqual(v6(liveness: "QUIET", check: acceptance, outputAgo: 840.5).head,
                        ProjectPage.LandingHead(right: "1m 50s of 60m", isClock: true,
-                                               detail: "checking · claim 1 · round 1 of 3 · no output for 14m · within its 60m budget"))
+                                               detail: "checking · no output for 14m · within its 60m budget · claim 1 · round 1 of 3"))
         // SILENT freezes the clock at the runner's last word and stops the ring; LEGACY keeps the
         // clock but says why its quiet is not a stall, with no freshness to misread.
         let silent = v6(liveness: "SILENT", check: acceptance, stepAgo: 600.5, heartbeatAgo: 240.5)
         XCTAssertEqual(silent.head,
                        ProjectPage.LandingHead(right: "6m 0s of 60m", isClock: true,
-                                               detail: "checking · claim 1 · round 1 of 3 · no word from runner wikova for 4m"))
+                                               detail: "checking · no word from runner wikova for 4m · claim 1 · round 1 of 3"))
         XCTAssertFalse(silent.running)
         let legacy = v6(liveness: "LEGACY", check: acceptance, stepAgo: 720.5, heartbeatAgo: 720.5)
         XCTAssertEqual(legacy.head,
                        ProjectPage.LandingHead(right: "12m 0s of 60m", isClock: true,
-                                               detail: "checking · claim 1 · round 1 of 3 · reports only between steps"))
+                                               detail: "checking · reports only between steps · claim 1 · round 1 of 3"))
         XCTAssertFalse(legacy.head.detail.contains("Updated"))
         XCTAssertTrue(legacy.running)
         // LEASE_EXPIRED is the server's one timeout, worded as main words it.
@@ -177,12 +177,12 @@ final class ProjectLandingHeadTests: XCTestCase {
     func testEachKindSaysItsOwnWordAndOnlyAMergeCheckCarriesTheUsualDuration() {
         let check = v6(kind: "CHECK_PROMOTION", liveness: "LIVE", check: mergeCheck, typicalMs: 18 * 60_000)
         XCTAssertEqual(check.word, "Merge check")
-        XCTAssertEqual(check.head.detail, "checking · usually ~18m · claim 1 · round 1 of 3 · output 6s ago")
+        XCTAssertEqual(check.head.detail, "checking · output 6s ago · usually ~18m · claim 1 · round 1 of 3")
         let merge = v6(kind: "LAND_PROMOTION", liveness: "LIVE", check: mergeCheck, typicalMs: 18 * 60_000)
         XCTAssertEqual(merge.word, "Merge to main")
         // A task's own acceptance command has no usual duration.
         XCTAssertEqual(v6(liveness: "LIVE", check: acceptance).head.detail,
-                       "checking · claim 1 · round 1 of 3 · output 6s ago")
+                       "checking · output 6s ago · claim 1 · round 1 of 3")
     }
 
     func testATakeoverNamesTheFirstStartTheClaimRowStillCarries() {

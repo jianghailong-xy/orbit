@@ -557,25 +557,12 @@ function landingLiveness(
       : (readAt ?? now);
   const stepClock = landingClock(Number.isFinite(stepStart) ? Math.max(0, elapsedAt - stepStart) : 0);
   const budget = job.check ? Math.round(job.check.budgetSeconds / 60) : null;
-  const clauses: string[] = [];
-  if (job.check?.name === 'MERGE_CHECK' && job.typicalMs != null) {
-    clauses.push(`${LANDING_LIVENESS_WORDS.USUALLY} ~${Math.round(job.typicalMs / 60_000)}m`);
-  }
-  if (typeof job.claim === 'number' && job.claim >= 1) {
-    clauses.push(`${LANDING_LIVENESS_WORDS.CLAIM} ${job.claim}`);
-    if (job.round != null) {
-      clauses.push(`${LANDING_LIVENESS_WORDS.ROUND} ${job.round}`
-        + (job.check ? ` ${LANDING_LIVENESS_WORDS.OF} ${job.check.count}` : ''));
-    }
-  }
-  if (typeof job.claim === 'number' && job.claim > 1 && Number.isFinite(Date.parse(job.startedAt))) {
-    const first = Date.parse(firstStartedAt ?? '');
-    clauses.push(Number.isFinite(first)
-      ? `${LANDING_LIVENESS_WORDS.TAKEN_OVER} ${landingClockTime(job.startedAt)} · `
-        + `${LANDING_LIVENESS_WORDS.FIRST_STARTED} ${landingClockTime(firstStartedAt!)}`
-      : `${LANDING_LIVENESS_WORDS.TAKEN_OVER} ${landingClockTime(job.startedAt)}`);
-  }
   const minutes = (at: number): number => Math.max(0, Math.floor((now - at) / 60_000));
+  // The liveness sentence leads the line, right after the step word: the narrow cards (the
+  // sessions page's Landing card, the 360 dp Android card) elide everything past it, and the board
+  // says the liveness there — "checking · output 1s ago" (v4 04 and 07). The claim, round and the
+  // usual duration follow it and are read in full on the wider rows.
+  const clauses: string[] = [];
   if (word === 'LIVE') {
     if (Number.isFinite(outputMoved)) {
       clauses.push(`${lowerFirst(LANDING_LIVENESS_WORDS.OUTPUT)} ${Math.max(0, Math.round((now - outputMoved) / 1000))}s ago`);
@@ -595,6 +582,23 @@ function landingLiveness(
     clauses.push(`${who} for ${minutes(since)}m`);
   } else if (word === 'LEGACY') {
     clauses.push(lowerFirst(LANDING_LIVENESS_WORDS.REPORTS_ONLY_BETWEEN_STEPS));
+  }
+  if (job.check?.name === 'MERGE_CHECK' && job.typicalMs != null) {
+    clauses.push(`${LANDING_LIVENESS_WORDS.USUALLY} ~${Math.round(job.typicalMs / 60_000)}m`);
+  }
+  if (typeof job.claim === 'number' && job.claim >= 1) {
+    clauses.push(`${LANDING_LIVENESS_WORDS.CLAIM} ${job.claim}`);
+    if (job.round != null) {
+      clauses.push(`${LANDING_LIVENESS_WORDS.ROUND} ${job.round}`
+        + (job.check ? ` ${LANDING_LIVENESS_WORDS.OF} ${job.check.count}` : ''));
+    }
+  }
+  if (typeof job.claim === 'number' && job.claim > 1 && Number.isFinite(Date.parse(job.startedAt))) {
+    const first = Date.parse(firstStartedAt ?? '');
+    clauses.push(Number.isFinite(first)
+      ? `${LANDING_LIVENESS_WORDS.TAKEN_OVER} ${landingClockTime(job.startedAt)} · `
+        + `${LANDING_LIVENESS_WORDS.FIRST_STARTED} ${landingClockTime(firstStartedAt!)}`
+      : `${LANDING_LIVENESS_WORDS.TAKEN_OVER} ${landingClockTime(job.startedAt)}`);
   }
   return { clock: budget === null ? stepClock : `${stepClock} ${LANDING_LIVENESS_WORDS.OF} ${budget}m`, clauses, ticking };
 }

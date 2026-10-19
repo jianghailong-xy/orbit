@@ -205,12 +205,12 @@ class ProjectLandingCardTest {
             put("inFlightJobs", JsonArray(listOf(Json.parseToJsonElement(v6(liveness).toString()))))
         } }
         val card = ProjectPage.landingCard(view("LIVE"), now, now, false)!!
-        val expected = LandingHead("1m 50s of 60m", true, "checking · claim 1 · round 1 of 3 · output 6s ago")
+        val expected = LandingHead("1m 50s of 60m", true, "checking · output 6s ago · claim 1 · round 1 of 3")
         assertEquals(expected, card.head)
         assertEquals("1m 50s of 60m", card.clock); assertEquals(true, card.liveness?.ticking)
         assertEquals(expected, ProjectPage.landingJobLines(view("LIVE"), now, now, false).single().line.head)
         // LEGACY keeps its clock but never infers silence; the head says why it is quiet.
-        assertEquals(LandingHead("1m 50s of 60m", true, "checking · claim 1 · round 1 of 3 · reports only between steps"),
+        assertEquals(LandingHead("1m 50s of 60m", true, "checking · reports only between steps · claim 1 · round 1 of 3"),
             ProjectPage.landingCard(view("LEGACY"), now, now, false)!!.head)
         // A server without the fields: the card is the one this file's first test draws, unchanged.
         val older = running(listOf(job("j-c5")))

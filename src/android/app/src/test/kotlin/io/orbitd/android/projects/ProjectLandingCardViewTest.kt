@@ -199,13 +199,13 @@ class ProjectLandingCardViewTest {
      * word, LEGACY says why its quiet is not a stall — each written to a PNG for the evidence. */
     @Test fun theV6LivenessReadingsAreDrawnOnTheHead() {
         val readings = listOf(
-            Triple("LIVE", v6view("LIVE"), "1m 50s of 60m" to "checking · claim 1 · round 1 of 3 · output 6s ago"),
+            Triple("LIVE", v6view("LIVE"), "1m 50s of 60m" to "checking · output 6s ago · claim 1 · round 1 of 3"),
             Triple("QUIET", v6view("QUIET", outputAge = 840), "1m 50s of 60m" to
-                "checking · claim 1 · round 1 of 3 · no output for 14m · within its 60m budget"),
+                "checking · no output for 14m · within its 60m budget · claim 1 · round 1 of 3"),
             Triple("SILENT", v6view("SILENT", step = 600, heartbeat = 240), "6m 0s of 60m" to
-                "checking · claim 1 · round 1 of 3 · no word from runner wikova for 4m"),
+                "checking · no word from runner wikova for 4m · claim 1 · round 1 of 3"),
             Triple("LEGACY", v6view("LEGACY", step = 720, heartbeat = 720), "12m 0s of 60m" to
-                "checking · claim 1 · round 1 of 3 · reports only between steps"))
+                "checking · reports only between steps · claim 1 · round 1 of 3"))
         for ((name, view, copy) in readings) {
             draw(ProjectPage.landingCard(view, now, now, false)!!)
             says("landing-head:right", copy.first)

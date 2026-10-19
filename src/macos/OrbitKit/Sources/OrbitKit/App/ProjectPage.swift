@@ -499,7 +499,30 @@ public enum ProjectPage {
         }
         let stepClock = landingClock(stepStart.map { elapsedAt.timeIntervalSince($0) } ?? 0)
         let budget = check.map { Int((Double($0.budgetSeconds) / 60).rounded()) }
+        func minutes(_ at: Date) -> Int { max(0, Int(now.timeIntervalSince(at)) / 60) }
+        // The liveness sentence leads the line, right after the step word: the narrow cards (the
+        // sessions page's Landing card, the 360 dp Android card) elide everything past it, and the
+        // board says the liveness there — "checking · output 1s ago" (v4 04 and 07). The claim,
+        // round and the usual duration follow it and are read in full on the wider rows.
         var clauses: [String] = []
+        if liveness == "LIVE" {
+            if let outputMoved {
+                clauses.append("\(lowercasingFirst(landingOutput)) "
+                    + "\(max(0, Int(now.timeIntervalSince(outputMoved).rounded())))s ago")
+            }
+        } else if liveness == "QUIET" {
+            if let outputMoved {
+                clauses.append("\(lowercasingFirst(landingNoOutputFor)) \(minutes(outputMoved))m")
+            }
+            if let budget { clauses.append("\(landingWithinIts) \(budget)m \(landingBudget)") }
+        } else if liveness == "SILENT" {
+            let since = heartbeat ?? stepStart ?? now
+            let who = runner.flatMap { $0.isEmpty ? nil : "\(lowercasingFirst(landingNoWordFromRunner)) \($0)" }
+                ?? lowercasingFirst(landingNoWordFromTheRunner)
+            clauses.append("\(who) for \(minutes(since))m")
+        } else if liveness == "LEGACY" {
+            clauses.append(lowercasingFirst(landingReportsOnlyBetweenSteps))
+        }
         if check?.name == "MERGE_CHECK", let typicalMs {
             clauses.append("\(landingUsually) ~\(Int((Double(typicalMs) / 60_000).rounded()))m")
         }
@@ -518,25 +541,6 @@ public enum ProjectPage {
             } else {
                 clauses.append("\(landingTakenOver) \(landingClockTime(claimedAt))")
             }
-        }
-        func minutes(_ at: Date) -> Int { max(0, Int(now.timeIntervalSince(at)) / 60) }
-        if liveness == "LIVE" {
-            if let outputMoved {
-                clauses.append("\(lowercasingFirst(landingOutput)) "
-                    + "\(max(0, Int(now.timeIntervalSince(outputMoved).rounded())))s ago")
-            }
-        } else if liveness == "QUIET" {
-            if let outputMoved {
-                clauses.append("\(lowercasingFirst(landingNoOutputFor)) \(minutes(outputMoved))m")
-            }
-            if let budget { clauses.append("\(landingWithinIts) \(budget)m \(landingBudget)") }
-        } else if liveness == "SILENT" {
-            let since = heartbeat ?? stepStart ?? now
-            let who = runner.flatMap { $0.isEmpty ? nil : "\(lowercasingFirst(landingNoWordFromRunner)) \($0)" }
-                ?? lowercasingFirst(landingNoWordFromTheRunner)
-            clauses.append("\(who) for \(minutes(since))m")
-        } else if liveness == "LEGACY" {
-            clauses.append(lowercasingFirst(landingReportsOnlyBetweenSteps))
         }
         return LandingLiveness(clock: budget.map { "\(stepClock) \(landingOf) \($0)m" } ?? stepClock,
                                clauses: clauses, ticking: ticking)

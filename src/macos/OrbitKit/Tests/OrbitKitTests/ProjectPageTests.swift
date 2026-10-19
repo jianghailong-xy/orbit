@@ -327,7 +327,7 @@ final class ProjectPageTests: XCTestCase {
             inFlightJobs: [job])
         let line = ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now)!
         let head = ProjectPage.LandingHead(right: "1m 50s of 60m", isClock: true,
-                                           detail: "checking · claim 1 · round 1 of 3 · output 6s ago")
+                                           detail: "checking · output 6s ago · claim 1 · round 1 of 3")
         XCTAssertEqual(line.head, head)
         let card = ProjectPage.landingCard(view, now: Self.now, updatedAt: Self.now)!
         XCTAssertEqual(card.head, head)
@@ -346,12 +346,12 @@ final class ProjectPageTests: XCTestCase {
                                            now: Self.now, updatedAt: Self.now)!
         }
         XCTAssertEqual(read("QUIET", output: 840.5).head.detail,
-                       "checking · claim 1 · round 1 of 3 · no output for 14m · within its 60m budget")
+                       "checking · no output for 14m · within its 60m budget · claim 1 · round 1 of 3")
         let silent = read("SILENT", step: 600.5, heartbeat: 240.5)
-        XCTAssertEqual(silent.head.detail, "checking · claim 1 · round 1 of 3 · no word from runner wikova for 4m")
+        XCTAssertEqual(silent.head.detail, "checking · no word from runner wikova for 4m · claim 1 · round 1 of 3")
         XCTAssertFalse(silent.running)
         let legacy = read("LEGACY", step: 720.5, heartbeat: 720.5)
-        XCTAssertEqual(legacy.head.detail, "checking · claim 1 · round 1 of 3 · reports only between steps")
+        XCTAssertEqual(legacy.head.detail, "checking · reports only between steps · claim 1 · round 1 of 3")
         XCTAssertFalse(legacy.head.detail.contains("Updated"))
         XCTAssertTrue(legacy.running)
     }

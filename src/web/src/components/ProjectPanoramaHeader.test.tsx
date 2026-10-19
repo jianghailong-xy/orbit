@@ -952,23 +952,23 @@ describe('§7.2 V6: the head once the server derives the claim’s liveness', ()
     // LIVE: the step's clock against its budget, and output moving.
     expect(line({ liveness: 'LIVE' })).toEqual({
       right: '1m 50s of 60m', isClock: true,
-      detail: `checking · ${usually}claim 1 · round 1 of 3 · output 6s ago`,
+      detail: `checking · output 6s ago · ${usually}claim 1 · round 1 of 3`,
     });
     // QUIET: the heartbeat is fresh and the output is not — the clock still runs.
     expect(line({ liveness: 'QUIET', outputMovedAt: '2026-09-25T13:45:20Z' })).toEqual({
       right: '1m 50s of 60m', isClock: true,
-      detail: `checking · ${usually}claim 1 · round 1 of 3 · no output for 14m · within its 60m budget`,
+      detail: `checking · no output for 14m · within its 60m budget · ${usually}claim 1 · round 1 of 3`,
     });
     // SILENT: no word for four minutes; the clock is frozen at the runner's last word.
     expect(line({ liveness: 'SILENT', heartbeatAt: '2026-09-25T13:55:20Z', stepStartedAt: '2026-09-25T13:50:00Z' })).toEqual({
       right: '5m 20s of 60m', isClock: true,
-      detail: `checking · ${usually}claim 1 · round 1 of 3 · no word from runner wikova for 4m`,
+      detail: `checking · no word from runner wikova for 4m · ${usually}claim 1 · round 1 of 3`,
     });
     // LEGACY: reports only between steps; no freshness, and no silence inferred from 12 quiet minutes.
     const legacy = line({ liveness: 'LEGACY', heartbeatAt: '2026-09-25T13:47:20Z', stepStartedAt: '2026-09-25T13:47:20Z' });
     expect(legacy).toEqual({
       right: '12m 0s of 60m', isClock: true,
-      detail: `checking · ${usually}claim 1 · round 1 of 3 · reports only between steps`,
+      detail: `checking · reports only between steps · ${usually}claim 1 · round 1 of 3`,
     });
     expect(JSON.stringify(legacy)).not.toContain('Update unavailable');
     expect(JSON.stringify(legacy)).not.toContain('Updated 12m ago');
@@ -1027,7 +1027,7 @@ describe('§7.2 V6: the head once the server derives the claim’s liveness', ()
       inFlightJobs: undefined,
     });
     const head = landingHead(landingLine(read, V6_NOW, { updatedAt: V6_NOW })!);
-    expect(head.detail).toBe('checking · claim 1 · round 1 of 3 · reports only between steps');
+    expect(head.detail).toBe('checking · reports only between steps · claim 1 · round 1 of 3');
     expect(JSON.stringify(head)).not.toContain('Update unavailable');
   });
 

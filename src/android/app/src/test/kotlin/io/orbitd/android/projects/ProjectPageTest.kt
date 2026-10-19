@@ -305,17 +305,17 @@ class ProjectPageTest {
     @Test fun theHeadDrawsTheStepClockAgainstItsBudgetAndTheServersLiveness() {
         // LIVE and QUIET: the local clock runs; the step's own clock against its budget is the main number.
         val live = ProjectPage.landingLine(v6View(v6Job("LIVE")), now, now, false)!!
-        assertEquals(LandingHead("1m 50s of 60m", true, "checking · claim 1 · round 1 of 3 · output 6s ago"), live.head)
+        assertEquals(LandingHead("1m 50s of 60m", true, "checking · output 6s ago · claim 1 · round 1 of 3"), live.head)
         val quiet = ProjectPage.landingLine(v6View(v6Job("QUIET", outputMoved = 840)), now, now, false)!!
         assertEquals("1m 50s of 60m", quiet.head.right)
-        assertEquals("checking · claim 1 · round 1 of 3 · no output for 14m · within its 60m budget", quiet.head.detail)
+        assertEquals("checking · no output for 14m · within its 60m budget · claim 1 · round 1 of 3", quiet.head.detail)
         // SILENT: the clock freezes at the runner's last word, and the line says how long it has been.
         val silent = ProjectPage.landingLine(v6View(v6Job("SILENT", stepStarted = 600, heartbeat = 240)), now, now, false)!!
-        assertEquals(LandingHead("6m 0s of 60m", true, "checking · claim 1 · round 1 of 3 · no word from runner wikova for 4m"), silent.head)
+        assertEquals(LandingHead("6m 0s of 60m", true, "checking · no word from runner wikova for 4m · claim 1 · round 1 of 3"), silent.head)
         assertFalse(silent.running)
         // LEGACY: reports only between steps — twelve quiet minutes are not a stall, and there is no freshness to misread.
         val legacy = ProjectPage.landingLine(v6View(v6Job("LEGACY", stepStarted = 720, heartbeat = 720)), now, now, false)!!
-        assertEquals(LandingHead("12m 0s of 60m", true, "checking · claim 1 · round 1 of 3 · reports only between steps"), legacy.head)
+        assertEquals(LandingHead("12m 0s of 60m", true, "checking · reports only between steps · claim 1 · round 1 of 3"), legacy.head)
         assertFalse(legacy.head.detail.contains("Updated"))
         assertTrue(legacy.running)
         // LEASE_EXPIRED: the server's one timeout, worded as main words it.
@@ -328,12 +328,12 @@ class ProjectPageTest {
         val merge = ProjectPage.landingLine(v6View(v6Job("LIVE", kind = "CHECK_PROMOTION", title = null, check = "MERGE_CHECK", typical = 18 * 60_000)),
             now, now, false)!!
         assertEquals("Merge check", merge.word)
-        assertEquals("checking · usually ~18m · claim 1 · round 1 of 3 · output 6s ago", merge.head.detail)
+        assertEquals("checking · output 6s ago · usually ~18m · claim 1 · round 1 of 3", merge.head.detail)
         val promotion = ProjectPage.landingLine(v6View(v6Job("LIVE", kind = "LAND_PROMOTION", title = null, check = "MERGE_CHECK", typical = 18 * 60_000)),
             now, now, false)!!
         assertEquals("Merge to main", promotion.word)
         // A task's own acceptance command has no usual duration: the board gives it to merge checks only.
-        assertEquals("checking · claim 1 · round 1 of 3 · output 6s ago", liveDetail())
+        assertEquals("checking · output 6s ago · claim 1 · round 1 of 3", liveDetail())
     }
 
     private fun liveDetail() = ProjectPage.landingLine(v6View(v6Job("LIVE")), now, now, false)!!.head.detail

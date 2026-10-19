@@ -290,19 +290,11 @@ object ProjectPage {
         }
         val stepClock = landingClock(stepStart?.let { seconds(it, elapsedAt) } ?: 0.0)
         val budget = check?.number("budgetSeconds")?.let { Math.round(it / 60.0).toInt() }
-        val clauses = mutableListOf<String>()
-        if (check?.text("name") == "MERGE_CHECK" && typicalMs != null) clauses += "$landingUsually ~${Math.round(typicalMs / 60_000.0)}m"
-        if (claim != null && claim >= 1) {
-            clauses += "$landingClaim $claim"
-            if (round != null) clauses += "$landingRound $round" + (check?.number("count")?.let { " $landingOf $it" } ?: "")
-        }
-        if (claim != null && claim > 1 && startedAt?.let(ProjectTime::parse) != null) {
-            val claimedAt = ProjectTime.parse(startedAt)!!
-            val first = firstStartedAt?.let(ProjectTime::parse)
-            clauses += if (first != null) "$landingTakenOver ${landingClockTime(claimedAt)} · $landingFirstStarted ${landingClockTime(first)}"
-                else "$landingTakenOver ${landingClockTime(claimedAt)}"
-        }
         fun minutes(at: Instant) = max(0, seconds(at, now).toInt() / 60)
+        // The liveness sentence leads the line, right after the step word: the narrow cards (the sessions page's Landing card,
+        // the 360 dp Android card) elide everything past it, and the board says the liveness there — "checking · output 1s ago"
+        // (v4 04 and 07). The claim, round and the usual duration follow it and are read in full on the wider rows.
+        val clauses = mutableListOf<String>()
         when (liveness) {
             "LIVE" -> if (outputMoved != null) clauses += "${landingOutput.replaceFirstChar { it.lowercase() }} " +
                 "${max(0, Math.round(seconds(outputMoved, now)))}s ago"
@@ -317,6 +309,17 @@ object ProjectPage {
                 clauses += "$who for ${minutes(since)}m"
             }
             "LEGACY" -> clauses += landingReportsOnlyBetweenSteps.replaceFirstChar { it.lowercase() }
+        }
+        if (check?.text("name") == "MERGE_CHECK" && typicalMs != null) clauses += "$landingUsually ~${Math.round(typicalMs / 60_000.0)}m"
+        if (claim != null && claim >= 1) {
+            clauses += "$landingClaim $claim"
+            if (round != null) clauses += "$landingRound $round" + (check?.number("count")?.let { " $landingOf $it" } ?: "")
+        }
+        if (claim != null && claim > 1 && startedAt?.let(ProjectTime::parse) != null) {
+            val claimedAt = ProjectTime.parse(startedAt)!!
+            val first = firstStartedAt?.let(ProjectTime::parse)
+            clauses += if (first != null) "$landingTakenOver ${landingClockTime(claimedAt)} · $landingFirstStarted ${landingClockTime(first)}"
+                else "$landingTakenOver ${landingClockTime(claimedAt)}"
         }
         return LandingLiveness(if (budget != null) "$stepClock $landingOf ${budget}m" else stepClock, clauses, ticking)
     }
