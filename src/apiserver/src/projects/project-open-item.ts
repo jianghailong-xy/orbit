@@ -1582,6 +1582,26 @@ interface IntegrationItemPayload {
     requestedBySessionId?: string | null;
     requestedByUserId?: string | null;
   } | null;
+  /**
+   * The landing session this attempt belongs to (§2.9 LS1), at the top level like
+   * `upstreamMovedCommits` and for the same reason (G6): the delivery text is replayed byte for
+   * byte, and this field is read by the item's card, never by its message.
+   */
+  landingSessionId?: string | null;
+  /** The round inside the claim that failed, from 1, as the v2 reports named it (§2.2 J-T4). Its own
+   *  top-level field, not read by the delivery text. */
+  round?: number | null;
+}
+
+/**
+ * The landing session an item's payload records (§2.9 LS1), or null when it records none — a
+ * payload an older build wrote, a promotion's item that predates the field, a kind that lands
+ * nothing.
+ */
+export function landingSessionIdOf(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const value = (payload as { landingSessionId?: unknown }).landingSessionId;
+  return typeof value === 'string' && value !== '' ? value : null;
 }
 
 /** Longest tail of a check's output a turn carries. The payload holds 16 KiB; a turn is not a log. */
@@ -2341,6 +2361,9 @@ export async function readOpenItemDeliveryCard(
       upstream: branches.upstream[0]!,
       integration: branches.integration[0]!,
     },
+    // The landing the failure came from, when its payload recorded one: the transcript card's
+    // "Open the landing ↗" and the row's `OPEN_LANDING` both reach it.
+    landingSessionId: landingSessionIdOf(item.payload),
   };
 }
 
