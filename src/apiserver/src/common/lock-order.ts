@@ -143,7 +143,7 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_landing, project_promotion, project_task_status_count, project_fuse_episode, project_fuse_held_action',
+    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_task_status_count, project_fuse_episode, project_fuse_held_action',
     modes: 'INSERT/UPDATE/DELETE only',
     why:
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '
@@ -166,6 +166,11 @@ export const LOCK_ORDER = [
       + 'while a settlement takes the canonical `session` (30) → `project_landing` (60) order in '
       + 'its own transaction after the landing/cancel fact committed — so no job gate ever waits '
       + 'on a session lock. '
+      + '`project_integration_job_event` (0438) is the same shape: every fact is appended by the '
+      + 'transaction that already holds or has just written its job row (60), and the two facts '
+      + 'written after a claim statement commits — the claim and the takeover — are one more INSERT '
+      + 'from that committed row in their own transaction. It adds no wait edge of its own, and no '
+      + 'job gate ever waits on a session lock for it (§2.9 LS2). '
       + '`project_task_status_count` (0282) is the same shape one trigger over: the three '
       + '`project_task_status_count_sync` triggers fire on a Task write (50) and UPSERT it here, '
       + 'having already taken the project (40) through `task_project_id_fkey`. It is here rather '

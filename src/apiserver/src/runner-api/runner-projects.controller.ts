@@ -329,6 +329,7 @@ export class RunnerProjectsController {
     @Query('round') round?: string,
     @Query('check') check?: string,
     @Query('cursor') cursor?: string,
+    @Query('timelineCursor') timelineCursor?: string,
   ) {
     const selectors = {
       ...(jobId ? { jobId } : {}),
@@ -336,6 +337,7 @@ export class RunnerProjectsController {
       ...(round === undefined ? {} : { round: RunnerProjectsController.pageNumber('round', round) }),
       ...(check === undefined ? {} : { check: RunnerProjectsController.pageNumber('check', check) }),
       ...(cursor?.trim() ? { cursor: cursor.trim() } : {}),
+      ...(timelineCursor?.trim() ? { timelineCursor: timelineCursor.trim() } : {}),
     };
     return this.projects.integrationForAgent(runner.ownerId, id, sessionId?.trim(), selectors);
   }

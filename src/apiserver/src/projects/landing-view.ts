@@ -9,6 +9,7 @@ import type {
 
 import { PrismaService } from '../prisma/prisma.service';
 import { readInFlightJobs } from './project-integration-line';
+import { readLandingTimeline } from './landing-timeline';
 
 /**
  * The landing view (docs/project-integration-line-contract.md §2.9 LS1, LS6; errata E4):
@@ -37,6 +38,7 @@ export async function readLandingView(
     select: {
       id: true,
       projectId: true,
+      ownerId: true,
       codebaseId: true,
       subject: true,
       taskId: true,
@@ -110,6 +112,10 @@ export async function readLandingView(
     select: { sessionId: true, episode: true, openedAt: true, settledAt: true, settledAs: true },
   });
 
+  // §2.9 LS2/LS4: the ordered timeline — one section per attempt, the facts each recorded, and the
+  // lines derived from the rows that kept the decisions. Read-only and bounded.
+  const timeline = await readLandingTimeline(prisma, landing);
+
   const checks = Array.isArray(job?.checks)
     ? (job!.checks as unknown as Array<Record<string, unknown>>)
     : [];
@@ -158,6 +164,7 @@ export async function readLandingView(
     currentAttempt,
     todos,
     generations,
+    timeline,
   };
 }
 

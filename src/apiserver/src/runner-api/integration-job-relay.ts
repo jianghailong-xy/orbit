@@ -89,6 +89,21 @@ import {
   refileCandidateBehindTheWork,
 } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
+import {
+  abandonedText,
+  appendIntegrationJobEvent,
+  checkFinishedText,
+  checkStartedText,
+  claimedText,
+  handedToText,
+  pushRefusedText,
+  recordCommittedIntegrationJobEvent,
+  releasedText,
+  resultText,
+  roundText,
+  stepText,
+  takenOverText,
+} from '../projects/project-integration-event';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
@@ -256,6 +271,8 @@ interface ClaimedRow {
   progressProtocol: string | null;
   /** The landing subject this attempt belongs to (§2.9 SQL): what the claim's session row is for. */
   landingId: string | null;
+  /** The job's state in the statement that claimed it: RUNNING means this claim is a takeover. */
+  previousState: string;
 }
 
 /**
@@ -292,6 +309,9 @@ export async function dispatchIntegrationJobs(
   // said so is never handed one — it would check a moved main again and merge it, which the
   // Automatic setting does not authorize.
   const landsAutomatically = heartbeat.capabilities?.includes(PROMOTION_AUTOMATIC_LAND) === true;
+  // Resolved once, on the first claim of a beat that has one: the claim's timeline line names the
+  // runner, and a beat that is handed nothing must not pay for a read it will not use.
+  let runnerName: string | null | undefined;
   for (let i = 0; i < INTEGRATION_JOBS_PER_HEARTBEAT; i += 1) {
     const row = await claimOne(prisma, heartbeat.runnerId, heartbeat.leaseOwner, taken, landsAutomatically,
       progressProtocol)
@@ -303,6 +323,17 @@ export async function dispatchIntegrationJobs(
       });
     if (!row) break;
     taken.push(row.serialKey);
+    // §2.9 LS2: the claim and the takeover are the two facts written AFTER the claim statement
+    // commits, in an independent transaction, backfilled from what that statement already decided.
+    // A failure here costs the timeline one line (the reader derives the current claim from the job
+    // row) and never the claim itself.
+    if (runnerName === undefined) {
+      runnerName = await prisma.runner
+        .findFirst({ where: { id: heartbeat.runnerId }, select: { name: true } })
+        .then((runner) => runner?.name ?? null)
+        .catch(() => null);
+    }
+    await backfillClaimEvent(prisma, row, heartbeat, runnerName ?? null, log);
     // §2.9 LS1's compensation point: the claim is committed, so the subject's session row is owed
     // — at the latest before this command is handed out. Only a claimed subject can reach here; a
     // candidate superseded while QUEUED never does. A failure does not cost the runner its command
@@ -437,7 +468,7 @@ async function claimOne(
   const staleBefore = new Date(Date.now() - INTEGRATION_CLAIM_STALE_MS);
   const rows = await prisma.$queryRaw<ClaimedRow[]>(Prisma.sql`
     WITH candidate AS (
-      SELECT c."id"
+      SELECT c."id", c."state"
         FROM "project_integration_job" c
         JOIN "session" s ON s."id" = c."session_id"
         JOIN "workspace" w ON w."id" = s."workspace_id"
@@ -589,9 +620,56 @@ async function claimOne(
       (SELECT p."upstream_sha_checked" FROM "project_promotion" p
         WHERE p."id" = j."promotion_id") AS "upstreamShaChecked",
       (SELECT p."merge_tree_sha" FROM "project_promotion" p
-        WHERE p."id" = j."promotion_id") AS "mergeTreeSha"
+        WHERE p."id" = j."promotion_id") AS "mergeTreeSha",
+      -- What the row was before this statement: RUNNING means the candidate was a silent claim and
+      -- this one takes it over (J-T3). Read from the CTE the UPDATE just consumed, so the claim
+      -- event's claim/takeover distinction is the statement's own fact and not a second reading of
+      -- a row another runner may already have moved.
+      (SELECT c."state" FROM candidate c) AS "previousState"
   `);
   return rows[0] ?? null;
+}
+
+/**
+ * Record the claim the statement just committed (§2.9 LS2): `Claimed by runner … · claim 1` for a
+ * job taken off the queue, `Taken over by a new process … · claim 2` when the row was RUNNING (a
+ * silent claim this process takes over, J-T3). The distinction is the claim statement's own —
+ * `previousState` travels back with the row — never a second reading of a row another runner may
+ * have moved by now.
+ *
+ * Its own transaction, after the claim committed: a failure is logged and costs the timeline one
+ * line, and `readLandingTimeline` derives the current claim from the job row when the event is
+ * missing, so the attempt does not read as unclaimed.
+ */
+async function backfillClaimEvent(
+  prisma: PrismaService,
+  row: ClaimedRow,
+  heartbeat: IntegrationDispatchHeartbeat,
+  runnerName: string | null,
+  log: Logger,
+): Promise<void> {
+  const claim = Number(row.claimGeneration);
+  const takeover = row.previousState === 'RUNNING';
+  try {
+    await recordCommittedIntegrationJobEvent(prisma, {
+      jobId: row.id,
+      key: `claim:${claim}`,
+      kind: takeover ? 'TAKEN_OVER' : 'CLAIMED',
+      claim,
+      phase: 'FETCH',
+      actor: { type: 'RUNNER' },
+      data: {
+        claimGeneration: claim,
+        runnerId: heartbeat.runnerId,
+        runnerName,
+        leaseOwner: heartbeat.leaseOwner,
+        previousState: row.previousState,
+      },
+      text: takeover ? takenOverText(claim, runnerName) : claimedText(claim, runnerName),
+    });
+  } catch (error) {
+    log.warn(`claim event for job ${row.id} not recorded: ${(error as Error)?.message ?? String(error)}`);
+  }
 }
 
 /**
@@ -814,7 +892,28 @@ export async function receiveIntegrationJobProgress(
   ownerId?: string,
 ): Promise<IntegrationJobProgressResponse> {
   const report = progressReport(body);
-  const updated = await prisma.$executeRaw(Prisma.sql`
+  // §2.9 LS2: a step's start, a round's start and a check's start are facts the report carries, and
+  // they are written in the SAME transaction as the renewal that accepts them — a pure renewal (the
+  // pair unchanged) writes the row and no event, which is what "a plain heartbeat is not a timeline
+  // line" means. The fence is the statement's, exactly as before: the row it names is read FOR
+  // UPDATE first so the events can see what the pair WAS, and the update that follows can only
+  // match the id it just locked.
+  await withTransactionRetry(prisma, async (tx) => {
+    const [before] = await tx.$queryRaw<Array<{
+      phase: string | null; step: string | null; round: number | null; currentCheck: unknown;
+      sourceRef: string; upstreamRef: string; targetRef: string;
+    }>>(Prisma.sql`
+      SELECT "phase", "step", "round", "current_check" AS "currentCheck",
+             "source_ref" AS "sourceRef", "upstream_ref" AS "upstreamRef", "target_ref" AS "targetRef"
+        FROM "project_integration_job"
+       WHERE "id" = ${jobId}::uuid
+         AND "runner_id" = ${runnerId}::uuid
+         AND "state" = 'RUNNING'
+         AND "claim_lease_owner" = ${report.leaseOwner}
+         AND "claim_generation" = ${BigInt(report.claimGeneration)}
+       FOR UPDATE`);
+    if (!before) throw await progressRefusal(tx, { jobId, ownerId });
+    await tx.$executeRaw(Prisma.sql`
       UPDATE "project_integration_job"
          SET "heartbeat_at" = now(),
              "phase" = ${report.phase},
@@ -846,12 +945,14 @@ export async function receiveIntegrationJobProgress(
              "source_sha" = COALESCE("source_sha", ${report.sourceSha}::char(40)),
              "target_sha_before" = COALESCE("target_sha_before", ${report.targetShaBefore}::char(40)),
              "updated_at" = now()
-       WHERE "id" = ${jobId}::uuid
-         AND "runner_id" = ${runnerId}::uuid
-         AND "state" = 'RUNNING'
-         AND "claim_lease_owner" = ${report.leaseOwner}
-         AND "claim_generation" = ${BigInt(report.claimGeneration)}`);
-  if (updated === 0) throw await progressRefusal(prisma, { jobId, ownerId });
+       WHERE "id" = ${jobId}::uuid`);
+    await appendProgressEvents(tx, {
+      jobId,
+      runnerId,
+      report,
+      before,
+    });
+  }, loggedRetry(logger, 'integrationJob.progress'));
   // M-T7: the upstream moved after the owner confirmed, so the job is redoing the merge and the
   // checks on the new tip. A progress report rather than a question — the owner confirmed these
   // tasks and these checks, and the checks passing again is the same answer (M5).
@@ -959,6 +1060,94 @@ function reportSha(value: unknown, field: string): string | null {
     throw new IntegrationJobRefused('INVALID_RESULT', `${field} is not a full commit sha: ${String(value)}`);
   }
   return value;
+}
+
+/** The `current_check` a report replaces, read back in the shape it was stored with. */
+function storedCurrentCheck(value: unknown): { name: string; index: number; startedAt: string } | null {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  return typeof row.name === 'string' && Number.isSafeInteger(row.index) && typeof row.startedAt === 'string'
+    ? { name: row.name, index: row.index as number, startedAt: row.startedAt }
+    : null;
+}
+
+/**
+ * The facts a progress report carries, appended in the transaction that accepted it (§2.9 LS2).
+ *
+ * A PURE RENEWAL WRITES NOTHING: the pair (phase, step), the round and the check are compared with
+ * what the row held before the statement, and only a change is a line. A check's start is the
+ * runner's own `startedAt`, so the line sorts where the check really began even though it is
+ * written when the first report naming it arrives.
+ */
+async function appendProgressEvents(
+  tx: Prisma.TransactionClient,
+  input: {
+    jobId: string;
+    runnerId: string;
+    report: ReturnType<typeof progressReport>;
+    before: {
+      phase: string | null; step: string | null; round: number | null; currentCheck: unknown;
+      sourceRef: string; upstreamRef: string; targetRef: string;
+    };
+  },
+): Promise<void> {
+  const claim = Number(input.report.claimGeneration);
+  const round = input.report.round;
+  if (round !== null && round !== input.before.round) {
+    await appendIntegrationJobEvent(tx, {
+      jobId: input.jobId,
+      key: `round:${claim}:${round}`,
+      kind: 'ROUND',
+      claim,
+      round,
+      phase: input.report.phase,
+      data: { round },
+      text: roundText(round),
+    });
+  }
+  if (input.report.phase !== input.before.phase || input.report.step !== input.before.step) {
+    await appendIntegrationJobEvent(tx, {
+      jobId: input.jobId,
+      key: `step:${claim}:${round ?? 0}:${input.report.phase}:${input.report.step ?? 'none'}`,
+      kind: 'STEP',
+      claim,
+      round,
+      phase: input.report.phase,
+      step: input.report.step,
+      data: { phase: input.report.phase, step: input.report.step, round },
+      text: stepText({
+        phase: input.report.phase,
+        step: input.report.step,
+        sourceRef: input.before.sourceRef,
+        upstreamRef: input.before.upstreamRef,
+        targetRef: input.before.targetRef,
+      }),
+    });
+  }
+  const check = input.report.check;
+  const prior = storedCurrentCheck(input.before.currentCheck);
+  if (check && (prior?.name !== check.name || prior?.index !== check.index
+      || prior?.startedAt !== check.startedAt)) {
+    const runner = await tx.runner.findFirst({ where: { id: input.runnerId }, select: { name: true } });
+    await appendIntegrationJobEvent(tx, {
+      jobId: input.jobId,
+      key: `check-start:${claim}:${round ?? 0}:${check.index}`,
+      kind: 'CHECK_STARTED',
+      claim,
+      round,
+      check: { name: check.name, index: check.index },
+      phase: 'CHECK',
+      data: {
+        name: check.name,
+        index: check.index,
+        count: check.count,
+        budgetSeconds: check.budgetSeconds,
+        startedAt: check.startedAt,
+      },
+      text: checkStartedText(check, claim, runner?.name ?? null),
+      at: new Date(check.startedAt),
+    });
+  }
 }
 
 /**
@@ -1183,7 +1372,13 @@ export async function releaseIntegrationJob(
       heartbeatAt: null,
     },
   });
-  if (moved.count === 1) return { released: true };
+  if (moved.count === 1) {
+    // J-T11 (§2.9 LS2): the hand-back is a fact of its own — the job row only leaves
+    // `claim_generation + 1` behind, with no time and no cause. Written after the update committed,
+    // in an independent transaction; a failure costs the timeline one line, never the release.
+    await recordReleasedEvent(prisma, input.jobId, claimGeneration, input.runnerId);
+    return { released: true };
+  }
   // Nothing moved: say why, from the row as it is now, and among the reporting runner's owner's jobs
   // only — another account's job is answered as one that does not exist.
   const job = await prisma.projectIntegrationJob.findFirst({
@@ -1206,8 +1401,34 @@ export async function releaseIntegrationJob(
   throw new IntegrationJobRefused('STALE_CLAIM');
 }
 
-/** What the caller must do after the transaction that applied a result committed. */
-export interface IntegrationResultAftermath {
+/**
+ * J-T11's hand-back as a timeline fact (§2.9 LS2): the job row keeps only `claim_generation + 1`,
+ * so the time and the runner that gave it back live here. Its own auto-commit INSERT, after the
+ * release committed, idempotent on the claim it names.
+ */
+async function recordReleasedEvent(
+  prisma: PrismaService,
+  jobId: string,
+  claimGeneration: bigint,
+  runnerId: string,
+): Promise<void> {
+  try {
+    const runner = await prisma.runner.findFirst({ where: { id: runnerId }, select: { name: true } });
+    await recordCommittedIntegrationJobEvent(prisma, {
+      jobId,
+      key: `released:${claimGeneration.toString()}`,
+      kind: 'RELEASED',
+      claim: claimGeneration,
+      actor: { type: 'RUNNER' },
+      data: { claimGeneration: claimGeneration.toString(), runnerId, runnerName: runner?.name ?? null },
+      text: releasedText(Number(claimGeneration), runner?.name ?? null),
+    });
+  } catch (error) {
+    logger.warn(`release event for job ${jobId} not recorded: ${(error as Error)?.message ?? String(error)}`);
+  }
+}
+
+/** What the caller must do after the transaction that applied a result committed. */export interface IntegrationResultAftermath {
   projectId: string;
   landedTaskId: string | null;
   /**
@@ -1278,6 +1499,7 @@ export async function applyIntegrationJobResult(
       select: {
         id: true, projectId: true, ownerId: true, kind: true, state: true,
         taskId: true, sessionId: true, promotionId: true, targetRef: true, sourceRef: true,
+        upstreamRef: true, round: true,
         // J12: the queue the job belongs to, which is the scope an unknown push is repaired on.
         serialKey: true,
         codebaseId: true, cancelRequestedAt: true,
@@ -1721,6 +1943,10 @@ export async function applyIntegrationJobResult(
         // ERROR / TARGET_MOVED keeps today's path.
         errorCode: body.errorCode ?? null,
         movedCommitsReported: upstreamMovedCommits !== null,
+        // The same enriched list, for the two facts the promotion's own transition records in this
+        // transaction: an automatic landing that found main moved checks again (M-T12), and an
+        // owner-confirmed one queues the next generation under the same confirmation (J-T13).
+        movedCommits: upstreamMovedCommits,
       })
       : null;
     const promotionReceiptIds = promotion?.receiptIds ?? [];
@@ -1812,6 +2038,8 @@ export async function applyIntegrationJobResult(
 
     // §2.6: a failed job is somebody's to look at, and the platform does not retry it by itself.
     let openItemId: string | null = null;
+    /** The item or card this result handed to somebody, for the timeline's `HANDED_TO` fact. */
+    let handedTo: { itemId: string; assignee: 'COORDINATOR' | 'OWNER'; itemKind: string } | null = null;
     if (promotion?.openApproval) {
       // M-T2: the one card in this whole line that is the owner's rather than the coordinator's.
       // Producing it IS the push event §3.3 names; sending the push is the client task's (criterion
@@ -1839,6 +2067,7 @@ export async function applyIntegrationJobResult(
       });
       openItemId = opened;
       if (openItemId) {
+        handedTo = { itemId: openItemId, assignee: 'OWNER', itemKind: 'PROMOTION_APPROVAL' };
         await tx.projectPromotion.update({
           where: { id: promotion.promotionId },
           data: { openItemId },
@@ -1915,6 +2144,9 @@ export async function applyIntegrationJobResult(
         }),
       });
       openItemId = opened?.itemId ?? openItemId;
+      if (opened) {
+        handedTo = { itemId: opened.itemId, assignee: opened.assignee, itemKind };
+      }
       // §4.7 H3: a rerun that failed again supersedes the items it was handling with the one it just
       // opened, in this transaction — the old card ends RETRIED and points at the new failure, which
       // is in front of somebody; nothing about it is closed quietly.
@@ -1942,6 +2174,22 @@ export async function applyIntegrationJobResult(
     const rearmedItemId = job.kind === 'LAND_TASK' && job.taskId && receiptState !== null && !leftWorkBehind
       ? await rearmItemFixedBy(tx, job.taskId)
       : null;
+
+    // §2.9 LS2: the facts this result IS — each check's result, a refused push, the answer itself,
+    // who it was handed to, an abandonment — recorded in the transaction that wrote the terminal
+    // state, after every write above so the row they read is the one that stands. A replay writes
+    // none of them twice: each key is the fact.
+    await appendResultEvents(tx, {
+      job,
+      requestedState: state,
+      effectiveState,
+      body,
+      checks,
+      upstreamMovedCommits,
+      platformEnd,
+      handedTo,
+      finishedAt: terminalData.finishedAt,
+    });
 
     return {
       answer: {
@@ -1976,6 +2224,204 @@ export async function applyIntegrationJobResult(
   // ended in, instead of being inserted open and moved a statement later.
   await ensureLandingSessionAfterClaim(prisma, input.jobId);
   return applied;
+}
+
+/** The job columns the result's timeline facts are written from. */
+interface ResultJobRow {
+  id: string;
+  ownerId: string;
+  kind: string;
+  targetRef: string;
+  upstreamRef: string;
+  sourceRef: string;
+  claimGeneration: bigint;
+  runnerId: string | null;
+  round: number | null;
+}
+
+/**
+ * The facts a result IS, appended in the transaction that wrote the terminal state (§2.9 LS2):
+ * each check's start and result, a refused push with its moved commits, the answer, who it was
+ * handed to, and — for J-T10 — the abandonment with who pressed it and why.
+ *
+ * A CHECK START THE RUNNER NEVER REPORTED is reconstructed from the result's own durations: a
+ * legacy claim reports only at step boundaries, and the timeline still owes each check a start
+ * line. The instant is the result's `finishedAt` less the durations of the checks that ran at or
+ * after it, and the event says so (`derivedFromDuration`); a start a v2 report already recorded is
+ * the row that stands, because the key is the check.
+ */
+async function appendResultEvents(
+  tx: Prisma.TransactionClient,
+  input: {
+    job: ResultJobRow;
+    /** The state the runner spelled; `effectiveState` is what the row was written with. */
+    requestedState: string;
+    effectiveState: string;
+    body: IntegrationJobResultRequest;
+    checks: IntegrationCheckResult[];
+    upstreamMovedCommits: UpstreamMovedCommitsEnriched | null;
+    platformEnd?: IntegrationJobPlatformEnd | undefined;
+    handedTo: { itemId: string; assignee: 'COORDINATOR' | 'OWNER'; itemKind: string } | null;
+    finishedAt: Date;
+  },
+): Promise<void> {
+  const job = input.job;
+  const claim = Number(job.claimGeneration);
+  const round = job.round ?? null;
+  const phase = input.body.phase ?? null;
+
+  const runner = input.checks.length > 0 && job.runnerId
+    ? await tx.runner.findFirst({ where: { id: job.runnerId }, select: { name: true } })
+    : null;
+  // The checks ran one after the other, so the one that finished last ended at `finishedAt` and
+  // the one before it the later check's duration earlier; each started its own duration before
+  // that. The instants are explicit so the section reads start → finish → the answer, whatever
+  // order the rows are written in.
+  let trailingMs = 0;
+  const instants: Array<{ startedAt: Date; endedAt: Date }> = new Array(input.checks.length);
+  for (let index = input.checks.length; index >= 1; index -= 1) {
+    const durationMs = Math.max(0, input.checks[index - 1].durationMs);
+    const endedAt = new Date(input.finishedAt.getTime() - trailingMs);
+    instants[index - 1] = { startedAt: new Date(endedAt.getTime() - durationMs), endedAt };
+    trailingMs += durationMs;
+  }
+  for (let index = 1; index <= input.checks.length; index += 1) {
+    const check = input.checks[index - 1];
+    const { startedAt, endedAt } = instants[index - 1];
+    await appendIntegrationJobEvent(tx, {
+      jobId: job.id,
+      key: `check-start:${claim}:${round ?? 0}:${index}`,
+      kind: 'CHECK_STARTED',
+      claim,
+      round,
+      check: { name: check.name, index },
+      phase: 'CHECK',
+      data: {
+        name: check.name,
+        index,
+        startedAt: startedAt.toISOString(),
+        derivedFromDuration: true,
+      },
+      text: checkStartedText(check, claim, runner?.name ?? null),
+      at: startedAt,
+    });
+    await appendIntegrationJobEvent(tx, {
+      jobId: job.id,
+      key: `check-done:${claim}:${round ?? 0}:${index}`,
+      kind: 'CHECK_FINISHED',
+      claim,
+      round,
+      check: { name: check.name, index },
+      phase: 'CHECK',
+      data: {
+        name: check.name,
+        index,
+        exitCode: check.exitCode,
+        expectedExitCode: check.expectedExitCode,
+        timedOut: check.timedOut,
+        durationMs: check.durationMs,
+        finishedAt: endedAt.toISOString(),
+      },
+      text: checkFinishedText(check),
+      at: endedAt,
+    });
+  }
+
+  // J-T13 / M-T12: the push was refused because the upstream moved, with the control plane's own
+  // reading of each commit (`outsideQueue`, and `landedBy` — ids for this account, only the reason
+  // for another account's).
+  if (input.upstreamMovedCommits) {
+    await appendIntegrationJobEvent(tx, {
+      jobId: job.id,
+      key: 'push-refused',
+      kind: 'PUSH_REFUSED',
+      claim,
+      round,
+      phase,
+      data: { upstreamMovedCommits: input.upstreamMovedCommits },
+      text: pushRefusedText(input.upstreamMovedCommits),
+    });
+  }
+
+  await appendIntegrationJobEvent(tx, {
+    jobId: job.id,
+    key: 'result',
+    kind: 'RESULT',
+    claim,
+    round,
+    phase,
+    data: {
+      state: input.effectiveState,
+      requestedState: input.requestedState,
+      errorCode: input.body.errorCode ?? null,
+      sourceFullyApplied:
+        typeof input.body.sourceFullyApplied === 'boolean' ? input.body.sourceFullyApplied : null,
+      landedSha: input.body.landedSha ?? null,
+      targetShaBefore: input.body.targetShaBefore ?? null,
+      finishedAt: input.finishedAt.toISOString(),
+      ...(input.platformEnd ? { abandoned: true } : {}),
+    },
+    text: resultText({
+      state: input.requestedState,
+      effectiveState: input.effectiveState,
+      phase,
+      targetRef: job.targetRef,
+      upstreamRef: job.upstreamRef,
+      landedSha: input.body.landedSha ?? null,
+      targetShaBefore: input.body.targetShaBefore ?? null,
+      sourceFullyApplied: input.body.sourceFullyApplied ?? null,
+      errorCode: input.body.errorCode ?? null,
+    }),
+    at: input.finishedAt,
+  });
+
+  // Who it was handed to, in the transaction that opened the item (LS2): derived lines read the
+  // item's own row, but "this attempt handed it to somebody" is the attempt's fact.
+  if (input.handedTo) {
+    await appendIntegrationJobEvent(tx, {
+      jobId: job.id,
+      key: `handed:${input.handedTo.itemId}`,
+      kind: 'HANDED_TO',
+      claim,
+      round,
+      phase,
+      actor: { type: input.handedTo.assignee === 'OWNER' ? 'OWNER' : 'COORDINATOR' },
+      data: { itemId: input.handedTo.itemId, assignee: input.handedTo.assignee, itemKind: input.handedTo.itemKind },
+      text: handedToText({
+        assignee: input.handedTo.assignee,
+        itemKind: input.handedTo.itemKind,
+        targetRef: job.upstreamRef,
+      }),
+    });
+  }
+
+  // J-T10: the platform ended a job nobody was reporting any more. Which door pressed it is the
+  // fact the row cannot tell apart from a runner's own ERROR afterwards, so it is written here with
+  // the reason the coordinator gave (the owner's door carries none).
+  if (input.platformEnd) {
+    const by = input.platformEnd.by === 'owner' ? 'OWNER' : 'COORDINATOR';
+    await appendIntegrationJobEvent(tx, {
+      jobId: job.id,
+      key: 'abandoned',
+      kind: 'ABANDONED',
+      claim,
+      round,
+      phase,
+      actor: {
+        type: by,
+        sessionId: input.platformEnd.sessionId ?? null,
+        userId: by === 'OWNER' ? job.ownerId : null,
+      },
+      reason: input.platformEnd.reason ?? null,
+      data: {
+        by: input.platformEnd.by,
+        ...(input.platformEnd.sessionId ? { sessionId: input.platformEnd.sessionId } : {}),
+        errorCode: input.body.errorCode ?? null,
+      },
+      text: abandonedText(by, input.platformEnd.reason ?? null),
+      at: input.finishedAt,
+    });
+  }
 }
 
 /**

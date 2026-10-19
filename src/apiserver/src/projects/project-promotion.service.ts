@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
-import type { IntegrationJobPhase, PromotionTask } from '@orbit/shared';
+import type { IntegrationJobPhase, PromotionTask, UpstreamMovedCommitsEnriched } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { type MergeReceiptResult, resultLanded } from '../sessions/merge-receipt';
@@ -25,6 +25,7 @@ import {
   workBranchEndedOn,
 } from './project-integration-job';
 import { type InFlightStop, stopInFlightJob } from './project-integration-line';
+import { appendIntegrationJobEvent, movedMainText } from './project-integration-event';
 import { settleLandingAfterPromotionDecision } from './landing-session';
 import { openItemOwed } from './project-open-item';
 import {
@@ -307,7 +308,8 @@ export class ProjectPromotionService {
     projectId: string,
     promotionId: string,
   ): Promise<ProjectPromotionView> {
-    return this.decide(principal, projectId, promotionId, applyCancel);
+    return this.decide(principal, projectId, promotionId,
+      (tx, row) => applyCancel(tx, row, principal.userId));
   }
 
   /**
@@ -610,6 +612,7 @@ async function applyConfirm(
     kind: 'LAND_PROMOTION',
     promotion: row,
     canonicalRepoUrl: codebase.canonicalRepoUrl,
+    cause: 'DECISION',
   });
   await tx.projectPromotion.update({ where: { id: row.id }, data: { landJobId } });
   await resolveApprovalItem(tx, row.openItemId, 'APPROVED', userId);
@@ -663,7 +666,7 @@ async function applyDecline(
  * door still refuses with 409 PROMOTION_NOT_READY, because the result is the fact (M-T8). The card
  * draws the same two facts from `cancelRequested` / `pushBoundaryPassed` (§3.6).
  */
-async function applyCancel(tx: Prisma.TransactionClient, row: PromotionRow): Promise<void> {
+async function applyCancel(tx: Prisma.TransactionClient, row: PromotionRow, byUserId: string): Promise<void> {
   if (row.state !== 'CONFIRMED' && row.state !== 'RECHECKING') {
     throw new ConflictException({
       code: PROMOTION_NOT_READY,
@@ -685,7 +688,13 @@ async function applyCancel(tx: Prisma.TransactionClient, row: PromotionRow): Pro
         message: 'this merge is already being pushed and cannot be called back',
       });
     }
-    stopped = await stopInFlightJob(tx, { projectId: row.projectId, jobId: row.landJobId, now });
+    stopped = await stopInFlightJob(tx, {
+      projectId: row.projectId,
+      jobId: row.landJobId,
+      now,
+      cause: 'STOP',
+      actor: { type: 'OWNER', userId: byUserId },
+    });
   }
 
   if (stopped.outcome === 'STOP_REQUESTED') {
@@ -969,7 +978,13 @@ async function supersedeLiveCandidates(
       // CANCELLED here and now; a RUNNING one still reporting is asked to stop; one already silent
       // past its limit is ended as the ERROR it is, so it cannot hold `#check:<project>` for ever
       // (2026-10-09).
-      await stopInFlightJob(tx, { projectId, jobId: row.checkJobId, now: new Date() });
+      await stopInFlightJob(tx, {
+        projectId,
+        jobId: row.checkJobId,
+        now: new Date(),
+        cause: 'SUPERSEDE',
+        actor: { type: 'PLATFORM' },
+      });
     }
     if (row.openItemId) {
       await tx.projectOpenItem.updateMany({
@@ -1152,7 +1167,13 @@ export async function retireCandidatesLandedByReceipt(
       // job holds its serial key forever, and `claimOne` never re-hands a cancel-requested row, so
       // nobody could ever end it and no later check of the project could be claimed (2026-10-09: a
       // candidate superseded this way kept `#check:<project>` and blocked the whole project).
-      await stopInFlightJob(tx, { projectId: row.projectId, jobId: row.checkJobId, now });
+      await stopInFlightJob(tx, {
+        projectId: row.projectId,
+        jobId: row.checkJobId,
+        now,
+        cause: 'M13',
+        actor: { type: 'PLATFORM' },
+      });
     }
     // The owner's card, when the check had already put one in front of them: the merge it asked
     // about has been made, so there is nothing left to approve.
@@ -1217,6 +1238,13 @@ export async function applyPromotionJobResult(
      * field is read exactly as before it existed.
      */
     movedCommitsReported: boolean;
+    /**
+     * J-T13's list as the control plane enriched it, for the two facts the timeline records that
+     * the job row alone cannot tell apart afterwards: main moving under an automatic landing
+     * (`checkAgainOnMovedMain`) and under an owner-confirmed one (`landAgainAfterMovedUpstream`).
+     * The relay computed it in this same transaction; absent for every result that moved nothing.
+     */
+    movedCommits?: UpstreamMovedCommitsEnriched | null;
   },
 ): Promise<PromotionJobOutcome | null> {
   const promotion = await tx.projectPromotion.findUnique({
@@ -1361,6 +1389,7 @@ async function queueAutomaticLanding(tx: Prisma.TransactionClient, promotion: Pr
     promotion,
     canonicalRepoUrl: codebase.canonicalRepoUrl,
     confirmedAutomatically: true,
+    cause: 'AUTOMATIC',
   });
 }
 
@@ -1385,7 +1414,7 @@ async function queueAutomaticLanding(tx: Prisma.TransactionClient, promotion: Pr
 async function automaticLandingCameBack(
   tx: Prisma.TransactionClient,
   promotion: PromotionRow,
-  input: { jobId: string; runnerId: string | null },
+  input: { jobId: string; runnerId: string | null; movedCommits?: UpstreamMovedCommitsEnriched | null },
 ): Promise<PromotionJobOutcome> {
   const refusal = await automaticConfirmationRefusalIn(tx, promotion, {
     runnerHandsBackMovedUpstream: await runnerHandsBackMovedUpstream(tx, input.runnerId),
@@ -1405,7 +1434,11 @@ async function automaticLandingCameBack(
     },
   });
   if (earlier + 1 >= AUTOMATIC_MERGE_ATTEMPTS) return handBackToOwner(tx, promotion);
-  return checkAgainOnMovedMain(tx, promotion);
+  return checkAgainOnMovedMain(tx, promotion, {
+    endedJobId: input.jobId,
+    moved: input.movedCommits ?? null,
+    attempt: earlier + 1,
+  });
 }
 
 /**
@@ -1421,6 +1454,13 @@ async function automaticLandingCameBack(
 async function checkAgainOnMovedMain(
   tx: Prisma.TransactionClient,
   promotion: PromotionRow,
+  input: {
+    /** The landing that came back READY; its timeline records that main moved. */
+    endedJobId: string;
+    moved: UpstreamMovedCommitsEnriched | null;
+    /** Which automatic attempt this recheck is, counted as `AUTOMATIC_MERGE_ATTEMPTS` counts it. */
+    attempt: number;
+  },
 ): Promise<PromotionJobOutcome> {
   const codebase = await tx.projectCodebase.findUnique({
     where: { id: promotion.codebaseId },
@@ -1432,6 +1472,7 @@ async function checkAgainOnMovedMain(
     kind: 'CHECK_PROMOTION',
     promotion,
     canonicalRepoUrl: codebase.canonicalRepoUrl,
+    cause: 'RETRY',
   });
   await tx.projectPromotion.update({
     where: { id: promotion.id },
@@ -1442,6 +1483,20 @@ async function checkAgainOnMovedMain(
       confirmedAt: null,
       landJobId: null,
     },
+  });
+  // §2.9 LS2's fourth fact the job row could not tell apart afterwards (M-T12): the automatic
+  // landing found main moved and the candidate is checked again on the new main. Written on the
+  // landing that came back, in the transaction that queued the recheck.
+  await appendIntegrationJobEvent(tx, {
+    jobId: input.endedJobId,
+    key: 'recheck-on-moved-main',
+    kind: 'RECHECK_ON_MOVED_MAIN',
+    data: {
+      nextJobId: checkJobId,
+      attempt: input.attempt,
+      ...(input.moved ? { upstreamMovedCommits: input.moved } : {}),
+    },
+    text: movedMainText(input.moved, 'checking again on the new main'),
   });
   return { promotionId: promotion.id, state: 'CHECKING', receiptIds: [], openApproval: null };
 }
@@ -1466,7 +1521,13 @@ async function checkAgainOnMovedMain(
 async function landAgainAfterMovedUpstream(
   tx: Prisma.TransactionClient,
   promotion: PromotionRow,
-  input: { jobId: string; checks: IntegrationCheckResult[]; conflicts: string[]; sourceSha: string | null },
+  input: {
+    jobId: string;
+    checks: IntegrationCheckResult[];
+    conflicts: string[];
+    sourceSha: string | null;
+    movedCommits?: UpstreamMovedCommitsEnriched | null;
+  },
 ): Promise<PromotionJobOutcome> {
   const blocked = () => blockPromotion(tx, promotion.id, input.checks as unknown as Prisma.InputJsonValue,
     input.conflicts, new Date(), input.sourceSha, 'ERROR');
@@ -1502,12 +1563,26 @@ async function landAgainAfterMovedUpstream(
     promotion,
     canonicalRepoUrl: codebase.canonicalRepoUrl,
     confirmedAutomatically: false,
+    cause: 'RETRY',
   });
   // The candidate stays where it is — CONFIRMED, or RECHECKING when the last landing had already
   // reported the move (M-T7) — and only the landing it points at moves.
   await tx.projectPromotion.update({
     where: { id: promotion.id },
     data: { landJobId: nextJobId },
+  });
+  // §2.9 LS2's fifth fact the job row could not tell apart afterwards (J-T13, owner decision
+  // 2026-10-19): the owner-confirmed landing's push was refused because main moved, and the next
+  // generation runs under the SAME confirmation. Written on the landing that was refused.
+  await appendIntegrationJobEvent(tx, {
+    jobId: input.jobId,
+    key: 'next-generation',
+    kind: 'NEXT_GENERATION',
+    data: {
+      nextJobId,
+      ...(input.movedCommits ? { upstreamMovedCommits: input.movedCommits } : {}),
+    },
+    text: movedMainText(input.movedCommits ?? null, 're-checking before merging'),
   });
   return {
     promotionId: promotion.id,
@@ -1630,6 +1705,7 @@ export async function requeuePromotionCheck(
     promotion,
     canonicalRepoUrl: codebase.canonicalRepoUrl,
     retry: input.retry,
+    cause: 'RETRY',
   });
   await tx.projectPromotion.update({
     where: { id: promotion.id },
