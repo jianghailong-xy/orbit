@@ -214,3 +214,51 @@ On the lab's volume a `syncfs` with nothing dirty took 0.1 ms, after 1 MiB writt
   17:52.
 - No record holds a credential: `durability-lab.py secret-scan` over this directory, against `test-server-t02c`, found
   none of 20 server credentials and 3 runner credentials in 63 files.
+
+## Checks
+
+- **The tip.** `origin/project/34ZteKCnYMpKY46f63Leb` (`326f43dc0`) and `origin/main` (`e7168b246`) were both already
+  in the branch: `git merge --no-ff` of each said "Already up to date". `git merge-tree --write-tree e7168b246 HEAD` was
+  clean and gave HEAD's own tree ([logs/merge-ritual.txt](logs/merge-ritual.txt)).
+- **The gate.** [kit/gate.sh](kit/gate.sh) ran on the tip `09d69958b`, one step after another, in a transient unit
+  outside the runner's cgroup (`MemoryMax=9G`), at a host load of 4–9
+  ([logs/gate-steps.txt](logs/gate-steps.txt), [logs/gate-results.txt](logs/gate-results.txt)):
+
+| Step | Result |
+| --- | --- |
+| `npm run test:compose-topology` | 16 of 16 |
+| `npm run prisma:generate`, `npm run build` | exit 0 |
+| `npm test -w @orbit/shared` | 491 of 491 (32 files) |
+| `npm test -w @orbit/apiserver` | 5320 of 5320 |
+| `npm test -w @orbit/web` | 5368 of 5368 (414 files) |
+| managed-runner Python, `python3 -B -m unittest discover -s scripts/managed-runner -p '*test*.py'` | 233 tests OK, among them `DurabilityLabTest` (the driver's reading and judging of a volume) and fake-model.py's `FAKE-HOLD` |
+| runner-go, `go test -count=1 ./...` (run, not read from the cache) | `ok orbit 308.5s` |
+
+**runner-go's new behavior and its tests** (all in that run):
+
+- The volume sync, only on a managed runner, bounded for storage that does not answer:
+  `volume_durability_test.go`.
+- The sync before the reports of a commit, a merge, an integration result and a session's checkout:
+  `volume_durability_ops_test.go`.
+- Through the real supervisor and a scripted Claude, `volume_durability_session_test.go`:
+  - a sync behind the engine's tool and before the turn's end and the session's end are reported;
+  - a session refused at reclaim stays refused when a claim wakes it.
+- The real `syncfs`: `volume_syncfs_linux_test.go`.
+- The start-time check, `managed_repo_recovery_test.go`:
+  - locks no process holds removed, a held one kept;
+  - an empty and a missing branch restored from their reflogs;
+  - an unreadable commit left and reported;
+  - each kind of damage worded;
+  - a session in a damaged repository or worktree refused, with no new repository started over it;
+  - a self-managed runner unchanged.
+- The refusal carried across a claim: `session_pool_test.go`.
+
+In this session, each of the turn's, the session end's and the tool's syncs, the claim-time refusal, the lock-holder
+check and the refusal's carry-over was taken out once. Each time the test that covers it failed, and it passed again
+with the code back.
+
+**Not run, and why.** The apiserver's pg specs: no apiserver, shared or web code changed. The change is runner-go, lab
+tooling under `scripts/managed-runner/lab/`, its offline tests, the design record, the lab page, the runbook and this
+evidence.
+
+This section, the gate's logs and the merge record, and nothing else, were added after the gate ran.
