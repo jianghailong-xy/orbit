@@ -45,10 +45,10 @@ import { ProjectPromotionService } from './project-promotion.service';
  *   * its answer is J12's: a v2 claim that recorded no PUSH — and every CHECK_PROMOTION — is
  *     RUNNER_LOST ("nothing was pushed"); a v2 claim that recorded PUSH, and every legacy landing
  *     claim, is PUSH_OUTCOME_UNKNOWN ("may have been pushed");
- *   * it ends the job as ERROR, opens NO failure item (J-T8's exception, revision 24: stop and
- *     abandon both mean the generation is not wanted), moves a promotion to BLOCKED, queues no
- *     next generation, closes the claim to late reports and results, and releases the serial slot
- *     so the next job is claimed on the next beat;
+ *   * it ends the job as ERROR, opens the INTEGRATION_ERROR item (unless the generation had
+ *     already been asked to stop — J-T8's exception, revision 24), moves a promotion to BLOCKED,
+ *     queues no next generation, closes the claim to late reports and results, and releases the
+ *     serial slot so the next job is claimed on the next beat;
  *   * stop ends a QUEUED landing CANCELLED on the spot, asks a live RUNNING claim
  *     (`cancel_requested_at`, settled by its result), ends one already past its lease as ERROR, and
  *     is refused past the push boundary and when nothing is in flight.
@@ -435,14 +435,16 @@ test('abandon: the lease gate, J12\'s code, and only-end-never-re-queue', {
       await stack.db.projectIntegrationJob.count({ where: { taskId: first.taskId, kind: 'LAND_TASK' } }),
       1,
     );
-    // J-T8's exception (revision 24): an abandoned generation opens no failure card — the work was
-    // deliberately given up, and nobody is being asked to fix it. The row keeps the code.
-    assert.equal(abandoned.abandoned.openItemId, null);
-    assert.equal(
-      await stack.db.projectOpenItem.count({ where: { integrationJobId: firstJob.jobId } }),
-      0,
-      'no exception item is opened for an abandoned generation',
-    );
+    // J-T10 / §4's INTEGRATION_ERROR row: an abandoned generation that was NOT stopped opens the
+    // item a runner-reported ERROR would. Its work is not on the line, no result will ever say so,
+    // and the item is the door through which the coordinator reaches integration_retry.
+    assert.ok(abandoned.abandoned.openItemId, 'the abandon opened the failure item');
+    const item = await stack.db.projectOpenItem.findUniqueOrThrow({
+      where: { id: abandoned.abandoned.openItemId! },
+    });
+    assert.equal(item.kind, 'INTEGRATION_ERROR');
+    assert.equal(item.state, 'OPEN');
+    assert.equal(item.integrationJobId, firstJob.jobId);
 
     // The next job on the same serial key is claimed on the very next beat.
     const [next] = await beat(stack, w);
@@ -470,6 +472,12 @@ test('abandon: the lease gate, J12\'s code, and only-end-never-re-queue', {
       1,
       'nothing is queued in its place',
     );
+    // The promotion's failure is a card like any other ERROR's, and it names the candidate.
+    const landingItem = await stack.db.projectOpenItem.findFirstOrThrow({
+      where: { integrationJobId: landingJob.jobId },
+    });
+    assert.equal(landingItem.kind, 'INTEGRATION_ERROR');
+    assert.equal(landingItem.promotionId, confirmed.candidate.id);
 
     // CHECK_PROMOTION: the check never pushes, so its end says nothing was pushed and blocks the
     // candidate the same way an error from its runner would.
@@ -489,6 +497,11 @@ test('abandon: the lease gate, J12\'s code, and only-end-never-re-queue', {
       await stack.db.projectIntegrationJob.count({ where: { promotionId: candidate.id, kind: 'CHECK_PROMOTION' } }),
       1,
     );
+    const checkItem = await stack.db.projectOpenItem.findFirstOrThrow({
+      where: { integrationJobId: check.jobId },
+    });
+    assert.equal(checkItem.kind, 'INTEGRATION_ERROR');
+    assert.equal(checkItem.promotionId, candidate.id);
   });
 
   await t.test('(7) late reports and results are refused, and the claim generation moved on', async () => {
@@ -539,7 +552,30 @@ test('abandon: the lease gate, J12\'s code, and only-end-never-re-queue', {
     assert.equal((await jobRow(stack, job.jobId)).state, 'ERROR', 'the abandoned generation is its own row');
   });
 
-  await t.test('(9) the owner door refuses an acting session, and abandons a silent runner\'s job', async () => {
+  await t.test('(9) abandoning a generation that was already asked to stop opens no item (J-T8 rev 24)', async () => {
+    const w = await world(stack, 'abandon-stopped', 'PROJECT_BRANCH');
+    await doneTask(stack, w, 'abandon-stopped');
+    const job = await claim(stack, w);
+    await ageClaim(stack, job.jobId, 11 * 60_000);
+    // Somebody asked this claim to stop before its runner went silent: the generation is not
+    // wanted, and abandoning it only writes the end down.
+    await stack.db.projectIntegrationJob.update({
+      where: { id: job.jobId }, data: { cancelRequestedAt: new Date() },
+    });
+
+    const abandoned = await abandonIntegrationJob(stack.prisma, {
+      jobId: job.jobId, projectId: w.projectId, ownerId: w.ownerId, by: 'owner',
+    });
+    assert.equal(abandoned.abandoned.state, 'ERROR');
+    assert.equal(abandoned.abandoned.openItemId, null);
+    assert.equal(
+      await stack.db.projectOpenItem.count({ where: { integrationJobId: job.jobId } }),
+      0,
+      'a stopped generation opens no failure card, even when abandoned',
+    );
+  });
+
+  await t.test('(10) the owner door refuses an acting session, and abandons a silent runner\'s job', async () => {
     const w = await world(stack, 'owner-door', 'PROJECT_BRANCH');
     await doneTask(stack, w, 'owner-door');
     const job = await claim(stack, w);

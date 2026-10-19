@@ -3841,9 +3841,12 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"job ends as ERROR, and the record says whether it is known that nothing was pushed " +
 				"(RUNNER_LOST: a merge-check job, which never pushes, or a landing whose current claim " +
 				"is v2 and recorded no PUSH) or that it may have been pushed (PUSH_OUTCOME_UNKNOWN: every " +
-				"legacy landing claim). Nothing is queued in its place and no failure item is opened: " +
-				"abandonment only ends a generation nobody is waiting for, and the project branch or " +
-				"main is left exactly as it was. A candidate the job was merging is blocked. Refused when the job is not running (INTEGRATION_ABANDON_NOT_RUNNING), " +
+				"legacy landing claim). Nothing is queued in its place, and the project branch or main " +
+				"is left exactly as it was; a candidate the job was merging is blocked. An abandoned " +
+				"generation opens the same INTEGRATION_ERROR item a runner-reported error would — it is " +
+				"the item through which you reach integration_retry — except when it had already been " +
+				"asked to stop (cancel_requested_at set): a stopped generation opens no card, because " +
+				"stop and abandon both mean it is not wanted. Refused when the job is not running (INTEGRATION_ABANDON_NOT_RUNNING), " +
 				"when its runner is still reporting (INTEGRATION_ABANDON_LEASE_LIVE), and for a job or " +
 				"project of another account; only the project's current coordinator conversation may call " +
 				"it.",

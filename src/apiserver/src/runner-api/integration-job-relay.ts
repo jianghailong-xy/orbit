@@ -1572,12 +1572,13 @@ export async function applyIntegrationJobResult(
     // J-T8: a job somebody asked to stop does not open a card for the work it is stopping. A
     // failure it reports before it gets the stop is a fact about work nobody is waiting for any
     // more — the task was reopened or taken away, the candidate was superseded or retired — and an
-    // item about it would be a todo with no door its owner would take. The same holds for an
-    // ABANDONED generation (J-T8's exception, revision 24): stop and abandon both mean this
-    // generation is not wanted, and an item about it would ask somebody to fix work that was
-    // deliberately given up. The promotion is still blocked below, and the job row keeps the code
-    // and detail a reader needs.
-    if (itemKind && !candidateMovedOn && !cancelRequested && !platformEnd) {
+    // item about it would be a todo with no door its owner would take. Revision 24 extends that to
+    // a STOPPED generation that is then abandoned: stop and abandon both say it is not wanted.
+    // Abandoning a generation that was NOT stopped is the other case and keeps the item (J-T10 and
+    // §4's INTEGRATION_ERROR row): its work is not on the line, no result will ever say so, and the
+    // item is the door through which the coordinator reaches `integration_retry`. The condition is
+    // therefore `cancelRequested` alone, not the abandon path as such.
+    if (itemKind && !candidateMovedOn && !cancelRequested) {
       // A promotion's item is named after the merge it is about: into the project's main branch.
       const mainBranch = job.kind === 'LAND_TASK'
         ? null
@@ -1692,11 +1693,13 @@ export interface AbandonedIntegrationJob {
  * holding. Writing them anywhere else would let a reader see a terminal job with a transition
  * still owed, or the reverse.
  *
- * NO FAILURE ITEM (J-T8's exception, revision 24). A stopped generation opens no card — the
- * exception the X table's `INTEGRATION_ERROR` entry makes — and an abandoned generation is one of
- * those: stop and abandon both say "this generation is not wanted", and a todo asking somebody to
- * fix work that was deliberately given up is a todo with no door its owner would take. The job row
- * keeps the code and the detail, and a promotion is still blocked.
+ * THE FAILURE ITEM, AND THE ONE IT DOES NOT OPEN. An abandoned generation is an `ERROR` like any
+ * other, so it opens the project's `INTEGRATION_ERROR` item (§4 X table names J-T10's codes as a
+ * source): the work is not on the line, no runner will ever report on it, and that item is how the
+ * coordinator reaches `integration_retry`. The exception (J-T8, revision 24) is the generation
+ * that was ALREADY ASKED TO STOP (`cancel_requested_at` set): stop and abandon both say that
+ * generation is not wanted, and a card asking somebody to fix work deliberately given up would
+ * have no door its owner would take. A promotion is blocked either way.
  *
  * WHAT IT DOES NOT DO. It does not queue the next generation (J-T1b): abandonment is "only end,
  * never re-queue", for all three kinds. The one exception is J-T8's deferred DONE — the enqueue a
