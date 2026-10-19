@@ -1564,6 +1564,13 @@ interface IntegrationItemPayload {
   } | null;
   errorCode?: string;
   errorDetail?: unknown;
+  /**
+   * J-T13: the commits that moved the upstream under a LAND_PROMOTION (contract §4.2's payload
+   * note), at the top level and never inside `errorDetail`. Deliberately not read by
+   * `integrationItemFacts` or `failureClassLines`: the delivery text is replayed byte for byte
+   * (G6), and a field added for a person reading the payload must not move it.
+   */
+  upstreamMovedCommits?: unknown;
   /** What the failure was of (`landingFailureClass`), and which generation of the landing it was. */
   failureClass?: string | null;
   generation?: number;

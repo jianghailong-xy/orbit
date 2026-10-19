@@ -28,6 +28,7 @@ import { type InFlightStop, stopInFlightJob } from './project-integration-line';
 import { openItemOwed } from './project-open-item';
 import {
   AUTOMATIC_MERGE_ATTEMPTS,
+  PROMOTION_LAND_ATTEMPTS,
   AutomaticConfirmationFacts,
   LIVE_PROMOTION_STATES,
   PROMOTION_COLUMNS,
@@ -774,6 +775,12 @@ export interface PromotionJobOutcome {
   /** The receipts M9 wrote, so the job row can keep them beside its own. */
   receiptIds: string[];
   /**
+   * J-T13, the owner-confirmed half: this landing ended on a refused push and the candidate — still
+   * the owner's confirmation — has the next generation queued. A failure with nobody to look at it:
+   * the relay opens no INTEGRATION_ERROR item for it.
+   */
+  requeuedUnderConfirmation?: boolean;
+  /**
    * Whether the owner's approval card should be opened for this promotion, and the facts it is
    * about — read off the promotion rather than off the job that just finished, because a landing
    * handed back after main moved (M-T12) reports the tip it found, not the one the check passed on.
@@ -1193,6 +1200,16 @@ export async function applyPromotionJobResult(
     /** Somebody asked this claim to stop before this result arrived (J-T8). The promotion follows
      *  the result: a landing still wins (M-T8), everything else settles the cancellation. */
     cancelRequested: boolean;
+    /** The result's error code (J12), so J-T13's `TARGET_MOVED` can be told from every other
+     *  failure a landing reports. */
+    errorCode: string | null;
+    /**
+     * Whether the result carried `upstreamMovedCommits` — true only from a runner of this build
+     * (J-T13). An older runner's `ERROR / TARGET_MOVED` keeps today's path (M-T9 blocks the
+     * candidate): the deployment order is apiserver first, runner after, and a result missing the
+     * field is read exactly as before it existed.
+     */
+    movedCommitsReported: boolean;
   },
 ): Promise<PromotionJobOutcome | null> {
   const promotion = await tx.projectPromotion.findUnique({
@@ -1277,6 +1294,15 @@ export async function applyPromotionJobResult(
   // LAND_PROMOTION.
   if (input.state === 'READY' && promotion.confirmedAutomatically) {
     return automaticLandingCameBack(tx, promotion, input);
+  }
+  // J-T13, the owner-confirmed half (owner decision 2026-10-19, option B): the first push that was
+  // refused TARGET_MOVED ends this landing only. The candidate keeps the owner's confirmation, and
+  // the next generation is queued in this same transaction under that confirmation — the same frozen
+  // source, re-checked and merged on the new main (M5). The third consecutive set of steals is a
+  // main moving faster than a check keeps up with, and M-T9's block applies then.
+  if (input.state === 'ERROR' && input.errorCode === 'TARGET_MOVED'
+      && !promotion.confirmedAutomatically && input.movedCommitsReported) {
+    return landAgainAfterMovedUpstream(tx, promotion, input);
   }
   if (input.state === 'LANDED' || input.state === 'ALREADY_LANDED') {
     const mergedSha = input.state === 'LANDED' ? input.landedSha : (input.targetShaBefore ?? input.upstreamSha);
@@ -1411,6 +1437,78 @@ async function checkAgainOnMovedMain(
     },
   });
   return { promotionId: promotion.id, state: 'CHECKING', receiptIds: [], openApproval: null };
+}
+
+/**
+ * J-T13, the owner-confirmed half (owner decision 2026-10-19, option B): the first push that lost a
+ * race for the upstream ends THAT landing and nothing else.
+ *
+ * The candidate keeps the confirmation the owner gave — they are not asked to press again — and the
+ * next generation of the landing is queued in this same transaction: the same frozen `source_sha`,
+ * `confirmed_automatically = false`, `land_job_id` pointing at it. It finds the new main at its own
+ * fetch, merges and checks again (M5), and lands if the push it makes survives the race this time.
+ * A NEW claim generation resets the push boundary (§2.2 J-T4), so the owner's Cancel is available
+ * again for the whole of the next attempt.
+ *
+ * `PROMOTION_LAND_ATTEMPTS` consecutive generations ending this way is a main moving faster than a
+ * check keeps up with: the candidate goes BLOCKED (M-T9) and the INTEGRATION_ERROR item the relay
+ * opens beside it carries this last landing's `upstreamMovedCommits`. Any other result — a landing,
+ * a conflict, a red check — ends the count with it, and a candidate the coordinator later has
+ * confirmed again counts from its new `confirmed_at`.
+ */
+async function landAgainAfterMovedUpstream(
+  tx: Prisma.TransactionClient,
+  promotion: PromotionRow,
+  input: { jobId: string; checks: IntegrationCheckResult[]; conflicts: string[]; sourceSha: string | null },
+): Promise<PromotionJobOutcome> {
+  const blocked = () => blockPromotion(tx, promotion.id, input.checks as unknown as Prisma.InputJsonValue,
+    input.conflicts, new Date(), input.sourceSha, 'ERROR');
+  // The generation being applied is not terminal yet — the relay writes it after this decision — so
+  // it is counted by hand, exactly as `automaticLandingCameBack` counts its own.
+  //
+  // The boundary is the claim, not the row's `created_at`: the job is created in the transaction
+  // that writes `confirmed_at`, and `created_at` is the database's transaction start — earlier than
+  // the instant the app writes `confirmed_at` a few statements later — so a `created_at` boundary
+  // would leave out the first landing of the confirmation. The claim happens after that transaction
+  // commits, on both counts.
+  const earlier = await tx.projectIntegrationJob.count({
+    where: {
+      promotionId: promotion.id,
+      kind: 'LAND_PROMOTION',
+      confirmedAutomatically: false,
+      state: 'ERROR',
+      errorCode: 'TARGET_MOVED',
+      id: { not: input.jobId },
+      ...(promotion.confirmedAt ? { claimedAt: { gte: promotion.confirmedAt } } : {}),
+    },
+  });
+  if (earlier + 1 >= PROMOTION_LAND_ATTEMPTS) return blocked();
+  const codebase = await tx.projectCodebase.findUnique({
+    where: { id: promotion.codebaseId },
+    select: { canonicalRepoUrl: true },
+  });
+  // Unreachable while a landing of this candidate was handed to a runner at all; the block is the
+  // honest answer if the binding went away under it.
+  if (!codebase) return blocked();
+  const nextJobId = await queuePromotionJob(tx, {
+    kind: 'LAND_PROMOTION',
+    promotion,
+    canonicalRepoUrl: codebase.canonicalRepoUrl,
+    confirmedAutomatically: false,
+  });
+  // The candidate stays where it is — CONFIRMED, or RECHECKING when the last landing had already
+  // reported the move (M-T7) — and only the landing it points at moves.
+  await tx.projectPromotion.update({
+    where: { id: promotion.id },
+    data: { landJobId: nextJobId },
+  });
+  return {
+    promotionId: promotion.id,
+    state: promotion.state as PromotionState,
+    receiptIds: [],
+    openApproval: null,
+    requeuedUnderConfirmation: true,
+  };
 }
 
 /**
@@ -1576,6 +1674,9 @@ async function writeUpstreamReceipts(
     /** What the landing job put on the upstream, and the commit it ran its checks on. */
     testedSha: string | null;
     testedTreeSha: string | null;
+    /** J12's repair: this receipt is for a landing whose push outcome nobody could read (see
+     *  `MergeReceiptService.fromIntegrationJob`). */
+    recoveredUnknownPush?: boolean;
   },
 ): Promise<string[]> {
   const onItsOwnBranch = input.promotion.sourceKind === 'TASK_BRANCH';
@@ -1637,10 +1738,53 @@ async function writeUpstreamReceipts(
       // The ledger's own copy of who merged it: a receipt read years later has to be able to say
       // "nobody pressed this" without the promotion row beside it.
       confirmedAutomatically: input.promotion.confirmedAutomatically,
+      recoveredUnknownPush: input.recoveredUnknownPush,
     });
     receiptIds.push(...written);
   }
   return receiptIds;
+}
+
+/**
+ * J12's repair for a promotion: a LAND_PROMOTION whose push outcome nobody could read (ERROR ·
+ * PUSH_OUTCOME_UNKNOWN) turned out to have landed — a later landing on the same serial key found its
+ * tested commit on the upstream — so M9's receipts are written after all, against that job.
+ *
+ * The job row is not touched (J4): its terminal state and code are what was known at the time, and
+ * the receipts' own `detail` names it (`integrationJobId`, plus `recoveredUnknownPush`). The
+ * candidate is NOT moved to MERGED either: it may be BLOCKED (M-T10 / abandon cannot claim a merge
+ * it could not prove) or CANCELLED, and a terminal candidate row is not this function's to rewrite.
+ * The tasks' receipts are what makes §1.4 and §2.5 read their work as landed; the candidate's own
+ * disposition is the coordinator's, and this is said in the task's evidence.
+ */
+export async function recoverPromotionPushReceipts(
+  tx: Prisma.TransactionClient,
+  input: {
+    promotionId: string;
+    /** The landing whose outcome was unknown — the job the receipts are written against. */
+    jobId: string;
+    testedSha: string;
+    targetShaBefore: string | null;
+    testedTreeSha: string | null;
+    /** Whether that landing was the Automatic setting's (0301). */
+    confirmedAutomatically: boolean;
+  },
+): Promise<string[]> {
+  const promotion = await tx.projectPromotion.findUnique({
+    where: { id: input.promotionId },
+    select: PROMOTION_COLUMNS,
+  });
+  if (!promotion) return [];
+  return writeUpstreamReceipts(tx, {
+    promotion: { ...promotion, confirmedAutomatically: input.confirmedAutomatically },
+    jobId: input.jobId,
+    state: 'LANDED',
+    mergedSha: input.testedSha,
+    targetShaBefore: input.targetShaBefore,
+    testedSha: input.testedSha,
+    testedTreeSha: input.testedTreeSha,
+    recoveredUnknownPush: true,
+  });
 }
 
 /**

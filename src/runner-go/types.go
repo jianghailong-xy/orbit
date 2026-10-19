@@ -546,6 +546,12 @@ type IntegrationJobCommand struct {
 	Automatic       bool                   `json:"automatic,omitempty"`
 	Checks          []IntegrationCheckSpec `json:"checks"`
 	CancelRequested bool                   `json:"cancelRequested"`
+	// Earlier landings on this job's serial key whose push outcome the control plane could not know
+	// (ERROR / PUSH_OUTCOME_UNKNOWN) and that have no receipt yet (J12). After its fetch the runner
+	// asks git whether each one's tested commit is already an ancestor of the target, and reports
+	// which are. An older runner ignores the field; the control plane then leaves those results to
+	// a coordinator as it always did.
+	UnknownPushes []IntegrationUnknownPush `json:"unknownPushes,omitempty"`
 	// ReportBeforePush is set on a claim made under the v2 progress protocol (§2.2 J-T4): before it
 	// pushes, the runner reports phase = PUSH synchronously and waits for the answer. Absent on a
 	// legacy claim, whose runner reports the phase best-effort and pushes without asking.
@@ -560,6 +566,21 @@ type IntegrationJobCommand struct {
 	// are never on the wire.
 	progressEvery    time.Duration
 	pushReportBudget time.Duration
+}
+
+// IntegrationUnknownPush is one earlier landing the control plane could not read the push outcome
+// of, as its command names it (J12): the job, and the commit that job tested and would have pushed.
+type IntegrationUnknownPush struct {
+	JobID     string `json:"jobId"`
+	TestedSha string `json:"testedSha"`
+}
+
+// IntegrationUnknownPushCheck is that same landing after the runner asked git: landed is whether the
+// tested commit is now an ancestor of the target. Only a sha git could answer for is reported, so an
+// absent entry means "cannot tell", never "not landed".
+type IntegrationUnknownPushCheck struct {
+	JobID  string `json:"jobId"`
+	Landed bool   `json:"landed"`
 }
 
 // IntegrationCheckSpec is one command to run on the combined tree before anything is pushed.
@@ -605,6 +626,15 @@ type IntegrationJobProgressRequest struct {
 	// The upstream moved under a confirmed promotion, so the merge and the checks are being redone
 	// on the new tip (§3.3 M-T7). Nil on every other report.
 	UpstreamMoved *IntegrationUpstreamMoved `json:"upstreamMoved,omitempty"`
+	// The synchronous PUSH report's facts (J12): the commit about to be pushed, the tree it carries,
+	// the commit it replays or merges into it, and the target tip it expects. The control plane
+	// records them on the row while the claim still holds it, so a job whose push outcome later
+	// becomes unknown leaves the next landing on its serial key enough to check — and, if the push
+	// did happen, to write the receipt it never got to report. Nil on every other report.
+	TestedSha       string `json:"testedSha,omitempty"`
+	TestedTreeSha   string `json:"testedTreeSha,omitempty"`
+	SourceSha       string `json:"sourceSha,omitempty"`
+	TargetShaBefore string `json:"targetShaBefore,omitempty"`
 }
 
 // IntegrationJobCurrentCheck is the check a v2 claim is running, as its progress reports name it
@@ -677,6 +707,29 @@ type IntegrationJobResultRequest struct {
 	Conflicts          []string                 `json:"conflicts,omitempty"`
 	ErrorCode          string                   `json:"errorCode,omitempty"`
 	ErrorDetail        map[string]any           `json:"errorDetail,omitempty"`
+	// With a LAND_PROMOTION that ended because the upstream moved under it (J-T13, M-T12): what the
+	// upstream gained between the tip this job worked from and the tip it found. The control plane
+	// writes it into the job row, and its INTEGRATION_ERROR item carries it at the payload's top
+	// level; it is never put in ErrorDetail, which is copied verbatim into delivery text.
+	UpstreamMovedCommits *IntegrationUpstreamMovedCommits `json:"upstreamMovedCommits,omitempty"`
+	// What this job's fetch found about the earlier unknown pushes its command named (J12): only the
+	// ones git could answer for, and whether their tested commit is on the target.
+	UnknownPushes []IntegrationUnknownPushCheck `json:"unknownPushes,omitempty"`
+}
+
+// IntegrationUpstreamMovedCommits is the list of commits that moved the upstream under a landing, as
+// the runner measured it on the repository it fetched (J-T13 / M-T12): first-parent, newest first,
+// at most the twenty the contract allows, with the true total beside them.
+type IntegrationUpstreamMovedCommits struct {
+	Total   int                      `json:"total"`
+	Commits []IntegrationMovedCommit `json:"commits"`
+}
+
+// IntegrationMovedCommit is one of those commits. Subject is cut to 200 characters here because the
+// repository is the only place the full one is read.
+type IntegrationMovedCommit struct {
+	Sha     string `json:"sha"`
+	Subject string `json:"subject"`
 }
 
 // IntegrationJobResultResponse is the control plane's answer: whether it took the result.
