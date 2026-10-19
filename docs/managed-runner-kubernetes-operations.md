@@ -15,7 +15,9 @@ runs:
 - task T08's end-to-end run of 2026-10-18 on one node ([evidence](evidence/managed-runner-acceptance/2026-10-18/README.md));
 - task T08b's volume switch, the same day ([evidence](evidence/managed-runner-volume-switch/2026-10-18/README.md));
 - task T02's move to another node and failover, on the lab's two nodes on 2026-10-19
-  ([evidence](evidence/managed-runner-cross-node/2026-10-19/README.md)).
+  ([evidence](evidence/managed-runner-cross-node/2026-10-19/README.md));
+- task T08x's two accounts on the same two nodes, the same day: moves, a failover of both runners at once with this
+  page's commands, and drains ([evidence](evidence/managed-runner-cross-node-accounts/2026-10-19/README.md)).
 
 What was not run is marked **Not verified here**. Read the [design contract](managed-runner-design.md)
 first: this page says how to operate it, not why it is built so.
@@ -419,15 +421,38 @@ object gone, and no VolumeAttachment holding the volume; or an operator's fencin
 volume. Anything else leaves the mapping `FENCING`: the old credential is replaced at once, the volume and the reservation
 are kept, nothing starts, and no timeout, lease or owner's retry opens it.
 
-**A planned move off a node** (`kubectl drain`, maintenance): the eviction deletes the Pod, the finalizer keeps its
-kubelet's report until the manager has it, the volume detaches, and the next generation is scheduled on another node
-with the same claim. The manager names no node itself, so cordon the node the runner should leave.
+**A planned move off a node** (maintenance): drain it. The eviction deletes each runner's Pod: the runner drains and
+exits, the finalizer keeps its kubelet's report until the manager has it, the volume detaches, and the next generation
+is scheduled on another node with the same claim. The manager names no node itself; the drain's cordon keeps the next
+generation off the node.
+
+```bash
+kubectl --kubeconfig $ADMIN_KUBECONFIG --context $TEST_CONTEXT drain <node> --ignore-daemonsets --delete-emptydir-data --force
+```
+
+- A runner's Pod is a bare Pod with an emptyDir (`/tmp`). Without `--delete-emptydir-data` the drain refuses it ("Pods
+  with local storage"), and without `--force` too ("Pods that declare no controller"). A refused drain cordons the node
+  and evicts nothing.
+- The drain finishes once every Pod it evicted is gone. For a runner's Pod that is once a manager has recorded its stop
+  and taken the stop-report finalizer off. With managed runners switched off, or for a managed Pod no running manager
+  records, it waits until its `--timeout` ([When a Pod stays Terminating](#the-stop-report-finalizer)).
+  `--skip-wait-for-delete-timeout=SECONDS` passes Pods that have been terminating longer than that.
+- `--pod-selector=app.kubernetes.io/name=orbit-managed-runner` moves only the runners. The lab drains its first node this
+  way, because the CSI controller plugin runs there too.
+
+Measured:
 
 - On one node, an eviction, a delete and a crash each started the next generation on the same volume (T04, and the T08
   rebuild).
 - On the two-node lab (T02) the owner's sleep put the runner to sleep in 15.4 s, on its kubelet's report: the Pod went
   and the volume detached. With its node cordoned, a message woke it on the other node 24.7 s later: the same runner,
   claim, PV and RBD image, data and session.
+- On the two-node lab (T08x) two accounts' runners were drained off each node in turn. Their next generations' Pods
+  were made on the other node 14–17 s after the drain began, and both runners were READY 45–46 s after it, with the same
+  claims, data and sessions. The second node's drain finished in 10 s.
+- The first node's drain also evicted a managed Pod of an earlier task's test server. It was `Failed` and held by the
+  stop-report finalizer of a manager that was not running, so the drain waited its full 300 s `--timeout` and exited 1,
+  although both runners had moved. With `--skip-wait-for-delete-timeout=60` the next drain passed it.
 
 **A node that stops reporting** (power loss, network partition): its runner's Pod is not terminal by its kubelet, and
 nothing replaces it. The manager has no right to read nodes, and a lost heartbeat proves nothing, so the mapping stays
@@ -441,22 +466,26 @@ nothing replaces it. The manager has no right to read nodes, and a lost heartbea
 - The mapping goes `FENCING` (`PREDECESSOR_STOP_UNPROVEN`), and the predecessor's credential is replaced, only when the
   control plane makes that Pod terminal (step 4 below) or its object goes.
 
-Measured on the two-node lab (T02), the second node's qemu killed while the runner wrote there:
+Measured on the two-node lab, the second node's qemu killed while its runners wrote there (T02: one runner; T08x: two
+accounts' runners):
 
-| After the power cut | Seen |
-| --- | --- |
-| 35 s | The node's RBD watcher gone |
-| 52 s | The node `Unknown` |
-| 114 s | The runner not usable |
-| 351 s | The Pod evicted by the taint manager |
+| Seen, after the power cut | T02 | T08x |
+| --- | --- | --- |
+| The node's RBD watchers gone | 35 s | by 38 s |
+| The node `Unknown` | 52 s | 56 s |
+| The runners not usable | 114 s | 95 s |
+| The Pods evicted by the taint manager | 351 s | 354 s |
 
-For 420 s the manager made no Pod, admission probe or Secret, the mapping stayed `READY` at its generation, and the
-attachment stayed on the dead node.
+For 420 s the manager made no Pod, admission probe or Secret, the mappings stayed `READY` at their generation, and the
+attachments stayed on the dead node. In T08x, second Pods on either claim pinned to the other node meanwhile were refused
+by the admission guard, the next generation's under the fixed name too (`NOT_THE_RESERVED_GENERATION`).
 
 To bring the runner back elsewhere:
 
 1. Identify the predecessor from the mapping: runner, generation, Pod name and UID, node, claim UID, volume handle, RBD
-   pool and image.
+   pool and image. A node may hold several accounts' runners, and each of them needs steps 3 and 4. The query of
+   [Find an account's runner](#find-an-accounts-runner) gives every runner's `node_name`, and its commands, with `R` set,
+   show the stale Pod, the claim, PV, handle and image, and the VolumeAttachment still on the lost node.
 2. **Fence the node.** Power it off through its BMC or hypervisor and verify the power state independently, then keep it
    out until its stale Pods and mounts are gone; or blocklist its Ceph clients by a tested, persistent procedure (record the
    addresses and nonces, the OSD map epoch, the expiry and the rejoin policy). A lock break, a temporary blocklist, a
@@ -464,19 +493,37 @@ To bring the runner back elsewhere:
 3. **Write the receipt** as ConfigMap `mr-fence-<runner uuid>`, key `receipt.json`, shaped like
    [fencing-receipt.example.json](../deploy/managed-runner/fencing-receipt.example.json), naming the predecessor exactly as
    the mapping records it ([Fencing receipt](../deploy/managed-runner/README.md#fencing-receipt)). An incomplete or unbound
-   receipt is refused field by field (`FENCING_RECEIPT_INVALID`, seen in the lab, T02a) and opens nothing.
+   receipt is refused field by field (`FENCING_RECEIPT_INVALID`, seen in the lab, T02a) and opens nothing. One receipt per
+   runner:
+
+   ```bash
+   $K create configmap "mr-fence-$R" --from-file=receipt.json=receipt.json
+   ```
+
 4. **Let Kubernetes release the volume**: the `node.kubernetes.io/out-of-service` taint on the fenced node (only after the
-   power-off is verified), then [take the finalizer off](#the-stop-report-finalizer) the stale Pod. The manager waits for
-   the object and the attachment to be gone, reads the receipt, and starts the next generation on another node.
+   power-off is verified), once for all its runners, then [take the finalizer off](#the-stop-report-finalizer) each stale
+   Pod. The manager waits for the object and the attachment to be gone, reads the receipt, and starts the next generation
+   on another node.
+
+   ```bash
+   $K taint node <node> node.kubernetes.io/out-of-service=nodeshutdown:NoExecute
+   ```
+
    - PodGC makes the stale Pod `Failed`, and the attach/detach controller deletes its VolumeAttachment without waiting
      for an unmount nobody can report.
-   - The manager, finding the Pod terminal but not by its kubelet, goes `FENCING`. The predecessor's credential is
-     refused from then on.
+   - The manager, finding the Pod terminal but not by its kubelet, or finding its object gone, goes `FENCING`. The
+     predecessor's credential is refused from then on.
+   - The finalizer can come off right after the taint or once the query says `FENCING`. T08x did one runner each way and
+     both took over: the manager fenced on the Pod's removal for one, on PodGC's `Failed` for the other.
    - The taint also evicts the Ceph-CSI node plugin from that node, unless it tolerates the taint. In the lab it does not,
      so the node maps nothing until the taint is removed, which is the quarantine.
 5. Check the account's data on the new node (SQLite, Git, the engine's session), and keep the old node out until it is
-   wiped or rejoined under the rejoin policy. When its stale Pod and attachment are gone and it maps and mounts nothing of
-   the volume, remove the taint.
+   wiped or rejoined under the rejoin policy. When its stale Pods and attachments are gone and it maps and mounts nothing
+   of the volumes, remove the taint:
+
+   ```bash
+   $K taint node <node> node.kubernetes.io/out-of-service-
+   ```
 
 Measured on the two-node lab (T02, 2026-10-19, [evidence](evidence/managed-runner-cross-node/2026-10-19/README.md)):
 
@@ -492,6 +539,21 @@ Measured on the two-node lab (T02, 2026-10-19, [evidence](evidence/managed-runne
   and the old instance 403 `MANAGED_RUNNER_INSTANCE_SUPERSEDED`. With the taint removed, the node rejoined and the
   volume stayed with the new generation, one Pod and one attachment throughout.
 
+Measured with two accounts' runners on the lost node, running this page's query and commands (T08x, 2026-10-19,
+[evidence](evidence/managed-runner-cross-node-accounts/2026-10-19/README.md)):
+
+- **Steps 1 to 4.** From the power-off check to the taint took 3 s: the query, the commands for each runner, two
+  receipts, one taint. One runner's finalizer came off right after the taint, the other's once its mapping was
+  `FENCING`.
+- **Fencing.** Within 7 s of the taint the first Pod object was gone and the other Pod `Failed`. 9.1 s after the taint
+  both mappings were `FENCING`, and the predecessor's credential of the one still recorded got 401.
+- **The next generations.** Both predecessors were retired on their receipts 4 s after the second finalizer came off.
+  Both runners were READY on the other node 44 and 53 s after their finalizers, 481 s after the power cut.
+- **The data.** Every acknowledged SQLite row, the probes' files, rows and Git commits, uploads and worktrees were as
+  before. The work sent during the outage was answered.
+- **The old node.** Back under the taint, it mapped nothing of either volume and ran nothing of the old Pods. Both old
+  credentials got 401.
+
 **What a node that loses power can lose.** Data its processes had not made durable when the power went may be gone:
 ext4 allocates delayed blocks only at writeback.
 
@@ -499,12 +561,19 @@ ext4 allocates delayed blocks only at writeback.
   loose objects nor refs by default.
 - Even with `core.fsync=committed,index`, a repository committed 1.5 s before a cut lost its `HEAD` and its branch ref.
 - What was fsynced survived: SQLite with `synchronous=FULL`, and fsynced files.
+- The engine's transcript is not fsynced either (T08x). A turn answered 20 s before a cut was missing from the
+  account's transcript on the volume after the failover. The session went on from the lines written before it, and the
+  turn was not in the conversation the engine resumed. Orbit's server kept the turn's events. The other account, whose
+  volume was synced (`sync -f /var/lib/orbit` in the runner container) just before the cut, kept its last turn.
 
-After a failover, check the account's repositories (`git fsck`) before relying on the last minute of work.
+After a failover, check the account's repositories (`git fsck`) before relying on the last minute of work, and expect
+the engine's own record of that minute to be missing.
 
 **Not verified here:**
 - a node that keeps running but is cut off, a partition;
 - a storage fence (`STORAGE_FENCE`) as the receipt's method;
+- the failure of the node that runs the control plane: the lab's k3s server and CSI controller run on its first node,
+  and only the second was failed;
 - failover across separate physical machines: the lab's two nodes are VMs on one host.
 
 ## Where each setting lives

@@ -1,0 +1,632 @@
+{
+ "checks": [
+  {
+   "check": "start.sh --nodes 2 booted the second VM",
+   "ok": true,
+   "value": 0
+  },
+  {
+   "check": "orbit-mr-lab-2 is Ready again and still tainted out of service",
+   "ok": true,
+   "value": {
+    "name": "orbit-mr-lab-2",
+    "ready": "True",
+    "readySince": "2026-10-19T14:45:28Z",
+    "reason": "KubeletReady",
+    "taints": [
+     "node.kubernetes.io/out-of-service=nodeshutdown:NoExecute"
+    ],
+    "uid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+    "unschedulable": false
+   }
+  },
+  {
+   "check": "ann: the old Pod object is gone",
+   "ok": true
+  },
+  {
+   "check": "ann: no sandbox or container of the old Pod runs on orbit-mr-lab-2",
+   "ok": true,
+   "value": {
+    "containersOfTheOldPod": [
+     {
+      "name": "runner",
+      "state": "CONTAINER_EXITED"
+     },
+     {
+      "name": "private-volume-directories",
+      "state": "CONTAINER_EXITED"
+     }
+    ],
+    "kubeletLinesAboutTheOldPod": [
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568\\\") pod \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\" (UID: \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\") \"",
+     "3568\") pod \"ce76c2ac-ea02-4634-b184-eb801d09b751\" (UID: \"ce76c2ac-ea02-4634-b184-eb801d09b751\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568\\\") pod \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\" (UID: \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\") \"",
+     "3568\") pod \"ce76c2ac-ea02-4634-b184-eb801d09b751\" (UID: \"ce76c2ac-ea02-4634-b184-eb801d09b751\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568\\\") pod \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\" (UID: \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\") \"",
+     "3568\") pod \"ce76c2ac-ea02-4634-b184-eb801d09b751\" (UID: \"ce76c2ac-ea02-4634-b184-eb801d09b751\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568\\\") pod \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\" (UID: \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\") \"",
+     "3568\") pod \"ce76c2ac-ea02-4634-b184-eb801d09b751\" (UID: \"ce76c2ac-ea02-4634-b184-eb801d09b751\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568\\\") pod \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\" (UID: \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\") \"",
+     "3568\") pod \"ce76c2ac-ea02-4634-b184-eb801d09b751\" (UID: \"ce76c2ac-ea02-4634-b184-eb801d09b751\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568\\\") pod \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\" (UID: \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\") \"",
+     "3568\") pod \"ce76c2ac-ea02-4634-b184-eb801d09b751\" (UID: \"ce76c2ac-ea02-4634-b184-eb801d09b751\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers"
+    ],
+    "oldPodDirectory": true,
+    "runningContainers": [],
+    "sandboxesOfTheOldPod": [
+     {
+      "id": "bd61307e0dff",
+      "state": "SANDBOX_NOTREADY"
+     }
+    ]
+   }
+  },
+  {
+   "check": "ann: orbit-mr-lab-2 booted anew and maps and mounts no RBD image at all",
+   "ok": true,
+   "value": {
+    "bootId": "53b68dde-f1e6-4ffc-9e2a-a042d0f93d7a",
+    "devices": [],
+    "mounts": [],
+    "uptimeSeconds": 79.65
+   }
+  },
+  {
+   "check": "ann, with the old node back: the runner's Pod runs on orbit-mr-lab",
+   "ok": true,
+   "value": {
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "de97e3f3-e934-4609-881f-f38c82423e99"
+   }
+  },
+  {
+   "check": "ann, with the old node back: one Pod on the claim",
+   "ok": true,
+   "value": [
+    {
+     "deleting": false,
+     "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+     "node": "orbit-mr-lab",
+     "phase": "Running",
+     "uid": "de97e3f3-e934-4609-881f-f38c82423e99"
+    }
+   ]
+  },
+  {
+   "check": "ann, with the old node back: one VolumeAttachment, to orbit-mr-lab",
+   "ok": true,
+   "value": [
+    {
+     "attached": true,
+     "deleting": false,
+     "detachError": null,
+     "name": "csi-affdc008f0ae7fe2acbeb01d6fc62d482ff5ec4b75171c6a9da5256ea11ac222",
+     "node": "orbit-mr-lab"
+    }
+   ]
+  },
+  {
+   "check": "ann, with the old node back: the image is mapped by orbit-mr-lab's kernel",
+   "ok": true,
+   "value": [
+    {
+     "address": "10.77.0.1:0/3639404582",
+     "client": "clientclient294137",
+     "device": "rbd1",
+     "image": "orbit-mr-rbd/csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+    }
+   ]
+  },
+  {
+   "check": "ann, with the old node back: and not by orbit-mr-lab-2's",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "ann, with the old node back: one RBD watcher, orbit-mr-lab's kernel client (10.77.0.1)",
+   "ok": true,
+   "value": [
+    "10.77.0.1:0/3639404582"
+   ]
+  },
+  {
+   "check": "bob: the old Pod object is gone",
+   "ok": true
+  },
+  {
+   "check": "bob: no sandbox or container of the old Pod runs on orbit-mr-lab-2",
+   "ok": true,
+   "value": {
+    "containersOfTheOldPod": [
+     {
+      "name": "runner",
+      "state": "CONTAINER_EXITED"
+     },
+     {
+      "name": "private-volume-directories",
+      "state": "CONTAINER_EXITED"
+     }
+    ],
+    "kubeletLinesAboutTheOldPod": [
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14\\\") pod \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\" (UID: \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\") \"",
+     "ac14\") pod \"c575d98b-33a5-4895-88b5-87f2832ea889\" (UID: \"c575d98b-33a5-4895-88b5-87f2832ea889\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14\\\") pod \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\" (UID: \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\") \"",
+     "ac14\") pod \"c575d98b-33a5-4895-88b5-87f2832ea889\" (UID: \"c575d98b-33a5-4895-88b5-87f2832ea889\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14\\\") pod \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\" (UID: \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\") \"",
+     "ac14\") pod \"c575d98b-33a5-4895-88b5-87f2832ea889\" (UID: \"c575d98b-33a5-4895-88b5-87f2832ea889\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14\\\") pod \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\" (UID: \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\") \"",
+     "ac14\") pod \"c575d98b-33a5-4895-88b5-87f2832ea889\" (UID: \"c575d98b-33a5-4895-88b5-87f2832ea889\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14\\\") pod \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\" (UID: \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\") \"",
+     "ac14\") pod \"c575d98b-33a5-4895-88b5-87f2832ea889\" (UID: \"c575d98b-33a5-4895-88b5-87f2832ea889\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14\\\") pod \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\" (UID: \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\") \"",
+     "ac14\") pod \"c575d98b-33a5-4895-88b5-87f2832ea889\" (UID: \"c575d98b-33a5-4895-88b5-87f2832ea889\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers"
+    ],
+    "oldPodDirectory": true,
+    "runningContainers": [],
+    "sandboxesOfTheOldPod": [
+     {
+      "id": "86c15e13bd27",
+      "state": "SANDBOX_NOTREADY"
+     }
+    ]
+   }
+  },
+  {
+   "check": "bob: orbit-mr-lab-2 booted anew and maps and mounts no RBD image at all",
+   "ok": true,
+   "value": {
+    "bootId": "53b68dde-f1e6-4ffc-9e2a-a042d0f93d7a",
+    "devices": [],
+    "mounts": [],
+    "uptimeSeconds": 83.49
+   }
+  },
+  {
+   "check": "bob, with the old node back: the runner's Pod runs on orbit-mr-lab",
+   "ok": true,
+   "value": {
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "f18bf6bd-9d69-46d5-912f-bb65032f0903"
+   }
+  },
+  {
+   "check": "bob, with the old node back: one Pod on the claim",
+   "ok": true,
+   "value": [
+    {
+     "deleting": false,
+     "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+     "node": "orbit-mr-lab",
+     "phase": "Running",
+     "uid": "f18bf6bd-9d69-46d5-912f-bb65032f0903"
+    }
+   ]
+  },
+  {
+   "check": "bob, with the old node back: one VolumeAttachment, to orbit-mr-lab",
+   "ok": true,
+   "value": [
+    {
+     "attached": true,
+     "deleting": false,
+     "detachError": null,
+     "name": "csi-7767fb794d9638199285d7bcbf716bedf52faf4454f608f42adeef5e1fc9be15",
+     "node": "orbit-mr-lab"
+    }
+   ]
+  },
+  {
+   "check": "bob, with the old node back: the image is mapped by orbit-mr-lab's kernel",
+   "ok": true,
+   "value": [
+    {
+     "address": "10.77.0.1:0/3639404582",
+     "client": "clientclient294137",
+     "device": "rbd2",
+     "image": "orbit-mr-rbd/csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+    }
+   ]
+  },
+  {
+   "check": "bob, with the old node back: and not by orbit-mr-lab-2's",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "bob, with the old node back: one RBD watcher, orbit-mr-lab's kernel client (10.77.0.1)",
+   "ok": true,
+   "value": [
+    "10.77.0.1:0/3639404582"
+   ]
+  }
+ ],
+ "endedAt": "2026-10-19T14:46:29.360+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "rejoin",
+ "result": {
+  "ann": {
+   "placement": {
+    "at": "2026-10-19T14:46:15.928+00:00",
+    "generation": 3,
+    "guests": {
+     "orbit-mr-lab": {
+      "bootId": "393dbae1-9c15-449f-bc00-9816ed2072c5",
+      "devices": [
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd0",
+        "image": "orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd"
+       },
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd1",
+        "image": "orbit-mr-rbd/csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+       },
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd2",
+        "image": "orbit-mr-rbd/csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+       }
+      ],
+      "mounts": [
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/pods/bbc3ff55-2aee-47da-9c43-57f708e36bef/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd2",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/e8dcc238b46fc2c525e59c00a1183d2e93d754a7d3ab864b75709fd2970c9548/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd2",
+        "target": "/var/lib/kubelet/pods/f18bf6bd-9d69-46d5-912f-bb65032f0903/volumes/kubernetes.io~csi/pvc-89d67b8d-c292-4f99-a619-0d964d1df9e5/mount"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd1",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/f2e771687bdf0ba0e2a24a831d4338738031ce21971f9d3cd49f65615db35767/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd1",
+        "target": "/var/lib/kubelet/pods/de97e3f3-e934-4609-881f-f38c82423e99/volumes/kubernetes.io~csi/pvc-22b25daa-3fa0-4432-a081-8ec8ed247208/mount"
+       }
+      ],
+      "uptimeSeconds": 1540.46
+     },
+     "orbit-mr-lab-2": {
+      "bootId": "53b68dde-f1e6-4ffc-9e2a-a042d0f93d7a",
+      "devices": [],
+      "mounts": [],
+      "uptimeSeconds": 79.65
+     }
+    },
+    "image": "orbit-mr-rbd/csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568",
+    "nodeName": "orbit-mr-lab",
+    "pod": {
+     "containers": [
+      {
+       "exitCode": 0,
+       "name": "private-volume-directories",
+       "reason": "Completed",
+       "state": "terminated"
+      },
+      {
+       "exitCode": null,
+       "name": "runner",
+       "reason": null,
+       "state": "running"
+      }
+     ],
+     "deletionTimestamp": null,
+     "disruptionTarget": null,
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "generation": "3",
+     "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+     "node": "orbit-mr-lab",
+     "phase": "Running",
+     "ready": "True",
+     "uid": "de97e3f3-e934-4609-881f-f38c82423e99"
+    },
+    "podUid": "de97e3f3-e934-4609-881f-f38c82423e99",
+    "podsOnTheClaim": [
+     {
+      "deleting": false,
+      "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+      "node": "orbit-mr-lab",
+      "phase": "Running",
+      "uid": "de97e3f3-e934-4609-881f-f38c82423e99"
+     }
+    ],
+    "state": "READY",
+    "volumeAttachments": [
+     {
+      "attached": true,
+      "deleting": false,
+      "detachError": null,
+      "name": "csi-affdc008f0ae7fe2acbeb01d6fc62d482ff5ec4b75171c6a9da5256ea11ac222",
+      "node": "orbit-mr-lab"
+     }
+    ],
+    "watchers": [
+     {
+      "address": "10.77.0.1:0/3639404582",
+      "client": 294137,
+      "cookie": 18446462598732840965
+     }
+    ]
+   },
+   "vm2": {
+    "containersOfTheOldPod": [
+     {
+      "name": "runner",
+      "state": "CONTAINER_EXITED"
+     },
+     {
+      "name": "private-volume-directories",
+      "state": "CONTAINER_EXITED"
+     }
+    ],
+    "kubeletLinesAboutTheOldPod": [
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568\\\") pod \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\" (UID: \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\") \"",
+     "3568\") pod \"ce76c2ac-ea02-4634-b184-eb801d09b751\" (UID: \"ce76c2ac-ea02-4634-b184-eb801d09b751\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568\\\") pod \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\" (UID: \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\") \"",
+     "3568\") pod \"ce76c2ac-ea02-4634-b184-eb801d09b751\" (UID: \"ce76c2ac-ea02-4634-b184-eb801d09b751\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568\\\") pod \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\" (UID: \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\") \"",
+     "3568\") pod \"ce76c2ac-ea02-4634-b184-eb801d09b751\" (UID: \"ce76c2ac-ea02-4634-b184-eb801d09b751\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568\\\") pod \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\" (UID: \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\") \"",
+     "3568\") pod \"ce76c2ac-ea02-4634-b184-eb801d09b751\" (UID: \"ce76c2ac-ea02-4634-b184-eb801d09b751\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568\\\") pod \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\" (UID: \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\") \"",
+     "3568\") pod \"ce76c2ac-ea02-4634-b184-eb801d09b751\" (UID: \"ce76c2ac-ea02-4634-b184-eb801d09b751\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568\\\") pod \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\" (UID: \\\"ce76c2ac-ea02-4634-b184-eb801d09b751\\\") \"",
+     "3568\") pod \"ce76c2ac-ea02-4634-b184-eb801d09b751\" (UID: \"ce76c2ac-ea02-4634-b184-eb801d09b751\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers"
+    ],
+    "oldPodDirectory": true,
+    "runningContainers": [],
+    "sandboxesOfTheOldPod": [
+     {
+      "id": "bd61307e0dff",
+      "state": "SANDBOX_NOTREADY"
+     }
+    ]
+   }
+  },
+  "bob": {
+   "placement": {
+    "at": "2026-10-19T14:46:21.857+00:00",
+    "generation": 3,
+    "guests": {
+     "orbit-mr-lab": {
+      "bootId": "393dbae1-9c15-449f-bc00-9816ed2072c5",
+      "devices": [
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd0",
+        "image": "orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd"
+       },
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd1",
+        "image": "orbit-mr-rbd/csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+       },
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd2",
+        "image": "orbit-mr-rbd/csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+       }
+      ],
+      "mounts": [
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/pods/bbc3ff55-2aee-47da-9c43-57f708e36bef/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd2",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/e8dcc238b46fc2c525e59c00a1183d2e93d754a7d3ab864b75709fd2970c9548/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd2",
+        "target": "/var/lib/kubelet/pods/f18bf6bd-9d69-46d5-912f-bb65032f0903/volumes/kubernetes.io~csi/pvc-89d67b8d-c292-4f99-a619-0d964d1df9e5/mount"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd1",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/f2e771687bdf0ba0e2a24a831d4338738031ce21971f9d3cd49f65615db35767/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd1",
+        "target": "/var/lib/kubelet/pods/de97e3f3-e934-4609-881f-f38c82423e99/volumes/kubernetes.io~csi/pvc-22b25daa-3fa0-4432-a081-8ec8ed247208/mount"
+       }
+      ],
+      "uptimeSeconds": 1544.32
+     },
+     "orbit-mr-lab-2": {
+      "bootId": "53b68dde-f1e6-4ffc-9e2a-a042d0f93d7a",
+      "devices": [],
+      "mounts": [],
+      "uptimeSeconds": 83.49
+     }
+    },
+    "image": "orbit-mr-rbd/csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14",
+    "nodeName": "orbit-mr-lab",
+    "pod": {
+     "containers": [
+      {
+       "exitCode": 0,
+       "name": "private-volume-directories",
+       "reason": "Completed",
+       "state": "terminated"
+      },
+      {
+       "exitCode": null,
+       "name": "runner",
+       "reason": null,
+       "state": "running"
+      }
+     ],
+     "deletionTimestamp": null,
+     "disruptionTarget": null,
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "generation": "3",
+     "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+     "node": "orbit-mr-lab",
+     "phase": "Running",
+     "ready": "True",
+     "uid": "f18bf6bd-9d69-46d5-912f-bb65032f0903"
+    },
+    "podUid": "f18bf6bd-9d69-46d5-912f-bb65032f0903",
+    "podsOnTheClaim": [
+     {
+      "deleting": false,
+      "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+      "node": "orbit-mr-lab",
+      "phase": "Running",
+      "uid": "f18bf6bd-9d69-46d5-912f-bb65032f0903"
+     }
+    ],
+    "state": "READY",
+    "volumeAttachments": [
+     {
+      "attached": true,
+      "deleting": false,
+      "detachError": null,
+      "name": "csi-7767fb794d9638199285d7bcbf716bedf52faf4454f608f42adeef5e1fc9be15",
+      "node": "orbit-mr-lab"
+     }
+    ],
+    "watchers": [
+     {
+      "address": "10.77.0.1:0/3639404582",
+      "client": 294137,
+      "cookie": 18446462598732840964
+     }
+    ]
+   },
+   "vm2": {
+    "containersOfTheOldPod": [
+     {
+      "name": "runner",
+      "state": "CONTAINER_EXITED"
+     },
+     {
+      "name": "private-volume-directories",
+      "state": "CONTAINER_EXITED"
+     }
+    ],
+    "kubeletLinesAboutTheOldPod": [
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14\\\") pod \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\" (UID: \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\") \"",
+     "ac14\") pod \"c575d98b-33a5-4895-88b5-87f2832ea889\" (UID: \"c575d98b-33a5-4895-88b5-87f2832ea889\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14\\\") pod \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\" (UID: \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\") \"",
+     "ac14\") pod \"c575d98b-33a5-4895-88b5-87f2832ea889\" (UID: \"c575d98b-33a5-4895-88b5-87f2832ea889\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14\\\") pod \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\" (UID: \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\") \"",
+     "ac14\") pod \"c575d98b-33a5-4895-88b5-87f2832ea889\" (UID: \"c575d98b-33a5-4895-88b5-87f2832ea889\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14\\\") pod \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\" (UID: \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\") \"",
+     "ac14\") pod \"c575d98b-33a5-4895-88b5-87f2832ea889\" (UID: \"c575d98b-33a5-4895-88b5-87f2832ea889\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14\\\") pod \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\" (UID: \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\") \"",
+     "ac14\") pod \"c575d98b-33a5-4895-88b5-87f2832ea889\" (UID: \"c575d98b-33a5-4895-88b5-87f2832ea889\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers",
+     "ame: \\\"kubernetes.io/csi/rbd.csi.ceph.com^0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14\\\") pod \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\" (UID: \\\"c575d98b-33a5-4895-88b5-87f2832ea889\\\") \"",
+     "ac14\") pod \"c575d98b-33a5-4895-88b5-87f2832ea889\" (UID: \"c575d98b-33a5-4895-88b5-87f2832ea889\") : kubernetes.io/csi: Unmounter.TearDownAt failed to get CSI client: driver name rbd.csi.ceph.com not found in the list of registered CSI drivers"
+    ],
+    "oldPodDirectory": true,
+    "runningContainers": [],
+    "sandboxesOfTheOldPod": [
+     {
+      "id": "86c15e13bd27",
+      "state": "SANDBOX_NOTREADY"
+     }
+    ]
+   }
+  },
+  "bootToReadySeconds": 34.8,
+  "memory": {
+   "at": "2026-10-19T14:46:23.296Z",
+   "host": {
+    "MemAvailable": 5213,
+    "MemTotal": 15357,
+    "SwapFree": 31811,
+    "SwapTotal": 44285
+   },
+   "label": "t08x second node back, tainted",
+   "vms": {
+    "orbit-mr-lab": {
+     "guest": {
+      "stat-available-memory": 3321,
+      "stat-disk-caches": 983,
+      "stat-free-memory": 2536,
+      "stat-total-memory": 5920
+     },
+     "unit": {
+      "currentMiB": 2408,
+      "peakMiB": 3409,
+      "swapMiB": 1589
+     }
+    },
+    "orbit-mr-lab-2": {
+     "guest": {
+      "stat-available-memory": 2411,
+      "stat-disk-caches": 480,
+      "stat-free-memory": 2118,
+      "stat-total-memory": 2903
+     },
+     "unit": {
+      "currentMiB": 1096,
+      "peakMiB": 1104,
+      "swapMiB": 0
+     }
+    }
+   }
+  },
+  "node": {
+   "name": "orbit-mr-lab-2",
+   "ready": "True",
+   "readySince": "2026-10-19T14:45:28Z",
+   "reason": "KubeletReady",
+   "taints": [
+    "node.kubernetes.io/out-of-service=nodeshutdown:NoExecute"
+   ],
+   "uid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+   "unschedulable": false
+  },
+  "readyAt": "2026-10-19T14:45:30.234+00:00",
+  "startLog": [
+   "14:44:55Z host MemAvailable 5756 MiB (floor 1536 MiB): booting orbit-mr-lab-2 (3072 MiB)",
+   "14:44:57Z started orbit-mr-lab-2.service (cgroup /system.slice/orbit-mr-lab-2.service)",
+   "14:45:24Z SSH to VM 2 is up: 7.0.0-34-generic"
+  ],
+  "startShAt": "2026-10-19T14:44:55.461+00:00"
+ },
+ "seconds": 93.9,
+ "startedAt": "2026-10-19T14:44:55.440+00:00",
+ "step": "start"
+}

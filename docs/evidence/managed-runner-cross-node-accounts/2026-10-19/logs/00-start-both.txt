@@ -1,0 +1,44 @@
+2026-10-19T14:20:32.184Z
+14:20:32Z host MemAvailable 9796 MiB (floor 3584 MiB): booting orbit-mr-lab (6144 MiB), orbit-mr-lab-2 (3072 MiB)
+14:20:33Z started orbit-mr-lab.service (cgroup /system.slice/orbit-mr-lab.service)
+14:20:35Z started orbit-mr-lab-2.service (cgroup /system.slice/orbit-mr-lab-2.service)
+14:21:11Z SSH to VM 1 is up: 7.0.0-34-generic
+14:21:17Z SSH to VM 2 is up: 7.0.0-34-generic
+host kernel modules rbd/nbd/ceph/libceph loaded: none
+VM 1: running, qemu pid 1303933, cgroup /system.slice/orbit-mr-lab.service
+VM 1 qemu listens on: 127.0.0.1:16222 127.0.0.1:16230 127.0.0.1:16443
+VM 2: running, qemu pid 1303960, cgroup /system.slice/orbit-mr-lab-2.service
+VM 2 qemu listens on: 127.0.0.1:16223
+link 127.0.0.1:16230: 127.0.0.1:16230 <- 127.0.0.1:38724
+unit orbit-mr-lab: memory.current 1348 MiB, memory.peak 1350 MiB, swap 0 MiB, memory.max 6979321856
+unit orbit-mr-lab-2: memory.current 991 MiB, memory.peak 992 MiB, swap 0 MiB, memory.max 3758096384
+host: MemAvailable 7627 MiB, SwapFree 33512 MiB
+guest 1 (virtio-balloon): {"guestMiB": {"stat-available-memory": 5263, "stat-free-memory": 4884, "stat-total-memory": 5920, "stat-disk-caches": 577}, "lastUpdate": 1792419679}
+guest 2 (virtio-balloon): {"guestMiB": {"stat-available-memory": 2452, "stat-free-memory": 2202, "stat-total-memory": 2903, "stat-disk-caches": 438}, "lastUpdate": 1792419682}
+guest 1: {"cephHealth":"HEALTH_OK","osdsUp":3,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"cephListens":"10.77.0.1","problems":["k3s is not active"]}
+guest 2: {"linkRttMs":"0.162","rbdMapped":0,"problems":["k3s-agent is not active"]}
+k3s v1.36.5+k3s1
+node orbit-mr-lab Ready: True, internal IP 10.77.0.1
+node orbit-mr-lab-2 Ready: True, internal IP 10.77.0.2, cordoned
+deployment/ceph-csi-operator-controller-manager: 0/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 0/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab: not ready
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab-2: ready
+not healthy: VM 1: k3s is not active;VM 2: k3s-agent is not active;deployment/ceph-csi-operator-controller-manager not available;deployment/rbd.csi.ceph.com-ctrlplugin not available;no ready CSI node plugin on orbit-mr-lab
+guest 1: {"cephHealth":"HEALTH_OK","osdsUp":3,"osdsIn":3,"pgStates":[{"state_name":"unknown","count":33}],"cephListens":"10.77.0.1","problems":[]}
+guest 2: {"linkRttMs":"0.276","rbdMapped":0,"problems":[]}
+k3s v1.36.5+k3s1
+node orbit-mr-lab Ready: True, internal IP 10.77.0.1
+node orbit-mr-lab-2 Ready: True, internal IP 10.77.0.2, cordoned
+deployment/ceph-csi-operator-controller-manager: 1/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab: ready
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab-2: ready
+healthy, two nodes: orbit-mr-lab and orbit-mr-lab-2 Ready over the link 10.77.0.0/24; Ceph (3 OSDs, HEALTH_OK) at 10.77.0.1; Ceph-CSI on both nodes; StorageClass runner-data, namespace orbit-mr-test
+14:22:10Z node orbit-mr-lab-2: uncordoned
+14:22:13Z [trim] page cache dropped; 1260 MiB used, 718 MiB cache, 4179 MiB free
+14:22:14Z [trim] page cache dropped; 504 MiB used, 317 MiB cache, 2290 MiB free
+unit orbit-mr-lab: memory.current 2699 MiB, memory.peak 3024 MiB, swap 0 MiB, memory.max 6979321856
+unit orbit-mr-lab-2: memory.current 1224 MiB, memory.peak 1225 MiB, swap 0 MiB, memory.max 3758096384
+host: MemAvailable 5591 MiB, SwapFree 33515 MiB
+2026-10-19T14:22:14.364Z

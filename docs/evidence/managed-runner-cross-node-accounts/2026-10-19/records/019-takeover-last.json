@@ -1,0 +1,166 @@
+{
+ "checks": [
+  {
+   "check": "ann: the last message was answered by ann's runner on orbit-mr-lab-2",
+   "ok": true,
+   "value": {
+    "created_at": "2026-10-19T14:36:22.637",
+    "ingested_at": "2026-10-19T14:36:22.82877+00:00",
+    "ingested_by_runner_id": "01a1548e-0f66-719f-aa98-e3ed285e4e91",
+    "seq": 30,
+    "session_id": "01a1548e-ccbb-7578-98d5-3e00fbd897c6",
+    "type": "assistant"
+   }
+  },
+  {
+   "check": "bob: the last message was answered by bob's runner on orbit-mr-lab-2",
+   "ok": true,
+   "value": {
+    "created_at": "2026-10-19T14:36:22.085",
+    "ingested_at": "2026-10-19T14:36:22.300773+00:00",
+    "ingested_by_runner_id": "01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+    "seq": 30,
+    "session_id": "01a1548e-d1e1-7716-94ca-8b2770f29b8a",
+    "type": "assistant"
+   }
+  },
+  {
+   "check": "no Git work on either volume for 60 s",
+   "ok": true,
+   "value": 67.2
+  }
+ ],
+ "endedAt": "2026-10-19T14:36:23.262+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "takeover",
+ "result": {
+  "ann": {
+   "answered": {
+    "event": {
+     "created_at": "2026-10-19T14:36:22.637",
+     "ingested_at": "2026-10-19T14:36:22.82877+00:00",
+     "ingested_by_runner_id": "01a1548e-0f66-719f-aa98-e3ed285e4e91",
+     "seq": 30,
+     "session_id": "01a1548e-ccbb-7578-98d5-3e00fbd897c6",
+     "type": "assistant"
+    },
+    "modelRequests": [
+     {
+      "at": "2026-10-19T14:36:22Z",
+      "kind": "text",
+      "messages": 11,
+      "n": 9,
+      "secrets": [
+       "annfirst",
+       "annlast"
+      ],
+      "tool": null
+     }
+    ],
+    "session": {
+     "assigned_runner_id": "01a1548e-0f66-719f-aa98-e3ed285e4e91",
+     "created_at": "2026-10-19T14:26:47.1",
+     "engine": "claude",
+     "id": "01a1548e-ccbb-7578-98d5-3e00fbd897c6",
+     "provider": "deepseek",
+     "runtime_session_id": "d4a254d7-c4a8-4fa2-87e2-246533d210f5",
+     "status": "RUNNING",
+     "task_id": null
+    }
+   },
+   "stampAt": "2026-10-19T14:36:17.837+00:00",
+   "transcriptsBefore": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-ccbb-7578-98d5-3e00fbd897c6/d4a254d7-c4a8-4fa2-87e2-246533d210f5.jsonl": {
+     "bytes": 736991,
+     "endsWithNewline": true,
+     "lines": 36,
+     "prefixes": {},
+     "sha256": "c983db0d1b29e401138d92a35a54f34735e6efa1db7f51254ffdbdad4d5aeb2e"
+    }
+   },
+   "turn": {
+    "answer": {
+     "code": null,
+     "id": null,
+     "message": null,
+     "seq": 3,
+     "status": null
+    },
+    "at": "2026-10-19T14:36:20.551+00:00",
+    "kind": "turn",
+    "session": "34ifX1UizebwFShwLfstK",
+    "status": 201
+   }
+  },
+  "bob": {
+   "answered": {
+    "event": {
+     "created_at": "2026-10-19T14:36:22.085",
+     "ingested_at": "2026-10-19T14:36:22.300773+00:00",
+     "ingested_by_runner_id": "01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+     "seq": 30,
+     "session_id": "01a1548e-d1e1-7716-94ca-8b2770f29b8a",
+     "type": "assistant"
+    },
+    "modelRequests": [
+     {
+      "at": "2026-10-19T14:36:22Z",
+      "kind": "text",
+      "messages": 11,
+      "n": 8,
+      "secrets": [
+       "bobfirst",
+       "boblast"
+      ],
+      "tool": null
+     }
+    ],
+    "session": {
+     "assigned_runner_id": "01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+     "created_at": "2026-10-19T14:26:48.417",
+     "engine": "claude",
+     "id": "01a1548e-d1e1-7716-94ca-8b2770f29b8a",
+     "provider": "deepseek-2",
+     "runtime_session_id": "6001df67-0d8b-4d9b-81c1-425d9c747037",
+     "status": "RUNNING",
+     "task_id": null
+    }
+   },
+   "stampAt": "2026-10-19T14:36:19.880+00:00",
+   "transcriptsBefore": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-d1e1-7716-94ca-8b2770f29b8a/6001df67-0d8b-4d9b-81c1-425d9c747037.jsonl": {
+     "bytes": 736992,
+     "endsWithNewline": true,
+     "lines": 36,
+     "prefixes": {},
+     "sha256": "ec5a957b9d8b72f94dec56f40612e9da0552b8f07a0a85fd0beb592657a41a2a"
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-b2c53285-8438-541c-b14b-232d3b04c323/4436b81d-d3a5-4077-961f-774d4f0d5801.jsonl": {
+     "bytes": 731829,
+     "endsWithNewline": true,
+     "lines": 23,
+     "prefixes": {},
+     "sha256": "31f7f22cf5e6ad869113c77c9e1220117a07b0117582fc1bd9002eed994cb2bf"
+    }
+   },
+   "turn": {
+    "answer": {
+     "code": null,
+     "id": null,
+     "message": null,
+     "seq": 3,
+     "status": null
+    },
+    "at": "2026-10-19T14:36:20.675+00:00",
+    "kind": "turn",
+    "session": "34ifX3ZCiSUsMligh4Ixe",
+    "status": 201
+   }
+  },
+  "secondsSinceLastGit": 67.2
+ },
+ "seconds": 60.6,
+ "startedAt": "2026-10-19T14:35:22.687+00:00",
+ "step": "last"
+}

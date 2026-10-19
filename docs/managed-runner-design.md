@@ -295,12 +295,28 @@ UID, advance generation, issue its credential, and create the replacement on ano
 Deletion of a Kubernetes API object, disappearance of a `VolumeAttachment`, or a manager lock alone
 is insufficient evidence that a partitioned machine stopped using the disk.
 
-For an unreachable node, persist `FENCING` and block replacement. The first supported fault path is
-operator-confirmed fencing in the authorized test environment:
+For an unreachable node, block replacement and leave the takeover to the operator. A lost heartbeat
+proves nothing about the node's writers, so the mapping stays `READY` with its generation and Pod
+recorded. The owner's status says the runner is not usable once its heartbeat is older than
+`heartbeatFreshSeconds`; demand waits, the owner's retry is refused, and no Pod is created. The
+manager goes `FENCING` only when the recorded Pod disappears, is replaced, or turns terminal without
+its kubelet's report. In practice that happens when the operator's `node.kubernetes.io/out-of-service` taint
+lets PodGC make the Pod `Failed` (step 4). From then on the predecessor's credential is refused, and
+the next generation starts on the operator's fencing receipt.
+
+This behavior was kept by the coordinator's decision of 2026-10-19, after T02 found it, instead of
+fencing as soon as the control plane marks the Pod for eviction:
+
+- A takeover needs the operator's receipt either way, so fencing earlier would not be safer.
+- It would cut a draining runner's credential whenever a healthy node is given a `NoExecute` taint.
+- It would make every loss of contact longer than the taint toleration an event for an operator.
+
+The first supported fault path is operator-confirmed fencing in the authorized test environment:
 
 1. Identify the predecessor by Pod UID, node UID, generation, PVC UID, volume handle, and RBD image.
-   Stop new claims and reject the predecessor's managed API generation. Preserve the mapping and
-   pending demand. No timeout or user retry may authorize disk access by a successor.
+   Preserve the mapping and pending demand. The predecessor's managed API generation is rejected
+   from the moment the mapping is `FENCING`. No timeout or user retry may authorize disk access by a
+   successor.
 2. A privileged infrastructure operator powers off the old node through its hypervisor/BMC and
    verifies that state, then quarantines it from scheduling/restart until stale Pods/mounts are
    removed. Record the control action and independent observed power/cessation result. No such
@@ -1589,14 +1605,11 @@ through the test server's manager, with its findings
 
 Found, and left to later work (reported to the coordinator):
 
-- **For an unreachable node, the manager does not persist `FENCING`.** "Single Pod and single writer protection" above
-  says it should, and that it should reject the predecessor's generation.
-  - What the manager does: it blocks replacement, but it fences only when the recorded Pod disappears, is replaced, or
-    turns terminal without its kubelet's report.
-  - A Pod on a lost node stays `Running`, evicted or not, so the mapping stays `READY` and the predecessor's credential
-    stays valid until the operator's out-of-service taint lets PodGC make the Pod terminal.
-  - One option is to fence on the control plane's eviction mark. Its cost: a healthy node's `NoExecute` taint would then
-    cut a draining runner's credential before it finished.
+- **For an unreachable node, the manager does not persist `FENCING`** until the operator's out-of-service taint lets
+  PodGC make the Pod terminal: the mapping stays `READY`, and the predecessor's credential valid, until then. The
+  coordinator decided on 2026-10-19 to keep this behavior. "Single Pod and single writer protection" above now
+  describes it, with the reasons. T08x saw it again with two runners on the stopped node
+  ([its record](#implementation-record-two-accounts-across-two-nodes)).
 - **Work a node had not made durable when it lost power can be lost**, and a repository with it.
   - Git fsyncs neither loose objects nor refs by default. ext4 allocates delayed blocks at writeback, and a rename is
     durable only at the next journal commit.
@@ -1606,3 +1619,32 @@ Found, and left to later work (reported to the coordinator):
     example syncing the volume after it), or repairing a repository at the next start, is the image's and the runner's.
 - Not established: a partition that keeps the old node running, a storage fence as the receipt's method, two managers,
   failover across physical machines, a real model.
+
+## Implementation record: two accounts across two nodes
+
+Recorded 2026-10-19 for task T08x, the cross-node part of criterion 8, on the lab's two nodes (task L1: two VMs on one
+physical machine, one failure domain, Ceph a single-host cluster in the first). No product code changed: the record is of
+what the delivered manager, admission guard and fencing gate did for two accounts at once, and of the runbook as it was
+followed. It was run by `scripts/managed-runner/lab/cross-node-lab.py` through the test server's manager
+([evidence](evidence/managed-runner-cross-node-accounts/2026-10-19/README.md), [the lab page](managed-runner-lab.md#two-accounts-across-two-nodes-t08x)).
+
+| Area | What the run established |
+| --- | --- |
+| Normal move, two accounts | Both runners put to sleep on one node and woken on the other, one by a message and one by a task run now: each the same runner, PVC, PV, volume handle, RBD image and workspace, with its probe data, uploads, worktree, transcripts and engine session. Both again by `kubectl drain` of either node: the next generations on the other node, with their data and sessions. |
+| Second Pods on another node | For each account the shapes T02 tried, and Pods mixing the two accounts' runners and claims (`NOT_THE_FIXED_NAME`, `NOT_THE_OWNER`, `MULTIPLE_MANAGED_CLAIMS`), were refused while the runners ran. So were Pods made while the node was lost and the volumes still attached to it, the next generation's under the fixed name among them (`NOT_THE_RESERVED_GENERATION`): the guard reserves nothing a receipt has not opened. |
+| A node that stops with two runners | Both mappings stayed `READY` at their generation for 420 s: no Pod, admission probe or Secret was created, demand waited and retries were refused. This is the behavior "Single Pod and single writer protection" now describes. |
+| Failover | The runbook's query and commands, two receipts, one out-of-service taint, two finalizer patches. One Pod's finalizer came off right after the taint and the other's once its mapping was `FENCING`. The manager fenced on the Pod object's removal (`gone without a stop proof`) for the one and on PodGC's `Failed` (`not by its kubelet's report`) for the other, accepted each receipt as its stop proof and started both next generations on the other node. Every SQLite row each writer acknowledged was there, `integrity_check` ok, Git commits made more than a minute before the cut intact. |
+| The old node's return | Under the taint it mapped nothing of either volume and ran nothing of either old Pod; both old generations' credentials were refused. |
+
+Found (reported to the coordinator):
+
+- **The engine's transcript loses what was not written back.** Claude Code does not fsync its transcript on the volume.
+  - A turn answered 20 s before the power cut was missing after the takeover, and the session went on without it.
+    Orbit's server kept its events.
+  - A volume synced in the runner container just before the cut kept its last turn.
+  - Like Git work (T02's finding), this is data the image or the runner would have to make durable. It belongs with T02c.
+- **The planned move needs `kubectl drain --delete-emptydir-data --force`**, for a bare Pod with an emptyDir. A drain
+  ends only when a manager records each evicted runner's stop. A managed Pod no running manager records holds the drain
+  until its timeout: here, an earlier task's Pod, which the drain marked for deletion. The runbook now says so.
+- Not established: a real model, a partition, a storage fence, the failure of the node that runs the control plane, two
+  managers, failover across physical machines.

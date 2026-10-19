@@ -1,0 +1,66 @@
+{
+ "checks": [
+  {
+   "check": "Terminating managed Pods on orbit-mr-lab: none of them a runner of these accounts",
+   "ok": true,
+   "value": [
+    {
+     "created": "2026-10-18T06:27:51Z",
+     "deletionTimestamp": "2026-10-19T14:48:34Z",
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "generation": "1",
+     "name": "mr-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+     "phase": "Failed",
+     "uid": "52ed1c8a-1ba8-43b5-a563-347bb26f9038"
+    }
+   ]
+  },
+  {
+   "check": "with --skip-wait-for-delete-timeout=60 the drain finishes",
+   "ok": true,
+   "value": "node/orbit-mr-lab cordoned\nnode/orbit-mr-lab drained"
+  },
+  {
+   "check": "the Terminating Pods are still there as they were: the drain passed them",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T14:57:28.513+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "drain",
+ "result": {
+  "drain": {
+   "exit": 0,
+   "output": [
+    "node/orbit-mr-lab cordoned",
+    "node/orbit-mr-lab drained"
+   ]
+  },
+  "drainAt": "2026-10-19T14:57:28.304+00:00",
+  "stuck": [
+   {
+    "created": "2026-10-18T06:27:51Z",
+    "deletionTimestamp": "2026-10-19T14:48:34Z",
+    "finalizers": [
+     "orbit.dev/managed-runner-stop-report"
+    ],
+    "generation": "1",
+    "name": "mr-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+    "phase": "Failed",
+    "uid": "52ed1c8a-1ba8-43b5-a563-347bb26f9038"
+   }
+  ],
+  "uncordon": {
+   "action": "uncordon",
+   "at": "2026-10-19T14:57:28.485+00:00",
+   "node": "orbit-mr-lab",
+   "unschedulable": false
+  }
+ },
+ "seconds": 0.3,
+ "startedAt": "2026-10-19T14:57:28.189+00:00",
+ "step": "stuck"
+}

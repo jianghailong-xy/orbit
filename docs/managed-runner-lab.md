@@ -203,6 +203,7 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `acceptance-lab.py` | The end-to-end run of task T08 ([below](#end-to-end-acceptance-t08)): two accounts through the switch unset, `false` and on, provisioning, capacity, sessions, busy and idle, wakes, Pod rebuilds, a controller restart, an image rollback, an independent RBD backup restored to a new PVC, and the switch off again, in one command that stops at the first failed check; `report` condenses a run, `secret-scan` checks its records. |
 | `switch-lab.py` | Task T08b's run ([below](#a-restored-volume-back-under-its-runner-t08b)), on acceptance-lab.py's helpers: one account provisioned, data on its volume, an independent backup, the volume lost, the runbook's restore into a new claim under the runner's name, the administrator's volume switch and the wake on the restored claim, in one command that stops at the first failed check; `report` condenses a run. |
 | `takeover-lab.py` | Task T02's run on the two nodes ([below](#cross-node-migration-and-takeover-t02)), on acceptance-lab.py's helpers: one account's runner moved to the other node through sleep and wake, Pods on its claim pinned to the other node, what RWO and RBD do alone, the second node's power cut while the runner writes there, the runbook's failover (receipt, out-of-service taint, finalizer) and the old node's return; it stops at the first failed check and goes on from a step (`--from-step`); `report` condenses a run, `secret-scan` checks its records. |
+| `cross-node-lab.py` | Task T08x's run on the two nodes ([below](#two-accounts-across-two-nodes-t08x)), on takeover-lab.py's helpers: two accounts' runners moved to the other node (a message, a task run now), second Pods on each claim and Pods mixing the accounts, the second node's power cut with both runners on it (no Git work in the last minute, a last message to each session, one volume synced and one not), the runbook's failover for both with the runbook's own query and commands, the old node's return, and `kubectl drain` both ways; `--from-step`, `report` and `secret-scan` as above. |
 
 A test window:
 
@@ -888,6 +889,67 @@ Left in the lab: `test-server-t02` (ann SLEEPING on her claim, generation 4 rese
 `mr-fence-01a15431-…`; the trial's `test-server-t02-dev`; their claims with PVs and images, as retained test data. The
 plain RWO claim and the Git experiment's claim were deleted with their PVs and images. The webhook is removed, the test
 server and gate are stopped, and both VMs are off.
+
+## Two accounts across two nodes (T08x)
+
+Recorded 2026-10-19 by task T08x, the cross-node part of criterion 8, on the two nodes of [L1](#two-nodes-l1). Two
+accounts' runners (`ann`, `bob`) ran through the test server's manager, admission guard and fencing gate, in one run of
+`cross-node-lab.py`: 32 steps, 412 checks, 31 steps passed. The one failed check was fixed and the run went on from a new
+step (below). The records are in [the evidence](evidence/managed-runner-cross-node-accounts/2026-10-19/README.md); the
+procedures it follows are the runbook's [Failover](managed-runner-kubernetes-operations.md#failover) and planned move.
+
+- **Model.** The owner's DeepSeek key file did not exist, so fake-model.py stood in as a DeepSeek-preset key, which is not
+  a model. A real model session is still to be run.
+- **Image.** T02's build (`8055bb568` plus the lab CA layer), already in both VMs' containerd; nothing under
+  `src/runner-go` or `deploy/managed-runner/image` changed since. Nothing built or pushed.
+- **Lab window.** Both VMs on from 14:20 to 15:01 UTC, after another session's landing merge check had ended.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t08x    # earlier tasks' databases untouched
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh --nodes 2
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+OUT=/mnt/data/tmp/t08x-cross-node/run && mkdir -p $OUT    # LAB_T02_IMAGE_ARCHIVE names the image archive (T02's by default)
+sudo systemd-run --unit=orbit-mr-lab-t08x-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR -p WorkingDirectory=$PWD \
+  -p StandardOutput=append:$OUT/run.log -p StandardError=append:$OUT/run.log \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/cross-node-lab.py run --out $OUT    # --from-step PHASE/STEP goes on
+python3 scripts/managed-runner/lab/cross-node-lab.py report $OUT
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+| Check | Result |
+| --- | --- |
+| Normal move, both accounts | Both runners on the first node (the second cordoned), READY 38 s after the sign-in. Both owners' sleep: asleep within 11 s, on the kubelets' reports. With the first node cordoned and the second not, a message woke ann's and a task run now bob's: the Pods made on the second node in the same second, the work answered after 36 s, READY after 37 s. Each kept its runner, PVC, PV, handle, RBD image and workspace, its probe data, uploads, worktree, transcripts and session |
+| Second Pods on the other node | With both runners writing on the second node, five Pods per claim pinned to the first node (as T02's) and a Job's were refused by the guard, and so were Pods mixing the accounts: bob's Pod with ann's claim (`NOT_THE_FIXED_NAME`), ann's naming bob (`NOT_THE_OWNER`), one Pod on both claims (`MULTIPLE_MANAGED_CLAIMS`) |
+| The node stops | The second node's qemu SIGKILLed with both runners writing there. Before the cut: no Git work for 86 s, a last message answered 20 s before it, ann's volume synced (`sync -f /var/lib/orbit` in her runner container) 26 ms before it, bob's not. For 420 s both mappings stayed `READY` at their generation; the node `Unknown` at 56 s, the runners not usable at 95 s, the Pods evicted at 354 s; demand waited, retries were refused, the gate saw only reads; second Pods on either claim on the first node (the next generation's under the fixed name among them) were refused |
+| Failover | The runbook's query listed both runners on the lost node, its commands showed each Pod and attachment there. Two receipts, one out-of-service taint; bob's finalizer off at once, ann's once she was `FENCING`. Both `FENCING` 9.1 s after the taint (ann on PodGC's `Failed`, bob on his Pod object's removal), both READY on the first node 481 s after the cut; the gate saw two Pod creates |
+| Data after it | Every SQLite row each writer acknowledged, probes p1 and p2 (written 4.5 and 1.6 minutes before the cut, Git included), uploads, worktrees: as before, `integrity_check` ok, `git fsck` clean. ann's transcript kept her last turn; bob's lost it (6 lines, 20 s before the cut), and his session went on from the lines before it |
+| The old node back | Under the taint it mapped and mounted nothing and ran nothing of either old Pod; both old credentials 401, the old instances 403 `SUPERSEDED`; the writers went on from the first node; the taint removed, it rejoined |
+| Drains | The runbook's planned move: `kubectl drain` refused the runners' bare Pods without `--delete-emptydir-data` and `--force`. With them, both runners moved to the second node and back, READY 45–46 s after each drain began |
+| At the end | Never more than one Pod on either claim nor one attachment of either PV in the timeline; Ceph `HEALTH_OK`; both asleep |
+
+How the run went: a first attempt stopped at its Ceph facts 26 s after the boot, the PGs still peering, and the run
+started again from nothing. The first node's drain then evicted, besides both runners, a managed Pod of task T07's test
+server, `Failed` since 2026-10-18 and held by the stop-report finalizer of T07's manager, which was not running. The
+drain waited its full 300 s and exited 1, so that check failed although both runners had moved. With the check judging
+the runners it moves, the run went on with a drain of the first node that passed T07's Pod
+(`--skip-wait-for-delete-timeout=60`) and the drain back.
+
+Findings, reported to the coordinator:
+
+- **The coordinator's decision of 2026-10-19 held for two runners**: `READY` until the out-of-service taint, `FENCING`
+  then. [The design record](managed-runner-design.md#single-pod-and-single-writer-protection) now says so.
+- **The engine's transcript loses the last seconds.** A turn answered 20 s before the power cut was missing from bob's
+  transcript after the takeover. Orbit's server kept it; the engine resumed without it. ann's volume, synced just
+  before, kept hers. Relevant to T02c.
+- **The runbook's drain needed flags**, and a drain finishes only once a manager records each evicted runner's stop.
+  The runbook now gives the command, says what holds it, and adds the failover commands for a node with several runners.
+
+Left in the lab: `test-server-t08x` (ann and bob SLEEPING on their claims); their claims with PVs and images, and the
+receipt ConfigMaps `mr-fence-01a1548e-0f66-…` and `mr-fence-01a1548e-0fc4-…`. T07's Pod `mr-01a14db1-…`, `Failed` before
+the run, is now also `Terminating`, marked by the first drain. It has no VolumeAttachment, and T07's manager takes its
+finalizer off when T07's server runs with the switch on. The webhook is removed, the test server and gate are stopped,
+and both VMs are off.
 
 ## Known limits
 

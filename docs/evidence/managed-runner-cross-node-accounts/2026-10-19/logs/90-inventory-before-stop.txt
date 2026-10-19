@@ -1,0 +1,109 @@
+== 2026-10-19T15:00:39Z status.sh
+host kernel modules rbd/nbd/ceph/libceph loaded: none
+VM 1: running, qemu pid 1303933, cgroup /system.slice/orbit-mr-lab.service
+VM 1 qemu listens on: 127.0.0.1:16222 127.0.0.1:16230 127.0.0.1:16443
+VM 2: running, qemu pid 1636544, cgroup /system.slice/orbit-mr-lab-2.service
+VM 2 qemu listens on: 127.0.0.1:16223
+link 127.0.0.1:16230: 127.0.0.1:16230 <- 127.0.0.1:41660
+unit orbit-mr-lab: memory.current 2664 MiB, memory.peak 3409 MiB, swap 1632 MiB, memory.max 6979321856
+unit orbit-mr-lab-2: memory.current 822 MiB, memory.peak 1680 MiB, swap 358 MiB, memory.max 3758096384
+host: MemAvailable 5597 MiB, SwapFree 31564 MiB
+guest 1 (virtio-balloon): {"guestMiB": {"stat-available-memory": 3559, "stat-free-memory": 2237, "stat-total-memory": 5920, "stat-disk-caches": 1521}, "lastUpdate": 1792422042}
+guest 2 (virtio-balloon): {"guestMiB": {"stat-available-memory": 2365, "stat-free-memory": 2245, "stat-total-memory": 2903, "stat-disk-caches": 305}, "lastUpdate": 1792422043}
+guest 1: {"cephHealth":"HEALTH_OK","osdsUp":3,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"cephListens":"10.77.0.1","problems":[]}
+guest 2: {"linkRttMs":"0.398","rbdMapped":0,"problems":[]}
+k3s v1.36.5+k3s1
+node orbit-mr-lab Ready: True, internal IP 10.77.0.1
+node orbit-mr-lab-2 Ready: True, internal IP 10.77.0.2
+deployment/ceph-csi-operator-controller-manager: 1/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab: ready
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab-2: ready
+healthy, two nodes: orbit-mr-lab and orbit-mr-lab-2 Ready over the link 10.77.0.0/24; Ceph (3 OSDs, HEALTH_OK) at 10.77.0.1; Ceph-CSI on both nodes; StorageClass runner-data, namespace orbit-mr-test
+status exit=0
+== nodes
+NAME             STATUS   ROLES           AGE     VERSION        INTERNAL-IP   EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION             CONTAINER-RUNTIME
+orbit-mr-lab     Ready    control-plane   2d9h    v1.36.5+k3s1   10.77.0.1     <none>        Ubuntu 26.04.1 LTS   7.0.0-34-generic (amd64)   containerd://2.3.4-k3s1.36
+orbit-mr-lab-2   Ready    <none>          3h58m   v1.36.5+k3s1   10.77.0.2     <none>        Ubuntu 26.04.1 LTS   7.0.0-34-generic (amd64)   containerd://2.3.4-k3s1.36
+== taints
+orbit-mr-lab  unschedulable= 
+orbit-mr-lab-2  unschedulable= 
+== pods
+NAME                                      READY   STATUS    RESTARTS      AGE    IP          NODE           NOMINATED NODE   READINESS GATES
+lab-20261017061552-b                      1/1     Running   6 (39m ago)   5h5m   10.42.0.5   orbit-mr-lab   <none>           <none>
+mr-01a14db1-e2b6-7199-8613-d95d4616d6a7   0/1     Unknown   0             32h    <none>      orbit-mr-lab   <none>           <none>
+== pvc
+NAME                                           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799   Bound    pvc-d5299c21-8be0-4e61-91dd-33636ccda9ab   2Gi        RWO            runner-data    <unset>                 43h
+mr-data-01a14b7d-4faf-7082-acb6-7cee4cd693ee   Bound    pvc-f00e77e6-337a-464f-9a54-0c6fb3bfcc1f   2Gi        RWO            runner-data    <unset>                 42h
+mr-data-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4   Bound    pvc-d2dd3096-1e5f-44f0-9fc2-0a44e9fb1250   2Gi        RWO            runner-data    <unset>                 41h
+mr-data-01a14bc6-f4de-7328-9a3f-0d025ff3a21b   Bound    pvc-e8aa1f8c-ce3f-4bba-8674-89fbdb37615f   2Gi        RWO            runner-data    <unset>                 41h
+mr-data-01a14bdc-ead8-73ba-9322-286ff7b293dd   Bound    pvc-8278f180-68bf-4eea-ae49-c79d896e3c15   2Gi        RWO            runner-data    <unset>                 41h
+mr-data-01a14c23-4d07-7679-812d-f74876266c72   Bound    pvc-4ede0589-3cb3-44a8-bc3e-f7b414b71681   2Gi        RWO            runner-data    <unset>                 39h
+mr-data-01a14c39-5ff2-746d-87ad-ac5f6fa1a3ee   Bound    pvc-928c943a-bc2a-4df9-9cea-97d88369f2f0   2Gi        RWO            runner-data    <unset>                 39h
+mr-data-01a14c3a-e9b4-77bb-8d63-0bb1fc697702   Bound    pvc-fc1c9388-c2d1-49d5-a9fc-4325d9cdd413   2Gi        RWO            runner-data    <unset>                 39h
+mr-data-01a14c3c-502b-71cb-984b-0594e9adc118   Bound    pvc-9bddfcba-1043-48d2-bbd5-f1453d65f862   2Gi        RWO            runner-data    <unset>                 39h
+mr-data-01a14c3d-df2c-701d-9013-6ead27f5922a   Bound    pvc-10238454-a0bd-4438-9173-a17b35b2778b   2Gi        RWO            runner-data    <unset>                 39h
+mr-data-01a14c3e-c23e-7476-91bc-0b1010f420a1   Bound    pvc-d1075e02-0f32-4913-9884-5c3da5d1e57d   2Gi        RWO            runner-data    <unset>                 39h
+mr-data-01a14c44-d7e6-75a4-8ab9-4fb0625f5ac0   Bound    pvc-9a7cd7cb-8c86-4071-a5b0-856fd5457b0e   2Gi        RWO            runner-data    <unset>                 39h
+mr-data-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585   Bound    pvc-3831f550-8fc3-4718-8fbd-940a7979157b   2Gi        RWO            runner-data    <unset>                 38h
+mr-data-01a14cb2-fd31-761c-ae11-591d4b8f6360   Bound    pvc-9e102973-fe8d-4114-a3be-4178cab95865   2Gi        RWO            runner-data    <unset>                 37h
+mr-data-01a14d26-b010-71ec-bb22-0cf65c7614e5   Bound    pvc-4a06a82f-fcfd-4b7e-a32c-aea44e40d388   2Gi        RWO            runner-data    <unset>                 35h
+mr-data-01a14d31-2558-76b5-aa8a-f8f35df30d08   Bound    pvc-949b525a-c46d-4899-abeb-c577bdddd26c   2Gi        RWO            runner-data    <unset>                 34h
+mr-data-01a14d96-a6ec-7439-b0a3-bd794faeeed0   Bound    pvc-1cfec193-c8bd-4597-8c52-d14596792053   2Gi        RWO            runner-data    <unset>                 33h
+mr-data-01a14d97-23a7-747d-9f18-2512a70f4fff   Bound    pvc-79150284-3469-4a91-ad9d-1b5b5cf6284f   2Gi        RWO            runner-data    <unset>                 32h
+mr-data-01a14db1-e2b6-7199-8613-d95d4616d6a7   Bound    pvc-dd00c73e-bba2-4d42-ac50-ab03891b413f   2Gi        RWO            runner-data    <unset>                 32h
+mr-data-01a14e3f-b2c3-755a-ae7b-0a99e998e42d   Bound    pvc-3d7239dd-281f-4a10-8720-e270c96cf7ec   2Gi        RWO            runner-data    <unset>                 29h
+mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36   Bound    pvc-4caa2267-5150-455d-9fc8-e9efd7e63154   2Gi        RWO            runner-data    <unset>                 26h
+mr-data-01a14f03-ec5a-749b-9877-e882a1a198eb   Bound    pvc-f5cccf9b-6093-453e-b5de-f05993a2a483   2Gi        RWO            runner-data    <unset>                 26h
+mr-data-01a14f04-a624-724f-b618-252c0e3e8e26   Bound    pvc-989c98fe-b03c-4071-aadb-4a935f2ec311   2Gi        RWO            runner-data    <unset>                 26h
+mr-data-01a14f86-1602-76bc-82ef-45e628d67449   Bound    pvc-6835c7f2-96db-417e-a45e-6b35716daec1   2Gi        RWO            runner-data    <unset>                 23h
+mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95   Bound    pvc-92140165-55f9-4513-a0a7-8a1d2c6ce510   2Gi        RWO            runner-data    <unset>                 23h
+mr-data-01a15425-c85b-74ae-b075-b1843c1e2c52   Bound    pvc-6d10e22d-3a0f-49ab-af1b-8a57df982b2f   2Gi        RWO            runner-data    <unset>                 148m
+mr-data-01a15431-f1f1-773e-b7cd-c25915447151   Bound    pvc-4221311d-4f1c-4715-be48-cc3d8c5ae9a5   2Gi        RWO            runner-data    <unset>                 135m
+mr-data-01a1548e-0f66-719f-aa98-e3ed285e4e91   Bound    pvc-22b25daa-3fa0-4432-a081-8ec8ed247208   2Gi        RWO            runner-data    <unset>                 34m
+mr-data-01a1548e-0fc4-702f-a800-04fd55cdd1b9   Bound    pvc-89d67b8d-c292-4f99-a619-0d964d1df9e5   2Gi        RWO            runner-data    <unset>                 34m
+mr-data-13282595-dbc7-4ac3-b7ef-0999794197d4   Bound    pvc-8780660e-7455-4612-8b16-3f1fddaf9ded   1Gi        RWOP           runner-data    <unset>                 2d9h
+mr-data-299e8118-16bd-4c75-997c-861a9410350b   Bound    pvc-9353bb99-2272-4685-b48c-8cbcc8467ea7   1Gi        RWO            runner-data    <unset>                 4h19m
+mr-data-41feaca0-acd0-4b5f-93d6-626fd2caa95c   Bound    pvc-d36e5c66-3888-4d21-b45d-af170070d658   1Gi        RWO            runner-data    <unset>                 4h12m
+mr-data-640deaf2-edcb-4c42-aedd-716f4bcbccf3   Bound    pvc-e2daf0db-ed65-4a62-9841-ced57d71ed3b   1Gi        RWO            runner-data    <unset>                 2d9h
+mr-data-7780fd99-b953-41f0-a005-6ac813c776b4   Bound    pvc-11457841-9550-4ed6-bbf2-f61f595fca88   1Gi        RWO            runner-data    <unset>                 4h54m
+mr-data-83283361-0bc1-4cdf-a05d-647fc0b120cf   Bound    pvc-dd745a38-f385-4596-b359-8bc9f27828c6   1Gi        RWOP           runner-data    <unset>                 2d8h
+mr-data-98c938b2-26ad-47e8-9ed3-6a67f6ef32d6   Bound    pvc-2ec56b85-59cc-4462-8b74-dc295fa227cf   1Gi        RWO            runner-data    <unset>                 4h59m
+mr-data-99801ca8-3bb3-47ae-b014-92073b1970f3   Bound    pvc-ccb2829a-8066-43d6-9ffd-176b60234a04   1Gi        RWOP           runner-data    <unset>                 4h11m
+mr-data-b3c54306-e474-4fce-a316-228ce37a5266   Bound    pvc-c869968e-0f44-4365-800c-0448f74f8892   1Gi        RWO            runner-data    <unset>                 2d8h
+t03-data                                       Bound    pvc-b4ed170c-e8ee-40bb-96a4-83f5156bcd6f   5Gi        RWO            runner-data    <unset>                 2d7h
+t08-restore-20261018t125553z                   Bound    pvc-ca673121-f036-4163-8687-9ff134e2f606   2Gi        RWO            runner-data    <unset>                 26h
+== pv (count by phase)
+     40 Bound
+      1 Released
+== volumeattachments
+NAME                                                                   PV                                         NODE           ATTACHED
+csi-1603ccb7471b09ba2c720a4ef62f32ac595d065c6d54d1e368c2248305b198ce   pvc-c869968e-0f44-4365-800c-0448f74f8892   orbit-mr-lab   true
+== configmaps
+NAME                                            DATA   AGE
+ceph-rbd-payload                                1      2d9h
+kube-root-ca.crt                                1      2d9h
+mr-fence-01a15431-f1f1-773e-b7cd-c25915447151   1      121m
+mr-fence-01a1548e-0f66-719f-aa98-e3ed285e4e91   1      17m
+mr-fence-01a1548e-0fc4-702f-a800-04fd55cdd1b9   1      17m
+t03-ca                                          1      2d7h
+== webhooks
+No resources found
+== ceph
+  cluster:
+    id:     12b3f1b2-c9ec-11f1-80c0-525400123456
+    health: HEALTH_OK
+ 
+  services:
+    mon: 1 daemons, quorum orbit-mr-lab (age 39m) [leader: orbit-mr-lab]
+    mgr: orbit-mr-lab.wrnzlo(active, since 39m)
+    osd: 3 osds: 3 up (since 37m), 3 in (since 2d)
+ 
+  data:
+    pools:   2 pools, 33 pgs
+    objects: 1.01k objects, 1.1 GiB
+    usage:   3.9 GiB used, 56 GiB / 60 GiB avail
+    pgs:     33 active+clean
+ 
+42
