@@ -229,9 +229,11 @@ func (u *integrationLogUploader) drain(route *integrationLogRoute, final bool) {
 	}
 	text := u.redact.redact(string(data))
 	keep := ""
-	if !final && len(text) > u.carry {
+	// Hold back only when there is something to hold back: with no secret to protect, carry is 0 and
+	// a cut here would read text[len(text)].
+	if !final && u.carry > 0 && len(text) > u.carry {
 		cut := len(text) - u.carry
-		for cut > 0 && !utf8.RuneStart(text[cut]) {
+		for cut > 0 && cut < len(text) && !utf8.RuneStart(text[cut]) {
 			cut--
 		}
 		text, keep = text[:cut], text[cut:]

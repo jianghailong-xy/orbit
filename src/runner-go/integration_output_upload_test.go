@@ -98,6 +98,83 @@ func TestIntegrationOutputUploadsItsChunksInOrder(t *testing.T) {
 	}
 }
 
+// TestIntegrationOutputFlushesWhenTheRedactorHoldsNoSecret: a runner whose environment holds no
+// credential (carry 0, as in the merge check's stripped environment) still flushes pending output —
+// on the timer, and on a full buffer. The hold-back cut used to run regardless and read
+// text[len(text)], panicking the uploader's goroutine and with it the whole process.
+func TestIntegrationOutputFlushesWhenTheRedactorHoldsNoSecret(t *testing.T) {
+	noSecrets := func(t *testing.T) *integrationOutputRedactor {
+		t.Helper()
+		redactor := &integrationOutputRedactor{urlCredential: integrationURLCredential}
+		if carry := redactor.carry(); carry != 0 {
+			t.Fatalf("carry = %d, want 0 for a redactor with no secrets", carry)
+		}
+		return redactor
+	}
+	joined := func(recorder *outputRecorder) string {
+		var b strings.Builder
+		for _, chunk := range recorder.snapshot() {
+			b.WriteString(chunk.Text)
+		}
+		return b.String()
+	}
+
+	t.Run("ticker", func(t *testing.T) {
+		recorder := &outputRecorder{}
+		uploader := newIntegrationLogUploader(context.Background(), IntegrationJobCommand{
+			outputSender:     recorder.send,
+			outputEvery:      5 * time.Millisecond,
+			outputChunkBytes: 4096,
+			outputRedactor:   noSecrets(t),
+		})
+		out := newIntegrationOutput()
+		uploader.attach(out, IntegrationJobOutputCheck{Name: "MERGE_CHECK", Index: 1})
+		if _, err := out.Write([]byte("a quiet check's only line\n")); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		waitForOutputChunks(t, recorder, 1)
+		uploader.Close()
+		uploader.close()
+		if got, want := joined(recorder), "a quiet check's only line\n"; got != want {
+			t.Fatalf("uploaded text = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("kick", func(t *testing.T) {
+		recorder := &outputRecorder{}
+		uploader := newIntegrationLogUploader(context.Background(), IntegrationJobCommand{
+			outputSender:     recorder.send,
+			outputEvery:      time.Hour, // only a full buffer can flush this one
+			outputChunkBytes: 8,
+			outputRedactor:   noSecrets(t),
+		})
+		out := newIntegrationOutput()
+		uploader.attach(out, IntegrationJobOutputCheck{Name: "MERGE_CHECK", Index: 1})
+		if _, err := out.Write([]byte("kick-flushed output\n")); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		waitForOutputChunks(t, recorder, 1)
+		uploader.Close()
+		uploader.close()
+		if got, want := joined(recorder), "kick-flushed output\n"; got != want {
+			t.Fatalf("uploaded text = %q, want %q", got, want)
+		}
+	})
+}
+
+// waitForOutputChunks waits until the sender has taken at least want chunks.
+func waitForOutputChunks(t *testing.T, recorder *outputRecorder, want int) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(recorder.snapshot()) >= want {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("uploader sent %d chunks, want at least %d", len(recorder.snapshot()), want)
+}
+
 // TestIntegrationOutputRedactsTheRunnersSecrets: the runner token this process holds, a credential
 // in the environment, and the userinfo of a git remote URL are all redacted before a chunk leaves
 // the machine — including a secret split across two writes, which the uploader holds back rather
