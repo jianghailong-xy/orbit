@@ -1,0 +1,25 @@
+== 00-overlay exit=0
+== 01-compose-topology exit=0
+# tests 16
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+== 02-prisma-generate exit=0
+== 03-build exit=0
+✓ built in 856ms
+== 04-shared exit=0
+ Test Files  32 passed (32)
+      Tests  491 passed (491)
+== 05-apiserver exit=0
+ℹ tests 5320
+ℹ pass 5320
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+== 06-web exit=0
+ Test Files  414 passed (414)
+      Tests  5368 passed (5368)
+== 07-managed-runner-python exit=0
+Ran 223 tests in 8.103s
+OK

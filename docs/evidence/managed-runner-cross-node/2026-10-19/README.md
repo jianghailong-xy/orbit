@@ -252,3 +252,27 @@ The run's teardown removed the webhook and stopped the recorder, the test server
   finalizer and has no VolumeAttachment, and was left untouched.
 - No record holds a credential. `takeover-lab.py secret-scan` over this directory, against both test-server directories,
   found none: no owner token or password, server secret, webhook or manager token, lab admin key or runner credential.
+
+## Checks
+
+- **The tip.** `origin/project/34ZteKCnYMpKY46f63Leb` (`8055bb568`) and `origin/main` (`e7168b246`) were both already in
+  the branch, so `git merge --no-ff` of each was "Already up to date".
+- **The gate.** [kit/gate.sh](kit/gate.sh) ran on the tip `8e3edaedf`, one step after another, in a transient scope
+  outside the runner's cgroup (`MemoryMax=9G`), after other sessions' builds had ended
+  ([logs/gate-steps.txt](logs/gate-steps.txt), [logs/gate-results.txt](logs/gate-results.txt)):
+
+| Step | Result |
+| --- | --- |
+| `npm run test:compose-topology` | 16 of 16 |
+| `npm run prisma:generate`, `npm run build` | exit 0 |
+| `npm test -w @orbit/shared` | 491 of 491 (32 files) |
+| `npm test -w @orbit/apiserver` | 5320 of 5320 |
+| `npm test -w @orbit/web` | 5368 of 5368 (414 files) |
+| managed-runner Python, `python3 -B -m unittest discover -s scripts/managed-runner -p '*test*.py'` | 223 tests OK, among them `TakeoverLabTest`'s three cases and fake-model.py's T02 markers |
+
+**Not run, and why.**
+- The apiserver's pg specs: no product code changed. The delivery is lab tooling under `scripts/managed-runner/lab/`,
+  its offline tests, the lab page, the runbook, a design record and this evidence.
+- runner-go's `go test ./...`: nothing under `src/runner-go` changed.
+
+This section, the gate's two logs, and nothing else, were added after the gate ran.
