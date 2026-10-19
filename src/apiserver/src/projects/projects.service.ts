@@ -19,6 +19,7 @@ import {
   type CoordinatorFuseUsage,
   type CoordinatorWakeups,
   deriveSessionLifecycleState,
+  type ProjectIntegrationRead,
   type ProjectListCoordinatorActivity,
   type ProjectPauseState,
   RunEventType,
@@ -109,6 +110,7 @@ import {
   refuseSessionAuthoredCriteriaDecision,
 } from './coordinator-authority';
 import { withSessionState } from '../sessions/session-state';
+import { readSessionProjectMembership } from '../sessions/session-project-membership';
 import { chargeSessionMessage, SessionMessageRateLimited } from '../sessions/session-message';
 import {
   chargeOpenRequest,
@@ -159,10 +161,12 @@ import {
 } from './criterion-landing-reason';
 import {
   configureProjectIntegration,
+  type IntegrationReadSelectors,
   type IntegrationSettings,
   lastMainBranchView,
   projectIntegrationView,
   readMainBranchMemory,
+  readProjectIntegrationRead,
   readProjectIntegrationView,
   type ProjectIntegrationView,
   readProjectCodebase,
@@ -2821,6 +2825,80 @@ export class ProjectsService {
         project.exceptionEscalationSeconds,
       ),
     );
+  }
+
+  /**
+   * An agent's read of a project's integration line — `GET /runner/projects/:id/integration`, the
+   * `project_integration_get` tool (contract §2.2 J-T4, §2.9 LS6).
+   *
+   * The queue, the three job kinds, each task's newest landing and each candidate's newest check and
+   * merge, composed from the same reads the project page and the task rows use. READ ONLY: this is
+   * the door that replaces a coordinator querying the production database to find out why a landing
+   * is stuck.
+   *
+   * The acting session is the second half of the gate: the line is a project's own work, so the
+   * header has to name a session of THIS project. A missing header, another project's session and
+   * another account's session are refused alike, without saying which row exists — the same
+   * rule the coordinator's doors keep. A project of another account is the ordinary 404.
+   */
+  async integrationForAgent(
+    ownerId: string,
+    id: string,
+    sessionId: string | undefined,
+    selectors: IntegrationReadSelectors,
+  ): Promise<ProjectIntegrationRead<Date>> {
+    const project = await this.prisma.project.findFirst({
+      where: { id, ownerId },
+      select: { title: true, exceptionEscalationSeconds: true },
+    });
+    if (!project) throw new NotFoundException('project not found');
+    await this.assertProjectSession(ownerId, id, sessionId);
+    return readProjectIntegrationRead(
+      this.prisma,
+      { id, title: project.title, exceptionEscalationSeconds: project.exceptionEscalationSeconds },
+      selectors,
+    );
+  }
+
+  /** The acting session an agent's project read names must belong to this project and this owner. */
+  private async assertProjectSession(
+    ownerId: string,
+    projectId: string,
+    sessionId: string | undefined,
+  ): Promise<void> {
+    if (!sessionId) {
+      throw new ForbiddenException({
+        code: 'INTEGRATION_READ_SESSION_REQUIRED',
+        message: 'reading a project’s integration line needs the acting session: send '
+          + 'X-Orbit-Session-Id naming a session of this project',
+      });
+    }
+    // The header middleware decodes the spellings a client may send and leaves what it cannot
+    // decode untouched. A value no column can hold is the same refusal as a session of another
+    // project — not a 500 from the uuid cast.
+    let resolved: string;
+    try {
+      resolved = toUuid(sessionId);
+    } catch {
+      throw ProjectsService.notThisProjectsSession();
+    }
+    const session = await this.prisma.session.findFirst({
+      where: { id: resolved, ownerId },
+      select: { id: true },
+    });
+    const membership = session ? await readSessionProjectMembership(this.prisma, resolved) : null;
+    if (!session || membership?.projectId !== projectId) {
+      throw ProjectsService.notThisProjectsSession();
+    }
+  }
+
+  /** The one refusal for a session that is not one of the project's, whichever way it misses. */
+  private static notThisProjectsSession(): ForbiddenException {
+    return new ForbiddenException({
+      code: 'INTEGRATION_READ_NOT_PROJECT_SESSION',
+      message: 'the acting session is not one of this project’s: a project’s integration '
+        + 'line is read only from inside the project',
+    });
   }
 
   /**

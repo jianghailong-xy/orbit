@@ -296,6 +296,124 @@ export interface ProjectIntegrationJob<Instant = string> {
   retryable: boolean;
 }
 
+/**
+ * One generation of an integration job, as the agent read port lists it (contract §2.2 J-T3, §2.9
+ * LS6): the queue's entry for an attempt still in flight, each task's newest `LAND_TASK`, and each
+ * merge candidate's newest check and merge. It is the job row's own facts — never a conclusion drawn
+ * from the task's status or from whether an exception card exists.
+ *
+ * A generation is what the coordinator needs to answer "which attempt is this, how far did it get,
+ * and what stopped it": `generation` is the attempt's number, `round` the round inside its current
+ * claim, and `check` the check that was running when it last reported. `blockingReason` is present
+ * where the row is in a state a reason is read for — a queued attempt, or a `LAND_TASK` that stopped.
+ */
+export interface IntegrationJobGeneration<Instant = string> {
+  jobId: string;
+  kind: IntegrationJobKind;
+  generation: number;
+  state: IntegrationJobState;
+  /** The step it last reported, or stopped at; null before its first claim. */
+  phase: IntegrationJobPhase | null;
+  /** Why it ended as an error (contract J12); null unless `state` is `ERROR`. */
+  errorCode: string | null;
+  /** The task it lands; null for a promotion job, which lands no single task. */
+  taskId: string | null;
+  /** The task's title as the row can still name it; null for a promotion or a task since deleted. */
+  taskTitle: string | null;
+  /** The merge candidate it checks or lands; null for a task landing. */
+  promotionId: string | null;
+  /** The round inside the current claim, from 1; null before a v2 report named one. */
+  round: number | null;
+  /** The check in flight, or the one it stopped at; null between checks and for a legacy claim. */
+  check: ProjectIntegrationCheck<Instant> | null;
+  /** Why it waits or where it stopped, in the one shape every reader uses. */
+  blockingReason: IntegrationJobBlockingReason | null;
+  /** Enqueue, first claim, the claimer's latest report, and the terminal write. */
+  queuedAt: Instant;
+  startedAt: Instant | null;
+  heartbeatAt: Instant | null;
+  finishedAt: Instant | null;
+}
+
+/**
+ * One merge candidate as the agent read port lists it (§3.2, §3.6): the candidate's own state and
+ * recorded checks, the newest `CHECK_PROMOTION` and `LAND_PROMOTION` generations, and the merge when
+ * there was one.
+ *
+ * Which candidates appear is bounded like `landTasks`: the live ones (a card or a check in flight),
+ * the blocked ones, and the one merged last — never the project's merge history.
+ */
+export interface ProjectPromotionIntegrationRead<Instant = string> {
+  promotionId: string;
+  sourceKind: PromotionSourceKind;
+  sourceRef: string;
+  upstreamRef: string;
+  state: PromotionState;
+  /** Why the candidate is blocked, when it is; null otherwise. */
+  blockedReason: PromotionBlockedReason | null;
+  /** The checks the candidate's last attempt recorded (§3.6). */
+  checks: IntegrationCheckResult[];
+  /** The merge, once it happened; null on every candidate that did not land. */
+  merged: {
+    sha: string;
+    at: Instant;
+    /** Nobody pressed Merge: the project's Automatic setting confirmed it (M-T11). */
+    automatic: boolean;
+    /** The account owner who pressed Merge, or null when it was Automatic. */
+    byUserId: string | null;
+  } | null;
+  /** The newest `CHECK_PROMOTION` generation, or null when the candidate never had one. */
+  check: IntegrationJobGeneration<Instant> | null;
+  /** The newest `LAND_PROMOTION` generation, or null when the merge has not been attempted. */
+  land: IntegrationJobGeneration<Instant> | null;
+}
+
+/**
+ * The slots the integration read pages its timeline and check log by (contract §2.2 J-T4, §2.9
+ * LS6). Revision 12 reserves them on the read now, before the timeline and log rows exist, so a
+ * caller that learns to pass them does not have to change when those reads are added: `jobId`
+ * names the attempt, `claim` its claim generation, `round` the round inside it, `check` the check's
+ * position, and `cursor` continues a page. Each is null when the request did not name it.
+ */
+export interface ProjectIntegrationReadPagination {
+  jobId: string | null;
+  claim: number | null;
+  round: number | null;
+  check: number | null;
+  cursor: string | null;
+}
+
+/**
+ * `GET /runner/projects/:id/integration` — the agent's read of a project's integration line
+ * (`project_integration_get`, contract §2.2 J-T4, §2.9 LS6).
+ *
+ * Read only, and the one door an agent has onto the queue itself: before it, a coordinator that
+ * needed to know why a landing was stuck either read the project summary, which says nothing about
+ * generations, or queried the production database directly, which is not an interface. Every part
+ * is bounded by the queue and by what failed rather than by the project's history.
+ *
+ * `queue` is every QUEUED and RUNNING job — all three kinds — in `inFlightJobs`' order (running
+ * first, then the queue oldest first). `generations` says where each current attempt stands.
+ * `landTasks` is each task's newest `LAND_TASK` through the same read model the task page uses, and
+ * `promotions` is each live, blocked or last-merged candidate's newest check and merge.
+ */
+export interface ProjectIntegrationRead<Instant = string> {
+  projectId: string;
+  projectTitle: string;
+  /** The line's settings: where work lands, the merge check, and how long a wait is a person's. */
+  line: ProjectIntegrationSettings<Instant>;
+  /** Every QUEUED and RUNNING job, in `inFlightJobs`' order. */
+  queue: ProjectIntegrationJob<Instant>[];
+  /** Where each current attempt stands: the queue, each task's newest landing, each candidate's jobs. */
+  generations: IntegrationJobGeneration<Instant>[];
+  /** Each task's newest `LAND_TASK`, bounded by the queue and by what stopped. */
+  landTasks: ProjectLandTask<Instant>[];
+  /** Each live, blocked or last-merged candidate, with its newest check and merge. */
+  promotions: ProjectPromotionIntegrationRead<Instant>[];
+  /** The timeline and log page slots, echoed as the read resolved them. */
+  pagination: ProjectIntegrationReadPagination;
+}
+
 /** The integration claim's existing lease window, also used to stop stale activity indicators. */
 export const INTEGRATION_CLAIM_STALE_MS = 10 * 60 * 1_000;
 
@@ -372,6 +490,9 @@ export interface LandTaskIntegrationView<Instant = string> {
   state: IntegrationJobState;
   /** The runner's step, or the one the attempt stopped at; null before its first report. */
   phase: IntegrationJobPhase | null;
+  /** Why the attempt ended as an error (contract J12), null unless `state` is `ERROR`. Absent from a
+   *  server that predates it. */
+  errorCode?: string | null;
   /** A decimal string, as every 64-bit counter crosses this API. */
   generation: string;
   /** Enqueue, first claim, the claimer's latest heartbeat, and the terminal write. */

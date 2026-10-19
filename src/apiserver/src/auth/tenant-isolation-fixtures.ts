@@ -109,10 +109,11 @@ export function upload(
 
 /**
  * An answer as text with what differs between any two answers spelled one way — every id, in either
- * spelling, every instant, digest and cursor, the seq a session gives each new turn, and B2's names
- * for its objects, which are B's with a 2 — so that the answer to an id of A's and the answer to an
- * id that names nothing compare on everything else: the status, the words, which fields are there
- * and what the rest of them hold.
+ * spelling, every instant, digest and cursor, the seq a session gives each new turn, a live
+ * duration measured from an instant (B's objects are older than B2's by however long the fixtures
+ * took), and B2's names for its objects, which are B's with a 2 — so that the answer to an id of A's
+ * and the answer to an id that names nothing compare on everything else: the status, the words,
+ * which fields are there and what the rest of them hold.
  */
 export const answerOf = (reply: Reply) =>
   `${reply.status} ${reply.text}`
@@ -122,6 +123,7 @@ export const answerOf = (reply: Reply) =>
     .replace(/\b[0-9A-Za-z]{20,22}\b/g, '<id>')
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?/g, '<instant>')
     .replace(/"seq":\d+/g, '"seq":<n>')
+    .replace(/"waitMs":\d+/g, '"waitMs":<ms>')
     .replace(/\bb2(?=[ -])/g, 'b');
 
 /** An account of the run's: a user, and a JWT of theirs. */
