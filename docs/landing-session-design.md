@@ -3,6 +3,8 @@
 # 落地会话（契约修订 9 草案）
 
 > 本草案作为集成线契约 **v1 修订 12** 落地（`docs/project-integration-line-contract.md` 附录 B；main 的修订 9、10 与附录 B 的 11 号已另有所指，见 §0.1 第 1 条）。文中的「修订 9」都指修订 12。
+>
+> **与契约冲突时，以 `docs/project-integration-line-contract.md` 为准；本文跟着改**（2026-10-19 起）。
 
 
 ## 0. 红队修正（2026-10-04，优先于下文；下文与本节冲突处以本节为准）
@@ -44,8 +46,8 @@
     - 「通常用时」只对 MERGE_CHECK 计算，或按命令哈希分别计算。TASK_ACCEPTANCE 每个任务的命令都不同，不显示通常用时。
 12. **blockingReason 推广到三种作业。** 第 1 期就做，属于纯读取（V0）。跨账号的阻塞作业不显示 id 和标题，只显示原因，例如 *another landing into this repository*。
 13. **补齐的缺陷修复。**
-    - J-T8 for LAND_TASK：任务重开或取消的事务里，QUEUED 直接写 CANCELLED，RUNNING 写 `cancel_requested_at`。
-    - 排空交还需要新增一扇有围栏的 release 门（RUNNING → QUEUED），写进 J-T 表和 db-write-inventory。
+    - J-T8 for LAND_TASK：任务重开或取消的事务里，QUEUED 直接写 CANCELLED，RUNNING 写 `cancel_requested_at`（已按 V6 超时的 RUNNING 当场按 J-T9 结束，见契约 J-T8 / M-T6 / M-T10）。
+    - 排空交还需要新增一扇有围栏的 release 门（RUNNING → QUEUED），写进 J-T 表和 db-write-inventory。**已由 main 实现（2026-10-17，`47de98f3a`；契约 J-T11）。**
     - `_integrate-` 临时目录实际在 `~/_integrate-<id>`，因为 workDir 是 workspace 的 work_dir，要么挪进 worktreesDir，要么让 GC 扫描这个位置。
 14. **租约过期提醒（owner 2026-10-04 已定：过期 15 分钟给 owner 开待办）。** J1 跨项目、跨账号，一个死掉的作业会卡住同一 repo#ref 上所有落地。把 §4.6（唯一允许的「时间→状态」时钟，只面向 owner）扩展到「租约过期超过 15 分钟 → 给 owner 一条待办」，待办里带 Abandon。
 15. **分期顺序调整。**
@@ -53,9 +55,9 @@
     - 第 2 期：落地会话核心，包括判别列、按线区分的 project_landing、引擎门守卫、不可 Trash。
     - 第 3 期：时间线事件、日志管道和 outputIdle 活性。
     - 第 4 期：各端页面与入口。实时事件 `landing.updated` 和 `includeLanding` 跟项目分组一起上，在那之前按 §2.7a 的节奏轮询。
-16. **直接推到 main 的提交与合入 main 争抢（owner 2026-10-04 已定：第一次被抢就交回）。** LAND_PROMOTION 推送被拒（TARGET_MOVED）一次后，不再在作业里重跑两轮完整检查。作业结束，候选交回协调会话（Automatic 下）或 owner，由它决定重跑：
-    - Automatic 下照旧回 READY；
-    - owner 确认过的候选回 BLOCKED，并开 INTEGRATION 待办，payload 带 upstreamMovedBy。
+16. **直接推到 main 的提交与合入 main 争抢（owner 2026-10-04 定：第一次被抢就结束这一次领取；2026-10-19 改定后续，以契约为准）。** LAND_PROMOTION 推送被拒（TARGET_MOVED）一次后，不再在作业里重跑两轮完整检查；这一次领取就此结束，不在作业内重取（J-T13）：
+    - Automatic 下按 owner 2026-10-15 的决定（d321b88ee）：候选回到 CHECKING、在新的 main 上重检，第 3 次自动落地仍被抢、或授权已撤回时才回 READY 出卡（M-T12）；
+    - owner 确认过的候选留在 CONFIRMED，在同一确认下重排下一代 LAND_PROMOTION，在新 main 上按 M5 重检并落地；新领取重置推送界线，Cancel 重新可用。同一候选连续第 3 代被抢才回 BLOCKED，并开 INTEGRATION_ERROR 待办，payload 带 upstreamMovedCommits（J-T13、M5、附录 A Q5）。
 
     LAND_TASK（落到项目分支）的重取轮次不变。session merge 到 main 不与合入 main 串行，这一点不在本项目范围内。
 17. **契约修订 9 还要写明以下内容：**
@@ -83,14 +85,14 @@
    - **不加 landing.updated**：分组上线时没有加实时事件，页面按 4 s 轮询；落地会话页按 §2.7a 的节奏轮询；
    - 服务端由新任务 t2list 负责，客户端由 web 入口任务和 t4apple 负责。
 5. **修订 10**：合入卡在项目 sessions 页（web ProjectMergeStrip，iOS ProjectMergeCardView），协调会话里每个时刻只留一行。
-   - §3「晋升卡在 CHECKING/CONFIRMED/RECHECKING 时显示 Watch」改为合入卡上的 Watch。
+   - §3「晋升卡在 CHECKING/CONFIRMED/RECHECKING 时显示 Watch」改为合入卡上的入口（2026-10-19 再改为合入检查行整行按压，见契约 §7.2 V6 / §2.9 LS6）。
    - §5「晋升沿用 Cancel（project-promotion.controller.ts:77）」：现在在 :83，并且是 @PatForbidden('OWNER_INTERACTIVE')。
    - M-T10 改为「取消中」以后，ProjectPromotionView 由服务端给出 cancelRequested 与 pushBoundaryPassed，合入卡据此画「取消中」，不再自己看 execution.phase（ProjectMergeStrip.tsx:173）。
-6. **落地行已经有四处**：项目页 Work overview、项目 sessions 页进度卡（859fc2e0c）、合入卡里的 LandingRow（6b4bef713）、会话列表项目行第二行（19555f614）。四处共用 landingLine。会话列表项目行在心跳超过 10 分钟时变灰，是同一种假停滞。V6 与活性规则覆盖全部四处，新字段一律可选。
+6. **落地行已经有四处**（2026-10-07 的现状；2026-10-19 已是六处，见契约 §7.2 V6 与本文 §3）：项目页 Work overview、项目 sessions 页进度卡（859fc2e0c）、合入卡里的落地行（6b4bef713；22124bb0a 之后穿同一个头，`LandingRow` 已不在 main 上）、会话列表项目行第二行（19555f614）。会话列表项目行在心跳超过 10 分钟时变灰，是同一种假停滞。V6 与活性规则覆盖全部展示位，新字段一律可选。
 7. **owner 重跑门已上线**（d2904706e，0380）：POST /projects/:id/tasks/:taskId/integration/retry 与 POST /projects/:id/promotions/:promotionId/integration/retry；发起者是会话或 user，二者互斥。§5 表「重跑」一行和 §8 第 4 期「放宽 0344」已经完成。
 8. **LAND_TASK 的 blockingReason 已实现**，含跨账号只给原因。代码在 project-task-integration.ts:108-190 与 :340-375，不在 project-integration-line.ts。第 1 期只需推广到两种晋升作业和本机锁等待。
 9. **晋升待办从来没有 OPEN_TASK_SESSION**：5b73f4717 与 main 都只投影 ASK_COORDINATOR_AGAIN、RETRY、REVIEW（open-item-doors.ts:634-643）。§0 第 9 条和 §3「晋升待办上错误的 Open task session」说的其实是转录卡上的「Open the failed session ↗」（OpenItemDeliveryCard.tsx:177-236；OrbitKit OpenItemDelivery.swift）和行上的 sessionId。暂时保留的是这两样。
-10. **Automatic 合入被抢后已能交回**：今天在第 1 轮重取时经 M-T12（integrate.go:553-556）报 READY，服务端交回 owner（project-promotion.service.ts:1045-1047）。owner 确认过的候选以 ERROR 结束，已走 BLOCKED 加 INTEGRATION_ERROR 待办。§0 第 16 条剩下要做的是：轮次改为 0，加上提交列表。
+10. **Automatic 合入被抢后已能交回**：今天在第 1 轮重取时经 M-T12（`integrate.go:608-618`）报 READY，服务端交回 owner（`project-promotion.service.ts` 的 `automaticLandingCameBack` :1288）。2026-10-15 起（d321b88ee）改为候选回 CHECKING 重检（`checkAgainOnMovedMain` :1324），第 3 次或授权撤回才回 READY 出卡。owner 确认过的一半按 2026-10-19 的决定（J-T13，选 B）：第一次推送被抢只结束这一次领取，候选留在 CONFIRMED、在同一确认下重排下一代 LAND_PROMOTION，连续第 3 次才 BLOCKED 加 INTEGRATION_ERROR 待办；剩下要做的是轮次改为 0、重排新一代、加上提交列表（upstreamMovedCommits）。
 11. **其他已上线、要读进时间线与结案规则的事实**：
     - task_reopen intent（28bd87aa4，0381）；
     - 修复任务 fixes_open_item_id（c84c6f9a3，0379）：协调会话现在建修复任务，而不是重开原任务；
@@ -102,7 +104,7 @@
     - 第 1 期起就从作业行的一列读出（例如 push_reported_generation，由 PUSH 同步回报在租约围栏内写入），不依赖第 3 期才有的事件表。
     - 只能看 phase 的地方，PUSH 与 VERIFY 都算已过界。runner 推送成功后报 VERIFY（integrate.go:394、:687），而今天 applyCancel 只排除 PUSH（project-promotion.service.ts:610）：VERIFY 期间取消，会把已推送的合入记成 CANCELLED。这是 §9 第 1 条之外的新缺陷，由 t1srv-a 修。
 13. **legacy 领取**（progress_protocol 不是 v2）：PUSH 回报是尽力而为，应答被丢弃（integrate.go:1034），所以「没记下 PUSH」不能证明没有推送。
-    - 放弃一律写 PUSH_OUTCOME_UNKNOWN，不写 RUNNER_LOST，也不写「nothing was pushed」。
+    - 放弃一个 legacy 领取的 LAND_TASK / LAND_PROMOTION 一律写 PUSH_OUTCOME_UNKNOWN，不写 RUNNER_LOST，也不写「nothing was pushed」（CHECK_PROMOTION 从不推送，仍按 J12 一律 RUNNER_LOST）。
     - 检查期间不判 LEASE_EXPIRED，或以预算加余量为界；X-E5 用同一条界线。
 14. **锁序**（改 §7 S3 的前提与 §0 第 17 条）：claimOne（integration-job-relay.ts:311-387）JOIN session、workspace 后 FOR UPDATE SKIP LOCKED（:385），没有 OF c，三张表都上行锁，但从不等待。
     - lock-order.ts 如实写现状。
@@ -125,7 +127,7 @@
     - owner 重跑门的新一代落在同一段。
 21. **runner 新查实的缺陷**（补 §9）：
     - 检查以 0 退出、但子进程仍占着 stdout 时，返回 exec.ErrWaitDelay，落进 integrate.go:894 的 default，被判 CHECK_FAILED（先例修复 0fa9af167）。
-    - 自更新闸门只数会话轮次（runloop.go:103-116）。Update Runner Now（ef8745d30）与灰度发版会在长检查中途停掉心跳（:2005），runner 一直显示离线，直到作业结束（:2016）。
+    - 自更新闸门只数会话轮次（runloop.go:103-116）。Update Runner Now（ef8745d30）与灰度发版会在长检查中途停掉心跳（:2005），runner 一直显示离线，直到作业结束（:2016）。**已由 main 实现（`47de98f3a`）：自更新等心跳操作，和等轮次一样。**
     - scratch 挪进 worktreesDir 以后，gcWorktrees 会把非 UUID 目录当作可删（runner-api.controller.ts:6433-6455）。要在 worktree.go:2517 排除它，并按在跑作业另做清扫。
 22. **换掉 CombinedOutput 挪到第 1 期**（改 §8 第 3 期）：不换就量不出 outputIdleMs 与 outputBytes，也就没有活性。第 3 期只留上传 sink、日志表和脱敏。
 23. **推送许可作废**：§2「数据」里的 push_granted_at、§5「推送许可」、§8 第 1 期的「推送许可」都已被 §0 第 1 条取代。
@@ -322,23 +324,27 @@
 
 ### Work overview 行
 
-适用于 iOS/macOS 的 `ProjectLandingRow` 和 web 的 `LandingRow`。规则：
-- 最多 3 行：运行中、待决定、停滞。
-- 名字位永不为空。
-- 整行点击进入落地会话。
+展示位与入口以契约为准（§7.2 V6、§2.9 LS6；owner 2026-10-19 批准 v4 方案 A）。今天读 `inFlight` 的落地展示位共六处：Work overview 的 Landing 卡、项目 sessions 页的 Landing 卡、合入卡的头、作业清单的每一行、会话列表项目行的第二行、web 任务页的 `LandTaskStatus`。六处的计时、活性与可点规则相同，新字段一律可选。
+
+- 两张 Landing 卡（含 Work overview 卡）整张仍打开作业清单，清单的行打开任务。
+- 「Open landing ›」另写：一个作业时卡底一个；多个作业时每个作业行一个（合入作业行不放，它的入口在合入检查行）；作业清单的每一行一个（合入作业行只有它这一个按压）。
+- 合入检查行（checking 与 merging 两种形态）的整行按压打开这一轮合入的落地会话（不再叫 Watch）；作业不少于 2 个时由「All jobs ›」进清单；BLOCKED 不加。
+- 「Merged into main」仍打开回执，回执底部一个。
+- 任务页只读，当前这一代一个；会话列表的项目行保持 main 的按压（协调会话或项目）。
+- 旧服务端没有 `landingSessionId` 时，没有派的按压就是只读；只有作业清单在标题下写一句 `No landing page on this server yet.`。
 
 ```
 ┌ Work overview ───────────────────────────────┐
-│ ⟳ Merge to main · re-checking              › │
+│ ⟳ Merge to main · re-checking              › │  ← 整行 → 这一轮合入的落地会话
 │   project/34Y7 → main · 5 tasks              │
 │   Merge check 14m 02s of 60m · usually ~38m  │
 │   Round 3 of 3 · 62m 58s in all              │
 │   Output 6s ago · Updated just now           │
 ├──────────────────────────────────────────────┤
-│ ✕ Land · Ledger migration order            › │
+│ ✕ Land · Ledger migration order  Open landing › │
 │   Checks failed · with coordinator · 18m     │
 ├──────────────────────────────────────────────┤
-│ +2 queued                                  › │
+│ +2 queued                          All jobs › │
 └──────────────────────────────────────────────┘
 停滞时：
 │ ◌ Merge to main · Update unavailable       › │
@@ -346,8 +352,7 @@
 │   Merge check stopped at 21m 04s (09:14)     │
 ```
 
-- `inFlight` 新增的字段全部可选：`jobId`、`landingSessionId`、`taskId`、`promotionId`、`runner`、`round`、`check{name,index,count,budgetSeconds,startedAt}`、`outputMovedAt`、`progressProtocol`、`typicalMs`、`liveness`。**原提的 `landings[]`（最多 3 条）由 main 的 `inFlightJobs` 取代**（契约 §1.6）：这些可选字段同样加在它的每一项上，落地行动态行与项目 sessions 页的 Landings 组都读它。
-- 旧服务端没有这些 id 时，这一行照旧不可点，并写明原因。
+- `inFlight` 新增的字段全部可选：`jobId`、`landingSessionId`、`taskId`、`promotionId`、`runner`、`round`、`check{name,index,count,budgetSeconds,startedAt}`、`outputMovedAt`、`progressProtocol`、`typicalMs`、`liveness`。原提的 `landings[]` 由 main 的 `inFlightJobs` 取代（契约 §1.6）：这些可选字段同样加在它的每一项上，落地展示位与项目 sessions 页的 Landings 组都读它。
 
 ### 落地会话页
 
@@ -391,8 +396,8 @@
 ### 其他入口
 
 - **任务页**
-  - web：`LandTaskStatus` 的每一代都加链接。
-  - iOS：开始解码 `landTasks`（今天不解码，`ProjectDetail.swift:676-689`），并加一个 "Landing ›" 入口。
+  - web：`LandTaskStatus` 的当前这一代加一个 `Open landing ›`（同一任务段的各代共用一个落地会话，一个就够）。
+  - iOS：开始解码 `landTasks`（今天不解码，`ProjectDetail.swift:676-689`），并加一个 `Open landing ›` 入口；Android 的任务页 Landing 段同。
 - **源工作会话**
   - 加派生标签 "Landing · checking ›" 或 "On project/34Y7 ✓ ›"，读法同 merge-repair 子会话（`sessions.service.ts:3190-3210`），需要 `(session_id, created_at)` 索引。
   - 用词是集成线，不与 session merge 混淆。
@@ -400,7 +405,7 @@
   - INTEGRATION_* 卡片加服务端决定的 `OPEN_LANDING` 动作（`project-progress.ts:323`），晋升待办上错误的 Open task session 去掉。
   - `open-item:v1` 的投递内容加 "Landing session: <id>"。这个 id 在入队时就定了，重放时逐字节一致。
   - 落地过程本身不回写进协调会话的转录。
-- **晋升卡**：在 CHECKING、CONFIRMED、RECHECKING 时显示 "Watch ›"；Swift 开始解码 `recheck.typicalMs`。
+- **合入卡**：CHECKING、CONFIRMED、RECHECKING 时整行按压打开这一轮合入的落地会话（不再另放 Watch ›）；BLOCKED 不加；旧服务端没有 id 时照 main 打开作业清单。Swift 开始解码 `recheck.typicalMs`。
 - **通知**：日常落地不推送。既有的待办推送和升级推送不变，卡片链接到落地会话。
 - **agent 工具**
   - `session_get` 对 LANDING 返回 kind、`landing` 视图（主体、当前尝试、阶段、轮次、检查、活性、blockingReason、待办、各代）和事件尾。
@@ -569,8 +574,8 @@
    - 作业 `cancel_requested_at` 的唯一写者是晋升的 applyCancel（`project-promotion.service.ts:595-600`），领取也不看任务状态（`integration-job-relay.ts:312-399`）。
    - 推断：已取消任务的排队落地仍会被执行。
 6. **【中】已请求取消的 QUEUED 作业永远计为在途。** 领取会跳过它（`integration-job-relay.ts:318`），但计数只按状态统计（`project-integration-line.ts:285-288`）。
-7. **【中】结果回报重试 5 次后就丢弃**（`integrate.go:1004-1019`），契约 J-S8 要求缓存并重发（:423）。
-8. **【中】排空时，已领取但未开始的作业滞留 RUNNING**（`runloop.go:1230-1259`），并占着跨项目的 J1 槽。
+7. **【中】结果回报重试 5 次后就丢弃**（`integrate.go:1004-1019`），契约 J-S8 要求缓存并重发（:423）。**已由 main 实现（`937eef7c3`）：重试到上限后落盘缓存，重发到确认接收或终态 / 失效围栏，不重跑 git。**
+8. **【中】排空时，已领取但未开始的作业滞留 RUNNING**（`runloop.go:1230-1259`），并占着跨项目的 J1 槽。**已由 main 实现（`47de98f3a`）：停机时经 release 门交还（契约 J-T11）。**
 9. **【中低】晋升失败待办指向无关会话**（`integration-job-relay.ts:965`、`project-promotion.service.ts:135-139`）。
 10. **【中】直接推到 main 的提交不与集成队列串行。** J1 只管作业，`mergeLock` 只在进程内（`worktree.go:1196-1198`）。这是 34Y7 的根因；落地会话只能让它可见。
 11. **【低】临时 worktree 的位置与契约 §2.4 不符**（`integrate.go:127`）。注释说 GC 能识别它的前缀（:30-32），实际不能（`worktree.go:2516-2518`）。
