@@ -172,7 +172,9 @@ export async function assertManagedFirstSessionRuntime(
   // runtime's own sign-in has none to wait for on a runner nobody could sign in to yet.
   if (ownCredentials && args.runner.engines == null && (MANAGED_SUPPLY_RUNTIMES as readonly string[]).includes(args.runtime)) return;
   const ran = await prisma.session.findFirst({
-    where: { workspaceId: args.workspaceId, taskId: null, parentSessionId: null },
+    // `kind` is the seed's own measure (workspace-provider.ts): a LANDING row is not a session a
+    // person started, and its provider is the reserved `orbit` slug no engine runs.
+    where: { workspaceId: args.workspaceId, taskId: null, parentSessionId: null, sessionKind: 'CONVERSATION' },
     select: { id: true },
   });
   if (ran) return;

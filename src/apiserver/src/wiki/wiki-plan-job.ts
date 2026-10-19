@@ -545,6 +545,10 @@ export async function wikiPlanJobById(prisma: Db, ownerId: string, jobId: string
  * owner's projects with their task and session counts, the sessions of the space's workspaces of the
  * last `materialsSessionDays` days, and how the space's entries and topics are spread. Every title is
  * redacted before it leaves; the plan draft job counts and clusters (wiki-worker/wiki-plan-materials.ts).
+ *
+ * LANDING sessions are left out of both session reads (`kind = 'CONVERSATION'`): they are the
+ * platform's own containers for landing work, their provider is the reserved `orbit` slug, and their
+ * titles describe merges rather than anything the owner talked about (contract §2.9 LS6, errata E4).
  */
 export async function wikiPlanMaterials(prisma: Db, ownerId: string, spaceId: string, now: Date = new Date()): Promise<WikiPlanMaterials> {
   const space = await prisma.wikiSpace.findFirstOrThrow({
@@ -580,7 +584,8 @@ export async function wikiPlanMaterials(prisma: Db, ownerId: string, spaceId: st
     : await prisma.$queryRaw<Array<{ n: number }>>`
       SELECT count(*)::int AS "n" FROM "session" s
        WHERE s."owner_id" = ${ownerId}::uuid AND s."workspace_id" = ANY(${workspaceIds}::uuid[])
-         AND s."created_at" > ${since} AND s."deleted_at" IS NULL`;
+         AND s."created_at" > ${since} AND s."deleted_at" IS NULL
+         AND s."kind" = 'CONVERSATION'`;
   const sessions = workspaceIds.length === 0
     ? []
     : await prisma.$queryRaw<Array<{ title: string; month: string; task: boolean; project: string | null; provider: string | null }>>`
@@ -591,6 +596,7 @@ export async function wikiPlanMaterials(prisma: Db, ownerId: string, spaceId: st
         LEFT JOIN "project" p ON p."id" = t."project_id"
        WHERE s."owner_id" = ${ownerId}::uuid AND s."workspace_id" = ANY(${workspaceIds}::uuid[])
          AND s."created_at" > ${since} AND s."deleted_at" IS NULL
+         AND s."kind" = 'CONVERSATION'
        ORDER BY s."created_at" DESC, s."id" DESC
        LIMIT ${WIKI_PLAN_JOB_RULES.materialsSessionsMax}`;
   const entries = await prisma.wikiEntry.groupBy({

@@ -31,6 +31,7 @@ test('needs-you includes only canonical Open, non-ending sessions', async () => 
   assert.deepEqual(calls[0].where, {
     ownerId: 'owner-1',
     status: RunStatus.RUNNING,
+    sessionKind: 'CONVERSATION',
     completedAt: null,
     archivedAt: null,
     deletedAt: null,

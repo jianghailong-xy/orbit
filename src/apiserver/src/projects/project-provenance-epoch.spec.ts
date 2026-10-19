@@ -152,6 +152,14 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
     'types completion-evidence source provenance; does not read task project provenance',
   'src/apiserver/src/tasks/task-completion-evidence.service.ts':
     'validates and records completion-evidence source provenance; grants no project authority',
+  // §2.9 LS6's landing view reuses the same `sourceSessionId` spelling for a different fact: the
+  // work session a landing attempt is about (`project_integration_job.session_id`, a history
+  // reference). The view copies it into the attempt for a reader to display and answers NULL when
+  // that session is gone; no branch compares it, and it grants or refuses nothing.
+  'src/apiserver/src/projects/landing-view.ts':
+    'renders the landing attempt source session as evidence; decides nothing',
+  'src/shared/src/project-progress.ts':
+    'types the landing attempt source session for the wire; reads no task provenance',
   // The decision door reads the same N10 column, and reads it to REFUSE: a session that submitted
   // evidence for a task may not decide it. That is the opposite direction from the one SC7 forbids
   // — "evidence grants nothing" is about provenance becoming authority, and this takes authority

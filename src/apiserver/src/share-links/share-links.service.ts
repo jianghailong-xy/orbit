@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { RunEventType } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { withSessionState } from '../sessions/session-state';
+import { assertEngineSession } from '../sessions/engine-session';
 import { WikiDocs } from '../wiki/wiki-docs';
 import { currentWikiRollout, wikiDisabledError, wikiOnFor } from '../wiki/wiki-rollout';
 import type { PutShareLinkDto } from './dto';
@@ -241,6 +242,9 @@ export class ShareLinksService {
    */
   async put(ownerId: string, kind: ShareRootKind, rootId: string, dto: PutShareLinkDto): Promise<ShareLinkView> {
     const root = await this.ownedRoot(ownerId, kind, rootId);
+    // A landing session is not a conversation anyone can share (§2.9 LS6). Reading the link it has
+    // (GET) is left alone; opening, changing or turning one off is an engine door's act.
+    if (kind === 'SESSION') assertEngineSession(root);
     if (root.inTrash) {
       throw new ConflictException('this session is in the trash — restore it before sharing it');
     }
@@ -278,7 +282,8 @@ export class ShareLinksService {
 
   /** Access → Only you: end the root's link. Nothing to end is not an error. */
   async turnOff(ownerId: string, kind: ShareRootKind, rootId: string): Promise<void> {
-    await this.ownedRoot(ownerId, kind, rootId);
+    const root = await this.ownedRoot(ownerId, kind, rootId);
+    if (kind === 'SESSION') assertEngineSession(root);
     await this.end({ ownerId, ...rootColumn(kind, rootId) }, new Date());
   }
 
@@ -446,11 +451,11 @@ export class ShareLinksService {
   /** The caller's root, or its kind's 404 — another account's root is not found, exactly as a
    *  missing one is. Says whether a session root is in the trash. A wiki space is the wiki's own 404
    *  (WIKI_DISABLED) first when the wiki is not on for the account, as every route of the wiki is. */
-  private async ownedRoot(ownerId: string, kind: ShareRootKind, id: string): Promise<{ inTrash: boolean }> {
+  private async ownedRoot(ownerId: string, kind: ShareRootKind, id: string): Promise<{ inTrash: boolean; sessionKind?: string | null }> {
     if (kind === 'SESSION') {
-      const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { deletedAt: true } });
+      const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { deletedAt: true, sessionKind: true } });
       if (!session) throw new NotFoundException('session not found');
-      return { inTrash: session.deletedAt != null };
+      return { inTrash: session.deletedAt != null, sessionKind: session.sessionKind };
     }
     if (kind === 'TASK') {
       const task = await this.prisma.task.findFirst({ where: { id, ownerId }, select: { id: true } });

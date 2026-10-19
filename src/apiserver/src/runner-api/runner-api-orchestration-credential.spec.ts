@@ -263,6 +263,7 @@ test('reclaim enables orchestration only when capability and every live guard ma
     {
       assignedRunnerId: 'runner-1',
       ownerId: 'owner-1',
+      sessionKind: 'CONVERSATION',
       status: {
         in: [
           RunStatus.PENDING,

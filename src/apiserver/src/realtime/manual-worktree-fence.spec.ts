@@ -61,6 +61,7 @@ test('a terminal merge is claimed by the heartbeat owner with an operation CAS',
     {
       where: {
         assignedRunnerId: RUNNER_ID,
+        sessionKind: 'CONVERSATION',
         mergeStatus: 'pending',
         mergeOperationId: { not: null },
         branch: { not: null },
@@ -301,6 +302,7 @@ test('commit claim repeats every idle and process-owner guard in its CAS', async
   };
   const commonWhere = {
     assignedRunnerId: RUNNER_ID,
+    sessionKind: 'CONVERSATION',
     commitStatus: 'pending',
     commitOperationId: { not: null },
     branch: { not: null },
