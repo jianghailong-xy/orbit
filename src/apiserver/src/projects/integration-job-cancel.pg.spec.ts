@@ -736,6 +736,39 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
     assert.equal(await stack.db.taskReopenIntent.findUnique({ where: { taskId: work.taskId } }), null);
   });
 
+  await t.test('(15) a cancel asked before the push does not erase a landing that happened: MERGED, with a receipt', async () => {
+    const w = await world(stack, 'landed-after-cancel', 'MAIN');
+    const { candidate } = await offered(stack, w, 'landed-after-cancel');
+    const check = await claim(stack, w);
+    await report(stack, w, check, CLEAN(sha('a')));
+    await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, candidate.id, sha('a'));
+    const land = await claim(stack, w);
+    assert.equal(land.kind, 'LAND_PROMOTION');
+
+    // The owner calls it back while the runner is still reporting: the job is asked to stop, and
+    // the candidate stays CONFIRMED (M-T10/J-T8) — its result is what decides it.
+    const view = await stack.promotions.cancel({ userId: w.ownerId }, w.projectId, candidate.id);
+    assert.equal(view.state, 'CONFIRMED', 'a landing still reporting is asked, not declared stopped');
+    assert.ok((await jobRow(stack, land.jobId)).cancelRequestedAt);
+
+    // The runner had already pushed before it read the stop. The fact wins (M-T8): MERGED, and the
+    // upstream receipt that says the work is there.
+    const merged = await report(stack, w, land, {
+      state: 'LANDED', phase: 'VERIFY', landedSha: sha('1'), targetShaBefore: sha('0'),
+      upstreamSha: sha('0'), testedSha: sha('2'), testedTreeSha: sha('3'), landedTreeSha: sha('3'),
+      sourceSha: sha('a'), checks: [GREEN_CHECK], conflicts: [],
+    });
+    assert.equal(merged.accepted, true);
+    assert.equal((await jobRow(stack, land.jobId)).state, 'LANDED');
+    const promotion = await stack.db.projectPromotion.findUniqueOrThrow({ where: { id: candidate.id } });
+    assert.equal(promotion.state, 'MERGED', 'an answer that landed is not written off as cancelled');
+    assert.equal(promotion.mergedSha, sha('1'));
+    assert.ok(promotion.receiptIds.length > 0, 'the landing wrote its upstream receipt');
+    assert.equal(await stack.db.sessionMergeReceipt.count({
+      where: { id: { in: promotion.receiptIds } },
+    }), promotion.receiptIds.length);
+  });
+
   await t.test('(7) a stopped running landing that answers too early ends CANCELLED, never a QUEUED row with a stop', async () => {
     const w = await world(stack, 'too-early-cancel', 'PROJECT_BRANCH');
     const work = await doneTask(stack, w, 'early');
