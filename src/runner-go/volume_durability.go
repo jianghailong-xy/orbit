@@ -24,7 +24,16 @@ import (
 //     commit, a merge, a landing, a cleanup (syncManagedVolume). What the control plane has been
 //     told about is then on the disk, whatever Git or an engine wrote;
 //   - behind every tool an engine runs, in the background (volumeSyncAfterTools): a commit or an
-//     edit in the middle of a turn is on the disk a sync's time after the tool returns.
+//     edit in the middle of a turn is on the disk a sync's time after the tool returns. Only on a
+//     volume that is a filesystem of its own, as a Kubernetes volume on RBD is.
+//
+// A Docker local volume is a directory of the Docker host's filesystem, which every other runner's
+// volume, the deployment's Postgres and its logs share, so a syncfs there writes back all of them.
+// With eight runners on one disk the syncs behind tools tripled Postgres's commit p99 and doubled
+// the API's (docs/managed-runner-design.md, "Implementation record: volume syncs on a shared Docker
+// host"). On such a volume the runner syncs before its reports only; what a tool wrote in the middle
+// of a turn reaches the disk with the next sync anyone makes on that filesystem, or the kernel's own
+// writeback, about 30 s later at most.
 //
 // Not Git's own fsyncs (core.fsync=all): they cover objects, refs and the index but not HEAD,
 // reflogs, config, worktree metadata or checked-out files, leave a command's last rename to the next
@@ -50,6 +59,33 @@ const managedVolumeSlowSync = 5 * time.Second
 // syncFilesystems writes back and commits the filesystems that hold paths, once each (syncfs on
 // Linux). A variable so tests can see the syncs.
 var syncFilesystems = syncFilesystemsOf
+
+// managedVolumeShared reports whether this managed runner's volume is a directory of a filesystem
+// it shares (a Docker local volume) rather than a filesystem of its own, read once from the mount
+// that holds ORBIT_HOME. A volume that cannot be told counts as its own: T02c's syncs stay. A
+// variable so tests can say which.
+var managedVolumeShared = sync.OnceValue(volumeSharesItsFilesystem)
+
+func volumeSharesItsFilesystem() bool {
+	_, shared, err := volumeFilesystemOf(machineHome())
+	return err == nil && shared
+}
+
+// logManagedVolumeSyncs says at start which syncs this managed runner makes, and why.
+func logManagedVolumeSyncs() {
+	if !managedVolumeDurable() {
+		return
+	}
+	filesystem, _, err := volumeFilesystemOf(machineHome())
+	switch {
+	case err != nil:
+		logln("volume syncs: before reports and behind every tool; the volume's filesystem could not be read:", err)
+	case managedVolumeShared():
+		logln(fmt.Sprintf("volume syncs: before reports only; the volume is a directory of %s, which it shares, so a sync behind every tool would write back the whole filesystem", filesystem))
+	default:
+		logln(fmt.Sprintf("volume syncs: before reports and behind every tool; the volume is %s, a filesystem of its own", filesystem))
+	}
+}
 
 // syncManagedVolume makes everything written on this managed runner's volume durable before the
 // runner reports work that lives there: the filesystem of ORBIT_HOME, and of each of paths that
@@ -83,11 +119,12 @@ type backgroundVolumeSync struct {
 	again   bool
 }
 
-// volumeSyncAfterTools is nudged by every tool result an engine reports (runInteractiveSession).
+// volumeSyncAfterTools is nudged by every tool result an engine reports (runInteractiveSession). It
+// syncs nothing on a volume that shares its filesystem (managedVolumeShared).
 var volumeSyncAfterTools = &backgroundVolumeSync{}
 
 func (b *backgroundVolumeSync) nudge() {
-	if !managedVolumeDurable() {
+	if !managedVolumeDurable() || managedVolumeShared() {
 		return
 	}
 	b.mu.Lock()

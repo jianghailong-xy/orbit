@@ -15,6 +15,24 @@ import (
 // again before the session's end is reported. What the engine wrote in that turn — its transcript,
 // its Git work — is then on the disk whenever the control plane thinks it happened.
 func TestManagedSessionSyncsItsVolumeBeforeReportingTheTurnAndTheEnd(t *testing.T) {
+	if behindTheTool := managedSessionSyncs(t, false); behindTheTool == 0 {
+		t.Fatal("no sync behind the engine's tool")
+	}
+}
+
+// On a volume that shares its filesystem (a Docker local volume) the same session is synced before
+// the turn and the end are reported, and not behind the tool.
+func TestManagedSessionOnASharedVolumeSyncsBeforeReportsOnly(t *testing.T) {
+	if behindTheTool := managedSessionSyncs(t, true); behindTheTool != 0 {
+		t.Fatalf("%d syncs behind the engine's tool on a shared volume", behindTheTool)
+	}
+}
+
+// managedSessionSyncs runs one turn whose engine commits, then ends the session, and checks that a
+// sync came right before the turn was reported and another right before the end was. It returns how
+// many syncs ran behind the tool.
+func managedSessionSyncs(t *testing.T, shared bool) int {
+	t.Helper()
 	fake := newFakeClaude(t,
 		fakeStep{Await: "user"},
 		fakeStep{Emit: "replay_user"},
@@ -28,6 +46,7 @@ func TestManagedSessionSyncsItsVolumeBeforeReportingTheTurnAndTheEnd(t *testing.
 	job := runnerStopJob(t, "sess-durable-turn")
 	withManagedInstance(t, "4", testManagedPodUID)
 	syncs := recordVolumeSyncs(t)
+	volumeSharedAs(t, shared)
 	api := newRunnerStopControlPlane()
 	api.queue(RunInboxResponse{TurnID: "turn-1", Kind: "message", Content: "commit the change"})
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -64,9 +83,7 @@ func TestManagedSessionSyncsItsVolumeBeforeReportingTheTurnAndTheEnd(t *testing.
 			behindTheTool++ // the background one names only the volume; a report's names its session's checkout too
 		}
 	}
-	if behindTheTool == 0 {
-		t.Fatalf("no sync behind the engine's tool: %v", syncs.syncs)
-	}
+	return behindTheTool
 }
 
 func indexOf(steps []string, step string) int {
