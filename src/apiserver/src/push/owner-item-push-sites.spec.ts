@@ -44,6 +44,10 @@ const OWNER_ITEM_WRITERS: Record<string, string> = {
     'askOwner (R9) and handToOwner (X-D6), which announce here; requestStart and requestDone file the '
     + 'coordinator’s start and done requests, which are none of the four and ring nothing — the '
     + 'coordinator’s row says Ready to start or Ready to close instead',
+  'projects/open-item-doors.ts':
+    'the capability matrix, not a door: it registers the owner-only cell for LANDING_LEASE_EXPIRED '
+    + '(§4.6 X-E5), whose items are opened by projects/open-item-escalation.service.ts and announced '
+    + 'there',
   'projects/project-fuse.service.ts': 'evaluate (F-T1), which announces after its transaction',
   'projects/owner-decision-signal.ts': 'a READ: it counts the owner’s items, it opens none',
   'projects/project-done-request.ts':
@@ -59,7 +63,9 @@ const ANNOUNCERS: Record<string, string> = {
     'a question filed for the owner (R9), an item handed over when nobody can read it (X-D6), and '
     + 'a failure opened with the owner on it already (X-C3)',
   'projects/project-fuse.service.ts': 'the coordinator pausing itself (F-T1)',
-  'projects/open-item-escalation.service.ts': 'the clock handing an item over (X-E1)',
+  'projects/open-item-escalation.service.ts':
+    'the clock handing an item over (X-E1), and the one it opens for a claim whose runner stopped '
+    + 'reporting (X-E5)',
   'runner-api/runner-api.controller.ts': 'the merge approval an integration result opened (M-T2)',
 };
 

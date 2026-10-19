@@ -99,6 +99,24 @@ test('owner-item need uses the raw item kind, including escalated integration ki
   assert.equal(ownerItemNeed('INTEGRATION_CONFLICT'), 'Merge conflict');
   assert.equal(ownerItemNeed('TASK_FAILED'), 'Task failed');
   assert.equal(ownerItemNeed('PROMOTION_APPROVAL'), 'Approve merge to main');
+  assert.equal(ownerItemNeed('LANDING_LEASE_EXPIRED'), 'Runner stopped reporting');
+});
+
+/**
+ * §4.6 X-E5's row, byte for byte: the contract spells its sentence, and its lead press is the
+ * abandon door — the one door that changes anything while the runner is gone. The kind is not one
+ * of the `INTEGRATION_*` family, so none of that family's sentence rules may claim it.
+ */
+test('X-E5’s lease item says the contract’s sentence and leads with ABANDON', () => {
+  const cell = OPEN_ITEM_DOOR_TABLE.find((candidate) =>
+    candidate.todoType === 'LANDING_LEASE_EXPIRED');
+  assert.ok(cell, 'the door census lost X-E5’s cell');
+  const row = rowFor(cell!);
+  assert.equal(
+    openItemRequiredAction(row),
+    'The runner stopped reporting; abandon this landing, or wait for the runner to come back.',
+  );
+  assert.equal(primaryAction(row), 'ABANDON');
 });
 
 test('the primary action never escapes the resolved door list', () => {

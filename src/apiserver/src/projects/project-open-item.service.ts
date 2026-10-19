@@ -44,6 +44,7 @@ import {
   CoordinatorQuestion,
   DELIVERY_REVIEW_KIND,
   INTEGRATION_ITEM_KINDS,
+  LANDING_LEASE_EXPIRED_KIND,
   MAX_OPEN_ITEM_RESOLUTION_NOTE,
   OpenItemAssignee,
   OpenItemAssigneeReason,
@@ -177,6 +178,9 @@ export const OPEN_ITEM_HAND_OVER_NOTE_REQUIRED = 'OPEN_ITEM_HAND_OVER_NOTE_REQUI
 export const OPEN_ITEM_HAND_OVER_NOTE_TOO_LONG = 'OPEN_ITEM_HAND_OVER_NOTE_TOO_LONG';
 /** Another item writer won the hand-over compare-and-set. */
 export const OPEN_ITEM_HAND_OVER_RACE = 'OPEN_ITEM_HAND_OVER_RACE';
+/** This kind is never delivered to a coordinator conversation, so it cannot be sent back to one
+ *  (§4.6 X-E5, §4.4 X-D7): it is the owner's from birth, and the silence it reports is theirs. */
+export const OPEN_ITEM_NOT_RETURNABLE = 'OPEN_ITEM_NOT_RETURNABLE';
 
 function normalizedDoneRequestDeclineNote(given: ProjectDoneRequestDeclineBody | undefined): string {
   const note = typeof given?.note === 'string' ? given.note.trim() : '';
@@ -218,6 +222,9 @@ const HAND_CLOSABLE_RESOLUTIONS: Readonly<Record<string, 'HANDLED' | 'WITHDRAWN'
   ...Object.fromEntries(INTEGRATION_ITEM_KINDS.map((kind) => [kind, 'HANDLED' as const])),
   TASK_FAILED: 'HANDLED',
   [DELIVERY_REVIEW_KIND]: 'HANDLED',
+  // §4.6 X-E5: the owner's own ending for a claim whose job may already be gone — the silence is
+  // theirs to judge as dealt with (the job's own terminal state is the platform's ending).
+  [LANDING_LEASE_EXPIRED_KIND]: 'HANDLED',
   // §5.2 R12: a question is withdrawn, not handled, and who withdraws it is who asked it.
   COORDINATOR_QUESTION: 'WITHDRAWN',
 };
@@ -274,6 +281,7 @@ export interface OpenItemRow {
     | 'RESUME'
     | 'ANSWER'
     | 'OPEN_LANDING'
+    | 'ABANDON'
   >;
   /** The server's one-sentence next step, optional for rolling-version readers. */
   requiredAction?: string;
@@ -287,7 +295,8 @@ export interface OpenItemRow {
     | 'ASK_COORDINATOR_AGAIN'
     | 'RESUME'
     | 'ANSWER'
-    | 'OPEN_LANDING';
+    | 'OPEN_LANDING'
+    | 'ABANDON';
   /** What was asked, for a `COORDINATOR_QUESTION`; null for every other kind (§5.2, §4.8). */
   question: CoordinatorQuestion | null;
   /** What a `START_REQUEST` asks — the "Start this project?" card's source; null for every other
@@ -1371,6 +1380,7 @@ export class ProjectOpenItemService {
       where: { id: itemId, projectId, ownerId },
       select: {
         id: true,
+        kind: true,
         state: true,
         assignee: true,
         project: {
@@ -1383,6 +1393,19 @@ export class ProjectOpenItemService {
       },
     });
     if (!item) throw new NotFoundException('item not found');
+    // §4.6 X-E5 with §4.4 X-D7: this item is never delivered to a coordinator conversation — it is
+    // about a claim that stopped reporting, which no conversation can act on by reading it — so
+    // there is nowhere to send it back to. Its doors are the owner's (abandon, open the landing,
+    // close it by hand).
+    if (item.kind === LANDING_LEASE_EXPIRED_KIND) {
+      throw new ConflictException({
+        code: OPEN_ITEM_NOT_RETURNABLE,
+        message:
+          'this item is never delivered to a coordinator conversation: it is about a landing whose '
+          + 'runner stopped reporting, and only the owner can abandon it, open its landing session, '
+          + 'or close it by hand.',
+      });
+    }
     if (item.state !== 'OPEN') {
       throw new ConflictException({
         code: OPEN_ITEM_NOT_OPEN,
@@ -3374,6 +3397,7 @@ function detailLine(kind: string, payload: unknown): string {
   // A pause writes its own, because what it has to say is not "something failed" but what the
   // coordinator spent, what is still running without it, and what resuming does and does not do.
   if (kind === 'FUSE_PAUSED') return fusePausedDetailLine(payload as FusePausedPayload);
+  if (kind === LANDING_LEASE_EXPIRED_KIND) return leaseExpiredDetailLine(payload);
   if (kind === DELIVERY_REVIEW_KIND) return deliveryReviewDetailLine(payload);
   if (kind !== 'TASK_FAILED') return '';
   const failure = (payload ?? {}) as {
@@ -3388,6 +3412,17 @@ function detailLine(kind: string, payload: unknown): string {
     ? ` · exit ${failure.exitCode}, expected ${failure.expectedExitCode ?? 0}`
     : '';
   return `${howInEnglish(failure.how)}${exit} · attempt ${attempt} of ${limit} in this chain`;
+}
+
+/** The line under X-E5's title: which runner went quiet, and when it last said anything. */
+function leaseExpiredDetailLine(payload: unknown): string {
+  const row = (payload ?? {}) as { lastReportAt?: unknown; runner?: unknown };
+  const runner = typeof row.runner === 'string' && row.runner ? `runner ${row.runner}` : 'the runner';
+  const last = typeof row.lastReportAt === 'string' ? new Date(row.lastReportAt) : null;
+  if (!last || Number.isNaN(last.getTime())) {
+    return `No report from ${runner}, and the attempt is still running.`;
+  }
+  return `No report from ${runner} since ${last.toISOString().slice(0, 16).replace('T', ' ')} UTC.`;
 }
 
 function howInEnglish(how: string | undefined): string {

@@ -56,7 +56,9 @@ export interface ProjectOpenItemDelivery {
  *  (`DONE_REQUEST`, `project-done-request.ts`; migration 0345). `DELIVERY_REVIEW` (0375) is a
  *  finished delivery whose landing somebody has to decide — files outside its declaration, a
  *  branch git refused, or a written reason for keeping a completion criterion Orbit questioned —
- *  put to the coordinator first. */
+ *  put to the coordinator first. `LANDING_LEASE_EXPIRED` (0439) is the owner's: the escalation
+ *  clock opens it when a RUNNING job's current claim has been LEASE_EXPIRED for fifteen minutes
+ *  (§4.6 X-E5), so that the owner can abandon an attempt whose runner stopped reporting. */
 export const OPEN_ITEM_KINDS = [
   'INTEGRATION_CONFLICT',
   'INTEGRATION_CHECK_FAILED',
@@ -68,6 +70,7 @@ export const OPEN_ITEM_KINDS = [
   'START_REQUEST',
   'DONE_REQUEST',
   'DELIVERY_REVIEW',
+  'LANDING_LEASE_EXPIRED',
 ] as const;
 export type OpenItemKind = (typeof OPEN_ITEM_KINDS)[number];
 
@@ -147,6 +150,9 @@ export const OPEN_ITEM_RESOLUTIONS = [
   'ANSWERED',
   'WITHDRAWN',
   'RESUMED',
+  /** The claim a `LANDING_LEASE_EXPIRED` item was about moved on: it reported, was released, was
+   *  taken over, or its job reached any terminal state (§4.6 X-E5). */
+  'JOB_MOVED_ON',
 ] as const;
 export type OpenItemResolution = (typeof OPEN_ITEM_RESOLUTIONS)[number];
 
@@ -311,6 +317,7 @@ export function ownerItemNeed(kind: OpenItemKind | string): string {
     case 'START_REQUEST': return 'Ready to start';
     case 'DONE_REQUEST': return 'Ready to close';
     case 'DELIVERY_REVIEW': return 'Delivery review';
+    case 'LANDING_LEASE_EXPIRED': return 'Runner stopped reporting';
     default: return 'Exception';
   }
 }
@@ -414,6 +421,10 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   }
   if (row.kind === 'DELIVERY_REVIEW') {
     return `This delivery needs a landing decision — ${actor === 'You' ? 'review it and' : 'review it, then'} retry, repair, or close it.`;
+  }
+  // §4.6 X-E5's card: the one sentence the contract spells for this kind, byte for byte.
+  if (row.kind === 'LANDING_LEASE_EXPIRED') {
+    return 'The runner stopped reporting; abandon this landing, or wait for the runner to come back.';
   }
   if (sourceJob === 'MAIN_SYNC' && failureClass === 'CONFLICT') {
     return 'The project branch cannot move until this sync conflict is repaired — record the fix and reopen the task.';
@@ -788,6 +799,9 @@ export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
  * By what the item names:
  *  - a merge card (`PROMOTION_APPROVAL`) is owed while its candidate is READY, the one state the
  *    owner's Merge acts on (`promotionConfirmRefusal`);
+ *  - a `LANDING_LEASE_EXPIRED` item, while its job is still RUNNING under the claim generation its
+ *    dedupe key names: the fact is that ONE claim's lease, so the first accepted report, a release,
+ *    a takeover (which moves the generation) or any terminal state answers it;
  *  - an INTEGRATION_* item about a candidate, while the candidate is live (`LIVE_PROMOTION_STATES`,
  *    BLOCKED among them: a blocked candidate is what such an item waits on somebody to fix);
  *  - an INTEGRATION_* item about a task's landing, while the task is neither cancelled nor replaced —
@@ -815,6 +829,11 @@ export function openItemOwed(alias: string): Prisma.Sql {
   const live = Prisma.raw(LIVE_PROMOTION_STATES.map((state) => `'${state}'`).join(', '));
   const liveSessions = Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL);
   return Prisma.sql`(CASE
+      WHEN ${item}."kind" = 'LANDING_LEASE_EXPIRED' THEN EXISTS (
+        SELECT 1 FROM "project_integration_job" owed_job
+         WHERE owed_job."id" = ${item}."integration_job_id"
+           AND owed_job."state" = 'RUNNING'
+           AND ${item}."dedupe_key" = 'LE:' || owed_job."id"::text || ':' || owed_job."claim_generation"::text)
       WHEN ${item}."promotion_id" IS NOT NULL AND ${item}."kind" = 'PROMOTION_APPROVAL' THEN EXISTS (
         SELECT 1 FROM "project_promotion" owed_promotion
          WHERE owed_promotion."id" = ${item}."promotion_id"
@@ -1134,6 +1153,39 @@ export async function rearmItemFixedBy(
 
 /** What a finished delivery whose landing somebody has to decide is filed under (0375). */
 export const DELIVERY_REVIEW_KIND = 'DELIVERY_REVIEW' satisfies OpenItemKind;
+
+/** The owner's item about a claim whose runner stopped reporting (§4.6 X-E5, 0439). */
+export const LANDING_LEASE_EXPIRED_KIND = 'LANDING_LEASE_EXPIRED' satisfies OpenItemKind;
+
+/**
+ * One item per claim of one job (§4.2's dedupe key for `LANDING_LEASE_EXPIRED`): the lease that
+ * expired is that generation's, so a takeover opens a second item rather than refreshing this one,
+ * and every edge that ends one generation can name the row it ends.
+ */
+export function leaseExpiredDedupeKey(
+  jobId: string,
+  claimGeneration: bigint | number | string,
+): string {
+  return `LE:${jobId}:${claimGeneration.toString()}`;
+}
+
+/**
+ * The edge §4.6 X-E5 writes: the claim an item was opened about moved on — it reported again, it
+ * was released, a takeover took it, or the job reached any terminal state — so nobody owes the
+ * owner a decision about it any more. Called in the transaction that wrote that fact, for every
+ * open lease item of the job; a row already ended is left alone by the terminal guard.
+ */
+export async function resolveLeaseExpiredItems(
+  tx: Pick<Prisma.TransactionClient, 'projectOpenItem'>,
+  jobId: string,
+  resolvedBy: OpenItemResolvedBy = 'PLATFORM',
+): Promise<number> {
+  const closed = await tx.projectOpenItem.updateMany({
+    where: { integrationJobId: jobId, kind: LANDING_LEASE_EXPIRED_KIND, state: 'OPEN' },
+    data: { state: 'RESOLVED', resolution: 'JOB_MOVED_ON', resolvedBy, resolvedAt: new Date() },
+  });
+  return closed.count;
+}
 
 /** The three readings answered by the bounded task-landing decision. */
 export type DeliveryReviewReason =

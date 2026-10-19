@@ -65,6 +65,7 @@ import {
   recordPromotionApproval,
   resolveHandledItems,
   resolveIntegrationItemsOnLanding,
+  resolveLeaseExpiredItems,
   supersedeHandledItems,
 } from '../projects/project-open-item';
 import { sessionReportedWork } from '../projects/landing-source-branch';
@@ -814,7 +815,13 @@ export async function receiveIntegrationJobProgress(
   ownerId?: string,
 ): Promise<IntegrationJobProgressResponse> {
   const report = progressReport(body);
-  const updated = await prisma.$executeRaw(Prisma.sql`
+  // The report that is accepted and §4.6 X-E5's ending are one transaction: a claim that is talking
+  // again is exactly the fact that answers the item about its silence, and a reader must never see
+  // one without the other. The statement itself is the fence — this runner, RUNNING, the exact
+  // (leaseOwner, claimGeneration) — so a chunk or report from a claim that was taken over, released
+  // or abandoned writes nothing.
+  const accepted = await withTransactionRetry(prisma, async (tx) => {
+    const updated = await tx.$executeRaw(Prisma.sql`
       UPDATE "project_integration_job"
          SET "heartbeat_at" = now(),
              "phase" = ${report.phase},
@@ -851,7 +858,13 @@ export async function receiveIntegrationJobProgress(
          AND "state" = 'RUNNING'
          AND "claim_lease_owner" = ${report.leaseOwner}
          AND "claim_generation" = ${BigInt(report.claimGeneration)}`);
-  if (updated === 0) throw await progressRefusal(prisma, { jobId, ownerId });
+    if (updated === 0) return false;
+    // The first report of a claim a takeover made, and any later report of the claim an item was
+    // opened about, end that item the same way (§4.6 X-E5: RESOLVED / JOB_MOVED_ON, by the platform).
+    await resolveLeaseExpiredItems(tx, jobId);
+    return true;
+  }, loggedRetry(logger, 'integrationJob.progress'));
+  if (!accepted) throw await progressRefusal(prisma, { jobId, ownerId });
   // M-T7: the upstream moved after the owner confirmed, so the job is redoing the merge and the
   // checks on the new tip. A progress report rather than a question — the owner confirmed these
   // tasks and these checks, and the checks passing again is the same answer (M5).
@@ -1164,26 +1177,34 @@ export async function releaseIntegrationJob(
     throw new IntegrationJobRefused('INVALID_RESULT', 'a release names the claim it gives back: claimGeneration and leaseOwner');
   }
   const claimGeneration = BigInt(body.claimGeneration);
-  const moved = await prisma.projectIntegrationJob.updateMany({
-    where: {
-      id: input.jobId,
-      runnerId: input.runnerId,
-      ...(input.ownerId != null ? { ownerId: input.ownerId } : {}),
-      state: 'RUNNING',
-      claimLeaseOwner: body.leaseOwner,
-      claimGeneration,
-      cancelRequestedAt: null,
-    },
-    data: {
-      state: 'QUEUED',
-      phase: null,
-      claimGeneration: { increment: 1 },
-      claimLeaseOwner: null,
-      claimedAt: null,
-      heartbeatAt: null,
-    },
-  });
-  if (moved.count === 1) return { released: true };
+  // The claim is handed back and §4.6 X-E5's item about its silence is answered in one transaction:
+  // giving the job back is the runner saying it will not finish this claim, which is what the item
+  // was asking somebody to look at.
+  const released = await withTransactionRetry(prisma, async (tx) => {
+    const moved = await tx.projectIntegrationJob.updateMany({
+      where: {
+        id: input.jobId,
+        runnerId: input.runnerId,
+        ...(input.ownerId != null ? { ownerId: input.ownerId } : {}),
+        state: 'RUNNING',
+        claimLeaseOwner: body.leaseOwner,
+        claimGeneration,
+        cancelRequestedAt: null,
+      },
+      data: {
+        state: 'QUEUED',
+        phase: null,
+        claimGeneration: { increment: 1 },
+        claimLeaseOwner: null,
+        claimedAt: null,
+        heartbeatAt: null,
+      },
+    });
+    if (moved.count !== 1) return false;
+    await resolveLeaseExpiredItems(tx, input.jobId);
+    return true;
+  }, loggedRetry(logger, 'integrationJob.release'));
+  if (released) return { released: true };
   // Nothing moved: say why, from the row as it is now, and among the reporting runner's owner's jobs
   // only — another account's job is answered as one that does not exist.
   const job = await prisma.projectIntegrationJob.findFirst({
@@ -1783,6 +1804,12 @@ export async function applyIntegrationJobResult(
     } else {
       await tx.projectIntegrationJob.update({ where: { id: job.id }, data: terminalData });
     }
+    // §4.6 X-E5: the job is terminal, so the item about its claim's silence is answered — by the
+    // party that ended it (the owner pressing Abandon is USER, the coordinator's integration_abandon
+    // is COORDINATOR) or by the platform when a result closed it. Written in the same transaction as
+    // the terminal state, which is the fact the item was asking somebody to bring about.
+    await resolveLeaseExpiredItems(tx, job.id,
+      platformEnd ? (platformEnd.by === 'owner' ? 'USER' : 'COORDINATOR') : 'PLATFORM');
 
     // §2.6, the other half: the line answered about a branch this task's work did not end on, so the
     // commits are on a branch nothing has offered and nothing will — the row just written is terminal

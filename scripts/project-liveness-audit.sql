@@ -120,6 +120,11 @@ SELECT item."project_id"                                       AS project_id,
   JOIN "project" proj ON proj."id" = item."project_id"
  WHERE item."state" = 'OPEN'
    AND NOT (CASE
+      WHEN "item"."kind" = 'LANDING_LEASE_EXPIRED' THEN EXISTS (
+        SELECT 1 FROM "project_integration_job" owed_job
+         WHERE owed_job."id" = "item"."integration_job_id"
+           AND owed_job."state" = 'RUNNING'
+           AND "item"."dedupe_key" = 'LE:' || owed_job."id"::text || ':' || owed_job."claim_generation"::text)
       WHEN "item"."promotion_id" IS NOT NULL AND "item"."kind" = 'PROMOTION_APPROVAL' THEN EXISTS (
         SELECT 1 FROM "project_promotion" owed_promotion
          WHERE owed_promotion."id" = "item"."promotion_id"
