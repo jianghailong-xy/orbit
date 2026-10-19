@@ -387,6 +387,9 @@ export class SessionsController {
     // Page size. Omitted (every native client) means the whole list, as before.
     @Query('limit') limit?: string,
     @Query('projectId', PublicIdPipe) projectId?: string,
+    // Contract §2.9 LS6: the project sessions page asks for its LANDING sessions too, through
+    // `includeLanding=1`. Honoured only beside `projectId`; every flat list stays conversations.
+    @Query('includeLanding') includeLanding?: string,
     // The Open list as a delta against the cursor of the copy already held (see
     // SessionsService.listOpenSince). Present at all — even empty — asks for the delta shape, which
     // is how a client gets its first cursor; absent keeps the plain array every older client reads.
@@ -395,10 +398,11 @@ export class SessionsController {
     @Res({ passthrough: true }) res?: Response,
   ) {
     const confinedTo = workspaceConfinement(user);
+    const withLanding = includeLanding === '1' && projectId !== undefined;
     if (since !== undefined && (view === undefined || view === 'open' || view === 'active')) {
       return this.sessions.listOpenSince(
         user.userId,
-        { runnerId, workspaceId: workspaceId ?? agentId, tagId, projectId, confinedTo },
+        { runnerId, workspaceId: workspaceId ?? agentId, tagId, projectId, includeLanding: withLanding, confinedTo },
         since,
       );
     }
@@ -408,6 +412,7 @@ export class SessionsController {
       workspaceId: workspaceId ?? agentId,
       tagId,
       projectId,
+      includeLanding: withLanding,
       confinedTo,
       view,
       limit: Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
@@ -417,13 +422,15 @@ export class SessionsController {
     // serialized. The 304 is ended here rather than left to Express's `req.fresh`, which refuses
     // any request carrying `Cache-Control: no-cache` (as fetch() adds to every conditional one);
     // what Nest sends after it is a no-op on a finished response. Other views keep Express's
-    // body-hash ETag.
+    // body-hash ETag. A landing-aware read is a different list, so it has its own version scope:
+    // an insert or a settlement moves that one and leaves the plain list's where it was.
     if (res && isOpenListView(view)) {
-      const etag = openListEtag(await this.sessions.openListVersion(user.userId), {
+      const etag = openListEtag(await this.sessions.openListVersion(user.userId, withLanding), {
         runnerId: filters.runnerId,
         workspaceId: filters.workspaceId,
         tagId,
         projectId,
+        includeLanding: withLanding ? 1 : undefined,
         confinedTo: confinedTo?.join(','),
         limit: filters.limit,
       });
