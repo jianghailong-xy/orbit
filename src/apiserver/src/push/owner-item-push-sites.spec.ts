@@ -50,6 +50,10 @@ const OWNER_ITEM_WRITERS: Record<string, string> = {
     + 'there',
   'projects/project-fuse.service.ts': 'evaluate (F-T1), which announces after its transaction',
   'projects/owner-decision-signal.ts': 'a READ: it counts the owner’s items, it opens none',
+  'runner-api/integration-job-relay.ts':
+    'no item of its own: the string labels the timeline fact (`HANDED_TO`, §2.9 LS2) that this '
+    + 'result handed the owner the card `recordPromotionApproval` opened in the same transaction — '
+    + 'the writer is project-open-item.ts, announced by runner-api.controller.ts after the commit',
   'projects/project-done-request.ts':
     'a READ: the done check reads the owner’s open items to refuse over them, it opens none',
   'auth/tenant-isolation-fixtures.ts':

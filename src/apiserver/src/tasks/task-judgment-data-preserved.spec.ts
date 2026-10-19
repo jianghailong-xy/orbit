@@ -2399,6 +2399,17 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // writer of the DONE fence. No INSERT, UPDATE or DELETE: the table is new and every stored row
       // is one a runner uploads after this lands.
       '0437_integration_job_log',
+      // The landing timeline's ledger (0438, docs/project-integration-line-contract.md §2.9
+      // LS2/LS4): one new table, `project_integration_job_event`, append-only — its UPDATE/DELETE
+      // guard trigger, its unique (job_id, key) identity, its (job_id, claim_generation, round, at,
+      // seq) page index, its closed-set CHECKs and a foreign key to `project_integration_job` that
+      // cascades (the guard admits exactly that cascade). Only `project_integration_job` is named
+      // (rank 60): no `task`, `session`, `project` or `project_acceptance_*` object and none of the
+      // six preserved triggers/functions, and no function is created that writes another relation —
+      // the one function here raises and writes nothing — so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: the table is new and every stored row is one a landing
+      // door appends after this lands.
+      '0438_project_integration_job_event',
       // The owner's item about a landing whose runner stopped reporting (0439,
       // docs/project-integration-line-contract.md §4.6 X-E5): three CHECKs on `project_open_item`
       // rewired — `project_open_item_kind_chk` admits `LANDING_LEASE_EXPIRED`,

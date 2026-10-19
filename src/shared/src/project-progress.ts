@@ -358,6 +358,123 @@ export interface SessionLandingGeneration<Instant = string> {
   settledAs: string | null;
 }
 
+// ── the landing timeline (contract §2.9 LS2, LS4) ──────────────────────────────────────────────
+
+/** The closed set of facts an attempt records (migration 0438's CHECK, spelled in
+ *  `projects/project-integration-event.ts`). Each one is written by the door that decided it, in
+ *  the same transaction as the job-gate write it describes; the two claim facts are backfilled from
+ *  the committed claim right after it (LS2). */
+export type IntegrationJobEventKind =
+  | 'ENQUEUED'
+  | 'STEP'
+  | 'ROUND'
+  | 'CHECK_STARTED'
+  | 'CHECK_FINISHED'
+  | 'CLAIMED'
+  | 'TAKEN_OVER'
+  | 'RELEASED'
+  | 'PUSH_REFUSED'
+  | 'RECHECK_ON_MOVED_MAIN'
+  | 'NEXT_GENERATION'
+  | 'RESULT'
+  | 'REQUEUED'
+  | 'HANDED_TO'
+  | 'STOP_REQUESTED'
+  | 'CANCELLED'
+  | 'ABANDONED'
+  | 'TIMED_OUT';
+
+/** A line read-time derived from another row rather than stored as its own event (LS4): a rerun's
+ *  requester and reason (`retry_*`), an item being handled (`handling_*`), the owner's
+ *  confirmation, the skipped check, a timeout the job row alone cannot explain, the Nth automatic
+ *  attempt, and the task a fix was filed as. */
+export type DerivedTimelineKind =
+  | 'RETRY'
+  | 'SKIPPED_CHECK'
+  | 'HANDLING'
+  | 'CONFIRMATION'
+  | 'RESULT_FALLBACK'
+  | 'AUTOMATIC_ATTEMPT'
+  | 'FIX_TASK';
+
+/** Who caused a timeline line. */
+export interface IntegrationTimelineActor {
+  type: 'OWNER' | 'COORDINATOR' | 'PLATFORM' | 'RUNNER' | 'AUTOMATIC';
+  /** The conversation that acted, when a coordinator did. */
+  sessionId?: string | null;
+  /** The person that acted, when the owner did. */
+  userId?: string | null;
+}
+
+/**
+ * One line of the landing timeline, as `GET /sessions/:id` and the runner read serve it.
+ *
+ * `text` is the whole sentence, written by the server (mockup v4 §05's wording); `data` carries the
+ * structured fields the same line is drawn with. A client lays the line out and never composes one
+ * from the fields — which is what keeps the three clients saying the same thing. `id` is the event
+ * row's id, and null for a line derived at read time from another row whose decision this ledger
+ * does not copy (LS4).
+ */
+export interface IntegrationTimelineEntry<Instant = string> {
+  id: string | null;
+  /** The ledger's own order, for a stored fact; absent on a derived line. Two facts one transaction
+   *  appends share the same `at`, and this is what orders them. */
+  seq?: number;
+  /** An `IntegrationJobEventKind`, or one of `DerivedTimelineKind`. */
+  kind: IntegrationJobEventKind | DerivedTimelineKind;
+  at: Instant;
+  /** The claim the fact happened under; 0 before the first claim. */
+  claim: number;
+  round: number | null;
+  check: { name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK'; index: number } | null;
+  phase: IntegrationJobPhase | null;
+  step: string | null;
+  actor: IntegrationTimelineActor | null;
+  reason: string | null;
+  /** Structured fields the line is drawn with: the moved commits, the item handed to, a timeout's
+   *  limit, the job a rerun repeats, the automatic attempt's count. */
+  data: Record<string, unknown> | null;
+  text: string;
+  /** True for a line derived from another row at read time; absent for a stored fact. */
+  derived?: boolean;
+}
+
+/** One section of the timeline: a task landing's generation, or one merge round's attempt.
+ *  `title` is the server-written heading (`Generation 1`, `Merge check · 2`, `Merge to main · 1`);
+ *  `generation` is the section's number among the subject's attempts of its kind, which is the
+ *  number the title carries — not the job's own per-candidate generation. */
+export interface IntegrationTimelineSection<Instant = string> {
+  title: string;
+  jobId: string;
+  kind: IntegrationJobKind;
+  generation: number;
+  state: string;
+  /** Oldest first: by claim, then by round, then by the instant the fact happened. */
+  entries: IntegrationTimelineEntry<Instant>[];
+}
+
+/** A subject-level derived fact that belongs to no one attempt (a fix task, the promotion state). */
+export interface IntegrationTimelineFact {
+  kind: DerivedTimelineKind | 'PROMOTION_STATE';
+  text: string;
+  data: Record<string, unknown> | null;
+}
+
+/** The landing subject's whole timeline: one section per attempt, oldest first. */
+export interface SessionLandingTimeline<Instant = string> {
+  sections: IntegrationTimelineSection<Instant>[];
+  facts: IntegrationTimelineFact[];
+  /** True when the subject had more attempts or entries than the read returns. */
+  truncated: boolean;
+}
+
+/** One page of one attempt's timeline, as the runner read's `timeline` slot serves it. */
+export interface IntegrationTimelinePage<Instant = string> {
+  jobId: string;
+  entries: IntegrationTimelineEntry<Instant>[];
+  nextCursor: string | null;
+}
+
 /**
  * The landing view `GET /sessions/:id` and `session_get` answer for a LANDING session (contract
  * §2.9 LS1, LS6; errata E4): the subject, its newest attempt, the phase/round/checks/activity the
@@ -394,6 +511,11 @@ export interface SessionLandingView<Instant = string> {
   todos: SessionLandingTodo<Instant>[];
   /** Every generation of the subject, oldest first. */
   generations: SessionLandingGeneration<Instant>[];
+  /** The ordered timeline the landing page draws (§2.9 LS2/LS4): one section per attempt, with
+   *  the stored facts each one recorded and the lines derived from the rows that kept the
+   *  decisions. Read-only, and bounded — `truncated` says the read returned less than the subject
+   *  holds. Absent on servers that predate the timeline (contract §2.9: a new field is optional). */
+  timeline?: SessionLandingTimeline<Instant>;
 }
 
 /**
@@ -484,6 +606,9 @@ export interface ProjectIntegrationReadPagination {
   round: number | null;
   check: number | null;
   cursor: string | null;
+  /** The attempt timeline's own continuation, when the request passed one (`timelineCursor`); the
+   *  log and the timeline are paged independently. Absent on servers that predate the timeline. */
+  timelineCursor?: string | null;
 }
 
 /**
@@ -551,6 +676,11 @@ export interface ProjectIntegrationRead<Instant = string> {
   /** The check output of the job the request named by `jobId`; absent when it named none, so a
    *  caller that only wants the line reads the shape it always did. */
   log?: ProjectIntegrationLogPage<Instant> | null;
+  /** One attempt's timeline, paged by the selectors a caller already passes (`jobId` names the
+   *  attempt, `claim` and `round` narrow it, `timelineCursor` continues it — its own cursor, so the
+   *  log and the timeline of one attempt are paged independently). Absent when the request named
+   *  no `jobId`, like the log. */
+  timeline?: IntegrationTimelinePage<Instant> | null;
 }
 
 /** The integration claim's existing lease window, also used to stop stale activity indicators. */

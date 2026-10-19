@@ -261,11 +261,15 @@ func TestMCPProjectIntegrationGetReadsTheLineUnderTheActingSession(t *testing.T)
 	if !hasMCPTool(toolDescriptors(false, false), "project_integration_get") {
 		t.Fatalf("project_integration_get missing from the base tools")
 	}
-	var gotMethod, gotPath, gotJob, gotCursor, gotSession string
+	var gotMethod, gotPath, gotJob, gotClaim, gotRound, gotCheck, gotCursor, gotTimeline, gotSession string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath = r.Method, r.URL.Path
 		gotJob = r.URL.Query().Get("jobId")
+		gotClaim = r.URL.Query().Get("claim")
+		gotRound = r.URL.Query().Get("round")
+		gotCheck = r.URL.Query().Get("check")
 		gotCursor = r.URL.Query().Get("cursor")
+		gotTimeline = r.URL.Query().Get("timelineCursor")
 		gotSession = r.Header.Get("X-Orbit-Session-Id")
 		w.Write([]byte(`{"projectId":"p1","queue":[],"generations":[]}`))
 	}))
@@ -273,7 +277,8 @@ func TestMCPProjectIntegrationGetReadsTheLineUnderTheActingSession(t *testing.T)
 
 	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
 	res := mcp.callTool("project_integration_get", map[string]interface{}{
-		"projectId": "p1", "jobId": "j1", "cursor": "c1",
+		"projectId": "p1", "jobId": "j1", "claim": "2", "round": "3", "check": "1",
+		"cursor": "c1", "timelineCursor": "t1c",
 	})
 	if res["isError"] == true {
 		t.Fatalf("project_integration_get returned an error: %#v", res["content"])
@@ -281,9 +286,12 @@ func TestMCPProjectIntegrationGetReadsTheLineUnderTheActingSession(t *testing.T)
 	if gotMethod != http.MethodGet || gotPath != "/api/runner/projects/p1/integration" {
 		t.Fatalf("project_integration_get hit %s %s", gotMethod, gotPath)
 	}
-	// The page selectors travel as the query the server reserved them under.
-	if gotJob != "j1" || gotCursor != "c1" {
-		t.Fatalf("the page selectors sent = jobId %q, cursor %q", gotJob, gotCursor)
+	// Every page selector travels as the query the server reserved it under — the timeline's own
+	// cursor included, so an agent can page both reads of one attempt.
+	if gotJob != "j1" || gotClaim != "2" || gotRound != "3" || gotCheck != "1" ||
+		gotCursor != "c1" || gotTimeline != "t1c" {
+		t.Fatalf("the page selectors sent = jobId %q, claim %q, round %q, check %q, cursor %q, timelineCursor %q",
+			gotJob, gotClaim, gotRound, gotCheck, gotCursor, gotTimeline)
 	}
 	// The acting session is the second half of the gate: the line is read as a session in the
 	// project, and the server checks it against the project's own membership.
