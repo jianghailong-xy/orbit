@@ -5119,6 +5119,12 @@ html[data-theme='dark'] .session-tag-chip {
   border-color: var(--brand-border);
   background: var(--brand-tint);
 }
+/* A merge job the server judged timed out: the WHOLE card turns amber, exactly as the landing
+   card does (owner 2026-10-19), whichever moment it is in — checking or merging. */
+.session-project-merge.is-timed-out {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
 .session-project-merge.is-blocked {
   border-color: var(--warning-border);
 }
@@ -5422,6 +5428,11 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--brand);
 }
 .session-preview.tone-approval {
+  color: var(--warning-solid);
+}
+/* A landing the server judged timed out: amber words, and no needs-you dot — the dot means
+   somebody is waiting on you, and a stopped runner is a fact rather than a question. */
+.session-preview.tone-warning {
   color: var(--warning-solid);
 }
 .session-preview.tone-queued,
