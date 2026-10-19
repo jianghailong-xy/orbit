@@ -379,6 +379,9 @@ export interface PromotionFacts {
   upstreamSyncedAt: Date | null;
   /** The re-check in flight (state B), or null when none is. */
   recheck: { upstreamMovedBy: number | null; startedAt: Date; typicalMs: number | null } | null;
+  /** The landing session of this round (§2.9 LS1), on the states the check line and the receipt
+   *  open it from; null on every other state and when the round recorded none. */
+  landingSessionId?: string | null;
   execution?: ProjectPromotionView['execution'];
   /** The landing has been asked to stop and has not ended (M-T10): the card draws "cancelling". */
   cancelRequested?: boolean;
@@ -412,6 +415,7 @@ export function promotionView(row: PromotionRow, facts: PromotionFacts): Project
     askedAt: row.state === 'CHECKING' ? null : row.updatedAt,
     recheckedAt: row.recheckedAt,
     recheck: facts.recheck,
+    landingSessionId: facts.landingSessionId ?? null,
     onPass: facts.onPass ?? null,
     execution: facts.execution ?? null,
     cancelRequested: facts.cancelRequested ?? false,
