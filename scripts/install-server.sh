@@ -300,7 +300,8 @@ if [ "$ENABLE_FIREWALL" -eq 1 ]; then
   mv "$NEW_ENV" .env
   trap - EXIT
   if [ "$START" -eq 0 ]; then
-    echo "✓ The managed runners' firewall rules are in force. Start its service with: docker compose up -d --wait $FW_SERVICE"
+    echo "✓ The managed runners' firewall rules are in force. No runner container starts until its service runs, which keeps"
+    echo "  them: docker compose up -d --wait $FW_SERVICE"
     exit 0
   fi
   echo "==> Starting the managed runners' firewall"
