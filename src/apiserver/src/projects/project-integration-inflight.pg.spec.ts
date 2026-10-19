@@ -542,7 +542,6 @@ test('the landing line describes running work before the queue, on real PostgreS
           assert.deepEqual(jobs[0], {
             jobId: running, kind: 'LAND_TASK', state: 'RUNNING', phase: 'REBASE',
             taskId: landing, taskTitle: 'C5 · 登录后开通默认托管 runner', generation: 2,
-            landingSessionId: null,
             startedAt: jobs[0].startedAt, queuedAt: jobs[0].queuedAt, heartbeatAt: jobs[0].heartbeatAt,
             runnerName: 'workstation-gpu', retriedBy: null, timedOut: false, limitSeconds: 600,
             retryable: false,
@@ -934,7 +933,6 @@ test('the landing line describes running work before the queue, on real PostgreS
         assert.deepEqual(entry, {
           jobId: running, kind: 'LAND_TASK', state: 'RUNNING', phase: null, taskId,
           taskTitle: 'A live v2 landing', promotionId: null, generation: 1,
-          landingSessionId: null,
           startedAt, queuedAt, heartbeatAt,
           runnerName: 'v2-runner', retriedBy: null, timedOut: false, limitSeconds: 600,
           progressProtocol: 'v2', claim: 2, round: 2,
