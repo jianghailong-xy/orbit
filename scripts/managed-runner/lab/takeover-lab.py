@@ -458,7 +458,7 @@ def on_admission(ctx, step):
 # ---- the account on the first node ---------------------------------------------------------------------------
 
 def account_ready(ctx, step):
-    cordoned = cordon(2, 'cordon')  # the first generation on the first node
+    cordoned = [cordon(1, 'uncordon'), cordon(2, 'cordon')]  # the first generation on the first node
     since = now()
     signed = al.account(OWNER)
     starting = until(OWNER, 'STARTING', reason='MODEL_UNAVAILABLE', timeout=300)

@@ -384,6 +384,11 @@ class FakeModelTest(unittest.TestCase):
     def user(text):
         return {"role": "user", "content": [{"type": "text", "text": text}]}
 
+    def test_an_answer_quotes_the_markers_of_the_last_message(self):
+        [answer] = self.ask([self.user("T02-ANN-MOVE T08-ANN-S1 a message, T05-NOT-A-MARKER")])
+        self.assertEqual(answer["type"], "text")
+        self.assertTrue(answer["text"].endswith("Answering: T02-ANN-MOVE T08-ANN-S1"), answer["text"])
+
     def test_a_background_job_is_one_bg_run_call_and_its_result_is_answered(self):
         first = self.user("T06-X FAKE-BG 7 start a job")
         [call] = self.ask([first])
