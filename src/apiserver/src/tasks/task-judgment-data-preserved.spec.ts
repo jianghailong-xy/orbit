@@ -2343,7 +2343,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers/functions, and no function, trigger or type is created, replaced or dropped, so it is
       // not another writer of the DONE fence. The two UPDATEs only move rows out of QUEUED / out of the
       // live promotion states, and every statement can run twice.
-      '0433_integration_job_queued_cancel'],
+      '0433_integration_job_queued_cancel',
+      // The v2 progress protocol's facts (0434, docs/project-integration-line-contract.md §2.1 revision
+      // 12's column list, §2.2 J-T4): seven nullable columns on `project_integration_job` — two text
+      // (`progress_protocol`, `step`), one bigint (`push_reported_generation`), one integer (`round`),
+      // two TIMESTAMPTZ(3) (`step_started_at`, `output_moved_at`) and one jsonb (`current_check`) — none
+      // with a default, and three CHECKs every stored row satisfies (the two closed sets and round ≥ 1),
+      // added NOT VALID then VALIDATEd. Only `project_integration_job` is named (rank 60): no `task`,
+      // `session`, `project` or `project_acceptance_*` object and none of the six preserved
+      // triggers/functions, and no function, trigger or type is created, replaced or dropped, so it is
+      // not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored row reads NULL
+      // in the new columns, which is exactly "a legacy claim".
+      '0434_integration_job_progress_protocol'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

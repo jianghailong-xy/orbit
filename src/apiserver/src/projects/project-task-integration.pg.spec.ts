@@ -479,7 +479,8 @@ test('a DONE task’s landing through the heartbeat and result routes: every que
         leaseOwner: claimed[0]!.leaseOwner,
         phase: 'CHECK',
       });
-      assert.deepEqual(progress, { accepted: true });
+      // §2.2 J-T4: every accepted report also answers the stop signal, false while nobody asked.
+      assert.deepEqual(progress, { accepted: true, cancelRequested: false });
       const checking = await read(stack, w, first);
       assert.equal(checking.landTask?.phase, 'CHECK');
       assert.notEqual(checking.checksRunningForMs, null);

@@ -1715,20 +1715,22 @@ export class RunnerApiController {
 
   /**
    * A claimed integration job is still being worked on (contract §2.3, §2.2 J-T4): the phase it
-   * reached, and the lease renewal that keeps another runner from taking it over. Fenced on
-   * (leaseOwner, claimGeneration) and on the runner token, so a process whose claim was taken over
-   * gets 409 STALE_CLAIM and stops rather than reporting into a job that is no longer its.
+   * reached, the check in flight, and the lease renewal that keeps another runner from taking it
+   * over. Fenced on (leaseOwner, claimGeneration) and on the runner token, and answered with
+   * `cancelRequested` — the stop signal a v2 runner reads between reports and before its push.
+   * A fence miss is 409 STALE_CLAIM (claim taken over, released or abandoned), 409 ALREADY_FINAL
+   * (job written down) or 404 (another account's job); all three tell the runner to stop.
    */
   @UseGuards(RunnerAuthGuard)
   @Post('integration-jobs/:jobId/progress')
   @HttpCode(200)
   async integrationJobProgress(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId?: string },
     @Param('jobId', PublicIdPipe) jobId: string,
     @Body() body: IntegrationJobProgressRequest,
   ) {
     try {
-      return await this.integrationQueue().progress(runner.id, jobId, body);
+      return await this.integrationQueue().progress(runner.id, jobId, body, runner.ownerId);
     } catch (error) {
       throw integrationJobHttpError(error);
     }

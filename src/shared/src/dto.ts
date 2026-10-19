@@ -2707,15 +2707,57 @@ export interface IntegrationJobCommand {
    *  legacy job runs only takes effect if the job is claimed again; the progress protocol adds it to
    *  every answer (§2.2 J-T4, J-T12). */
   cancelRequested: boolean;
+  /** The v2 progress protocol (§2.2 J-T4): before it pushes, the runner reports `phase = PUSH` and
+   *  waits for the answer. Sent only to a claim whose `progress_protocol` this server wrote as
+   *  `v2`; absent on every legacy claim, whose runner pushes without asking. */
+  reportBeforePush?: true;
 }
 
-/** Runner → control plane: still working (POST /runner/integration-jobs/:jobId/progress). */
+/** The named sub-step a v2 claim is on, beside `phase` (§2.2 J-T4). It does not widen
+ *  `IntegrationJobPhase`: waiting for this runner's own integration lock happens inside FETCH, and
+ *  preparing the tree inside CHECK. */
+export type IntegrationJobStep = 'WAITING_LOCAL_LOCK' | 'PREPARE';
+
+/** The check a v2 claim is running, as its progress reports name it (§2.1, §2.2 J-T4). The job
+ *  row's `checks` holds FINISHED results in a different shape; this one is the check in flight. */
+export interface IntegrationJobCurrentCheck {
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  /** Position of this check in the run, from 1, and how many the run has in all. */
+  index: number;
+  count: number;
+  budgetSeconds: number;
+  startedAt: string;
+}
+
+/** Runner → control plane: still working (POST /runner/integration-jobs/:jobId/progress). Every
+ *  field past the fence is optional: a legacy runner sends only the first three and is still
+ *  served the same way. */
 export interface IntegrationJobProgressRequest {
   claimGeneration: string;
   leaseOwner: string;
   phase: IntegrationJobPhase;
+  /** The named sub-step, while one is (J-T4). Absent between steps. */
+  step?: IntegrationJobStep;
+  /** Which round inside this claim, from 1: a landing may retry its push onto a moved target. */
+  round?: number;
+  /** The check in flight, while one is. */
+  check?: IntegrationJobCurrentCheck;
+  /** How long the current step's output has been idle. The server writes `output_moved_at` as the
+   *  instant it received this report minus this; absent is "not measured". */
+  outputIdleMs?: number;
+  /** Bytes this step has produced so far. */
+  outputBytes?: number;
   /** Upstream moved under the job while it worked, for a reader of the timeline. */
   upstreamMoved?: { from: string; to: string; commits?: number };
+}
+
+/** Control plane → runner: the renewal was taken, and — a stop signal in the other direction —
+ *  whether somebody asked this job to stop (§2.2 J-T4). A v2 runner that reads `true` kills the
+ *  check's process group and answers CANCELLED. A 409 STALE_CLAIM / 409 ALREADY_FINAL / 404 is
+ *  the same signal with no answer left to report into. */
+export interface IntegrationJobProgressResponse {
+  accepted: true;
+  cancelRequested: boolean;
 }
 
 /** Runner → control plane: give a claimed job back to the queue (POST

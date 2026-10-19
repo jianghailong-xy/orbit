@@ -19,6 +19,9 @@ import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
  * with no such column. Instead each source contributes the set of its row VERSIONS — `(ctid, xmin)`
  * is a new pair for every insert and update, whoever wrote it, and a delete removes one — folded to
  * a count and an order-free sum. Vacuum freezing or moving a row only changes it spuriously.
+ * `project_integration_job` is the one exception: a v2 claim renews its row every 30 seconds
+ * (§2.2 J-T4), so the RUNNING half of that source fingerprints the row's content without the
+ * renewal-only columns, while every finished row keeps its tuple identity (see the line below).
  *
  * The sources are every table `listRows` and the readers it calls reach (owner decisions,
  * request peers, confirmations under review, project membership, the queued-gate lateral), each
@@ -114,7 +117,27 @@ export async function readOpenListVersion(
       ${ownedBy('project_standard_set_confirmation')} AS standard_set_confirmation,
       ${ownedViaProject('project_task_status_count')} AS task_status_count,
       ${ownedBy('project_promotion')} AS promotion,
-      ${ownedBy('project_integration_job')} AS integration_job,
+      -- A v2 integration claim renews its job row inside every 30 seconds (§2.2 J-T4), so ctid/xmin
+      -- — a new pair on every UPDATE — would move this version, and every client's If-None-Match,
+      -- while nothing the list shows changed. Only a RUNNING row is renewed, so only that half pays
+      -- for a content hash: a job that is not RUNNING keeps its tuple identity, and a running one is
+      -- hashed as its row WITHOUT the columns only a renewal writes (heartbeat_at, updated_at, phase
+      -- and the step/check/output facts). Two subqueries rather than one CASE over the whole set, so
+      -- the whole-row reference — and the detoast of every finished check's outputTail — never runs
+      -- over the account's finished jobs. A running row that ends leaves the second half and enters
+      -- the first, so the state change moves the version like any other write to a finished row.
+      COALESCE((
+        SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended(x.ctid::text || ':' || x.xmin::text, 0)), 0)::text
+          FROM project_integration_job x
+         WHERE x.owner_id = ${o} AND x.state <> 'RUNNING'), '0/0')
+      || ':' ||
+      COALESCE((
+        SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended((to_jsonb(x)
+            - 'heartbeat_at' - 'updated_at' - 'phase' - 'round' - 'step' - 'step_started_at'
+            - 'output_moved_at' - 'current_check')::text, 0)), 0)::text
+          FROM project_integration_job x
+         WHERE x.owner_id = ${o} AND x.state = 'RUNNING'), '0/0')
+      AS integration_job,
       ${ownedBy('project_codebase')} AS codebase,
       ${ownedBy('project_criteria_authorship')} AS criteria_authorship,
       ${ownedBy('session_merge_receipt')} AS merge_receipt,

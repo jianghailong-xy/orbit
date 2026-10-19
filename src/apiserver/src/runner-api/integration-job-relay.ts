@@ -4,8 +4,10 @@ import {
   IntegrationCheckResult,
   IntegrationCheckSpec,
   IntegrationJobCommand,
+  IntegrationJobCurrentCheck,
   IntegrationJobPhase,
   IntegrationJobProgressRequest,
+  IntegrationJobProgressResponse,
   IntegrationJobReleaseRequest,
   IntegrationJobReleaseResponse,
   IntegrationJobResultRequest,
@@ -19,6 +21,9 @@ import {
   INTEGRATION_JOB_CLAIM,
   INTEGRATION_JOB_PHASES,
   INTEGRATION_JOB_STATES,
+  INTEGRATION_JOB_STEPS,
+  INTEGRATION_PROGRESS_V2,
+  INTEGRATION_PROGRESS_V2_PROTOCOL,
   LandingWorkSessionFacts,
   MAX_CHECK_OUTPUT_TAIL,
   PROMOTION_AUTOMATIC_LAND,
@@ -107,8 +112,9 @@ export class IntegrationJobRelay {
     runnerId: string,
     jobId: string,
     body: IntegrationJobProgressRequest,
-  ): Promise<{ accepted: true }> {
-    return receiveIntegrationJobProgress(this.prisma, runnerId, jobId, body);
+    ownerId?: string,
+  ): Promise<IntegrationJobProgressResponse> {
+    return receiveIntegrationJobProgress(this.prisma, runnerId, jobId, body, ownerId);
   }
 
   /**
@@ -195,6 +201,8 @@ interface ClaimedRow {
   mergeTreeSha: string | null;
   /** A landing the project's Automatic setting confirmed (M-T11), bound to the checked tip. */
   confirmedAutomatically: boolean;
+  /** The protocol this claim is made under (§2.2 J-T4): `'v2'` or null (legacy). */
+  progressProtocol: string | null;
 }
 
 /**
@@ -221,12 +229,19 @@ export async function dispatchIntegrationJobs(
 
   const commands: IntegrationJobCommand[] = [];
   const taken: string[] = [];
+  // §2.2 J-T4: the protocol this process's claims are recorded under. A runner that declared
+  // `integration-progress/v2` is handed `reportBeforePush` and reports inside every 30 seconds; any
+  // other is a legacy claim and keeps the old shape.
+  const progressProtocol = heartbeat.capabilities?.includes(INTEGRATION_PROGRESS_V2)
+    ? INTEGRATION_PROGRESS_V2_PROTOCOL
+    : null;
   // M-T12: whether this process lands an automatic merge only onto the checked tip. One that has not
   // said so is never handed one — it would check a moved main again and merge it, which the
   // Automatic setting does not authorize.
   const landsAutomatically = heartbeat.capabilities?.includes(PROMOTION_AUTOMATIC_LAND) === true;
   for (let i = 0; i < INTEGRATION_JOBS_PER_HEARTBEAT; i += 1) {
-    const row = await claimOne(prisma, heartbeat.runnerId, heartbeat.leaseOwner, taken, landsAutomatically)
+    const row = await claimOne(prisma, heartbeat.runnerId, heartbeat.leaseOwner, taken, landsAutomatically,
+      progressProtocol)
       .catch((error) => {
         // A lost race against another runner's claim surfaces as the partial unique index. It is
         // the index doing its job, not an incident: the next beat looks again.
@@ -285,6 +300,8 @@ export async function dispatchIntegrationJobs(
       ...(row.confirmedAutomatically ? { automatic: true } : {}),
       checks: checksFor(row),
       cancelRequested: row.cancelRequestedAt != null,
+      // §2.2 J-T4: only a v2 claim is asked to report PUSH synchronously and wait for the answer.
+      ...(row.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL ? { reportBeforePush: true as const } : {}),
     });
   }
   return commands;
@@ -320,6 +337,7 @@ async function claimOne(
   leaseOwner: string,
   alreadyTaken: string[],
   landsAutomatically: boolean,
+  progressProtocol: string | null,
 ): Promise<ClaimedRow | null> {
   const staleBefore = new Date(Date.now() - INTEGRATION_CLAIM_STALE_MS);
   const rows = await prisma.$queryRaw<ClaimedRow[]>(Prisma.sql`
@@ -412,6 +430,27 @@ async function claimOne(
            "heartbeat_at" = now(),
            "started_at" = COALESCE(j."started_at", now()),
            "phase" = 'FETCH',
+           -- §2.2 J-T2 / J-T3: every claim records the protocol it is made under. The renewal
+           -- fields describe the PREVIOUS claim, so they start empty; push_reported_generation
+           -- does not — it is the push boundary's history (J-T4). The FETCH step starts now, which
+           -- is the instant §7.2 V6 counts the landing's main clock from.
+           "progress_protocol" = ${progressProtocol},
+           "round" = NULL,
+           "step" = NULL,
+           "step_started_at" = now(),
+           "output_moved_at" = NULL,
+           "current_check" = NULL,
+           -- J-T3: taking over a LEGACY claim whose push outcome was never recorded. That runner's
+           -- PUSH report was best-effort, so the server cannot rule out that it pushed: the taken-
+           -- over generation is written here, which is exactly what J12 reads to answer
+           -- PUSH_OUTCOME_UNKNOWN rather than RUNNER_LOST. A v2 claim recorded its own PUSH
+           -- synchronously or did not push at all, so it is never backfilled this way.
+           "push_reported_generation" = CASE
+             WHEN j."state" = 'RUNNING'
+              AND (j."progress_protocol" IS DISTINCT FROM ${INTEGRATION_PROGRESS_V2_PROTOCOL})
+              AND j."push_reported_generation" IS NULL
+             THEN j."claim_generation"
+             ELSE j."push_reported_generation" END,
            "updated_at" = now()
       FROM candidate, "project_codebase" cb, "session" s
       LEFT JOIN "workspace" w ON w."id" = s."workspace_id"
@@ -440,6 +479,7 @@ async function claimOne(
       -- §2.4 J-S5 / 0393: a generation whose merge check was approved away. It travels with the
       -- claim because the command this beat builds is where the check would have been handed over.
       j."skip_merge_check" AS "skipMergeCheck",
+      j."progress_protocol" AS "progressProtocol",
       j."source_sha" AS "jobSourceSha",
       j."promotion_id" AS "promotionId",
       j."confirmed_automatically" AS "confirmedAutomatically",
@@ -577,29 +617,65 @@ export class IntegrationJobRefused extends Error {
 }
 
 /**
- * A heartbeat from the runner working on a job (J-T4): the phase it reached, and the lease renewal
- * that keeps another runner from taking it over.
+ * A heartbeat from the runner working on a job (J-T4): the phase it reached, the current check, and
+ * the lease renewal that keeps another runner from taking it over.
+ *
+ * THE ANSWER IS THE STOP SIGNAL IN THE OTHER DIRECTION (§2.2 J-T4): every accepted report answers
+ * `cancelRequested`, and a v2 runner that reads true kills the check's process group and reports
+ * CANCELLED within 30 seconds. A fence that no longer matches is told apart, because each answer
+ * means something different to the runner: 409 STALE_CLAIM (the claim was taken over, released or
+ * abandoned), 409 ALREADY_FINAL (the job is written down and the claim can never report again) and
+ * 404 (another account's job, or none). All three are stop signals, and none is retried as a
+ * transient error.
+ *
+ * THE PUSH REPORT IS SYNCHRONOUS (§2.2 J-T4): a `phase = PUSH` report writes
+ * `push_reported_generation = claim_generation` in the SAME statement that renews the lease, BEFORE
+ * this function answers — that row fact is the push boundary every later reader uses, and a runner
+ * only pushes after it reads `cancelRequested = false` from this answer.
+ *
+ * A RENEWAL MUST NOT INVALIDATE THE OPEN LIST'S VERSION: the statement updates the job row, and
+ * `readOpenListVersion` fingerprints that table by the columns the list can show, excluding these
+ * renewal-only ones (open-list-version.ts).
  */
 export async function receiveIntegrationJobProgress(
   prisma: PrismaService,
   runnerId: string,
   jobId: string,
   body: IntegrationJobProgressRequest,
-): Promise<{ accepted: true }> {
-  if (!INTEGRATION_JOB_PHASES.includes(body?.phase as never)) {
-    throw new IntegrationJobRefused('INVALID_RESULT', `unknown phase ${body?.phase}`);
-  }
-  const moved = await prisma.projectIntegrationJob.updateMany({
-    where: {
-      id: jobId,
-      runnerId,
-      state: 'RUNNING',
-      claimLeaseOwner: body.leaseOwner,
-      claimGeneration: BigInt(body.claimGeneration),
-    },
-    data: { phase: body.phase, heartbeatAt: new Date() },
-  });
-  if (moved.count === 0) throw new IntegrationJobRefused('STALE_CLAIM');
+  /** The reporting runner's owner: another account's job is answered as one that does not exist. */
+  ownerId?: string,
+): Promise<IntegrationJobProgressResponse> {
+  const report = progressReport(body);
+  const updated = await prisma.$executeRaw(Prisma.sql`
+      UPDATE "project_integration_job"
+         SET "heartbeat_at" = now(),
+             "phase" = ${report.phase},
+             "step" = ${report.step},
+             "round" = ${report.round},
+             "current_check" = ${report.check ? JSON.stringify(report.check) : null}::jsonb,
+             "output_moved_at" = CASE
+               WHEN ${report.outputIdleMs}::int IS NULL THEN NULL
+               ELSE now() - (${report.outputIdleMs}::int * interval '1 millisecond') END,
+             -- §7.2 V6: the landing head's main timer counts from here, and a "step" in J-T4 /
+             -- J-T9 is the (phase, sub-step) pair. Any change of that pair — including a sub-step
+             -- going back to none, when the phase moves on — starts the clock again; a pure
+             -- renewal (both unchanged) leaves it where it was.
+             "step_started_at" = CASE
+               WHEN "phase" IS DISTINCT FROM ${report.phase}::text
+                 OR "step" IS DISTINCT FROM ${report.step}::text
+                 THEN now()
+               ELSE "step_started_at" END,
+             -- §2.2 J-T4's push boundary, written in the statement that accepts the report.
+             "push_reported_generation" = CASE
+               WHEN ${report.phase}::text = 'PUSH' THEN "claim_generation"
+               ELSE "push_reported_generation" END,
+             "updated_at" = now()
+       WHERE "id" = ${jobId}::uuid
+         AND "runner_id" = ${runnerId}::uuid
+         AND "state" = 'RUNNING'
+         AND "claim_lease_owner" = ${report.leaseOwner}
+         AND "claim_generation" = ${BigInt(report.claimGeneration)}`);
+  if (updated === 0) throw await progressRefusal(prisma, { jobId, ownerId });
   // M-T7: the upstream moved after the owner confirmed, so the job is redoing the merge and the
   // checks on the new tip. A progress report rather than a question — the owner confirmed these
   // tasks and these checks, and the checks passing again is the same answer (M5).
@@ -614,7 +690,95 @@ export async function receiveIntegrationJobProgress(
       await markPromotionRechecking(prisma, job.promotionId, body.upstreamMoved.commits ?? null);
     }
   }
-  return { accepted: true };
+  // Read AFTER the write, so a stop written between the report and this answer is in it: the
+  // runner acts on this answer before it pushes.
+  const [job] = await prisma.$queryRaw<Array<{ cancelRequestedAt: Date | null }>>(Prisma.sql`
+    SELECT "cancel_requested_at" AS "cancelRequestedAt"
+      FROM "project_integration_job"
+     WHERE "id" = ${jobId}::uuid`);
+  return { accepted: true, cancelRequested: job?.cancelRequestedAt != null };
+}
+
+/** The optional half of a report, validated once, in the shape the row is written with. */
+function progressReport(body: IntegrationJobProgressRequest): {
+  claimGeneration: string;
+  leaseOwner: string;
+  phase: IntegrationJobPhase;
+  step: string | null;
+  round: number | null;
+  check: IntegrationJobCurrentCheck | null;
+  outputIdleMs: number | null;
+} {
+  if (typeof body?.leaseOwner !== 'string' || body.leaseOwner === ''
+      || typeof body?.claimGeneration !== 'string' || !/^\d{1,19}$/.test(body.claimGeneration)) {
+    throw new IntegrationJobRefused(
+      'INVALID_RESULT', 'a progress report names the claim it renews: claimGeneration and leaseOwner',
+    );
+  }
+  if (!INTEGRATION_JOB_PHASES.includes(body.phase as never)) {
+    throw new IntegrationJobRefused('INVALID_RESULT', `unknown phase ${body.phase}`);
+  }
+  const step = body.step ?? null;
+  if (step != null && !INTEGRATION_JOB_STEPS.includes(step as never)) {
+    throw new IntegrationJobRefused('INVALID_RESULT', `unknown step ${step}`);
+  }
+  const round = body.round ?? null;
+  if (round != null && (!Number.isSafeInteger(round) || round < 1)) {
+    throw new IntegrationJobRefused('INVALID_RESULT', `round must be an integer from 1, not ${round}`);
+  }
+  const check = body.check ?? null;
+  let current: IntegrationJobCurrentCheck | null = null;
+  if (check != null) {
+    const name = check.name;
+    if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK') {
+      throw new IntegrationJobRefused('INVALID_RESULT', `unknown check name ${name}`);
+    }
+    if (![check.index, check.count, check.budgetSeconds].every((n) => Number.isSafeInteger(n) && n >= 1)) {
+      throw new IntegrationJobRefused(
+        'INVALID_RESULT', 'a current check carries a positive integer index, count and budgetSeconds',
+      );
+    }
+    const startedAt = new Date(check.startedAt);
+    if (typeof check.startedAt !== 'string' || Number.isNaN(startedAt.getTime())) {
+      throw new IntegrationJobRefused('INVALID_RESULT', `check.startedAt is not an instant: ${check.startedAt}`);
+    }
+    current = {
+      name, index: check.index, count: check.count, budgetSeconds: check.budgetSeconds,
+      startedAt: startedAt.toISOString(),
+    };
+  }
+  const outputIdleMs = body.outputIdleMs ?? null;
+  if (outputIdleMs != null && (!Number.isFinite(outputIdleMs) || outputIdleMs < 0)) {
+    throw new IntegrationJobRefused('INVALID_RESULT', `outputIdleMs must be a non-negative number, not ${outputIdleMs}`);
+  }
+  return {
+    claimGeneration: body.claimGeneration,
+    leaseOwner: body.leaseOwner,
+    phase: body.phase,
+    step,
+    round,
+    check: current,
+    outputIdleMs: outputIdleMs == null ? null : Math.round(outputIdleMs),
+  };
+}
+
+/**
+ * Why a progress report matched no row: the three answers §2.2 J-T4 gives a runner, each of which
+ * makes it stop. A job of another account is answered as one that does not exist, exactly as the
+ * release and result doors answer it; a terminal job is ALREADY_FINAL; anything else is a claim
+ * that was taken over, released or abandoned (STALE_CLAIM).
+ */
+async function progressRefusal(
+  prisma: PrismaService,
+  input: { jobId: string; ownerId?: string },
+): Promise<IntegrationJobRefused> {
+  const job = await prisma.projectIntegrationJob.findFirst({
+    where: { id: input.jobId, ...(input.ownerId != null ? { ownerId: input.ownerId } : {}) },
+    select: { state: true },
+  });
+  if (!job) return new IntegrationJobRefused('NOT_FOUND');
+  if (isTerminalJobState(job.state)) return new IntegrationJobRefused('ALREADY_FINAL');
+  return new IntegrationJobRefused('STALE_CLAIM');
 }
 
 /** What a release came to when nothing was refused: back in the queue, or owed a CANCELLED end. */
