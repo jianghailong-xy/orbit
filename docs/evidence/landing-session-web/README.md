@@ -89,13 +89,17 @@ Test Files  417 passed (417)
 
 ```
 cd src/apiserver && npm test
-ℹ tests 5353   ℹ pass 5353   ℹ fail 0
+ℹ tests 5356   ℹ pass 5356   ℹ fail 0
 
 scripts/run-pg-spec.sh src/apiserver/src/projects/landing-session.pg.spec.ts \
   src/apiserver/src/runner-api/project-integration-read.pg.spec.ts
 ==== landing-session.pg.spec.ts tests=8 pass=8 fail=0 skipped=0
 ==== project-integration-read.pg.spec.ts tests=11 pass=11 fail=0 skipped=0
 ```
+
+合并后的 tip（`2591ee394` 合进本分支后的 `60b5a1f14`）上重跑了上面这些：web 两个时区都
+417 files / 5445 tests passed，apiserver `ℹ tests 5356 pass 5356 fail 0`，
+landing-session 8/8 + project-integration-read 11/11，OrbitKit 的 422 条仍全过。
 
 OrbitKit 的文案对照（Swift 6.1 容器，工作树只读挂载）：
 
