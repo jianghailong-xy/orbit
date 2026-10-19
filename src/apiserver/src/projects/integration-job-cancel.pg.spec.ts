@@ -244,6 +244,24 @@ async function doneTask(
   return { taskId: created.id, sessionId: session.id, branch };
 }
 
+/**
+ * The task reopened and written DONE again while its stopped generation is still in flight: the
+ * DONE cannot queue (J-T8's marker is kept for it, and `enqueueForDoneTask` answers ALREADY_QUEUED).
+ */
+async function reopenAndRedo(stack: Stack, w: World, taskId: string): Promise<void> {
+  await stack.tasks.update(w.ownerId, taskId, {
+    status: TaskStatus.OPEN, supersededByTaskId: null, terminalReason: null,
+  } as never);
+  await stack.db.$executeRawUnsafe(
+    `UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid`, taskId,
+  );
+  const again = await stack.db.$transaction((tx) => enqueueForDoneTask(tx, w.ownerId, taskId));
+  assert.equal(again.enqueued, false);
+  assert.equal(again.reason, 'ALREADY_QUEUED');
+  assert.ok(await stack.db.taskReopenIntent.findUnique({ where: { taskId } }),
+    'the marker is kept for the stopped generation to answer');
+}
+
 /** One dispatch beat for a world's runner. */
 async function beat(stack: Stack, w: World, leaseOwner = `lease-${randomUUID()}`) {
   return stack.jobs.dispatch({
@@ -583,6 +601,85 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
     assert.equal(row.state, 'QUEUED');
   });
 
+  await t.test('(11) a stopped generation that lands anyway still queues the DONE written after the reopen', async () => {
+    const w = await world(stack, 'stopped-landed', 'PROJECT_BRANCH');
+    const work = await doneTask(stack, w, 'stopped-landed');
+    const first = await claim(stack, w);
+    await stack.tasks.update(w.ownerId, work.taskId, { status: TaskStatus.CANCELLED } as never);
+    await reopenAndRedo(stack, w, work.taskId);
+
+    // Today's runner read `cancelRequested` once, at the start: the stop never reaches it, and it
+    // reports the landing of the OLD content.
+    const landed = await report(stack, w, first, {
+      state: 'LANDED', phase: 'VERIFY', landedSha: sha('1'), targetShaBefore: sha('0'),
+      testedSha: sha('2'), testedTreeSha: sha('3'), landedTreeSha: sha('3'), sourceSha: sha('a'),
+      checks: [GREEN_CHECK], conflicts: [],
+    });
+    assert.equal(landed.accepted, true);
+    const rows = await stack.db.projectIntegrationJob.findMany({
+      where: { taskId: work.taskId, kind: 'LAND_TASK' },
+      orderBy: { generation: 'asc' },
+    });
+    assert.deepEqual(rows.map((job) => [job.generation, job.state]), [[1, 'LANDED'], [2, 'QUEUED']],
+      'the DONE written after the reopen is owed its own generation');
+    assert.equal(await stack.db.taskReopenIntent.findUnique({ where: { taskId: work.taskId } }), null,
+      'the marker is consumed by the generation it was kept for');
+  });
+
+  await t.test('(12) a stopped generation that fails still queues the next one, and opens no item', async () => {
+    const w = await world(stack, 'stopped-failed', 'PROJECT_BRANCH');
+    const work = await doneTask(stack, w, 'stopped-failed');
+    const first = await claim(stack, w);
+    await stack.tasks.update(w.ownerId, work.taskId, { status: TaskStatus.CANCELLED } as never);
+    await reopenAndRedo(stack, w, work.taskId);
+
+    const failed = await report(stack, w, first, {
+      state: 'CHECK_FAILED', phase: 'CHECK', checks: [RED_CHECK], conflicts: [],
+    });
+    assert.equal(failed.accepted, true);
+    assert.equal(failed.openItemId, null, 'nothing is opened about a landing nobody is waiting for');
+    assert.equal(await stack.db.projectOpenItem.count({
+      where: { projectId: w.projectId, kind: { startsWith: 'INTEGRATION_' }, state: 'OPEN' },
+    }), 0);
+    const rows = await stack.db.projectIntegrationJob.findMany({
+      where: { taskId: work.taskId, kind: 'LAND_TASK' },
+      orderBy: { generation: 'asc' },
+    });
+    assert.deepEqual(rows.map((job) => [job.generation, job.state]),
+      [[1, 'CHECK_FAILED'], [2, 'QUEUED']]);
+    assert.equal(await stack.db.taskReopenIntent.findUnique({ where: { taskId: work.taskId } }), null);
+  });
+
+  await t.test('(13) a stopped generation that answers too early ends CANCELLED and queues the next one', async () => {
+    const w = await world(stack, 'stopped-early', 'PROJECT_BRANCH');
+    const work = await doneTask(stack, w, 'stopped-early');
+    const first = await claim(stack, w);
+    await stack.tasks.update(w.ownerId, work.taskId, { status: TaskStatus.CANCELLED } as never);
+    await reopenAndRedo(stack, w, work.taskId);
+
+    // The work starts moving again after the claim, so the answer is too early (J-T1e).
+    await stack.db.session.create({
+      data: {
+        ownerId: w.ownerId, creatorId: w.ownerId, taskId: work.taskId, workspaceId: w.workspaceId,
+        assignedRunnerId: w.runnerId, title: 'still working', prompt: 'still working',
+        branch: `orbit/still-${randomUUID().slice(0, 6)}`, isolationStatus: 'worktree',
+        status: RunStatus.RUNNING, startsTaskWork: true, startedAt: new Date(),
+      },
+    });
+    const early = await report(stack, w, first, {
+      state: 'ALREADY_LANDED', phase: 'FETCH', sourceSha: sha('a'),
+    });
+    assert.equal(early.accepted, true);
+    assert.equal(early.state, 'CANCELLED', 'the stopped claim ends; it does not go back to the queue');
+    const rows = await stack.db.projectIntegrationJob.findMany({
+      where: { taskId: work.taskId, kind: 'LAND_TASK' },
+      orderBy: { generation: 'asc' },
+    });
+    assert.deepEqual(rows.map((job) => [job.generation, job.state]), [[1, 'CANCELLED'], [2, 'QUEUED']],
+      'the DONE after the reopen is queued in the too-early branch too');
+    assert.equal(await stack.db.taskReopenIntent.findUnique({ where: { taskId: work.taskId } }), null);
+  });
+
   await t.test('(7) a stopped running landing that answers too early ends CANCELLED, never a QUEUED row with a stop', async () => {
     const w = await world(stack, 'too-early-cancel', 'PROJECT_BRANCH');
     const work = await doneTask(stack, w, 'early');
@@ -628,7 +725,7 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
     assert.equal(still.cancelRequestedAt, null);
   });
 
-  await t.test('(10) a stopped claim opens no item and queues no generation for work left behind', async () => {
+  await t.test('(10) a stopped claim whose task was NOT written DONE again opens no item and queues no generation', async () => {
     const w = await world(stack, 'stopped-result', 'PROJECT_BRANCH');
     const work = await doneTask(stack, w, 'stopped');
     const job = await claim(stack, w);

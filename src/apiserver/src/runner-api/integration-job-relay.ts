@@ -779,12 +779,17 @@ export async function applyIntegrationJobResult(
     const cancelRequested = job.cancelRequestedAt !== null;
     // A stopped LAND_TASK whose task was reopened and written DONE again is owed the next
     // generation, queued in THIS transaction once the row below stops being the live one (J-T8).
+    // WHATEVER RESULT the stopped generation reports: today's runner reads `cancelRequested` once,
+    // when it starts, so a stop asked mid-job is almost always followed by the real answer —
+    // LANDED, ALREADY_LANDED, NOTHING_TO_LAND, CHECK_FAILED, CONFLICT, ERROR — and the commits of
+    // the DONE that came after the reopen are on a branch no generation of that DONE was ever
+    // queued for. The marker is what says that DONE is waiting, and it is consumed by the enqueue.
     // That is the DONE transaction's shape — task (50), then the project's binding (55), then the
     // job (60) — so the binding is taken here, before the first rank-60 write, when it is going to
-    // happen. The marker is re-read below; one that appears in between turns this attempt into a
-    // deadlock the retry re-runs, and the re-run finds it here.
+    // happen. The two facts are re-read at the enqueue itself; one that appears in between turns
+    // this attempt into a deadlock the retry re-runs, and the re-run finds it here.
     const queuesReopenedDone = job.kind === 'LAND_TASK' && job.taskId != null
-      && state === 'CANCELLED'
+      && cancelRequested
       && (await tx.taskReopenIntent.findFirst({
         where: { taskId: job.taskId }, select: { taskId: true },
       })) !== null
@@ -797,6 +802,24 @@ export async function applyIntegrationJobResult(
          WHERE "project_id" = ${job.projectId}::uuid AND "slot" = 'primary'
          FOR UPDATE`);
     }
+    /**
+     * Queue the generation the DONE written after the reopen is owed, once this one is terminal —
+     * whatever it ended as. The marker and the task's status are asked again here: the pre-read
+     * above decided only whether to take the binding first. A task that is still being reworked or
+     * was taken away again queues nothing, and its marker lives until a DONE comes.
+     */
+    const queueReopenedDone = async (): Promise<void> => {
+      if (!queuesReopenedDone || job.taskId == null) return;
+      const intent = await tx.taskReopenIntent.findFirst({
+        where: { taskId: job.taskId }, select: { taskId: true },
+      });
+      if (!intent) return;
+      const nowDone = await tx.task.findFirst({
+        where: { id: job.taskId }, select: { status: true },
+      });
+      if (nowDone?.status !== 'DONE') return;
+      await enqueueForDoneTask(tx, job.ownerId, job.taskId);
+    };
 
     // The task this job is about, read BESIDE the job rather than below it: `task_id` is a history
     // reference with no foreign key (0423), so it may name a task that is no longer there — the
@@ -859,6 +882,10 @@ export async function applyIntegrationJobResult(
             heartbeatAt: null,
           },
       });
+      // A stopped generation that answered too early still ends here, so the DONE written after
+      // the reopen has room for its own generation (J-T8) — the same requeue every other terminal
+      // result takes below.
+      await queueReopenedDone();
       return {
         answer: {
           accepted: true,
@@ -1111,12 +1138,12 @@ export async function applyIntegrationJobResult(
 
     // §2.2 J-T8: the generation was stopped, and the task was reopened and written DONE again while
     // it was still in flight — that DONE could not queue (J3's index still named this row), and its
-    // marker was kept for this moment. The row above is now terminal, so the next generation has
-    // room. `enqueueForDoneTask` is the DONE's own route (it consumes the marker), so the new
-    // generation is exactly the one that DONE would have queued.
-    if (queuesReopenedDone && job.taskId) {
-      await enqueueForDoneTask(tx, job.ownerId, job.taskId);
-    }
+    // marker was kept for this moment. The row above is now terminal, whatever it ended as (a
+    // legacy runner never reads the stop, so LANDED / CHECK_FAILED / CONFLICT / ERROR are all
+    // ordinary answers here), so the next generation has room. `enqueueForDoneTask` is the DONE's
+    // own route (it consumes the marker), so the new generation is exactly the one that DONE would
+    // have queued.
+    await queueReopenedDone();
 
     // §2.6: a failed job is somebody's to look at, and the platform does not retry it by itself.
     let openItemId: string | null = null;

@@ -1042,9 +1042,10 @@ export async function enqueueForDoneTask(
     // A generation this task already has in flight is the ordinary answer. But a generation somebody
     // ASKED TO STOP is not: J-T8 leaves it QUEUED/RUNNING while its runner catches up, so the DONE
     // that was written after the reopen has nowhere to queue. The marker is kept for that case —
-    // the result transaction that writes the stopped generation CANCELLED queues this DONE's
-    // generation itself, and consumes the marker there (J-T8). Any other in-flight generation is
-    // already serving this DONE, so the marker has done its work.
+    // the result transaction that ends the stopped generation queues this DONE's generation itself,
+    // whatever that generation reported (a legacy runner never reads the stop), and consumes the
+    // marker there (J-T8). Any other in-flight generation is already serving this DONE, so the
+    // marker has done its work.
     const stopped = await tx.projectIntegrationJob.findFirst({
       where: {
         taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] },
