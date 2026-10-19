@@ -221,6 +221,57 @@ class SwitchLabTest(unittest.TestCase):
         self.assertEqual(switch_lab.restore_claim_manifest("orbit-mr-test", f"mr-data-{runner}", owner, runner, "runner-data", "2Gi"), rendered)
 
 
+class TakeoverLabTest(unittest.TestCase):
+    """lab/takeover-lab.py (T02), offline: the fencing receipt it writes and the second Pods it tries on the other node."""
+
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("lab_takeover", LAB / "takeover-lab.py")
+        cls.takeover = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.takeover)
+
+    def test_the_receipt_has_every_field_of_the_repository_example_and_is_bound_to_the_mapping(self):
+        def paths(value, prefix=""):
+            found = set()
+            for key, item in value.items():
+                found.add(prefix + key)
+                if isinstance(item, dict):
+                    found |= paths(item, prefix + key + ".")
+            return found
+        example = json.loads((REPO / "deploy/managed-runner/fencing-receipt.example.json").read_text())
+        mapping = {"runner_id": "0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b", "generation": 3, "pod_name": "mr-0199a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b",
+                   "pod_uid": "pod-uid", "node_name": render.ENV["LAB2_NAME"], "pvc_uid": "pvc-uid", "volume_handle": "handle"}
+        receipt = self.takeover.fencing_receipt(mapping, {"pool": "orbit-mr-rbd", "rbdImage": "csi-vol-1"}, "node-uid", "2026-10-19T12:00:00.000Z",
+                                                {"at": "2026-10-19T12:00:30+00:00", "activeState": "inactive"}, "2026-10-19T12:01:00+00:00")
+        self.assertEqual(paths(receipt), paths(example))
+        self.assertEqual((receipt["method"], receipt["verification"]["result"], receipt["nodePowerOff"]["mechanism"]),
+                         ("NODE_POWER_OFF", "POWERED_OFF", "HYPERVISOR"))
+        self.assertIs(receipt["nodePowerOff"]["quarantined"], True)
+        self.assertEqual(receipt["predecessor"], {"runnerId": mapping["runner_id"], "generation": 3, "podName": mapping["pod_name"], "podUid": "pod-uid",
+                                                  "nodeName": render.ENV["LAB2_NAME"], "nodeUid": "node-uid", "pvcUid": "pvc-uid",
+                                                  "volumeHandle": "handle", "rbdImage": {"pool": "orbit-mr-rbd", "image": "csi-vol-1"}})
+        self.assertLessEqual(receipt["action"]["performedAt"].replace("Z", "+00:00"), receipt["verification"]["observedAt"])
+
+    def test_a_contender_is_pinned_to_the_other_node_and_keeps_the_authorized_pod_s_shape(self):
+        authorized = {"metadata": {"name": "mr-x", "labels": {"app": "runner"}, "annotations": {"orbit.dev/generation": "2"}, "finalizers": ["f"]},
+                      "spec": {"nodeName": render.ENV["LAB2_NAME"], "priority": 0, "containers": [{"name": "runner"}],
+                               "volumes": [{"name": "user-state", "persistentVolumeClaim": {"claimName": "mr-data-x"}}]}}
+        copy = self.takeover.contender("t02-second-copy", authorized, render.ENV["LAB_NAME"], "mr-data-x", labelled=True)
+        self.assertEqual(copy["spec"]["nodeName"], render.ENV["LAB_NAME"])
+        self.assertNotIn("priority", copy["spec"])
+        self.assertEqual(copy["metadata"], {"name": "t02-second-copy", "namespace": render.ENV["LAB_NAMESPACE"], "labels": {"app": "runner"},
+                                            "annotations": {"orbit.dev/generation": "2"}})
+        self.assertEqual(authorized["spec"]["nodeName"], render.ENV["LAB2_NAME"])
+        plain = self.takeover.contender("t02-second-admin", None, render.ENV["LAB_NAME"], "mr-data-x")
+        self.assertEqual((plain["spec"]["nodeName"], plain["spec"]["volumes"][0]["persistentVolumeClaim"]["claimName"]), (render.ENV["LAB_NAME"], "mr-data-x"))
+
+    def test_it_reads_only_the_lab_context_and_its_own_server_directory(self):
+        source = (LAB / "takeover-lab.py").read_text()
+        self.assertNotIn("KUBECONFIG=", source)
+        self.assertEqual(self.takeover.OWN_SERVER_DIRS, ("test-server-t02", "test-server-t02-dev"))
+        self.assertEqual(self.takeover.NODES, {1: render.ENV["LAB_NAME"], 2: render.ENV["LAB2_NAME"]})
+
+
 class ApiGateTest(unittest.TestCase):
     """lab/api-gate.py (T04) on loopback sockets: a stand-in upstream answers every chunk it receives."""
 
