@@ -23,6 +23,10 @@ through the test server's own manager, admission guard and fencing gate:
   final    consistency, one Pod per claim over the timeline, Ceph; both asleep, the window closed
   damaged  the volume the cut damaged before the fix, woken on this branch's final image: what the runner's start says of
            it, and the session refused with its reason instead of run in the broken repository
+  again    a later change of the runner through the after run again (task D10), on its own after the others: the
+           versions, what the last teardown stopped started again with this checkout's image pinned, the after run with
+           a new account (LAB_T02C_AFTER_OWNER), what the runner says of its volume's syncs, the mid-turn commit kept,
+           the final checks and the teardown
 
   durability-lab.py run --out DIR [--from PHASE | --from-step PHASE/STEP] [--to PHASE]
   durability-lab.py record-loop SECONDS        the recorder unit's loop (started by the run)
@@ -857,6 +861,56 @@ def teardown(ctx, step):
     return results
 
 
+# ---- a later runner change through the after run again (task D10) -------------------------------------------------------
+
+def again_start(ctx, step):
+    """What the last teardown stopped, started again with this checkout's image pinned (LAB_T02C_AFTER_IMAGE): the gate,
+    the test server with the switch on, the admission webhook, the recorder."""
+    gate = capture(ml.cmd_gate, action='start', since=None)
+    step.check('the gate runs', gate['unit'] == 'active', gate['unit'])
+    imported = import_image(IMAGES['after'])
+    source = al.git('diff', '--stat', imported['source'], 'HEAD', '--', 'src/runner-go', 'deploy/managed-runner/image')
+    step.check('the after image\'s runner and image sources are this checkout\'s', source == '', source or '(no difference)')
+    step.check('the after image is in both VMs\' containerd under one ID', len({n['id'] for n in imported['nodes'].values()}) == 1, imported['nodes'])
+    ctx.setdefault('images', {})['after'] = imported['reference']
+    profile = json.loads(sw.PROFILE.read_text())
+    profile['runner']['image'] = imported['reference']
+    sw.private_write(sw.PROFILE, profile)
+    restarted = al.start_server('on')
+    ctx['switched'] = ctx['image'] = json.loads(sw.PROFILE.read_text())['runner']['image']
+    step.check('the profile pins the after image', ctx['switched'] == imported['reference'], ctx['switched'])
+    step.check('the switch is on with the lab profile', al.switch_lines() == ['ORBIT_MANAGED_RUNNERS_ENABLED=true', f'ORBIT_MANAGED_RUNNERS_PROFILE={sw.PROFILE}'],
+               al.switch_lines())
+    install = capture(sw.cmd_admission, action='install')
+    step.check('the admission webhook is installed', bool(install['webhook']))
+    return {'gate': gate, 'image': imported, 'restarted': restarted, 'recorder': record('start'),
+            'admission': {k_: install[k_]['answer'][:160] for k_ in ('dryRunUnmanagedPod', 'dryRunUnownedManagedClaim')}}
+
+
+def again_syncs(ctx, step):
+    """What the runner on the second node says of its volume's syncs, and the mount it read that from: an RBD volume is
+    an ext4 of its own (the mount's root is "/"), so T02c's syncs all stay, the one behind every tool included."""
+    name = owner_of('after')
+    _, pod = ml.running_pod(name)
+    log = k('logs', pod['metadata']['name'], '-c', 'runner', check=False).stdout.splitlines()
+    lines = [line[-300:] for line in log if 'volume syncs:' in line]
+    mount = sw.pod_exec(pod['metadata']['name'], 'sh', '-c', "grep ' /var/lib/orbit ' /proc/self/mountinfo").stdout.split()
+    root, source = (mount[3], mount[mount.index('-') + 2]) if '-' in mount else (None, None)
+    step.check(f'{name}: the runner syncs before reports and behind every tool, its volume a filesystem of its own on RBD',
+               any('before reports and behind every tool' in line and '/dev/rbd' in line and 'a filesystem of its own' in line for line in lines), lines)
+    step.check(f'{name}: the volume\'s mount is the root of an RBD device\'s filesystem', root == '/' and (source or '').startswith('/dev/rbd'),
+               {'root': root, 'source': source})
+    return {'lines': lines, 'mountinfo': ' '.join(mount)}
+
+
+def again_s3(ctx, step):
+    """s3's engine commit, made in a turn still running at the cut, survived it: the sync behind its tool ran."""
+    r = ctx['runs']['after']
+    held = r['left']['s3']
+    step.check('s3\'s mid-turn engine commit is on its branch in what the cut left', bool(held) and all(c.get('onTheBranch') for c in held.values()), held)
+    return {'s3': held, 'secondsBeforeTheCut': al.seconds_between(r['times']['s3EngineCommitSeen'], r['killedAt'])}
+
+
 # ---- the recorder ---------------------------------------------------------------------------------------------------------
 
 def cmd_record_loop(args):
@@ -905,6 +959,10 @@ def phases():
         ('after', one_run('after')),
         ('final', [('checks', final_checks), ('teardown', teardown)]),
         ('damaged', [('start', damaged_start), ('wake', damaged_wake), ('teardown', teardown)]),
+        ('again', [('host', tl.facts_host), ('cluster', tl.facts_cluster), ('ceph', tl.facts_ceph), ('start', again_start),
+                   ('ready', run_ready('after')), ('syncs', again_syncs), ('sessions', run_sessions('after')), ('last', run_last('after')),
+                   ('left', run_left('after')), ('s3', again_s3), ('fence', run_fence('after')), ('resume', run_resume('after')),
+                   ('rejoin', run_rejoin('after')), ('checks', final_checks), ('teardown', teardown)]),
     ]
 
 

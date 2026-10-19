@@ -359,6 +359,14 @@ class DurabilityLabTest(unittest.TestCase):
         self.assertEqual(self.durability.RUNS, {"before": "ann", "after": "bob"})
         self.assertTrue(self.durability.marker("ann", "LAST").startswith("T02C-"))
 
+    def test_a_later_runner_change_does_the_after_run_again_on_its_own(self):
+        # Task D10: the last phase, never reached by a run of the others, restarts what the teardown stopped with this
+        # checkout's image and does the after run again, with the checks that the runner still syncs behind its tools.
+        name, steps = self.durability.phases()[-1]
+        self.assertEqual(name, "again")
+        self.assertEqual([label for label, _ in steps], ["host", "cluster", "ceph", "start", "ready", "syncs", "sessions", "last", "left", "s3",
+                                                        "fence", "resume", "rejoin", "checks", "teardown"])
+
     def volume(self, folder):
         """A managed runner's volume in miniature, as a power cut would find it: the workspace repository, a session's
         worktree with the engine's commit, and its transcript with the last turn."""
