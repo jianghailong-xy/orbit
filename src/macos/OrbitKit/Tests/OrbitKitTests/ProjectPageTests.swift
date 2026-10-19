@@ -830,12 +830,17 @@ final class ProjectPageTests: XCTestCase {
         let page = try JSONDecoder().decode(ProjectTaskPage.self, from: Data("""
         {"items":[{"id":"t1","title":"A","status":"OPEN","parentTaskId":null,"createdAt":"x","updatedAt":"y",
           "childCount":0,"unmetCount":1,"blocksCount":2,"topoLevel":1,"dependencyState":"BLOCKED",
-          "workState":"BLOCKED","integration":{"state":"NOT_APPLICABLE","since":null,"handler":null,
-          "openItemId":null,"jobId":null,"checksRunningForMs":null},"landingWaitCount":0}],
+          "workState":"BLOCKED","integration":{"state":"QUEUED","since":null,"handler":null,
+          "openItemId":null,"jobId":"j1","checksRunningForMs":null,
+          "landTask":{"jobId":"j1","state":"QUEUED","phase":null,"targetRef":"refs/heads/project/p",
+                      "blockingReason":{"code":"WAITING_DISPATCH","summary":"Waiting to land: next for the runner"}}},
+          "landingWaitCount":0}],
          "nextCursor":"c2"}
         """.utf8))
         XCTAssertEqual(page.items.first?.blocksCount, 2)
-        XCTAssertEqual(page.items.first?.integration?.state, "NOT_APPLICABLE")
+        XCTAssertEqual(page.items.first?.integration?.state, "QUEUED")
+        XCTAssertEqual(page.items.first?.integration?.landTask?.jobId, "j1")
+        XCTAssertEqual(page.items.first?.integration?.landTask?.blockingReason?.code, "WAITING_DISPATCH")
         XCTAssertEqual(page.nextCursor, "c2")
 
         let panorama = try JSONDecoder().decode(ProjectPanorama.self, from: Data("""
@@ -854,24 +859,52 @@ final class ProjectPageTests: XCTestCase {
         {"line":"PROJECT_BRANCH","ref":"project/runner","upstreamRef":"main","integratingCount":1,"queuedCount":1,
          "mergeCheckOnTip":"PASSING",
          "inFlight":{"taskTitle":"C5","kind":"LAND_TASK","phase":"FETCH","state":"RUNNING",
-           "startedAt":"2026-10-07T12:07:04.000Z","heartbeatAt":"2026-10-07T12:07:13.000Z"},
+           "startedAt":"2026-10-07T12:07:04.000Z","heartbeatAt":"2026-10-07T12:07:13.000Z",
+           "jobId":"j-c5","taskId":"t-c5","runner":"workstation-gpu","claim":1,"progressProtocol":"v2",
+           "round":1,"stepStartedAt":"2026-10-07T12:12:00.000Z",
+           "outputMovedAt":"2026-10-07T12:13:04.000Z","typicalMs":2280000,"liveness":"LIVE",
+           "check":{"name":"MERGE_CHECK","index":1,"count":2,"budgetSeconds":3600,
+                    "startedAt":"2026-10-07T12:12:00.000Z"}},
          "inFlightJobs":[
            {"jobId":"j-c5","kind":"LAND_TASK","state":"RUNNING","phase":"FETCH","taskId":"t-c5","taskTitle":"C5",
             "generation":1,"startedAt":"2026-10-07T12:07:04.000Z","queuedAt":"2026-10-07T12:06:58.000Z",
             "heartbeatAt":"2026-10-07T12:07:13.000Z","runnerName":"workstation-gpu","retriedBy":null,
-            "timedOut":true,"limitSeconds":600,"retryable":true},
+            "timedOut":true,"limitSeconds":600,"retryable":true,
+            "promotionId":null,"claim":2,"round":1,"progressProtocol":"v2",
+            "check":{"name":"MERGE_CHECK","index":1,"count":2,"budgetSeconds":3600,
+                     "startedAt":"2026-10-07T12:12:00.000Z"},
+            "stepStartedAt":"2026-10-07T12:12:00.000Z","outputMovedAt":"2026-10-07T12:13:04.000Z",
+            "typicalMs":2280000,"liveness":"LIVE","landingSessionId":"s-landing",
+            "blockingReason":{"code":"WAITING_LOCAL_LOCK",
+                              "summary":"Waiting for another job on this runner"}},
            {"jobId":"j-merge","kind":"LAND_PROMOTION","state":"QUEUED","phase":null,"taskId":null,"taskTitle":null,
             "generation":2,"startedAt":"2026-10-07T13:16:00.000Z","queuedAt":"2026-10-07T13:16:00.000Z",
             "heartbeatAt":null,"runnerName":null,"retriedBy":"COORDINATOR","timedOut":false,"limitSeconds":null,
             "retryable":false,"somethingNewer":1}]}
         """.utf8))
         XCTAssertEqual(view.inFlight?.taskTitle, "C5")
+        XCTAssertEqual(view.inFlight?.jobId, "j-c5")
+        XCTAssertEqual(view.inFlight?.runner, "workstation-gpu")
+        XCTAssertEqual(view.inFlight?.claim, 1)
+        XCTAssertEqual(view.inFlight?.check?.name, "MERGE_CHECK")
+        XCTAssertEqual(view.inFlight?.typicalMs, 2_280_000)
+        XCTAssertEqual(view.inFlight?.liveness, "LIVE")
         XCTAssertEqual(view.inFlightJobs, [
             ProjectIntegrationJob(jobId: "j-c5", kind: "LAND_TASK", state: "RUNNING", phase: "FETCH", taskId: "t-c5",
                                   taskTitle: "C5", generation: 1, startedAt: "2026-10-07T12:07:04.000Z",
                                   queuedAt: "2026-10-07T12:06:58.000Z", heartbeatAt: "2026-10-07T12:07:13.000Z",
                                   runnerName: "workstation-gpu", retriedBy: nil, timedOut: true, limitSeconds: 600,
-                                  retryable: true),
+                                  retryable: true, promotionId: nil, claim: 2, round: 1,
+                                  check: ProjectIntegrationCheck(name: "MERGE_CHECK", index: 1, count: 2,
+                                                                 budgetSeconds: 3600,
+                                                                 startedAt: "2026-10-07T12:12:00.000Z"),
+                                  stepStartedAt: "2026-10-07T12:12:00.000Z",
+                                  outputMovedAt: "2026-10-07T12:13:04.000Z", typicalMs: 2_280_000,
+                                  liveness: "LIVE",
+                                  blockingReason: LandTaskBlockingReason(
+                                    code: "WAITING_LOCAL_LOCK",
+                                    summary: "Waiting for another job on this runner"),
+                                  landingSessionId: "s-landing"),
             ProjectIntegrationJob(jobId: "j-merge", kind: "LAND_PROMOTION", state: "QUEUED", generation: 2,
                                   startedAt: "2026-10-07T13:16:00.000Z", queuedAt: "2026-10-07T13:16:00.000Z",
                                   retriedBy: "COORDINATOR"),
