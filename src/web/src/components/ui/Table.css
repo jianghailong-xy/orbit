@@ -91,7 +91,7 @@
 .orbit-table td {
   transition: background-color 0.2s, border-color 0.2s;
 }
-.orbit-table tbody tr:not(.orbit-table-empty):hover > td {
+.orbit-table tbody tr:not(.orbit-table-empty, .orbit-table-placeholder):hover > td {
   background: var(--bg-hover);
 }
 .orbit-table-empty > td {
@@ -109,7 +109,66 @@
   padding: 16px;
   overflow: hidden;
 }
+/* TableFrame: a table as wide as its box, on the table's surface. While loading, the surface and all
+   on it are at half opacity under a faint veil of the surface colour, and inert; the spinner sits in
+   the middle, above both. */
+.orbit-table-frame {
+  position: relative;
+}
+.orbit-table-frame-body {
+  position: relative;
+  border-radius: 8px 8px 0 0;
+  background: var(--bg-raised);
+  transition: opacity 0.3s;
+}
+.orbit-table-frame-body > .orbit-table {
+  width: 100%;
+}
+.orbit-table-frame-body[data-loading] {
+  opacity: 0.5;
+  user-select: none;
+  pointer-events: none;
+}
+.orbit-table-frame-body[data-loading]::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: var(--bg-raised);
+  opacity: 0.4;
+  pointer-events: auto;
+}
+.orbit-table-frame-spinner {
+  position: absolute;
+  top: 50%;
+  inset-inline-start: 50%;
+  z-index: 11;
+  transform: translate(-50%, -50%);
+}
+/* A table that fits its box has no measure row: a column with nothing in its header is as wide as
+   its cells make it. */
+.orbit-table-frame-body > .orbit-table th:empty::after {
+  content: none;
+}
+/* TableEmptyRow: the illustration and "No data", 32px above and below. */
+.orbit-table-placeholder > td {
+  color: var(--orbit-control-disabled-text);
+  text-align: center;
+}
+.orbit-table-placeholder .orbit-select-empty-content {
+  margin: 32px 8px;
+  color: var(--text-3);
+}
+.orbit-table-placeholder .orbit-select-empty-image {
+  height: 40px;
+  margin-bottom: 8px;
+}
+.orbit-table-placeholder .orbit-select-empty-image svg {
+  height: 100%;
+  max-width: 100%;
+}
 @media (prefers-reduced-motion: reduce) {
+  .orbit-table-frame-body,
   .orbit-table-scroll::before,
   .orbit-table-scroll::after,
   .orbit-table th,

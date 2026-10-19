@@ -177,11 +177,58 @@ final class WatchStripCopyParityTests: XCTestCase {
             let word: String
             let line: String
         }
+        struct Fold: Decodable {
+            struct FoldWatch: Decodable {
+                struct Target: Decodable {
+                    let id: String
+                    let kind: String
+                    let title: String
+                    let state: String?
+                    let status: WatchTargetStatus?
+                    /// The session's `targetTask`: nil when the case leaves it out, as an older server
+                    /// does, and `.some(nil)` when it says the session runs no task.
+                    let task: WatchTargetTask??
+
+                    private enum CodingKeys: String, CodingKey { case id, kind, title, state, status, task }
+
+                    init(from decoder: Decoder) throws {
+                        let c = try decoder.container(keyedBy: CodingKeys.self)
+                        id = try c.decode(String.self, forKey: .id)
+                        kind = try c.decode(String.self, forKey: .kind)
+                        title = try c.decode(String.self, forKey: .title)
+                        state = try c.decodeIfPresent(String.self, forKey: .state)
+                        status = try c.decodeIfPresent(WatchTargetStatus.self, forKey: .status)
+                        task = c.contains(.task) ? .some(try c.decodeIfPresent(WatchTargetTask.self, forKey: .task)) : nil
+                    }
+                }
+                let state: String
+                let predicate: AnyJSON
+                let lastEvaluatedAt: String?
+                let createdAt: String
+                let targets: [Target]
+            }
+            struct Watched: Decodable, Equatable {
+                let id: String
+                let title: String
+                let status: String?
+                let running: Bool
+                let queued: Bool
+                let stale: Bool
+            }
+            let `case`: String
+            let watches: [FoldWatch]
+            let watchedTasks: [Watched]
+            let strip: [Int]
+            let taskStaleLines: [String]
+            let word: String
+            let line: String
+        }
         let now: String
         let sentences: [Sentence]
         let stale: [Stale]
         let counts: [Count]
         let rows: [Row]
+        let fold: [Fold]
         let sessionWords: [String: String]
     }
 
@@ -278,6 +325,50 @@ final class WatchStripCopyParityTests: XCTestCase {
             let summary = try XCTUnwrap(WatchSessionSummary(sessionID: "S1", watches: watches), c.case)
             XCTAssertEqual(summary.rowLine, c.line, c.case)
             XCTAssertEqual(summary.word, c.word, c.case)
+        }
+    }
+
+    /// A task's run session is a target on that task above the composer and in the session's words:
+    /// its eye on the task's row, no Watching card of its own, one target where the task and its run
+    /// are both waited on — the browser's `watchedTasks`, `waitsBeyondTasks`, `taskStaleLines` and
+    /// `watchingSessions` over the same cases.
+    func testATasksRunSessionFoldsIntoThatTaskAsTheFixtureDoes() throws {
+        let f = try fixture()
+        let now = try date(f.now)
+        XCTAssertGreaterThanOrEqual(f.fold.count, 5)
+        for c in f.fold {
+            let watches = try c.watches.enumerated().map { index, w in
+                let targets: [[String: Any]] = w.targets.map { t in
+                    var object = WatchFixture.target(t.id, kind: t.kind, state: t.state ?? "OBSERVED")
+                    object["targetTitle"] = t.title
+                    if let status = t.status {
+                        object["targetStatus"] = ["status": status.status, "running": status.running,
+                                                  "queued": status.queued]
+                    }
+                    if let task = t.task {
+                        object["targetTask"] = task.map { task -> Any in
+                            ["id": task.id, "title": task.title,
+                             "status": ["status": task.status.status, "running": task.status.running,
+                                        "queued": task.status.queued]]
+                        } ?? NSNull()
+                    }
+                    return object
+                }
+                let predicate = try XCTUnwrap(w.predicate.value as? [String: Any], c.case)
+                return WatchFixture.watch(id: "W\(index)", state: w.state, observer: "OBSERVER", predicate: predicate,
+                                          targets: targets, lastEvaluatedAt: w.lastEvaluatedAt, createdAt: w.createdAt)
+            }
+            let summary = try XCTUnwrap(WatchSessionSummary(sessionID: "OBSERVER", watches: watches), c.case)
+            let watched = summary.watchedTasks(now: now) { _ in nil }.map {
+                Fixture.Fold.Watched(id: $0.id, title: $0.title, status: $0.standing?.status,
+                                     running: $0.standing?.running ?? false, queued: $0.standing?.queued ?? false,
+                                     stale: $0.stale)
+            }
+            XCTAssertEqual(watched, c.watchedTasks, c.case)
+            XCTAssertEqual(summary.beyondTasks?.watches.map(\.id) ?? [], c.strip.map { "W\($0)" }, c.case)
+            XCTAssertEqual(summary.taskStaleLines(now: now), c.taskStaleLines, c.case)
+            XCTAssertEqual(summary.word, c.word, c.case)
+            XCTAssertEqual(summary.rowLine, c.line, c.case)
         }
     }
 

@@ -1,0 +1,5 @@
+scene 03-off-missing-compose: 81.014 s, actions (
+)
+03-off-missing-compose-00: "Claude Code" shows
+03-off-missing-compose: 34 requests, 0 violations, actions left [], notes (
+)

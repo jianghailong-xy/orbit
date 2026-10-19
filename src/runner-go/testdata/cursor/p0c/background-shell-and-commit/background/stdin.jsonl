@@ -1,0 +1,8 @@
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1,"clientCapabilities":{"fs":{"readTextFile":false,"writeTextFile":false},"terminal":false},"clientInfo":{"name":"orbit-p0","version":"0"}}}
+{"jsonrpc":"2.0","id":2,"method":"session/new","params":{"cwd":"<RUN>/work","mcpServers":[]}}
+{"jsonrpc":"2.0","id":3,"method":"session/prompt","params":{"sessionId":"<UUID_1>","prompt":[{"type":"text","text":"Three steps: 1) Append the line \"attribution probe\" to README.md. 2) Commit that change with git using the commit message \"p0 attribution probe\" (git user.name and user.email may be set with -c for this one command if needed). 3) Start the shell command `sleep 20 && echo bg-done > bg.txt` in the background so that you do not wait for it, and end your turn right after starting it."}]}}
+{"jsonrpc":"2.0","id":0,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}
+{"jsonrpc":"2.0","id":1,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}
+{"jsonrpc":"2.0","id":2,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}
+{"jsonrpc":"2.0","id":3,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}
+{"jsonrpc":"2.0","id":4,"result":{"outcome":{"outcome":"selected","optionId":"allow-once"}}}

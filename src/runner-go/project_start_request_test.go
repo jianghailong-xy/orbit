@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -109,8 +110,8 @@ func TestProjectRequestStartIsABaseToolThatSaysWhenToCallIt(t *testing.T) {
 	tools := toolDescriptors(false, false)
 	props := mcpToolProps(tools, "project_request_start")
 	for _, want := range []string{
-		"projectId", "line", "projectBranchName", "automatic", "maxConcurrentTasks",
-		"mergeCheckCommand", "why",
+		"projectId", "line", "projectBranchName", "upstreamRef", "automatic", "maxConcurrentTasks",
+		"mergeCheckCommand", "mergeCheckTimeoutSeconds", "why",
 	} {
 		if _, ok := props[want]; !ok {
 			t.Fatalf("project_request_start does not take %q: %#v", want, props)
@@ -251,6 +252,121 @@ func TestProjectRequestStartLeftOutAutomaticIsOn(t *testing.T) {
 	}
 }
 
+// The main branch is a suggestion with either line, sent as given; left out or blank, nothing is
+// sent and the project keeps the main branch it stands on.
+func TestProjectRequestStartSendsASuggestedMainBranchAsGiven(t *testing.T) {
+	srv, seen := startRequestServer(t, http.StatusCreated, startRequestFiledBody)
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "343dlzsYWKo5z8l2M8tsB"}
+	request := func(line string, upstream interface{}) map[string]interface{} {
+		t.Helper()
+		args := map[string]interface{}{
+			"projectId": "proj-1", "line": line, "maxConcurrentTasks": float64(3), "why": "ready",
+		}
+		if upstream != nil {
+			args["upstreamRef"] = upstream
+		}
+		if res := mcp.callTool("project_request_start", args); res["isError"] == true {
+			t.Fatalf("project_request_start returned an error: %s", toolText(t, res))
+		}
+		return (*seen)[len(*seen)-1].body
+	}
+
+	if got := request("PROJECT_BRANCH", "refs/heads/release/2026")["upstreamRef"]; got != "refs/heads/release/2026" {
+		t.Fatalf("project_request_start sent upstreamRef = %#v, want refs/heads/release/2026", got)
+	}
+	if got := request("MAIN", "refs/heads/master")["upstreamRef"]; got != "refs/heads/master" {
+		t.Fatalf("project_request_start on MAIN sent upstreamRef = %#v, want refs/heads/master", got)
+	}
+	for name, upstream := range map[string]interface{}{"left out": nil, "blank": "   "} {
+		body := request("PROJECT_BRANCH", upstream)
+		if _, sent := body["upstreamRef"]; sent {
+			t.Fatalf("a main branch %s was sent: %#v", name, body)
+		}
+	}
+}
+
+func TestProjectRequestStartCLISendsASuggestedMainBranchAsGiven(t *testing.T) {
+	srv, seen := startRequestServer(t, http.StatusCreated, startRequestFiledBody)
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "sess-1")
+	t.Setenv("ORBIT_SERVICE_TOKEN", "")
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{
+		"request-start", "proj-1", "--line", "PROJECT_BRANCH", "--max-concurrent-tasks", "3",
+		"--upstream-ref", "refs/heads/master", "--why", "ready",
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := (*seen)[0].body["upstreamRef"]; got != "refs/heads/master" {
+		t.Fatalf("--upstream-ref sent upstreamRef = %#v, want refs/heads/master (body %#v)", got, (*seen)[0].body)
+	}
+	if err := cmdProjectCLI([]string{
+		"request-start", "proj-1", "--line", "PROJECT_BRANCH", "--max-concurrent-tasks", "3", "--why", "ready",
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if _, sent := (*seen)[1].body["upstreamRef"]; sent {
+		t.Fatalf("request-start with no --upstream-ref sent a main branch: %#v", (*seen)[1].body)
+	}
+}
+
+// The coordinator suggests a main branch only for a repository the owner has not chosen one for, and
+// reads it from the repository rather than guessing: the tool, the CLI help and the capabilities
+// listing each say when to leave it out, how to read it, and that the owner's press decides.
+func TestProjectRequestStartSaysWhenToSuggestAMainBranch(t *testing.T) {
+	props := mcpToolProps(toolDescriptors(false, false), "project_request_start")
+	upstream, _ := props["upstreamRef"].(map[string]interface{})
+	description, _ := upstream["description"].(string)
+	var arguments string
+	for _, spec := range projectCLICapabilities {
+		if spec.Tool == "project_request_start" {
+			for _, argument := range spec.Arguments {
+				if strings.HasPrefix(argument, "--upstream-ref ") {
+					arguments = argument
+				}
+			}
+		}
+	}
+	help := projectActionHelp["request-start"]
+	says := func(where, text string, wants ...string) {
+		t.Helper()
+		// The help wraps its lines; a phrase is the same phrase across a line break.
+		flat := strings.ToLower(strings.Join(strings.Fields(text), " "))
+		for _, want := range wants {
+			if !strings.Contains(flat, strings.ToLower(want)) {
+				t.Errorf("%s does not say %q: %q", where, want, text)
+			}
+		}
+	}
+	everywhere := []string{
+		"main branch",
+		// Not when the owner has already chosen one for this repository.
+		"integration.lastMainBranch",
+		"leave it out",
+		// Otherwise read from the repository, and sent as a full ref.
+		"git symbolic-ref --short refs/remotes/origin/HEAD",
+		"refs/heads/<name>",
+	}
+	whatItIs := []string{
+		"tasks start from",
+		"merged into",
+		"origin/master becomes refs/heads/master",
+		"only a suggestion",
+		"last choice for this repository ahead of it",
+		"nothing is written until they press Start",
+	}
+	for where, text := range map[string]string{
+		"the upstreamRef parameter":            description,
+		"`orbit project request-start --help`": help,
+		"the capabilities argument":            arguments,
+	} {
+		says(where, text, everywhere...)
+	}
+	says("the upstreamRef parameter", description, whatItIs...)
+	says("`orbit project request-start --help`", help, append(whatItIs, "--upstream-ref REF")...)
+}
+
 // Every reason the server gave, one per line with what to do — the whole point of returning them at
 // once is that the caller fixes the plan in one pass.
 func TestProjectRequestStartListsEveryReasonTheServerGave(t *testing.T) {
@@ -330,11 +446,130 @@ func TestProjectRequestStartRefusesABadShapeBeforeARoundTrip(t *testing.T) {
 		"no reason":                func(a map[string]interface{}) { delete(a, "why") },
 		"a blank reason":           func(a map[string]interface{}) { a["why"] = "   " },
 		"a branch for a main line": func(a map[string]interface{}) { a["line"] = "MAIN"; a["projectBranchName"] = "refs/heads/x" },
+		"zero budget":              func(a map[string]interface{}) { a["mergeCheckTimeoutSeconds"] = float64(0) },
+		"a negative budget":        func(a map[string]interface{}) { a["mergeCheckTimeoutSeconds"] = float64(-60) },
+		"half a second":            func(a map[string]interface{}) { a["mergeCheckTimeoutSeconds"] = float64(1.5) },
+		"a budget in words":        func(a map[string]interface{}) { a["mergeCheckTimeoutSeconds"] = "an hour" },
 	} {
 		args := valid()
 		mutate(args)
 		if res := mcp.callTool("project_request_start", args); res["isError"] != true {
 			t.Fatalf("%s was accepted: %#v", name, args)
+		}
+	}
+}
+
+// The check's budget is a suggestion like the command, under the same name on both doors: whatever
+// the session suggests — 90 seconds, or nothing at all — comes out of the tool and out of the CLI as
+// the same request body, field for field.
+func TestProjectRequestStartSendsASuggestedMergeCheckBudget(t *testing.T) {
+	srv, seen := startRequestServer(t, http.StatusCreated, startRequestFiledBody)
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "sess-1")
+	t.Setenv("ORBIT_SERVICE_TOKEN", "")
+
+	mcp := &mcpServer{t: NewTransport(srv.URL, "tok"), sessionID: "sess-1"}
+	mcpBody := func(seconds interface{}) map[string]interface{} {
+		t.Helper()
+		args := map[string]interface{}{
+			"projectId": "proj-1", "line": "PROJECT_BRANCH", "maxConcurrentTasks": float64(3),
+			"mergeCheckCommand": "npm test", "why": "ready",
+		}
+		if seconds != nil {
+			args["mergeCheckTimeoutSeconds"] = seconds
+		}
+		if res := mcp.callTool("project_request_start", args); res["isError"] == true {
+			t.Fatalf("project_request_start returned an error: %s", toolText(t, res))
+		}
+		return (*seen)[len(*seen)-1].body
+	}
+	if got := mcpBody(float64(90))["mergeCheckTimeoutSeconds"]; got != float64(90) {
+		t.Fatalf("project_request_start sent mergeCheckTimeoutSeconds = %#v, want 90", got)
+	}
+	// A model that sends the number quoted means what the flag means.
+	if got := mcpBody("90")["mergeCheckTimeoutSeconds"]; got != float64(90) {
+		t.Fatalf("a quoted budget went out as %#v, want 90", got)
+	}
+	if _, sent := mcpBody(nil)["mergeCheckTimeoutSeconds"]; sent {
+		t.Fatal("a budget nobody suggested was sent")
+	}
+
+	var out bytes.Buffer
+	cliBody := func(extra ...string) map[string]interface{} {
+		t.Helper()
+		argv := append([]string{
+			"request-start", "proj-1", "--line", "PROJECT_BRANCH", "--max-concurrent-tasks", "3",
+			"--merge-check-command", "npm test", "--why", "ready",
+		}, extra...)
+		if err := cmdProjectCLI(argv, strings.NewReader(""), &out); err != nil {
+			t.Fatal(err)
+		}
+		return (*seen)[len(*seen)-1].body
+	}
+	sameBody := func(name string, want, got map[string]interface{}) {
+		t.Helper()
+		wantJSON, _ := json.Marshal(want)
+		gotJSON, _ := json.Marshal(got)
+		if string(wantJSON) != string(gotJSON) {
+			t.Fatalf("%s: the CLI and the tool sent different requests:\n tool %s\n  cli %s",
+				name, wantJSON, gotJSON)
+		}
+	}
+	named := cliBody("--merge-check-timeout-seconds", "90")
+	if named["mergeCheckTimeoutSeconds"] != float64(90) {
+		t.Fatalf("--merge-check-timeout-seconds 90 sent %#v", named)
+	}
+	sameBody("a suggested budget", mcpBody(float64(90)), named)
+	sameBody("no suggested budget", mcpBody(nil), cliBody())
+
+	// A budget the door would only refuse costs no round trip, whichever door typed it: the flag
+	// parser rejects what is not a number, and the body builder the numbers the door will not take.
+	for _, flag := range []string{"0", "-30", "an hour"} {
+		err := cmdProjectCLI([]string{
+			"request-start", "proj-1", "--line", "PROJECT_BRANCH", "--max-concurrent-tasks", "3",
+			"--why", "ready", "--merge-check-timeout-seconds", flag,
+		}, strings.NewReader(""), &out)
+		refusal := strings.ToLower(strings.ReplaceAll(fmt.Sprint(err), "-", ""))
+		if err == nil || !strings.Contains(refusal, "mergechecktimeoutseconds") {
+			t.Fatalf("--merge-check-timeout-seconds %s: %v", flag, err)
+		}
+	}
+}
+
+// Both doors say what the budget is and when to leave it out, the way the merge check's command does.
+func TestProjectRequestStartSaysWhatTheMergeCheckBudgetIs(t *testing.T) {
+	props := mcpToolProps(toolDescriptors(false, false), "project_request_start")
+	budget, _ := props["mergeCheckTimeoutSeconds"].(map[string]interface{})
+	description, _ := budget["description"].(string)
+	var arguments string
+	for _, spec := range projectCLICapabilities {
+		if spec.Tool == "project_request_start" {
+			for _, argument := range spec.Arguments {
+				if strings.HasPrefix(argument, "--merge-check-timeout-seconds ") {
+					arguments = argument
+				}
+			}
+		}
+	}
+	help := projectActionHelp["request-start"]
+	for where, text := range map[string]string{
+		"the mergeCheckTimeoutSeconds parameter": description,
+		"`orbit project request-start --help`":   help,
+		"the capabilities argument":              arguments,
+	} {
+		flat := strings.ToLower(strings.Join(strings.Fields(text), " "))
+		for _, want := range []string{"budget", "seconds", "one-hour default"} {
+			if !strings.Contains(flat, want) {
+				t.Errorf("%s does not say %q: %q", where, want, text)
+			}
+		}
+	}
+	for where, text := range map[string]string{
+		"`orbit project request-start --help`": help,
+		"the capabilities argument":            arguments,
+	} {
+		if !strings.Contains(text, "--merge-check-timeout-seconds") {
+			t.Errorf("%s does not name the flag: %q", where, text)
 		}
 	}
 }

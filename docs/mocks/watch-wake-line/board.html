@@ -1,0 +1,564 @@
+<!doctype html>
+<!-- DESIGN MOCK (2026-10-09). A watch's wake turn drawn the way a background job's wake already is: one event
+     line in the agent's stream instead of a card, on an iPhone.
+     The owner's 11:14 screenshot: session 卡片问题选项显示优化, a "Watch triggered" card (WatchWakeCardView, OrbitKit
+     WatchWakeCard) between two paragraphs of the agent's one answer. Commit 10df2da41 (2026-09-29) turned the
+     background-job wake into a line (BackgroundWakeCardView: mark · title · name · status chip · time · 详情 ›,
+     fold underneath, failure loud, queued dashed, no sticky-bar anchor) and left watch wakes unchanged.
+     Geometry: the owner's screenshot (1179×2556 @3x → 393×852 pt). Header to 113, sticky strip 113–142,
+     transcript 142–591, bottom band from 591. Card 212–350 (138 pt).
+     Sizes are OrbitApp's iOS tokens: orbitProse 17, orbitLabel 13, orbitMeta 11, orbitMonoFine 11 mono;
+     the line's row padding 4/3, name and closing rows indented 20, fold rule 2 pt at 20 + 10.
+     Sample text after the screenshot's own is made up (the repo is public).
+     Render: node /var/tmp/watch-wake-line-mock/render.mjs <this> <outdir> (playwright-core, Inter + Noto Sans SC). -->
+<html lang="zh-CN">
+<meta charset="utf-8">
+<title>Watch 唤醒改成和 Background 一样：回答里的一行 — iPhone 设计图</title>
+<style>
+  :root {
+    --accent: #3E69F6;
+    --label: #000; --label2: rgba(60,60,67,.6); --label3: rgba(60,60,67,.3);
+    --sep: rgba(60,60,67,.29);
+    --red: #FF3B30; --green: #34C759; --orange: #FF9500;
+    --mk: #E5484D; --mkfill: #F08A24;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 36px; background: #e9e9ee; color: #16161a; width: 1960px;
+         font: 15px/1.6 "Inter", "Noto Sans SC", sans-serif; -webkit-font-smoothing: antialiased; }
+  .part { background: #f7f7f9; border-radius: 26px; padding: 30px 34px 34px; }
+  .part + .part { margin-top: 30px; }
+  #part-1 { width: fit-content; }
+  #part-1 .lede { max-width: 1300px; }
+  h1 { font-size: 27px; line-height: 1.3; margin: 0 0 12px; letter-spacing: -.01em; }
+  h2 { font-size: 21px; margin: 0 0 6px; }
+  .lede { color: #4d4d56; font-size: 15.5px; max-width: 1840px; margin: 0 0 6px; }
+  .lede b, .cap b, .cols b, .steps b, td b { color: #16161a; }
+  code, .mono { font-family: "DejaVu Sans Mono", monospace; }
+  code { font-size: 12.5px; background: #e4e4ea; border-radius: 4px; padding: 1px 5px; }
+  .tag { display: inline-block; font: 600 12.5px/1 "Inter", "Noto Sans SC", sans-serif; padding: 5px 9px; border-radius: 7px; margin-bottom: 12px; }
+  .tag.now { background: #ffe1dc; color: #b3261e; }
+  .tag.new { background: #dfe8ff; color: #2346c4; }
+  .tag.alt { background: #efe3ff; color: #6a2bb8; }
+  .tag.open { background: #fff0d1; color: #8a5300; }
+  .row { display: flex; gap: 38px; align-items: flex-start; margin-top: 22px; }
+  figure { margin: 0; flex: none; width: 393px; }
+  .cap { margin-top: 16px; font-size: 14px; line-height: 1.68; color: #4d4d56; }
+  .cap > b:first-child { display: block; font-size: 15px; margin-bottom: 4px; }
+  .cap ol { margin: 6px 0 0; padding-left: 0; list-style: none; }
+  .cap li { margin-top: 6px; padding-left: 28px; position: relative; }
+  .cap li .n { position: absolute; left: 0; top: 2px; }
+  .cap p { margin: 6px 0 0; }
+  .n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--mkfill);
+       color: #fff; font: 700 12px/1 "Inter", sans-serif; }
+
+  /* ── the phone, 393 × 852 pt ── */
+  .phone { width: 393px; height: 852px; border-radius: 54px; overflow: hidden; position: relative; background: #fff; color: var(--label);
+           box-shadow: 0 14px 44px rgba(0,0,0,.16); border: 1px solid rgba(0,0,0,.08);
+           font-family: "Inter", "Noto Sans SC", sans-serif; line-height: 1.3; }
+  .top { position: absolute; top: 0; left: 0; right: 0; height: 113px; background: #FAFAFA; z-index: 2; }
+  .sb { position: absolute; top: 0; left: 0; right: 0; height: 54px; display: flex; justify-content: space-between; align-items: center;
+        padding: 6px 30px 0 44px; z-index: 3; }
+  .sb .time { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 5px; }
+  .sb .sys { display: flex; gap: 6px; align-items: center; font-size: 15px; font-weight: 600; }
+  .sb .bat { background: #000; color: #fff; border-radius: 6px; font: 700 12.5px/1 "Inter", sans-serif; padding: 3px 5px; position: relative; }
+  .sb .bat::after { content: ""; position: absolute; right: -4px; top: 6px; width: 2.5px; height: 5px; border-radius: 0 2px 2px 0; background: #b9b9be; }
+  .nav { position: absolute; top: 54px; left: 0; right: 0; height: 59px; z-index: 3; }
+  .circ { position: absolute; top: 4px; width: 45px; height: 45px; border-radius: 50%; background: #F6F6F6; border: 1px solid rgba(0,0,0,.09);
+          box-shadow: 0 1px 6px rgba(0,0,0,.06); display: grid; place-items: center; }
+  .circ.back { left: 16px; } .circ.more { right: 16px; }
+  .ttl { position: absolute; left: 70px; right: 70px; top: 9px; text-align: center; }
+  .t1 { font-size: 17px; font-weight: 600; line-height: 22px; white-space: nowrap; }
+  .t2 { font-size: 12.5px; line-height: 16px; color: var(--label2); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .strip { position: absolute; top: 113px; left: 0; right: 0; height: 29px; background: #F6F6F6; display: flex; align-items: center; gap: 8px;
+           padding: 0 16px; font-size: 13px; color: var(--label2); white-space: nowrap; overflow: hidden; z-index: 2; }
+  .strip::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; transform: scaleY(.5); transform-origin: bottom; background: rgb(191,191,194); }
+  .strip .q { font-size: 15px; color: var(--label); overflow: hidden; text-overflow: ellipsis; }
+  .tx { position: absolute; left: 0; right: 0; top: 142px; bottom: 261px; overflow: hidden; padding-top: 7px; }
+  .msg { padding: 0 16px; font-size: 17px; line-height: 26.7px; margin-bottom: 10px; }
+  .msg p { margin: 0; }
+  .down { position: absolute; left: 177px; top: 535px; width: 40px; height: 40px; border-radius: 50%; background: #fff; box-shadow: 0 3px 12px rgba(0,0,0,.14);
+          display: grid; place-items: center; z-index: 2; }
+  .band { position: absolute; left: 0; right: 0; bottom: 0; height: 261px; background: #fff; z-index: 2; }
+  .band::before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px; transform: scaleY(.5); transform-origin: top; background: var(--sep); }
+  .brow { position: absolute; left: 16px; right: 16px; height: 29px; border: 1px solid #E3E3E6; background: #F6F6F6; border-radius: 10px;
+          display: flex; align-items: center; gap: 8px; padding: 0 11px; font-size: 14.5px; white-space: nowrap; }
+  .brow b { font-weight: 600; } .brow .v { color: var(--label2); font-size: 13.5px; } .brow .c { margin-left: auto; display: flex; }
+  .brow .bl { color: var(--accent); overflow: hidden; text-overflow: ellipsis; font-size: 13.5px; }
+  .brow .pill { flex: none; display: inline-flex; align-items: center; gap: 5px; background: #E3F3E5; color: #3D9A45; border-radius: 11px; padding: 2px 8px; font-size: 13px; }
+  .brow .pill i { width: 7px; height: 7px; border-radius: 50%; background: #65C466; display: block; }
+  .brow .chip { font: 13px/1 "DejaVu Sans Mono", monospace; color: #55555e; background: #EBEBEE; border: 1px solid #D9D9DE; border-radius: 7px; padding: 4px 7px; margin-left: -6px; display: flex; gap: 4px; align-items: center; }
+  .brow .add { color: #34A853; font: 14px/1 "DejaVu Sans Mono", monospace; } .brow .del { color: #E5484D; font: 14px/1 "DejaVu Sans Mono", monospace; }
+  .brow .files { color: var(--label2); font: 14px/1 "DejaVu Sans Mono", monospace; }
+  .brow .merged { margin-left: auto; color: #3D9A45; font-weight: 600; font-size: 14.5px; }
+  .cmp { position: absolute; left: 16px; right: 16px; top: 127px; height: 89px; border: 1px solid #E3E3E6; background: #FAFAFA; border-radius: 26px; padding: 13px 16px; }
+  .cmp .ph { font-size: 17px; color: rgba(60,60,67,.3); }
+  .cmp .tb { position: absolute; left: 14px; right: 9px; bottom: 9px; display: flex; align-items: center; gap: 14px; font-size: 16px; color: #55555e; }
+  .cmp .tb .md { margin-left: auto; color: #000; font-weight: 600; } .cmp .tb .md span { color: var(--label2); font-weight: 400; }
+  .cmp .tb .bar { width: 20px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent) 70%, #C9D4FB 70%); }
+  .cmp .tb .send { width: 28px; height: 28px; border-radius: 50%; background: #C4C4C8; display: grid; place-items: center; }
+  .home { position: absolute; bottom: 8px; left: 50%; width: 134px; height: 5px; margin-left: -67px; border-radius: 3px; background: #000; z-index: 4; }
+
+  /* ── tool group row (ToolCards) ── */
+  .tools { margin: 0 16px 10px; height: 32px; display: flex; align-items: center; gap: 8px; border-left: 3px solid #8A8A8D; padding-left: 10px; white-space: nowrap; }
+  .tools .ib { width: 20px; height: 20px; border-radius: 5px; background: #EEEEEF; display: grid; place-items: center; flex: none; }
+  .tools .nm { font: 600 15px/1 "DejaVu Sans Mono", monospace; }
+  .tools .sc { font-size: 15px; color: var(--label2); }
+  .tools .tc { font: 13px/1 "DejaVu Sans Mono", monospace; color: var(--label2); background: #EFEFF0; border-radius: 5px; padding: 4px 6px; overflow: hidden; text-overflow: ellipsis; max-width: 114px; }
+  .tools .ok { margin-left: auto; margin-right: 14px; display: flex; }
+
+  /* ── today: the watch's card (WatchWakeCardView) ── */
+  .wcard { margin: 0 16px 10px; padding: 8px 10px; border-radius: 8px; background: #F5F5F5; border: 1px solid #DCDCDC; }
+  .wcard .h { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; line-height: 16px; }
+  .wcard .why { font-size: 17px; line-height: 21px; margin-top: 5px; }
+  .wcard .tg { font-size: 11px; line-height: 13px; color: var(--accent); margin-top: 5px; }
+  .wcard .meta { font-size: 11px; line-height: 13px; color: var(--label2); margin-top: 5px; }
+  .wcard .vw { font-size: 13px; line-height: 16px; color: var(--accent); margin-top: 5px; }
+  .wcard .raw { display: flex; align-items: center; font-size: 11px; line-height: 16px; color: var(--label2); margin-top: 5px; }
+  .wcard .raw svg { margin-left: auto; }
+
+  /* ── proposal: the wake as one line in the agent's stream (BackgroundWakeCardView's grammar) ── */
+  .wake { margin: 0 16px 10px; position: relative; }
+  .wl { padding: 3px 4px; font-size: 13px; line-height: 18px; color: var(--label2); position: relative; }
+  .wl.queued::after { content: ""; position: absolute; inset: 0; border: 1px dashed rgba(60,60,67,.32); border-radius: 6px; }
+  .wl-h { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; }
+  .wl-v { display: none; }
+  .wl.stacked .wl-h { display: none; } .wl.stacked .wl-v { display: block; }
+  .wl-v .r1 { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .wl-v .r2 { padding-left: 20px; margin-top: 1px; color: rgba(0,0,0,.75); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wl-v .r3 { padding-left: 20px; margin-top: 1px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .wl-mk { width: 14px; height: 18px; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+  .wl-t { flex: none; }
+  .wl-t.red { color: var(--red); }
+  .wl-n { color: rgba(0,0,0,.75); flex: none; }
+  .wl-chip { font: 11px/14px "DejaVu Sans Mono", monospace; padding: 1px 5px; border-radius: 4px; background: rgba(142,142,147,.14); color: var(--label2); flex: none; }
+  .wl-meta { font-size: 11px; line-height: 14px; flex: none; }
+  .wl-cv { display: inline-flex; flex: none; }
+  .wl-cv.open svg { transform: rotate(90deg); }
+  .wl-fold { margin: 4px 0 0 20px; padding-left: 10px; border-left: 2px solid rgba(60,60,67,.16); display: flex; flex-direction: column; gap: 6px; }
+  .wl-fold .why { font-size: 13px; line-height: 18px; color: rgba(0,0,0,.75); }
+  .wl-fold .tg { font-size: 11px; line-height: 14px; color: var(--accent); }
+  .wl-fold .tg.red, .wl-out .tg.red { color: var(--red); }
+  .wl-fold .meta { font-size: 11px; line-height: 14px; color: var(--label2); }
+  .wl-fold .vw { font-size: 13px; line-height: 18px; color: var(--accent); }
+  .wl-fold .raw { display: flex; align-items: center; font-size: 11px; line-height: 16px; color: var(--label2); }
+  .wl-fold .raw svg { margin-left: auto; }
+  .wl-out { margin: 6px 0 0 24px; display: flex; flex-direction: column; gap: 3px; }
+  .wl-out .tg { font-size: 11px; line-height: 14px; }
+  .wl-q { margin: 4px 0 0 24px; display: flex; gap: 8px; font-size: 11px; line-height: 14px; color: var(--label2); }
+  .wl-q a { color: var(--accent); }
+  .wl-und { margin: 4px 0 0 24px; font-size: 11px; line-height: 14px; color: var(--orange); }
+
+  /* ── marks: dashed outline + numbered dot, placed after layout ── */
+  .ol-mk { position: absolute; border: 2px dashed var(--mk); border-radius: 12px; z-index: 6; pointer-events: none; }
+  .dot-mk { position: absolute; width: 22px; height: 22px; border-radius: 50%; background: var(--mkfill); color: #fff; z-index: 7;
+            font: 700 12.5px/22px "Inter", sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff; }
+
+  /* ── snippets: lines at phone width, out of their phone ── */
+  .snip { width: 393px; background: #fff; border-radius: 24px; padding: 4px 0 16px; box-shadow: 0 8px 26px rgba(0,0,0,.10); position: relative;
+          font-family: "Inter", "Noto Sans SC", sans-serif; line-height: 1.3; color: var(--label); }
+  .snip .sl { font: 600 11.5px/1 "DejaVu Sans Mono", monospace; color: #8a8a93; letter-spacing: .04em; padding: 14px 18px 12px; text-transform: uppercase; }
+  .snip .ctx { padding: 0 16px; font-size: 17px; line-height: 26.7px; margin-bottom: 10px; color: rgba(0,0,0,.38); }
+  .snip .wake:last-child { margin-bottom: 0; }
+  .snip .gap { height: 12px; }
+  .snip .stk { position: relative; height: 29px; background: #F6F6F6; display: flex; align-items: center; gap: 8px; padding: 0 16px; font-size: 13px;
+               color: var(--label2); white-space: nowrap; overflow: hidden; margin: 0 0 4px; }
+  .snip .stk .q { font-size: 15px; color: var(--label); overflow: hidden; text-overflow: ellipsis; }
+  .snip .stk-l { font-size: 12px; color: #8a8a93; padding: 10px 16px 6px; }
+
+  .grid4 { display: grid; grid-template-columns: repeat(4, 393px); gap: 30px 38px; margin-top: 22px; align-items: start; }
+
+  /* ── rules ── */
+  table.rules { border-collapse: collapse; width: 100%; font-size: 14px; line-height: 1.6; color: #4d4d56; background: #fff; border-radius: 16px; overflow: hidden;
+                box-shadow: 0 4px 16px rgba(0,0,0,.06); }
+  .rules th { text-align: left; font-size: 13px; color: #6b6b75; font-weight: 600; background: #f0f0f4; padding: 10px 14px; }
+  .rules td { padding: 9px 14px; border-top: 1px solid #ececf1; vertical-align: top; }
+  .rules td:first-child { color: #16161a; font-weight: 600; white-space: nowrap; width: 110px; }
+  .rules td.chg { background: #f3f6ff; }
+  .rules td.chg b { color: #2346c4; }
+  .pick { border: 2px solid #3E69F6; border-radius: 18px; padding: 14px 18px; background: #fff; }
+  .pick.no { border-color: #d9d9e0; }
+  .steps { font-size: 14.5px; line-height: 1.72; color: #4d4d56; }
+  .steps ol { margin: 0; padding-left: 0; list-style: none; counter-reset: s; }
+  .steps li { position: relative; padding: 11px 0 11px 42px; border-top: 1px solid #e0e0e6; }
+  .steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 12px; width: 28px; height: 28px; border-radius: 8px;
+                      background: #2346c4; color: #fff; font: 700 14px/28px "Inter", sans-serif; text-align: center; }
+</style>
+
+<body>
+
+<!-- ═══════════════ 1 · today vs the line ═══════════════ -->
+<section class="part" id="part-1">
+  <h1>Watch 唤醒改成和 Background 一样：回答里的一行，点开才是详情</h1>
+  <p class="lede">9 月 29 日 Background 的唤醒从卡片改成了「agent 回答里的一行」：图标、发生了什么、哪个任务、结果、多久以前、<b>详情 ›</b>；点开才有命令、id、谁排的这一轮、agent 收到的原文。失败时整行变红；顶部提示条不指向它，一直写你的问题。那次的提交写明 <b>Watch 唤醒不动</b>，所以你截图里它还是一张灰底卡片，夹在同一段回答中间。</p>
+  <p class="lede">下面左边是你 11:14 的截图（照尺寸复刻），中间是同一屏改成一行，右边是点开这一行。<b>字都用现有的</b>（Watch triggered、Queued by a watch…、View watch、What the agent received），只换摆法。</p>
+  <div class="row">
+    <figure>
+      <span class="tag now">现状 · 11:14 截图</span>
+      <div class="phone" id="p-today"></div>
+      <div class="cap"><b>一张卡，把一段回答切成两段</b><ol>
+        <li><span class="n">1</span>卡片高 138 pt。上面「……这两步我会先跟你确认再动手」和下面「任务已转为完成……」是 agent 接着做的同一件事，被卡片隔开，读起来像有人插话。</li>
+        <li><span class="n">2</span>写的是 <code>Task 01a11e30</code>：id 的前 8 位。UUIDv7 的前 8 位是创建时间，同一分钟建的任务都一样。同一个任务的标题，就在下面 Tasks 那一行。</li>
+        <li><span class="n">3</span>卡片滚到上面以后，这一条会变成 <code>↑ Watch triggered  1 of 1 finished · 0 of 1 failed</code>，点它跳回卡片，不是你的问题。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">建议 · 同一屏，变成一行</span>
+      <div class="phone" id="p-line"></div>
+      <div class="cap"><b>和 Background job finished 同一个写法</b><ol>
+        <li><span class="n">1</span>一行三层：<b>👁 Watch triggered</b> / 哪个任务 / <code>DONE</code> · 42m ago · 详情 ›。手机上放不下一行时，名字和结尾各占一行（Background 也是这样折的），共 60 pt。</li>
+        <li><span class="n">2</span>写任务标题，不写 id。今天写成 id 是因为唤醒里带的是 UUID，手机上的任务列表用短 id，两边对不上；顺带修掉，并且也查本会话的 Tasks 卡。</li>
+        <li><span class="n">3</span>顶部条不再指向它，一直写你的问题，点了回到你的问题。和 Background 一样。</li>
+        <li><span class="n">4</span>省下的 78 pt 留给回答本身：下一组工具调用也进了这一屏。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">建议 · 点这一行</span>
+      <div class="phone" id="p-open"></div>
+      <div class="cap"><b>原卡片上的东西都在，折在下面</b><ol>
+        <li><span class="n">1</span>整行都能点，<b>›</b> 转成朝下；再点收起。和 Background 那一行同一个手势。</li>
+        <li><span class="n">2</span>折叠里按原卡片的顺序：为什么触发（<code>1 of 1 finished · 0 of 1 failed</code>）、哪个任务变成了什么（点了打开任务）、<code>Queued by a watch, not typed by you · generation 1</code>、View watch、What the agent received（再点一层才展开原文）。</li>
+      </ol></div>
+    </figure>
+  </div>
+</section>
+
+<!-- ═══════════════ 2 · the other cases ═══════════════ -->
+<section class="part" id="part-2">
+  <h2>其余几种情况</h2>
+  <p class="lede">都是同一行，规则照搬 Background：失败才醒目，其它时候安静。灰字是前后的回答，示意用。</p>
+  <div class="grid4">
+    <figure>
+      <span class="tag new">一个任务失败</span>
+      <div class="snip" id="s-fail1"><div class="sl">Task FAILED</div></div>
+      <div class="cap"><ol>
+        <li><span class="n">1</span>有任务变成 <code>FAILED</code>：图标换成红色 ✗，标题变红，跟后台任务失败一样醒目。结果写 <code>FAILED</code>。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">三个任务，一个失败</span>
+      <div class="snip" id="s-fail3"><div class="sl">3 tasks · 1 failed</div></div>
+      <div class="cap"><ol>
+        <li><span class="n">1</span>名字写 <code>3 tasks</code>，结果写 <code>1 of 3 failed</code>（Background 多个任务时也是这样数）。</li>
+        <li><span class="n">2</span>失败的那个留在折叠外面，点了直接打开。Background 失败时留在外面的是输出末尾；Watch 唤醒里没有输出，留的是失败的任务。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">三个任务都完成 · 点开</span>
+      <div class="snip" id="s-three"><div class="sl">3 tasks · opened</div></div>
+      <div class="cap"><ol>
+        <li><span class="n">1</span>没有失败就不写结果，一行放得下。</li>
+        <li><span class="n">2</span>点开每个变了的任务一行，最多 5 行，再多写 <code>+N more</code>（和现在一样）。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">Watch 结束了（没等到）</span>
+      <div class="snip" id="s-ends"><div class="sl">Expired / stopped</div></div>
+      <div class="cap"><ol>
+        <li><span class="n">1</span>到期、失去权限、目标都没了：标题照旧，图标还是 👁（没有任务失败，不算失败）。</li>
+        <li><span class="n">2</span>原卡片上那句为什么结束（<i>It will not wake this session again.</i>）放进折叠的第一行。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">还在排队（这一轮没结束）</span>
+      <div class="snip" id="s-queued"><div class="sl">Queued behind the running turn</div></div>
+      <div class="cap"><ol>
+        <li><span class="n">1</span>虚线框，和 Background 排队时一样。Watch 唤醒总是排在当前一轮后面，不会插进正在跑的一轮。</li>
+        <li><span class="n">2</span>下面一行 <code>Queued for next turn · Withdraw wake</code>。点 Withdraw 仍先弹确认；后果那句（撤回后这次不唤醒、也不会重发）只写在确认框里，现在卡片上还另写了一遍。</li>
+      </ol></div>
+    </figure>
+    <figure>
+      <span class="tag new">没确认送达</span>
+      <div class="snip" id="s-und"><div class="sl">Not confirmed</div></div>
+      <div class="cap"><ol>
+        <li><span class="n">1</span>橙字一行 <i>The session has not confirmed it received this.</i>，和 Background 一样。</li>
+      </ol></div>
+    </figure>
+    <figure style="grid-column: span 2; width: auto">
+      <span class="tag now">顶部提示条：现状</span> <span class="tag new" style="margin-left:6px">建议</span>
+      <div style="display:flex;gap:38px">
+        <div class="snip" id="s-stick-now"><div class="sl">Today · scrolled past the card</div></div>
+        <div class="snip" id="s-stick-new"><div class="sl">Proposal · scrolled past the line</div></div>
+      </div>
+      <div class="cap"><ol>
+        <li><span class="n">1</span>现状：卡片滚过顶部后，提示条改写成卡片的标题和触发原因，点它跳到卡片。你的问题从屏幕上消失。</li>
+        <li><span class="n">2</span>建议：提示条跳过这一行，一直写你的问题，点了回到你的问题。Background 那一行现在就是这样（<code>StickySummary.isAnchor</code>）。</li>
+      </ol></div>
+    </figure>
+  </div>
+</section>
+
+<!-- ═══════════════ 3 · rules, the one open choice, landing ═══════════════ -->
+<section class="part" id="part-3">
+  <h2>逐项对照、要你定的一处、落地</h2>
+  <div class="row" style="gap:40px;margin-top:16px">
+    <div style="flex:1;min-width:0">
+      <table class="rules">
+        <tr><th></th><th>Background 唤醒（现在就是这样）</th><th>Watch 唤醒（建议；蓝底是改动）</th></tr>
+        <tr><td>画在哪</td><td>agent 回答里的一行，和 <code>Interrupted</code> 同一种写法</td><td class="chg"><b>同左</b>（现在是一张灰底卡片，138 pt）</td></tr>
+        <tr><td>图标</td><td>✓ 正常结束 · ✗ 失败或被杀 · 🕐 只是有新输出、定时唤醒</td><td class="chg">👁 照旧；<b>有任务 FAILED 时换成红色 ✗</b>（见右边「要你定」）</td></tr>
+        <tr><td>标题</td><td>Background job finished / failed / has new output · Scheduled wakeup</td><td>Watch triggered / Watch expired / Watch stopped: …（字不变）</td></tr>
+        <tr><td>名字</td><td>那个任务的说明，没有说明就写命令</td><td class="chg"><b>变了的那个任务或会话的标题</b>；多个写 <code>3 tasks</code>；结束类不写</td></tr>
+        <tr><td>结果</td><td><code>exit 0</code> · <code>killed: …</code> · 多个时 <code>2 of 3 failed</code></td><td class="chg"><b><code>DONE</code> · <code>FAILED</code>…</b>；多个时只在有失败时写 <code>1 of 3 failed</code></td></tr>
+        <tr><td>结尾</td><td>42m ago · 任务详情 ›</td><td class="chg"><b>42m ago · 详情 ›</b>（时间从卡片中间那行挪到这里）</td></tr>
+        <tr><td>点开以后</td><td>每个任务一行（命令、id、输出大小）· 谁排的这一轮 · What the agent received</td><td class="chg"><b>折叠</b>：为什么触发 · 变了的目标（点了打开）· Queued by a watch… · generation · View watch · What the agent received</td></tr>
+        <tr><td>失败</td><td>整行红，输出末尾留在折叠外</td><td class="chg"><b>整行红，失败的目标留在折叠外</b>（现在不分成败）</td></tr>
+        <tr><td>排队中</td><td>虚线框 + <code>Queued · Cancel</code></td><td class="chg"><b>虚线框</b> + <code>Queued for next turn · Withdraw wake</code>；仍先确认，后果只写在确认框</td></tr>
+        <tr><td>顶部提示条</td><td>不指向它，继续写你的问题</td><td class="chg"><b>同左</b>（现在会写成 ↑ Watch triggered）</td></tr>
+        <tr><td>没确认送达</td><td>橙字一行</td><td>同左（不变）</td></tr>
+      </table>
+    </div>
+    <div style="flex:none;width:884px">
+      <span class="tag open">要你定 · 图标（下面按手机宽度画，和 Background 那一行挨着）</span>
+      <div style="display:flex;gap:18px;align-items:flex-start">
+        <div style="flex:none;width:433px">
+          <div class="pick">
+            <b style="font-size:15px;color:#2346c4">A（推荐）· 保留 👁，失败时换红 ✗</b>
+            <div class="snip" id="s-icon-a" style="width:393px;box-shadow:none;border:1px solid #ececf1;margin-top:10px;padding-bottom:12px"></div>
+            <p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#4d4d56">👁 在 App 里一直代表 watch（Following、Watching 条、现在这张卡）。和 Background 那行挨着时，一眼分得出是哪种唤醒；成败看后面的 <code>DONE</code> / <code>FAILED</code>。</p>
+          </div>
+        </div>
+        <div style="flex:none;width:433px">
+          <div class="pick no">
+            <b style="font-size:15px;color:#6a2bb8">B · 和 Background 一模一样：✓ ✗ 🕐</b>
+            <div class="snip" id="s-icon-b" style="width:393px;box-shadow:none;border:1px solid #ececf1;margin-top:10px;padding-bottom:12px"></div>
+            <p style="margin:10px 0 0;font-size:14px;line-height:1.7;color:#4d4d56">图标只说结果：完成 ✓ 绿、失败 ✗ 红、到期 🕐 灰。整条对话里每种唤醒长得一样，靠标题分是 Background 还是 Watch。</p>
+          </div>
+        </div>
+      </div>
+      <div class="steps" style="margin-top:22px">
+        <span class="tag new">落地 · 一个任务、一次落地</span>
+        <ol>
+          <li><b>iPhone / Mac</b>（共用 OrbitKit）：<code>WatchWakeCardView</code> 照 <code>BackgroundWakeCardView</code> 改成一行 + 折叠，失败变红、排队虚线；<code>StickySummary.isAnchor</code> 不再把 Watch 唤醒当成问题；任务和会话的名字按 <code>PublicID.storageKey</code> 对上，再查本会话的 Tasks 卡。</li>
+          <li><b>Web</b>：<code>WatchWakeCard.tsx</code> 用同一套 <code>.bgwake</code> 样式画这一行，去掉 <code>data-sticky-label</code>；名字从本会话的 Tasks 卡和 Watching 列表取，取不到写 id。</li>
+          <li><b>测试</b>：两端对字的 <code>WatchWakeCopyParityTests</code>、提示条 <code>StickySummaryTests</code> 和 Web 的 <code>Transcript.watchWake</code> / <code>WorkspaceView.stickyWake</code> 跟着改。Android 两种唤醒本来就画成同一种通用卡片（Background 那次也没动），这次不动。</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+/* ── glyphs ── */
+const IC = {
+  bell: '<svg width="17" height="16" viewBox="0 0 17 16"><path d="M8.5 1.6c-2.4 0-4.2 1.9-4.2 4.3v2.6L3 10.6v.9h11v-.9l-1.3-2.1V5.9c0-2.4-1.8-4.3-4.2-4.3z" fill="#000"/><path d="M7 12.6c.2.8.8 1.3 1.5 1.3s1.3-.5 1.5-1.3z" fill="#000"/><path d="M2.2 1.3 15 14.2" stroke="#FAFAFA" stroke-width="3.2"/><path d="M2.2 1.3 15 14.2" stroke="#000" stroke-width="1.5" stroke-linecap="round"/></svg>',
+  signal: '<svg width="19" height="12" viewBox="0 0 19 12"><rect x="0" y="8" width="3.2" height="4" rx="1"/><rect x="5.1" y="5.4" width="3.2" height="6.6" rx="1"/><rect x="10.2" y="2.7" width="3.2" height="9.3" rx="1"/><rect x="15.3" y="0" width="3.2" height="12" rx="1"/></svg>',
+  wifi: '<svg width="17" height="12" viewBox="0 0 17 12"><path d="M8.5 2.2c2.5 0 4.8 1 6.5 2.6l1.2-1.3C14.2 1.6 11.5.4 8.5.4S2.8 1.6.8 3.5L2 4.8c1.7-1.6 4-2.6 6.5-2.6z"/><path d="M8.5 5.6c1.6 0 3 .6 4.1 1.6l1.2-1.3C12.4 4.6 10.5 3.8 8.5 3.8S4.6 4.6 3.2 5.9l1.2 1.3c1.1-1 2.5-1.6 4.1-1.6z"/><path d="M8.5 9c.7 0 1.3.3 1.8.7l1.2-1.3c-.8-.7-1.9-1.2-3-1.2s-2.2.5-3 1.2l1.2 1.3c.5-.4 1.1-.7 1.8-.7z"/><circle cx="8.5" cy="11" r="1"/></svg>',
+  back: '<svg width="12" height="20" viewBox="0 0 12 20"><path d="M10 2 2.5 10 10 18" fill="none" stroke="#000" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  more: '<svg width="22" height="6" viewBox="0 0 22 6"><circle cx="3" cy="3" r="2.4"/><circle cx="11" cy="3" r="2.4"/><circle cx="19" cy="3" r="2.4"/></svg>',
+  chevR: (c = '#B8B8BE', h = 13) => `<svg width="${h * 0.6}" height="${h}" viewBox="0 0 8 13"><path d="M1.6 1.5 6.4 6.5 1.6 11.5" fill="none" stroke="${c}" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  up: '<svg width="12" height="14" viewBox="0 0 12 14"><path d="M6 13V2M1.5 6.2 6 1.6l4.5 4.6" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  down: '<svg width="16" height="18" viewBox="0 0 16 18"><path d="M8 2v13M2.5 9.6 8 15.2l5.5-5.6" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  term: '<svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="#6b6b73" stroke-width="1.4"><rect x="1" y="1.5" width="18" height="13" rx="2.6"/><path d="M5 6l2.4 2L5 10M9.4 10.4h4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  box: '<svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="#6b6b73" stroke-width="1.4"><rect x="1.5" y="1.5" width="14" height="14" rx="2.5"/><path d="M5 8.7 7.4 11 12 6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  fork: '<svg width="12" height="14" viewBox="0 0 12 14" fill="none" stroke="#55555e" stroke-width="1.4" stroke-linecap="round"><path d="M2 1.5v3.8c0 1.8 4 1.8 4 3.6v3.6M10 1.5v3.8c0 1.8-4 1.8-4 3.6"/></svg>',
+  ring: '<svg width="20" height="20" viewBox="0 0 22 22" fill="none" stroke-width="2.6"><circle cx="11" cy="11" r="8.2" stroke="#D9DEEE"/><path d="M11 2.8a8.2 8.2 0 1 1-8 10.2" stroke="#3E69F6" stroke-linecap="round"/></svg>',
+  sendUp: '<svg width="14" height="16" viewBox="0 0 14 16"><path d="M7 14.5V2M1.8 7 7 1.8 12.2 7" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  tools: '<svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="#6b6b73" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12l5-5M8.6 2.4a2.6 2.6 0 0 0 3 3.5l-1.3 1.3"/><path d="M12 12 7.2 7.2M2.3 2.3l1.6-.4.6 1.5 1.5.6-.4 1.6"/></svg>',
+  okc: (s = 15) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.6" fill="#65C466"/><path d="M4.6 8.2 7 10.5l4.4-4.9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  /* SF eye, outline almond with a ringed pupil */
+  eye: (c = '#8E8E93', w = 15) => `<svg width="${w}" height="${w * 0.66}" viewBox="0 0 22 14.5"><path d="M11 1.4C6.4 1.4 2.9 4.5 1.4 7.25 2.9 10 6.4 13.1 11 13.1s8.1-3.1 9.6-5.85C19.1 4.5 15.6 1.4 11 1.4z" fill="none" stroke="${c}" stroke-width="1.7"/><circle cx="11" cy="7.25" r="3.3" fill="${c}"/><circle cx="11" cy="7.25" r="1.3" fill="#fff"/></svg>`,
+  /* SF xmark.circle.fill / checkmark.circle.fill / clock */
+  xc: (s = 13) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.6" fill="#FF3B30"/><path d="M5.3 5.3l5.4 5.4M10.7 5.3l-5.4 5.4" stroke="#fff" stroke-width="1.8" stroke-linecap="round"/></svg>`,
+  cc: (s = 13) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16"><circle cx="8" cy="8" r="7.6" fill="#34C759"/><path d="M4.6 8.2 7 10.5l4.4-4.9" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  clk: (s = 13) => `<svg width="${s}" height="${s}" viewBox="0 0 16 16" fill="none" stroke="rgba(60,60,67,.6)" stroke-width="1.5"><circle cx="8" cy="8" r="6.7"/><path d="M8 4.4V8l2.5 1.6" stroke-linecap="round"/></svg>`,
+  cvLine: '<svg width="7" height="11" viewBox="0 0 8 13"><path d="M1.8 1.6 6.4 6.5 1.8 11.4" fill="none" stroke="rgba(60,60,67,.3)" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  cvRaw: '<svg width="8" height="13" viewBox="0 0 8 13"><path d="M1.6 1.5 6.4 6.5 1.6 11.5" fill="none" stroke="#1c1c1e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+
+/* ── the screenshot's words ── */
+const TASK = '协调者提问卡：答完后保留当时的问题和选项';
+const P1 = '完成后，要我帮你发版、升级部署的话说一声，这两步我会先跟你确认再动手。';
+const P2 = '任务已转为完成（watch 回报的是我确认后的状态）。我查一下它有没有开始合进 main。';
+const P3 = '任务完成后没有自动合进 main：它不属于任何项目，不走项目的自动落地。你批准的方案里包含「一次落地」，所以我现在把任务分支合进 main。';
+
+/* a mark: 3 → outline + dot; "3:dot" → only a dot, right after the element's text */
+const mkAttr = (v) => {
+  if (!v) return '';
+  const [n, pos] = String(v).split(':');
+  return ` data-mk="${n}"${pos ? ` data-mkpos="${pos}"` : ''}`;
+};
+
+/* ── phone chrome ── */
+function chrome(stripHtml) {
+  return `<div class="top"></div>
+    <div class="sb"><span class="time">11:14${IC.bell}</span><span class="sys">${IC.signal}${IC.wifi}<span class="bat">90</span></span></div>
+    <div class="nav"><div class="circ back">${IC.back}</div>
+      <div class="ttl"><div class="t1">卡片问题选项显示优化</div><div class="t2">Background process running · Open · just…</div></div>
+      <div class="circ more">${IC.more}</div></div>
+    ${stripHtml}`;
+}
+const strip = (label, q, mk) => `<div class="strip"${mk ? ` data-mk="${mk}"` : ''}>${IC.up}<span>${label}</span>${q ? `<span class="q">${q}</span>` : ''}</div>`;
+function band() {
+  return `<div class="band">
+    <div class="brow" style="top:12px">${IC.term}<b>Background processes</b><span class="v">1 running · 5 total</span><span class="c">${IC.chevR('#8e8e93', 12)}</span></div>
+    <div class="brow" style="top:51px">${IC.box}<b>Tasks</b><span class="bl">${TASK}</span><span class="pill"><i></i>Done</span><span class="c">${IC.chevR('#8e8e93', 12)}</span></div>
+    <div class="brow" style="top:88px"><span class="chip">${IC.fork} orbit…94104</span><span class="add">+647</span><span class="del">−0</span><span class="files">· 11 fi…</span><span class="merged">✓ Merged</span></div>
+    <div class="cmp"><div class="ph">Message...</div><div class="tb"><span style="font-size:28px;font-weight:300;line-height:1;color:#55555e">+</span><span>Auto</span><span class="md">Opus 5.5 <span>Max</span></span><span class="bar"></span>${IC.ring}<span class="send">${IC.sendUp}</span></div></div>
+  </div><div class="home"></div>`;
+}
+const msg = (t, mk) => `<div class="msg"${mk ? ` data-mk="${mk}"` : ''}><p>${t}</p></div>`;
+const tools = (n, chip, mk) => `<div class="tools"${mk ? ` data-mk="${mk}"` : ''}>${IC.chevR('#C4C4C8', 12)}<span class="ib">${IC.tools}</span><span class="nm">Tools × ${n}</span><span class="sc">${n} succeeded</span><span class="tc">${chip}</span><span class="ok">${IC.okc(15)}</span></div>`;
+const downBtn = `<div class="down">${IC.down}</div>`;
+
+/* ── today: the card ── */
+function card(mk) {
+  return `<div class="wcard"${mk.card ? ` data-mk="${mk.card}"` : ''}>
+    <div class="h">${IC.eye('#8E8E93', 15)}<span>Watch triggered</span></div>
+    <div class="why">1 of 1 finished · 0 of 1 failed</div>
+    <div class="tg"><span${mkAttr(mk.tg)}>Task 01a11e30 is now DONE</span></div>
+    <div class="meta">Queued by a watch, not typed by you · generation 1 · 42m ago</div>
+    <div class="vw">View watch</div>
+    <div class="raw">What the agent received${IC.cvRaw}</div>
+  </div>`;
+}
+
+/* ── proposal: the line ──
+   o: { mark: 'eye'|'x'|'check'|'clock', title, name, chip, time, open, failed, queued, fold, out, foot, mk: {line, name, fold, cv} } */
+function wline(o) {
+  const mk = o.mk || {};
+  const at = (k) => mkAttr(mk[k]);
+  const glyph = { eye: IC.eye('#8E8E93', 15), x: IC.xc(13), check: IC.cc(13), clock: IC.clk(13) }[o.mark || 'eye'];
+  const t = `<span class="wl-t${o.failed ? ' red' : ''}">${o.title}</span>`;
+  const chip = o.chip ? `<span class="wl-chip">${o.chip}</span>` : '';
+  const time = o.time ? `<span class="wl-meta">${o.time}</span>` : '';
+  const det = `<span class="wl-meta">${o.detail || '详情'}</span><span class="wl-cv${o.open ? ' open' : ''}"${at('cv')}>${IC.cvLine}</span>`;
+  const h = `<div class="wl-h"><span class="wl-mk">${glyph}</span>${t}${o.name ? `<span class="wl-n">${o.name}</span>` : ''}${chip}${time}${det}</div>`;
+  const v = `<div class="wl-v"><div class="r1"><span class="wl-mk">${glyph}</span>${t}</div>${o.name ? `<div class="r2"${at('name')}>${o.name}</div>` : ''}<div class="r3">${chip}${time}${det}</div></div>`;
+  return `<div class="wake"${at('wake')}><div class="wl${o.queued ? ' queued' : ''}"${at('line')}>${h}${v}</div>${o.open ? fold(o.fold, mk.fold) : ''}${o.out || ''}${o.foot || ''}</div>`;
+}
+/* f: { why, targets: [{line, red}], more, meta } */
+function fold(f, mk) {
+  return `<div class="wl-fold"${mkAttr(mk)}${mk ? ' data-mkpad="9"' : ''}>
+    <div class="why">${f.why}</div>
+    ${(f.targets || []).map((t) => `<div class="tg${t.red ? ' red' : ''}">${t.line}</div>`).join('')}
+    ${f.more ? `<div class="meta">${f.more}</div>` : ''}
+    <div class="meta">${f.meta || 'Queued by a watch, not typed by you · generation 1'}</div>
+    <div class="vw">View watch</div>
+    <div class="raw">What the agent received${IC.cvRaw}</div>
+  </div>`;
+}
+const FOLD1 = { why: '1 of 1 finished · 0 of 1 failed', targets: [{ line: `Task ${TASK} is now DONE` }] };
+
+/* ── the three phones ── */
+document.getElementById('p-today').innerHTML = chrome(strip('Your question', '', 3)) +
+  `<div class="tx">${msg(P1)}${card({ card: 1, tg: '2:dot' })}${msg(P2)}${tools(7, 'orbit · merge_receipt')}${msg(P3)}</div>${downBtn}` + band();
+
+document.getElementById('p-line').innerHTML = chrome(strip('Your question', '', 3)) +
+  `<div class="tx">${msg(P1)}${wline({ title: 'Watch triggered', name: TASK, chip: 'DONE', time: '42m ago', mk: { line: 1, name: '2:dot' } })}${msg(P2)}${tools(7, 'orbit · merge_receipt')}${msg(P3)}${tools(3, 'git · merge', 4)}</div>${downBtn}` + band();
+
+document.getElementById('p-open').innerHTML = chrome(strip('Your question', '')) +
+  `<div class="tx">${msg(P1)}${wline({ title: 'Watch triggered', name: TASK, chip: 'DONE', time: '42m ago', open: true, fold: FOLD1, mk: { cv: '1:dot', fold: 2 } })}${msg(P2)}${tools(7, 'orbit · merge_receipt')}${msg(P3)}</div>${downBtn}` + band();
+
+/* ── snippets ── */
+const put = (id, html) => { document.getElementById(id).insertAdjacentHTML('beforeend', html); };
+const ctx = (t) => `<div class="ctx">${t}</div>`;
+const FIX = '修复登录跳转后的空白页', SORT = '任务列表按截止时间排序', DARK = '设置页加深色模式开关';
+
+put('s-fail1', ctx('修复已经派出去了，跑完我再看结果。') +
+  wline({ mark: 'x', failed: true, title: 'Watch triggered', name: FIX, chip: 'FAILED', time: '5m ago', mk: { line: 1 } }) +
+  ctx('失败了。我先看它最后的日志，再决定是重试还是换个修法。'));
+
+put('s-fail3', ctx('三个任务都派出去了，全部结束我再汇总。') +
+  wline({ mark: 'x', failed: true, title: 'Watch triggered', name: '3 tasks', chip: '1 of 3 failed', time: '5m ago', mk: { line: 1 },
+          out: `<div class="wl-out" data-mk="2"><div class="tg red">Task ${FIX} is now FAILED</div></div>` }) +
+  ctx('两个完成了，修复登录跳转那个失败了。我先看它的日志。'));
+
+put('s-three', ctx('三个任务都派出去了，全部结束我再汇总。') +
+  wline({ title: 'Watch triggered', name: '3 tasks', time: '5m ago', open: true, mk: { cv: '1:dot', fold: 2 },
+          fold: { why: '3 of 3 finished · 0 of 3 failed', targets: [{ line: `Task ${FIX} is now DONE` }, { line: `Task ${SORT} is now DONE` }, { line: `Task ${DARK} is now DONE` }] } }) +
+  ctx('三个都完成了，我逐个看一下改动。'));
+
+put('s-ends',
+  wline({ title: 'Watch expired', time: '2h ago', open: true, mk: { cv: '1:dot', fold: 2 },
+          fold: { why: 'Its deadline passed before its condition held. It will not wake this session again.', meta: 'Queued by a watch, not typed by you' } }) +
+  '<div class="gap"></div>' +
+  wline({ title: 'Watch stopped: access lost', time: '1d ago' }) +
+  '<div class="gap"></div>' +
+  wline({ title: 'Watch stopped: every target is gone', time: '1d ago' }));
+
+put('s-queued', ctx('合并检查还在跑，大约还要两分钟。') +
+  wline({ title: 'Watch triggered', name: TASK, chip: 'DONE', time: 'just now', queued: true, mk: { cv: '1:dot' },
+          foot: `<div class="wl-q" data-mk="2"><span>Queued for next turn</span><a>Withdraw wake</a></div>` }));
+
+put('s-und', ctx('完成后，要我帮你发版的话说一声。') +
+  wline({ title: 'Watch triggered', name: TASK, chip: 'DONE', time: '1m ago', mk: { foot: 1 },
+          foot: `<div class="wl-und" data-mk="1">The session has not confirmed it received this.</div>` }));
+
+put('s-stick-now', `<div class="stk" data-mk="1">${IC.up}<span>Watch triggered</span><span class="q">1 of 1 finished · 0 of 1 failed</span></div>` +
+  ctx('任务已转为完成（watch 回报的是我确认后的状态）。'));
+put('s-stick-new', `<div class="stk" data-mk="2">${IC.up}<span>Your question</span><span class="q">按推荐的来，一次落地</span></div>` +
+  ctx('任务已转为完成（watch 回报的是我确认后的状态）。'));
+
+const BG = (mark) => wline({ mark: 'check', title: 'Background job finished', name: 'web 全量测试', chip: 'exit 0', time: '3m ago', detail: '任务详情' });
+put('s-icon-a', '<div class="gap"></div>' + BG() + '<div class="gap"></div>' +
+  wline({ title: 'Watch triggered', name: TASK, chip: 'DONE', time: '1m ago' }) + '<div class="gap"></div>' +
+  wline({ mark: 'x', failed: true, title: 'Watch triggered', name: FIX, chip: 'FAILED', time: 'now' }) + '<div class="gap"></div>' +
+  wline({ title: 'Watch expired', time: '2h ago' }));
+put('s-icon-b', '<div class="gap"></div>' + BG() + '<div class="gap"></div>' +
+  wline({ mark: 'check', title: 'Watch triggered', name: TASK, chip: 'DONE', time: '1m ago' }) + '<div class="gap"></div>' +
+  wline({ mark: 'x', failed: true, title: 'Watch triggered', name: FIX, chip: 'FAILED', time: 'now' }) + '<div class="gap"></div>' +
+  wline({ mark: 'clock', title: 'Watch expired', time: '2h ago' }));
+
+/* ViewThatFits: the one-row line when it fits, else name and closing each on their own row. */
+function fitLines() {
+  document.querySelectorAll('.wl').forEach((wl) => {
+    wl.classList.remove('stacked');
+    const h = wl.querySelector('.wl-h');
+    if (h.scrollWidth > h.clientWidth + 0.5) wl.classList.add('stacked');
+  });
+}
+window.fitLines = fitLines;
+
+function drawMarks() {
+  document.querySelectorAll('.ol-mk, .dot-mk').forEach((e) => e.remove());
+  document.querySelectorAll('.phone, .snip').forEach((ph) => {
+    const pr = ph.getBoundingClientRect();
+    const W = pr.width;
+    const tx = ph.querySelector('.tx');
+    ph.querySelectorAll('[data-mk]').forEach((el) => {
+      const r = el.getBoundingClientRect();
+      let top = r.top, bottom = r.bottom;
+      if (tx && tx.contains(el)) { const c = tx.getBoundingClientRect(); top = Math.max(top, c.top + 4); bottom = Math.min(bottom, c.bottom - 4); }
+      const pad = Number(el.dataset.mkpad || 4);
+      const L = Math.max(4, r.left - pr.left - pad), R = Math.min(W - 4, r.right - pr.left + pad);
+      const T = Math.max(2, top - pr.top - pad), B = Math.min(pr.height - 4, bottom - pr.top + pad);
+      if (el.dataset.mkpos === 'dot') {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const t = range.getBoundingClientRect();
+        const dot = document.createElement('div');
+        dot.className = 'dot-mk';
+        dot.textContent = el.dataset.mk;
+        dot.style.cssText = `left:${Math.min(t.right - pr.left + 6, W - 26)}px;top:${(t.top + t.bottom) / 2 - pr.top - 11}px`;
+        ph.appendChild(dot);
+        return;
+      }
+      const box = document.createElement('div');
+      box.className = 'ol-mk';
+      box.style.cssText = `left:${L}px;top:${T}px;width:${R - L}px;height:${B - T}px`;
+      ph.appendChild(box);
+      const dot = document.createElement('div');
+      dot.className = 'dot-mk';
+      dot.textContent = el.dataset.mk;
+      dot.style.cssText = `left:${Math.min(R - 16, W - 30)}px;top:${Math.max(-6, T - 13)}px`;
+      ph.appendChild(dot);
+    });
+  });
+}
+window.drawMarks = drawMarks;
+
+/* geometry probe for the renderer: line heights vs the card's, and anything clipped. */
+window.probe = () => {
+  const h = (sel) => { const e = document.querySelector(sel); return e ? Math.round(e.getBoundingClientRect().height * 10) / 10 : null; };
+  const out = { card: h('#p-today .wcard'), line: h('#p-line .wake'), open: h('#p-open .wake') };
+  const clipped = [];
+  document.querySelectorAll('.wl-v .r2, .t2, .brow .bl, .tools .tc, .stk .q').forEach((e) => { if (e.scrollWidth > e.clientWidth + 1) clipped.push(e.textContent.slice(0, 30)); });
+  out.ellipsized = clipped;
+  out.stacked = [...document.querySelectorAll('.wl')].map((w) => (w.classList.contains('stacked') ? 'v' : 'h')).join('');
+  const caps = document.querySelector('#p-today .card');
+  return out;
+};
+document.fonts.ready.then(() => requestAnimationFrame(() => { fitLines(); drawMarks(); }));
+</script>
+</body>
+</html>

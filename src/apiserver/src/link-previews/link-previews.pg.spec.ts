@@ -464,6 +464,51 @@ test('link previews: five kinds of card, one answer for everything out of reach,
     }
   });
 
+  await t.test('watching counts a task and the session that runs it as one target', async () => {
+    // Parked on one task twice — on the task, and on the session running it — and on two sessions
+    // that run nothing: a plain one, and a conversation an @-mention opened about that same task.
+    const work = await task(me.ownerId, 'Fold the run into its task');
+    const runOfWork = await run(me.ownerId, work, RunStatus.RUNNING);
+    const [parked, plain, mention] = [randomUUID(), randomUUID(), randomUUID()];
+    for (const [id, title, about] of [
+      [parked, 'Waits on the work', null],
+      [plain, 'A child session', null],
+      [mention, 'About the work', work],
+    ] as const) {
+      await db.session.create({
+        data: {
+          id, ownerId: me.ownerId, creatorId: me.ownerId, title, prompt: 'p',
+          status: RunStatus.AWAITING_INPUT, dispatchOrigin: SessionDispatchOrigin.USER,
+          startsTaskWork: false, contextTaskId: about,
+        },
+      });
+    }
+    const parkOn = (kind: 'TASK' | 'SESSION', ids: string[]) =>
+      db.watch.create({
+        data: {
+          ownerId: me.ownerId,
+          observerType: 'SESSION',
+          observerSessionId: parked,
+          predicate: { kind: 'ALL', over: 'ALL_TARGETS', leaf: kind === 'TASK' ? 'TASK_TERMINAL' : 'SESSION_TURN_SETTLED' },
+          action: 'RESUME_SESSION',
+          state: 'ACTIVE',
+          expiresAt: new Date(now + 24 * HOUR),
+          targets: { create: ids.map((id) => ({ targetKind: kind, targetResourceId: id, state: 'OBSERVED' })) },
+        },
+      });
+    await parkOn('TASK', [work]);
+    await parkOn('SESSION', [runOfWork]);
+    await parkOn('SESSION', [plain, mention]);
+
+    const asked = await ask([{ kind: 'session', id: pub(parked) }]);
+    assert.equal(asked.status, 200, asked.body);
+    assert.deepEqual(
+      asked.json.previews[0].session.watching,
+      { active: 3, paused: 0, targets: 3 },
+      'the task with its run, the plain session, and the conversation that is only about the task',
+    );
+  });
+
   await t.test('a task card: status, live overlays, project, assignee, runs and the newest run', () => {
     const card = byId(pub(taskId)).task;
     assert.equal(card.title, 'Write the batch read');

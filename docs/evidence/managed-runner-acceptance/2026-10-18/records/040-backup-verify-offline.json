@@ -1,0 +1,100 @@
+{
+ "checks": [
+  {
+   "check": "the archive decompresses to the exported image (SHA-256)",
+   "ok": true,
+   "value": "4a5777903d90cfb3"
+  },
+  {
+   "check": "ext4 is clean in the image",
+   "ok": true,
+   "value": "clean"
+  },
+  {
+   "check": "the probe written before the backup is in it: same random bytes, SQLite rows and Git commit, integrity_check ok",
+   "ok": true,
+   "value": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   }
+  },
+  {
+   "check": "every upload of the runner is in it with its checksum",
+   "ok": true,
+   "value": 1
+  },
+  {
+   "check": "the engine's commit is in the workspace repository, its file with its checksum",
+   "ok": true,
+   "value": 0
+  },
+  {
+   "check": "every SQLite database in it passes integrity_check",
+   "ok": true,
+   "value": [
+    "t08-probe/b125243/rows.sqlite",
+    "t08-probe/p1/rows.sqlite"
+   ]
+  },
+  {
+   "check": "the workspace repository passes git fsck",
+   "ok": true,
+   "value": 0
+  },
+  {
+   "check": "the runner identity in it is ann's runner",
+   "ok": true,
+   "value": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+  },
+  {
+   "check": "the engine's transcripts are in it as they were",
+   "ok": true,
+   "value": 1
+  }
+ ],
+ "endedAt": "2026-10-18T12:56:08.583+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "backup",
+ "result": {
+  "ext4": {
+   "Block count": "524288",
+   "Filesystem UUID": "4e2f1aa1-c18a-4314-9789-bcb86d958901",
+   "Filesystem created": "Sun Oct 18 20:37:17 2026",
+   "Filesystem state": "clean",
+   "Inode count": "131072"
+  },
+  "extractedCopyRemoved": true,
+  "probe": {
+   "gitFsckExit": 0,
+   "gitHead": "7f8108f5328cfc3357e2c01ac8eb1a4d121a5e37",
+   "integrityCheck": "ok",
+   "maxRow": 150,
+   "mount": [],
+   "randomSha256": "b146e40fe13f66c4cd0ce89ee7e865a774da66b107108013528efe79d6c67207",
+   "rows": 150,
+   "rowsSha256": "8436f7a9143c40be270617776226e4957e33183e8a50cb8ae90591334ede5596"
+  },
+  "rawSha256": "4a5777903d90cfb3e17c57a14793951aaea39a50b76893fc1d8c72a9561de04a",
+  "rdumpExit": 0,
+  "same": {
+   "gitHead": true,
+   "randomSha256": true,
+   "rows": true,
+   "rowsSha256": true
+  },
+  "seconds": 4.3,
+  "sqlite": {
+   "t08-probe/b125243/rows.sqlite": "ok",
+   "t08-probe/p1/rows.sqlite": "ok"
+  },
+  "transcripts": 1,
+  "uploads": 1,
+  "workspaceFsckExit": 0
+ },
+ "seconds": 4.3,
+ "startedAt": "2026-10-18T12:56:04.249+00:00",
+ "step": "verify-offline"
+}

@@ -1,12 +1,16 @@
 /**
- * The narrow Kubernetes surface the managed runner manager uses: PVCs, Secrets and Pods in the one
- * configured namespace (get, create, delete, list, watch), and a read of a PV, whose CSI volume
- * handle is part of a data volume's identity. Nothing else — no cluster-scoped writes, no exec, no
- * node or storage administration.
+ * The narrow Kubernetes surface KubernetesBackend (kubernetes-backend.ts) uses: PVCs, Secrets and
+ * Pods in the one configured namespace (get, create, delete, list, watch), and a JSON Patch of a Pod,
+ * which takes the manager's own stop-report finalizer off once the Pod's stop is recorded; a read of
+ * a PV, whose CSI volume handle is part of a data volume's identity; a list of VolumeAttachments,
+ * which says whether that volume is still attached to a node; and a read of a ConfigMap, the only
+ * way a fencing receipt reaches the manager (it can read one, never write one). Nothing else — no
+ * cluster-scoped writes, no exec, no node or storage administration.
  *
  * Two implementations: `kube-http-client.ts`, constructed only when the feature is enabled and an
  * explicit context and namespace are configured; and the test fake in
- * `test-support/fake-kube-client.ts`. The manager is written against this interface alone.
+ * `test-support/fake-kube-client.ts`. KubernetesBackend is written against this interface alone, and
+ * the manager against the run backend's (managed-runner-backend.ts).
  */
 
 export interface KubeObjectMeta {
@@ -16,6 +20,8 @@ export interface KubeObjectMeta {
   resourceVersion?: string;
   creationTimestamp?: string;
   deletionTimestamp?: string;
+  /** What is still to happen before a deleted object goes; while any is listed it stays. */
+  finalizers?: string[];
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
   ownerReferences?: Array<{ apiVersion: string; kind: string; name: string; uid: string }>;
@@ -42,7 +48,8 @@ export interface PersistentVolume {
   spec: {
     storageClassName?: string;
     claimRef?: { namespace?: string; name?: string; uid?: string };
-    csi?: { driver?: string; volumeHandle?: string };
+    /** Ceph-CSI states the RBD `pool` and `imageName` in `volumeAttributes`. */
+    csi?: { driver?: string; volumeHandle?: string; volumeAttributes?: Record<string, string> };
     persistentVolumeReclaimPolicy?: string;
   };
   status?: { phase?: string };
@@ -58,19 +65,58 @@ export interface Secret {
   data?: Record<string, string>;
 }
 
+/** One container's state as the kubelet reports it: exactly one of the three is set. */
+export interface PodContainerStatus {
+  name: string;
+  state?: {
+    waiting?: { reason?: string };
+    running?: { startedAt?: string };
+    terminated?: { exitCode?: number; reason?: string; finishedAt?: string };
+  };
+}
+
+export interface PodCondition {
+  type: string;
+  status: string;
+  reason?: string;
+}
+
 export interface Pod {
   apiVersion: 'v1';
   kind: 'Pod';
   metadata: KubeObjectMeta;
   spec: {
     nodeName?: string;
-    volumes?: Array<{ name: string; persistentVolumeClaim?: { claimName: string }; [key: string]: unknown }>;
+    volumes?: Array<{ name: string; persistentVolumeClaim?: { claimName: string; readOnly?: boolean }; [key: string]: unknown }>;
     [key: string]: unknown;
   };
-  status?: { phase?: string; startTime?: string; reason?: string };
+  status?: {
+    phase?: string;
+    startTime?: string;
+    reason?: string;
+    conditions?: PodCondition[];
+    initContainerStatuses?: PodContainerStatus[];
+    containerStatuses?: PodContainerStatus[];
+  };
 }
 
-export type KubeObject = PersistentVolumeClaim | PersistentVolume | Secret | Pod;
+/** A volume attached, or being attached or detached, to a node (storage.k8s.io/v1, cluster-scoped). */
+export interface VolumeAttachment {
+  apiVersion: 'storage.k8s.io/v1';
+  kind: 'VolumeAttachment';
+  metadata: KubeObjectMeta;
+  spec: { attacher?: string; nodeName?: string; source: { persistentVolumeName?: string } };
+  status?: { attached?: boolean };
+}
+
+export interface ConfigMap {
+  apiVersion: 'v1';
+  kind: 'ConfigMap';
+  metadata: KubeObjectMeta;
+  data?: Record<string, string>;
+}
+
+export type KubeObject = PersistentVolumeClaim | PersistentVolume | Secret | Pod | ConfigMap;
 
 export interface KubeWatchEvent<T> {
   type: 'ADDED' | 'MODIFIED' | 'DELETED' | 'BOOKMARK' | 'ERROR';
@@ -88,11 +134,16 @@ export interface KubeDeleteOptions {
   uid?: string;
 }
 
+export interface KubeCreateOptions {
+  /** `dryRun=All`: admission runs and answers, nothing is stored. */
+  dryRun?: boolean;
+}
+
 /** One namespaced resource of the configured namespace. */
 export interface KubeResource<T> {
   /** The object, or null when the API answers 404. */
   get(name: string): Promise<T | null>;
-  create(object: T): Promise<T>;
+  create(object: T, options?: KubeCreateOptions): Promise<T>;
   /** Resolves once the API accepted the deletion; a 404 resolves too (already gone). */
   delete(name: string, options?: KubeDeleteOptions): Promise<void>;
   list(options?: { labelSelector?: string }): Promise<T[]>;
@@ -102,14 +153,34 @@ export interface KubeResource<T> {
   ): KubeWatch;
 }
 
+/** One JSON Patch operation (RFC 6902), of the two kinds a Pod's patch is made of. */
+export interface JsonPatchOperation {
+  op: 'test' | 'remove';
+  path: string;
+  value?: unknown;
+}
+
+/** The Pods of the namespace: a resource like the others, and a patch of one. */
+export interface KubePods extends KubeResource<Pod> {
+  /**
+   * Apply `operations` to the Pod `name` (`application/json-patch+json`). The API server applies
+   * them all or none; a `test` that does not hold is refused, nothing changed.
+   */
+  patch(name: string, operations: JsonPatchOperation[]): Promise<Pod>;
+}
+
 export interface ManagedKubeClient {
   /** The one namespace every resource below is addressed in. */
   readonly namespace: string;
   readonly persistentVolumeClaims: KubeResource<PersistentVolumeClaim>;
   readonly secrets: KubeResource<Secret>;
-  readonly pods: KubeResource<Pod>;
+  readonly pods: KubePods;
+  /** Read-only: where an operator leaves a fencing receipt (managed-runner-fencing.ts). */
+  readonly configMaps: Pick<KubeResource<ConfigMap>, 'get'>;
   /** Read-only and cluster-scoped: the PV a bound claim names, or null on 404. */
   getPersistentVolume(name: string): Promise<PersistentVolume | null>;
+  /** Read-only and cluster-scoped: every VolumeAttachment, whatever its node or volume. */
+  listVolumeAttachments(): Promise<VolumeAttachment[]>;
 }
 
 /**
@@ -136,6 +207,20 @@ export class KubeAmbiguousError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'KubeAmbiguousError';
+  }
+}
+
+/**
+ * No request reached the API server: the connection could not be made — refused, reset or timed out
+ * before the TLS session was up, a name that does not resolve. Nothing was applied, so nothing has to
+ * be read back; it is still no answer, and transient like any ambiguous error. The manager tells it
+ * apart: an API server that cannot be reached at all spends no provisioning attempt
+ * (managed-runner-manager.ts, `unreachable`).
+ */
+export class KubeUnreachableError extends KubeAmbiguousError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'KubeUnreachableError';
   }
 }
 

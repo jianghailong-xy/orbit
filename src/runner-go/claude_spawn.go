@@ -25,10 +25,6 @@ import (
 // firstSpawn opens a new conversation (--session-id); a re-spawn continues the existing one
 // (--resume), whose local transcript file the caller must have ensured already.
 func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) []string {
-	// A Wiki maintenance run is not started the way its workspace starts every other session.
-	if job.wikiMaintenanceCleanStart() {
-		return wikiMaintenanceClaudeArgs(job, scratchDir, firstSpawn)
-	}
 	a := job.Agent
 	// --max-turns / --max-budget-usd are process-wide (Phase 0), so they are
 	// intentionally NOT passed for a long-lived interactive session.
@@ -44,6 +40,10 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 	}
 	if a.Effort != "" {
 		args = append(args, "--effort", claudeEffortFlag(a.Effort))
+	}
+	// The engine's guess at the person's next message, after each turn (claude_prompt_suggestion.go).
+	if claudePromptSuggestionsOn(job) {
+		args = append(args, "--prompt-suggestions")
 	}
 	// Apply the agent's configured prompts (claim payload carries both; previously
 	// dropped here). --system-prompt replaces the default, --append-system-prompt adds.
@@ -125,8 +125,9 @@ func claudeCommandArgs(job *ClaimedSession, scratchDir string, firstSpawn bool) 
 }
 
 // writeClaudeSettings writes this session's private settings file — the PreToolUse hooks
-// that send background work to the runner, and the session's fast-mode opt-in — and
-// returns its path, or "" when there is nothing to say.
+// that send background work to the runner, the session's fast-mode opt-in, and the
+// standing turn-off of everything the runner's claude.ai account supplies — and returns
+// its path, or "" when the session has no scratch dir to put it in.
 //
 // Two hook matchers, for the two halves of one story: the launch door, and the readers
 // that would be asked about a job this CLI has never heard of.
@@ -144,7 +145,20 @@ func writeClaudeSettings(scratchDir, orbitExe string, fastMode bool) (string, er
 	if scratchDir == "" {
 		return "", nil
 	}
-	settings := map[string]interface{}{}
+	// A session's tools are Orbit's to decide, not the login's. The connectors, plugins and
+	// skills a claude.ai account supplies arrive and vanish with that account — they widen
+	// what an unattended agent can reach (mail, files, issue trackers), the same session
+	// offers different tools on the next account, and while any of them is unauthorized the
+	// engine tells the model every session to have a human run an OAuth flow, which a
+	// headless session cannot do and an Orbit user has no surface to act on. All three are
+	// off for this invocation. This file is the FLAG settings layer, so the machine's own
+	// interactive claude keeps them; --strict-mcp-config is deliberately not the switch,
+	// because it would also drop a repository's checked-in .mcp.json.
+	settings := map[string]interface{}{
+		"disableClaudeAiConnectors": true,
+		"syncClaudeAiPlugins":       false,
+		"syncClaudeAiSkills":        false,
+	}
 	if orbitExe != "" {
 		guard := []map[string]interface{}{{"type": "command", "command": orbitExe + " hook bg-guard"}}
 		settings["hooks"] = map[string]interface{}{
@@ -161,9 +175,6 @@ func writeClaudeSettings(scratchDir, orbitExe string, fastMode bool) (string, er
 	// so would be a second place claiming to decide it.
 	if fastMode {
 		settings["fastMode"] = true
-	}
-	if len(settings) == 0 {
-		return "", nil
 	}
 	b, err := json.Marshal(settings)
 	if err != nil {
@@ -216,10 +227,6 @@ func spawnClaude(ctx context.Context, job *ClaimedSession, execDir string, args 
 	// Where `orbit mcp` (a child of this process) reaches the runner to start a
 	// background job the runner will own (bgJobEnvPairs).
 	cmd.Env = append(cmd.Env, bgJobEnvPairs(job.SessionID)...)
-	// A Wiki maintenance run's environment is built from nothing instead (wiki_maintenance_session.go).
-	if job.wikiMaintenanceCleanStart() {
-		cmd.Env = wikiMaintenanceEnv(job)
-	}
 	sp := &claudeSpawn{cmd: cmd}
 	var err error
 	if sp.stdin, err = cmd.StdinPipe(); err != nil {

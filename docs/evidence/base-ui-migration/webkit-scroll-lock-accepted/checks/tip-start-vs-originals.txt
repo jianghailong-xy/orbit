@@ -1,0 +1,10 @@
+# tip-start (b2568f28d, before the registration): each failure's expected and actual image against expected-pre (the expectations its globalSetup assembled) and the after original of the same-commit run on b2568f28d
+webkit-light-desktop/settings-saved.png expected 7fb81b5733dd = expected-pre actual 3f7a0158db8f = after original
+webkit-light-desktop/profile-validation.png expected 93218ccee8fd = expected-pre actual 9f1ee22bac54 = after original
+webkit-light-desktop/notification-error.png expected f71ec3a6eb40 = expected-pre actual b0dafa152e08 = after original
+webkit-dark-desktop/settings-saved.png expected 9f4cbab3da76 = expected-pre actual 4bc4460111b9 = after original
+webkit-dark-desktop/profile-validation.png expected 52a0f5eb9e5e = expected-pre actual 8d686d6d4ca7 = after original
+webkit-dark-desktop/notification-error.png expected d12982adfe17 = expected-pre actual aa47ee44b7ff = after original
+webkit-dark-phone/settings-saved.png expected ce46c1231e9b = expected-pre actual 40656db95780 = after original
+webkit-dark-phone/profile-validation.png expected 53f9152dc1de = expected-pre actual 0f3a4108c15f = after original
+webkit-dark-phone/notification-error.png expected f5d6ab570e4a = expected-pre actual 05b985e2a109 = after original

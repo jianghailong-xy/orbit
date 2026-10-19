@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T01:37:31.292",
+    "ingested_at": "2026-10-18T01:37:31.314873+00:00",
+    "ingested_by_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "seq": 31,
+    "session_id": "01a14c95-8c41-761f-8c86-a7f859235b72",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-AMY-BURST-M2",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T01:37:31Z",
+      "kind": "text",
+      "messages": 11,
+      "n": 6,
+      "tool": null
+    }
+  ],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "created_at": "2026-10-18T01:17:11.617",
+    "engine": "claude",
+    "id": "01a14c95-8c41-761f-8c86-a7f859235b72",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-AMY-WK FAKE-WAKEUP 240 AMYWK1 schedule a wakeup"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T01:37:31.56",
+      "client_turn_id": "18188e80-1142-4cb3-865d-f8ad9a2563d7",
+      "content": "T06-AMY-BURST-M2 a message",
+      "created_at": "2026-10-18T01:37:15.711",
+      "delivered_at": "2026-10-18T01:37:31.042",
+      "id": "01a14ca7-ebbf-74a5-8380-2261ae5bb636",
+      "kind": "message",
+      "seq": 3,
+      "status": "ANSWERED"
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+/* The managed runner's state (ManagedRunnerNotice.tsx): above a managed workspace's composer, and
+   on the default landing of an account with nothing to open yet. */
+
+.managed-runner-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: var(--brand-tint);
+  color: var(--text-2);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.managed-runner-notice.attention {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
+.managed-runner-notice > .orbit-spinner,
+.managed-runner-notice-dot {
+  flex: none;
+  margin-top: 2px;
+}
+.managed-runner-notice-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+.managed-runner-notice.attention .managed-runner-notice-dot {
+  background: var(--warning-solid);
+}
+.managed-runner-notice-text {
+  flex: 1;
+  min-width: 0;
+}
+.managed-runner-notice-title {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.managed-runner-notice-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+}
+
+.managed-runner-landing {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+.managed-runner-landing .managed-runner-notice {
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+.managed-runner-landing-register {
+  font-size: 13px;
+}

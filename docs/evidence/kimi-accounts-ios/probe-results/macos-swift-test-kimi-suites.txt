@@ -1,0 +1,42 @@
+Test Case '-[OrbitKitTests.KimiAccountsTests testAddAccountNeedsARunnerThatKeepsKimiAccounts]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testAddAccountNeedsARunnerThatKeepsKimiAccounts]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testAutomaticWeighsKimisMonthAsItsLongestWindow]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testAutomaticWeighsKimisMonthAsItsLongestWindow]' passed (0.028 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testEachAccountShowsItsOwnThreeWindows]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testEachAccountShowsItsOwnThreeWindows]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testEachAccountsLineSaysItsSiteThenItsDirectory]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testEachAccountsLineSaysItsSiteThenItsDirectory]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testKimiAutomaticIsDecidedByItsOwnPickAndEnv]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testKimiAutomaticIsDecidedByItsOwnPickAndEnv]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testNeedsAttentionWeighsEveryKimiAccount]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testNeedsAttentionWeighsEveryKimiAccount]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testNextMarksTheAccountANewSessionStartsOnOnEveryEngine]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testNextMarksTheAccountANewSessionStartsOnOnEveryEngine]' passed (0.105 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testTheConsoleCarriesTheKimiAccount]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testTheConsoleCarriesTheKimiAccount]' passed (0.050 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testTheGatesAndKeysAreTheWebsAndTheServers]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testTheGatesAndKeysAreTheWebsAndTheServers]' passed (0.005 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testThePickerListsKimiAccountsByTheirTightestWindow]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testThePickerListsKimiAccountsByTheirTightestWindow]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testTheRunnerReportDecodesEachAccountsSiteAndKimisWindows]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testTheRunnerReportDecodesEachAccountsSiteAndKimisWindows]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testTheRunnerRowCountsTheAccountsAndNamesTheNextOne]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testTheRunnerRowCountsTheAccountsAndNamesTheNextOne]' passed (0.068 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testTheSessionAndItsWorkspaceCarryTheirKimiAccount]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testTheSessionAndItsWorkspaceCarryTheirKimiAccount]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.KimiAccountsTests testTheSignInsCurrentIsTheAccountsOwnSite]' started.
+Test Case '-[OrbitKitTests.KimiAccountsTests testTheSignInsCurrentIsTheAccountsOwnSite]' passed (0.001 seconds).
+Test Case '-[OrbitKitTests.KimiSiteTests testAPressNamesItsSiteWhereTheRunnerCanBeToldIt]' started.
+Test Case '-[OrbitKitTests.KimiSiteTests testAPressNamesItsSiteWhereTheRunnerCanBeToldIt]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.KimiSiteTests testEachSiteNamesItsDomainItsPlaceAndTheOther]' started.
+Test Case '-[OrbitKitTests.KimiSiteTests testEachSiteNamesItsDomainItsPlaceAndTheOther]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.KimiSiteTests testOnlyARunnerThatDeclaresItCanBeToldTheSite]' started.
+Test Case '-[OrbitKitTests.KimiSiteTests testOnlyARunnerThatDeclaresItCanBeToldTheSite]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.KimiSiteTests testTheLoginLineAndTheRowSayWhichSite]' started.
+Test Case '-[OrbitKitTests.KimiSiteTests testTheLoginLineAndTheRowSayWhichSite]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.KimiSiteTests testTheRunnersLoginSiteIsTheOneItsProbeReported]' started.
+Test Case '-[OrbitKitTests.KimiSiteTests testTheRunnersLoginSiteIsTheOneItsProbeReported]' passed (0.000 seconds).
+Test Case '-[OrbitKitTests.KimiSiteTests testTheSignInSaysWhatTheWebSays]' started.
+Test Case '-[OrbitKitTests.KimiSiteTests testTheSignInSaysWhatTheWebSays]' passed (0.021 seconds).
+Test Case '-[OrbitKitTests.KimiSiteTests testTheSiteOfAPageIsReadOffItsAddress]' started.
+Test Case '-[OrbitKitTests.KimiSiteTests testTheSiteOfAPageIsReadOffItsAddress]' passed (0.000 seconds).

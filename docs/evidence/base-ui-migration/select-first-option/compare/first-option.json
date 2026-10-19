@@ -1,0 +1,4198 @@
+{
+ "ref": [
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "unexpected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [],
+    "afterEnter": "null",
+    "expanded": "true",
+    "focused": false
+   },
+   "equal": false
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  }
+ ],
+ "del": [
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-desktop",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-light-phone",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-desktop",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "chromium-dark-phone",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-desktop",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-light-phone",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-desktop",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by pointer with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by ArrowDown with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by Enter with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by Space with no value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "Never"
+    ],
+    "afterEnter": "never",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by pointer with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by ArrowDown with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by Enter with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by Space with a value, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by pointer with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by ArrowDown with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by Enter with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  },
+  {
+   "project": "webkit-dark-phone",
+   "test": "opened by Space with no value and the first option disabled, the list is on the option the old select was on and Enter picks it",
+   "status": "expected",
+   "antd": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "orbit": {
+    "highlighted": [
+     "7 days"
+    ],
+    "afterEnter": "7",
+    "expanded": "false",
+    "focused": true
+   },
+   "equal": true
+  }
+ ]
+}

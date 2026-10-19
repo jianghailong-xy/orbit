@@ -1,0 +1,156 @@
+{
+ "tests": {
+  "start": {
+   "passed": 756,
+   "failed": 20
+  },
+  "base": {
+   "passed": 756,
+   "failed": 20
+  }
+ },
+ "reds": 20,
+ "sameOnBoth": true,
+ "rows": [
+  {
+   "test": "choices-first-frame.browser.mjs › menu is drawn where it settles from its first frame, at the replaced popup's place › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: page, pointer: AntD's box\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 2\n+ Received  + 2\n\n  Object {\n-   \"height\": 177,\n-   \"width\": 130.063,\n+   \"height\": 240.953,\n+   \"width\": 250,\n    \"x\": 0,\n    \"y\": 36,\n  }\n\n  203 |       }\n  204 |       const expected = fromAnchor(antd.settled, kind.compared);\n> 205 |       expect.soft(within(fromAnchor(settled, kind.compared), expected), `${place.name}, ${opening}: AntD's box`).toEqual(expected);\n      |                                                                                                                  ^\n  206 "
+  },
+  {
+   "test": "choices-first-frame.browser.mjs › menu is drawn where it settles from its first frame, at the replaced popup's place › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: page, pointer: AntD's box\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 2\n+ Received  + 2\n\n  Object {\n-   \"height\": 177,\n-   \"width\": 130.063,\n+   \"height\": 240.953,\n+   \"width\": 250,\n    \"x\": 0,\n    \"y\": 36,\n  }\n\n  203 |       }\n  204 |       const expected = fromAnchor(antd.settled, kind.compared);\n> 205 |       expect.soft(within(fromAnchor(settled, kind.compared), expected), `${place.name}, ${opening}: AntD's box`).toEqual(expected);\n      |                                                                                                                  ^\n  206 "
+  },
+  {
+   "test": "choices-first-frame.browser.mjs › menu is drawn where it settles from its first frame, at the replaced popup's place › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: dialog, pointer: AntD's box\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 2\n+ Received  + 2\n\n  Object {\n-   \"height\": 177,\n-   \"width\": 130.063,\n+   \"height\": 240.953,\n+   \"width\": 250,\n    \"x\": 0,\n    \"y\": 36,\n  }\n\n  203 |       }\n  204 |       const expected = fromAnchor(antd.settled, kind.compared);\n> 205 |       expect.soft(within(fromAnchor(settled, kind.compared), expected), `${place.name}, ${opening}: AntD's box`).toEqual(expected);\n      |                                                                                                                  ^\n  20"
+  },
+  {
+   "test": "choices-first-frame.browser.mjs › menu is drawn where it settles from its first frame, at the replaced popup's place › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: dialog, pointer: AntD's box\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 2\n+ Received  + 2\n\n  Object {\n-   \"height\": 177,\n-   \"width\": 130.063,\n+   \"height\": 240.953,\n+   \"width\": 250,\n    \"x\": 0,\n    \"y\": 36,\n  }\n\n  203 |       }\n  204 |       const expected = fromAnchor(antd.settled, kind.compared);\n> 205 |       expect.soft(within(fromAnchor(settled, kind.compared), expected), `${place.name}, ${opening}: AntD's box`).toEqual(expected);\n      |                                                                                                                  ^\n  20"
+  },
+  {
+   "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion matches attachment › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 4\n+ Received  + 4\n\n@@ -1,11 +1,11 @@\n  Object {\n    \"box\": Object {\n-     \"bottom\": 359.7957763671875,\n-     \"height\": 175.7957763671875,\n-     \"right\": 154.0625,\n-     \"width\": 130.0625,\n+     \"bottom\": 423.31378173828125,\n+     \"height\": 239.31378173828125,\n+     \"right\": 274,\n+     \"width\": 250,\n      \"x\": 24,\n      \"y\": 184,\n    },\n    \"opacity\": \"0.965983\",\n    \"time\": 100,\n\n  126 |     if (direction.name === 'bottom') for (const phase of ['enter', 'exit']) {\n  127 |       const midpoint = ({ time, opacity, box }) ="
+  },
+  {
+   "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion matches attachment › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 4\n+ Received  + 4\n\n@@ -1,11 +1,11 @@\n  Object {\n    \"box\": Object {\n-     \"bottom\": 359.7957763671875,\n-     \"height\": 175.7957763671875,\n-     \"right\": 154.0625,\n-     \"width\": 130.0625,\n+     \"bottom\": 423.31378173828125,\n+     \"height\": 239.31378173828125,\n+     \"right\": 274,\n+     \"width\": 250,\n      \"x\": 24,\n      \"y\": 184,\n    },\n    \"opacity\": \"0.965983\",\n    \"time\": 100,\n\n  126 |     if (direction.name === 'bottom') for (const phase of ['enter', 'exit']) {\n  127 |       const midpoint = ({ time, opacity, box }) ="
+  },
+  {
+   "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion matches attachment › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 4\n+ Received  + 4\n\n@@ -1,11 +1,11 @@\n  Object {\n    \"box\": Object {\n-     \"bottom\": 372.7957763671875,\n-     \"height\": 175.7957763671875,\n-     \"right\": 154.0625,\n-     \"width\": 130.0625,\n+     \"bottom\": 436.3138122558594,\n+     \"height\": 239.31381225585938,\n+     \"right\": 274,\n+     \"width\": 250,\n      \"x\": 24,\n      \"y\": 197,\n    },\n    \"opacity\": \"0.965983\",\n    \"time\": 100,\n\n  126 |     if (direction.name === 'bottom') for (const phase of ['enter', 'exit']) {\n  127 |       const midpoint = ({ time, opacity, box }) =>"
+  },
+  {
+   "test": "choices-motion.browser.mjs › normal bottom entrance and exit motion matches attachment › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 4\n+ Received  + 4\n\n@@ -1,11 +1,11 @@\n  Object {\n    \"box\": Object {\n-     \"bottom\": 372.7957763671875,\n-     \"height\": 175.7957763671875,\n-     \"right\": 154.0625,\n-     \"width\": 130.0625,\n+     \"bottom\": 436.3138122558594,\n+     \"height\": 239.31381225585938,\n+     \"right\": 274,\n+     \"width\": 250,\n      \"x\": 24,\n      \"y\": 197,\n    },\n    \"opacity\": \"0.965983\",\n    \"time\": 100,\n\n  126 |     if (direction.name === 'bottom') for (const phase of ['enter', 'exit']) {\n  127 |       const midpoint = ({ time, opacity, box }) =>"
+  },
+  {
+   "test": "choices-motion.browser.mjs › normal flipped entrance and exit motion matches attachment › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 1\n\n@@ -20,8 +20,8 @@\n          \"opacity\": \"1\",\n          \"transform\": \"scaleY(1)\",\n          \"transformOrigin\": \"100% 100%\",\n        },\n      ],\n-     \"origin\": \"130.062px 177px\",\n+     \"origin\": \"250px 240.953px\",\n    },\n  ]\n\n  92 |   for (const phase of ['enter', 'exit']) {\n  93 |     expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))\n> 94 |       .toEqual(samples.antd[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames"
+  },
+  {
+   "test": "choices-motion.browser.mjs › normal flipped entrance and exit motion matches attachment › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 1\n\n@@ -20,8 +20,8 @@\n          \"opacity\": \"1\",\n          \"transform\": \"scaleY(1)\",\n          \"transformOrigin\": \"100% 100%\",\n        },\n      ],\n-     \"origin\": \"130.062px 177px\",\n+     \"origin\": \"250px 240.953px\",\n    },\n  ]\n\n  92 |   for (const phase of ['enter', 'exit']) {\n  93 |     expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))\n> 94 |       .toEqual(samples.antd[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames"
+  },
+  {
+   "test": "choices-motion.browser.mjs › normal flipped entrance and exit motion matches attachment › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 1\n\n@@ -24,8 +24,8 @@\n          \"transformOriginX\": \"100%\",\n          \"transformOriginY\": \"100%\",\n          \"transformOriginZ\": \"0px\",\n        },\n      ],\n-     \"origin\": \"130.0625px 177px\",\n+     \"origin\": \"250px 240.953125px\",\n    },\n  ]\n\n  92 |   for (const phase of ['enter', 'exit']) {\n  93 |     expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))\n> 94 |       .toEqual(samples.antd[phase].map(({ duration, frames, origin, filter }) => ({ dur"
+  },
+  {
+   "test": "choices-motion.browser.mjs › normal flipped entrance and exit motion matches attachment › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 1\n\n@@ -24,8 +24,8 @@\n          \"transformOriginX\": \"100%\",\n          \"transformOriginY\": \"100%\",\n          \"transformOriginZ\": \"0px\",\n        },\n      ],\n-     \"origin\": \"130.0625px 177px\",\n+     \"origin\": \"250px 240.953125px\",\n    },\n  ]\n\n  92 |   for (const phase of ['enter', 'exit']) {\n  93 |     expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))\n> 94 |       .toEqual(samples.antd[phase].map(({ duration, frames, origin, filter }) => ({ dur"
+  },
+  {
+   "test": "choices-motion.browser.mjs › normal top entrance and exit motion matches attachment › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 1\n\n@@ -20,8 +20,8 @@\n          \"opacity\": \"1\",\n          \"transform\": \"scaleY(1)\",\n          \"transformOrigin\": \"100% 100%\",\n        },\n      ],\n-     \"origin\": \"130.062px 177px\",\n+     \"origin\": \"250px 240.953px\",\n    },\n  ]\n\n  92 |   for (const phase of ['enter', 'exit']) {\n  93 |     expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))\n> 94 |       .toEqual(samples.antd[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames"
+  },
+  {
+   "test": "choices-motion.browser.mjs › normal top entrance and exit motion matches attachment › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 1\n\n@@ -20,8 +20,8 @@\n          \"opacity\": \"1\",\n          \"transform\": \"scaleY(1)\",\n          \"transformOrigin\": \"100% 100%\",\n        },\n      ],\n-     \"origin\": \"130.062px 177px\",\n+     \"origin\": \"250px 240.953px\",\n    },\n  ]\n\n  92 |   for (const phase of ['enter', 'exit']) {\n  93 |     expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))\n> 94 |       .toEqual(samples.antd[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames"
+  },
+  {
+   "test": "choices-motion.browser.mjs › normal top entrance and exit motion matches attachment › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 1\n\n@@ -24,8 +24,8 @@\n          \"transformOriginX\": \"100%\",\n          \"transformOriginY\": \"100%\",\n          \"transformOriginZ\": \"0px\",\n        },\n      ],\n-     \"origin\": \"130.0625px 177px\",\n+     \"origin\": \"250px 240.953125px\",\n    },\n  ]\n\n  92 |   for (const phase of ['enter', 'exit']) {\n  93 |     expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))\n> 94 |       .toEqual(samples.antd[phase].map(({ duration, frames, origin, filter }) => ({ dur"
+  },
+  {
+   "test": "choices-motion.browser.mjs › normal top entrance and exit motion matches attachment › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 1\n\n@@ -24,8 +24,8 @@\n          \"transformOriginX\": \"100%\",\n          \"transformOriginY\": \"100%\",\n          \"transformOriginZ\": \"0px\",\n        },\n      ],\n-     \"origin\": \"130.0625px 177px\",\n+     \"origin\": \"250px 240.953125px\",\n    },\n  ]\n\n  92 |   for (const phase of ['enter', 'exit']) {\n  93 |     expect(samples.orbit[phase].map(({ duration, frames, origin, filter }) => ({ duration, frames, origin, filter })))\n> 94 |       .toEqual(samples.antd[phase].map(({ duration, frames, origin, filter }) => ({ dur"
+  },
+  {
+   "test": "choices.browser.mjs › attachment matches the current surface, density and option states › chromium-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 24\n+ Received  + 24\n\n  Array [\n    Object {\n-     \"color\": \"rgb(201, 206, 213)\",\n-     \"height\": 12,\n+     \"color\": \"rgb(138, 138, 142)\",\n+     \"height\": 19,\n      \"kind\": \"svg\",\n      \"paths\": Array [\n        \"M779.3 196.6c-94.2-94.2-247.6-94.2-341.7 0l-261 260.8c-1.7 1.7-2.6 4-2.6 6.4s.9 4.7 2.6 6.4l36.9 36.9a9 9 0 0012.7 0l261-260.8c32.4-32.4 75.5-50.2 121.3-50.2s88.9 17.8 121.2 50.2c32.4 32.4 50.2 75.5 50.2 121.2 0 45.8-17.8 88.8-50.2 121.2l-266 265.9-43.1 43.1c-40.3 40.3-105.8 40.3-146.1 0-19.5-19.5-30.2-45.4-30.2-7"
+  },
+  {
+   "test": "choices.browser.mjs › attachment matches the current surface, density and option states › chromium-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 24\n+ Received  + 24\n\n  Array [\n    Object {\n-     \"color\": \"rgb(31, 35, 41)\",\n-     \"height\": 12,\n+     \"color\": \"rgb(138, 138, 142)\",\n+     \"height\": 19,\n      \"kind\": \"svg\",\n      \"paths\": Array [\n        \"M779.3 196.6c-94.2-94.2-247.6-94.2-341.7 0l-261 260.8c-1.7 1.7-2.6 4-2.6 6.4s.9 4.7 2.6 6.4l36.9 36.9a9 9 0 0012.7 0l261-260.8c32.4-32.4 75.5-50.2 121.3-50.2s88.9 17.8 121.2 50.2c32.4 32.4 50.2 75.5 50.2 121.2 0 45.8-17.8 88.8-50.2 121.2l-266 265.9-43.1 43.1c-40.3 40.3-105.8 40.3-146.1 0-19.5-19.5-30.2-45.4-30.2-73s1"
+  },
+  {
+   "test": "choices.browser.mjs › attachment matches the current surface, density and option states › webkit-dark-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 24\n+ Received  + 24\n\n  Array [\n    Object {\n-     \"color\": \"rgb(201, 206, 213)\",\n-     \"height\": 12,\n+     \"color\": \"rgb(138, 138, 142)\",\n+     \"height\": 19,\n      \"kind\": \"svg\",\n      \"paths\": Array [\n        \"M779.3 196.6c-94.2-94.2-247.6-94.2-341.7 0l-261 260.8c-1.7 1.7-2.6 4-2.6 6.4s.9 4.7 2.6 6.4l36.9 36.9a9 9 0 0012.7 0l261-260.8c32.4-32.4 75.5-50.2 121.3-50.2s88.9 17.8 121.2 50.2c32.4 32.4 50.2 75.5 50.2 121.2 0 45.8-17.8 88.8-50.2 121.2l-266 265.9-43.1 43.1c-40.3 40.3-105.8 40.3-146.1 0-19.5-19.5-30.2-45.4-30.2-7"
+  },
+  {
+   "test": "choices.browser.mjs › attachment matches the current surface, density and option states › webkit-light-phone",
+   "start": "failed",
+   "base": "failed",
+   "sameMessages": true,
+   "firstMessage": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 24\n+ Received  + 24\n\n  Array [\n    Object {\n-     \"color\": \"rgb(31, 35, 41)\",\n-     \"height\": 12,\n+     \"color\": \"rgb(138, 138, 142)\",\n+     \"height\": 19,\n      \"kind\": \"svg\",\n      \"paths\": Array [\n        \"M779.3 196.6c-94.2-94.2-247.6-94.2-341.7 0l-261 260.8c-1.7 1.7-2.6 4-2.6 6.4s.9 4.7 2.6 6.4l36.9 36.9a9 9 0 0012.7 0l261-260.8c32.4-32.4 75.5-50.2 121.3-50.2s88.9 17.8 121.2 50.2c32.4 32.4 50.2 75.5 50.2 121.2 0 45.8-17.8 88.8-50.2 121.2l-266 265.9-43.1 43.1c-40.3 40.3-105.8 40.3-146.1 0-19.5-19.5-30.2-45.4-30.2-73s1"
+  }
+ ]
+}

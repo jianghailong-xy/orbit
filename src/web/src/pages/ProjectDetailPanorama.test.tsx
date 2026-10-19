@@ -244,9 +244,9 @@ let root: Root;
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   apiMock.mockReset();
-  // antd's responsive grid subscribes to breakpoints on mount and jsdom ships no matchMedia. The
-  // stub answers "no breakpoint matches", which is the desktop reading and the one this layout is
-  // asserted at; the CSS media query that stacks the pair is not this test's subject.
+  // The page's breakpoint reads subscribe on mount and jsdom ships no matchMedia. The stub answers
+  // "no breakpoint matches", which is the desktop reading and the one this layout is asserted at;
+  // the CSS media query that stacks the pair is not this test's subject.
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: false,
     media: query,
@@ -339,7 +339,7 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     const tasks = at('>Tasks<');
     const ready = at('Run queue');
     const blockers = at('aria-label="Blockers"');
-    const acceptance = at('Acceptance criteria</div>');
+    const acceptance = at('Acceptance criteria</h2>');
 
     // The changing work account and its Coordinator lead. The stable goal follows both as one
     // full-width card, before the graph of the work it defines.
@@ -478,7 +478,7 @@ describe('ProjectDetailPage — the panorama, assembled', () => {
     // first match and stay green on a page that draws the whole block a second time lower down.
     expect(countOf('>Goal</h5>')).toBe(1);
     expect(countOf('Ship the new marketing site')).toBe(1);
-    expect(countOf('>Acceptance criteria</div>')).toBe(1);
+    expect(countOf('>Acceptance criteria</h2>')).toBe(1);
     expect(countOf('Every page scores 90 or better')).toBe(1);
     expect(countOf('>Instructions</h5>')).toBe(1);
     expect(countOf('Land behind a flag, then flip it')).toBe(1);

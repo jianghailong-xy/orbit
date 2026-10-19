@@ -1,0 +1,16 @@
+{
+ "label": "fix-404c-pilot",
+ "step": "pilot",
+ "tree": "/mnt/data/tmp/overlay-first-frame-34brok/run",
+ "command": "cd src/web && P32_SNAPSHOTS=/mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-pilot/shots P32_OUTPUT=/mnt/data/tmp/overlay-first-frame-34brok/runs/fix-404c-pilot/results npx playwright test -c ui-migration/pilot.config.mjs ui-migration/pilot.browser.mjs --update-snapshots=all",
+ "commit": "aa162207c1bd1353224d62e38634dc21f9707e78",
+ "webChanges": [],
+ "webDiffSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+ "startedAt": "2026-10-08T18:18:06Z",
+ "endedAt": "2026-10-08T18:21:54+00:00",
+ "loadAverage": {
+  "start": "36.70 19.65 15.25",
+  "end": "16.03 16.88 15.03"
+ },
+ "exitCode": 0
+}

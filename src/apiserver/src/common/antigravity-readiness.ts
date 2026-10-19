@@ -12,7 +12,7 @@ export const ANTIGRAVITY_GOOGLE_LOGIN_TOO_OLD =
 
 /** The refusal for a runner on another platform: the runner's own words for it (login.go), so the
  *  card reads the same whichever side refused. */
-export const ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY = 'Antigravity 的 Google 登录暂时只支持 Linux runner';
+export const ANTIGRAVITY_GOOGLE_LOGIN_LINUX_ONLY = 'Signing Antigravity in with Google works only on a Linux runner for now.';
 
 export function hasGeminiEnvKey(env: unknown): boolean {
   if (!env || typeof env !== 'object' || Array.isArray(env)) return false;

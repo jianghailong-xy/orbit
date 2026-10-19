@@ -353,12 +353,12 @@ A.launch_app()                  # = xcrun simctl launch <UDID> io.orbitd.app
 | A5 | 同上,仍然不做任何操作 | **90s** |
 | A6 | `simctl terminate` + `launch`,联网状态 | 15s |
 
-**序列 B —— Settings → Runners,离线一次、恢复后一次**
+**序列 B —— Settings → Infrastructure(原 Runners 行),离线一次、恢复后一次**
 
 | # | 动作 | 时点 |
 | --- | --- | --- |
 | B1 | 离线冷启动后进 Settings(齿轮坐标 `(273, 810)`) | 20s |
-| B2 | 切到 Runners 行(坐标 `(100, 195)`) | — |
+| B2 | 切到 Infrastructure 行(`(100, 195)` 量的是改名前的 Runners 行,用前重新 dump) | — |
 | B3 | 代理进程起来,**不做任何操作** | **30s** |
 | B4 | 同上 | **60s** |
 

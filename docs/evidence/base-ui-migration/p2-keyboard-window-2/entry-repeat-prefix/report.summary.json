@@ -1,0 +1,1653 @@
+{
+ "stats": {
+  "startTime": "2026-10-07T23:22:13.527Z",
+  "duration": 88473.349,
+  "expected": 40,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "errors": [],
+ "tests": [
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3104,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "068dd99eceef976b66f3674a3ec4561217c82a4e0474dc3042a1f258c8413876"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "47beaf19507f19b48aae1d15a3d1208e1a0d8fe79d01da4158590c5543f6cd6e"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "13f684960d1cc274f116e2dc56d6f2191862f3e30159bf90fea84576b6986b73"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3b3ab639ac134de328ecfd37239c6bb6fadb9009a6244ec24425f8dd98eaa5bf"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1457,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5978d0ab4d3d896f759e13e9c098f491efbde1d462fdf6b1508492340d75ded2"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0ea96e995ad57a0208eadf016cdca672a4ab29acabc77ea45a96b5ae3e0e436d"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e2cb2c90f1397923110fb63aba01ddb335e4843838ee6dc977b5b9ac4fff30d7"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "593c977d4bcfb25bba3777d69844e8dd46e32f4e0e985d32b687265277e0b57d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2656,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "068dd99eceef976b66f3674a3ec4561217c82a4e0474dc3042a1f258c8413876"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8d6ffa155eb557d55086e1210d1fe616450a429ad70725ad6445a37fd4bd47d3"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8686b0643bb056d2f36d8dd984b215bed8794851c41c5ad064f2e29899af83ce"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6cc4937ad2e072658a615110f026b9c7b4cada170acedcea4dadb7ee0b10797f"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1274,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5978d0ab4d3d896f759e13e9c098f491efbde1d462fdf6b1508492340d75ded2"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "152908e90c83b9d9f3a3cad4c6fa2081b812d9965f5e9b6e7ade2a5f78d2cc62"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "75a32f557f3a97c4110ff76cc77538a070b3b15d57e222ecd1c33ab3427d832a"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "932d3c594d2140b8efbc4c3ef93f3d52d939eb5247bfd12683311990cc620ca0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2668,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "068dd99eceef976b66f3674a3ec4561217c82a4e0474dc3042a1f258c8413876"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "67ef964172872facc93766f00d3ec6f13d1fa3e1f52b2f3dbbe81ab2d4e863a6"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bbbd16ff958a9faae4b076a14466dfafd3ec96029402ef9d8c0ea242845bb3c0"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "526e30a7444ec7c32f82b85cc3137f8b25fb5045c0f5ed049fd6236b894b07dd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1329,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5978d0ab4d3d896f759e13e9c098f491efbde1d462fdf6b1508492340d75ded2"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6dcc65cd34d4509a12c197c2889fc305ba7baaf2a15418e2311c5fd89f759865"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a43563aa53c2da9c2986f439d0e94d51bc4adf388186696fc3acb5181657cf05"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b2e3c96e5a59f037a52b80815af1621879c1e36320c973830818b507736c0156"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2762,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "068dd99eceef976b66f3674a3ec4561217c82a4e0474dc3042a1f258c8413876"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "065426b05a728be1f8754c2ff949f94e03c533e6ba92bd8445712bbf147bb806"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "454c3f6fa59cd7466bf30ab8a745d06cab52b3b1b9e2625d68a6ed0e761be4d3"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "37cf4cd2582b2a738f7b0112a5dfdfa47a084431cb541a7f77b306909204b590"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1412,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5978d0ab4d3d896f759e13e9c098f491efbde1d462fdf6b1508492340d75ded2"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1581a0a2b606ac7574095c6c02df902493d6ed051bebcbefb402b8d9af117b78"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e31c5a7c0258c3925f239c9f5cbca3d4f14a9f38ec7638f950c6b53763d38c68"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2ddf3433be375787c885bb324502c6a3c8c281798d2fd809700e691584536e83"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2707,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "068dd99eceef976b66f3674a3ec4561217c82a4e0474dc3042a1f258c8413876"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "aa8bfeeea1fb6ee77258b936c84099fa06454f4888cb801cdad6e48b99b2a103"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ee09a1d576a2f8aed602c24cc2d714db96a008dfc7c81452c4a6308f0bc77567"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6ed3a5d9072fb944df2742b07a77b3ce54aab90d2e5b5b4e2b7b661b148f3ad6"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1414,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "dce2d5274e41f9fd54d19e16c2ec102f3767bb116a677394a2c2d6547edfe971"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "21550ab4191b5abe21f62af7126df824c58bd1b6fc63a15da3f336598474fd05"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "81ffd0cac616abab906607c3c7de37cc3f6f558f2b7f3c7fe07f4497d9686081"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b2e3c96e5a59f037a52b80815af1621879c1e36320c973830818b507736c0156"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2660,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "068dd99eceef976b66f3674a3ec4561217c82a4e0474dc3042a1f258c8413876"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9beb0abb889ed9def2d5b14aa9b5588d17b7cb5424fab1b35057a3a7dc377a12"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "da9d1056502bb6ae1ebdd3d4f0f36184a6706549950763aeeb1c6ef422581cc4"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "45397a46abcf3eed1e28689aebf4f077c683b08799149de8e7cef667ecd6f6da"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1462,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5978d0ab4d3d896f759e13e9c098f491efbde1d462fdf6b1508492340d75ded2"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "dfd45b0fe6179497d7baaa79b231209a18bdeac558403c9797a43ec9197cfc85"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a6de1739afb5c996c09ecd300aa50229a818a97d84bea5502205f7da5efb8936"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b2e3c96e5a59f037a52b80815af1621879c1e36320c973830818b507736c0156"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2757,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "068dd99eceef976b66f3674a3ec4561217c82a4e0474dc3042a1f258c8413876"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "643d845bcd4a22957fcbbe9aa905a76633ddb4c409796c66c09fd35d75d4d20b"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cec9aac47e3236628e89420d238ffa7d33ca68d7065d35d8cdb165dd9358ce0a"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5b59aa3ebcd48a56967dae1aeec9f87e7958ec6920f1894402f4c6fc187960b7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1345,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5978d0ab4d3d896f759e13e9c098f491efbde1d462fdf6b1508492340d75ded2"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6046678ff09a75221decbf52401d31e726914331f038d01b0722e8d5fd902b8b"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4392c90e8460b7c6a065902d2b4eef4e5d2c6197afd48986568c63ce16e0b15f"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "932d3c594d2140b8efbc4c3ef93f3d52d939eb5247bfd12683311990cc620ca0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2726,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "068dd99eceef976b66f3674a3ec4561217c82a4e0474dc3042a1f258c8413876"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a678f12256d218d4e719b5f762a428f9e45ee97819f3828e680ab1218cb7e4b7"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a1a4f5f482b91c05aea6ea82bcfe3d1facbb62bf7f854329a6d61662b86431ea"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4ae99349e6ab68983cbe9cf14ece2fa4759b0890ac15c54ef97cb7928858bce2"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1311,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "66831453369f4cb88b136910c53be9f4a5a089aeb982e26cc99dfb7db6c05c2d"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1399ebaed79b549d52c592baddb1dd7d43d59b1f235487062b29fe10796b5575"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0365975b736d002d93df5abc3aca70aca1ddc0b6a64b0d2539d5de8f604560e1"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b2e3c96e5a59f037a52b80815af1621879c1e36320c973830818b507736c0156"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2706,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "068dd99eceef976b66f3674a3ec4561217c82a4e0474dc3042a1f258c8413876"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "757f88101d5e85ca69190d21ab7168579eeb40a0d9ede7b36ab0b69dd63489a4"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e39fde282e3ec453aea4417a6711fabeefbaeca1f7b9f9132064828f415be7b4"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "21475196701f7293984424ef79182ee7ccb3f32c4bbec02b9a19e20dd8fab0dc"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1297,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "5978d0ab4d3d896f759e13e9c098f491efbde1d462fdf6b1508492340d75ded2"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6d31593add5cab565d29e06f6a23cae89867fc623ec7c0b3bf0f7518fa115ff5"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3b7a353fee474cc4f4ad66458b00dc7747103fd2c6205bed53d0fc1eec0932db"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c7303b305ba5287c0a2b86d69538f7320e746f571c2913c015fbd3913db9f817"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2829,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "068dd99eceef976b66f3674a3ec4561217c82a4e0474dc3042a1f258c8413876"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "fb4b3f78ad85cad6afb78fd80e89f4a53f33a74a38b4fb2134dac3b1fe3a1b00"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "525d84cf909428ee80b96aeeff3e16bc6624d35a69e64b9179ba7d2c6e3c7e4f"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8e957497c57d882bde3b3f182d946c05cfd69c3c24770843476c3174ed3cf346"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "chromium-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1511,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "d8b5afdd55239f1bb5e46b767f8c7feb081c43577d223ea51bd1a564d69dd92f"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c0e0719f0dd8997e6ee134a161814673c8471ada9711a4474235095ca627a394"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e2cb2c90f1397923110fb63aba01ddb335e4843838ee6dc977b5b9ac4fff30d7"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e61e3bad9bf0164d35fad093bfc450a2d7511d3328b2697f92e31053f1863ec0"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2768,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b1b86f295fcd3f0c2ddfe63d0122823144c0bc8a87912d840c031d5e4cf58005"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "14aa9159c22a15800ee6be70fa75cb98e94aefd8ac711bfa47ba24f42d41fb7b"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cf0887688778542973428652797603bc7ec76ce4b18f23755fa7a02228631641"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "68488f4027e609ee0cf95ca267bc0d91983a6f31445d46121718cc3788957aeb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1350,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "c4e0414c75d004bd6aac297237aed010467203595a655c76cc0e373fa0493ab3"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "abd52a95ef43988ec52e862fab65a4b6fe0c8bddd9758bd581fac842fdbc7fc0"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "eb3ade1d231880cade72cabaf3e27463e5ff9da57c8897fe3929de804eb1bd1f"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "194b49a027508530e61acac071b355ff0ae87328b9da84f1aedf78c6dcd2a1dd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2681,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b1b86f295fcd3f0c2ddfe63d0122823144c0bc8a87912d840c031d5e4cf58005"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "59517f4daed194958b605440134dc9b7f97bcd5acaa9a822432dea4c35b2290e"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "238827e7840406edb60c78a2b6359320a0144c1e07e4e31a7da42dcc09b74a4e"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2162b0613d630f8b998f26326f92c8d1cc50159a24873cea40a763276bc508f5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1329,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "ce67eab15848a4e8fd270747af8ac728d9d7592c9577d86a67abb937d871f73b"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c84201e8edfbb064d5ee6c14e680bf1ae10c9e7cd79e1ed1a133a2eefce6775e"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "320336cbc0c2f94f8fa1e38cb37b9fb357e6bc0c4801be67eec23f6f19d3b78d"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "194b49a027508530e61acac071b355ff0ae87328b9da84f1aedf78c6dcd2a1dd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2715,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b1b86f295fcd3f0c2ddfe63d0122823144c0bc8a87912d840c031d5e4cf58005"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e66074dbeaa36bc74565789ab64e9239ef26f66d88acd2f65e1db27402dd00d6"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3c9aec5698efadc4731604381d9aaea39db474dc78e3970ca696740beafa5e22"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "be244e0da2aa96339ddc16a001a30f795ebb7cc0071298a4363aef6e65b481a8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1307,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "4f0c0c6478042373851d41a2fa497ed442ff46cb87bfa84b0bd122ca72f97ded"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7b96883f282a28df5e538400d20558e4534d42819c7bd47a51f4f2aaa51cd5ac"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "30e87b6cdab1336c87973292a5a245645cd22bfbbc17700dbc2b006e7cc5fcc7"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "194b49a027508530e61acac071b355ff0ae87328b9da84f1aedf78c6dcd2a1dd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2672,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b1b86f295fcd3f0c2ddfe63d0122823144c0bc8a87912d840c031d5e4cf58005"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c74896b68cae88ccbded8750972d64ced413f4c69a8067801065a2dad519edc7"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "496249498b4101f86fa5e11f2b3aad80f7df87594d92d72b1ddbc92ec467d639"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a0242b6a482a046d4cbc2ebe12286aee601a8d3a12b0c82cd0724aa297e00e75"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1308,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "562987df1d91cb3a5870dc2037fbbe385ff9c3ba0b962745cd1425f7ae6a961c"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7225e944159c25f75ae22d220bad6300b05d2f7ec91f83aa643be4fe83befdac"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "6b6c6cda0fd5e8785fd1bb8b8d7516ae2f11b3d2fe4e7bcd3093348520617825"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "194b49a027508530e61acac071b355ff0ae87328b9da84f1aedf78c6dcd2a1dd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2632,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b1b86f295fcd3f0c2ddfe63d0122823144c0bc8a87912d840c031d5e4cf58005"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c895386c64a3d456113ea53a17bd9e946270f38562f030b5687a76701f791bf8"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "367c0046f913a8221cecdd6ba9178ec5bda558f818400b30a6e4e323b1ec8b7a"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "579a373a7107738e3a86b3085e153e20badbb9e2d13049bb82280407a65f5e46"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1318,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "9fb5390f67bf07d8f03e1c3d08e83f821182e01089f2d01129ae43b2208b246e"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9d84d1bfa2f203640e81c353aa521e5daa681234621a3dc76966d6cfeeece760"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "932e74a32deed806f0193825021852068a8a9bf86c736f5b64f4eeac0a87d606"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "474118f8a1f288305fcbb7561b7bd10af8856d70d926db0a8fe86da18e568d95"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2715,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b1b86f295fcd3f0c2ddfe63d0122823144c0bc8a87912d840c031d5e4cf58005"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "59517f4daed194958b605440134dc9b7f97bcd5acaa9a822432dea4c35b2290e"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b9682f5b0bc22cc46314224716b90c88742004d5472d6f6db7b96f6c83347b88"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cf3b54ed006cfffa650dd04be2dd7f0dce04502ce56d9ab417c211631b08dc98"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1353,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "88e97d847402375f4e62a26b70dce9ca297b661e5346e53a361f3395cf28bc51"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "62c447b4352094916a2d172b5ab2542e637a6e9e72fcbb8ab2f73c3e330e5be0"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e18118cd90b117370b519d0781170efd12d0fe018f303cffa0abf5dce21cb6cd"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "474118f8a1f288305fcbb7561b7bd10af8856d70d926db0a8fe86da18e568d95"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2699,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b1b86f295fcd3f0c2ddfe63d0122823144c0bc8a87912d840c031d5e4cf58005"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f0959a23c3ba7bcbbf0eb4ffe1103219b3ea3caed3b78fd7546cc6143c819640"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b68e75df367f7aec086a0bbb98f5fe6a2d444ba78c3347b0032b9ca00ead613f"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "07c94c376a9a424945ec11809cf872c0cdf3b7a1c869d99226bc3a8c6f89df05"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1340,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "c00417dd803e17a3411199f5f4deb8e1a262e3611c52bb8e64a4ae6813b37abb"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "611ec697d188da341e31a4ee13527004f413021b7a85ca95742b9ba643047649"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "94d13a25a9b5493f4666688530880b8afdcffbbec31c166c6939c4a319c7706b"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "194b49a027508530e61acac071b355ff0ae87328b9da84f1aedf78c6dcd2a1dd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2710,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b1b86f295fcd3f0c2ddfe63d0122823144c0bc8a87912d840c031d5e4cf58005"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3c0f653ce8429b5e26e0b7ff6b47b802098e93df0fbd37472b823c05d8fb4895"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ea3a66c71ddd2c6891cfd9b4cefab3f1b3b2fc3dca7607b1648f51636ad18319"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "da452ac284a23cd5dc442a18bbb6aa29c025629ebeb0f4aeb1003a8093c02b92"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1329,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "e5e0addbcb3e47d57dae4b6e89908ae54edeb72441c990379b3cfee911816d86"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "62c447b4352094916a2d172b5ab2542e637a6e9e72fcbb8ab2f73c3e330e5be0"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "fb6dcaa45d87d92dae74aabc2188282125930df678db460a64f048b42091c571"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "474118f8a1f288305fcbb7561b7bd10af8856d70d926db0a8fe86da18e568d95"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2711,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b1b86f295fcd3f0c2ddfe63d0122823144c0bc8a87912d840c031d5e4cf58005"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3222e887d78d81b1cdc6fbcc12101e7927835592f690699973cd5781979a07e7"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "1ff3f30780180f41850a58a7490017d7700128bbea23735d2d51897b76312e21"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "33ef2ca870b32632e9a46aef69a3925b593b4acf8bc93c2190766f50e99a80a7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1316,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "562987df1d91cb3a5870dc2037fbbe385ff9c3ba0b962745cd1425f7ae6a961c"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "9d84d1bfa2f203640e81c353aa521e5daa681234621a3dc76966d6cfeeece760"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cea1d5282c9d6487df87f04519b8920e183554410fe6e11e3fd8abc5705c94b8"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "194b49a027508530e61acac071b355ff0ae87328b9da84f1aedf78c6dcd2a1dd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "no-preference Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2732,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "b1b86f295fcd3f0c2ddfe63d0122823144c0bc8a87912d840c031d5e4cf58005"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "7f90350915384bf2546b22b9bd356403f903223d3a0812451cd1cbfae78850f3"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0778291125f88e331a7e56becb3a6d039a3b237a870c809e20f02f1ffe32c171"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "4809e9daa73bfdfebd2ccfabfbeac2c26ba3b1b01d3a397558625dffb79336ed"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "reduce Dialog Popover Select exits restore one layer at a time",
+   "location": "choices-lifecycle.browser.mjs:51",
+   "project": "webkit-dark-phone",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1377,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "nested-open",
+       "contentType": "image/png",
+       "path": null,
+       "sha256": "e5e0addbcb3e47d57dae4b6e89908ae54edeb72441c990379b3cfee911816d86"
+      },
+      {
+       "name": "scroll-unlock",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "fc2d9b9c6333fea5b0b32db639ee413a093c0a002db7b48bfb2fb514f24559e0"
+      },
+      {
+       "name": "page-scroll",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "88b8da53c2dd73b7efbb112f2fdeb56fff1c5ae0fd63b4e51816f5eda79d7256"
+      },
+      {
+       "name": "nested-lifecycle",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "474118f8a1f288305fcbb7561b7bd10af8856d70d926db0a8fe86da18e568d95"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

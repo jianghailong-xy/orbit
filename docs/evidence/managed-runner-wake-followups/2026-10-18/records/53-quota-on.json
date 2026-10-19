@@ -1,0 +1,34 @@
+{
+  "at": "2026-10-18T04:15:20.054+00:00",
+  "now": {
+    "apiVersion": "v1",
+    "kind": "ResourceQuota",
+    "metadata": {
+      "annotations": {
+        "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"ResourceQuota\",\"metadata\":{\"annotations\":{},\"labels\":{\"orbit.dev/lab\":\"t06\"},\"name\":\"t06-no-pods\",\"namespace\":\"orbit-mr-test\"},\"spec\":{\"hard\":{\"pods\":\"0\"}}}\n"
+      },
+      "creationTimestamp": "2026-10-18T04:15:20Z",
+      "labels": {
+        "orbit.dev/lab": "t06"
+      },
+      "name": "t06-no-pods",
+      "namespace": "orbit-mr-test",
+      "resourceVersion": "26956",
+      "uid": "536c8dea-1e20-438c-9126-a77716708466"
+    },
+    "spec": {
+      "hard": {
+        "pods": "0"
+      }
+    },
+    "status": {
+      "hard": {
+        "pods": "0"
+      },
+      "used": {
+        "pods": "1"
+      }
+    }
+  },
+  "quota": "on"
+}

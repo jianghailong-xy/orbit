@@ -1,0 +1,55 @@
+{
+ "name": "background-shell-and-commit",
+ "runId": "2026-10-16T17-45-59-200Z",
+ "startedAt": "2026-10-16T17:52:14.414Z",
+ "finishedAt": "2026-10-16T17:53:19.772Z",
+ "passed": false,
+ "realPromptsDeclared": 1,
+ "realPrompts": [
+  {
+   "n": 20,
+   "at": "2026-10-16T17:52:24.150Z",
+   "note": "commit attribution + background shell"
+  }
+ ],
+ "protocol": "protocol/background-shell-and-commit.ndjson",
+ "protocolLines": 13,
+ "fixtures": [
+  "background-shell-and-commit/background"
+ ],
+ "checks": [
+  {
+   "name": "the commit was made",
+   "ok": false,
+   "detail": "p0 <<EMAIL>>\np0 <<EMAIL>>\ninit\n\n"
+  },
+  {
+   "name": "no unsolicited turn after end_turn: no session/update in the 40 s after the prompt answered",
+   "ok": false,
+   "detail": [
+    "session_info_update",
+    "available_commands_update"
+   ]
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "background + commit": {
+   "stopReason": "end_turn",
+   "turnMs": 581,
+   "bgFileWrittenMsAfterResult": null,
+   "updatesAfterResult": [
+    "session_info_update",
+    "available_commands_update"
+   ],
+   "permissionRequests": [],
+   "tools": [],
+   "lastCommit": "p0 <<EMAIL>>\np0 <<EMAIL>>\ninit\n\n"
+  },
+  "commit attribution (attributeCommitsToAgent default true): trailer lines in the message": [],
+  "whether the prompt waited for the background command": "bg.txt not written"
+ }
+}

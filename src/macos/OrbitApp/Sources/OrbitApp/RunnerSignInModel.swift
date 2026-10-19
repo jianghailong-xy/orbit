@@ -114,8 +114,9 @@ final class RunnerSignInModel {
     /// The runner's own last word — a rejected code, or why an attempt failed.
     var relayMessage: String? { mine ? relay?.message : nil }
 
-    /// Kimi: the site the runner's login is on now, marked on the choice.
-    var currentSite: KimiSite? { KimiSite.current(on: runner) }
+    /// Kimi: the site of the login this card signs in again, marked on the choice — that account's own,
+    /// Default's being the engine's; none on a card adding an account (`KimiSite.current(on:account:adding:)`).
+    var currentSite: KimiSite? { KimiSite.current(on: runner, account: account, adding: adding) }
     /// Kimi: the site of the page the one-time code is for, read off its address.
     var site: KimiSite? { engine == .kimi ? KimiSite.of(url: url) : nil }
 

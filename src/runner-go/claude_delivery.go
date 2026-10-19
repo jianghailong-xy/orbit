@@ -24,11 +24,15 @@ import (
 //	requeued      it never arrived AND that is provable, so it goes back to being an ordinary
 //	              queued message — the one non-delivery that is not a loss
 //	failed        it will never arrive, and why
+//	withdrawn     the person took it back and the CLI dropped it unread (claude_withdraw.go):
+//	              nothing will ever read it, and its bubble leaves the transcript
 //
-// enqueued and written are genuinely different: a `claude` inside a tool call stops
-// reading stdin, so an accepted message can sit unwritten for as long as the tool runs.
-// written and acknowledged are different for the same kind of reason — bytes in a pipe
-// are not yet a turn the model has taken.
+// enqueued and written are genuinely different: a frame bigger than the pipe's buffer sits
+// accepted-but-unwritten until the CLI drains it. written and acknowledged are different
+// for a reason that holds for every frame — bytes in the CLI are not yet a turn the model
+// has taken. A `claude` busy in a tool call reads a frame at once and queues it (measured on
+// 2.1.296 and 2.1.300: queued in under 10 ms while a 20 s `sleep` ran), but folds it into the
+// conversation only at the next tool boundary, which is when it echoes it back.
 type deliveryState string
 
 const (
@@ -38,6 +42,7 @@ const (
 	deliveryAcknowledged deliveryState = "acknowledged"
 	deliveryRequeued     deliveryState = "requeued"
 	deliveryFailed       deliveryState = "failed"
+	deliveryWithdrawn    deliveryState = "withdrawn"
 )
 
 // messageDelivery is one user message's progress towards the CLI. turnID is the
@@ -59,8 +64,13 @@ type messageDelivery struct {
 	// the delivery rather than stored globally, because it answers for THIS message on THIS
 	// control plane; a runner that assumed it would lose a message to an older one.
 	requeueable bool
-	receipt     *writeReceipt
-	state       deliveryState
+	// uuid is what the frame carried as its own `uuid`, when it carried one (a steer: see
+	// userTurnFrame). The CLI echoes it back, so the echo names this message rather than
+	// answering whichever one is oldest, and it is the only handle a withdrawal has on a
+	// message still waiting in the CLI's queue.
+	uuid    string
+	receipt *writeReceipt
+	state   deliveryState
 }
 
 // deliveryLedger correlates the messages a session hands to its CLI with the echoes the
@@ -71,11 +81,18 @@ type messageDelivery struct {
 // answers the n-th unacknowledged message. Two messages carrying the very same text are
 // therefore still told apart — matching on text could not tell them apart at all.
 //
+// The one exception is a frame that carried a uuid of its own (a steer, see userTurnFrame):
+// the CLI echoes that uuid back, so its echo is matched by it, and only an echo naming none
+// of ours falls back to position.
+//
 // Scoped to one process. A re-spawn starts an empty ledger, because a new CLI replays
 // only what this process feeds it.
 type deliveryLedger struct {
 	mu    sync.Mutex
 	queue []*messageDelivery // accepted, not yet acknowledged — in the order accepted
+	// read holds the turns of the uuid-carrying messages this process saw the CLI read, so a
+	// withdrawal asked after the echo can say "already read" rather than "not here".
+	read map[string]bool
 }
 
 // newMessageDelivery opens the record for a message the poller has pulled but not yet
@@ -114,15 +131,73 @@ func (l *deliveryLedger) markWritten(d *messageDelivery) bool {
 // acknowledgeNext answers the oldest unacknowledged message: the CLI replays what it
 // reads, in order, so this is the message that replay belongs to.
 func (l *deliveryLedger) acknowledgeNext() (*messageDelivery, bool) {
+	return l.acknowledgeEcho("")
+}
+
+// acknowledgeEcho answers the message one echo belongs to: the one whose uuid it carries back,
+// and otherwise — an echo naming none of ours — the oldest unacknowledged message, the way
+// acknowledgeNext always has.
+func (l *deliveryLedger) acknowledgeEcho(uuid string) (*messageDelivery, bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if len(l.queue) == 0 {
-		return nil, false
+	at := -1
+	if uuid != "" {
+		for i, d := range l.queue {
+			if d.uuid == uuid {
+				at = i
+				break
+			}
+		}
 	}
-	d := l.queue[0]
-	l.queue = l.queue[1:]
+	if at < 0 {
+		if len(l.queue) == 0 {
+			return nil, false
+		}
+		at = 0
+	}
+	d := l.queue[at]
+	l.queue = append(l.queue[:at], l.queue[at+1:]...)
 	d.state = deliveryAcknowledged
+	if d.uuid != "" {
+		if l.read == nil {
+			l.read = map[string]bool{}
+		}
+		l.read[d.turnID] = true
+	}
 	return d, true
+}
+
+// waiting finds the message a withdrawal is about: accepted for turnID and still on its way
+// into the conversation — not echoed back, failed or withdrawn. When there is none, read says
+// whether this process saw the CLI read it.
+func (l *deliveryLedger) waiting(turnID string) (d *messageDelivery, read bool) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	for _, q := range l.queue {
+		if q.turnID == turnID && (q.state == deliveryEnqueued || q.state == deliveryWritten) {
+			return q, false
+		}
+	}
+	return nil, l.read[turnID]
+}
+
+// withdraw records that the CLI dropped a message unread. It leaves the correlation queue — no
+// echo will ever come for it — and nothing answers for it again: not the writer's receipt, not
+// the result of the turn it was aimed at, not a dying process's account of what it still owed.
+func (l *deliveryLedger) withdraw(d *messageDelivery) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if d.state != deliveryEnqueued && d.state != deliveryWritten {
+		return false
+	}
+	d.state = deliveryWithdrawn
+	for i, q := range l.queue {
+		if q == d {
+			l.queue = append(l.queue[:i], l.queue[i+1:]...)
+			break
+		}
+	}
+	return true
 }
 
 // acknowledgeAnswered settles the message a result just answered, if its echo never came.
@@ -149,7 +224,7 @@ func (l *deliveryLedger) acknowledgeAnswered(turnID string) (*messageDelivery, b
 func (l *deliveryLedger) fail(d *messageDelivery) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if d.state == deliveryAcknowledged || d.state == deliveryFailed {
+	if d.state == deliveryAcknowledged || d.state == deliveryFailed || d.state == deliveryWithdrawn {
 		return false
 	}
 	d.state = deliveryFailed
@@ -233,6 +308,13 @@ func isReplayedUserTurn(msg map[string]interface{}) bool {
 	return true
 }
 
+// echoUUID is the uuid a replayed user turn carries back: one of ours when the frame it echoes
+// carried one (userTurnFrame), the CLI's own otherwise.
+func echoUUID(msg map[string]interface{}) string {
+	uuid, _ := msg["uuid"].(string)
+	return uuid
+}
+
 // deliveryReporter publishes one message's delivery state. The state is passed in rather
 // than read back off the record: it is settled under the ledger's lock, and what a report
 // must say is the transition it belongs to, not whatever the record holds by the time the
@@ -272,6 +354,11 @@ var errNoTurnToSteer = errors.New("no turn was running to steer; send it again")
 // errCurrentWorkTargetEnded is terminal for one explicit steer. The process generation is also
 // stopped: even bytes already written to stdin must not survive to become the next turn.
 var errCurrentWorkTargetEnded = errors.New("the target turn ended before the engine acknowledged this CURRENT_WORK message")
+
+// errCurrentWorkTargetInterrupted: the turn a steer was waiting to be read in was stopped first. The
+// fence proves the engine never read it, which is what would otherwise send it back to the queue; a
+// Stop is the one ending that must not, because the turn it would open runs straight after the Stop.
+var errCurrentWorkTargetInterrupted = errors.New("the turn was interrupted by Stop before the engine read this message")
 
 // settleSteerTurn closes a steer's own conversation turn. Success or failure, it settles
 // nothing else: the turn it was written into is still running, and its result — the slot,

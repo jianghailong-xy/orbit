@@ -172,7 +172,7 @@ export const BLOCKER_SIGNAL_EXIT_INVENTORY = [
     family: 'PROJECT_BLOCKER',
     type: 'HUMAN_DECISION_REQUIRED',
     resolveWhen:
-      'The stored episode resolves when the task reaches a terminal status; the evidence-bound projection that used to raise it was removed with the judgment machinery on 2026-09-02. Raised for a delivery that argues a criterion does not apply (CRITERION_EXEMPTION_ARGUED), it ends when that task has a merge receipt that is landing evidence.',
+      'The stored episode resolves when the task reaches a terminal status; the evidence-bound projection that used to raise it was removed with the judgment machinery on 2026-09-02. Raised before 2026-10-14 for a task that kept a completion criterion Orbit questioned, with a written reason (CRITERION_EXEMPTION_ARGUED, a coordinator delivery review since), it ends when that task has a merge receipt that is landing evidence.',
   },
   {
     family: 'PROJECT_BLOCKER',

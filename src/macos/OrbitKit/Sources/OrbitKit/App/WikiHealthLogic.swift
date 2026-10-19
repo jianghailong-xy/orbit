@@ -24,6 +24,15 @@ public enum WikiHealthCopy {
     public static func failed(_ count: Int) -> String {                                                    // wikiMaintenanceFailed
         count == 1 ? "Maintenance failed" : "Maintenance failed \(count) times"
     }
+
+    // MARK: the server's reasons (mock 35 ⑥, P9)
+
+    public static let reasonWorker = "wiki worker not running"                        // WIKI_REASON_WORKER
+    public static let reasonUnconfigured = "System model not configured"              // WIKI_REASON_UNCONFIGURED
+    public static let reasonKeyRefused = "System model refused the key"               // WIKI_REASON_KEY_REFUSED
+    public static let reasonUnreachable = "System model unreachable"                  // WIKI_REASON_UNREACHABLE
+    public static let reasonRunnerOffline = "Waiting for the runner to come online"   // WIKI_REASON_RUNNER_OFFLINE
+    public static let reasonRunnerUpgrade = "Upgrade the runner to read the repository"   // WIKI_REASON_RUNNER_UPGRADE
 }
 
 /// One part of the status line: its words, how it is coloured and marked, and where it leads when it is a
@@ -33,7 +42,7 @@ public struct WikiStatusPart: Equatable, Sendable {
     public enum Tone: String, Sendable { case plain, muted, warn, error }
     /// check: a green ✓ after it; dot: a coloured dot before it; spin: a spinner before it on a wide screen.
     public enum Mark: String, Sendable { case none, check, dot, spin }
-    /// settings: the space's Wiki settings; run: the session of the run that ended last.
+    /// settings: the space's Wiki settings; run: the run that ended last — its session, or its row on Activity.
     public enum Link: String, Sendable { case none, settings, run }
 
     public let text: String
@@ -98,7 +107,9 @@ public enum WikiHealthLogic {
             var parts = [WikiStatusPart(WikiHealthCopy.failed(health.consecutiveFailures), tone: .error, mark: .dot, strong: true)]
             if let lastOkAt = health.lastOkAt { parts.append(WikiStatusPart(WikiHealthCopy.lastSuccess(ago(lastOkAt, now: now)))) }
             parts.append(catchUp)
-            if health.lastRun?.sessionId != nil { parts.append(WikiStatusPart(WikiModeCopy.viewRun, link: .run)) }
+            if health.lastRun?.sessionId != nil || health.lastRun?.jobId != nil {
+                parts.append(WikiStatusPart(WikiModeCopy.viewRun, link: .run))
+            }
             return parts
         case .ok:
             let lead = health.lastOkAt.map { WikiStatusPart(WikiHealthCopy.maintained(ago($0, now: now)), mark: .check) }
@@ -107,6 +118,36 @@ public enum WikiHealthLogic {
         case .unknown:
             return []
         }
+    }
+
+    /// Why the server's runs do not move, while the server executes the account's wiki — the web's
+    /// `wikiServerReason`: the first that holds of the worker, the model's configuration, its key and its
+    /// reachability, then — while maintenance is on or a read of the repository waits — the runner.
+    public static func serverReason(_ health: WikiSpaceHealth) -> WikiStatusPart? {
+        guard health.serverExecutes else { return nil }
+        let reason = { (text: String, tone: WikiStatusPart.Tone) in WikiStatusPart(text, tone: tone, mark: .dot, strong: true) }
+        switch health.systemModel?.state {
+        case .workerNotRunning?: return reason(WikiHealthCopy.reasonWorker, .error)
+        case .unconfigured?:     return reason(WikiHealthCopy.reasonUnconfigured, .error)
+        case .authFailed?:       return reason(WikiHealthCopy.reasonKeyRefused, .error)
+        case .down?:             return reason(WikiHealthCopy.reasonUnreachable, .warn)
+        default:                 break
+        }
+        guard let repo = health.repo, health.maintenance.enabled || repo.pending > 0 else { return nil }
+        switch repo.look {
+        case .runnerOffline: return reason(WikiHealthCopy.reasonRunnerOffline, .warn)
+        case .runnerUpgrade: return reason(WikiHealthCopy.reasonRunnerUpgrade, .warn)
+        default:             return nil
+        }
+    }
+
+    /// The status line's whole maintenance part: the look's parts, and the server's reason before their links —
+    /// the web's `wikiStatusParts`.
+    public static func parts(_ health: WikiSpaceHealth, now: Date) -> [WikiStatusPart] {
+        let parts = parts(health.maintenance, now: now)
+        guard let reason = serverReason(health) else { return parts }
+        guard let link = parts.firstIndex(where: { $0.link != .none }) else { return parts + [reason] }
+        return Array(parts[..<link]) + [reason] + Array(parts[link...])
     }
 
     /// The parts as one line of text: `●` before a dot, `✓` after a check, ` · ` between — the web's

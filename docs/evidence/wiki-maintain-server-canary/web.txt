@@ -1,0 +1,24 @@
+
+ RUN  v5.0.2 /root/.orbit/worktrees/8a1f58fa-7517-564c-bb38-9e9a41dcc961/src/web
+
+stderr | src/components/WorkspaceView.modelControl.test.tsx > the composer model control > opens under the engine the session runs on, as a title that picks nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+
+stderr | src/components/WorkspaceView.modelControl.test.tsx > the composer model control > opens under the engine the session runs on, as a title that picks nothing
+Warning: [antd: Image] `visible` is deprecated. Please use `open` instead.
+Warning: [antd: Image] `onVisibleChange` is deprecated. Please use `onOpenChange` instead.
+...
+ Test Files  368 passed (368)
+      Tests  4758 passed (4758)
+   Start at  20:16:44
+   Duration  430.41s (tests 41%, import 41%, environment 14%, transform 4%)
+...
+
+     Import  819 modules were evaluated 3275 times · 336.93s total, 41% of tracked time
+             ~104.53s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
+
+

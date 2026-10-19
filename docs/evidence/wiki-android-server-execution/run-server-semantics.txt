@@ -1,0 +1,57 @@
+Printing with useUnmergedTree = 'false'
+Node #1 at (l=0.0, t=0.0, r=411.0, b=1400.0)px
+ |-Node #330 at (l=0.0, t=0.0, r=411.0, b=1400.0)px, Tag: 'wiki-job'
+    |-Node #335 at (l=0.0, t=0.0, r=411.0, b=1400.0)px, Tag: 'wiki-job-page'
+      CollectionInfo = 'androidx.compose.ui.semantics.CollectionInfo@4e43f4f2'
+      IsTraversalGroup = 'true'
+      VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+      Actions = [GetScrollViewportLength, IndexForKey, ScrollBy, ScrollByOffset, ScrollToIndex]
+       |-Node #337 at (l=16.0, t=18.0, r=395.0, b=145.0)px
+       |  |-Node #339 at (l=32.0, t=30.0, r=379.0, b=74.0)px, Tag: 'wiki-job-state'
+       |  | Text = '[Running · 1 of 3 calls ended · next call 2 ahead, waited 4h 46m]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #340 at (l=32.0, t=78.0, r=114.0, b=93.0)px
+       |  | Text = '[started 4h ago]'
+       |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |  |-Node #342 at (l=32.0, t=118.0, r=379.0, b=133.0)px, Tag: 'wiki-job-foot'
+       |    Text = '[3 calls · 1,204 tokens in, 296 out so far]'
+       |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       |-Node #344 at (l=32.0, t=173.0, r=379.0, b=188.0)px
+       | Text = '[Calls, 3]'
+       | [Heading]
+       | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+       | MergeDescendants = 'true'
+       |-Node #348 at (l=16.0, t=202.0, r=395.0, b=371.0)px
+          |-Node #349 at (l=32.0, t=210.0, r=379.0, b=245.0)px, Tag: 'wiki-call-row'
+          |  |-Node #351 at (l=32.0, t=210.0, r=341.0, b=225.0)px
+          |  | Text = '[verify · 3f2a9c1e]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #352 at (l=349.0, t=210.0, r=379.0, b=225.0)px
+          |  | Text = '[Done]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #353 at (l=32.0, t=227.0, r=260.0, b=245.0)px
+          |    Text = '[waited 1s · ran 14s · 1,204 → 296 tokens]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #355 at (l=32.0, t=262.0, r=379.0, b=297.0)px, Tag: 'wiki-call-row'
+          |  |-Node #357 at (l=32.0, t=262.0, r=341.0, b=277.0)px
+          |  | Text = '[verify · 77b0e1d2]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #358 at (l=349.0, t=262.0, r=379.0, b=277.0)px
+          |  | Text = '[Done]'
+          |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |  |-Node #359 at (l=32.0, t=279.0, r=304.0, b=297.0)px
+          |    Text = '[1 retry · waited 2s · ran 17s · 1,388 → 311 tokens]'
+          |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+          |-Node #361 at (l=32.0, t=314.0, r=379.0, b=363.0)px, Tag: 'wiki-call-row'
+             |-Node #363 at (l=32.0, t=314.0, r=337.0, b=329.0)px
+             | Text = '[verify · a1c3e9f0]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+             |-Node #364 at (l=345.0, t=314.0, r=379.0, b=329.0)px
+             | Text = '[Failed]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+             |-Node #365 at (l=32.0, t=331.0, r=142.0, b=346.0)px
+             | Text = '[waited 1s · ran 15m]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+             |-Node #366 at (l=32.0, t=348.0, r=248.0, b=363.0)px
+               Text = '[The call ran past its 15-minute budget.]'
+               Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]

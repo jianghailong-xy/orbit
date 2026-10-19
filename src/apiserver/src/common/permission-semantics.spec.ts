@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   AgentProvider,
+  CURSOR_PERMISSION_MODES,
   DSH_PERMISSION_MODES,
   PermissionMode,
   autoAvailable,
@@ -9,7 +10,7 @@ import {
   runtimeApprovalSupport,
 } from '@orbit/shared';
 import { withSessionCapabilities } from '../sessions/session-state';
-import { assertDshPermissionMode } from './permission-semantics';
+import { assertCursorPermissionMode, assertDshPermissionMode } from './permission-semantics';
 import { normalizeBuiltinPermissionMode } from './runtime-provider';
 
 const ASK_MODES = [PermissionMode.DEFAULT, PermissionMode.ACCEPT_EDITS, PermissionMode.PLAN];
@@ -68,6 +69,8 @@ test('Auto and Bypass are honored by supported runtimes; DeepSeek Harness honors
     [AgentProvider.OPENCODE]: { u: 'allow', h: true },
     [AgentProvider.ANTIGRAVITY]: { u: 'allow', h: true },
     [AgentProvider.DSH]: { u: 'allow', h: true },
+    // Cursor CLI's Bypass is `--force`; its Auto is the runner's own review of each request.
+    [AgentProvider.CURSOR]: { u: 'allow', h: true },
   };
   for (const mode of [PermissionMode.AUTO, PermissionMode.BYPASS]) {
     for (const provider of Object.values(AgentProvider)) {
@@ -119,8 +122,10 @@ test("DeepSeek Harness enforces Default, Auto and Don't Ask and rejects the rest
       if (measured[effective]) {
         assert.deepEqual({ u: semantics.unapproved, h: semantics.honored }, { u: measured[effective], h: true }, `${mode}/${runsAsRoot}`);
         assert.equal(semantics.shortNote, undefined);
-        // The boundary is stated, not implied: what runs without asking, and that subagents are gone.
-        assert.match(semantics.note ?? '', /MCP tools \(Orbit’s included\) run without asking/);
+        // The boundary is stated, not implied: what runs without asking, what the tool gate asks
+        // about instead, and that subagents are gone.
+        assert.match(semantics.note ?? '', /Orbit’s MCP tools run without asking/);
+        assert.match(semantics.note ?? '', /network ones included — except a push, a remote shell, an HTTP write/);
         assert.match(semantics.note ?? '', /subagents are not available/);
       } else {
         assert.deepEqual({ u: semantics.unapproved, h: semantics.honored }, { u: 'deny', h: false }, `${mode}/${runsAsRoot}`);
@@ -199,6 +204,45 @@ test('approval support is reported per runtime', () => {
   assert.equal(runtimeApprovalSupport(AgentProvider.CODEX), 'partial');
   // Harness asks only about file-sandbox escalations; reads, commands in the sandbox and MCP never ask.
   assert.equal(runtimeApprovalSupport(AgentProvider.DSH), 'partial');
+  // Cursor CLI asks about commands off its allowlist, MCP tools and web fetches; never about a write
+  // inside the workspace.
+  assert.equal(runtimeApprovalSupport(AgentProvider.CURSOR), 'partial');
+  // Every engine is reported.
+  for (const provider of Object.values(AgentProvider)) {
+    assert.ok(['full', 'partial', 'none'].includes(runtimeApprovalSupport(provider)), provider);
+  }
+});
+
+test('P5c cursor: the server admits exactly the modes the picker describes as kept, Auto among them', () => {
+  // What the picker shows for each mode and what admission does are one table (CURSOR_PERMISSION_MODES).
+  const kept: Record<string, { unapproved: string; honored: boolean }> = {
+    [PermissionMode.ACCEPT_EDITS]: { unapproved: 'ask', honored: true },
+    [PermissionMode.PLAN]: { unapproved: 'deny', honored: true },
+    [PermissionMode.AUTO]: { unapproved: 'allow', honored: true },
+    // Workspace edits still run: disclosed as not honored.
+    [PermissionMode.DONT_ASK]: { unapproved: 'deny', honored: false },
+    [PermissionMode.BYPASS]: { unapproved: 'allow', honored: true },
+  };
+  assert.deepEqual([...CURSOR_PERMISSION_MODES].sort(), Object.keys(kept).sort());
+  for (const mode of [...Object.values(PermissionMode), 'unknown-mode']) {
+    const semantics = derivePermissionSemantics(AgentProvider.CURSOR, mode, 'default');
+    const payload = withSessionCapabilities({ ...ROW, provider: 'cursor', providerBuiltin: true, permissionMode: mode });
+    if (kept[mode]) {
+      assert.equal(assertCursorPermissionMode(mode), mode);
+      assert.deepEqual({ unapproved: semantics.unapproved, honored: semantics.honored }, kept[mode], mode);
+      assert.equal(payload.permissionSemantics?.unapproved, kept[mode].unapproved, mode);
+      assert.ok(semantics.note, `${mode} says what it means on Cursor CLI`);
+    } else {
+      assert.throws(() => assertCursorPermissionMode(mode),
+        /Cursor CLI cannot enforce permission mode ".+"; use Accept Edits, Plan, Auto, Don't Ask or Bypass/);
+      assert.deepEqual({ unapproved: semantics.unapproved, honored: semantics.honored }, { unapproved: 'deny', honored: false }, mode);
+      assert.match(semantics.note ?? '', /Session configuration is rejected; use Accept Edits, Plan, Auto, Don’t Ask or Bypass\.$/);
+    }
+  }
+  // Auto exists on Cursor CLI for any model: it is the runner's review, not a model's.
+  for (const model of ['default', 'gpt-5.5', 'claude-opus-5-5']) assert.equal(autoAvailable(AgentProvider.CURSOR, model), true);
+  // Bypass says what happens when the account's team turns Run Everything off.
+  assert.match(derivePermissionSemantics(AgentProvider.CURSOR, PermissionMode.BYPASS).note ?? '', /Run Everything/);
 });
 
 const ROW = {

@@ -1,0 +1,11 @@
+复核目标与 P7.1 交付
+delivery commit: 09d94a12f4bb969d69edf75c208d8ab0f9777423
+delivery tree:   74bc29723385e663cbe65c6e85dff6d701e0a40d
+src/web tree at delivery:  31aaca562bae53cc29b959399c9468b25fdf81e9
+src/web tree at project tip c04e79238: 31aaca562bae53cc29b959399c9468b25fdf81e9
+src/web tree at P7.1 evidence commit f43d6e1a3: 31aaca562bae53cc29b959399c9468b25fdf81e9
+src/web tree at main tip 3b23aa163: 38a006c9824ea625502e1818cc101d06f38c37a8
+09d94a12f Merge origin/main 0f07cf72e into the P7.1 candidate (project tip c04e79238)
+
+P7.1 evidence branch: orbit/task-p7-1-41e8e5 at f43d6e1a3
+f43d6e1a3 in main: no

@@ -1,0 +1,22 @@
+--- a/src/web/src/components/TasksSidePanel.tsx
++++ b/src/web/src/components/TasksSidePanel.tsx
+@@ -798,7 +798,7 @@
+               aria-current={sel === t.key ? 'page' : undefined}
+             >
+               <span className="tp-ico">{t.icon}</span>
+-              <span className="tp-label">{t.label}</span>
++              <span className="tp-label" style={t.key === 'infrastructure' ? { marginLeft: 1 } : undefined}>{t.label}</span>
+               {t.key === 'wiki' && wikiWaitingCount > 0 ? (
+                 <span
+                   className="tp-count needs-you"
+--- a/src/web/src/index.css
++++ b/src/web/src/index.css
+@@ -8435,7 +8435,7 @@
+   gap: 6px;
+   height: 18px;
+   margin: 8px 0 24px;
+-  padding: 0 12px;
++  padding: 0 12px 0 13px;
+ }
+ .chat-turn-foot > .chat-copy {
+   margin-left: -4px;

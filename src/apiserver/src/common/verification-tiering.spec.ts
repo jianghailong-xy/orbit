@@ -324,8 +324,14 @@ test('(l) tiering added no service and nothing that keeps running', () => {
   const withoutExtensions = compose.replace(/^x-[^\n]*\n(?:[ \t][^\n]*\n|\n)*/gm, '');
   const services = [...withoutExtensions.matchAll(/^ {2}([a-z][a-z0-9-]*):$/gmu)]
     .map((match) => match[1]);
+  // wiki-worker is the wiki's server-side executor, which the account owner added on 2026-10-07
+  // (docs/wiki-server-execution-design.md §4.1), not this removal; test/compose-topology.test.mjs (l)
+  // pins its whole definition.
+  // docker-channel is the managed runners' restricted Docker channel, which the account owner allowed on
+  // 2026-10-17 under a Compose profile a fresh install switches on (docs/managed-runner-design.md,
+  // "Implementation record: new deployments"), not this removal; test/compose-topology.test.mjs (m) pins it.
   assert.deepEqual(services.sort(),
-    ['apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web']);
+    ['apiserver', 'docker-channel', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web', 'wiki-worker']);
 
   const scripts = JSON.parse(read('package.json')).scripts as Record<string, string>;
   assert.equal(Object.keys(scripts).some((name) => /daemon|worker|cron|watch/iu.test(name)), false);

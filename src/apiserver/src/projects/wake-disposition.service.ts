@@ -13,7 +13,9 @@ import {
 import { readTaskCriterionChange } from '../tasks/task-completion-criterion-change-guard';
 import {
   BLOCKER_KIND_FOR,
+  BLOCKER_REASONS,
   type BlockerDisposition,
+  type BlockerReason,
   type BlockerRoute,
   type DeliveryObservations,
   blockerDisposition,
@@ -51,6 +53,7 @@ import {
   criterionLanding,
   landingBranchesFor,
   readLandingBranches,
+  readLandingJobsByTask,
   receiptIsLandingEvidence,
 } from './project-criterion-landing';
 import { CriterionState, criterionCoverage, wakeDisposition } from './wake-disposition';
@@ -283,8 +286,11 @@ export class WakeDispositionService {
         readLandingBranches(this.prisma, fact.projectId),
       ]);
       if (!served) return [];
+      const jobs = await readLandingJobsByTask(this.prisma, served.servingTasks.map((task) => task.id));
       return [state(
-        served,
+        { ...served, servingTasks: served.servingTasks.map((task) => ({
+          ...task, integrationJobs: jobs.get(task.id) ?? [],
+        })) },
         criterionCoverage(settlements(served.servingTasks), fact.subjectId),
         branches,
       )];
@@ -298,12 +304,23 @@ export class WakeDispositionService {
         }),
         readLandingBranches(this.prisma, fact.projectId),
       ]);
+      // The line's answers about these branches, beside the tasks rather than below them: 0423 made
+      // `task_id` a history reference, so there is no relation for Prisma to nest.
+      const jobs = await readLandingJobsByTask(
+        this.prisma, stated.flatMap((row) => row.servingTasks.map((task) => task.id)),
+      );
+      const withJobs = (row: (typeof stated)[number]) => ({
+        ...row,
+        servingTasks: row.servingTasks.map((task) => ({
+          ...task, integrationJobs: jobs.get(task.id) ?? [],
+        })),
+      });
       // Matched by re-deriving the subject rather than by parsing it: the spelling of a criterion's
       // wake subject belongs to the function that writes it, and a second parser of it here would
       // be a second definition of what a criterion is called.
       return stated
         .filter((row) => criterionSubjectId(fact.projectId, criterionKeyOf(row.id)) === fact.subjectId)
-        .map((row) => state(row, criterionCoverage(settlements(row.servingTasks)), branches));
+        .map((row) => state(withJobs(row), criterionCoverage(settlements(row.servingTasks)), branches));
     }
 
     return [];
@@ -426,12 +443,15 @@ export class WakeDispositionService {
    * question addressed to somebody: two of them raised in one pass would be two notifications
    * about one delivery, and the second question is not askable until the first is answered
    * anyway. The order is fixed so that two readings of the same world ask the same question.
+   *
+   * Which deliveries still need a person is `blockerFor`'s to say, and since 2026-10-15 it is not
+   * every one with a reading: one already asked about is not asked again.
    */
   async raiseBlockerIfNeeded(fact: WakeFact): Promise<RaisedBlocker | null> {
     const stopped = await this.blockerFor(fact);
     if (!stopped) return null;
     const reason = stopped.disposition.reason;
-    if (blockerRoute(reason) === 'EXCEPTION_ITEM' && isDeliveryReviewReason(reason)) {
+    if (filedAsReview(reason)) {
       return {
         ...stopped.disposition,
         taskId: stopped.taskId,
@@ -462,6 +482,7 @@ export class WakeDispositionService {
       paths: stopped.disposition.paths,
       declaredPaths: stopped.observed.declaredPaths,
       criterionKey: stopped.criterionKey,
+      argument: reason === 'CRITERION_EXEMPTION_ARGUED' ? stopped.argument : null,
     }), loggedRetry(this.logger, 'wakeDisposition.fileDeliveryReview'));
     await this.openItems?.deliverForTasks([stopped.taskId]);
     return filed?.itemId ?? null;
@@ -474,7 +495,6 @@ export class WakeDispositionService {
       where: { id: blocker.taskId },
       select: {
         title: true,
-        completionCriterionOverrideReason: true,
         criterionDefinition: { select: { ordinal: true, revision: true, text: true } },
       },
     });
@@ -489,9 +509,6 @@ export class WakeDispositionService {
         reason: blocker.reason,
         requiredAction: REQUIRED_ACTION[blocker.reason],
         taskTitle: task.title,
-        agentArgument: blocker.reason === 'CRITERION_EXEMPTION_ARGUED'
-          ? task.completionCriterionOverrideReason
-          : null,
         criterionOrdinal: task.criterionDefinition?.ordinal ?? null,
         criterionRevision: task.criterionDefinition?.revision ?? null,
         criterionText: task.criterionDefinition?.text ?? null,
@@ -508,24 +525,52 @@ export class WakeDispositionService {
    * would act on it, and `raiseBlockerIfNeeded` needs it after the fact was allowed, because that
    * is the only moment a blocker may be written. Asking twice costs one repeated read and buys the
    * property that matters — nothing is written on the strength of a fact nobody authorized.
+   *
+   * ONE QUESTION PER DELIVERY
+   * =========================
+   * The fact is derived again whenever the criterion's work is all DONE in a new way — a sibling
+   * finishing is enough — and a delivery's reading does not change because somebody answered it.
+   * Until 2026-10-15 every one of those facts asked the first delivery's question again — 106 scope
+   * reviews over 76 tasks in production, one task six times, 52 after the work had merged, and owner
+   * blockers re-raised to their eighth generation — while the sibling behind it was never read at
+   * all. So two kinds of delivery are passed over: one whose work has landed, because what its
+   * question would hold back has happened; and one whose question for this reading was answered
+   * during this delivery, by whoever answered it.
+   *
+   * A question still open is not asked twice either — its row is the question — and it still holds
+   * the criterion's merge. What it no longer does is hide a later delivery nobody has asked about:
+   * that one is asked first, and the first open question is the answer only when there is none.
    */
   private async blockerFor(fact: WakeFact): Promise<StoppedDelivery | null> {
     if (fact.event !== 'CRITERION_UNLANDED') return null;
 
+    let open: StoppedDelivery | null = null;
     for (const delivery of await this.deliveriesUnder(fact)) {
+      if (delivery.landed) continue;
       const disposition = blockerDisposition(delivery.observed);
-      if (disposition) return { ...delivery, disposition };
+      if (!disposition) continue;
+      const asked = askedAbout(delivery, disposition.reason);
+      if (asked === 'ANSWERED') continue;
+      if (asked === null) return { ...delivery, disposition };
+      open ??= { ...delivery, disposition };
     }
-    return null;
+    return open;
   }
 
   /**
-   * The work serving this criterion, each with the five observations the fold is a function of.
+   * The work serving this criterion, each with the five observations the fold is a function of,
+   * and what has already become of its delivery: whether it landed, and what it was already asked.
    *
-   * One query. The nested selects carry the receipts and the delivering session with the task,
-   * because the alternative is a query per task and the criterion this fact is about can be served
-   * by several. Nothing here decides anything: `blocker-disposition.ts` §2 says which row each
-   * observation is, and this is that reading, spelled once.
+   * One query for the work. The nested selects carry the receipts and the delivering session with
+   * the task, because the alternative is a query per task and the criterion this fact is about can
+   * be served by several. Nothing here decides anything: `blocker-disposition.ts` §2 says which row
+   * each observation is, and this is that reading, spelled once.
+   *
+   * "This delivery" is what the task delivered since it was last sent back: 0271's lifecycle epoch,
+   * which a trigger starts whenever a task leaves DONE for OPEN or IN_PROGRESS, whoever reopened it.
+   * A landing, a refused merge or an answer from before then belonged to the delivery it was sent
+   * back from, and the one it made since is read as new. A task never sent back has no epoch row,
+   * and everything it was ever asked, ever landed or was ever refused is this delivery's.
    */
   private async deliveriesUnder(fact: WakeFact): Promise<ObservedDelivery[]> {
     const stated = await this.prisma.projectAcceptanceCriterionDefinition.findMany({
@@ -544,7 +589,7 @@ export class WakeDispositionService {
             criterionRevision: true,
             mergeReceipts: {
               orderBy: { createdAt: 'desc' },
-              select: { result: true, targetBranch: true, conflicts: true },
+              select: { result: true, targetBranch: true, conflicts: true, createdAt: true },
             },
             // The attempt that produced the branch. Its snapshot is what the runner computed
             // against this session's own base, so a task that ran twice is described by its
@@ -555,19 +600,34 @@ export class WakeDispositionService {
               take: 1,
               select: { id: true, changedFiles: true },
             },
+            progress: { select: { epochStartedAt: true } },
           },
         },
       },
     });
 
-    const branches = await readLandingBranches(this.prisma, fact.projectId);
-
-    return stated
+    const serving = stated
       .filter((row) => criterionSubjectId(fact.projectId, criterionKeyOf(row.id)) === fact.subjectId)
-      .flatMap((row) => row.servingTasks.map((task) => ({
+      .flatMap((row) => row.servingTasks.map((task) => ({ row, task })));
+    const [branches, asked] = await Promise.all([
+      readLandingBranches(this.prisma, fact.projectId),
+      this.questionsAbout(fact.projectId, serving.map(({ task }) => task.id)),
+    ]);
+
+    return serving.map(({ row, task }) => {
+      const thisDelivery = thisDeliverySince(task.progress?.epochStartedAt ?? null);
+      return {
         taskId: task.id,
         sessionId: task.sessions[0]?.id ?? null,
         criterionKey: criterionKeyOf(row.id),
+        argument: task.completionCriterionOverrideReason?.trim() || null,
+        // The landing test `resolveLandedBlockers` ends a question by, on this delivery's receipts.
+        landed: task.mergeReceipts.some((receipt) => thisDelivery(receipt.createdAt)
+          && receiptIsLandingEvidence(receipt, branches)),
+        // An open question whenever it was put, since its row is still the question; an answered
+        // one only if it was answered about this delivery.
+        questions: (asked.get(task.id) ?? [])
+          .filter((question) => question.open || thisDelivery(question.raisedAt)),
         observed: {
           // Written prose only: the record the criterion-change door keeps in the same column says
           // the criterion moved, not that one does not apply (`blocker-disposition.ts` §2).
@@ -581,11 +641,60 @@ export class WakeDispositionService {
           declaredPaths: declaredPaths(task),
           // The branch test is the landing fold's own, asked without its result: a conflict on
           // some other branch is a conflict about somewhere else, exactly as a merge into one is.
+          // And only this delivery's, like the landing: a merge git refused before the task was
+          // sent back refused the delivery it was sent back from, not one nobody has tried to merge.
           conflictedPaths: task.mergeReceipts.find((receipt) => receipt.result === 'CONFLICT'
+            && thisDelivery(receipt.createdAt)
             && receiptIsLandingEvidence({ result: 'MERGED', targetBranch: receipt.targetBranch }, branches),
           )?.conflicts ?? [],
         },
-      })));
+      };
+    });
+  }
+
+  /**
+   * Every question already put about these tasks, by task, in both places one is put: the
+   * coordinator's delivery review, and the owner's blocker — which is also where the three readings
+   * that are reviews now were put before they were. Chosen by the keys their two writers use, never
+   * by `kind` or `detail`, for the reason `resolveLandedBlockers` gives.
+   */
+  private async questionsAbout(
+    projectId: string,
+    taskIds: readonly string[],
+  ): Promise<Map<string, PutQuestion[]>> {
+    const asked = new Map<string, PutQuestion[]>();
+    if (taskIds.length === 0) return asked;
+    const [reviews, blockers] = await Promise.all([
+      this.prisma.projectOpenItem.findMany({
+        where: { projectId, kind: DELIVERY_REVIEW_KIND, taskId: { in: [...taskIds] } },
+        select: { taskId: true, dedupeKey: true, state: true, createdAt: true },
+      }),
+      this.prisma.projectBlocker.findMany({
+        where: {
+          projectId,
+          subjectType: 'TASK',
+          dedupeKey: {
+            in: taskIds.flatMap((taskId) =>
+              BLOCKER_REASONS.map((reason) => dispositionKey(reason, taskId))),
+          },
+        },
+        select: { subjectId: true, dedupeKey: true, resolvedAt: true, firstSeenAt: true },
+      }),
+    ]);
+    const put = (taskId: string, question: PutQuestion) =>
+      asked.set(taskId, [...(asked.get(taskId) ?? []), question]);
+    for (const review of reviews) {
+      if (!review.taskId) continue;
+      put(review.taskId, {
+        key: review.dedupeKey, open: review.state === 'OPEN', raisedAt: review.createdAt,
+      });
+    }
+    for (const blocker of blockers) {
+      put(blocker.subjectId, {
+        key: blocker.dedupeKey, open: blocker.resolvedAt === null, raisedAt: blocker.firstSeenAt,
+      });
+    }
+    return asked;
   }
 
   /**
@@ -661,11 +770,21 @@ export class WakeDispositionService {
    * it lands on, the merge they were holding back has happened and they no longer block anything.
    * A branch git refused is not among them: that ends when a person has untangled the tree.
    *
+   * The delivery reviews that end the same way are `LANDED_REVIEW_REASONS`: a refused branch once
+   * somebody merged it after all, and an argued exemption, which holds back the merge exactly as its
+   * blocker did. Files outside the declaration stay open: a merge decides nothing about them.
+   *
    * "Landed" is `receiptIsLandingEvidence`, the definition every other reader of landing uses, so
    * this follows it when that definition changes. Rows are chosen by the key `raiseBlocker` writes —
    * never by `kind`, which the missing-judgment-path signal shares, and never by `detail`, which is
    * display only. Each is a compare-and-set on the row still being open, so a redelivery, a second
    * receipt or an owner resolving it first writes nothing twice.
+   *
+   * Only a landing of this delivery counts, by the boundary `deliveriesUnder` draws: a receipt from
+   * before the task was last sent back landed the delivery it was sent back from, and an open
+   * question is about the one made since — the one `blockerFor` asks about. Until 2026-10-16 the old
+   * receipt closed that question in the very request that put it. A task never sent back has no
+   * boundary, and any of its landings counts, as before.
    */
   async resolveLandedBlockers(projectIds: ReadonlyArray<string | null | undefined>): Promise<number> {
     const ids = [...new Set(projectIds.filter((id): id is string => !!id))];
@@ -685,25 +804,28 @@ export class WakeDispositionService {
           projectId: { in: ids },
           kind: DELIVERY_REVIEW_KIND,
           state: 'OPEN',
-          dedupeKey: { startsWith: deliveryReviewKey('MERGE_REFUSED_BY_GIT', '') },
+          OR: LANDED_REVIEW_REASONS.map((reason) => ({ dedupeKey: { startsWith: deliveryReviewKey(reason, '') } })),
           taskId: { not: null },
         },
         select: { id: true, projectId: true, taskId: true },
       }),
     ]);
     if (open.length === 0 && reviews.length === 0) return 0;
-    const receipts = await this.prisma.sessionMergeReceipt.findMany({
-      where: {
-        taskId: {
-          in: [...new Set([
-            ...open.map((blocker) => blocker.subjectId),
-            ...reviews.map((review) => review.taskId!).filter(Boolean),
-          ])],
-        },
-      },
-      orderBy: { createdAt: 'asc' },
-      select: { taskId: true, result: true, targetBranch: true },
-    });
+    const taskIds = [...new Set([
+      ...open.map((blocker) => blocker.subjectId),
+      ...reviews.map((review) => review.taskId!).filter(Boolean),
+    ])];
+    const [receipts, epochs] = await Promise.all([
+      this.prisma.sessionMergeReceipt.findMany({
+        where: { taskId: { in: taskIds } },
+        orderBy: { createdAt: 'asc' },
+        select: { taskId: true, result: true, targetBranch: true, createdAt: true },
+      }),
+      this.prisma.taskProgress.findMany({
+        where: { taskId: { in: taskIds } },
+        select: { taskId: true, epochStartedAt: true },
+      }),
+    ]);
     const codebases = await this.prisma.projectCodebase.findMany({
       where: { projectId: { in: ids }, slot: 'primary' },
       select: { projectId: true, upstreamRef: true, integrationRef: true },
@@ -713,7 +835,11 @@ export class WakeDispositionService {
       const branches = landingBranchesFor(
         codebases.find((codebase) => codebase.projectId === projectId) ?? null,
       );
+      const thisDelivery = thisDeliverySince(
+        epochs.find((epoch) => epoch.taskId === taskId)?.epochStartedAt ?? null,
+      );
       return receipts.find((receipt) => receipt.taskId === taskId
+        && thisDelivery(receipt.createdAt)
         && receiptIsLandingEvidence(receipt, branches));
     };
 
@@ -757,7 +883,20 @@ interface ObservedDelivery {
   taskId: string;
   sessionId: string | null;
   criterionKey: string;
+  /** The override reason as written, for the review that shows it; the fold reads only `observed`. */
+  argument: string | null;
+  /** Whether a receipt from this delivery puts its work on a branch it lands on. */
+  landed: boolean;
+  /** The questions already put about it: every one still open, and those answered during it. */
+  questions: readonly PutQuestion[];
   observed: DeliveryObservations;
+}
+
+/** One question already put about a task's delivery, under the key its writer gave it. */
+interface PutQuestion {
+  key: string;
+  open: boolean;
+  raisedAt: Date;
 }
 
 interface StoppedDelivery extends ObservedDelivery {
@@ -765,7 +904,39 @@ interface StoppedDelivery extends ObservedDelivery {
 }
 
 function isDeliveryReviewReason(reason: BlockerDisposition['reason']): reason is DeliveryReviewReason {
-  return reason === 'OUTSIDE_DECLARED_SCOPE' || reason === 'MERGE_REFUSED_BY_GIT';
+  return reason === 'CRITERION_EXEMPTION_ARGUED' || reason === 'OUTSIDE_DECLARED_SCOPE'
+    || reason === 'MERGE_REFUSED_BY_GIT';
+}
+
+/** Whether a reading is put to the coordinator as a delivery review today, not as a blocker. */
+function filedAsReview(reason: BlockerReason): reason is DeliveryReviewReason {
+  return blockerRoute(reason) === 'EXCEPTION_ITEM' && isDeliveryReviewReason(reason);
+}
+
+/**
+ * Where the question a reading raises stands for one delivery: `OPEN` while the row it is filed as
+ * today is open, `ANSWERED` once one put during this delivery was closed, `null` while nobody has.
+ *
+ * Open is read on today's route only, so that a delivery held by an open question writes nothing
+ * new when it is filed again. An answer counts under either key: a reading that is a review now was
+ * a blocker before, and the owner's ruling on that blocker answered the same question.
+ */
+function askedAbout(delivery: ObservedDelivery, reason: BlockerReason): 'OPEN' | 'ANSWERED' | null {
+  const blocker = dispositionKey(reason, delivery.taskId);
+  const review = isDeliveryReviewReason(reason) ? deliveryReviewKey(reason, delivery.taskId) : null;
+  const filed = filedAsReview(reason) ? review : blocker;
+  if (delivery.questions.some((question) => question.open && question.key === filed)) return 'OPEN';
+  return delivery.questions.some((question) => !question.open
+    && (question.key === blocker || question.key === review)) ? 'ANSWERED' : null;
+}
+
+/**
+ * Whether a moment belongs to a task's current delivery: what it delivered since it was last sent
+ * back, 0271's lifecycle epoch (`deliveriesUnder` says why). A task never sent back has no epoch
+ * start, and everything it ever did is this delivery's.
+ */
+function thisDeliverySince(epochStartedAt: Date | null): (at: Date) => boolean {
+  return (at) => epochStartedAt === null || at >= epochStartedAt;
 }
 
 /** The reasons whose blocker a landing ends — see `resolveLandedBlockers`. */
@@ -773,6 +944,12 @@ const LANDED_WORK_REASONS: ReadonlyArray<BlockerDisposition['reason']> = [
   'CRITERION_EXEMPTION_ARGUED',
   'ACCEPTANCE_STANDARD_MOVED',
   'OUTSIDE_DECLARED_SCOPE',
+];
+
+/** The reasons whose delivery review a landing ends — see `resolveLandedBlockers`. */
+const LANDED_REVIEW_REASONS: ReadonlyArray<DeliveryReviewReason> = [
+  'CRITERION_EXEMPTION_ARGUED',
+  'MERGE_REFUSED_BY_GIT',
 ];
 
 /** The open-episode key a reason's blocker is raised under for one task, or the prefix of all of them. */
@@ -783,17 +960,19 @@ function dispositionKey(reason: BlockerDisposition['reason'], taskId = ''): stri
 /** One executable sentence per reason, addressed to the person the blocker hands the delivery to. */
 const REQUIRED_ACTION: Readonly<Record<BlockerDisposition['reason'], string>> = {
   CRITERION_EXEMPTION_ARGUED:
-    '这份交付写下了「某条判据不适用」的理由。请读那段理由并裁定它成不成立，再决定合不合入；'
-    + '在你裁定之前不要合并，也不要放行下一条。',
+    'This task keeps the completion criterion it declared although Orbit questioned it, and whoever filed it wrote '
+    + 'down why. Read that reason against the acceptance criterion it serves and rule on whether it holds before it '
+    + 'merges.',
   ACCEPTANCE_STANDARD_MOVED:
-    '这份工作声明的那条验收标准在它开工之后被改过。请确认按今天的措辞它算不算通过；'
-    + '改验收标准只有账号所有者能做，协调会话不能替。',
+    'The acceptance criterion this work declared was changed after it started. Confirm whether it passes under '
+    + 'today’s wording; only the account owner can change the acceptance criteria, and the coordinator session cannot '
+    + 'do it for them.',
   OUTSIDE_DECLARED_SCOPE:
-    '这份交付改了它自己的声明里没提过的文件。请看 detail.paths 列出的那些改动，'
-    + '决定接受、退回还是让它拆开；在你决定之前不要合并。',
+    'This delivery changed files its own declaration never mentioned. Look at the changes detail.paths lists, '
+    + 'and decide whether to accept it, send it back or have it split up; do not merge before you have decided.',
   MERGE_REFUSED_BY_GIT:
-    'git 拒绝了这次合并。请按 detail.paths 列出的冲突文件手工解决，再重新合入；'
-    + '重试不会有帮助。',
+    'git refused this merge. Resolve the conflicting files detail.paths lists by hand, then merge it again; '
+    + 'retrying will not help.',
 };
 
 /**

@@ -1,0 +1,210 @@
+<!doctype html>
+<!-- Design board, decided 2026-10-16 (按推荐落地) and built: messages sent while a turn runs move out of the
+     transcript into a tray on the composer's top edge, after the owner's Codex screenshot (00-codex-ref.png).
+     The pictures are the proposal as it was shown; the built pages draw the same structure.
+     ① and ⑤ are the session page as it is (this branch's src/web + src/shared on vite, Chromium, 1280-wide desktop
+     pane / 390-wide phone, 2x), fed by src/web/ui-migration's fixtures plus a running Claude conversation.
+     ② ③ ④ ⑥ and a–g are the SAME real page with the tray drawn into it (mock DOM + CSS on the page's own tokens):
+     the transcript and composer are real, the tray is not code yet. Dashed outlines and numbers are drawn on top.
+     Kit: /var/tmp/steer-tray-mock (capture.mjs, scenario.mjs, shots.mjs, tray.css). -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>运行中发的消息，挪到输入框上方</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1500px; }
+  .head { display: grid; grid-template-columns: minmax(0, 1fr) 560px; gap: 30px; align-items: start; }
+  .ref { background: #f5f6f8; border-radius: 10px; padding: 12px 14px 10px; }
+  .ref img { display: block; width: 100%; border-radius: 6px; background: #fff; }
+  .verdict { margin: 12px 0 0; padding: 10px 14px; border-radius: 8px; background: #fff; border: 1px solid #dde0e6;
+             font-size: 13px; line-height: 1.8; color: var(--text-2); }
+  .verdict b { color: var(--text-1); }
+  .verdict .yes { color: #16833a; font-weight: 700; }
+  .verdict .no { color: #c2410c; font-weight: 700; }
+  .cols2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .phone-row { display: grid; grid-template-columns: 330px 330px minmax(0, 1fr); gap: 26px; align-items: start; }
+  .fig { position: relative; }
+  .shot { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .09), 0 1px 3px rgba(15, 23, 42, .06); }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .en { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .ui { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; font-size: 12px; padding: 0 5px; border-radius: 4px; background: #f0f2f5; color: var(--text-1); white-space: nowrap; }
+  .mk { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 9px; pointer-events: none; }
+  .mk > .m-n { position: absolute; top: -10px; right: -10px; margin: 0; box-shadow: 0 0 0 2px #fff; }
+  .mk-l { position: absolute; white-space: nowrap; font-size: 12px; font-weight: 700;
+          color: #fff; background: var(--warning-solid); border-radius: 5px; padding: 1px 7px; }
+  .mk-l-up { bottom: calc(100% + 8px); left: -2px; }
+  .mk-l-left { right: calc(100% + 12px); top: 50%; transform: translateY(-50%); }
+  .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .states { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px 26px; align-items: start; }
+  .st-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 6px; font-size: 13px; color: var(--text-1); font-weight: 600; }
+  .st-h .tag { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 5px;
+               background: var(--text-1); color: #fff; font: 700 12px/1 -apple-system, "Inter", sans-serif; }
+  .st-h .who { font-weight: 400; color: var(--text-3); font-size: 12.5px; }
+  .st .m-cap { margin-top: 6px; }
+  .legend { padding: 12px 16px; background: #f5f6f8; border-radius: 8px; font-size: 12.5px; line-height: 1.85; color: #3f4652; }
+  .legend b { color: var(--text-1); }
+  .ic { display: inline-flex; vertical-align: -3px; width: 16px; height: 16px; color: var(--text-3); }
+  .ic.steer { color: var(--brand); }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 7px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules .tray { color: var(--brand-strong); font-weight: 700; }
+  .rules .chat { color: #3f4652; font-weight: 700; }
+  .rules .n { color: var(--text-3); }
+  .rules code, .files code, .ask code, .m-sub code, .m-cap code, .verdict code { font-size: 11.5px; }
+  .more { margin: 10px 0 0; padding: 0 0 0 18px; font-size: 12.5px; line-height: 1.75; color: var(--text-2); }
+  .more b { color: var(--text-1); }
+  .more li + li { margin-top: 4px; }
+  .bottom { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b { color: var(--text-1); }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.8; color: #5c4210; }
+  .ask b { color: #3d2b08; }
+  .ask ol { margin: 6px 0 0; padding-left: 20px; }
+  .ask li + li { margin-top: 6px; }
+  .ask .rec { color: #16833a; font-weight: 700; }
+  .ask .alt { color: #8a6a2c; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <div class="head">
+    <div>
+      <h1 class="m-h1 zh">运行中发的消息，挪到输入框上方（参考 Codex）</h1>
+      <p class="m-sub zh" style="line-height:1.85"><b>已定（2026-10-16）：按推荐落地。</b>你问 steer 能不能照 Codex 那样做：<b>可以，建议做。</b>回合进行中发出、模型还没读到的消息，不再画在对话里，而是排在贴着输入框上沿的一条托盘里，一行一条：行首的图标说它去哪（<span class="ic steer"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.5v5.5a2.5 2.5 0 0 0 2.5 2.5H13"/><path d="M10 7.5l3 3-3 3"/></svg></span> 插进当前回合，<span class="ic"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 3.5h11M2.5 7h11M2.5 10.5h4.5"/><path d="M9.5 10.5h4M12 9l1.5 1.5L12 12"/></svg></span> 排到下一轮），后面是它现在的状态和能做的事（<span class="ui">Steer</span>、撤回）。<b>模型读到它的那一刻，它才进对话，位置就是被读到的位置。</b><br>
+      ① ⑤ 是现在的真实页面；其余都是<b>同一个真实页面上画出来的效果图</b>：对话和输入框是本分支 Web 代码渲染的，只有托盘是手画进页面的（用页面自己的颜色变量）。</p>
+    </div>
+    <div class="ref">
+      <div class="m-stage-l zh" style="margin-bottom:8px"><span class="m-k">参考</span>你的截图（Codex）</div>
+      <img src="00-codex-ref.png" alt="">
+      <div class="verdict zh">
+        <b>Codex 这一行，在 Orbit 里是两种消息：</b><br>
+        <span class="yes">插进当前回合、还没被读的 steer。</span>Claude、Codex 会话里回合进行中发的，现在默认都是这种。<br>
+        <span class="yes">排到下一轮的消息。</span>Kimi、DeepSeek Harness、OpenCode、Antigravity 只能这样（引擎不收 steer）。Codex 的 <span class="ui">Steer</span> 按钮放在这一种上：现在插进当前回合。<br>
+        <span class="no">不同处：</span>Codex 默认排队，点 Steer 才插；我们默认直接插。默认怎么走是最下面第 2 项。
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web · Claude 会话</span>全量测试跑到一半，中途发了两条</div>
+    <div class="cols2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">现在</span>① 两条都画在对话里</div>
+        <div class="fig"><img class="shot" src="01a-today.png" alt=""><span class="mk" style="left:20.8%;top:42.8%;width:77.2%;height:11.2%"><span class="m-n">1</span></span><span class="mk" style="left:59.4%;top:55.0%;width:38.6%;height:26.9%"><span class="m-n">2</span></span></div>
+        <p class="m-cap zh"><b>1</b> 插进当前回合的 steer：<span class="ui">Waiting to be read</span> <span class="ui">Withdraw</span>。<b>2</b> 排到下一轮的消息（Claude 会话里现在少见：Stop 之后发的、错过回合被改排的；Kimi 等引擎上每条都是这样）：虚线框，<span class="ui">Queued for next turn</span> <span class="ui">Cancel</span>。全量测试一跑十几分钟，这段时间的输出会接在 1 下面，读起来像模型早就看到了它；往上翻一点，两条都不在视线里。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">效果图</span>② 托盘：一行一条，压在输入框后面</div>
+        <div class="fig"><img class="shot" src="01b-proposal.png" alt=""><span class="mk" style="left:4.8%;top:78.6%;width:90.4%;height:10.6%"><span class="m-n">3</span><span class="mk-l mk-l-up zh">新增</span></span><span class="mk" style="left:78.0%;top:84.6%;width:11.2%;height:4.2%"><span class="m-n">4</span></span></div>
+        <p class="m-cap zh">对话里只剩模型真正读到的东西。<b>3</b> 托盘：第一行是 1（蓝色 ↳，等着被读），第二行是 2（≡，排到下一轮），有图的带缩略图。<b>4</b> <span class="ui">Steer</span>：现在插进当前回合。垃圾桶 = 撤回，文字回到输入框、接在草稿下面（同 10-16 的决定）。一行放不下就省略，悬停（手机上点一下）看全文。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="cols2">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">效果图</span>③ 被读到：离开托盘，进对话</div>
+        <div class="fig"><img class="shot" src="03-read.png" alt=""><span class="mk" style="left:20.8%;top:42.8%;width:77.2%;height:11.2%"><span class="m-n">5</span><span class="mk-l mk-l-left zh">读到的位置</span></span></div>
+        <p class="m-cap zh">测试跑完，Claude 在这个工具边界读到它：这一行离开托盘，<b>5</b> 气泡出现在测试结果之后，下面写 <span class="ui">Read in this turn</span>，接着是模型照它做的事。排队那条还在托盘里，这一轮结束、下一轮开始时才进对话。<br>现在气泡排在「写进 Claude 的那一刻」，改成排在「Claude 回显的那一刻」：这两个事件 runner 本来就分开发（<code>user</code> 与 <code>user_delivery: acknowledged</code>），客户端换一个来排。</p>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">另一个选项</span>④ 照 Codex：默认排到下一轮</div>
+        <div class="fig"><img class="shot" src="04-codex-default.png" alt=""></div>
+        <p class="m-cap zh">回合进行中发的<b>都先排着</b>，每条都有 <span class="ui">Steer</span>；点了才插进当前回合，变成下面的 b（Claude）或 d（Codex）；不点就等这一轮结束，作为下一轮发出。<br><b>好处</b>：Codex 会话里 steer 一插进去就收不回（d），排着的时候还能撤回重写。<b>代价</b>：想让模型马上看到，每次都要多点一下；手机上尤其明显。</p>
+        <div class="legend zh" style="margin-top:16px">
+          <b>两种默认，托盘长得一样，只差刚发出的那条落在哪一行：</b><br>
+          <b>照旧（推荐）</b>：发送 = 插进当前回合（第一行那种）；<span class="en">⌥Enter</span>（手机长按发送键）= 排到下一轮（第二行那种）。<br>
+          <b>照 Codex</b>：发送 = 排到下一轮；<span class="en">⌥Enter</span> = 直接插进当前回合。<br>
+          两种都要服务器多一件事：把一条排着的消息改成插进当前回合（<span class="ui">Steer</span>）。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k state">状态</span>一行的几种样子（桌面 Web，托盘 + 输入框，悬停时的提示一起画出）</div>
+    <div class="states">
+      <div class="st"><div class="st-h zh"><span class="tag">a</span><span class="en">Sending…</span><span class="who">任何引擎</span></div><img class="shot" src="02a-sending.png" alt=""><p class="m-cap zh">Orbit 收下了，还没交给引擎。垃圾桶：服务器直接删。</p></div>
+      <div class="st"><div class="st-h zh"><span class="tag">b</span><span class="en">Waiting to be read</span><span class="who">Claude</span></div><img class="shot" src="02b-waiting-claude.png" alt=""><p class="m-cap zh">在 Claude 的队列里，模型还没读。悬停垃圾桶：<span class="ui">Withdraw — back to the composer</span>。</p></div>
+      <div class="st"><div class="st-h zh"><span class="tag">c</span><span class="en">Withdrawing…</span><span class="who">点了撤回</span></div><img class="shot" src="02c-withdrawing.png" alt=""><p class="m-cap zh">整行变灰、按钮收起，等 Claude 回答（实测 &lt; 10 ms，服务器最多等 15 秒）。删成了这一行就消失，文字回到输入框；来不及照旧提示 <span class="ui">Too late to withdraw</span>。</p></div>
+      <div class="st"><div class="st-h zh"><span class="tag">d</span><span class="en">Waiting to be read</span><span class="who">Codex</span></div><img class="shot" src="02d-waiting-codex.png" alt=""><p class="m-cap zh">Codex 收下就收不回：没有垃圾桶，只能等它被读（实测有过隔 31 秒才读）。</p></div>
+      <div class="st"><div class="st-h zh"><span class="tag">e</span><span class="en">Queued for next turn</span><span class="who">Claude、Codex 会话</span></div><img class="shot" src="02e-queued-steerable.png" alt=""><p class="m-cap zh">悬停 <span class="ui">Steer</span>：<span class="ui">Send into the current turn now</span>。点了这一行就变成 b 或 d。</p></div>
+      <div class="st"><div class="st-h zh"><span class="tag">f</span><span class="en">Queued for next turn</span><span class="who">Kimi、DeepSeek Harness、OpenCode、Antigravity</span></div><img class="shot" src="02f-queued-other-engine.png" alt=""><p class="m-cap zh">引擎不收 steer，所以没有 <span class="ui">Steer</span>，只能撤回（就是现在的 <span class="ui">Cancel</span>）。</p></div>
+      <div class="st"><div class="st-h zh"><span class="tag">g</span><span class="en">1 image</span><span class="who">只发了图</span></div><img class="shot" src="02g-image-only.png" alt=""><p class="m-cap zh">照 Codex：缩略图加 <span class="ui">1 image</span>（两张写 <span class="ui">2 images</span>）。</p></div>
+      <div class="legend zh">
+        <b>参考图里的 ⋯ 先不放。</b>这一行能做的两件事（<span class="ui">Steer</span>、撤回）都已经在行上；撤回把文字放回输入框，改完再发就是「编辑」。以后有第三件事再加。<br>
+        <b>好几条时</b>：按发出的顺序往上叠，最新的贴着输入框；超过 4 行在托盘里滚动。
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">手机 Web · Claude 会话</span>同一段对话</div>
+    <div class="phone-row">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k">现在</span>⑤</div>
+        <img class="shot" src="05a-today-phone.png" alt="">
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k new">效果图</span>⑥</div>
+        <img class="shot" src="05b-proposal-phone.png" alt="">
+      </div>
+      <div>
+        <p class="m-cap zh" style="margin-top:34px">手机上一行放不下文字、状态和按钮：<b>状态挪到文字下面一行</b>，按钮留在右边，每个 36px 见方，手指够得着。托盘比输入框两边各收进 12px（桌面 18px）。<br><br>现在 ⑤ 的两条一共占了大半屏，模型的输出被挤到上面；⑥ 里它们只占两行，对话完整地留给模型的输出。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="bottom">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">规则</span>哪些进托盘，哪些留在对话里</div>
+        <table class="rules zh">
+          <tr><th>这条消息此时</th><th>放在哪</th><th>行上能做的</th></tr>
+          <tr><td><span class="en">Sending…</span></td><td><span class="tray">托盘</span></td><td>撤回</td></tr>
+          <tr><td><span class="en">Waiting to be read</span>（Claude）</td><td><span class="tray">托盘</span></td><td>撤回（以 Claude 的回答为准）</td></tr>
+          <tr><td><span class="en">Waiting to be read</span>（Codex）</td><td><span class="tray">托盘</span></td><td class="n">无：收不回</td></tr>
+          <tr><td><span class="en">Withdrawing…</span></td><td><span class="tray">托盘</span>（变灰）</td><td class="n">无</td></tr>
+          <tr><td><span class="en">Queued for next turn</span></td><td><span class="tray">托盘</span></td><td>Claude / Codex 会话：<span class="ui">Steer</span>、撤回；其他引擎：撤回</td></tr>
+          <tr><td><span class="en">Read in this turn</span></td><td><span class="chat">对话里，被读到的位置</span></td><td class="n">同现在（复制）</td></tr>
+          <tr><td><span class="en">Not delivered</span> / <span class="en">Couldn't confirm it was read</span></td><td><span class="chat">对话里，没送到的那一刻的位置</span></td><td>同现在：⚠ 和 <span class="ui">Put back in the composer</span></td></tr>
+        </table>
+        <ul class="more zh">
+          <li><b>进对话的位置 = 它有结果的那一刻</b>：读到了排在读到的位置，没送到排在没送到的位置（回合末尾附近，正好在眼前），样子同现在。</li>
+          <li><b>错过回合被改排的</b>（现在写 <span class="en">Queued for next turn instead</span>）：回到托盘，当作排着的那种。</li>
+          <li><b>Orbit 自己排的</b>（任务简报、Watch 唤醒、别的会话发来的消息、回复卡）：不是你打的字，不能 Steer 也不放回输入框，照旧画在对话末尾，Watch 的 <span class="ui">Withdraw wake</span> 不变。</li>
+          <li><b>在别的设备上</b>：托盘跟着服务器的排队列表和 runner 的事件走，桌面撤回、手机上这一行也一起消失。</li>
+        </ul>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">改动</span>要做的话</div>
+        <ul class="files zh">
+          <li><b>Web</b>：托盘（替换对话末尾的排队气泡和 steer 气泡下面那一行）；<code>Transcript.tsx</code> 让 steer 气泡排在它被回显的位置；<span class="en">⌥Enter</span>。</li>
+          <li><b>服务器</b>：<span class="ui">Steer</span>：在会话行锁里把一条还排着的 message 改成指向正在跑的那一轮的 steer；没在跑、或引擎 / runner 不收 steer 就拒绝，这一行照旧排着。撤回沿用现在的 <code>DELETE /sessions/:id/turns/:turnId</code>。</li>
+          <li><b>iOS / macOS</b>：同样的结构，原生绘制：输入框上方那组卡片里最贴近输入框的一张。</li>
+          <li><b>Android</b>：排队尾巴（<code>QueuedTail</code>）同样挪进托盘。</li>
+        </ul>
+        <div class="ask zh">
+          <b>已定（2026-10-16）：按推荐落地。</b>四项都取绿色那一项。原生 Mac 上 ⌥Return 是系统的换行，所以 Mac App 用发送键的右键菜单（iPhone 长按）来排到下一轮，网页照旧 ⌥Enter。
+          <ol>
+            <li>放哪儿：<span class="rec">托盘，贴在输入框上方（②）</span>／<span class="alt">照旧画在对话里（①）</span></li>
+            <li>回合进行中按发送：<span class="rec">照旧插进当前回合；<span class="en">⌥Enter</span>（手机长按发送键）排到下一轮，排着的随时能 Steer</span>／<span class="alt">照 Codex 默认排到下一轮，点 Steer 才插（④）</span>／<span class="alt">只挪位置，不加 Steer 和 <span class="en">⌥Enter</span></span></li>
+            <li>垃圾桶：<span class="rec">撤回，文字回到输入框（沿用 10-16 的决定）</span>／<span class="alt">照 Codex 直接删掉</span></li>
+            <li>范围：<span class="rec">Web 和 iOS / macOS 一起做，Android 随后</span>／<span class="alt">先只做 Web</span></li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

@@ -1,0 +1,932 @@
+argv: env P32_SNAPSHOTS=/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p0-ref-shots P32_OUTPUT=/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/runs3/p0-strict-out P32_PORT=4173 npx playwright test --config ui-migration/p32-reference.config.mjs --update-snapshots=none
+tree: /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del
+head: f4ec61864e53a13aa35cbff25b5ea1ae03c99453
+uncommitted:
+?? src/web/ui-migration/p32-reference.config.mjs
+load: 30.53 32.26 38.32 41/5762 4001916
+mem: 2154M available
+disk: / 7018M available, TMPDIR /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/tmp
+started: 2026-10-09T22:18:01Z
+
+P0 expected screenshots: 87 P0.2 originals, 143 main drift references, 22 accepted migration differences.
+
+Running 112 tests using 1 worker
+
+  ✘    1 [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (18.4s)
+  ✘    2 [chromium-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (4.1s)
+  ✓    3 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.6s)
+  ✓    4 [chromium-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.2s)
+  ✓    5 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (4.7s)
+  ✓    6 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (1.0s)
+  ✓    7 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.6s)
+  ✓    8 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.1s)
+  ✓    9 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.2s)
+  ✓   10 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.3s)
+  ✘   11 [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (5.5s)
+  ✘   12 [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline (9.0s)
+  ✓   13 [chromium-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (813ms)
+  ✓   14 [chromium-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.5s)
+  -   15 [chromium-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✘   16 [chromium-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.3s)
+  ✓   17 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.4s)
+  ✓   18 [chromium-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.3s)
+  ✓   19 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.3s)
+  ✓   20 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (614ms)
+  ✓   21 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.2s)
+  ✓   22 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (1.2s)
+  ✓   23 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (936ms)
+  ✓   24 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (1.1s)
+  ✘   25 [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (5.0s)
+  -   26 [chromium-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   27 [chromium-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (768ms)
+  ✓   28 [chromium-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.4s)
+  ✘   29 [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (9.4s)
+  ✘   30 [chromium-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.1s)
+  ✓   31 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.2s)
+  ✓   32 [chromium-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.3s)
+  ✓   33 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.8s)
+  ✓   34 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (618ms)
+  ✓   35 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (2.1s)
+  ✓   36 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (800ms)
+  ✓   37 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (853ms)
+  ✓   38 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (852ms)
+  ✘   39 [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (4.0s)
+  -   40 [chromium-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   41 [chromium-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (600ms)
+  ✓   42 [chromium-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.8s)
+  -   43 [chromium-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✘   44 [chromium-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (2.6s)
+  ✓   45 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (829ms)
+  ✓   46 [chromium-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (920ms)
+  ✓   47 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (2.0s)
+  ✓   48 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (536ms)
+  ✓   49 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (2.0s)
+  ✓   50 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (899ms)
+  ✓   51 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (761ms)
+  ✓   52 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (792ms)
+  ✘   53 [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (4.6s)
+  -   54 [chromium-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   55 [chromium-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (668ms)
+  ✓   56 [chromium-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (1.8s)
+  ✘   57 [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (11.7s)
+  ✘   58 [webkit-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (4.0s)
+  ✓   59 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.7s)
+  ✓   60 [webkit-light-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.9s)
+  ✓   61 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › task (4.1s)
+  ✓   62 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › share (1.5s)
+  ✓   63 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (4.8s)
+  ✓   64 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (2.3s)
+  ✓   65 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (2.2s)
+  ✓   66 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.9s)
+  ✘   67 [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session (8.0s)
+  -   68 [webkit-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   69 [webkit-light-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.8s)
+  ✓   70 [webkit-light-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.9s)
+  -   71 [webkit-light-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✘   72 [webkit-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (4.3s)
+  ✓   73 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.6s)
+  ✓   74 [webkit-light-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.8s)
+  ✓   75 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › task (4.2s)
+  ✓   76 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › share (1.4s)
+  ✓   77 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › projects (4.4s)
+  ✓   78 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.8s)
+  ✓   79 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › settings (1.9s)
+  ✓   80 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › profile (2.0s)
+  ✘   81 [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session (7.1s)
+  -   82 [webkit-light-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   83 [webkit-light-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.0s)
+  ✓   84 [webkit-light-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.7s)
+  ✘   85 [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules (9.1s)
+  ✘   86 [webkit-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.5s)
+  ✓   87 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.3s)
+  ✓   88 [webkit-dark-desktop] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.4s)
+  ✓   89 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › task (2.7s)
+  ✓   90 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › share (890ms)
+  ✓   91 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › projects (3.0s)
+  ✓   92 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › wiki (1.3s)
+  ✓   93 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › settings (1.1s)
+  ✓   94 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › profile (1.1s)
+  ✘   95 [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session (5.5s)
+  -   96 [webkit-dark-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓   97 [webkit-dark-desktop] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.2s)
+  ✓   98 [webkit-dark-desktop] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (3.5s)
+  -   99 [webkit-dark-phone] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules
+  ✘  100 [webkit-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility (3.2s)
+  ✓  101 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-1: task share Escape restores focus (1.3s)
+  ✓  102 [webkit-dark-phone] › ui-migration/known-failures.browser.mjs:12:3 › P0.2-FOCUS-2: task share Done restores focus (1.3s)
+  ✓  103 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › task (3.6s)
+  ✓  104 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › share (2.0s)
+  ✓  105 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › projects (5.5s)
+  ✓  106 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › wiki (2.6s)
+  ✓  107 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › settings (2.2s)
+  ✓  108 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › profile (2.0s)
+  ✘  109 [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session (9.3s)
+  -  110 [webkit-dark-phone] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline
+  ✓  111 [webkit-dark-phone] › ui-migration/states.browser.mjs:6:3 › controlled loading › projects loading and release (1.5s)
+  ✓  112 [webkit-dark-phone] › ui-migration/states.browser.mjs:22:3 › controlled error › projects error and retry (4.0s)
+
+
+  1) [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/attachments/computed-styles-and-timings-6d41a6b05fc9e349039e1b0ffdbcfe98a47a25c9.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-light-desktop/attachments/computed-styles-and-timings-c8a286536e40d3b09cfc8a9e8bb02e0f84ff48df.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session ───────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-light-desktop/attachments/computed-styles-and-timings-36e838136f762cafb4cf392c3b25b05ac80f7e38.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at verify (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/performance.browser.mjs:39:49)
+        at /mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/performance.browser.mjs:82:11
+
+    attachment #1: browser-performance-samples (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/performance.browser.mjs-record-browser-performance-baseline-chromium-light-desktop/attachments/browser-performance-samples-e34be1d44dccbc75f1d20b0fbd17ed3af3f5f12d.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/performance.browser.mjs-record-browser-performance-baseline-chromium-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/performance.browser.mjs-record-browser-performance-baseline-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/performance.browser.mjs-record-browser-performance-baseline-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [chromium-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-light-phone/attachments/computed-styles-and-timings-cb5a28d5fad87f3f2493373e9f786a70955bfcaa.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-light-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session ─────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-light-phone/attachments/computed-styles-and-timings-444bd8492aec8ae47d08d2557c16d72024e1b1ae.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/attachments/computed-styles-and-timings-c4c146b1aef9a1bab756013346c96606c54ec848.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [chromium-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-dark-desktop/attachments/computed-styles-and-timings-8fddba64f9fe8d36787281f23fef46b9efc41ac4.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  9) [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session ────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-dark-desktop/attachments/computed-styles-and-timings-76255806f3b8d7290af41a4a91893d39a812f020.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  10) [chromium-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-dark-phone/attachments/computed-styles-and-timings-b505696d3b38a5e9e0ee0f31737d64daf68f390d.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-dark-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  11) [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session ─────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-dark-phone/attachments/computed-styles-and-timings-bb1cce46427d36c7a35e9c89d9d54018271cc158.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/pages.browser.mjs-session-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  12) [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/attachments/computed-styles-and-timings-64aa9a4c2b448e0e57b50625c08da5acd48e8d76.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  13) [webkit-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-light-desktop/attachments/computed-styles-and-timings-46520c8acb40a4d797211e1896264e19885b5401.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-light-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  14) [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session ────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-light-desktop/attachments/computed-styles-and-timings-9de49a36c2e10fa91afaa97954d7b99dd1a1ace6.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-light-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  15) [webkit-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-light-phone/attachments/computed-styles-and-timings-f7a1f1622180e769719f9d27945f2fffd96b0637.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-light-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  16) [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session ──────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-light-phone/attachments/computed-styles-and-timings-cbc9c2add4b47093149d82dfed3f307bd5cbaea5.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-light-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  17) [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/attachments/computed-styles-and-timings-472d118e26146630a395de5b73d6bd1a5ebf6085.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/breakpoints.browser.mjs-bo-b5465-ing-600-640-and-960px-rules-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  18) [webkit-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-dark-desktop/attachments/computed-styles-and-timings-e1d444bf9490fcb884ac163559b20cf3d732b3b1.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-dark-desktop/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  19) [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session ─────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-dark-desktop/attachments/computed-styles-and-timings-d6d01357a744ea94452161017deeec0ebdf8226f.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-dark-desktop/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  20) [webkit-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #3: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-dark-phone/attachments/computed-styles-and-timings-982e56908e5fe6a447af1628477489ef5b0e9658.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-dark-phone/error-context.md
+
+    attachment #5: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/feedback-production.browse-48216--notification-compatibility-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  21) [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session ───────────────────────────
+
+    AssertionError: Every API call must have an explicit browser fixture
+    + actual - expected
+
+    + [
+    +   'GET /api/auth/capabilities',
+    +   'GET /api/auth/capabilities'
+    + ]
+    - []
+
+
+       at fixtures.mjs:203
+
+      201 |     return json({ message: `Unhandled UI migration fixture: ${method} ${path}` }, 501);
+      202 |   });
+    > 203 |   return { requests, unhandled, release, assertHandled: () => assert.deepEqual(unhandled, [], 'Every API call must have an explicit browser fixture') };
+          |                                                                      ^
+      204 | }
+      205 |
+        at Object.assertHandled (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/fixtures.mjs:203:70)
+        at Object.evidence (/mnt/data/tmp/34Za39J4QY3kDa5p2Wsau/v1/del/src/web/ui-migration/harness.mjs:87:11)
+
+    attachment #1: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-dark-phone/attachments/computed-styles-and-timings-85545d6028b287852bbbf2cfd3d53ab7a2248106.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-dark-phone/error-context.md
+
+    attachment #3: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs3/p0-strict-out/pages.browser.mjs-session-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  21 failed
+    [chromium-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+    [chromium-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+    [chromium-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session ────────────────────────
+    [chromium-light-desktop] › ui-migration/performance.browser.mjs:16:1 › record browser performance baseline 
+    [chromium-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+    [chromium-light-phone] › ui-migration/pages.browser.mjs:6:3 › session ──────────────────────────
+    [chromium-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+    [chromium-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+    [chromium-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session ─────────────────────────
+    [chromium-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+    [chromium-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session ───────────────────────────
+    [webkit-light-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+    [webkit-light-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+    [webkit-light-desktop] › ui-migration/pages.browser.mjs:6:3 › session ──────────────────────────
+    [webkit-light-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+    [webkit-light-phone] › ui-migration/pages.browser.mjs:6:3 › session ────────────────────────────
+    [webkit-dark-desktop] › ui-migration/breakpoints.browser.mjs:4:1 › both sides of existing 600, 640 and 960px rules 
+    [webkit-dark-desktop] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+    [webkit-dark-desktop] › ui-migration/pages.browser.mjs:6:3 › session ───────────────────────────
+    [webkit-dark-phone] › ui-migration/feedback-production.browser.mjs:7:1 › P2.3 production notification compatibility 
+    [webkit-dark-phone] › ui-migration/pages.browser.mjs:6:3 › session ─────────────────────────────
+  11 skipped
+  80 passed (5.3m)
+exit=1
+load: 47.49 37.74 38.59 25/6069 4114958
+ended: 2026-10-09T22:23:27Z

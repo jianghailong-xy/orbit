@@ -1,0 +1,568 @@
+{
+ "tests": 1,
+ "steps": 12,
+ "semantic": [],
+ "antd": {
+  "ref": {
+   "steps": 12,
+   "rows": [
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "plan",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-primary",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-dropdown-trigger"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "versions",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-primary",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-dropdown",
+      "ant-dropdown-css-var",
+      "ant-dropdown-menu",
+      "ant-dropdown-menu-css-var",
+      "ant-dropdown-menu-item",
+      "ant-dropdown-menu-item-only-child",
+      "ant-dropdown-menu-item-selected",
+      "ant-dropdown-menu-light",
+      "ant-dropdown-menu-root",
+      "ant-dropdown-menu-title-content",
+      "ant-dropdown-menu-vertical",
+      "ant-dropdown-open",
+      "ant-dropdown-placement-bottomLeft",
+      "ant-dropdown-trigger"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "more",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-primary",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-dropdown",
+      "ant-dropdown-css-var",
+      "ant-dropdown-menu",
+      "ant-dropdown-menu-css-var",
+      "ant-dropdown-menu-item",
+      "ant-dropdown-menu-item-only-child",
+      "ant-dropdown-menu-light",
+      "ant-dropdown-menu-root",
+      "ant-dropdown-menu-title-content",
+      "ant-dropdown-menu-vertical",
+      "ant-dropdown-open",
+      "ant-dropdown-placement-bottomRight",
+      "ant-dropdown-trigger"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "compared",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-primary",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-dropdown-trigger"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "redraft",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-primary",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-dropdown-trigger",
+      "ant-input",
+      "ant-input-css-var",
+      "ant-input-outlined",
+      "ant-modal",
+      "ant-modal-body",
+      "ant-modal-close",
+      "ant-modal-close-icon",
+      "ant-modal-close-x",
+      "ant-modal-container",
+      "ant-modal-footer",
+      "ant-modal-header",
+      "ant-modal-mask",
+      "ant-modal-title",
+      "ant-modal-wrap"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "redraft asked",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-primary",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-dropdown-trigger"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "edit drawer",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-primary",
+      "ant-btn-sm",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-drawer",
+      "ant-drawer-body",
+      "ant-drawer-close",
+      "ant-drawer-content-wrapper",
+      "ant-drawer-footer",
+      "ant-drawer-header",
+      "ant-drawer-header-title",
+      "ant-drawer-mask",
+      "ant-drawer-open",
+      "ant-drawer-right",
+      "ant-drawer-section",
+      "ant-drawer-title",
+      "ant-dropdown-trigger",
+      "ant-input",
+      "ant-input-css-var",
+      "ant-input-number",
+      "ant-input-number-action",
+      "ant-input-number-action-down",
+      "ant-input-number-action-up",
+      "ant-input-number-css-var",
+      "ant-input-number-input",
+      "ant-input-number-mode-input",
+      "ant-input-number-outlined",
+      "ant-input-outlined",
+      "ant-select",
+      "ant-select-content",
+      "ant-select-content-has-value",
+      "ant-select-css-var",
+      "ant-select-input"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "section kinds",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-primary",
+      "ant-btn-sm",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-drawer",
+      "ant-drawer-body",
+      "ant-drawer-close",
+      "ant-drawer-content-wrapper",
+      "ant-drawer-footer",
+      "ant-drawer-header",
+      "ant-drawer-header-title",
+      "ant-drawer-mask",
+      "ant-drawer-open",
+      "ant-drawer-right",
+      "ant-drawer-section",
+      "ant-drawer-title",
+      "ant-dropdown-trigger",
+      "ant-input",
+      "ant-input-css-var",
+      "ant-input-number",
+      "ant-input-number-action",
+      "ant-input-number-action-down",
+      "ant-input-number-action-up",
+      "ant-input-number-css-var",
+      "ant-input-number-input",
+      "ant-input-number-mode-input",
+      "ant-input-number-outlined",
+      "ant-input-outlined",
+      "ant-select",
+      "ant-select-content",
+      "ant-select-content-has-value",
+      "ant-select-css-var",
+      "ant-select-dropdown"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "edited",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-primary",
+      "ant-btn-sm",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-drawer",
+      "ant-drawer-body",
+      "ant-drawer-close",
+      "ant-drawer-content-wrapper",
+      "ant-drawer-footer",
+      "ant-drawer-header",
+      "ant-drawer-header-title",
+      "ant-drawer-mask",
+      "ant-drawer-open",
+      "ant-drawer-right",
+      "ant-drawer-section",
+      "ant-drawer-title",
+      "ant-dropdown-trigger",
+      "ant-input",
+      "ant-input-css-var",
+      "ant-input-number",
+      "ant-input-number-action",
+      "ant-input-number-action-down",
+      "ant-input-number-action-up",
+      "ant-input-number-css-var",
+      "ant-input-number-input",
+      "ant-input-number-mode-input",
+      "ant-input-number-outlined",
+      "ant-input-outlined",
+      "ant-select",
+      "ant-select-content",
+      "ant-select-content-has-value",
+      "ant-select-css-var",
+      "ant-select-focused"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "saved",
+     "url": "/wiki/orbit/plan?v=3",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-primary",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "section form",
+     "url": "/wiki/orbit/plan/d/product/1?v=2",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-primary",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid",
+      "ant-input",
+      "ant-input-css-var",
+      "ant-input-number",
+      "ant-input-number-action",
+      "ant-input-number-action-down",
+      "ant-input-number-action-up",
+      "ant-input-number-css-var",
+      "ant-input-number-input",
+      "ant-input-number-mode-input",
+      "ant-input-number-outlined",
+      "ant-input-outlined",
+      "ant-modal",
+      "ant-modal-body",
+      "ant-modal-close",
+      "ant-modal-close-icon",
+      "ant-modal-close-x",
+      "ant-modal-container",
+      "ant-modal-footer",
+      "ant-modal-header",
+      "ant-modal-mask",
+      "ant-modal-title",
+      "ant-modal-wrap",
+      "ant-select",
+      "ant-select-content",
+      "ant-select-content-has-value",
+      "ant-select-css-var",
+      "ant-select-input",
+      "ant-select-outlined",
+      "ant-select-show-arrow",
+      "ant-select-single"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "section saved",
+     "url": "/wiki/orbit/plan/d/product/1?v=2",
+     "antd": [
+      "ant-app",
+      "ant-btn",
+      "ant-btn-color-default",
+      "ant-btn-color-primary",
+      "ant-btn-default",
+      "ant-btn-icon",
+      "ant-btn-icon-only",
+      "ant-btn-primary",
+      "ant-btn-variant-outlined",
+      "ant-btn-variant-solid"
+     ]
+    }
+   ]
+  },
+  "del": {
+   "steps": 12,
+   "rows": [
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "plan",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "versions",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "more",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "compared",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "redraft",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "redraft asked",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "edit drawer",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "section kinds",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "edited",
+     "url": "/wiki/orbit/plan",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "saved",
+     "url": "/wiki/orbit/plan?v=3",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "section form",
+     "url": "/wiki/orbit/plan/d/product/1?v=2",
+     "antd": [
+      "ant-app"
+     ]
+    },
+    {
+     "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+     "step": "section saved",
+     "url": "/wiki/orbit/plan/d/product/1?v=2",
+     "antd": [
+      "ant-app"
+     ]
+    }
+   ]
+  }
+ },
+ "presentation": {
+  "focus": 7,
+  "dialogs": 0
+ },
+ "examples": {
+  "focus": [
+   {
+    "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+    "step": "versions",
+    "ref": {
+     "role": "button",
+     "name": "v2Draft"
+    },
+    "del": {
+     "role": "menu",
+     "name": "v2Draft"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+    "step": "more",
+    "ref": {
+     "role": "button",
+     "name": "More"
+    },
+    "del": {
+     "role": "menu",
+     "name": "Compare with v1"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+    "step": "compared",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "More"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+    "step": "edit drawer",
+    "ref": {
+     "role": "div",
+     "name": "Plan v2 · Draft · 产品概览Edit 1.1 产品定位与使用场景TitleQuestion我是新读者，Orbit 解决什么问题、和直接开一个 C"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Plan v2 · Draft · 产品概览Edit 1.1 产品定位与使用场景"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+    "step": "section kinds",
+    "ref": {
+     "role": "combobox",
+     "name": "Kind"
+    },
+    "del": {
+     "role": "option",
+     "name": "Overview"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+    "step": "section form",
+    "ref": {
+     "role": "button",
+     "name": "Close"
+    },
+    "del": {
+     "role": "dialog",
+     "name": "Edit §1"
+    }
+   },
+   {
+    "test": "chromium-dark-desktop :: P4.4 the plan › its versions, compare, redraft, the edit drawer and a section form",
+    "step": "section saved",
+    "ref": "body",
+    "del": {
+     "role": "button",
+     "name": "Edit"
+    }
+   }
+  ],
+  "dialogs": []
+ }
+}

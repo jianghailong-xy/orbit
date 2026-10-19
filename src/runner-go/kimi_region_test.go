@@ -216,7 +216,7 @@ func TestKimiManualFallbackNamesTheSite(t *testing.T) {
 // The health report carries the site of the CLI's own login, read off its provider list.
 func TestKimiHealthReportsTheSiteOfItsLogin(t *testing.T) {
 	bin, _ := fakeKimi(t, kimiHelpWithRegion, string(kimiProviderList(`"managed:kimi-code": {"type": "kimi", "baseUrl": "https://api.kimi.ai/coding/v1", "apiKey": "", "oauth": {"storage": "file", "key": "oauth/kimi-code-env-0123456789abcdef", "oauthHost": "https://auth.kimi.ai"}}`)))
-	if got := probeKimiLoginRegion(bin); got != kimiRegionGlobal {
+	if got := probeKimiLoginRegion(bin, nil); got != kimiRegionGlobal {
 		t.Fatalf("probeKimiLoginRegion = %q, want global", got)
 	}
 	spec, _ := specFor(providerKimi)
@@ -228,7 +228,7 @@ func TestKimiHealthReportsTheSiteOfItsLogin(t *testing.T) {
 
 func TestKimiHealthReportsNoSiteBeforeASignIn(t *testing.T) {
 	bin, _ := fakeKimi(t, kimiHelpWithRegion, `{"providers": {}, "models": {}}`)
-	if got := probeKimiLoginRegion(bin); got != "" {
+	if got := probeKimiLoginRegion(bin, nil); got != "" {
 		t.Fatalf("probeKimiLoginRegion = %q before any sign-in, want none", got)
 	}
 }

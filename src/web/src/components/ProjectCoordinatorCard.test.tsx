@@ -136,7 +136,7 @@ function neverOpenedStatus(): CoordinatorStatus {
  * Still `state: 'LIVE'` — the payload's four states are about the POINTER, and this one leads to a
  * conversation that is neither in Trash nor unreachable. `AWAITING_INPUT` is the run status a
  * completed session really parks at, which is exactly why the card cannot read the sub-state alone:
- * that would answer "Needs you" about a conversation nobody is waiting in.
+ * that would answer "Idle", a conversation between turns, about one that is over.
  */
 function completedStatus(): CoordinatorStatus {
   return liveStatus({
@@ -375,10 +375,23 @@ describe('ProjectCoordinatorCard — LIVE', () => {
     expect(pillOf(html)).toContain('Working');
   });
 
-  it('reads Needs you when a turn has ended without one', () => {
+  it('reads Idle when a turn has ended and nothing waits on the reader', () => {
+    // A coordinator parks at AWAITING_INPUT between Orbit's wake-ups: that is its resting state,
+    // not a request. The press says what it does — open the conversation — and no longer "Reply".
     const html = paint(liveStatus());
-    expect(pillOf(html)).toContain('Needs you');
-    expect(buttonLabels(html)).toContain('Reply to coordinator');
+    expect(pillOf(html)).toContain('Idle');
+    expect(pillOf(html)).not.toContain('Needs you');
+    expect(buttonLabels(html)).toContain('Open coordinator');
+    expect(buttonLabels(html).join(' ')).not.toMatch(/Reply|Review/);
+  });
+
+  it('reads Needs you, and says how many, when something waits on the reader', () => {
+    // Parked, with a question it asked the owner still open: the server counts it in
+    // `pendingApprovals` (the session list's count), and the press names what the reader will find.
+    const one = paint(liveStatus({ pendingApprovals: 1 }));
+    expect(pillOf(one)).toContain('Needs you');
+    expect(buttonLabels(one)).toContain('Review 1 request');
+    expect(buttonLabels(paint(liveStatus({ pendingApprovals: 2 })))).toContain('Review 2 requests');
   });
 
   it('carries the same two-part control an open conversation has: one press, one caret', () => {
@@ -397,6 +410,7 @@ describe('ProjectCoordinatorCard — LIVE', () => {
     );
     expect(pillOf(html)).toContain('Needs you');
     expect(pillOf(html)).not.toContain('Working');
+    expect(buttonLabels(html)).toContain('Review 1 request');
   });
 
   it('reads Idle for a failed coordinator, which is reopened rather than replaced', () => {
@@ -445,7 +459,16 @@ describe('ProjectCoordinatorCard — LIVE, and completed', () => {
     expect(pillOf(html)).toContain('Completed');
     expect(pillOf(html)).not.toContain('Needs you');
     expect(pillOf(html)).not.toContain('Idle');
-    expect(buttonLabels(html)).not.toContain('Reply to coordinator');
+    // Not even with something counted on it: what the card offers is the conversation, read.
+    const counted = paint(liveStatus({
+      lifecycleState: SessionLifecycleState.COMPLETED,
+      filingState: 'ARCHIVED',
+      completedAt: TWELVE_MIN_AGO,
+      pendingApprovals: 1,
+    }));
+    expect(pillOf(counted)).toContain('Completed');
+    expect(buttonLabels(counted)).toContain('Open coordinator');
+    expect(buttonLabels(counted).join(' ')).not.toMatch(/Review/);
   });
 
   it('leads with Open and keeps the replacement behind the caret', () => {
@@ -479,7 +502,7 @@ describe('ProjectCoordinatorCard — LIVE, and completed', () => {
     // The negative control for all four above: same payload, one field back to OPEN.
     const html = paint(liveStatus());
     expect(pillOf(html)).not.toContain('Completed');
-    expect(buttonLabels(html)).toContain('Reply to coordinator');
+    expect(pillOf(html)).toContain('Idle');
     expect(text(html)).not.toContain('opens empty');
     expect(text(html)).not.toContain('told nothing new');
   });
@@ -565,7 +588,8 @@ describe('ProjectCoordinatorCard — colour is never the only channel', () => {
     const cases: Array<[CoordinatorStatus, string, string]> = [
       [neverOpenedStatus(), 'neutral', 'Not started'],
       [liveStatus({ runState: SessionRunState.RUNNING, runStatus: 'RUNNING' }), 'brand', 'Working'],
-      [liveStatus(), 'warning', 'Needs you'],
+      [liveStatus({ pendingApprovals: 1 }), 'warning', 'Needs you'],
+      [liveStatus(), 'neutral', 'Idle'],
       [trashedStatus(), 'neutral', 'Deleted'],
       [unavailableStatus(), 'error', 'Cannot be opened'],
     ];
@@ -600,8 +624,8 @@ describe('ProjectCoordinatorCard — colour is never the only channel', () => {
     for (const name of new Set(ours)) {
       expect(css, `${name} is declared in index.css`).toContain(`${name}:`);
     }
-    // No literal colours smuggled in beside the tokens. antd supplies its own, so only the card's
-    // inline styles are searched.
+    // No literal colours smuggled in beside the tokens. The controls take theirs from their own
+    // stylesheet, so only the card's inline styles are searched.
     for (const style of [...html.matchAll(/style="([^"]*)"/g)].map((m) => m[1])) {
       expect(style, 'no hex literal').not.toMatch(/#[0-9a-f]{3,8}\b/i);
       expect(style, 'no rgb()/hsl() literal').not.toMatch(/\b(rgba?|hsla?)\(/i);

@@ -270,6 +270,8 @@ test('the owner channel refuses a personal access token door by door and field b
     { route: 'POST /wiki/spaces/:id/plan/edits', path: `/wiki/spaces/${spaceId}/plan/edits`, body: {}, login: 422 },
     { route: 'POST /wiki/spaces/:id/plan/versions/:version/confirm', path: `/wiki/spaces/${spaceId}/plan/versions/1/confirm`, body: {}, login: 404 },
     { route: 'POST /wiki/spaces/:id/plan/redraft', path: `/wiki/spaces/${spaceId}/plan/redraft`, body: {}, login: 200 },
+    // The space has no version 1 (its read above is a 404): the door answers a login 404, no such version of the plan.
+    { route: 'POST /wiki/spaces/:id/plan/versions/:version/build', path: `/wiki/spaces/${spaceId}/plan/versions/1/build`, body: {}, login: 404 },
     { route: 'POST /wiki/plan-proposals/:id/decide', path: `/wiki/plan-proposals/${nobody()}/decide`, body: { action: 'reject' }, login: 404 },
   ];
 

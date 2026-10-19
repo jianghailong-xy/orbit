@@ -15,6 +15,12 @@ struct UserBubbleView: View {
     /// Provided only for the queued tail (`ConsoleView`): withdraws this still-waiting message.
     /// Nil for every settled/inline bubble, so the Cancel affordance shows on queued turns alone.
     var onCancelQueued: (() -> Void)? = nil
+    /// Provided by the console's rows (`UserTurnRow`): takes back a steer nothing has read yet, and
+    /// says when that has been asked. Nil where there is no console to act through.
+    var steer: SteerControls? = nil
+    /// Provided by the console's rows where `SteerDelivery.offersPutBack` says so: the words of a
+    /// message that never reached the engine, back in the composer (`ConsoleModel.putBack`).
+    var onPutBack: (() -> Void)? = nil
     @State private var expanded = false
     @State private var hovering = false
     @State private var copied = false
@@ -96,6 +102,7 @@ struct UserBubbleView: View {
                         .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.secondary)
                 }
                 meta
+                why
             }
             // Hover over the bubble column (not the full-width row) reveals the meta — web parity.
             // contentShape makes the WHOLE column rect (incl. the 3pt spacing gaps and the meta's
@@ -175,12 +182,12 @@ struct UserBubbleView: View {
     /// Anything not yet (or never) confirmed keeps its label on screen permanently; a settled turn
     /// shows its timestamp on hover alone.
     /// A steer keeps its line up after it settles too: unlike a message, whose reply is its
-    /// receipt, "Sent into this turn" is the only thing that ever says the engine took it.
+    /// receipt, "Read in this turn" is the only thing that ever says the engine took it.
     private var unconfirmed: Bool { bubble.pending || bubble.undelivered || bubble.steer }
 
     /// Touch has no hover, so a hover-gated copy button can never be reached on iOS: the only user
     /// turns copyable from a phone were the ones whose row is pinned up anyway (a steer, a send in
-    /// flight), which is why "Sent into this turn" carried a copy button and the message above it
+    /// flight), which is why "Read in this turn" carried a copy button and the message above it
     /// didn't. On iOS it is simply always shown.
     private var copyShown: Bool {
         #if os(iOS)
@@ -239,14 +246,36 @@ struct UserBubbleView: View {
                     // and the composer (or that card's Retry) is where it happens.
                     Label(SteerDelivery.state("failed").label, systemImage: "exclamationmark.circle")
                         .font(.orbitMeta).foregroundStyle(.orange)
+                    putBackButton
                 } else if bubble.steer {
                     // A steer is not waiting its turn — it is on its way into the one already
                     // running — and the turn it joined answers something else, so this line is the
-                    // only report it gets. Shown whether or not it is still pending: "Sent into
-                    // this turn" is what says the engine took it, and it arrives after the durable
-                    // `user` event has already settled the bubble.
-                    Text(SteerDelivery.state(bubble.delivery).label)
-                        .font(.orbitMeta).foregroundStyle(.secondary)
+                    // only report it gets. Shown whether or not it is still pending: "Read in this
+                    // turn" is what says the engine took it, and it arrives after the durable
+                    // `user` event has already settled the bubble. While nothing has read it, the
+                    // way to take it back sits beside the state it would undo, styled as the queued
+                    // Cancel is (web parity: `SteerState`); once asked, the line says so in place of
+                    // both, so it cannot be pressed twice.
+                    if steer?.withdrawing == true {
+                        Text("Withdrawing…").font(.orbitMeta).foregroundStyle(.secondary)
+                    } else if SteerDelivery.state(bubble.delivery).tone == .failed {
+                        // Nobody can say the engine read it ("Couldn't confirm it was read"): said in
+                        // the warning tone, as web's and Android's are. Put back only where all there
+                        // is of it is the receipt (`offersPutBack`).
+                        Label(SteerDelivery.state(bubble.delivery).label, systemImage: "exclamationmark.circle")
+                            .font(.orbitMeta).foregroundStyle(.orange)
+                        putBackButton
+                    } else {
+                        Text(SteerDelivery.state(bubble.delivery).label)
+                            .font(.orbitMeta).foregroundStyle(.secondary)
+                        if let onWithdraw = steer?.onWithdraw {
+                            Button { onWithdraw() } label: {
+                                Text("Withdraw").font(.orbitMeta)
+                            }
+                            .buttonStyle(.plain).foregroundStyle(.tint)
+                            .padding(.leading, 2).contentShape(Rectangle())
+                        }
+                    }
                 } else if bubble.pending {
                     Text(bubble.queued ? "Queued" : "Sending…").font(.orbitMeta).foregroundStyle(.secondary)
                     // A queued message can be withdrawn until the runner leases it (web parity). Offered
@@ -269,6 +298,32 @@ struct UserBubbleView: View {
             }
             .frame(height: metaHeight)
             .animation(.easeOut(duration: 0.12), value: hovering)
+        }
+    }
+
+    /// The words of a message that never reached the engine, back in the composer — beside the state
+    /// that says so, styled as Withdraw and Cancel are (web parity: `UserBubble`'s and
+    /// `QueuedTurnMeta`'s "Put back in the composer").
+    @ViewBuilder
+    private var putBackButton: some View {
+        if let onPutBack {
+            Button { onPutBack() } label: {
+                Text("Put back in the composer").font(.orbitMeta)
+            }
+            .buttonStyle(.plain).foregroundStyle(.tint)
+            .padding(.leading, 2).contentShape(Rectangle())
+        }
+    }
+
+    /// Why a message only the server's receipt speaks for did not land, in the sender's words, under
+    /// the line that says it did not (web parity: `QueuedTurnMeta`'s `chat-queued-why`).
+    @ViewBuilder
+    private var why: some View {
+        if bubble.receipt,
+           let words = SteerDelivery.failureExplanation(code: bubble.deliveryCode, reason: bubble.deliveryReason),
+           !words.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            Text(words).font(.orbitMeta).foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
         }
     }
 
@@ -352,40 +407,67 @@ struct ThinkingView: View {
     @State private var pinnedOpen: Bool?
     private static let tailAnchor = "thinking-tail"
 
+    private var expanded: Bool { pinnedOpen ?? !block.isFinalized }
+
     var body: some View {
-        DisclosureGroup(isExpanded: Binding(get: { pinnedOpen ?? !block.isFinalized },
-                                            set: { pinnedOpen = $0 })) {
-            // Same progressive streaming as AssistantBubbleView: completed blocks render as Markdown
-            // while the block grows, the trailing partial stays plain (this body only runs while
-            // expanded). aside/secondary so the iOS selectable leaves read as the muted "thinking"
-            // aside, not the assistant reply; macOS ignores these and keeps the inherited font/colour.
-            Group {
-                if block.isFinalized {
-                    MarkdownView(source: block.displayText, base: .aside, ink: .secondary)
-                } else {
-                    // While it streams, the reasoning is held to about ten lines that keep
-                    // themselves at the newest one. Unbounded it pushed the answer — and the tool
-                    // calls on the way to it — out of a transcript pinned to the tail: DeepSeek
-                    // writes 23k characters of reasoning per turn at the median, 122k at p90.
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            StreamingProse(text: block.displayText, base: .aside, ink: .secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .id(Self.tailAnchor)
-                        }
-                        .frame(maxHeight: 160)
-                        .onChange(of: block.displayText, initial: true) { _, _ in
-                            proxy.scrollTo(Self.tailAnchor, anchor: .bottom)
-                        }
+        VStack(alignment: .leading, spacing: 6) {
+            row
+            if expanded { content }
+        }
+        // ToolGroupCardView's List rule, same row: animating the fold has SwiftUI interpolating
+        // the contents while the UICollectionView behind the List re-measures and animates the
+        // same cell — both driving one height, which is the flicker. The fold is instant instead.
+        .animation(nil, value: expanded)
+    }
+
+    /// The tap row. The fold is driven by hand — chevron, contentShape, onTapGesture — the way
+    /// every other foldable row in this List does it (ToolCardView, ToolGroupCardView): the
+    /// `DisclosureGroup` this row was before would not collapse on tap on iOS (reported on a
+    /// streaming Kimi turn, 2026-10-09).
+    private var row: some View {
+        HStack(spacing: 7) {
+            // Turned, not swapped — see ToolCardView: the two chevron symbols are different sizes.
+            Image(systemName: "chevron.right")
+                .font(.orbitMeta.weight(.semibold)).foregroundStyle(.tertiary)
+                .rotationEffect(.degrees(expanded ? 90 : 0))
+            Label(rowLabel, systemImage: "brain")
+                .font(.orbitLabel).foregroundStyle(.secondary)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { pinnedOpen = !expanded }
+    }
+
+    private var content: some View {
+        // Same progressive streaming as AssistantBubbleView: completed blocks render as Markdown
+        // while the block grows, the trailing partial stays plain (this body only runs while
+        // expanded). aside/secondary so the iOS selectable leaves read as the muted "thinking"
+        // aside, not the assistant reply; macOS ignores these and keeps the inherited font/colour.
+        Group {
+            if block.isFinalized {
+                MarkdownView(source: block.displayText, base: .aside, ink: .secondary)
+            } else {
+                // While it streams, the reasoning is held to about ten lines that keep
+                // themselves at the newest one. Unbounded it pushed the answer — and the tool
+                // calls on the way to it — out of a transcript pinned to the tail: DeepSeek
+                // writes 23k characters of reasoning per turn at the median, 122k at p90.
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        StreamingProse(text: block.displayText, base: .aside, ink: .secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .id(Self.tailAnchor)
+                    }
+                    .frame(maxHeight: 160)
+                    .onChange(of: block.displayText, initial: true) { _, _ in
+                        proxy.scrollTo(Self.tailAnchor, anchor: .bottom)
                     }
                 }
             }
-            .font(.orbitProseAside).foregroundStyle(.secondary)
-            .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-            .environment(\.previewOwnerID, block.id)
-        } label: {
-            Label(rowLabel, systemImage: "brain").font(.orbitLabel).foregroundStyle(.secondary)
         }
+        .font(.orbitProseAside).foregroundStyle(.secondary)
+        .textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.previewOwnerID, block.id)
     }
 
     /// What the row says while it is shut. A bare "Thinking" told a reader nothing about whether
@@ -393,7 +475,8 @@ struct ThinkingView: View {
     private var rowLabel: String {
         block.isFinalized
             ? ThinkingSummary.settledLabel(chars: block.text.count, blocks: block.blocks,
-                                           startedTs: block.startedTs, finishedTs: block.finishedTs)
+                                           startedTs: block.startedTs, finishedTs: block.finishedTs,
+                                           thinkingMs: block.thinkingMs)
             : "Thinking…"
     }
 }

@@ -1,0 +1,272 @@
+{
+ "chromium-dark-desktop/p43a-blocker-review.png": {
+  "class": "dialog initial focus",
+  "pixelsOver2": 3170,
+  "max": 150
+ },
+ "chromium-dark-desktop/p43a-coordinator-rebind.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 14639,
+  "max": 15
+ },
+ "chromium-dark-desktop/p43a-overview-loading.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 95,
+  "max": 19
+ },
+ "chromium-dark-desktop/p43a-run-settings-edited.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 8
+ },
+ "chromium-dark-desktop/p43a-run-settings-escalation.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 8
+ },
+ "chromium-dark-desktop/p43a-session-handled-refused.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 10
+ },
+ "chromium-dark-desktop/p43a-status-cancel.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 1,
+  "max": 5
+ },
+ "chromium-dark-desktop/p43a-status-done.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 1,
+  "max": 5
+ },
+ "chromium-dark-desktop/p43a-status-refused.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 1,
+  "max": 5
+ },
+ "chromium-dark-desktop/p43a-task-attribution-copy.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 14
+ },
+ "chromium-dark-desktop/p43a-task-attribution-loading.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 14
+ },
+ "chromium-dark-desktop/p43a-task-attribution.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 14
+ },
+ "chromium-dark-desktop/p43a-tasks-assign.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 1,
+  "max": 3
+ },
+ "chromium-dark-desktop/p43a-tasks-delete.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 12,
+  "max": 8
+ },
+ "chromium-dark-desktop/p43a-tasks-keys-space.png": {
+  "class": "run-to-run (dependency graph load, toolbar height)",
+  "pixelsOver2": 119841,
+  "max": 232
+ },
+ "chromium-dark-desktop/p43a-tasks-labels.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 1,
+  "max": 4
+ },
+ "chromium-dark-desktop/p43a-tasks-run.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 1,
+  "max": 3
+ },
+ "chromium-dark-desktop/p43a-tasks-sorted.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 1,
+  "max": 4
+ },
+ "chromium-dark-desktop/p43a-tasks-stop.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 8
+ },
+ "chromium-dark-phone/p43a-blocker-review.png": {
+  "class": "dialog initial focus",
+  "pixelsOver2": 2330,
+  "max": 150
+ },
+ "chromium-dark-phone/p43a-coordinator-rebind.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 9967,
+  "max": 15
+ },
+ "chromium-dark-phone/p43a-tasks-assign.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 16,
+  "max": 51
+ },
+ "chromium-light-desktop/p43a-blocker-review.png": {
+  "class": "dialog initial focus",
+  "pixelsOver2": 3165,
+  "max": 171
+ },
+ "chromium-light-desktop/p43a-coordinator-rebind.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 14564,
+  "max": 10
+ },
+ "chromium-light-desktop/p43a-run-settings-edited.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 9
+ },
+ "chromium-light-desktop/p43a-run-settings-escalation.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 6,
+  "max": 9
+ },
+ "chromium-light-desktop/p43a-session-handled-refused.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 12
+ },
+ "chromium-light-desktop/p43a-status-cancel.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 5
+ },
+ "chromium-light-desktop/p43a-status-done.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 1,
+  "max": 5
+ },
+ "chromium-light-desktop/p43a-status-refused.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 1,
+  "max": 5
+ },
+ "chromium-light-phone/p43a-blocker-review.png": {
+  "class": "dialog initial focus",
+  "pixelsOver2": 2325,
+  "max": 171
+ },
+ "chromium-light-phone/p43a-coordinator-landing.png": {
+  "class": "mask compositing rounding",
+  "pixelsOver2": 2,
+  "max": 3
+ },
+ "chromium-light-phone/p43a-coordinator-rebind.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 9900,
+  "max": 10
+ },
+ "chromium-light-phone/p43a-coordinator-replace.png": {
+  "class": "mask compositing rounding",
+  "pixelsOver2": 4,
+  "max": 3
+ },
+ "chromium-light-phone/p43a-status-cancel.png": {
+  "class": "mask compositing rounding",
+  "pixelsOver2": 2,
+  "max": 3
+ },
+ "chromium-light-phone/p43a-status-reopen.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 2,
+  "max": 4
+ },
+ "chromium-light-phone/p43a-tasks-assign.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 19,
+  "max": 61
+ },
+ "webkit-dark-desktop/p43a-blocker-review.png": {
+  "class": "dialog initial focus",
+  "pixelsOver2": 3170,
+  "max": 150
+ },
+ "webkit-dark-desktop/p43a-coordinator-rebind.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 14649,
+  "max": 15
+ },
+ "webkit-dark-desktop/p43a-status-reopen.png": {
+  "class": "WebKit desktop dialog scroll lock",
+  "pixelsOver2": 48883,
+  "max": 255
+ },
+ "webkit-dark-desktop/p43a-tasks-assign.png": {
+  "class": "WebKit desktop dialog scroll lock",
+  "pixelsOver2": 15046,
+  "max": 255
+ },
+ "webkit-dark-desktop/p43a-tasks-keys-space.png": {
+  "class": "run-to-run (dependency graph load, toolbar height)",
+  "pixelsOver2": 30788,
+  "max": 220
+ },
+ "webkit-dark-phone/p43a-blocker-review.png": {
+  "class": "dialog initial focus",
+  "pixelsOver2": 2330,
+  "max": 150
+ },
+ "webkit-dark-phone/p43a-coordinator-rebind.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 9977,
+  "max": 15
+ },
+ "webkit-dark-phone/p43a-tasks-assign.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 18,
+  "max": 51
+ },
+ "webkit-dark-phone/p43a-tasks-stop.png": {
+  "class": "WebKit phone 382/390",
+  "pixelsOver2": 4965,
+  "max": 167
+ },
+ "webkit-light-desktop/p43a-blocker-review.png": {
+  "class": "dialog initial focus",
+  "pixelsOver2": 3168,
+  "max": 171
+ },
+ "webkit-light-desktop/p43a-coordinator-rebind.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 14558,
+  "max": 10
+ },
+ "webkit-light-desktop/p43a-status-reopen.png": {
+  "class": "WebKit desktop dialog scroll lock",
+  "pixelsOver2": 40268,
+  "max": 255
+ },
+ "webkit-light-desktop/p43a-tasks-assign.png": {
+  "class": "WebKit desktop dialog scroll lock",
+  "pixelsOver2": 14951,
+  "max": 255
+ },
+ "webkit-light-phone/p43a-blocker-review.png": {
+  "class": "dialog initial focus",
+  "pixelsOver2": 2328,
+  "max": 171
+ },
+ "webkit-light-phone/p43a-coordinator-rebind.png": {
+  "class": "Select opens with no option highlighted",
+  "pixelsOver2": 9886,
+  "max": 10
+ },
+ "webkit-light-phone/p43a-tasks-assign.png": {
+  "class": "edge rasterization",
+  "pixelsOver2": 18,
+  "max": 62
+ },
+ "webkit-light-phone/p43a-tasks-stop.png": {
+  "class": "WebKit phone 382/390",
+  "pixelsOver2": 6126,
+  "max": 255
+ }
+}

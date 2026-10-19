@@ -1,0 +1,273 @@
+{
+  "at": "2026-10-18T09:00:03.469+00:00",
+  "copied": [
+    "tls",
+    "secrets/admission-webhook-token"
+  ],
+  "copiedFrom": "/mnt/data/managed-runner-lab/test-server-t02a",
+  "identity": {
+    "canI": {
+      "create configmaps in orbit-mr-test": "no",
+      "create pods in kube-system": "no",
+      "create pods in orbit-mr-test": "yes",
+      "create pods/exec in orbit-mr-test": "no",
+      "create validatingwebhookconfigurations.admissionregistration.k8s.io": "no",
+      "delete persistentvolumeclaims in orbit-mr-test": "no",
+      "delete pods in orbit-mr-test": "yes",
+      "get nodes": "no",
+      "get persistentvolumes": "yes",
+      "get secrets in orbit-mr-test": "yes",
+      "list pods in orbit-mr-test": "no",
+      "list volumeattachments.storage.k8s.io": "yes",
+      "patch pods in orbit-mr-test": "yes",
+      "patch pods/ephemeralcontainers in orbit-mr-test": "no",
+      "patch pods/status in orbit-mr-test": "no",
+      "update pods in orbit-mr-test": "no"
+    },
+    "context": "orbit-mr-lab-manager",
+    "groups": [
+      "system:serviceaccounts",
+      "system:serviceaccounts:orbit-mr-test",
+      "system:authenticated"
+    ],
+    "kubeconfig": "/mnt/data/managed-runner-lab/test-server-t07b/manager-kubeconfig.json",
+    "rules": [
+      [
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "pods"
+          ],
+          "verbs": [
+            "get",
+            "create",
+            "delete",
+            "patch"
+          ]
+        },
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "persistentvolumeclaims"
+          ],
+          "verbs": [
+            "get",
+            "create"
+          ]
+        },
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "secrets"
+          ],
+          "verbs": [
+            "get",
+            "create",
+            "delete"
+          ]
+        },
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "configmaps"
+          ],
+          "verbs": [
+            "get"
+          ]
+        }
+      ],
+      [
+        {
+          "apiGroups": [
+            ""
+          ],
+          "resources": [
+            "persistentvolumes"
+          ],
+          "verbs": [
+            "get"
+          ]
+        },
+        {
+          "apiGroups": [
+            "storage.k8s.io"
+          ],
+          "resources": [
+            "volumeattachments"
+          ],
+          "verbs": [
+            "list"
+          ]
+        }
+      ]
+    ],
+    "username": "system:serviceaccount:orbit-mr-test:orbit-mr-manager"
+  },
+  "profile": "/mnt/data/managed-runner-lab/test-server-t07b/managed-runner-profile.json",
+  "value": {
+    "admission": {
+      "managerUsername": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+      "webhookTokenSha256": "da8d4588c7bf70f053fd26ae9e87e758fdbb12de4f25dca41e56c43029f560ad"
+    },
+    "backend": "kubernetes",
+    "capacity": {
+      "compute": {
+        "attachments": 2,
+        "cpu": "1",
+        "ephemeralStorage": "2Gi",
+        "memory": "1536Mi",
+        "pods": 2
+      },
+      "maxActiveUsers": 2,
+      "storage": {
+        "headroom": "2Gi",
+        "usable": "12Gi"
+      }
+    },
+    "clusterKey": "orbit-mr-lab",
+    "environmentId": "orbit-mr-lab",
+    "kubernetes": {
+      "apiServer": "https://127.0.0.1:16444",
+      "context": "orbit-mr-lab-manager",
+      "kubeconfig": "/mnt/data/managed-runner-lab/test-server-t07b/manager-kubeconfig.json",
+      "namespace": "orbit-mr-test"
+    },
+    "lifecycle": {
+      "backoffBaseSeconds": 5,
+      "backoffMaxSeconds": 60,
+      "capacityRetrySeconds": 30,
+      "drainSeconds": 300,
+      "heartbeatFreshSeconds": 120,
+      "idleSeconds": 604800,
+      "leaseSeconds": 60,
+      "maxAttempts": 5,
+      "pollIntervalSeconds": 5,
+      "requestTimeoutSeconds": 20,
+      "startupDeadlineSeconds": 43200
+    },
+    "resourceProfileId": "orbit-mr-lab-t04",
+    "runner": {
+      "image": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+      "maxConcurrent": 2,
+      "resources": {
+        "init": {
+          "limits": {
+            "cpu": "200m",
+            "memory": "128Mi"
+          },
+          "requests": {
+            "cpu": "50m",
+            "memory": "64Mi"
+          }
+        },
+        "runner": {
+          "limits": {
+            "cpu": "2",
+            "memory": "2Gi"
+          },
+          "requests": {
+            "cpu": "500m",
+            "memory": "768Mi"
+          }
+        }
+      },
+      "serverUrl": "https://10.0.2.2:13711",
+      "tmpSizeLimit": "1Gi"
+    },
+    "schemaVersion": 1,
+    "storage": {
+      "capacity": "2Gi",
+      "className": "runner-data"
+    },
+    "valueKind": "actual"
+  }
+}
+{
+  "at": "2026-10-18T09:00:03.469+00:00",
+  "profile": "/mnt/data/managed-runner-lab/test-server-t07b/managed-runner-profile.json",
+  "value": {
+    "admission": {
+      "managerUsername": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+      "webhookTokenSha256": "da8d4588c7bf70f053fd26ae9e87e758fdbb12de4f25dca41e56c43029f560ad"
+    },
+    "backend": "kubernetes",
+    "capacity": {
+      "compute": {
+        "attachments": 1,
+        "cpu": "500m",
+        "ephemeralStorage": "1Gi",
+        "memory": "768Mi",
+        "pods": 1
+      },
+      "maxActiveUsers": 1,
+      "storage": {
+        "headroom": "2Gi",
+        "usable": "12Gi"
+      }
+    },
+    "clusterKey": "orbit-mr-lab",
+    "environmentId": "orbit-mr-lab",
+    "kubernetes": {
+      "apiServer": "https://127.0.0.1:16444",
+      "context": "orbit-mr-lab-manager",
+      "kubeconfig": "/mnt/data/managed-runner-lab/test-server-t07b/manager-kubeconfig.json",
+      "namespace": "orbit-mr-test"
+    },
+    "lifecycle": {
+      "backoffBaseSeconds": 5,
+      "backoffMaxSeconds": 60,
+      "capacityRetrySeconds": 30,
+      "drainSeconds": 300,
+      "heartbeatFreshSeconds": 120,
+      "idleSeconds": 60,
+      "leaseSeconds": 60,
+      "maxAttempts": 5,
+      "pollIntervalSeconds": 5,
+      "requestTimeoutSeconds": 20,
+      "startupDeadlineSeconds": 900
+    },
+    "resourceProfileId": "orbit-mr-lab-t06",
+    "runner": {
+      "image": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+      "maxConcurrent": 2,
+      "resources": {
+        "init": {
+          "limits": {
+            "cpu": "200m",
+            "memory": "128Mi"
+          },
+          "requests": {
+            "cpu": "50m",
+            "memory": "64Mi"
+          }
+        },
+        "runner": {
+          "limits": {
+            "cpu": "2",
+            "memory": "2Gi"
+          },
+          "requests": {
+            "cpu": "500m",
+            "memory": "768Mi"
+          }
+        }
+      },
+      "serverUrl": "https://10.0.2.2:13711",
+      "tmpSizeLimit": "1Gi"
+    },
+    "schemaVersion": 1,
+    "storage": {
+      "capacity": "2Gi",
+      "className": "runner-data"
+    },
+    "valueKind": "actual"
+  }
+}

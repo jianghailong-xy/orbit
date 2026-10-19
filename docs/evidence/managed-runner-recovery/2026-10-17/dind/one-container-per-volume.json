@@ -1,0 +1,11 @@
+{
+ "from": "2026-10-17T17:17:22.712Z",
+ "to": "2026-10-17T18:08:57.884Z",
+ "samples": 5217,
+ "takenWhileDown": 44,
+ "mostAtOnce": {
+  "mr-data-01a14ade-533c-756b-b2a3-8adb824b1754": 1,
+  "mr-data-01a14ade-543d-718b-80fd-c800a75e0c5f": 1
+ },
+ "overall": 1
+}

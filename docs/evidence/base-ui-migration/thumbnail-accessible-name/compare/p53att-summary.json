@@ -1,0 +1,3270 @@
+{
+ "beyond": [],
+ "missing": [],
+ "screenshots": {
+  "antialias": 0,
+  "beyond": 0,
+  "identical": 44,
+  "missing": 0
+ },
+ "styleDeltas": {},
+ "tests": {
+  "notPassedDel": [],
+  "notPassedRef": [],
+  "total": 8
+ },
+ "traces": {
+  "differing": {
+   "chromium-dark-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed": [
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "closed with Esc"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "a file dragged over the conversation"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "dropped"
+    }
+   ],
+   "chromium-dark-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed": [
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "closed with Esc"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "a file dragged over the conversation"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "dropped"
+    }
+   ],
+   "chromium-light-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed": [
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "closed with Esc"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "a file dragged over the conversation"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "dropped"
+    }
+   ],
+   "chromium-light-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed": [
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "closed with Esc"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "a file dragged over the conversation"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "dropped"
+    }
+   ],
+   "webkit-dark-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed": [
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "closed with Esc"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "a file dragged over the conversation"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "dropped"
+    }
+   ],
+   "webkit-dark-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed": [
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "closed with Esc"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "a file dragged over the conversation"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "dropped"
+    }
+   ],
+   "webkit-light-desktop :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed": [
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "closed with Esc"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "a file dragged over the conversation"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [
+       "Release",
+       "Ship the release notes",
+       "Review the component migration (active)",
+       "Fix the flaky upload test",
+       "Demo for the design review",
+       "Merge the docs branch"
+      ],
+      "lock": {
+       "body": "visible",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "dropped"
+    }
+   ],
+   "webkit-light-phone :: P5.3 the session workspace › attachments: pasted, dropped, a picked picture previewed, removed": [
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "closed with Esc",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "closed with Esc"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "a file dragged over the conversation",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "a file dragged over the conversation"
+    },
+    {
+     "del": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "screenshot.png",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "ref": {
+      "antd": [
+       "ant-app"
+      ],
+      "composer": {
+       "attachments": [
+        "composer-pill composer-attach:eye",
+        "composer-pill composer-file:notes.pdf16 B"
+       ],
+       "chip": "Opus 5.5Max",
+       "disabled": false,
+       "height": 38,
+       "menu": [],
+       "mirror": [],
+       "pickers": [
+        "Default"
+       ],
+       "placeholder": "Reply…",
+       "plus": [
+        "Add attachment"
+       ],
+       "scrolls": false,
+       "selection": [
+        0,
+        0
+       ],
+       "send": [
+        "Send"
+       ],
+       "shell": false,
+       "value": ""
+      },
+      "dialogs": [],
+      "find": null,
+      "focus": {
+       "name": "eye",
+       "role": "button"
+      },
+      "header": "Review the component migration",
+      "list": [],
+      "lock": {
+       "body": "auto",
+       "html": "visible"
+      },
+      "menus": [],
+      "options": [],
+      "popovers": [],
+      "queued": [],
+      "requests": [
+       {
+        "body": "multipart",
+        "method": "POST",
+        "path": "/api/attachments?sessionId=2zwQZ2hd93IvLb59t6p1c"
+       }
+      ],
+      "rows": [
+       "1",
+       "2",
+       "3"
+      ],
+      "scroll": {
+       "gap": 0
+      },
+      "step": "dropped",
+      "tips": [],
+      "url": "/sessions/2zwQZ2hd93IvLb59t6p1c"
+     },
+     "step": "dropped"
+    }
+   ]
+  },
+  "equal": 0,
+  "total": 8
+ }
+}

@@ -1,6 +1,12 @@
-.gradle/
+# No trailing slash: also ignore a symlink at these paths (a worktree short on
+# disk may point them at another volume). With a slash, git tracks such a link
+# and every checkout then builds into that one shared directory.
+.gradle
 .gradle-user-home/
-.kotlin/
+.kotlin
+/build
+/app/build
+/core/build
 .idea/
 .artifacts/
 local.properties

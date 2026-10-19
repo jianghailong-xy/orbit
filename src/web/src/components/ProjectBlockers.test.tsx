@@ -241,7 +241,7 @@ let root: Root | null = null;
 let container: HTMLElement | null = null;
 
 beforeEach(() => {
-  // The reason field grows with its text, which antd measures with a ResizeObserver jsdom lacks.
+  // The reason field grows with its text, which it measures with a ResizeObserver jsdom lacks.
   vi.stubGlobal('ResizeObserver', class {
     observe() {}
     unobserve() {}
@@ -319,7 +319,7 @@ async function openDialog(): Promise<HTMLElement> {
   expect(first).toBeDefined();
   await click(first!);
   await settle();
-  const dialog = document.body.querySelector<HTMLElement>('.ant-modal');
+  const dialog = document.body.querySelector<HTMLElement>('[role="dialog"]');
   expect(dialog).not.toBeNull();
   return dialog!;
 }
@@ -367,7 +367,7 @@ describe('ProjectBlockersCard — resolving one', () => {
     await click(button('Accept these files')!);
     await settle();
 
-    const text = document.body.querySelector('.ant-modal')?.textContent ?? '';
+    const text = document.body.querySelector('[role="dialog"]')?.textContent ?? '';
     expect(text).toContain('That resolution was not recorded');
     expect(text).toContain('BLOCKER_ALREADY_RESOLVED: this blocker is already resolved');
   });

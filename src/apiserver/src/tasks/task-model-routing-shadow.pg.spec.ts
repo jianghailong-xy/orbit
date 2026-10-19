@@ -174,7 +174,7 @@ async function assertSessionIsBaseline(
   );
 }
 
-test('a fresh run records one shadow decision, frozen in a v2 target, and runs the baseline',
+test('a fresh run records one shadow decision, frozen in a v3 target, and runs the baseline',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const services = connect();
@@ -200,6 +200,8 @@ test('a fresh run records one shadow decision, frozen in a v2 target, and runs t
       );
       assert.equal(row.reasons[0], `Tier M: suggested by the coordinator — ${HINT_REASON}`);
       assert.deepEqual(row.baseline, {
+        // The task pins only the provider, so its engine is the one that provider runs on by default.
+        engine: 'claude', engineSource: 'provider-pin',
         provider: 'claude', providerSource: 'task-pin', model: null, runtimeDefaultModel: OPUS,
         effort: AGENT_EFFORT, permissionMode: 'auto',
       });
@@ -212,17 +214,18 @@ test('a fresh run records one shadow decision, frozen in a v2 target, and runs t
       assert.equal(features.dependents, 0);
       assert.ok((features.promptChars as number) > 0);
 
-      // THE RUN TARGET IS v2: what is dispatched is the task's own pins and no effort, beside the
-      // decision it was planned with.
+      // THE RUN TARGET IS v3 (docs/provider-engine-contract.md §6.4): what is dispatched is the task's
+      // own pins — no engine pin here — and no effort, beside the decision it was planned with, which
+      // names the engine it chose.
       const bound = await receipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, press);
       assert.equal(bound.status, 'COMPLETED');
-      assert.equal(bound.target.v, 2);
+      assert.equal(bound.target.v, 3);
       assert.equal(bound.target.kind, 'RUN');
       assert.deepEqual(
-        { provider: bound.target.provider, model: bound.target.model, effort: bound.target.effort },
-        { provider: 'claude', model: null, effort: null },
+        { engine: bound.target.engine, provider: bound.target.provider, model: bound.target.model, effort: bound.target.effort },
+        { engine: null, provider: 'claude', model: null, effort: null },
       );
-      assert.deepEqual(bound.target.route, snapshotOf(row));
+      assert.deepEqual(bound.target.route, { ...snapshotOf(row), engine: 'claude' });
 
       await assertSessionIsBaseline(
         services.db, sessionId, { provider: 'claude', model: null, effort: AGENT_EFFORT }, row.baseline,
@@ -254,7 +257,7 @@ test('a bulk run records one decision per fresh item, under that item\'s own req
 
       assert.equal(answer.dispatched, 3, JSON.stringify(answer));
       const bound = await receipt(services.db, target.ownerId, TASK_RUN_ACTION.batchExecute, press);
-      assert.equal(bound.target.v, 2);
+      assert.equal(bound.target.v, 3);
       assert.equal(bound.target.kind, 'BATCH');
       const expected = new Map([
         [suggested, {
@@ -288,7 +291,7 @@ test('a bulk run records one decision per fresh item, under that item\'s own req
         assert.equal(row.reasons[0], want.reason);
         const item = bound.target.items.find((i: { taskId: string }) => i.taskId === taskId);
         assert.equal(item.effort, null);
-        assert.deepEqual(item.route, snapshotOf(row));
+        assert.deepEqual(item.route, { ...snapshotOf(row), engine: 'claude' });
         await assertSessionIsBaseline(services.db, sessionId!, want.session, row.baseline);
       }
     } finally {
@@ -380,7 +383,7 @@ test('replaying an answered single run or bulk run through a takeover writes no 
     }
   });
 
-test('a v1 target bound before the upgrade is still carried out, recording nothing; v3 is refused',
+test('a v1 target bound before the upgrade is still carried out, recording nothing; v4 is refused',
   { skip, timeout: 120_000 }, async () => {
     assertCoordinatorPgUrlIsIsolated(URL!);
     const services = connect();
@@ -423,7 +426,7 @@ test('a v1 target bound before the upgrade is still carried out, recording nothi
 
       const futurePress = randomUUID();
       await boundReceipt(services.db, target.ownerId, TASK_RUN_ACTION.execute, futurePress,
-        `task:${unknown}`, { v: 3, kind: 'RUN' });
+        `task:${unknown}`, { v: 4, kind: 'RUN' });
       await assert.rejects(
         () => services.tasks.execute(target.ownerId, unknown, undefined, futurePress),
         (error: Error & { response?: { code?: string } }) =>

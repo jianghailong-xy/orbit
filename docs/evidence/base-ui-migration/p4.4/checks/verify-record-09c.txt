@@ -1,0 +1,4 @@
+Record 2026-10-09c.json verified: 1 file entries and 0 index.css entries match the audit; read after 8 earlier record(s), 1 points need its new/changed entries and 0 change owner without its reassignments; it leaves 0 points pending (0 questions); with all 9 records: 0 unowned, 0 pending; P0.1 baseline clean.
+exit=0
+Record 2026-10-09b.json verified: 3 file entries and 0 index.css entries match the audit; read after 7 earlier record(s), 3 points need its new/changed entries and 0 change owner without its reassignments; it leaves 0 points pending (0 questions); with all 9 records: 0 unowned, 0 pending; P0.1 baseline clean.
+exit=0

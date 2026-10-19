@@ -5,7 +5,7 @@ import { flattenOptions, type SelectOption, type SelectProps } from './Select';
 import { SelectEmpty } from './SelectEmpty';
 import { ComboboxOption } from './ComboboxOption';
 import { Spinner } from './Spinner';
-import { useDropdownPlacement, useFloating } from './Floating';
+import { useDropdownPlacement, useFloating, useResizingAnchor } from './Floating';
 
 export interface MultiSelectProps extends Omit<SelectProps, 'value' | 'onValueChange' | 'ref' | 'renderValue'> {
   value: string[];
@@ -31,6 +31,7 @@ export function MultiSelect({ options, value, onValueChange, mode = 'multiple', 
   const updateQuery = (next: string) => { setLocalQuery(next); onSearch?.(next); };
   const layer = useFloating({ open, onOpenChange: (next) => { if (!next) updateQuery(''); onOpenChange?.(next); } });
   const { positioner, ...placement } = useDropdownPlacement(layer.open, anchor, 4, align);
+  const positionAnchor = useResizingAnchor(layer.open, anchor);
   const flat = flattenOptions(options);
   const selected = value.map((entry) => flat.find((option) => option.value === entry) ?? { value: entry, label: entry });
   const visible = maxTagCount === undefined ? selected : selected.slice(0, maxTagCount);
@@ -60,7 +61,7 @@ export function MultiSelect({ options, value, onValueChange, mode = 'multiple', 
     }} filter={(option: SelectOption, search) => option.label.toLocaleLowerCase().includes(search.toLocaleLowerCase())}
     // As the replaced multiple select: opening highlights the first option (Enter picks it); free tags don't.
     autoHighlight={(mode === 'tags' ? true : 'always') as boolean} name={name} disabled={disabled} open={layer.open} onOpenChange={(next, details) => {
-      // AntD keeps a multiple picker open after selecting a search result.
+      // As the replaced multiple picker: it stays open after selecting a search result.
       if (!next && details.reason === 'item-press') { details.cancel(); return; }
       layer.setOpen(next);
     }} modal={false}>
@@ -93,7 +94,7 @@ export function MultiSelect({ options, value, onValueChange, mode = 'multiple', 
       {clearable && value.length > 0 && !disabled && <BaseCombobox.Clear className="orbit-choice-clear" tabIndex={0} aria-label={clearLabel}><CloseCircleFilled aria-hidden /></BaseCombobox.Clear>}
     </div>
     <BaseCombobox.Portal container={layer.container()}>
-      <BaseCombobox.Positioner ref={positioner} anchor={anchor} side={side} align={align} {...placement}
+      <BaseCombobox.Positioner ref={positioner} anchor={positionAnchor} side={side} align={align} {...placement} positionMethod={layer.positionMethod}
         className="orbit-floating-positioner orbit-choice-positioner" data-match-width={matchTriggerWidth} style={{ zIndex: layer.zIndex }}>
         <BaseCombobox.Popup className={`orbit-select-popup${popupClassName ? ` ${popupClassName}` : ''}`} style={popupStyle} finalFocus={returnFocus}>
           <BaseCombobox.Empty className="orbit-select-empty" role="status">{emptyContent}</BaseCombobox.Empty>

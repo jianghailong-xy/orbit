@@ -46,16 +46,16 @@ export class ManagedRunnerController {
   @UseGuards(ManagedRunnerEnabledGuard)
   @Post('wake')
   @HttpCode(202)
-  wake(@CurrentUser() user: AuthUser, @Body() _dto: ManagedRunnerWriteDto): Promise<never> {
-    return this.managed.refuseUnsupported(user.userId, 'wake');
+  wake(@CurrentUser() user: AuthUser, @Body() dto: ManagedRunnerWriteDto): Promise<ManagedRunnerStatus> {
+    return this.managed.wake(user.userId, dto.idempotencyKey);
   }
 
   @PatForbidden('RUNNER_CONTROL')
   @UseGuards(ManagedRunnerEnabledGuard)
   @Post('sleep')
   @HttpCode(202)
-  sleep(@CurrentUser() user: AuthUser, @Body() _dto: ManagedRunnerWriteDto): Promise<never> {
-    return this.managed.refuseUnsupported(user.userId, 'sleep');
+  sleep(@CurrentUser() user: AuthUser, @Body() dto: ManagedRunnerWriteDto): Promise<ManagedRunnerStatus> {
+    return this.managed.sleep(user.userId, dto.idempotencyKey, dto.revision);
   }
 
   @PatForbidden('RUNNER_CONTROL')

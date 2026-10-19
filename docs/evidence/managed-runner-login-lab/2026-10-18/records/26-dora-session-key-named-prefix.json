@@ -1,0 +1,40 @@
+{
+  "answer": {
+    "assignedRunnerId": "34hjkjiVESUBoVp9PV5Va",
+    "code": null,
+    "engine": "claude",
+    "id": "34hjnmZQEN769B3aeIpfB",
+    "message": null,
+    "model": null,
+    "provider": "deepseek",
+    "status": "PENDING",
+    "workspaceId": "34hjkjinEmKqKFiWEM4Ej"
+  },
+  "at": "2026-10-17T23:14:24.436+00:00",
+  "display": {
+    "acceptsWork": true,
+    "detail": "The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.",
+    "ensure": false,
+    "kind": "modelUnavailable",
+    "moving": true,
+    "retry": false,
+    "signIn": true,
+    "startsNewSession": false,
+    "title": "Your managed runner needs a model"
+  },
+  "managed": {
+    "initialProvider": null,
+    "managementState": "STARTING",
+    "runnerId": "34hjkjiVESUBoVp9PV5Va",
+    "usable": false,
+    "workspaceId": "34hjkjinEmKqKFiWEM4Ej"
+  },
+  "owner": "dora",
+  "request": {
+    "prompt": "T05-DORA-KEY-PREFIX say hello from the managed runner",
+    "provider": "deepseek",
+    "title": "t05 dora first session on the key (pre-fix, provider named)",
+    "workspaceId": "34hjkjinEmKqKFiWEM4Ej"
+  },
+  "status": 201
+}

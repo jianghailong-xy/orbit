@@ -1,0 +1,91 @@
+{
+  "baseline": {
+    "commit": "3a1eadcf802b8c6c5acb4042a98029d4e3bb6d76",
+    "scopeHash": "f74804b9a9e5af1528351af9354a50447b443bc27cd1d72224b1ab864d75e95b"
+  },
+  "records": [
+    "2026-10-07.json",
+    "2026-10-07b.json",
+    "2026-10-07d.json"
+  ],
+  "unowned": [
+    {
+      "path": "src/web/src/components/DeepSeekBalance.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/ProjectDoneConversation.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/RunnerEngines.accountFold.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/StartProjectCard.test.tsx",
+      "reason": "new since P0.1, not in a delta record: antd-reference, ant-selector, ant-class"
+    },
+    {
+      "path": "src/web/src/components/WikiReviewPage.decided.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/WikiShareButton.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/WorkspaceView.neverStarted.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/components/WorkspaceView.promptSuggestion.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/index.css",
+      "line": 6699,
+      "kind": "ant-class",
+      "text": ".ant-dropdown-menu-item.composer-engine-title,",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/index.css",
+      "line": 6700,
+      "kind": "ant-class",
+      "text": ".ant-dropdown-menu-item.composer-engine-title:hover {",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/index.css",
+      "line": 10701,
+      "kind": "ant-class",
+      "text": "`.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/pages/AdminUsersPage.disable.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/pages/SharedWikiPage.test.tsx",
+      "reason": "no owner"
+    },
+    {
+      "path": "src/web/src/pages/SharedWikiPage.tsx",
+      "reason": "no owner"
+    }
+  ],
+  "pending": [],
+  "owners": {
+    "KEEP": 1,
+    "P4.2": 81,
+    "P4.3a": 82,
+    "P4.3b": 30,
+    "P4.4": 50,
+    "P5.1": 28,
+    "P5.2": 11,
+    "P5.3": 90,
+    "P6": 36
+  }
+}
+Ownership gaps: 14 use points have no owner. Migrate them in this batch if in scope, otherwise report them to the coordinator.

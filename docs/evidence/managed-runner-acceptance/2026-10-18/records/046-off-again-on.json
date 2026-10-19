@@ -1,0 +1,319 @@
+{
+ "checks": [
+  {
+   "check": "T08-OFF-UNSET-ANN answered on ann's managed runner once the switch was on",
+   "ok": true,
+   "value": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+  },
+  {
+   "check": "T08-OFF-UNSET-BOB answered on bob's managed runner once the switch was on",
+   "ok": true,
+   "value": "01a14f03-ec5a-749b-9877-e882a1a198eb"
+  },
+  {
+   "check": "T08-OFF-UNSET-CY answered on cy's managed runner once the switch was on",
+   "ok": true,
+   "value": "01a14f04-a624-724f-b618-252c0e3e8e26"
+  },
+  {
+   "check": "T08-OFF-FALSE-ANN answered on ann's managed runner once the switch was on",
+   "ok": true,
+   "value": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+  },
+  {
+   "check": "T08-OFF-FALSE-BOB answered on bob's managed runner once the switch was on",
+   "ok": true,
+   "value": "01a14f03-ec5a-749b-9877-e882a1a198eb"
+  },
+  {
+   "check": "T08-OFF-FALSE-CY answered on cy's managed runner once the switch was on",
+   "ok": true,
+   "value": "01a14f04-a624-724f-b618-252c0e3e8e26"
+  },
+  {
+   "check": "ann: the same runner, PVC, PV, volume handle, RBD image and workspace after the switch was off and on",
+   "ok": true,
+   "value": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834"
+  },
+  {
+   "check": "bob: the same runner, PVC, PV, volume handle, RBD image and workspace after the switch was off and on",
+   "ok": true,
+   "value": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8"
+  },
+  {
+   "check": "cy: the same runner, PVC, PV, volume handle, RBD image and workspace after the switch was off and on",
+   "ok": true,
+   "value": "csi-vol-8df43b50-2e72-44e9-ad65-4737a09dd275"
+  }
+ ],
+ "endedAt": "2026-10-18T13:06:13.108+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "off-again",
+ "result": {
+  "T08-OFF-FALSE-ANN": {
+   "event": {
+    "created_at": "2026-10-18T13:05:41.963",
+    "ingested_at": "2026-10-18T13:05:42.121515+00:00",
+    "ingested_by_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "seq": 136,
+    "session_id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+    "type": "assistant"
+   },
+   "modelRequests": [
+    {
+     "at": "2026-10-18T13:05:41Z",
+     "kind": "text",
+     "messages": 47,
+     "n": 42,
+     "secrets": [
+      "annfirst"
+     ],
+     "tool": null
+    }
+   ],
+   "session": {
+    "assigned_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "created_at": "2026-10-18T12:37:47.476",
+    "engine": "claude",
+    "id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+    "provider": "deepseek-2",
+    "runtime_session_id": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+    "status": "AWAITING_INPUT",
+    "task_id": null
+   }
+  },
+  "T08-OFF-FALSE-BOB": {
+   "event": {
+    "created_at": "2026-10-18T13:03:26.414",
+    "ingested_at": "2026-10-18T13:03:26.674071+00:00",
+    "ingested_by_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "seq": 8,
+    "session_id": "edf0d323-3623-5b68-9947-cdcebd0ef459",
+    "type": "assistant"
+   },
+   "modelRequests": [],
+   "session": {
+    "assigned_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "created_at": "2026-10-18T13:01:00.109",
+    "engine": "claude",
+    "id": "edf0d323-3623-5b68-9947-cdcebd0ef459",
+    "provider": "deepseek-3",
+    "runtime_session_id": "628ad07b-a549-4eaf-b091-8910bf6254ea",
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14f19-e714-74ac-b1e2-5e63742a7d61"
+   }
+  },
+  "T08-OFF-FALSE-CY": {
+   "event": {
+    "created_at": "2026-10-18T13:03:24.415",
+    "ingested_at": "2026-10-18T13:03:24.479944+00:00",
+    "ingested_by_runner_id": "01a14f04-a624-724f-b618-252c0e3e8e26",
+    "seq": 8,
+    "session_id": "6372ad09-37eb-5dbf-9926-d5ca0ccc2124",
+    "type": "assistant"
+   },
+   "modelRequests": [],
+   "session": {
+    "assigned_runner_id": "01a14f04-a624-724f-b618-252c0e3e8e26",
+    "created_at": "2026-10-18T13:01:57.212",
+    "engine": "claude",
+    "id": "6372ad09-37eb-5dbf-9926-d5ca0ccc2124",
+    "provider": "deepseek-4",
+    "runtime_session_id": "cf760405-02d8-495c-8d36-077d55fa8f05",
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14f19-e769-77eb-8704-51feecb6496d"
+   }
+  },
+  "T08-OFF-UNSET-ANN": {
+   "event": {
+    "created_at": "2026-10-18T13:05:41.543",
+    "ingested_at": "2026-10-18T13:05:41.61923+00:00",
+    "ingested_by_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "seq": 127,
+    "session_id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+    "type": "assistant"
+   },
+   "modelRequests": [
+    {
+     "at": "2026-10-18T13:05:41Z",
+     "kind": "text",
+     "messages": 44,
+     "n": 41,
+     "secrets": [
+      "annfirst"
+     ],
+     "tool": null
+    }
+   ],
+   "session": {
+    "assigned_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "created_at": "2026-10-18T12:37:47.476",
+    "engine": "claude",
+    "id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+    "provider": "deepseek-2",
+    "runtime_session_id": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+    "status": "AWAITING_INPUT",
+    "task_id": null
+   }
+  },
+  "T08-OFF-UNSET-BOB": {
+   "event": {
+    "created_at": "2026-10-18T13:03:26.322",
+    "ingested_at": "2026-10-18T13:03:26.381559+00:00",
+    "ingested_by_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "seq": 8,
+    "session_id": "e7fac45c-0d6c-5028-bb14-77d9e4798ab2",
+    "type": "assistant"
+   },
+   "modelRequests": [],
+   "session": {
+    "assigned_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "created_at": "2026-10-18T12:58:57.834",
+    "engine": "claude",
+    "id": "e7fac45c-0d6c-5028-bb14-77d9e4798ab2",
+    "provider": "deepseek-3",
+    "runtime_session_id": "9e1b3c98-0af2-4ef9-9d28-9d2159cdd642",
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14f18-0971-741c-8c46-02833edc1866"
+   }
+  },
+  "T08-OFF-UNSET-CY": {
+   "event": {
+    "created_at": "2026-10-18T13:03:23.943",
+    "ingested_at": "2026-10-18T13:03:24.042657+00:00",
+    "ingested_by_runner_id": "01a14f04-a624-724f-b618-252c0e3e8e26",
+    "seq": 8,
+    "session_id": "8eeaebc5-817f-5a04-9712-00b8bfbef7d5",
+    "type": "assistant"
+   },
+   "modelRequests": [],
+   "session": {
+    "assigned_runner_id": "01a14f04-a624-724f-b618-252c0e3e8e26",
+    "created_at": "2026-10-18T12:59:55.065",
+    "engine": "claude",
+    "id": "8eeaebc5-817f-5a04-9712-00b8bfbef7d5",
+    "provider": "deepseek-4",
+    "runtime_session_id": "e01cd10a-60f1-499e-b454-c7d58e1ff650",
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14f18-09c9-72eb-935c-3ec1ff2e2d1a"
+   }
+  },
+  "asleep": {
+   "ann": {
+    "sleep": 202,
+    "until": {
+     "at": "2026-10-18T13:06:13.031+00:00",
+     "changes": [
+      {
+       "at": "2026-10-18T13:05:43.676+00:00",
+       "line": {
+        "attempt": 0,
+        "drain": "asked",
+        "generation": 7,
+        "management_state": "DRAINING",
+        "pod": "96c6cac4",
+        "reason": null,
+        "revision": 120
+       }
+      },
+      {
+       "at": "2026-10-18T13:06:04.870+00:00",
+       "line": {
+        "attempt": 0,
+        "drain": "accepted",
+        "generation": 7,
+        "management_state": "DRAINING",
+        "pod": "96c6cac4",
+        "reason": null,
+        "revision": 120
+       }
+      },
+      {
+       "at": "2026-10-18T13:06:08.144+00:00",
+       "line": {
+        "attempt": 0,
+        "drain": "accepted",
+        "generation": 7,
+        "management_state": "DRAINING",
+        "pod": "96c6cac4",
+        "reason": null,
+        "revision": 123
+       }
+      },
+      {
+       "at": "2026-10-18T13:06:13.031+00:00",
+       "line": {
+        "attempt": 0,
+        "drain": null,
+        "generation": 8,
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 124
+       }
+      }
+     ],
+     "reached": "SLEEPING",
+     "seconds": 29.4
+    }
+   },
+   "bob": null,
+   "cy": null
+  },
+  "server": {
+   "apiEnvironmentNames": [
+    "CORS_ORIGINS",
+    "DATABASE_URL",
+    "HOME",
+    "INVOCATION_ID",
+    "JWT_SECRET",
+    "LANG",
+    "MEMORY_PRESSURE_WATCH",
+    "MEMORY_PRESSURE_WRITE",
+    "MODEL_CATALOG_URL",
+    "NODE_ENV",
+    "ORBIT_MANAGED_RUNNERS_ENABLED",
+    "ORBIT_MANAGED_RUNNERS_PROFILE",
+    "ORBIT_RECAP_ENABLED",
+    "PATH",
+    "PORT",
+    "PROVIDER_SECRET_KEY",
+    "PUBLIC_ORIGIN",
+    "SYSTEMD_EXEC_PID",
+    "USER"
+   ],
+   "clusterSettingsInTheEnvironment": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED",
+    "ORBIT_MANAGED_RUNNERS_PROFILE"
+   ],
+   "kubeconfigInTheServerHome": false,
+   "mode": "on",
+   "replica": {
+    "managedSwitch": [
+     "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+     "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t08/managed-runner-profile.json"
+    ],
+    "port": 13720,
+    "unit": "active"
+   },
+   "seconds": 6.8,
+   "switch": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t08/managed-runner-profile.json"
+   ],
+   "testServer": [
+    "TLS front (orbit-mr-lab-tls): active",
+    "fake model (orbit-mr-lab-fake-model): active",
+    "PostgreSQL (orbit-mr-lab-pg): running",
+    "listening: 127.0.0.1:13710 127.0.0.1:13711 127.0.0.1:13712 127.0.0.1:15433",
+    "Pods use: https://10.0.2.2:13711 (CA /mnt/data/managed-runner-lab/test-server-t08/tls/ca.crt); host API http://127.0.0.1:13710/api",
+    "state: /mnt/data/managed-runner-lab/test-server-t08; managed runners: true",
+    "13:02:58Z applying migrations"
+   ]
+  }
+ },
+ "seconds": 195.1,
+ "startedAt": "2026-10-18T13:02:58.048+00:00",
+ "step": "on"
+}

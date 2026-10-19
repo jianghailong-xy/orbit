@@ -47,7 +47,7 @@ var userModeActions = map[string]string{
 	"task dependency-add":    "",
 	"task dependency-remove": "",
 	"task batch-pin": "no user route re-pins tasks in bulk; re-pin them one at a time with " +
-		"`orbit task update TASK_ID --provider SLUG --model MODEL`",
+		"`orbit task update TASK_ID --engine ENGINE --provider SLUG --model MODEL`",
 	"task evidence-decide": "a decision on completion evidence is an independent session's, made from inside " +
 		"it (ORBIT_SESSION_ID), or the account owner's own in the Orbit app — never a personal access token's",
 	"task request-confirmation": "a task's own run declares its work finished, from inside its session (ORBIT_SESSION_ID)",
@@ -248,7 +248,7 @@ type taskTransport interface {
 	updateTask(sessionID, id string, body interface{}) (json.RawMessage, error)
 	deleteTask(id string) (json.RawMessage, error)
 	startTask(id, triggerID string) (json.RawMessage, error)
-	commentTask(id, agentID, bodyText string) (json.RawMessage, error)
+	commentTask(id, agentID, sessionID, bodyText string) (json.RawMessage, error)
 	getTaskProgress(id string) (json.RawMessage, error)
 	reportTaskProgress(id string, body map[string]interface{}) (json.RawMessage, error)
 	taskDependencyGraph(id string, maxDepth, maxNodes int) (json.RawMessage, error)
@@ -362,7 +362,7 @@ func (u *userTransport) startTask(id, triggerID string) (json.RawMessage, error)
 	})
 }
 
-func (u *userTransport) commentTask(id, _, bodyText string) (json.RawMessage, error) {
+func (u *userTransport) commentTask(id, _, _, bodyText string) (json.RawMessage, error) {
 	return u.at(http.MethodPost, "/tasks", id, "/comments", map[string]string{"body": bodyText})
 }
 

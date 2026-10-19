@@ -1,8 +1,8 @@
 import Foundation
 
 /// One reading of the transcript scroll view's geometry. SwiftUI's `ScrollGeometry` is Apple-only
-/// and these three numbers are all the tail-pinning rule needs, so the decision itself lives here —
-/// in the package that builds and tests on Linux.
+/// and these five numbers are all the tail-pinning rules need, so the decisions themselves live
+/// here — in the package that builds and tests on Linux.
 public struct TailScrollSample: Equatable, Sendable {
     /// Vertical content offset.
     public let offset: Double
@@ -10,11 +10,22 @@ public struct TailScrollSample: Equatable, Sendable {
     public let contentHeight: Double
     /// How much content sits below the viewport's bottom edge. Zero at the live tail.
     public let bottomGap: Double
+    /// How far the content is inset from the viewport's top edge: the bars laid over the list, the
+    /// sticky "↑ Your question" header among them. A bar that arrives pushes the rows down by what
+    /// it adds here, and the tail with them, without anybody scrolling.
+    public let topInset: Double
+    /// How far the content is inset from the viewport's bottom edge: what floats over the list's
+    /// bottom — the composer band where it floats (iOS 26), and the keyboard under it. Zero where the
+    /// list ends at its band. A bar that grows there lifts the floor the tail rests on.
+    public let bottomInset: Double
 
-    public init(offset: Double, contentHeight: Double, bottomGap: Double) {
+    public init(offset: Double, contentHeight: Double, bottomGap: Double, topInset: Double = 0,
+                bottomInset: Double = 0) {
         self.offset = offset
         self.contentHeight = contentHeight
         self.bottomGap = bottomGap
+        self.topInset = topInset
+        self.bottomInset = bottomInset
     }
 }
 
@@ -104,5 +115,104 @@ public enum TailPinning {
                                      to currentHeight: Double) -> Bool {
         guard wasPinned, previousHeight > 0, currentHeight > 0 else { return false }
         return currentHeight != previousHeight
+    }
+
+    /// Points of play in where the offset ends up: this far from where the geometry carried it is
+    /// still the geometry's doing. A push is not exactly the inset it answers to once both are
+    /// rounded to the screen's pixels (measured on a Mac: a 30pt header moved the offset 29).
+    static let slop: Double = 2
+
+    /// Under a pixel at any scale the clients draw at (a third of a point on a 3x phone): a tail this
+    /// close is in place, and no rounding error reads as a gap. Anything more is followed to the
+    /// point — the last frame of the header's push moved a Mac's offset 2pt (274 against a tail at
+    /// 276), and a tail left that short stays short.
+    static let subpixel: Double = 0.25
+
+    /// Whether a pinned transcript should be carried back to its tail because the scroll GEOMETRY
+    /// changed under it while nothing was moving it: the content measured to a new height, or a bar
+    /// arriving over the list — the sticky "↑ Your question" header — and pushing its rows down.
+    ///
+    /// Neither is the viewport resizing (`followsResize`) or the reader leaving the tail (`pinned`),
+    /// and together they left a long conversation opened at its tail short of it, its last line in
+    /// the composer's fade. On an iPhone the header arrives after the first pin and pushes the rows
+    /// down by its height (measured: offset 692 against a tail at 724, every time); on a Mac the
+    /// rows start at estimated heights, the pin lands on the estimate, the content grows as the rows
+    /// on screen are measured (44pt), and then the header pushes it 30 more. Each of those gaps is
+    /// inside `nearBottom`, so the transcript still counted as pinned and the jump-to-latest disc
+    /// never showed. Re-pinning when the header appears is too early: the push lands after the
+    /// re-scroll, and over several frames, as the header animates in. So the answer is asked of
+    /// every reading instead, and the push is followed frame by frame.
+    ///
+    /// `pinned` is the pin as `pinned(...)` decided it for `current`. `moving` is whether anything
+    /// was moving the list that the platform reported: a finger or its coast, or a scroll SwiftUI
+    /// says it is animating.
+    ///
+    /// The offset may move only as far as the geometry carried it: not at all while rows grow under
+    /// the viewport, and down by what a bar added while it pushes. A movement past that is a scroll,
+    /// and a scroll is never followed — whoever made it — so a reader who scrolled up stays where
+    /// they are even where the platform does not report the scroll and the rows it uncovered were
+    /// measured in the same breath. The one other movement allowed is this rule's own re-pin landing
+    /// in the same reading as the next frame of a push: what is left out of view then is no more
+    /// than that frame pushed.
+    ///
+    /// And only a tail within the pin's own slack is followed. Further than that, the transcript was
+    /// carried off by a scroll or a jump, and the pin is no evidence otherwise: a List animating a
+    /// jump reports no phase of its own (measured on iOS 26: the jump-to-latest disc's glide read
+    /// `idle` from its first frame to its last, and its steps began at 1.6, 4.7, 7.7pt), so a jump up
+    /// from the tail lands its first reading inside the slack and pins the transcript again — and
+    /// nothing later in the jump has to un-pin it. A pinned transcript left out of view that way is
+    /// `stranded`, and the jump-to-latest disc is the way back.
+    ///
+    /// The one larger gap followed is the floor rising: a bar floating over the list's bottom grew —
+    /// the keyboard arriving under a floating composer band, the composer growing a line — and took
+    /// the tail under it. Nobody scrolled; the tail is as far below the new floor as the floor rose,
+    /// and no more than that past the slack, which no jump can arrange (a jump moves no inset).
+    /// Measured on iOS 26: the keyboard snapped the list from a 427.6pt frame back to 874 with 436pt
+    /// floating over its bottom, the content kept its place against the frame (offset 1090.3 to
+    /// 644), and the tail sat 436 below the composer; the composer then grew a line at a time
+    /// (insets 458, 480, 502) under an offset nothing moved again.
+    public static func followsGeometry(pinned: Bool,
+                                       from previous: TailScrollSample,
+                                       to current: TailScrollSample,
+                                       moving: Bool) -> Bool {
+        guard pinned, !moving, current.bottomGap > subpixel else { return false }
+        let lifted = current.bottomInset - previous.bottomInset
+        if lifted > subpixel, current.bottomGap <= lifted + nearBottom { return true }
+        guard current.bottomGap <= nearBottom else { return false }
+        let resized = current.contentHeight != previous.contentHeight
+        let pushed = current.topInset - previous.topInset
+        guard resized || pushed != 0 else { return false }
+        // The offset's movement that the push does not explain: zero when the geometry alone moved.
+        let carried = current.offset - previous.offset + pushed
+        return abs(carried) <= slop || current.bottomGap <= pushed + slop
+    }
+
+    /// Room past the pin's slack a folded band leaves the reader, so a rounding error at the
+    /// boundary can't pin them again.
+    public static let foldMargin: Double = 16
+
+    /// Whether a phone's composer band folds to its one-line bar: the reader has gone back through
+    /// the history (the owner, 2026-10-16: the parking strip and the composer give the conversation
+    /// their room while it is being read back).
+    ///
+    /// Not as soon as the pin lets go, which is the first point of a scroll up: the band floats over
+    /// the list, so folding it lowers the floor the tail rests on by everything it gives back. A
+    /// reader still that close to the tail is then past the end — the list springs back into the
+    /// room, under their finger — or back inside the pin's slack, which pins them again and opens the
+    /// band again, and so on while they scroll. So the band folds once the reader is far enough back
+    /// for the folded band to leave them clear of the pin: once the last row has gone below the
+    /// list's bottom edge, give or take what the folded band keeps there. That reading is the rows
+    /// against the list's own frame, whatever floats over it, so the band folding or opening cannot
+    /// answer its own question; and it is the same line on the way back, where the band opens as the
+    /// tail comes up to the bottom edge and the reader carries on into it.
+    ///
+    /// `foldedInset` is the bottom inset the list has with the band folded: the bar and its foot,
+    /// over the screen's own bottom inset.
+    public static func foldsBand(pinned: Bool, sample: TailScrollSample, foldedInset: Double) -> Bool {
+        guard !pinned else { return false }
+        // How far the last row sits below the list's bottom edge: the gap the pin reads, without
+        // whatever floats over the list.
+        let depth = sample.bottomGap - sample.bottomInset
+        return depth + foldedInset > nearBottom + foldMargin
     }
 }

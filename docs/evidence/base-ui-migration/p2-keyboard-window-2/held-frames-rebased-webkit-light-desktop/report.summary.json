@@ -1,0 +1,1140 @@
+{
+ "stats": {
+  "startTime": "2026-10-08T03:33:13.431Z",
+  "duration": 111492.995,
+  "expected": 49,
+  "skipped": 0,
+  "unexpected": 0,
+  "flaky": 0
+ },
+ "errors": [],
+ "tests": [
+  {
+   "title": "session submenu → ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3137,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a3fa93f70dc00605c69b635342a9bf78f221d461c0b11693f6de57bbbc21614d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session submenu → ↓ ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2559,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "905c266d11432014755380d3c30cea021eec886194493cfe3863d575a7b59a62"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session submenu → ↑ ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2909,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ad13babebab45069939bf4ecbdb098dc1988c31a70d752332d3e61927eb93f58"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session submenu → Home ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 4309,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f5c5f4fa717f9881551fa1f09e864e0b2558c2f4e4b935f3aebc21f09b129cf8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session submenu → End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 5008,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "61a44b2ad7c4228d6be338744a9a71af37265de410acbc6267c70952062a48d1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session submenu → Space with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3218,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "dd9929bda1ed9499bc6ea88c89fb00a42f0669603e4de601e230bcb956886c97"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session submenu → ← with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2491,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "eaf9628f71c498581f3f69a9d2bcd3ef4db2007e3c3ba4ffe95e85717d953fdd"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session submenu ⏎ ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 5994,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "37753620481567b0f8c01c6d00817b04fc16c280135b0884cfe1a0f4a313e444"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session submenu ⏎ ↓ ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 5402,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5f377c61e8555541b6424d91f04fac43d5a290ff6f3511d9f9c79419325ba24b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session submenu → Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2444,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "eea74c9f38e3c466ea55b4a4311e0b36447ff3af378cc8dff89367e9575c4089"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "session submenu → Shift+Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 3245,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "bc81191b716eeafc991040b3aec44e6a011539f7b63d51b8b3bc959971778dc8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "field submenu → ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2762,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0d6149e7b1f002a2badd25508a7bb215b6f931752d2eb94bd59567e3d0a12f82"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "field submenu → ↓ ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2675,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a4b584472bcdc65c5c1709f2c0d6517a69b3701b4be7f4026c699fbb0f8ad516"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "field submenu → ↑ ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2815,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "84f6938ebc530f7d8d992f76a46c5cde3ac6a6b844f7c6dd1f40d01d61749d4b"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "field submenu → Home ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2582,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "cbf9bcf01a4c8431d9c3adbad3448a7f115b756db0d2bf5bd3b464d06b3cbc3a"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "field submenu → End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2597,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "94e028a1a9a4701d1c2941b22ac44d984c943409255c4de49477d871cc1eb612"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "field submenu → Space with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2931,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "670db7efe3826c7ac4234f80b678133296f425fe040e0cedb0d1c6ada3b45572"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "field submenu → ← with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2332,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "2fecd2f0c2aa4deadd171c916dfe0d2a1c761032b4350ac2038d8ffb63242934"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "field submenu ⏎ ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2449,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "acc8510c87f5429621abd4692c8481ae202e103219d4f402e7ebac5cccac50fa"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "field submenu ⏎ ↓ ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2370,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f839292f7212b8da49dcd26b7cd4ede708a2fe08707feb9a2333b241aded9763"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "field submenu → Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2355,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c16a71dcf4f5a217019e76c0f41623233c94c123c3a28a4653965e850c710061"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "field submenu → Shift+Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 2313,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "a25692ca557aef1195cc01f7d78482c36c8a86f7f39f9dbdb38f050d8f4e6723"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ⏎ Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1469,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "e046712e1f40fe0fd91060734cbd6e3c42b8d49612e7fe79f4466e75af85bb94"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ⏎ Tab ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1798,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "145f6406f10584096923083d5524e42e45e6f5bf831ab58c6ee06008b451cfa1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ⏎ Shift+Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1610,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5ea0913498f304b9715c3478058178f21598978021777ebbd34ea87e11292807"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↓ Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1512,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f194f739dc451e526405794649a212379c3bf14eee267c9bb46c92ca9d1dcbc9"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ⏎ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1549,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "0858084bc7f73c2e077c0f5961c33e5e7417376de8a65e89b0c85154bc9902e7"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↓ End ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1912,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "14615f9c10ae839c7ff85d83c867def9537780ed4160afb771c73eaeb4abddc5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "menu ↑ Home ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1567,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "22355ee62c65ee49484ddef734e116cf5c923353b9a3b83f992c161818eb283e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "select ↓ Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1674,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "f9b2a95d4bdf3975b2386697a6ea94d6bc325443af8cd72db4b11526c698d8e5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "select ⏎ Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1662,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "61a2478385126b9684e64d64c992ae06e53a0e7400f2a2a815502b8b815092c4"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "select ↓ Shift+Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1696,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "3bfa4a445daec474bc30846dc41902614f62e7339148fa9fbd72aa31d796d38c"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "sample select ↓ Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1410,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "c1928478230acfcab9683f4f8bccadad8c87ad5a5e998754c65608aa11a67865"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "dialog ⏎ ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1391,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b01170a779c9850c1849757e746b909450653c2b78eee3662afe749532338ed5"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "dialog ⏎ Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1391,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "88e2f23fd577aa66faaf81da7658872ecd844373ed53c7d670fff63d553b41eb"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "dialog ⏎ Tab ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1374,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "91c891da2da1775090406babe212f4632cf8c38aa121fa0ead50e7ee8c68e63e"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "dialog ⏎ Shift+Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1355,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "50b9d9c183bce64f5886faa786560e332e1e2f08694eadd5cdcaabe6bd054ed8"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "dialog ⏎ Escape with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1414,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "780f326e38b23f09e7106c4213de3581dd419a08a340d053ccbbc7c0d140d777"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "confirm ⏎ ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1378,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "688b391d4a841be9639173e829c31fb8984d48ad5346a6b48aa02c2bd943e889"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "confirm ⏎ Space with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1230,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "832f5e8435af075fdd7688d2feb7cdf1cec094ad940a978503d62cf4c2f8f930"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "confirm ⏎ Tab with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1327,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "8883cf6dd28336ae2082fe7835af94a5cdd07973555cec6f78219f60fd550ac1"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "confirm ⏎ Tab ⏎ with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1278,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "aa449987587151c207ddd241199ad5c5cfade3764b846261ff470055bb009196"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "confirm ⏎ Escape with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1256,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "b7a6850aa1725d2b13f86a813dea88e6c09301f29b59eb37d4f05939a9bdf57d"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popconfirm ⏎ ⏎ (recorded) with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1346,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "81910be173e9d5c0c7ace297c04067c92d07cda7cd18ca6a2d2ecb81cda78b80"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popconfirm ⏎ Space (recorded) with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1606,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "481c2afea76bdcd6e4f94c58e2d9b64329ffe1ea982b77e1526b09d6d2581793"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popconfirm ⏎ Escape (recorded) with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1511,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "ea9ea2e6b496f85e408af1498eec7265a5b75c0e9facbc2b5bc78b09b60cb6b3"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popconfirm ⏎ Tab (recorded) with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1628,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "fca1af152846b4b284c8bc9a4a1fd31f9dc675366fbe55626f362412176d6809"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popconfirm ⏎ Tab ⏎ (recorded) with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1485,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "5e692640fdd7e51bf73f7f83f2c05bdf63b5a496371872e19542d8dee6916f20"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "title": "popconfirm ⏎ Shift+Tab (recorded) with frames held",
+   "location": "held-frames-2.browser.mjs:107",
+   "project": "webkit-light-desktop",
+   "expectedStatus": "passed",
+   "status": "expected",
+   "results": [
+    {
+     "status": "passed",
+     "duration": 1800,
+     "retry": 0,
+     "errors": [],
+     "attachments": [
+      {
+       "name": "held-frames-2",
+       "contentType": "application/json",
+       "path": null,
+       "sha256": "095fc69ae4dd518590d4b491759fc8b1ef78583ecaa4510506794d6dc954c4d5"
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

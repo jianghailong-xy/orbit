@@ -170,6 +170,7 @@ func TestTaskEvidenceCLIAndMCPUseTheSameWireStructure(t *testing.T) {
 }
 
 func TestTaskEvidenceSubmitRequiresStructuredEvidenceAndSourceSession(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv("ORBIT_TASK_ID", "task-1")
 	t.Setenv("ORBIT_SESSION_ID", "")
 	var out bytes.Buffer
@@ -248,6 +249,7 @@ func TestTaskEvidenceDecideCLIAndMCPUseTheSameWireStructure(t *testing.T) {
 
 // The three refusals a decider can be given before anything leaves the machine.
 func TestTaskEvidenceDecideRefusesLocallyWithoutDecisionRevisionOrSession(t *testing.T) {
+	t.Setenv("ORBIT_HOME", t.TempDir())
 	t.Setenv("ORBIT_TASK_ID", "task-1")
 	t.Setenv("ORBIT_SESSION_ID", "session-2")
 	var out bytes.Buffer
@@ -265,5 +267,20 @@ func TestTaskEvidenceDecideRefusesLocallyWithoutDecisionRevisionOrSession(t *tes
 	}, strings.NewReader(""), &out)
 	if err == nil || !strings.Contains(err.Error(), "ORBIT_SESSION_ID is required") {
 		t.Fatalf("missing deciding session error = %v", err)
+	}
+}
+
+// collapsedSpace is text with every run of whitespace one space: a usage line the help wraps is
+// still the one line the contract writes.
+func collapsedSpace(text string) string {
+	return strings.Join(strings.Fields(text), " ")
+}
+
+func assertSaysAll(t *testing.T, what, text string, phrases ...string) {
+	t.Helper()
+	for _, phrase := range phrases {
+		if !strings.Contains(text, phrase) {
+			t.Errorf("%s does not say %q:\n%s", what, phrase, text)
+		}
 	}
 }

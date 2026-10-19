@@ -332,6 +332,8 @@ export interface WikiPlanVersion {
   repoCheck: WikiPlanRepoCheck | null;
   model: string | null;
   authorSessionId: string | null;
+  /** The wiki_job that drafted it, when the server ran the plan job (contract `plan.jobs.server`); null otherwise. */
+  authorJobId: string | null;
   authorUserId: string | null;
   confirmedByUserId: string | null;
   confirmedAt: string | null;
@@ -368,7 +370,10 @@ export interface WikiPlanProposal {
   change: { doc: WikiPlanDocInput; category: WikiPlanCategoryInput | null };
   facts: Array<{ kind: WikiPlanFactKind; id: string }>;
   gate: WikiPlanGateReport;
-  authorSessionId: string;
+  /** The maintenance run that filed it: a session's, or null for a run the server's wiki job ran (P8, 0406). */
+  authorSessionId: string | null;
+  /** The wiki_job that filed it when the server ran the run (contract `plan.proposals.author`); null otherwise. */
+  authorJobId: string | null;
   decidedByUserId: string | null;
   decidedAt: string | null;
   decisionNote: string | null;
@@ -397,18 +402,20 @@ export interface WikiPlanDecisionResult {
 // ── The plan's jobs (contract `plan.jobs`, migration 0338) ──────────────────────────────────────
 
 /**
- * What a job does: draft a plan (`orbit wiki plan draft`), revise the newest version with the owner's
- * words (`orbit wiki plan revise`), or build the documents from a confirmed version (`orbit wiki docs
- * build`), which the owner's confirmation asks for.
+ * What a job does: draft a plan (`plan_draft`), revise the newest version with the owner's words
+ * (`plan_revise`), or build the documents from a confirmed version (`docs_build`), which the owner's
+ * confirmation asks for — each a wiki_job of the server's (contract `plan.jobs.kinds`).
  */
 export const WIKI_PLAN_JOB_KINDS = ['draft', 'revise', 'build'] as const;
 export type WikiPlanJobKind = (typeof WIKI_PLAN_JOB_KINDS)[number];
 
 /**
  * The fact that asked for a job: the space was created, or its owner asked on the plan page — for a draft,
- * or, by confirming a version, for the build of its documents.
+ * or, by confirming a version or asking for the documents of the version in force again, for a build of its
+ * documents — or an administrator asked for that build again for support (`support`, contract
+ * `plan.jobs.rebuild`, migration 0429).
  */
-export const WIKI_PLAN_JOB_TRIGGERS = ['space_created', 'owner'] as const;
+export const WIKI_PLAN_JOB_TRIGGERS = ['space_created', 'owner', 'support'] as const;
 export type WikiPlanJobTrigger = (typeof WIKI_PLAN_JOB_TRIGGERS)[number];
 
 /** Where a job stands as it is stored (`wiki_plan_job.state`). */
@@ -446,13 +453,57 @@ export const WIKI_PLAN_JOB_RULES = {
   draftMaxBytes: 1_000_000,
   /** A failure in words, at most. */
   errorMaxChars: 2_000,
-  /** The budget a job's task declares for its check, in seconds: the check reads one row. */
-  checkTimeoutSeconds: 300,
   /** The window of sessions the materials count and cluster, in days. */
   materialsSessionDays: 90,
   /** The most sessions and projects the materials list. */
   materialsSessionsMax: 5_000,
   materialsProjectsMax: 500,
+} as const;
+
+/**
+ * A draft or a revision run by the wiki-worker (contract `plan.jobs.server`, design §8, P6): the plan job is made
+ * as a `wiki_job`, and the worker drafts with the System model through the request queue — the runner's pipeline
+ * (`orbit wiki plan draft | revise` before P11), ported, its repository read from the space's snapshot.
+ */
+export const WIKI_PLAN_SERVER_JOB = {
+  /** The wiki_job a draft and a revision run as (contract `jobs.kinds`). */
+  kinds: { draft: 'plan_draft', revise: 'plan_revise' },
+  /** Owner-initiated: the space's creation and the owner's redraft are both the owner's (contract `jobs.priority`). */
+  priority: 1,
+  /** One call's max_tokens: a catalogue of forty documents in the line format, with room (the runner's 32,000). */
+  maxTokens: 32_000,
+  /** The calls one unit gets: the first, and two more with the format said again when its answer does not read. */
+  formatTries: 3,
+  /** The units in flight at once: the runner's --concurrency default, and the queue's own cap on one job. */
+  concurrency: 4,
+  /** How long the job waits for the space's runner to snapshot origin/main, and for a read of the texts the snapshot does not carry. */
+  snapshotWaitSeconds: 300,
+  readWaitSeconds: 300,
+  /** Every call's whole system prompt, word for word the runner's (wikiPlanSystemPrompt). */
+  systemPrompt: "You are the chief editor of this repository's documentation. You plan its product and technical documents from the "
+    + 'materials you are given. Use only the file paths, section headings, symbols and project names that appear in the materials, '
+    + 'and invent none. Write in English; keep code names, paths and commands as they are. Output only what is asked for.',
+  /**
+   * The repository's materials, cut to the runner's caps, in characters: the overview a catalogue, a category's
+   * details and a document's outline read; the structure and the documents' heading tree a catalogue and the
+   * details read; one document's code symbols.
+   */
+  materialCaps: {
+    overview: { full: 14_000, detail: 10_000, doc: 8_000 },
+    layout: { full: 32_000, detail: 26_000 },
+    docsTree: { full: 45_000, detail: 30_000 },
+    codeExcerpt: 16_000,
+  },
+  /** Each kind of call's step in the queue: `plan_*`, so the plan's wait limit and call budget apply (modelQueue). */
+  steps: {
+    skeleton: 'plan_skeleton',
+    details: 'plan_details',
+    outline: 'plan_outline',
+    rules: 'plan_rules',
+    reviseCatalogue: 'plan_revise_catalogue',
+    reviseDoc: 'plan_revise_doc',
+    redoDoc: 'plan_redo_doc',
+  },
 } as const;
 
 /** What a draft's or a revision's run reports when it ends (contract `plan.jobs.report`), kept as it was said. */
@@ -544,42 +595,64 @@ export interface WikiPlanRedraftResult {
 }
 
 /**
- * `GET /api/runner/wiki/spaces/:id/plan/job`: the job the calling maintenance session runs, and what it
- * starts from — the space, its repository and the maintenance workspace's checkout.
+ * The documents of the version in force asked for again (contract `plan.jobs.rebuild`): by the space's owner,
+ * `POST /api/wiki/spaces/:id/plan/versions/:version/build`, or by an administrator for support,
+ * `POST /api/admin/wiki/spaces/:id/plan/build`. Only while the server executes the account's wiki.
  */
-export interface WikiPlanJobContext {
+export const WIKI_PLAN_REBUILD = {
+  /** An administrator's reason, at most: what the support request is, recorded with it in Activity. */
+  reasonMaxChars: 500,
+  /** The Activity row of an administrator's request: theirs, naming the account, the space and the reason. */
+  activity: 'wiki.plan.build_requested',
+} as const;
+
+/** Its answer: the build — the one made now, or the one of the version in force that had not ended. */
+export interface WikiPlanBuildResult {
+  created: boolean;
   job: WikiPlanJob;
-  space: {
-    id: string;
-    title: string;
-    repo: { urlNorm: string | null; rootCommitSha: string | null };
-    workspace: { id: string; workDir: string | null } | null;
-  };
 }
 
-/** `POST …/plan/job/progress`: the gate round a draft's run is on, or how far a build's has got. */
-export type WikiPlanJobProgressRequest = { attempt: number } | WikiPlanBuildProgress;
-
-/** `POST …/plan/job/finish`: how the run ended. */
-export interface WikiPlanJobFinishRequest {
-  outcome: WikiPlanJobOutcome;
-  version?: number | null;
-  errors?: WikiPlanGateError[];
-  error?: string | null;
-  report?: WikiPlanJobReport | WikiPlanBuildReport | null;
-  draft?: WikiPlanDraftInput | null;
+/** `POST /api/admin/wiki/spaces/:id/plan/build`: why an administrator asks for the build. */
+export interface WikiPlanSupportBuildRequest {
+  reason: string;
 }
 
-/** `GET …/plan/check?job=<id>`: `orbit wiki plan check`'s verdict. */
-export interface WikiPlanJobCheck {
-  spaceId: string;
-  jobId: string;
-  kind: WikiPlanJobKind;
-  outcome: WikiPlanJobOutcome | null;
-  version: number | null;
-  ok: boolean;
-  /** Why it is not ok, one sentence each. */
-  problems: string[];
+/** An administrator's answer: the owner's build, and whose space it is. */
+export interface WikiPlanSupportBuildResult extends WikiPlanBuildResult {
+  ownerId: string;
+}
+
+/**
+ * One space of an account, as `GET /api/admin/wiki/users/:id/spaces` lists it for an administrator: what picking
+ * it to build needs, and nothing of what the space knows — its title, its version in force, how many of that
+ * version's documents are written, and whether a build of it is on its way.
+ */
+export interface WikiSupportSpace {
+  id: string;
+  title: string;
+  /** The version in force, or null when the space has no plan its owner confirmed. */
+  confirmedVersion: number | null;
+  /** The version in force's documents, written of how many; null without one. */
+  docs: { written: number; total: number } | null;
+  /** A build of the space that has not ended — queued, held or running — is on its way. */
+  building: boolean;
+}
+
+export interface WikiSupportSpaces {
+  userId: string;
+  /** Whether the server executes this account's wiki: only then can its documents be asked for again. */
+  serverExecutes: boolean;
+  spaces: WikiSupportSpace[];
+}
+
+/**
+ * A topic of the space as a session condition may name it (contract `plan.gate.references`): its slug, its
+ * display name, and how many of the space's active entries name it.
+ */
+export interface WikiPlanTopic {
+  slug: string;
+  title: string;
+  active: number;
 }
 
 /**

@@ -1,0 +1,4 @@
+limit: cpu, in 07191c4093bd as 10001:10001 at 2026-10-17T13:24:32Z
+cpu.max: 100000 100000
+4 busy processes for 10.0 s used 10.07 CPU-seconds: 1.01 CPUs
+throttled periods: 100 of 100

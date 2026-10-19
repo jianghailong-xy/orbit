@@ -1,0 +1,1381 @@
+{
+ "expected__full-fix-base2": {
+  "total": 252,
+  "missing": 0,
+  "same": 179,
+  "noise": 18,
+  "changed": 55,
+  "p0ComparatorFails": 44,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 2
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-959-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-961-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings-saved.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "settings.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ],
+   "wiki-contents.png": [
+    "chromium-dark-phone",
+    "chromium-light-phone",
+    "webkit-dark-phone",
+    "webkit-light-phone"
+   ],
+   "wiki-home.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-new-entry.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "expected__full-fix-base3": {
+  "total": 252,
+  "missing": 0,
+  "same": 186,
+  "noise": 11,
+  "changed": 55,
+  "p0ComparatorFails": 44,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 4
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-959-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-961-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings-saved.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "settings.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ],
+   "wiki-contents.png": [
+    "chromium-dark-phone",
+    "chromium-light-phone",
+    "webkit-dark-phone",
+    "webkit-light-phone"
+   ],
+   "wiki-home.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-new-entry.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "expected__full-fix-base": {
+  "total": 252,
+  "missing": 0,
+  "same": 174,
+  "noise": 23,
+  "changed": 55,
+  "p0ComparatorFails": 44,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 2
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-959-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-961-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings-saved.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "settings.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ],
+   "wiki-contents.png": [
+    "chromium-dark-phone",
+    "chromium-light-phone",
+    "webkit-dark-phone",
+    "webkit-light-phone"
+   ],
+   "wiki-home.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-new-entry.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "expected__full-fix-ebf5e6441": {
+  "total": 252,
+  "missing": 0,
+  "same": 185,
+  "noise": 21,
+  "changed": 46,
+  "p0ComparatorFails": 28,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 4
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-959-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-961-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "projects-loading.png": [
+    "chromium-light-desktop"
+   ],
+   "settings-saved.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings.png": [
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ],
+   "wiki-contents.png": [
+    "chromium-dark-phone",
+    "chromium-light-phone",
+    "webkit-dark-phone",
+    "webkit-light-phone"
+   ],
+   "wiki-home.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-new-entry.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "expected__full-orig-1d3cd4c70": {
+  "total": 252,
+  "missing": 0,
+  "same": 182,
+  "noise": 25,
+  "changed": 45,
+  "p0ComparatorFails": 28,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 2
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-959-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-961-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings-saved.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings.png": [
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ],
+   "wiki-contents.png": [
+    "chromium-dark-phone",
+    "chromium-light-phone",
+    "webkit-dark-phone",
+    "webkit-light-phone"
+   ],
+   "wiki-home.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-new-entry.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "expected__full-orig-7cc52e0cf": {
+  "total": 252,
+  "missing": 0,
+  "same": 214,
+  "noise": 21,
+  "changed": 17,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 2
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings-saved.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings.png": [
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ]
+  }
+ },
+ "expected__full-orig-f991d2421": {
+  "total": 252,
+  "missing": 0,
+  "same": 211,
+  "noise": 24,
+  "changed": 17,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 4
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings-saved.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings.png": [
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ]
+  }
+ },
+ "expected-registered__full-fix-base2": {
+  "total": 252,
+  "missing": 0,
+  "same": 222,
+  "noise": 19,
+  "changed": 11,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 2
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ]
+  }
+ },
+ "expected-registered__full-fix-base3": {
+  "total": 252,
+  "missing": 0,
+  "same": 229,
+  "noise": 12,
+  "changed": 11,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 4
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ]
+  }
+ },
+ "expected-registered__full-fix-negative-control-1px-final": {
+  "total": 252,
+  "missing": 0,
+  "same": 185,
+  "noise": 16,
+  "changed": 51,
+  "p0ComparatorFails": 40,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 2
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-959-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-961-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings-saved.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "settings.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ],
+   "wiki-home.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-new-entry.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "expected-registered__full-fix-negative-control-1px": {
+  "total": 252,
+  "missing": 0,
+  "same": 188,
+  "noise": 13,
+  "changed": 51,
+  "p0ComparatorFails": 40,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 2
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-959-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-961-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings-saved.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "settings.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ],
+   "wiki-home.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-new-entry.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "full-fix-2ba6765d9__full-fix-1d3cd4c70": {
+  "total": 252,
+  "missing": 0,
+  "same": 237,
+  "noise": 15,
+  "changed": 0,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 29,
+   "channel": 4
+  },
+  "webkitAllSame": true,
+  "changedByName": {}
+ },
+ "full-fix-2ba6765d9__full-fix-base": {
+  "total": 252,
+  "missing": 0,
+  "same": 219,
+  "noise": 17,
+  "changed": 16,
+  "p0ComparatorFails": 16,
+  "maxNoise": {
+   "pixels": 29,
+   "channel": 4
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "settings-saved.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "settings.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "full-fix-base2__full-fix-base3": {
+  "total": 252,
+  "missing": 0,
+  "same": 237,
+  "noise": 15,
+  "changed": 0,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 29,
+   "channel": 4
+  },
+  "webkitAllSame": true,
+  "changedByName": {}
+ },
+ "full-fix-base2__full-fix-negative-control-1px": {
+  "total": 252,
+  "missing": 0,
+  "same": 197,
+  "noise": 15,
+  "changed": 40,
+  "p0ComparatorFails": 40,
+  "maxNoise": {
+   "pixels": 29,
+   "channel": 2
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-959-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-961-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings-saved.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "settings.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-home.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-new-entry.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "full-fix-base3__full-fix-negative-control-1px-final": {
+  "total": 252,
+  "missing": 0,
+  "same": 203,
+  "noise": 9,
+  "changed": 40,
+  "p0ComparatorFails": 40,
+  "maxNoise": {
+   "pixels": 18,
+   "channel": 4
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-959-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-961-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "settings-saved.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "settings.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-home.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-new-entry.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "full-fix-base__full-fix-base2": {
+  "total": 252,
+  "missing": 0,
+  "same": 237,
+  "noise": 15,
+  "changed": 0,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 29,
+   "channel": 2
+  },
+  "webkitAllSame": true,
+  "changedByName": {}
+ },
+ "full-fix-def134095__full-fix-base": {
+  "total": 252,
+  "missing": 0,
+  "same": 246,
+  "noise": 6,
+  "changed": 0,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 11,
+   "channel": 2
+  },
+  "webkitAllSame": true,
+  "changedByName": {}
+ },
+ "full-fix-ebf5e6441__full-fix-def134095": {
+  "total": 252,
+  "missing": 0,
+  "same": 210,
+  "noise": 25,
+  "changed": 17,
+  "p0ComparatorFails": 16,
+  "maxNoise": {
+   "pixels": 26,
+   "channel": 4
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "projects-loading.png": [
+    "chromium-light-desktop"
+   ],
+   "settings-saved.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "settings.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "full-orig-1d3cd4c70__full-fix-1d3cd4c70": {
+  "total": 252,
+  "missing": 0,
+  "same": 235,
+  "noise": 17,
+  "changed": 0,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 50,
+   "channel": 2
+  },
+  "webkitAllSame": true,
+  "changedByName": {}
+ },
+ "full-orig-1d3cd4c70__full-orig-base": {
+  "total": 252,
+  "missing": 0,
+  "same": 218,
+  "noise": 18,
+  "changed": 16,
+  "p0ComparatorFails": 16,
+  "maxNoise": {
+   "pixels": 50,
+   "channel": 2
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "settings-saved.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "settings.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "full-orig-2ba6765d9__full-fix-2ba6765d9": {
+  "total": 252,
+  "missing": 0,
+  "same": 240,
+  "noise": 12,
+  "changed": 0,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 35,
+   "channel": 4
+  },
+  "webkitAllSame": true,
+  "changedByName": {}
+ },
+ "full-orig-2ba6765d9__full-orig-1d3cd4c70": {
+  "total": 252,
+  "missing": 0,
+  "same": 230,
+  "noise": 22,
+  "changed": 0,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 50,
+   "channel": 2
+  },
+  "webkitAllSame": true,
+  "changedByName": {}
+ },
+ "full-orig-7cc52e0cf__full-orig-2ba6765d9": {
+  "total": 252,
+  "missing": 0,
+  "same": 209,
+  "noise": 15,
+  "changed": 28,
+  "p0ComparatorFails": 28,
+  "maxNoise": {
+   "pixels": 35,
+   "channel": 2
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-959-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-961-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "wiki-contents.png": [
+    "chromium-dark-phone",
+    "chromium-light-phone",
+    "webkit-dark-phone",
+    "webkit-light-phone"
+   ],
+   "wiki-home.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-new-entry.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "full-orig-base2__full-fix-base2": {
+  "total": 252,
+  "missing": 0,
+  "same": 232,
+  "noise": 20,
+  "changed": 0,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 29,
+   "channel": 2
+  },
+  "webkitAllSame": true,
+  "changedByName": {}
+ },
+ "full-orig-base3__full-fix-base3": {
+  "total": 252,
+  "missing": 0,
+  "same": 233,
+  "noise": 19,
+  "changed": 0,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 29,
+   "channel": 2
+  },
+  "webkitAllSame": true,
+  "changedByName": {}
+ },
+ "full-orig-base__full-fix-base": {
+  "total": 252,
+  "missing": 0,
+  "same": 246,
+  "noise": 6,
+  "changed": 0,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 15,
+   "channel": 2
+  },
+  "webkitAllSame": true,
+  "changedByName": {}
+ },
+ "full-orig-f991d2421__full-orig-1d3cd4c70": {
+  "total": 252,
+  "missing": 0,
+  "same": 216,
+  "noise": 8,
+  "changed": 28,
+  "p0ComparatorFails": 28,
+  "maxNoise": {
+   "pixels": 20,
+   "channel": 4
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-959-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-961-wiki.png": [
+    "chromium-dark-desktop",
+    "chromium-light-desktop",
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "wiki-contents.png": [
+    "chromium-dark-phone",
+    "chromium-light-phone",
+    "webkit-dark-phone",
+    "webkit-light-phone"
+   ],
+   "wiki-home.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ],
+   "wiki-new-entry.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "chromium-light-desktop",
+    "chromium-light-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone",
+    "webkit-light-desktop",
+    "webkit-light-phone"
+   ]
+  }
+ },
+ "registered__full-fix-base2": {
+  "total": 252,
+  "missing": 0,
+  "same": 222,
+  "noise": 19,
+  "changed": 11,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 2
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ]
+  }
+ },
+ "registered__full-fix-base3": {
+  "total": 252,
+  "missing": 0,
+  "same": 229,
+  "noise": 12,
+  "changed": 11,
+  "p0ComparatorFails": 0,
+  "maxNoise": {
+   "pixels": 110,
+   "channel": 4
+  },
+  "webkitAllSame": false,
+  "changedByName": {
+   "breakpoint-599-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "breakpoint-601-dialog.png": [
+    "webkit-dark-desktop",
+    "webkit-light-desktop"
+   ],
+   "task-action-focus.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-hover.png": [
+    "webkit-dark-phone"
+   ],
+   "task-action-menu.png": [
+    "chromium-dark-desktop",
+    "chromium-dark-phone",
+    "webkit-dark-desktop",
+    "webkit-dark-phone"
+   ],
+   "task-detail.png": [
+    "webkit-dark-phone"
+   ]
+  }
+ }
+}

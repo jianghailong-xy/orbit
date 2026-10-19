@@ -1,0 +1,163 @@
+{
+ "light": [
+  {
+   "where": "a",
+   "replaced": "--ant-color-link: #3370ff",
+   "orbit": "--orbit-control-primary: #3370ff",
+   "equal": true
+  },
+  {
+   "where": "a:hover",
+   "replaced": "--ant-color-link-hover: #85b1ff",
+   "orbit": "--orbit-control-link-hover: #85b1ff",
+   "equal": true
+  },
+  {
+   "where": "a:active",
+   "replaced": "--ant-color-link-active: #2152d9",
+   "orbit": "--orbit-control-primary-active: #2152d9",
+   "equal": true
+  },
+  {
+   "where": "a:focus-visible outline colour",
+   "replaced": "--ant-color-primary-border: #adceff",
+   "orbit": "--orbit-focus-color: #adceff",
+   "equal": true
+  },
+  {
+   "where": "a:focus-visible outline width",
+   "replaced": "--ant-line-width-focus: 3px",
+   "orbit": "--orbit-focus-width: 3px",
+   "equal": true
+  },
+  {
+   "where": "a[disabled]",
+   "replaced": "--ant-color-text-disabled: rgba(0,0,0,0.25)",
+   "orbit": "--orbit-control-disabled-text: rgba(0, 0, 0, 0.25)",
+   "equal": true
+  },
+  {
+   "where": ".orbit-app colour",
+   "replaced": "--ant-color-text: #1f2329",
+   "orbit": "--text-1: #1f2329",
+   "equal": true
+  },
+  {
+   "where": "root.css / AppRoot literal",
+   "replaced": "--ant-link-decoration: none",
+   "orbit": "none",
+   "equal": true
+  },
+  {
+   "where": "root.css / AppRoot literal",
+   "replaced": "--ant-link-hover-decoration: none",
+   "orbit": "none",
+   "equal": true
+  },
+  {
+   "where": "root.css / AppRoot literal",
+   "replaced": "--ant-link-focus-decoration: none",
+   "orbit": "none",
+   "equal": true
+  },
+  {
+   "where": "root.css / AppRoot literal",
+   "replaced": "--ant-motion-duration-slow: 0.3s",
+   "orbit": "0.3s",
+   "equal": true
+  },
+  {
+   "where": "root.css / AppRoot literal",
+   "replaced": "--ant-font-size: 14px",
+   "orbit": "14px",
+   "equal": true
+  },
+  {
+   "where": "root.css / AppRoot literal",
+   "replaced": "--ant-line-height: 1.5714285714285714",
+   "orbit": "1.5714285714285714",
+   "equal": true
+  }
+ ],
+ "dark": [
+  {
+   "where": "a",
+   "replaced": "--ant-color-link: #2e62dc",
+   "orbit": "--orbit-control-primary: #2e62dc",
+   "equal": true
+  },
+  {
+   "where": "a:hover",
+   "replaced": "--ant-color-link-hover: #223d7e",
+   "orbit": "--orbit-control-link-hover: #223d7e",
+   "equal": true
+  },
+  {
+   "where": "a:active",
+   "replaced": "--ant-color-link-active: #2850ad",
+   "orbit": "--orbit-control-primary-active: #2850ad",
+   "equal": true
+  },
+  {
+   "where": "a:focus-visible outline colour",
+   "replaced": "--ant-color-primary-border: #1d305b",
+   "orbit": "--orbit-focus-color: #1d305b",
+   "equal": true
+  },
+  {
+   "where": "a:focus-visible outline width",
+   "replaced": "--ant-line-width-focus: 3px",
+   "orbit": "--orbit-focus-width: 3px",
+   "equal": true
+  },
+  {
+   "where": "a[disabled]",
+   "replaced": "--ant-color-text-disabled: rgba(255,255,255,0.25)",
+   "orbit": "--orbit-control-disabled-text: rgba(255, 255, 255, 0.25)",
+   "equal": true
+  },
+  {
+   "where": ".orbit-app colour",
+   "replaced": "--ant-color-text: #c9ced5",
+   "orbit": "--text-1: #c9ced5",
+   "equal": true
+  },
+  {
+   "where": "root.css / AppRoot literal",
+   "replaced": "--ant-link-decoration: none",
+   "orbit": "none",
+   "equal": true
+  },
+  {
+   "where": "root.css / AppRoot literal",
+   "replaced": "--ant-link-hover-decoration: none",
+   "orbit": "none",
+   "equal": true
+  },
+  {
+   "where": "root.css / AppRoot literal",
+   "replaced": "--ant-link-focus-decoration: none",
+   "orbit": "none",
+   "equal": true
+  },
+  {
+   "where": "root.css / AppRoot literal",
+   "replaced": "--ant-motion-duration-slow: 0.3s",
+   "orbit": "0.3s",
+   "equal": true
+  },
+  {
+   "where": "root.css / AppRoot literal",
+   "replaced": "--ant-font-size: 14px",
+   "orbit": "14px",
+   "equal": true
+  },
+  {
+   "where": "root.css / AppRoot literal",
+   "replaced": "--ant-line-height: 1.5714285714285714",
+   "orbit": "1.5714285714285714",
+   "equal": true
+  }
+ ],
+ "allEqual": true
+}

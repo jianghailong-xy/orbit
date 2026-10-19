@@ -1,0 +1,35 @@
+{
+ "command": "unshare -n bash -c 'ip link set lo up && NO_COLOR=1 nice -n -10 node node_modules/@playwright/test/cli.js test --config docs/evidence/base-ui-migration/p2-keyboard-window-2/held-frames-2.config.mjs --project chromium-light-desktop --project chromium-light-phone --project chromium-dark-desktop --project chromium-dark-phone --project webkit-light-desktop --project webkit-light-phone --project webkit-dark-desktop --project webkit-dark-phone'",
+ "env": {},
+ "cwd": "/root/.orbit/worktrees/246921c8-59d9-5834-bd60-af291bde4370",
+ "runner": "run-chunks.py (inside one mcp__orbit__bg_run job)",
+ "commit": "aed0a7bab6e39a50edaeea4cf16cecdae212b6d5",
+ "webTree": "d0a53fc0735666a86981095e9efa200b8a80d62c",
+ "dirtyWeb": "",
+ "startedAt": "2026-10-07T16:34:56.572356+00:00",
+ "endedAt": "2026-10-07T16:48:15.000072+00:00",
+ "loadAverage": {
+  "start": [
+   33.29296875,
+   35.3095703125,
+   34.6767578125
+  ],
+  "end": [
+   15.77294921875,
+   20.51318359375,
+   27.9091796875
+  ]
+ },
+ "exitCode": 0,
+ "outputSha256": "a284ff96d39155ff35e79e57c14a8e4029d2def842da0713a387a7a162af7f09",
+ "outputBytes": 69546,
+ "raw": "/var/tmp/kw2-246921c8/runs/fix-held-frames-after2",
+ "stats": {
+  "expected": 392,
+  "unexpected": 0,
+  "skipped": 0,
+  "flaky": 0,
+  "duration": 797973.037,
+  "samples": 392
+ }
+}

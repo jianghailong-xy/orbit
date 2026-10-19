@@ -1,0 +1,370 @@
+{
+ "schemaVersion": 1,
+ "kind": "antd-inventory-delta",
+ "date": "2026-10-08",
+ "task": "34Za39Feocgj42rrBYwzl",
+ "decision": {
+  "by": "coordinator",
+  "session": "34b245G3NiwgVVUj2JFJw",
+  "date": "2026-10-08",
+  "questions": [
+   "ProjectDoneConversation.test",
+   "SharedWikiPage",
+   "SharedWikiPage.test",
+   "StartProjectCard.test",
+   "WikiReviewPage.decided.test",
+   "WikiShareButton",
+   "WorkspaceView.neverStarted.test",
+   "WorkspaceView.promptSuggestion.test",
+   "index.css: .ant-dropdown-menu-item.composer-engine-title,",
+   "index.css: .ant-dropdown-menu-item.composer-engine-title:hover {",
+   "index.css: `.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */"
+  ]
+ },
+ "scan": {
+  "commit": "a794459b14424e0fbc239a6947d589fa4852e946",
+  "scopeHash": "44e84ef10ae4c9721686195d83bea888062e465cb598a2d7775b256dee3098cc",
+  "command": "node src/web/scripts/audit-antd.mjs --json",
+  "counts": {
+   "scannedFiles": 742,
+   "productionFiles": 371,
+   "testFiles": 369,
+   "antdProductionFiles": 79,
+   "antdTestFiles": 64,
+   "antSelectorTestFiles": 42,
+   "antClassTestFiles": 47,
+   "iconProductionFiles": 109,
+   "iconTestFiles": 0,
+   "relevantSourceFiles": 275,
+   "hitLines": {
+    "ant-class": 306,
+    "ant-design-support": 19,
+    "ant-selector": 284,
+    "antd-reference": 297,
+    "icon-class": 79,
+    "icon-reference": 120,
+    "imperative-confirm": 12,
+    "imperative-feedback": 221,
+    "internal-ref": 4,
+    "provider": 76,
+    "rc-support": 231,
+    "ref-focus": 28,
+    "theme": 2,
+    "use-app": 9,
+    "use-token": 1
+   },
+   "retirementBlockingFiles": 195
+  }
+ },
+ "files": {
+  "src/web/src/components/ProjectDoneConversation.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "antd-reference": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "21090b959aef83aa488c51a547247beed7a0e42d",
+     "short": "21090b959",
+     "date": "2026-10-07",
+     "subject": "fix(web,ios,macos): stop asking \"Why is this project not done?\" in a coordinator conversation",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P6",
+   "reason": "只有测试数据里的 “antd migration”（以本项目为例的固定数据名），不是 antd 依赖；退役扫描里的这处文字由 P6 改名或登记为允许的说明。",
+   "basis": "协调者 2026-10-08 判定（第 2 批窗口跟进 rebase 到 origin/main c7efa24cb 后 --check-owners 报出的未归属点）。2026-10-07 已作同样判定，先例为 2026-10-07.json 的 ProjectWhyNotDoneGate.test.tsx。"
+  },
+  "src/web/src/components/StartProjectCard.test.tsx": {
+   "status": "changed",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-text"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "ant-selector": 2,
+    "antd-reference": 1
+   },
+   "added": {
+    "antdImports": [],
+    "hitKinds": {
+     "ant-class": 2,
+     "ant-selector": 2,
+     "antd-reference": 1
+    }
+   },
+   "introducedBy": [
+    {
+     "commit": "50e7ca040a62bf2d407070eefe90d504993846a9",
+     "short": "50e7ca040",
+     "date": "2026-10-08",
+     "subject": "Update dto.ts and 27 more files",
+     "line": "main"
+    }
+   ],
+   "p01Owner": "P4.3",
+   "owner": "P4.3b",
+   "reason": "Start 卡片（StartProjectCard）的测试，main 50e7ca040 起用了 .ant-select-content 选择器；Start 卡片归 P4.3b，测试随它迁移。",
+   "basis": "协调者 2026-10-08 判定（第 2 批窗口跟进 rebase 到 origin/main c7efa24cb 后 --check-owners 报出的未归属点）。"
+  },
+  "src/web/src/components/WikiReviewPage.decided.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector",
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "ant-class": 3,
+    "ant-selector": 3,
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "6ec468a25369d28fe29f29891357468bac93f2f8",
+     "short": "6ec468a25",
+     "date": "2026-10-08",
+     "subject": "fix(wiki): iOS and web read what a Review decide recorded — conflict and withdrawn are refusals",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.4",
+   "reason": "main 6ec468a25 新增的 Review 决定后状态测试，以 AntD App 包裹并用 .ant-modal 等选择器；WikiReviewPage 归 P4.4，测试随它迁移。",
+   "basis": "协调者 2026-10-08 判定（退回 P4.2 第 1 版证据时：归 P4.4，写进重建的 07c）。"
+  },
+  "src/web/src/components/WikiShareButton.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Button"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+     "short": "2ba6765d9",
+     "date": "2026-10-07",
+     "subject": "docs(mocks): add wiki share mock for share-links",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.4",
+   "reason": "main 2ba6765d9 新增的 Wiki 分享按钮，导入 antd Button；Wiki 页面归 P4.4，按钮随它迁移。",
+   "basis": "协调者 2026-10-08 判定（项目 tip 上新报出的 Wiki 分享改动，都归 P4.4）。"
+  },
+  "src/web/src/components/WorkspaceView.neverStarted.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "622c30e1f8bab34d4f81d3d58594ba9f3321b0c0",
+     "short": "622c30e1f",
+     "date": "2026-10-07",
+     "subject": "Update 01-session-and-project.html and 17 more files",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P5.3",
+   "reason": "main 622c30e1f 新增的 WorkspaceView 测试，以 AntD App 包裹；随会话工作区归 P5.3。",
+   "basis": "协调者 2026-10-08 判定（第 2 批窗口跟进 rebase 到 origin/main c7efa24cb 后 --check-owners 报出的未归属点）。"
+  },
+  "src/web/src/components/WorkspaceView.promptSuggestion.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "antd-import",
+    "antd-provider"
+   ],
+   "antdImports": [
+    "App"
+   ],
+   "hitKinds": {
+    "antd-reference": 1,
+    "provider": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "def134095f8031d3a2498dbfc9677e684bca0e67",
+     "short": "def134095",
+     "date": "2026-10-08",
+     "subject": "feat(sessions): offer Claude Code's guess at the next message in the empty composer",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P5.3",
+   "reason": "main def134095 新增的输入框建议回复测试，以 AntD App 包裹；随会话工作区归 P5.3（先例为同一记录的 WorkspaceView.neverStarted.test.tsx）。",
+   "basis": "协调者 2026-10-08 判定（rebase 到 origin/main def134095 后 --check-owners 报出的未归属点）。"
+  },
+  "src/web/src/pages/SharedWikiPage.test.tsx": {
+   "status": "new",
+   "category": "test",
+   "types": [
+    "ant-selector"
+   ],
+   "antdImports": [],
+   "hitKinds": {
+    "ant-class": 2,
+    "ant-selector": 2
+   },
+   "introducedBy": [
+    {
+     "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+     "short": "2ba6765d9",
+     "date": "2026-10-07",
+     "subject": "docs(mocks): add wiki share mock for share-links",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.4",
+   "reason": "SharedWikiPage 的测试，用 .ant-popover 选择器；随页面归 P4.4。",
+   "basis": "协调者 2026-10-08 判定（项目 tip 上新报出的 Wiki 分享改动，都归 P4.4）。"
+  },
+  "src/web/src/pages/SharedWikiPage.tsx": {
+   "status": "new",
+   "category": "production",
+   "types": [
+    "antd-import"
+   ],
+   "antdImports": [
+    "Drawer",
+    "Popover"
+   ],
+   "hitKinds": {
+    "antd-reference": 1
+   },
+   "introducedBy": [
+    {
+     "commit": "2ba6765d9de2db57218f67ee57e6132e044ceb1b",
+     "short": "2ba6765d9",
+     "date": "2026-10-07",
+     "subject": "docs(mocks): add wiki share mock for share-links",
+     "line": "main"
+    }
+   ],
+   "p01Owner": null,
+   "owner": "P4.4",
+   "reason": "main 2ba6765d9 新增的公开分享 Wiki 页（/s/:token），导入 antd Drawer、Popover；公开分享页归 P4.4。",
+   "basis": "协调者 2026-10-08 判定（项目 tip 上新报出的 Wiki 分享改动，都归 P4.4）。"
+  }
+ },
+ "css": [
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".ant-dropdown-menu-item.composer-engine-title,",
+   "count": 1,
+   "lines": [
+    6698
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "81845a53d1a40a54574bccb59edf8a21514c0168",
+     "short": "81845a53d",
+     "date": "2026-10-08",
+     "subject": "Update a-chip-crop.png and 17 more files",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P5.3",
+   "reason": "输入框引擎菜单（composer）里标题项的覆盖样式；随会话工作区的输入框归 P5.3。",
+   "basis": "协调者 2026-10-08 判定（第 2 批窗口跟进 rebase 到 origin/main c7efa24cb 后 --check-owners 报出的未归属点）。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": ".ant-dropdown-menu-item.composer-engine-title:hover {",
+   "count": 1,
+   "lines": [
+    6699
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "81845a53d1a40a54574bccb59edf8a21514c0168",
+     "short": "81845a53d",
+     "date": "2026-10-08",
+     "subject": "Update a-chip-crop.png and 17 more files",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P5.3",
+   "reason": "输入框引擎菜单（composer）里标题项的覆盖样式；随会话工作区的输入框归 P5.3。",
+   "basis": "协调者 2026-10-08 判定（第 2 批窗口跟进 rebase 到 origin/main c7efa24cb 后 --check-owners 报出的未归属点）。"
+  },
+  {
+   "path": "src/web/src/index.css",
+   "kind": "ant-class",
+   "text": "`.ant-radio-group` / `.ant-radio-wrapper` ones, which would otherwise win on order. */",
+   "count": 1,
+   "lines": [
+    10700
+   ],
+   "status": "new",
+   "type": "css-override",
+   "introducedBy": [
+    {
+     "commit": "50e7ca040a62bf2d407070eefe90d504993846a9",
+     "short": "50e7ca040",
+     "date": "2026-10-08",
+     "subject": "Update dto.ts and 27 more files",
+     "line": "main"
+    }
+   ],
+   "p01Group": null,
+   "owner": "P4.3a",
+   "reason": "项目运行设置（project-run）一段注释提到被替换的 .ant-radio-group / .ant-radio-wrapper；project-run 设置归 P4.3a。",
+   "basis": "协调者 2026-10-08 判定（第 2 批窗口跟进 rebase 到 origin/main c7efa24cb 后 --check-owners 报出的未归属点）。"
+  }
+ ],
+ "summary": {
+  "files": 8,
+  "cssLines": 3,
+  "owners": {
+   "P4.3a": 1,
+   "P4.3b": 1,
+   "P4.4": 4,
+   "P5.3": 4,
+   "P6": 1
+  }
+ }
+}

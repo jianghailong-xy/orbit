@@ -192,6 +192,9 @@ orbit_pat_<43 字符 base64url>        # randomBytes(32)，256 bit
 第 3 步任务又追加 1 条：`PATCH /projects/:id/integration`。它的每个字段都是下面 5.1 里 `PATCH /projects/:id`
 拒绝 PAT 的 `integration`，不拒它，字段级规则换个 URL 就绕过去了。
 
+2026-10-17 又追加 1 条：wiki plan 的 `POST plan/versions/:version/build`（对在册版本再要一次生成，`docs/wiki-contract.md` 21.11），
+它和 plan 的另外 7 条一样，对 agent 会话拒 `WIKI_OWNER_CHANNEL_ONLY`。
+
 ※ 2026-10-07 起这条与 `PATCH /projects/:id` 不再逐字段对应：后者对 agent 会话只拒集成对象里的
 **线**字段（`line` / `projectBranchName` / `upstreamRef`，拒 403 `INTEGRATION_SETTINGS_OWNER_ONLY`），
 而 `mergeCheckCommand` / `mergeCheckTimeoutSeconds` 在本会话对本项目的 ALLOWED 确认卡覆盖这次改动时可以写入

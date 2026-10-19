@@ -1,12 +1,12 @@
-import type { ReportedEngine, RunnerEngineUpdate } from '@orbit/shared';
+import { AgentProvider, ENGINE_CLI_NAMES, type ReportedEngine, type RunnerEngineUpdate } from '@orbit/shared';
 
 /**
- * Facts about a runner's engine CLIs that two pages both need, owned by neither.
+ * Facts about a runner's engine CLIs that more than one place needs, owned by none of them.
  *
- * The Providers page asks which engines are signed in; the runner's own page asks what is
- * installed on that machine and whether it is current. Those are different questions about the
- * same four CLIs, so the rule for reading an update record lives here rather than in whichever
- * page happened to render it first.
+ * A machine's engine rows (RunnerEngines, on Infrastructure and on the runner's own page) say what
+ * is installed there and whether it is current; Needs Attention (runnerAttention) says when one has
+ * stopped being. Both read the same update records of the same CLIs, so the rule for reading one
+ * lives here rather than in whichever of them happened to render it first.
  */
 
 /** The CLIs' own product names. Keyed by ReportedEngine so a page that shows every engine on a
@@ -18,7 +18,18 @@ export const ENGINE_CLI_NAME: Record<ReportedEngine, string> = {
   opencode: 'OpenCode',
   antigravity: 'Antigravity CLI',
   dsh: 'DeepSeek Harness',
+  cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],
 };
+
+/**
+ * Whether the web draws this engine at all: every engine but Cursor CLI, which is registered (project P1)
+ * and has no screens here until P7a builds the owner's design board. Every list of engines these pages
+ * offer leaves it out — the pickers, the Infrastructure cards, a runner's rows and the attention list —
+ * and a runner's report of it is not drawn.
+ */
+export function webShowsEngine(engine: string): boolean {
+  return engine !== AgentProvider.CURSOR;
+}
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;

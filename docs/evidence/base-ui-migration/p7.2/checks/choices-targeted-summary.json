@@ -1,0 +1,23 @@
+{
+ "note": "Targeted re-run: choices.browser.mjs x webkit-light-phone + webkit-dark-phone at 09d94a12f; the two failures are the recorded pre-existing MultiSelect ResizeObserver cases",
+ "stats": {
+  "startTime": "2026-10-11T03:59:17.929Z",
+  "duration": 62282.687000000005,
+  "expected": 46,
+  "skipped": 0,
+  "unexpected": 2,
+  "flaky": 0
+ },
+ "failures": [
+  {
+   "project": "webkit-light-phone",
+   "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+   "error": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 3\n\n- Array []\n+ Array [\n+   \"ResizeObserver loop completed with undelivered notifications.\",\n+ ]\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                   "
+  },
+  {
+   "project": "webkit-dark-phone",
+   "title": "multiple labels search, toggle, collapse, remove and clear without losing the remaining values",
+   "error": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 3\n\n- Array []\n+ Array [\n+   \"ResizeObserver loop completed with undelivered notifications.\",\n+ ]\n\n  10 |   await page.evaluate(() => document.fonts.ready);\n  11 | });\n> 12 | test.afterEach(async ({ page }) => { expect(errors.get(page)).toEqual([]); });\n     |                                                   "
+  }
+ ]
+}

@@ -1,0 +1,56 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T01:51:48.18",
+    "ingested_at": "2026-10-18T01:51:48.340518+00:00",
+    "ingested_by_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "seq": 8,
+    "session_id": "01a14cb5-38bd-769d-8c0b-9059299860e7",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-BEN-S1",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T01:51:48Z",
+      "kind": "text",
+      "messages": 1,
+      "n": 16,
+      "tool": null
+    },
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T01:51:48Z",
+      "kind": "text",
+      "messages": 2,
+      "n": 17,
+      "tool": null
+    }
+  ],
+  "owner": "ben",
+  "session": {
+    "assigned_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "created_at": "2026-10-18T01:51:47.389",
+    "engine": "claude",
+    "id": "01a14cb5-38bd-769d-8c0b-9059299860e7",
+    "provider": "deepseek-2",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-BEN-S1 ben's first session"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T01:51:48.364",
+      "client_turn_id": "initial-01a14cb5-38bd-769d-8c0b-9059299860e7",
+      "content": "T06-BEN-S1 ben's first session",
+      "created_at": "2026-10-18T01:51:47.425",
+      "delivered_at": "2026-10-18T01:51:48.035",
+      "id": "01a14cb5-38e1-770d-ae0e-d24f0faab4f8",
+      "kind": "message",
+      "seq": 1,
+      "status": "ANSWERED"
+    }
+  ]
+}

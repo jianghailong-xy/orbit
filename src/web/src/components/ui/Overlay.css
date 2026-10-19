@@ -15,13 +15,19 @@
 .orbit-overlay-header { margin-bottom: 8px; }
 .orbit-overlay-title { margin: 0; color: var(--text-1); font-size: 16px; font-weight: 600; line-height: 24px; }
 .orbit-overlay-description { margin: 0; }
-.orbit-overlay-footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+/* Buttons that do not fit wrap onto the next line, each line to the end and no gap between lines,
+   as the replaced footers' inline buttons did (a long confirmation on a phone). */
+.orbit-overlay-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0 8px; margin-top: 12px; }
+/* Above the dialog's own content, as the replaced close was (its popup's base + 10): a dialog with no
+   title row (the project page's done and start dialogs) starts its content under it. */
 .orbit-overlay-close {
-  display: inline-flex; align-items: center; justify-content: center; position: absolute;
+  display: inline-flex; align-items: center; justify-content: center; position: absolute; z-index: 10;
   top: 12px; right: 12px; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 4px;
   color: var(--text-3); background: transparent; font-size: 16px; line-height: 1; cursor: pointer;
 }
 .orbit-overlay-close:hover:not(:disabled) { color: var(--text-1); background: var(--orbit-control-hover-bg); }
+/* The replaced dialog's Close took a stronger hover than the controls' shared one; pressed, it still takes the rule below. */
+:where(.orbit-dialog > .orbit-overlay-header) > .orbit-overlay-close:hover:not(:disabled) { background: var(--orbit-dialog-close-hover-bg); }
 .orbit-overlay-close:active:not(:disabled) { background: var(--orbit-control-active-bg); }
 .orbit-overlay-close:focus-visible { outline: var(--orbit-focus-width) solid var(--orbit-focus-color); outline-offset: var(--orbit-focus-offset); }
 .orbit-overlay-close:disabled { cursor: default; }
@@ -40,6 +46,7 @@
 .orbit-drawer > .orbit-overlay-footer { display: block; flex: none; margin: 0; padding: 8px 16px; border-top: 1px solid var(--orbit-border-split); }
 .orbit-confirm > .orbit-overlay-header, .orbit-confirm > .orbit-overlay-body { padding-left: 34px; }
 .orbit-confirm-icon { position: absolute; left: 24px; top: 21px; font-size: 22px; color: var(--orbit-badge-warning); }
+.orbit-confirm-icon-success { color: var(--orbit-badge-success); }
 .orbit-confirm-error { margin-top: 8px; color: var(--error); }
 /* On a narrow screen 8px a side and 8px more above: the widths are viewport widths, so when the
    viewport's box scrolls (a dialog taller than the screen, where scrollbars take room) the dialog keeps

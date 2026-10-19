@@ -1,0 +1,258 @@
+{
+ "checks": [
+  {
+   "check": "root: the managed status reads disabled",
+   "ok": true,
+   "value": false
+  },
+  {
+   "check": "root: every managed write is 404 MANAGED_RUNNER_DISABLED",
+   "ok": true,
+   "value": {
+    "delete": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    },
+    "ensure": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    },
+    "retry": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    },
+    "sleep": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    },
+    "wake": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    }
+   }
+  },
+  {
+   "check": "ann: the managed status reads disabled",
+   "ok": true,
+   "value": false
+  },
+  {
+   "check": "ann: every managed write is 404 MANAGED_RUNNER_DISABLED",
+   "ok": true,
+   "value": {
+    "delete": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    },
+    "ensure": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    },
+    "retry": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    },
+    "sleep": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    },
+    "wake": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    }
+   }
+  },
+  {
+   "check": "bob: the managed status reads disabled",
+   "ok": true,
+   "value": false
+  },
+  {
+   "check": "bob: every managed write is 404 MANAGED_RUNNER_DISABLED",
+   "ok": true,
+   "value": {
+    "delete": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    },
+    "ensure": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    },
+    "retry": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    },
+    "sleep": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    },
+    "wake": {
+     "code": "MANAGED_RUNNER_DISABLED",
+     "status": 404
+    }
+   }
+  },
+  {
+   "check": "no managed runner row was written",
+   "ok": true,
+   "value": 0
+  },
+  {
+   "check": "no runner but the self-managed one",
+   "ok": true,
+   "value": []
+  }
+ ],
+ "endedAt": "2026-10-18T12:31:51.151+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "off-unset",
+ "result": {
+  "ann": {
+   "created": true,
+   "owner": "ann",
+   "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+   },
+   "signIn": {
+    "at": "2026-10-18T12:31:50.858+00:00",
+    "ms": 30.2,
+    "status": 201
+   },
+   "user": {
+    "email": "t08-ann@lab.invalid",
+    "id": "34i3N7YWPyZxFmU3WOzzQ"
+   }
+  },
+  "ann.status": {
+   "display": null,
+   "enabled": false,
+   "http": 200,
+   "managementState": "NOT_PROVISIONED"
+  },
+  "ann.writes": {
+   "delete": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   },
+   "ensure": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   },
+   "retry": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   },
+   "sleep": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   },
+   "wake": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   }
+  },
+  "bob": {
+   "created": true,
+   "owner": "bob",
+   "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+   },
+   "signIn": {
+    "at": "2026-10-18T12:31:50.924+00:00",
+    "ms": 31.3,
+    "status": 201
+   },
+   "user": {
+    "email": "t08-bob@lab.invalid",
+    "id": "34i3N7f9ONNJXMmQrv3fZ"
+   }
+  },
+  "bob.status": {
+   "display": null,
+   "enabled": false,
+   "http": 200,
+   "managementState": "NOT_PROVISIONED"
+  },
+  "bob.writes": {
+   "delete": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   },
+   "ensure": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   },
+   "retry": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   },
+   "sleep": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   },
+   "wake": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   }
+  },
+  "capabilities": {
+   "http": 200,
+   "managedRunners": {
+    "contractVersion": 1,
+    "enabled": false
+   }
+  },
+  "root": {
+   "admin": true,
+   "at": "2026-10-18T12:31:50.753+00:00",
+   "bootstrap": {
+    "ms": 58.8,
+    "status": 201
+   },
+   "owner": "root",
+   "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+   },
+   "user": {
+    "email": "t08-root@lab.invalid",
+    "id": "34i3N7TA1u4c1eA9m6rJ0"
+   }
+  },
+  "root.status": {
+   "display": null,
+   "enabled": false,
+   "http": 200,
+   "managementState": "NOT_PROVISIONED"
+  },
+  "root.writes": {
+   "delete": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   },
+   "ensure": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   },
+   "retry": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   },
+   "sleep": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   },
+   "wake": {
+    "code": "MANAGED_RUNNER_DISABLED",
+    "status": 404
+   }
+  }
+ },
+ "seconds": 0.4,
+ "startedAt": "2026-10-18T12:31:50.752+00:00",
+ "step": "accounts"
+}

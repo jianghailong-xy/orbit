@@ -205,6 +205,8 @@ export class TaskCompletionEvidenceDto {
   revision!: string;
   idempotencyKeys!: string[];
   legacyImport!: TaskLegacyEvidenceImportDto | null;
+  /** The revision's one decision once it has been answered, note included; null before that. */
+  decision!: TaskEvidenceRevisionDecisionDto | null;
   /**
    * What this submission's citations resolved to, one per `evidence.checks` entry and in that
    * order. Present on a submit receipt — including a replayed one — and null on a list read,
@@ -297,6 +299,18 @@ export class DecideOwnerConfirmationDto {
   @IsOptional()
   @IsArray()
   answers?: Array<{ key: string; option?: number | null; text?: string | null }>;
+}
+
+/**
+ * The one decision a revision carries, as the ledger read returns it: at most one per revision
+ * (`task_evidence_decision_evidence_key`), with the note a SEND_BACK was required to record — the
+ * reason read back by any session, where until 2026-10-09 only the deciding session could see it.
+ */
+export class TaskEvidenceRevisionDecisionDto {
+  decision!: EvidenceDecisionValue;
+  note!: string | null;
+  decidedAt!: Date;
+  decidedByType!: CreatorType;
 }
 
 /** The shared read shape of one recorded decision. */
@@ -499,12 +513,18 @@ export class CreateTaskDto {
   // One-shot. The first run actually accepted consumes it, so there is no recurrence to express
   // and no cron expression to accept.
   @IsOptional() @IsDateString() runAt?: string;
-  // Provider/model this task's runs use, overriding the assignee workspace's own. The provider must
-  // be a built-in engine slug or one of the caller's enabled configured providers; omitted (or
-  // null) inherits from the assignee, which is the historical behaviour.
+  // Engine/provider/model this task's runs use, overriding the assignee workspace's own
+  // (docs/provider-engine-contract.md §1.2, §3.5). The engine is the CLI that runs it (`claude`,
+  // `codex`, `kimi`, `antigravity`, `opencode`, `dsh`); the provider is where its credential comes
+  // from — an engine's own sign-in, OpenCode's own config, an account pool, or one of the caller's
+  // enabled keys — and has to be one the engine can run. A provider alone pins the engine it runs on
+  // by default (a key on its protocol's own CLI), which is what every older caller meant; an engine
+  // alone leaves the credential to the run. Omitted (or null) inherits from the assignee, which is
+  // the historical behaviour. The engine is checked by the service (ENGINE_UNKNOWN), not here.
+  @IsOptional() @IsString() engine?: string | null;
   @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
   @IsOptional() @IsString() @MaxLength(200) model?: string | null;
-  // Suggested difficulty, distinct from the model pin; provider still chooses the engine.
+  // Suggested difficulty, distinct from the model pin and the engine pin.
   @IsOptional() @IsIn(TASK_MODEL_HINTS) modelHint?: TaskModelHint | null;
   @IsOptional() @IsString() @MaxLength(MAX_TASK_MODEL_HINT_REASON_CHARS)
   modelHintReason?: string | null;
@@ -517,7 +537,10 @@ export class CreateTaskDto {
   // the same epoch, so old plans keep working, but it reads as being about one particular run
   // when what the author meant was the work.
   @IsOptional() @IsArray() @IsPublicId({ each: true }) dependsOnTaskIds?: string[];
-  // Auto-run once all prerequisites are DONE (default true). Ignored without deps.
+  // Start without a manual start once ready (default true): once all prerequisites are DONE, and —
+  // for a task in a project — once the project has started, even with no prerequisites at all. A
+  // task in no project that has no prerequisites is never started by this flag, however ready it
+  // looks: start it with task_start, or give it a runAt.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
   // Free-text grouping labels, orthogonal to listId (see Task.labels). Stored trimmed and
   // deduplicated, case as given, since filtering matches exactly.
@@ -704,8 +727,11 @@ export class UpdateTaskDto {
   // consumption is a compare-and-set on the instant it read, so this write wins rather than being
   // cleared by the run it raced.
   @IsOptional() @IsDateString() runAt?: string | null;
-  // null goes back to inheriting the assignee workspace's provider/model; a string pins this task's
-  // runs to that provider / model id. Omit to leave the current pin alone.
+  // null goes back to inheriting the assignee workspace's engine/provider/model; a string pins this
+  // task's runs to that engine / provider / model id. Omit to leave the current pin alone. A provider
+  // named without an engine pins the engine it runs on by default; an engine named alone keeps the
+  // provider pin, which then has to be one that engine runs (CreateTaskDto.engine).
+  @IsOptional() @IsString() engine?: string | null;
   @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
   @IsOptional() @IsString() @MaxLength(200) model?: string | null;
   // Three-state for each field: omitted preserves it, a value replaces it, null clears it.
@@ -724,7 +750,8 @@ export class UpdateTaskDto {
   @IsArray()
   @IsPublicId({ each: true })
   dependsOnTaskIds?: string[];
-  // Auto-run once all prerequisites are DONE.
+  // Auto-run once all prerequisites are DONE. A task in no project that has no prerequisites is
+  // never started by this flag, however ready it looks: start it with task_start, or give it a runAt.
   @IsOptional() @IsBoolean() autoRunWhenReady?: boolean;
   // Which of its list's ready tasks takes the list's next free slot: higher first, equal priorities
   // in the order they already had (see Task.priority). Omit to keep it; null returns it to the
@@ -900,9 +927,11 @@ export const TASK_BATCH_PIN_CHUNK = 500;
  * both gets the intersection. At least one of them is required, and the service refuses a request
  * that names none of them rather than reading it as "every task this owner has".
  *
- * `provider`/`model` are three-state exactly as on `UpdateTaskDto`: omitted leaves the current pin
- * alone, null returns the task to inheriting its assignee workspace's, a string pins it. Naming
- * neither is refused — the request would write nothing.
+ * `engine`/`provider`/`model` are three-state exactly as on `UpdateTaskDto`: omitted leaves the
+ * current pin alone, null returns the task to inheriting its assignee workspace's, a string pins it.
+ * Naming none is refused — the request would write nothing. A provider is checked once, against the
+ * engine it is written with; an engine written alone is checked against every provider pin the
+ * selection already holds, and the whole batch is refused when one of them cannot run on it.
  */
 export class BatchPinTasksDto {
   @IsOptional() @IsArray() @ArrayMinSize(1) @IsPublicId({ each: true }) taskIds?: string[];
@@ -913,6 +942,7 @@ export class BatchPinTasksDto {
   @IsString({ each: true })
   @MaxLength(TASK_LABEL_MAX_LENGTH, { each: true })
   labels?: string[];
+  @IsOptional() @IsString() engine?: string | null;
   @IsOptional() @IsString() @MaxLength(64) provider?: string | null;
   @IsOptional() @IsString() @MaxLength(200) model?: string | null;
 }

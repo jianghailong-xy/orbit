@@ -16,19 +16,23 @@ import { ACCOUNT_ID_PATTERN } from '../runners/dto';
 import { runnerAccountPausedUntil } from './account-pause';
 
 /**
- * The engines a runner can sign into (LoginEngine's full set), in the order they're shown. Only a
- * runner that can relay Antigravity's Google sign-in is asked to (antigravityGoogleLogin).
+ * The engines Orbit signs a runner into, in the order they're shown. Only a runner that can relay
+ * Antigravity's Google sign-in is asked to (antigravityGoogleLogin), and only one that declares
+ * cursor-account-login/v1 is asked to sign Cursor CLI in, Default included: an older one signs Claude
+ * Code in for an engine it does not know (src/runner-go/login.go).
  */
-export const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity'];
+export const LOGIN_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'kimi', 'antigravity', 'cursor'];
 
 /**
  * The engines whose CLI keeps one login per config directory, so one machine can sign in several
  * accounts of them: a Codex CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR, an Antigravity Google
- * sign-in's Gemini directory. Everything account-shaped — a per-account sign-in, the account list on a
- * report, a workspace pinning a session to one — is gated on this rather than on the engine name, so
- * the next engine is a line here and a descriptor on the runner (src/runner-go/account_slot.go).
+ * sign-in's Gemini directory, a Kimi Code KIMI_CODE_HOME, a Cursor CLI account's directory
+ * (docs/cursor-runtime-contract.md §16.2). Everything account-shaped — a per-account sign-in, the
+ * account list on a report, a workspace pinning a session to one — is gated on this rather than on
+ * the engine name, so the next engine is a line here and a descriptor on the runner
+ * (src/runner-go/account_slot.go).
  */
-export const ACCOUNT_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'antigravity'];
+export const ACCOUNT_ENGINES: readonly LoginEngine[] = ['claude', 'codex', 'antigravity', 'kimi', 'cursor'];
 
 export function engineKeepsAccounts(engine: unknown): engine is LoginEngine {
   return typeof engine === 'string' && ACCOUNT_ENGINES.includes(engine as LoginEngine);
@@ -43,7 +47,8 @@ export function isKimiRegion(value: unknown): value is KimiRegion {
 }
 
 export function isInstallEngine(value: unknown): value is InstallEngine {
-  return isLoginEngine(value) || value === 'dsh' || value === 'opencode';
+  // Cursor CLI is signed in through the relay, but its install is not relayed yet.
+  return (isLoginEngine(value) && value !== 'cursor') || value === 'dsh' || value === 'opencode';
 }
 
 /**
@@ -62,6 +67,7 @@ export const REPORTED_ENGINES: readonly ReportedEngine[] = [
   'opencode',
   'antigravity',
   'dsh',
+  'cursor',
 ];
 
 export function isReportedEngine(value: unknown): value is ReportedEngine {
@@ -92,13 +98,15 @@ export function sanitizeRunnerEngines(value: unknown): RunnerEngineHealth[] | nu
     const update = sanitizeEngineUpdate(entry.update);
     // Only the engines whose CLI keeps a login per directory sign in more than one account.
     const accounts = engineKeepsAccounts(entry.engine)
-      ? sanitizeEngineAccounts(entry.accounts)
+      ? sanitizeEngineAccounts(entry.accounts, entry.engine)
       : undefined;
     // Only the CLI's own yes/no counts; everything else is the third state, which exists so
     // an engine that wouldn't answer is never shown as signed in.
     const auth = entry.engine !== 'dsh' && (entry.auth === 'yes' || entry.auth === 'no') ? entry.auth : 'unknown';
     const dsh = entry.engine === 'dsh' ? sanitizeDshHealth(entry.dsh) : undefined;
-    const installationError = entry.engine === 'dsh' ? dshDiagnosticCode(entry.installationError) : undefined;
+    const installationError = entry.engine === 'dsh'
+      ? dshDiagnosticCode(entry.installationError)
+      : entry.engine === 'cursor' ? cursorInstallationCode(entry.installationError) : undefined;
     // Antigravity alone says which credential `auth` is about, and carries the quota its Google
     // accounts read (docs/antigravity-runtime-contract.md §16.6): Default's while the runner's own
     // sign-in answers yes, every other account's under `accounts`.
@@ -141,6 +149,17 @@ function dshDiagnosticCode(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const code = value.split(':', 1)[0];
   return DSH_DIAGNOSTIC_CODES.includes(code) ? code : undefined;
+}
+
+/** Why the pinned Cursor CLI cannot run here, by the code that leads the runner's message
+ *  (cursor_health.go): CURSOR_NOT_INSTALLED, CURSOR_VERSION_INCOMPATIBLE (another build),
+ *  CURSOR_PLATFORM_UNSUPPORTED, CURSOR_INSTALL_FAILED — any CURSOR_ code, so a code this side has not
+ *  heard of still says the build is not ready. Kept without the words after it, which name paths on the
+ *  machine. What tells the runners that can check a Cursor key (cursor-key-check-relay.ts). */
+function cursorInstallationCode(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const code = value.split(':', 1)[0];
+  return /^CURSOR_[A-Z_]{1,60}$/.test(code) ? code : undefined;
 }
 
 function sanitizeDshHealth(value: unknown): DshRuntimeHealth | undefined {
@@ -252,9 +271,10 @@ function sanitizeBuckets(value: unknown): PlanUsageBucket[] {
  * is dropped on its own, like an engine's update record: it only labels the row, and whatever sits
  * there when it isn't one could be the raw account id that never leaves the machine (contract §3).
  * Returns undefined when nothing usable is left, which reads as the one account a runner had
- * before accounts.
+ * before accounts. A Kimi account's site is kept as the engine's is, one of the two Kimi names, and
+ * dropped on its own like the fingerprint: it only labels the row.
  */
-function sanitizeEngineAccounts(value: unknown): RunnerEngineAccount[] | undefined {
+function sanitizeEngineAccounts(value: unknown, engine: LoginEngine): RunnerEngineAccount[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const out: RunnerEngineAccount[] = [];
   const seen = new Set<string>();
@@ -286,12 +306,15 @@ function sanitizeEngineAccounts(value: unknown): RunnerEngineAccount[] | undefin
     // When a signed-in account's login lapses (src/runner-go claudeLoginExpiry): only a real instant,
     // re-written as ISO, so nothing but a time rides on it.
     const loginExpiresAt = auth === 'yes' ? isoInstant(entry.loginExpiresAt) : undefined;
+    // Which of Kimi's two sites this account's login is on (kimi.com or kimi.ai).
+    const kimiRegion = engine === 'kimi' && isKimiRegion(entry.kimiRegion) ? entry.kimiRegion : undefined;
     out.push({
       id: entry.id,
       ...(name ? { name } : {}),
       home,
       ...(codexHome ? { codexHome } : {}),
       auth,
+      ...(kimiRegion ? { kimiRegion } : {}),
       ...(fingerprintPrefix ? { fingerprintPrefix } : {}),
       ...(loginExpiresAt ? { loginExpiresAt } : {}),
     });

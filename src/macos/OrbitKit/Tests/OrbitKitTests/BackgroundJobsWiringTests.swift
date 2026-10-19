@@ -136,7 +136,7 @@ final class BackgroundJobsWiringTests: XCTestCase {
         XCTAssertTrue(row.contains("let wakeNote: String? = queued == nil ? b.note : b.text"),
                       "a delivered wake is no longer read off the note the apiserver recorded")
         let branch = try section(row, from: "BackgroundWakeText.parse(wakeNote)",
-                                 to: "UserBubbleView(bubble: b, onCancelQueued: cancel)")
+                                 to: "UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer, onPutBack: putBack)")
 
         XCTAssertTrue(branch.contains("attached: attachedRest(background)"),
                       "whatever the card did not take rides in the card, because nobody typed this "
@@ -156,8 +156,8 @@ final class BackgroundJobsWiringTests: XCTestCase {
     }
 
     /// A job that ends while a turn runs is written into that turn (a steer). Its line says how far it
-    /// got wherever it is drawn, and while it waits for the runner it offers no Cancel: the server
-    /// refuses to withdraw a steer (409), so a Cancel there would be a button that only ever fails.
+    /// got wherever it is drawn, and while it waits for the runner it offers no Cancel: a steer is
+    /// taken back only by its own Withdraw, which a wake nobody typed is never offered.
     func testASteeredWakeSaysHowFarItGotAndOffersNoCancel() throws {
         // One branch draws the wake queued and delivered (`UserTurnRow`); the queue's Cancel is the
         // one `QueuedControls` hands it, which a steer never gets.

@@ -1,16 +1,28 @@
+import { createHash } from 'node:crypto';
+
 import type { ManagedRunnerProfile } from '../managed-runners/managed-runner-profile';
+
+/** The Kubernetes identity the fake cluster gives the manager's client, and the profile admits. */
+export const TEST_MANAGER_USERNAME = 'system:serviceaccount:orbit-managed-test:orbit-runner-manager';
+/** The bearer token a test plays the API server with when it calls the admission webhook. */
+export const TEST_ADMISSION_WEBHOOK_TOKEN = 'test-admission-webhook-token';
 
 /**
  * A complete, valid managed runner profile for tests. Every host is under `.invalid`, which never
  * resolves, and the kubeconfig path names nothing: a test that reached a real client would fail at
  * once rather than find a cluster.
  */
-export function testManagedRunnerProfile(overrides: { lifecycle?: Partial<ManagedRunnerProfile['lifecycle']> } = {}): ManagedRunnerProfile {
+export function testManagedRunnerProfile(overrides: {
+  lifecycle?: Partial<ManagedRunnerProfile['lifecycle']>;
+  capacity?: Partial<ManagedRunnerProfile['capacity']>;
+  /** Another cluster key is another capacity pool: a test with a budget of its own names one. */
+  clusterKey?: string;
+} = {}): ManagedRunnerProfile {
   return {
     schemaVersion: 1,
     valueKind: 'actual',
     environmentId: 'orbit-mr-fake',
-    clusterKey: 'fake-cluster',
+    clusterKey: overrides.clusterKey ?? 'fake-cluster',
     resourceProfileId: 'invited-test-v1',
     kubernetes: {
       kubeconfig: '/nonexistent/orbit-managed-runner-test/kubeconfig.json',
@@ -29,6 +41,19 @@ export function testManagedRunnerProfile(overrides: { lifecycle?: Partial<Manage
         init: { requests: { cpu: '100m', memory: '64Mi' }, limits: { cpu: '200m', memory: '128Mi' } },
       },
     },
+    admission: {
+      managerUsername: TEST_MANAGER_USERNAME,
+      webhookTokenSha256: createHash('sha256').update(TEST_ADMISSION_WEBHOOK_TOKEN).digest('hex'),
+    },
+    // Room for a thousand runners of the Pod above and two thousand of its volumes, in one pool every
+    // spec of a database shares: no test outside the capacity ones ever waits for capacity. Those
+    // name a budget, and a cluster key, of their own.
+    capacity: {
+      compute: { cpu: '1000', memory: '2000Gi', ephemeralStorage: '2000Gi', pods: 1000, attachments: 1000 },
+      storage: { usable: '41Ti', headroom: '1Ti' },
+      maxActiveUsers: 1000,
+      ...overrides.capacity,
+    },
     lifecycle: {
       maxAttempts: 3,
       backoffBaseSeconds: 5,
@@ -38,6 +63,9 @@ export function testManagedRunnerProfile(overrides: { lifecycle?: Partial<Manage
       leaseSeconds: 30,
       pollIntervalSeconds: 5,
       heartbeatFreshSeconds: 90,
+      idleSeconds: 900,
+      capacityRetrySeconds: 60,
+      drainSeconds: 600,
       ...overrides.lifecycle,
     },
   };

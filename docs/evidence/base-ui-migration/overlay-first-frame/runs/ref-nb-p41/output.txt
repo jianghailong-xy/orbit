@@ -1,0 +1,706 @@
+[WebServer] (node:2294205) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+P0 expected screenshots: 88 P0.2 originals, 150 main drift references, 14 accepted migration differences.
+
+Running 96 tests using 1 worker
+
+(node:2298935) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-setup-valid.png, writing actual.
+  ✓   1 [chromium-light-desktop] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (5.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-login-error.png, writing actual.
+  ✓   2 [chromium-light-desktop] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-profile-reset.png, writing actual.
+  ✓   3 [chromium-light-desktop] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-profile-photo.png, writing actual.
+  ✓   4 [chromium-light-desktop] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (739ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-profile-signin.png, writing actual.
+  ✓   5 [chromium-light-desktop] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (649ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-settings-mode-open.png, writing actual.
+  ✘   6 [chromium-light-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (1.2s)
+(node:2305698) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-tokens-revoke.png, writing actual.
+  ✓   7 [chromium-light-desktop] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-tokens-issued.png, writing actual.
+  ✓   8 [chromium-light-desktop] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (3.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-tokens-error.png, writing actual.
+  ✓   9 [chromium-light-desktop] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (5.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-admin-revoke.png, writing actual.
+  ✓  10 [chromium-light-desktop] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-cli-approved.png, writing actual.
+  ✓  11 [chromium-light-desktop] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-desktop/p41-cli-error.png, writing actual.
+  ✓  12 [chromium-light-desktop] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.7s)
+(node:2311162) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-setup-valid.png, writing actual.
+  ✓  13 [chromium-light-phone] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-login-error.png, writing actual.
+  ✓  14 [chromium-light-phone] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-profile-reset.png, writing actual.
+  ✓  15 [chromium-light-phone] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-profile-photo.png, writing actual.
+  ✓  16 [chromium-light-phone] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (728ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-profile-signin.png, writing actual.
+  ✓  17 [chromium-light-phone] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (657ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-settings-mode-open.png, writing actual.
+  ✘  18 [chromium-light-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (718ms)
+(node:2313222) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-tokens-revoke.png, writing actual.
+  ✓  19 [chromium-light-phone] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-tokens-issued.png, writing actual.
+  ✓  20 [chromium-light-phone] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-tokens-error.png, writing actual.
+  ✓  21 [chromium-light-phone] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-admin-revoke.png, writing actual.
+  ✓  22 [chromium-light-phone] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-cli-approved.png, writing actual.
+  ✓  23 [chromium-light-phone] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (877ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-light-phone/p41-cli-error.png, writing actual.
+  ✓  24 [chromium-light-phone] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.2s)
+(node:2323106) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-setup-valid.png, writing actual.
+  ✓  25 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-login-error.png, writing actual.
+  ✓  26 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-profile-reset.png, writing actual.
+  ✓  27 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-profile-photo.png, writing actual.
+  ✓  28 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (957ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-profile-signin.png, writing actual.
+  ✓  29 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (766ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-settings-mode-open.png, writing actual.
+  ✘  30 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (1.5s)
+(node:2325381) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-tokens-revoke.png, writing actual.
+  ✓  31 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (4.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-tokens-issued.png, writing actual.
+  ✓  32 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (4.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-tokens-error.png, writing actual.
+  ✓  33 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (4.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-admin-revoke.png, writing actual.
+  ✓  34 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-cli-approved.png, writing actual.
+  ✓  35 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-desktop/p41-cli-error.png, writing actual.
+  ✓  36 [chromium-dark-desktop] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.6s)
+(node:2331275) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-setup-valid.png, writing actual.
+  ✓  37 [chromium-dark-phone] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-login-error.png, writing actual.
+  ✓  38 [chromium-dark-phone] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-profile-reset.png, writing actual.
+  ✓  39 [chromium-dark-phone] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (1.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-profile-photo.png, writing actual.
+  ✓  40 [chromium-dark-phone] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (696ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-profile-signin.png, writing actual.
+  ✓  41 [chromium-dark-phone] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (607ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-settings-mode-open.png, writing actual.
+  ✘  42 [chromium-dark-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (1.3s)
+(node:2333146) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-tokens-revoke.png, writing actual.
+  ✓  43 [chromium-dark-phone] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-tokens-issued.png, writing actual.
+  ✓  44 [chromium-dark-phone] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (2.2s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-tokens-error.png, writing actual.
+  ✓  45 [chromium-dark-phone] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-admin-revoke.png, writing actual.
+  ✓  46 [chromium-dark-phone] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-cli-approved.png, writing actual.
+  ✓  47 [chromium-dark-phone] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (874ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/chromium-dark-phone/p41-cli-error.png, writing actual.
+  ✓  48 [chromium-dark-phone] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.4s)
+(node:2334436) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-setup-valid.png, writing actual.
+  ✓  49 [webkit-light-desktop] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-login-error.png, writing actual.
+  ✓  50 [webkit-light-desktop] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-profile-reset.png, writing actual.
+  ✓  51 [webkit-light-desktop] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (2.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-profile-photo.png, writing actual.
+  ✓  52 [webkit-light-desktop] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (963ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-profile-signin.png, writing actual.
+  ✓  53 [webkit-light-desktop] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (831ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-settings-mode-open.png, writing actual.
+  ✘  54 [webkit-light-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (1.1s)
+(node:2335773) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-tokens-revoke.png, writing actual.
+  ✓  55 [webkit-light-desktop] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-tokens-issued.png, writing actual.
+  ✓  56 [webkit-light-desktop] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-tokens-error.png, writing actual.
+  ✓  57 [webkit-light-desktop] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-admin-revoke.png, writing actual.
+  ✓  58 [webkit-light-desktop] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-cli-approved.png, writing actual.
+  ✓  59 [webkit-light-desktop] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-desktop/p41-cli-error.png, writing actual.
+  ✓  60 [webkit-light-desktop] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.9s)
+(node:2337995) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-setup-valid.png, writing actual.
+  ✓  61 [webkit-light-phone] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-login-error.png, writing actual.
+  ✓  62 [webkit-light-phone] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-profile-reset.png, writing actual.
+  ✓  63 [webkit-light-phone] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (1.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-profile-photo.png, writing actual.
+  ✓  64 [webkit-light-phone] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (963ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-profile-signin.png, writing actual.
+  ✓  65 [webkit-light-phone] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (832ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-settings-mode-open.png, writing actual.
+  ✘  66 [webkit-light-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (1.1s)
+(node:2349033) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-tokens-revoke.png, writing actual.
+  ✓  67 [webkit-light-phone] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-tokens-issued.png, writing actual.
+  ✓  68 [webkit-light-phone] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (2.8s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-tokens-error.png, writing actual.
+  ✓  69 [webkit-light-phone] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (2.9s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-admin-revoke.png, writing actual.
+  ✓  70 [webkit-light-phone] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (2.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-cli-approved.png, writing actual.
+  ✓  71 [webkit-light-phone] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-light-phone/p41-cli-error.png, writing actual.
+  ✓  72 [webkit-light-phone] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.7s)
+(node:2350961) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-setup-valid.png, writing actual.
+  ✓  73 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (3.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-login-error.png, writing actual.
+  ✓  74 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.8s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-profile-reset.png, writing actual.
+  ✓  75 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (2.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-profile-photo.png, writing actual.
+  ✓  76 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (1.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-profile-signin.png, writing actual.
+  ✓  77 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (873ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-settings-mode-open.png, writing actual.
+  ✘  78 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (1.1s)
+(node:2352700) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-tokens-revoke.png, writing actual.
+  ✓  79 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (2.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-tokens-issued.png, writing actual.
+  ✓  80 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (3.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-tokens-error.png, writing actual.
+  ✓  81 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (4.0s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-admin-revoke.png, writing actual.
+  ✓  82 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (2.5s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-cli-approved.png, writing actual.
+  ✓  83 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-desktop/p41-cli-error.png, writing actual.
+  ✓  84 [webkit-dark-desktop] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (1.8s)
+(node:2354766) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-setup.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-setup-required.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-setup-invalid.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-setup-valid.png, writing actual.
+  ✓  85 [webkit-dark-phone] › ui-migration/p41.browser.mjs:85:3 › P4.1 sign-in and first-run setup › setup: checks, linked confirmation, submit and refusal (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-login.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-login-error.png, writing actual.
+  ✓  86 [webkit-dark-phone] › ui-migration/p41.browser.mjs:161:3 › P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going (1.4s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-profile-mismatch.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-profile-ready.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-profile-reset.png, writing actual.
+  ✓  87 [webkit-dark-phone] › ui-migration/p41.browser.mjs:190:3 › P4.1 profile › password form: each check, the linked confirmation and the reset (1.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-profile-photo.png, writing actual.
+  ✓  88 [webkit-dark-phone] › ui-migration/p41.browser.mjs:236:3 › P4.1 profile › photo: choose, show and remove (999ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-profile-signin.png, writing actual.
+  ✓  89 [webkit-dark-phone] › ui-migration/p41.browser.mjs:259:3 › P4.1 profile › sign-in methods card beside the replaced ones (787ms)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-settings-mode-open.png, writing actual.
+  ✘  90 [webkit-dark-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens (1.5s)
+(node:2356585) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-tokens-hover.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-tokens-ended.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-tokens-revoke.png, writing actual.
+  ✓  91 [webkit-dark-phone] › ui-migration/p41.browser.mjs:343:3 › P4.1 access tokens › list, tabs and the revoke question (2.6s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-tokens-new.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-tokens-new-custom.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-tokens-new-workspaces.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-tokens-new-never.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-tokens-issued.png, writing actual.
+  ✓  92 [webkit-dark-phone] › ui-migration/p41.browser.mjs:384:3 › P4.1 access tokens › a new token: presets, scopes, workspaces, never, issued once (6.1s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-tokens-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-tokens-empty.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-tokens-error.png, writing actual.
+  ✓  93 [webkit-dark-phone] › ui-migration/p41.browser.mjs:447:3 › P4.1 access tokens › loading, empty and a failed read (5.7s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-admin-tokens.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-admin-revoke.png, writing actual.
+  ✓  94 [webkit-dark-phone] › ui-migration/p41.browser.mjs:480:3 › P4.1 access tokens › an administrator: a user's tokens in the users page dialog (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-cli-loading.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-cli.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-cli-approved.png, writing actual.
+  ✓  95 [webkit-dark-phone] › ui-migration/p41.browser.mjs:520:3 › P4.1 orbit login approval › approve (3.3s)
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-cli-warnings.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-cli-denied.png, writing actual.
+A snapshot doesn't exist at /mnt/data/tmp/overlay-first-frame-34brok/runs/ref-nb-p41/shots/webkit-dark-phone/p41-cli-error.png, writing actual.
+  ✓  96 [webkit-dark-phone] › ui-migration/p41.browser.mjs:545:3 › P4.1 orbit login approval › warnings, a refused approval, deny and a dead code (3.1s)
+
+
+  1) [chromium-light-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+
+    Error: locator.click: Error: strict mode violation: locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch') resolved to 2 elements:
+        1) <span tabindex="0" role="switch" data-unchecked="" id="base-ui-_r_6_" aria-labelledby="" data-size="middle" aria-checked="false" class="orbit-switch" aria-label="Smart model selection">…</span> aka getByRole('switch', { name: 'Smart model selection' })
+        2) <span tabindex="0" role="switch" data-checked="" id="base-ui-_r_9_" aria-labelledby="" data-size="middle" aria-checked="true" class="orbit-switch" aria-label="Suggested replies">…</span> aka getByRole('switch', { name: 'Suggested replies' })
+
+    Call log:
+      - waiting for locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch')
+
+
+      296 |
+      297 |     const smart = card(page, 'Session defaults').getByRole('switch');
+    > 298 |     await smart.click();
+          |                 ^
+      299 |     await expect(smart).toHaveAttribute('aria-checked', 'true');
+      300 |     trace.push(await observe(page, fixtures, 'smart model selection on'));
+      301 |
+        at /mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/ui-migration/p41.browser.mjs:298:17
+
+    attachment #1: p41-settings-mode-open (image/png) ──────────────────────────────────────────────
+    Expected: ../../../runs/ref-nb-p41/shots/chromium-light-desktop/p41-settings-mode-open.png
+    Received: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-light-desktop/p41-settings-mode-open-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-light-desktop/attachments/computed-styles-and-timings-5fd8ef0773e4e228a5e93ed10bd0f39874b7b751.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) [chromium-light-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+
+    Error: locator.click: Error: strict mode violation: locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch') resolved to 2 elements:
+        1) <span tabindex="0" role="switch" data-unchecked="" id="base-ui-_r_6_" aria-labelledby="" data-size="middle" aria-checked="false" class="orbit-switch" aria-label="Smart model selection">…</span> aka getByRole('switch', { name: 'Smart model selection' })
+        2) <span tabindex="0" role="switch" data-checked="" id="base-ui-_r_9_" aria-labelledby="" data-size="middle" aria-checked="true" class="orbit-switch" aria-label="Suggested replies">…</span> aka getByRole('switch', { name: 'Suggested replies' })
+
+    Call log:
+      - waiting for locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch')
+
+
+      296 |
+      297 |     const smart = card(page, 'Session defaults').getByRole('switch');
+    > 298 |     await smart.click();
+          |                 ^
+      299 |     await expect(smart).toHaveAttribute('aria-checked', 'true');
+      300 |     trace.push(await observe(page, fixtures, 'smart model selection on'));
+      301 |
+        at /mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/ui-migration/p41.browser.mjs:298:17
+
+    attachment #1: p41-settings-mode-open (image/png) ──────────────────────────────────────────────
+    Expected: ../../../runs/ref-nb-p41/shots/chromium-light-phone/p41-settings-mode-open.png
+    Received: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-light-phone/p41-settings-mode-open-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-light-phone/attachments/computed-styles-and-timings-08716a2d178b8ea99a042b4c2577e83007a21566.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) [chromium-dark-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+
+    Error: locator.click: Error: strict mode violation: locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch') resolved to 2 elements:
+        1) <span tabindex="0" role="switch" data-unchecked="" id="base-ui-_r_6_" aria-labelledby="" data-size="middle" aria-checked="false" class="orbit-switch" aria-label="Smart model selection">…</span> aka getByRole('switch', { name: 'Smart model selection' })
+        2) <span tabindex="0" role="switch" data-checked="" id="base-ui-_r_9_" aria-labelledby="" data-size="middle" aria-checked="true" class="orbit-switch" aria-label="Suggested replies">…</span> aka getByRole('switch', { name: 'Suggested replies' })
+
+    Call log:
+      - waiting for locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch')
+
+
+      296 |
+      297 |     const smart = card(page, 'Session defaults').getByRole('switch');
+    > 298 |     await smart.click();
+          |                 ^
+      299 |     await expect(smart).toHaveAttribute('aria-checked', 'true');
+      300 |     trace.push(await observe(page, fixtures, 'smart model selection on'));
+      301 |
+        at /mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/ui-migration/p41.browser.mjs:298:17
+
+    attachment #1: p41-settings-mode-open (image/png) ──────────────────────────────────────────────
+    Expected: ../../../runs/ref-nb-p41/shots/chromium-dark-desktop/p41-settings-mode-open.png
+    Received: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-dark-desktop/p41-settings-mode-open-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-dark-desktop/attachments/computed-styles-and-timings-477e29a6ccecf22ed0a92d7a448fe2abf3b8cfbc.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  4) [chromium-dark-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+
+    Error: locator.click: Error: strict mode violation: locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch') resolved to 2 elements:
+        1) <span tabindex="0" role="switch" data-unchecked="" id="base-ui-_r_6_" aria-labelledby="" data-size="middle" aria-checked="false" class="orbit-switch" aria-label="Smart model selection">…</span> aka getByRole('switch', { name: 'Smart model selection' })
+        2) <span tabindex="0" role="switch" data-checked="" id="base-ui-_r_9_" aria-labelledby="" data-size="middle" aria-checked="true" class="orbit-switch" aria-label="Suggested replies">…</span> aka getByRole('switch', { name: 'Suggested replies' })
+
+    Call log:
+      - waiting for locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch')
+
+
+      296 |
+      297 |     const smart = card(page, 'Session defaults').getByRole('switch');
+    > 298 |     await smart.click();
+          |                 ^
+      299 |     await expect(smart).toHaveAttribute('aria-checked', 'true');
+      300 |     trace.push(await observe(page, fixtures, 'smart model selection on'));
+      301 |
+        at /mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/ui-migration/p41.browser.mjs:298:17
+
+    attachment #1: p41-settings-mode-open (image/png) ──────────────────────────────────────────────
+    Expected: ../../../runs/ref-nb-p41/shots/chromium-dark-phone/p41-settings-mode-open.png
+    Received: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-dark-phone/p41-settings-mode-open-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-dark-phone/attachments/computed-styles-and-timings-6f449f190698364b942718585f8b009913eebe7b.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-chromium-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  5) [webkit-light-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+
+    Error: locator.click: Error: strict mode violation: locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch') resolved to 2 elements:
+        1) <span tabindex="0" role="switch" data-unchecked="" id="base-ui-_r_6_" aria-labelledby="" data-size="middle" aria-checked="false" class="orbit-switch" aria-label="Smart model selection">…</span> aka getByRole('switch', { name: 'Smart model selection' })
+        2) <span tabindex="0" role="switch" data-checked="" id="base-ui-_r_9_" aria-labelledby="" data-size="middle" aria-checked="true" class="orbit-switch" aria-label="Suggested replies">…</span> aka getByRole('switch', { name: 'Suggested replies' })
+
+    Call log:
+      - waiting for locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch')
+
+
+      296 |
+      297 |     const smart = card(page, 'Session defaults').getByRole('switch');
+    > 298 |     await smart.click();
+          |                 ^
+      299 |     await expect(smart).toHaveAttribute('aria-checked', 'true');
+      300 |     trace.push(await observe(page, fixtures, 'smart model selection on'));
+      301 |
+        at /mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/ui-migration/p41.browser.mjs:298:17
+
+    attachment #1: p41-settings-mode-open (image/png) ──────────────────────────────────────────────
+    Expected: ../../../runs/ref-nb-p41/shots/webkit-light-desktop/p41-settings-mode-open.png
+    Received: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-light-desktop/p41-settings-mode-open-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-light-desktop/attachments/computed-styles-and-timings-714be14cc63d931cae903c456a52a01f684fa97c.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-light-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-light-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-light-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  6) [webkit-light-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+
+    Error: locator.click: Error: strict mode violation: locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch') resolved to 2 elements:
+        1) <span tabindex="0" role="switch" data-unchecked="" id="base-ui-_r_6_" aria-labelledby="" data-size="middle" aria-checked="false" class="orbit-switch" aria-label="Smart model selection">…</span> aka getByRole('switch', { name: 'Smart model selection' })
+        2) <span tabindex="0" role="switch" data-checked="" id="base-ui-_r_9_" aria-labelledby="" data-size="middle" aria-checked="true" class="orbit-switch" aria-label="Suggested replies">…</span> aka getByRole('switch', { name: 'Suggested replies' })
+
+    Call log:
+      - waiting for locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch')
+
+
+      296 |
+      297 |     const smart = card(page, 'Session defaults').getByRole('switch');
+    > 298 |     await smart.click();
+          |                 ^
+      299 |     await expect(smart).toHaveAttribute('aria-checked', 'true');
+      300 |     trace.push(await observe(page, fixtures, 'smart model selection on'));
+      301 |
+        at /mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/ui-migration/p41.browser.mjs:298:17
+
+    attachment #1: p41-settings-mode-open (image/png) ──────────────────────────────────────────────
+    Expected: ../../../runs/ref-nb-p41/shots/webkit-light-phone/p41-settings-mode-open.png
+    Received: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-light-phone/p41-settings-mode-open-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-light-phone/attachments/computed-styles-and-timings-26ea4f187dae2067ab7cc7f43dfb46778aa91d7f.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-light-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-light-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-light-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  7) [webkit-dark-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+
+    Error: locator.click: Error: strict mode violation: locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch') resolved to 2 elements:
+        1) <span tabindex="0" role="switch" data-unchecked="" id="base-ui-_r_6_" aria-labelledby="" data-size="middle" aria-checked="false" class="orbit-switch" aria-label="Smart model selection">…</span> aka getByRole('switch', { name: 'Smart model selection' })
+        2) <span tabindex="0" role="switch" data-checked="" id="base-ui-_r_9_" aria-labelledby="" data-size="middle" aria-checked="true" class="orbit-switch" aria-label="Suggested replies">…</span> aka getByRole('switch', { name: 'Suggested replies' })
+
+    Call log:
+      - waiting for locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch')
+
+
+      296 |
+      297 |     const smart = card(page, 'Session defaults').getByRole('switch');
+    > 298 |     await smart.click();
+          |                 ^
+      299 |     await expect(smart).toHaveAttribute('aria-checked', 'true');
+      300 |     trace.push(await observe(page, fixtures, 'smart model selection on'));
+      301 |
+        at /mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/ui-migration/p41.browser.mjs:298:17
+
+    attachment #1: p41-settings-mode-open (image/png) ──────────────────────────────────────────────
+    Expected: ../../../runs/ref-nb-p41/shots/webkit-dark-desktop/p41-settings-mode-open.png
+    Received: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-dark-desktop/p41-settings-mode-open-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-dark-desktop/attachments/computed-styles-and-timings-0e9d23f424a035fc8f4db04dee0755d84a1be149.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-dark-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-dark-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-dark-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8) [webkit-dark-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+
+    Error: locator.click: Error: strict mode violation: locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch') resolved to 2 elements:
+        1) <span tabindex="0" role="switch" data-unchecked="" id="base-ui-_r_6_" aria-labelledby="" data-size="middle" aria-checked="false" class="orbit-switch" aria-label="Smart model selection">…</span> aka getByRole('switch', { name: 'Smart model selection' })
+        2) <span tabindex="0" role="switch" data-checked="" id="base-ui-_r_9_" aria-labelledby="" data-size="middle" aria-checked="true" class="orbit-switch" aria-label="Suggested replies">…</span> aka getByRole('switch', { name: 'Suggested replies' })
+
+    Call log:
+      - waiting for locator('.ant-card, .orbit-card').filter({ has: getByText('Session defaults', { exact: true }) }).first().getByRole('switch')
+
+
+      296 |
+      297 |     const smart = card(page, 'Session defaults').getByRole('switch');
+    > 298 |     await smart.click();
+          |                 ^
+      299 |     await expect(smart).toHaveAttribute('aria-checked', 'true');
+      300 |     trace.push(await observe(page, fixtures, 'smart model selection on'));
+      301 |
+        at /mnt/data/tmp/overlay-first-frame-34brok/ref/src/web/ui-migration/p41.browser.mjs:298:17
+
+    attachment #1: p41-settings-mode-open (image/png) ──────────────────────────────────────────────
+    Expected: ../../../runs/ref-nb-p41/shots/webkit-dark-phone/p41-settings-mode-open.png
+    Received: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-dark-phone/p41-settings-mode-open-actual.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: computed-styles-and-timings (application/json) ──────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-dark-phone/attachments/computed-styles-and-timings-7f07f4ebcceca0ed31232888189eae8adf70e0c7.json
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-dark-phone/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-dark-phone/trace.zip
+    Usage:
+
+        npx playwright show-trace ../../../runs/ref-nb-p41/results/p41.browser.mjs-P4-1-setti-f0bdc-theme-and-the-way-to-tokens-webkit-dark-phone/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  8 failed
+    [chromium-light-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+    [chromium-light-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+    [chromium-dark-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+    [chromium-dark-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+    [webkit-light-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+    [webkit-light-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+    [webkit-dark-desktop] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+    [webkit-dark-phone] › ui-migration/p41.browser.mjs:274:3 › P4.1 settings › every control: mode, switches while saving, theme and the way to tokens 
+  88 passed (4.9m)

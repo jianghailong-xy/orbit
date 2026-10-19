@@ -1,0 +1,14 @@
+{
+  "action": "on",
+  "answer": "volumeattachment.storage.k8s.io/t07-left-behind-01a14da1 created",
+  "at": "2026-10-18T06:21:14.740+00:00",
+  "attachmentsOfThePv": [
+    {
+      "attached": true,
+      "name": "t07-left-behind-01a14da1",
+      "node": "orbit-mr-lab"
+    }
+  ],
+  "owner": "nia",
+  "pv": "pvc-ad73e57d-788a-44c0-904a-babd6200ac67"
+}

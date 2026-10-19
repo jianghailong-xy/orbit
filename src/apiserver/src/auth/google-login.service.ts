@@ -17,6 +17,7 @@ import { SharedRateLimiter } from '../shared/public-surface.guard';
 import { USER_NAME_MAX_CHARS } from '../users/dto';
 import { type AccountSignInMethods, SIGN_IN_METHODS_SELECT, signInMethodsOf } from '../users/sign-in-methods';
 import { AuthService } from './auth.service';
+import { accountDisabled } from './disabled-accounts';
 import type { GoogleClient } from './google-auth.controller';
 import {
   GoogleOAuthClient,
@@ -222,9 +223,13 @@ interface SignedInUser {
   name: string;
 }
 
-/** An account whose email is the Google one in some letter case, and whether a Google account is linked to it. */
+/**
+ * An account whose email is the Google one in some letter case, whether a Google account is linked to
+ * it, and whether an administrator has disabled it.
+ */
 interface EmailMatch extends SignedInUser {
   linked: boolean;
+  disabled: boolean;
 }
 
 /**
@@ -490,8 +495,8 @@ export class GoogleLoginService {
     if (matches.length > 1) throw refused('GOOGLE_EMAIL_AMBIGUOUS');
     if (matches.length === 1) {
       const [match] = matches;
-      // ACCOUNT_DISABLED, the first answer for a matched account, is X1's (§5.5): it goes here,
-      // before any other.
+      // A disabled account (§5.5) is the first answer, before any other.
+      if (match.disabled) throw accountDisabled();
       if (match.linked) throw refused('GOOGLE_ACCOUNT_MISMATCH');
       if (!googleIsAuthoritative(identity)) throw refused('GOOGLE_EMAIL_NOT_AUTHORITATIVE');
       return this.link(identity, match);
@@ -592,8 +597,8 @@ export class GoogleLoginService {
       include: { user: true },
     });
     if (!linked) return null;
-    // ACCOUNT_DISABLED, case 1's other answer, is X1's (§5.5): a disabled account is refused here,
-    // before its identity is touched.
+    // Case 1's other answer (§5.5): a disabled account is refused before its identity is touched.
+    if (linked.user.disabledAt) throw accountDisabled();
     await this.prisma.userIdentity.update({
       where: { id: linked.id },
       data: { email: identity.email, hostedDomain: identity.hd, lastSignInAt: new Date() },
@@ -602,14 +607,16 @@ export class GoogleLoginService {
   }
 
   /**
-   * §5.2 cases 3 and 4: the accounts whose email is this one in any letter case, and whether each
-   * has a Google account linked. Matched on lower(email) because the email's unique index is on the
-   * address as written (migration 0392); two rows are enough to know there is more than one.
+   * §5.2 cases 3 and 4: the accounts whose email is this one in any letter case, whether each has a
+   * Google account linked, and whether it is disabled (§5.5). Matched on lower(email) because the
+   * email's unique index is on the address as written (migration 0392); two rows are enough to know
+   * there is more than one.
    */
   private usersByEmail(email: string): Promise<EmailMatch[]> {
     return this.prisma.$queryRaw<EmailMatch[]>`
       SELECT u."id", u."email", u."name",
-        EXISTS (SELECT 1 FROM "user_identity" i WHERE i."user_id" = u."id" AND i."provider" = ${GOOGLE}) AS "linked"
+        EXISTS (SELECT 1 FROM "user_identity" i WHERE i."user_id" = u."id" AND i."provider" = ${GOOGLE}) AS "linked",
+        u."disabled_at" IS NOT NULL AS "disabled"
       FROM "user" u WHERE lower(u."email") = lower(${email})
       LIMIT 2`;
   }

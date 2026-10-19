@@ -1,0 +1,19 @@
+== C5-after-tip-agents at 2026-10-17T18:00:01Z, checkout ddd7a599485772f9f8ecbe68564ffa8d16b7369d
+.env sha256=ef6179650b5a41cf37f98e5fa0bfb0af32f783adf59653e6c9e8c79ab982c834 mode=644; managed runner lines: []
+under data/: pg-archive postgres 
+compose services: apiserver gateway pgbackup postgres web wiki-worker 
+-- containers (name, image, created)
+orbit-apiserver	c2eabfec5db4	2026-10-17 17:58:26 +0000 UTC
+orbit-gateway	nginx:alpine	2026-10-17 17:53:51 +0000 UTC
+orbit-pgbackup	postgres:16-alpine	2026-10-17 17:53:49 +0000 UTC
+orbit-postgres	postgres:16-alpine	2026-10-17 17:53:47 +0000 UTC
+orbit-web	orbit-web	2026-10-17 17:59:52 +0000 UTC
+orbit-wiki-worker	c2eabfec5db4	2026-10-17 17:58:39 +0000 UTC
+-- volumes
+54e1c70baff5d60a01989bff2fe9391ee9d813bd0ef6da97f4569862fca91e31 used by [orbit-pgbackup ]
+orbit_pg-socket used by [orbit-pgbackup orbit-postgres ]
+-- networks
+bridge host none orbit_default 
+-- images
+alpine:3 nginx:alpine orbit-apiserver:local orbit-docker-channel:local orbit-managed-runner:local orbit-web:latest orbit-web:previous-release postgres:16-alpine 
+-- anything of managed runners: containers [0], volumes [0], docker-channel [0], network orbit-managed-runners [0]

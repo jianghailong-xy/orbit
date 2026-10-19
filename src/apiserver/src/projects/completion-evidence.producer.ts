@@ -12,10 +12,16 @@ import { CoordinatorConvergenceService } from './coordinator-convergence.service
 import {
   CoordinatorDeliveryService,
   type CoordinatorDeliveryOutcome,
+  type CoordinatorRequeueOutcome,
 } from './coordinator-delivery.service';
+import {
+  COORDINATOR_PAUSE_SELECT,
+  DELIVERY_COORDINATOR_PAUSED,
+  conversationIsPaused,
+} from './coordinator-evidence-queue';
 import { type WakeFact, wakeIdempotencyKey } from './coordinator-wake';
 import type { WakeAuthorization, WakeAuthorizer } from './coordinator-wake.service';
-import { openFuseEpisodeId, refusingWhileFusePaused } from './project-fuse';
+import { PROJECT_FUSE_PAUSED, openFuseEpisodeId, refusingWhileFusePaused } from './project-fuse';
 
 /** The project disappeared between the committed read and the wake's authorization. */
 export const COMPLETION_EVIDENCE_WAKE_PROJECT_GONE = 'PROJECT_GONE';
@@ -59,8 +65,19 @@ export const COMPLETION_EVIDENCE_WAKE_COORDINATOR_DISABLED = 'COORDINATOR_DISABL
  * =================================
  * The switch is read again at authorization — the router's read is not a permission — then the
  * fuse (`refusingWhileFusePaused`: a coordinator paused for over-spending is not handed more to
- * decide, and the owner's card covers the pause), and `convergence.authorizeWake` LAST, because it
- * records a judgment and no refusal may follow it.
+ * decide, and the owner's card covers the pause), then whether the coordinator conversation is
+ * paused, and `convergence.authorizeWake` LAST, because it records a judgment and no refusal may
+ * follow it.
+ *
+ * WHEN THE COORDINATOR IS PAUSED, THE REVISION WAITS FOR IT (2026-10-09)
+ * =====================================================================
+ * A coordinator whose run failed on a usage limit, a 429 or an expired sign-in, or that is parked on
+ * a retry, has not ended (`conversationIsPaused`). Its revision is refused with
+ * DELIVERY_COORDINATOR_PAUSED, and nothing is written to the conversation — a turn written to one
+ * parked on a retry would disarm the retry. That refusal is the one that leaves the revision waiting
+ * for the coordinator rather than in front of the owner (`coordinator-evidence-queue.ts`), and
+ * `CoordinatorEvidenceQueueService` hands it over through `deliverWaiting` below once the
+ * coordinator is back.
  */
 @Injectable()
 export class CompletionEvidenceProducer {
@@ -79,7 +96,52 @@ export class CompletionEvidenceProducer {
    */
   async deliver(fact: WakeFact): Promise<CoordinatorDeliveryOutcome | null> {
     const told = await this.decidedByCoordinator(fact);
-    return told ? this.deliveries.queue(told, this.authorize) : null;
+    return told ? this.deliveries.queue(told, this.authorize, { holdWhilePaused: true }) : null;
+  }
+
+  /**
+   * Hand the coordinator a revision that WAITED for it (`coordinator-evidence-queue.ts`): asked again
+   * whether the conversation can decide it, exactly as a fresh delivery is, and told so in the
+   * message — when it was submitted, that it waited, that nobody has decided it — and on the wake,
+   * which is where the owner's "Sent to the coordinator" is read from.
+   *
+   * A revision nothing reached is claimed and queued as any delivery is. One whose delivery did not
+   * reach this conversation — taken off the queue unread, or made to a conversation since replaced —
+   * still holds its key, and is re-sent (`CoordinatorDeliveryService.requeue`) on the switch and the
+   * fuse alone: the convergence ledger already holds this fact's judgment from its first delivery.
+   *
+   * Null, as `deliver` answers it, when the revision is no longer one the coordinator decides.
+   */
+  async deliverWaiting(
+    fact: WakeFact,
+    waiting: {
+      submittedAt: Date;
+      resend: { wakeId: string; idempotencyKey: string; clientTurnId: string } | null;
+    },
+  ): Promise<CoordinatorDeliveryOutcome | CoordinatorRequeueOutcome | null> {
+    const told = await this.decidedByCoordinator(fact);
+    if (!told) return null;
+    const waited: WakeFact = {
+      ...told,
+      detail: { ...told.detail, waited: { submittedAt: waiting.submittedAt.toISOString() } },
+    };
+    if (!waiting.resend) {
+      return this.deliveries.queue(waited, this.authorize, { holdWhilePaused: true, waited: true });
+    }
+    const refused = await this.resendRefusal(fact.projectId);
+    if (refused) return { outcome: 'REFUSED', wakeId: waiting.resend.wakeId, refusalCode: refused };
+    return this.deliveries.requeue(waited, waiting.resend);
+  }
+
+  /** The switch and the fuse, asked of a re-sent delivery the way `authorize` asks a fresh one. */
+  private async resendRefusal(projectId: string): Promise<string | null> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { coordinatorEnabled: true },
+    });
+    if (!project) return COMPLETION_EVIDENCE_WAKE_PROJECT_GONE;
+    if (!project.coordinatorEnabled) return COMPLETION_EVIDENCE_WAKE_COORDINATOR_DISABLED;
+    return (await openFuseEpisodeId(this.prisma, projectId)) ? PROJECT_FUSE_PAUSED : null;
   }
 
   /**
@@ -177,8 +239,28 @@ export class CompletionEvidenceProducer {
       return { allowed: false, refusalCode: COMPLETION_EVIDENCE_WAKE_COORDINATOR_DISABLED };
     }
     return refusingWhileFusePaused(
-      this.convergence.authorizeWake,
+      this.authorizeUnlessPaused,
       () => openFuseEpisodeId(this.prisma, fact.projectId),
     )(fact, claim);
   };
+
+  /**
+   * A coordinator that is paused is refused before the judgment is recorded, for the reason the fuse
+   * is: this fact is delivered once the coordinator is back, and that delivery records its judgment
+   * then.
+   */
+  private readonly authorizeUnlessPaused: WakeAuthorizer = async (fact, claim) => (
+    await this.coordinatorPaused(fact.projectId)
+      ? { allowed: false, refusalCode: DELIVERY_COORDINATOR_PAUSED }
+      : this.convergence.authorizeWake(fact, claim)
+  );
+
+  /** Whether the project's coordinator conversation is paused (`conversationIsPaused`). */
+  private async coordinatorPaused(projectId: string): Promise<boolean> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: projectId },
+      select: { coordinatorSession: { select: COORDINATOR_PAUSE_SELECT } },
+    });
+    return !!project?.coordinatorSession && conversationIsPaused(project.coordinatorSession);
+  }
 }

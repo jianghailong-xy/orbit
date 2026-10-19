@@ -1,0 +1,6 @@
+webkit-light-desktop   pilot-share-access-menu.png    all=    43 gt2=    43 max= 34 clusters=  1 [43px x1056-1063 y712-743 m34]
+webkit-light-desktop   pilot-share-conversations.png  all=    43 gt2=    43 max= 34 clusters=  1 [43px x1056-1063 y712-743 m34]
+webkit-light-desktop   pilot-share-expiry-open.png    all=    43 gt2=    43 max= 34 clusters=  1 [43px x1056-1063 y712-743 m34]
+webkit-light-desktop   pilot-share-private.png        all=    43 gt2=    43 max= 34 clusters=  1 [43px x1056-1063 y712-743 m34]
+webkit-light-desktop   pilot-share-public.png         all=    43 gt2=    43 max= 34 clusters=  1 [43px x1056-1063 y712-743 m34]
+webkit-light-desktop   pilot-share-turn-off.png       all=    43 gt2=    43 max= 34 clusters=  1 [43px x1056-1063 y712-743 m34]

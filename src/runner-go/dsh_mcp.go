@@ -89,6 +89,12 @@ const dshMCPToolCallTimeout = 60 * time.Second
 // dshOrbitMCPEnv is the whole environment `orbit mcp` reads its session from. dsh starts stdio
 // servers from the declared env, not from its own, so nothing is inherited implicitly.
 func dshOrbitMCPEnv(job *ClaimedSession) []map[string]string {
+	return orbitMCPDeclaredEnv(job, dshMCPToolCallTimeout)
+}
+
+// orbitMCPDeclaredEnv is the whole environment `orbit mcp` reads its session from, as an ACP mcpServers
+// entry declares it, for an engine that ends an MCP tool call after callTimeout.
+func orbitMCPDeclaredEnv(job *ClaimedSession, callTimeout time.Duration) []map[string]string {
 	pairs := []string{
 		"ORBIT_SESSION_ID=" + publicID(job.SessionID),
 		"ORBIT_AGENT_ID=" + publicID(job.AgentID),
@@ -98,7 +104,7 @@ func dshOrbitMCPEnv(job *ClaimedSession) []map[string]string {
 		envWiki + "=" + wikiEnv(job.WikiDisabled),
 		envMCPPermissionPrompt + "=0",
 		envSpawnDepth + "=" + strconv.Itoa(job.SpawnDepth),
-		envMCPCallTimeout + "=" + strconv.Itoa(int(dshMCPToolCallTimeout/time.Second)),
+		envMCPCallTimeout + "=" + strconv.Itoa(int(callTimeout/time.Second)),
 		envRunnerChild + "=1",
 	}
 	// Where the runner's own config lives, so the server authenticates as this runner.
@@ -106,6 +112,8 @@ func dshOrbitMCPEnv(job *ClaimedSession) []map[string]string {
 		pairs = append(pairs, "ORBIT_HOME="+home)
 	}
 	pairs = append(pairs, bgJobEnvPairs(job.SessionID)...)
+	// A managed runner's instance, which `orbit mcp` sends with the runner credential.
+	pairs = append(pairs, managedInstanceEnv()...)
 	env := make([]map[string]string, 0, len(pairs))
 	for _, pair := range pairs {
 		key, value, _ := strings.Cut(pair, "=")

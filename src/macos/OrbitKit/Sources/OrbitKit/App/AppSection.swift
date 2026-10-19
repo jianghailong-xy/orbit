@@ -15,7 +15,9 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
         case .following: return "Following"
         case .agents:   return "Workspaces"
         case .skills:   return "Skills"
-        case .runners:  return "Runners"
+        // Where the agents run and whose quota they spend — the machines, the account pools and the API
+        // keys on one page, as the web's /infrastructure has them since its Runners and Providers merged.
+        case .runners:  return "Infrastructure"
         case .settings: return "Settings"
         case .admin:    return "Admin"
         case .wiki:     return "Wiki"
@@ -42,7 +44,7 @@ public enum AppSection: String, CaseIterable, Sendable, Identifiable {
     /// Admin-area sections are hidden from non-admins (mirrors the web route guard).
     public var adminOnly: Bool { self == .admin }
 
-    /// Sections to show in the nav, in display order. Runners leads; Skills is intentionally omitted
+    /// Sections to show in the nav, in display order. Infrastructure leads; Skills is intentionally omitted
     /// (its detail view still exists but is no longer a top-level destination). Projects sits just
     /// before Tasks — a project is what its tasks are for — and the Wiki, what the work learned,
     /// follows them: the work, then what is known, then the machines. Following, the watches kept on

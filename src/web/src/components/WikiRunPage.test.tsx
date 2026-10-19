@@ -5,7 +5,6 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { App as AntApp } from 'antd';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WikiChangesetView } from '@orbit/shared';
 import { WIKI_DEFAULT_SPACE_SETTINGS } from '@orbit/shared';
@@ -148,7 +147,7 @@ async function render(node: React.ReactNode): Promise<void> {
     root.render(
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <AntApp>{node}</AntApp>
+          {node}
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -187,7 +186,7 @@ describe('one run’s drawer', () => {
     await vi.waitFor(() => expect(container.textContent).toContain('Applied 5 changes'));
     await act(async () => button('Revert run…', container).click());
     await settle();
-    const dialog = document.querySelector<HTMLElement>('.ant-modal-confirm')!;
+    const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]')!;
     expect(dialog.textContent).toContain('Revert this run?');
     expect(dialog.textContent).toContain(
       'The 4 changes it applied are undone: 3 added entries are withdrawn and 1 amended one goes back to its previous revision. Agents stop getting them.',
@@ -207,7 +206,7 @@ describe('one run’s drawer', () => {
     expect([...drawer.querySelectorAll('.tdp-section-title')].map((node) => node.textContent)).toEqual(['Added2', 'Amended1']);
     await act(async () => button('Revert run…', drawer).click());
     await settle();
-    const dialog = document.querySelector<HTMLElement>('.ant-modal-confirm')!;
+    const dialog = document.querySelector<HTMLElement>('[role="alertdialog"]')!;
     expect(dialog.textContent).toContain(
       'The 3 changes it applied are undone: 2 added entries are withdrawn and 1 amended one goes back to its previous revision. Agents stop getting them.',
     );

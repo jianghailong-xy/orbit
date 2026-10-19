@@ -441,7 +441,7 @@ describe('ProjectTasks — narrow rows', () => {
     const layout = css.match(/\.project-task-row-layout\s*\{([^}]*)\}/)?.[1] ?? '';
     const shrinkBoundary =
       css.match(
-        /\.project-task-row-copy,\s*\.project-task-row-meta,\s*\.project-task-row-meta \.ant-list-item-meta-content\s*\{([^}]*)\}/,
+        /\.project-task-row-copy,\s*\.project-task-row-meta,\s*\.project-task-row-meta \.orbit-list-item-meta-content\s*\{([^}]*)\}/,
       )?.[1] ?? '';
     const wrapping =
       css.match(

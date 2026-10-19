@@ -21,6 +21,9 @@ import (
 // they stay reachable by pinning a full `--model` id. Order is picker order (Opus first = default).
 var claudeModelAliases = []string{"opus", "fable", "sonnet", "haiku"}
 
+// claudeProbeDirName is the privateProbeDir every claude the runner starts for itself runs in.
+const claudeProbeDirName = "claude-probe"
+
 func claudeCLIAvailable() bool {
 	_, err := exec.LookPath("claude")
 	return err == nil
@@ -32,6 +35,11 @@ func claudeCLIAvailable() bool {
 // list command, but `claude -p "/model <alias>"` resolves an alias to its friendly name (e.g.
 // "Set model to Opus 5 for this session only"); we derive the api id from that name.
 func fetchClaudeModelCatalog(ctx context.Context) ([]ModelInfo, error) {
+	// Up to twelve CLI starts a round, hourly: never in the directory the runner inherited.
+	cwd, err := privateProbeDir(claudeProbeDirName)
+	if err != nil {
+		return nil, err
+	}
 	// One settings file for the whole round: the fast-lane probe needs it and it says the same
 	// thing for every model. "" when it could not be written, which leaves both capabilities
 	// unknown rather than reporting a fast-less answer the probe could not actually make.
@@ -43,7 +51,7 @@ func fetchClaudeModelCatalog(ctx context.Context) ([]ModelInfo, error) {
 	}
 	models := make([]ModelInfo, 0, len(claudeModelAliases))
 	for i, alias := range claudeModelAliases {
-		name, err := resolveClaudeModelName(ctx, alias)
+		name, err := resolveClaudeModelName(ctx, cwd, alias)
 		if err != nil {
 			return nil, err
 		}
@@ -52,12 +60,12 @@ func fetchClaudeModelCatalog(ctx context.Context) ([]ModelInfo, error) {
 		}
 		priority := i
 		id := claudeModelID(name)
-		caps := fetchClaudeModelCapabilities(ctx, id, settings)
+		caps := fetchClaudeModelCapabilities(ctx, cwd, id, settings)
 		models = append(models, ModelInfo{
 			Value:           id,
 			Label:           name,
 			Priority:        &priority,
-			ContextWindow:   fetchClaudeContextWindow(ctx, id),
+			ContextWindow:   fetchClaudeContextWindow(ctx, cwd, id),
 			PermissionModes: caps.permissionModes,
 			FastMode:        caps.fastMode,
 		})
@@ -99,13 +107,13 @@ type claudeModelCapabilities struct {
 //
 // Everything is best effort: a failed spawn, an older CLI that has no `/fast`, changed wording —
 // all leave the field nil, and nil keeps the clients on their fallback for that model.
-func fetchClaudeModelCapabilities(ctx context.Context, model, settings string) claudeModelCapabilities {
+func fetchClaudeModelCapabilities(ctx context.Context, dir, model, settings string) claudeModelCapabilities {
 	if settings == "" {
 		return claudeModelCapabilities{}
 	}
 	cctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(
+	cmd := exec.CommandContext(
 		cctx,
 		"claude",
 		"-p",
@@ -122,7 +130,9 @@ func fetchClaudeModelCapabilities(ctx context.Context, model, settings string) c
 		"--model",
 		model,
 		"/fast",
-	).Output()
+	)
+	cmd.Dir = dir
+	out, err := cmd.Output()
 	if err != nil {
 		return claudeModelCapabilities{}
 	}
@@ -211,10 +221,10 @@ func claudeModelPermissionModes(auto bool) []string {
 // Returns 0 for anything it can't read (an older CLI, a changed layout, a model this install
 // won't accept). 0 travels as "no reading" all the way to the gauge, which then shows the token
 // count without a percentage — a missing number beats a fabricated one.
-func fetchClaudeContextWindow(ctx context.Context, model string) int {
+func fetchClaudeContextWindow(ctx context.Context, dir, model string) int {
 	cctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(
+	cmd := exec.CommandContext(
 		cctx,
 		"claude",
 		"-p",
@@ -224,7 +234,9 @@ func fetchClaudeContextWindow(ctx context.Context, model string) int {
 		"--model",
 		model,
 		"/context",
-	).CombinedOutput()
+	)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return 0
 	}
@@ -259,12 +271,12 @@ func parseContextWindow(out []byte) int {
 	return int(math.Round(n))
 }
 
-func resolveClaudeModelName(ctx context.Context, alias string) (string, error) {
+func resolveClaudeModelName(ctx context.Context, dir, alias string) (string, error) {
 	cctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	// Recent Claude Code versions resolve `/model` client-side. Any unsupported/failed invocation
 	// is treated as a catalog refresh failure, leaving the runner's previous catalog untouched.
-	out, err := exec.CommandContext(
+	cmd := exec.CommandContext(
 		cctx,
 		"claude",
 		"-p",
@@ -272,7 +284,9 @@ func resolveClaudeModelName(ctx context.Context, alias string) (string, error) {
 		"--setting-sources",
 		"user",
 		"/model "+alias,
-	).CombinedOutput()
+	)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", err
 	}

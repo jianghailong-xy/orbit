@@ -172,6 +172,11 @@ const ALLOWED_READERS: Readonly<Record<string, string>> = {
   // decides is still the decision door's, and no project provenance is read.
   'src/apiserver/src/tasks/evidence-review.ts':
     'names the run that submitted a completion-evidence revision; reads no task project provenance',
+  // The same unit's delivery half: a recorded SEND_BACK's note is handed to the run named on the
+  // revision — the one session that must act on it. It addresses a message with the value, decides
+  // nothing by it, and reads no task project provenance.
+  'src/apiserver/src/tasks/evidence-review.service.ts':
+    'delivers a send-back note to the run named on the revision; reads no task project provenance',
   'src/apiserver/src/tasks/pending-evidence-judgments.ts':
     'places an evidence card in the run that submitted it; reads no task project provenance',
   'src/apiserver/src/tasks/task-signoff-migration.cli.ts':

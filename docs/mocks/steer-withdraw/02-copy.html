@@ -1,0 +1,121 @@
+<!doctype html>
+<!-- Copy review for the line under a message sent into a running turn (a steer). Decided 2026-10-16: 按推荐落地. Every cell is cut from the real
+     session page (vite + src/web/ui-migration fixtures, 2x): 现在 is the page as it renders today for that delivery
+     state; 建议 is the same DOM with the proposed words written in (same classes, same link). Kit:
+     /var/tmp/steer-withdraw-mock (copy.mjs inside run-ns.sh, gen_copy.py, render.mjs). -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>消息下面那一行的文案</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1500px; }
+  .en { font-family: -apple-system, "Inter", sans-serif; }
+  .ui { font-family: -apple-system, "Inter", sans-serif; font-size: 12px; padding: 0 5px; border-radius: 4px; background: #f0f2f5; color: var(--text-1); white-space: nowrap; }
+  .m-sub code, .why code, .notes code { font-size: 11.5px; }
+  .copy { border-collapse: collapse; width: 100%; font-size: 12.5px; line-height: 1.7; }
+  .copy th, .copy td { border: 1px solid #dde0e6; padding: 8px 12px; text-align: left; vertical-align: middle; }
+  .copy th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .copy td.when { width: 190px; color: var(--text-1); font-weight: 600; }
+  .copy td.when span { display: block; font-weight: 400; color: var(--text-3); font-size: 12px; }
+  .copy td.cell { width: 380px; padding: 6px 8px; background: #fff; }
+  .copy td.cell img { display: block; width: 380px; }
+  .copy td.none { color: var(--text-4); text-align: center; }
+  .copy td.same { color: var(--text-3); text-align: center; }
+  .copy tr.main td { background: #fffaf0; }
+  .copy tr.main td.cell { background: #fff; box-shadow: inset 0 0 0 2px var(--warning-solid); }
+  .why { color: var(--text-2); }
+  .why b { color: var(--text-1); }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 4px; margin-right: 6px; }
+  .tag.chg { background: #fff1e8; color: #c2410c; }
+  .tag.add { background: var(--brand-tint); color: var(--brand-strong); }
+  .tag.keep { background: #eef0f3; color: #5b6270; }
+  .notes { margin: 18px 0 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; }
+  .notes ul { margin: 0; padding: 12px 16px 12px 32px; background: #f5f6f8; border-radius: 8px; font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .notes li + li { margin-top: 6px; }
+  .notes b { color: var(--text-1); }
+  .notes h3 { font-size: 12.5px; font-weight: 600; color: var(--text-2); margin: 0 0 8px; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <h1 class="m-h1 zh">消息下面那一行的文案（<span class="en">Delivering…</span> 合不合适）</h1>
+  <p class="m-sub zh" style="line-height:1.8"><b>已定（2026-10-16）：按推荐落地</b>，Web、iOS / macOS、Android 三份词表一起改。结论：<b><span class="en">Delivering…</span> 不合适</b>。这时消息已经到了 Claude 那里，只是在等它做完手上这一步再读；「-ing…」说的却是「还在路上」，一停几分钟就像卡住了，旁边再放 <span class="ui">Withdraw</span> 也会读成「取消投递」。大家熟悉的是聊天软件的回执：<b>发送中 → 已送达（未读）→ 已读</b>，这一行照这个顺序改，三处要动，其余不变。每一格都是真实页面截的（右下角是你那条消息的气泡），「建议」是把新文案写进同一个页面。</p>
+
+  <div class="m-stage">
+    <table class="copy zh">
+      <tr><th>消息走到哪</th><th>现在</th><th>建议</th><th>为什么</th></tr>
+      <tr>
+        <td class="when">还在路上<span>Orbit 收下了，还没交给引擎；通常不到一秒</span></td>
+        <td class="cell"><img src="02-sending-now.png" alt=""></td>
+        <td class="cell"><img src="02-sending-new.png" alt=""></td>
+        <td class="why"><span class="tag keep">不变</span>只是后面加了 <span class="ui">Withdraw</span>。</td>
+      </tr>
+      <tr class="main">
+        <td class="when">到了，模型还没读<span>Claude 在跑工具，等这一步结束才读；可能几分钟</span></td>
+        <td class="cell"><img src="02-written-now.png" alt=""></td>
+        <td class="cell"><img src="02-written-new.png" alt=""></td>
+        <td class="why"><span class="tag chg">改</span><b>主要问题。</b>消息已经到了，缺的是「被读到」。<span class="en">Waiting to be read</span> 说清楚两件事：没丢，在排队等着被读。不写「什么时候读」：这一轮可能先结束，那时它改成下一轮单独跑，写了时间就成了空话。</td>
+      </tr>
+      <tr>
+        <td class="when">正在撤回<span>新增的状态</span></td>
+        <td class="none">—</td>
+        <td class="cell"><img src="02-withdrawing-new.png" alt=""></td>
+        <td class="why"><span class="tag add">新增</span>链接消失，不能重复点。</td>
+      </tr>
+      <tr>
+        <td class="when">模型读到了<span>已经进了这一轮，这一轮的回复会照顾到它</span></td>
+        <td class="cell"><img src="02-acknowledged-now.png" alt=""></td>
+        <td class="cell"><img src="02-acknowledged-new.png" alt=""></td>
+        <td class="why"><span class="tag chg">改</span>在聊天软件里 <span class="en">Sent</span>（已发出）比 <span class="en">Delivered</span>（已送达）还早，原来 Sending → Delivering → <span class="en">Sent</span> 是倒着走的。你真正关心的是「它看到没有」，所以用 <span class="en">Read</span>；<span class="en">in this turn</span> 保留：这条没有自己的回复，回复在这一轮里。</td>
+      </tr>
+      <tr>
+        <td class="when">没赶上这一轮<span>这一轮先结束了，改成下一轮单独跑</span></td>
+        <td class="cell"><img src="02-requeued-now.png" alt=""></td>
+        <td class="same">不变</td>
+        <td class="why"><span class="tag keep">不变</span>说得准确：没丢，换到下一轮。</td>
+      </tr>
+      <tr>
+        <td class="when">没送到<span>引擎没拿到，或者没读就结束了</span></td>
+        <td class="cell"><img src="02-failed-now.png" alt=""></td>
+        <td class="same">不变</td>
+        <td class="why"><span class="tag keep">不变</span><span class="en">Not delivered</span> 是最常见的失败说法；具体原因在提示里（<span class="en">The turn finished before it was read.</span> 这类句子本来就用 <span class="en">read</span>，和新文案一致）。</td>
+      </tr>
+      <tr>
+        <td class="when">不知道读没读<span>引擎还没回显就退出了</span></td>
+        <td class="cell"><img src="02-unconfirmed-now.png" alt=""></td>
+        <td class="cell"><img src="02-unconfirmed-new.png" alt=""></td>
+        <td class="why"><span class="tag chg">改</span>不确定的不是「送没送到」（已经送到了），而是「读没读」。语气保持中性，不催你重发：它可能已经照做了，重发会做两遍。</td>
+      </tr>
+      <tr>
+        <td class="when">撤回时来不及<span>窗口右上角的提示</span></td>
+        <td class="none">—</td>
+        <td class="cell"><img src="02-toast-new.png" alt="" style="width:245px"></td>
+        <td class="why"><span class="tag add">新增</span>和 <span class="en">Read in this turn</span> 用同一个词。原稿 <span class="en">Claude had already read this message.</span> 改成现在时，也更短。</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="notes zh">
+    <div>
+      <h3>撤回相关的其他文案</h3>
+      <ul>
+        <li><b><span class="ui">Withdraw</span>，不用 <span class="ui">Cancel</span></b>：排队消息的 <span class="ui">Cancel</span> 是「还在 Orbit 手里，取消发送」；这条已经交给 Claude，是「拿回来」，和你说的「撤回」一个意思。动作的结果一样：文字回到输入框。</li>
+        <li><b>方案 B 留的那一行</b>：<span class="ui">You withdrew a message</span>（同微信「你撤回了一条消息」）。</li>
+        <li><b>撤回失败</b>：<span class="ui">Couldn't withdraw</span>，下面一行写原因，例如 <span class="ui">The runner didn't respond.</span>。</li>
+        <li><b>服务器的拒绝原因</b>（API、CLI、MCP 会原样看到）：现在是 <span class="en">this message is being written into the running turn and can no longer be withdrawn</span>，改成按引擎说：<span class="en">Claude has already read this message, so it can no longer be withdrawn.</span> / <span class="en">Codex already has this message and can't give it back.</span></li>
+      </ul>
+    </div>
+    <div>
+      <h3>不动的和要动的</h3>
+      <ul>
+        <li><b>不动</b>：Android 发送后的提示 <span class="ui">Sent to the current turn.</span>，这里的 <span class="en">Sent</span> 正是「已发出」，和新顺序对得上；Watch 卡片上的 <span class="ui">Delivering</span>，那是唤醒在送往会话的路上，确实在路上。</li>
+        <li><b>一起变</b>：后台任务完成、写进当前回合的那一行用的是同一套词（<span class="en">Delivering…</span> → <span class="en">Waiting to be read</span>）。</li>
+        <li><b>要改的地方</b>：同一张表有三份：Web <code>lib/steerDelivery.ts</code>、iOS/macOS <code>SteerDelivery.swift</code>、Android <code>BackgroundWakeCard.kt</code>，有对拍测试钉着两端一致；加上 Web 排队区里的 <code>Delivery could not be confirmed</code>（<code>WorkspaceView.tsx</code>），以及各自的测试。服务器和 runner 内部的状态名（<code>written</code>、<code>acknowledged</code>）不用改。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+</body>
+</html>

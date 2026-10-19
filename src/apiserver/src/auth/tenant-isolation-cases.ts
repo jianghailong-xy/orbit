@@ -111,7 +111,7 @@ export interface Tenant {
   wikiArticlePart: number;
   wikiDocSlug: string;
   wikiTopicSlug: string;
-  /** For /admin/*: a user an administrator acts on, one of its tokens, a global provider. */
+  /** For /admin/*: a user an administrator acts on (with a profile photo), one of its tokens, a global provider. */
   adminSubjectId: string;
   adminSubjectTokenId: string;
   adminProviderId: string;
@@ -209,14 +209,25 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
 
   // ── admin/*: an administrator acts on other accounts by design; a member is refused ─────────────
   'GET /admin/users/:id/access-tokens': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  // The subject has a profile photo: the administrator is answered its bytes.
+  'GET /admin/users/:id/avatar': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  // Before the role and disabled cases below: the subject is still an enabled member, whom an administrator may view.
+  'POST /admin/users/:id/impersonate': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { reason: 'the census' } }) },
   'DELETE /admin/users/:id/access-tokens/:tokenId': {
     request: (of) => ({ params: { id: of.adminSubjectId, tokenId: of.adminSubjectTokenId } }),
   },
   'DELETE /admin/users/:id': { request: (of) => ({ params: { id: of.spare.adminSubjectId } }) },
   'PATCH /admin/users/:id/role': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { role: 'ADMIN' } }) },
+  // The subject is enabled, and an administrator besides it is too: the administrator disables it.
+  'PATCH /admin/users/:id/disabled': { request: (of) => ({ params: { id: of.adminSubjectId }, body: { disabled: true } }) },
   // The subject has no Google account linked: the administrator is answered its sign-in methods as they are.
   'DELETE /admin/users/:id/identities/google': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
   'PATCH /admin/providers/:id': { request: (of) => ({ params: { id: of.adminProviderId }, body: { label: 'renamed by the census' } }) },
+  // The wiki's support routes (contract `plan.jobs.rebuild.support`): the member's spaces read, and the administrator's
+  // own space's build asked for — answered WIKI_RUNNER_EXECUTES under the census's default executor, and refused 403
+  // to a member either way.
+  'GET /admin/wiki/users/:id/spaces': { request: (of) => ({ params: { id: of.adminSubjectId } }) },
+  'POST /admin/wiki/spaces/:id/plan/build': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: { reason: 'the census' } }) },
   'DELETE /admin/providers/:id': { request: (of) => ({ params: { id: of.spare.adminProviderId } }) },
 
   // ── workspaces, under both of their names ────────────────────────────────────────────────────
@@ -362,6 +373,10 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
 
   // ── providers: the account's own, its pools, and the pools it shares with others ───────────────
   'GET /providers/mine/:id/key': { request: (of) => ({ params: { id: of.providerId } }) },
+  'GET /providers/mine/:id/balance': { request: (of) => ({ params: { id: of.providerId } }) },
+  'GET /providers/mine/:id/usage': { request: (of) => ({ params: { id: of.providerId } }) },
+  // The account's own key is no Cursor key: it is answered that, which no key of anybody else's is.
+  'POST /providers/mine/:id/key-check': { request: (of) => ({ params: { id: of.providerId } }) },
   'PATCH /providers/mine/:id': { request: (of) => ({ params: { id: of.providerId }, body: { label: 'renamed by the census' } }) },
   'DELETE /providers/mine/:id': { request: (of) => ({ params: { id: of.spare.providerId } }) },
   'GET /providers/pools/:id': { request: (of) => ({ params: { id: of.poolId } }) },
@@ -475,10 +490,15 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /sessions/:id/worktree-file': { request: (of) => ({ params: { id: of.sessionId }, query: { path: 'census.txt' } }) },
   'GET /sessions/:id/diff': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/diff/refresh': { request: (of) => ({ params: { id: of.sessionId } }) },
+  'POST /sessions/:id/recap': { request: (of) => ({ params: { id: of.sessionId } }) },
   'POST /sessions/:id/turns': { request: (of) => ({ params: { id: of.sessionId }, body: turn('turn') }) },
   'POST /sessions/:id/turns/current-work-routing': { request: (of) => ({ params: { id: of.sessionId }, body: turn('routed') }) },
   'GET /sessions/:id/turns': { request: (of) => ({ params: { id: of.sessionId } }) },
   'DELETE /sessions/:id/turns/:turnId': {
+    request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
+    nested: ['turnId'],
+  },
+  'POST /sessions/:id/turns/:turnId/steer': {
     request: (of) => ({ params: { id: of.sessionId, turnId: of.turnId } }),
     nested: ['turnId'],
   },
@@ -620,6 +640,7 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /wiki/spaces/:id/entries': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/timeline': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/health': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
+  'GET /wiki/spaces/:id/jobs': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/topics/:slug': { request: (of) => ({ params: { id: of.wikiSpaceId, slug: of.wikiTopicSlug } }) },
   'POST /wiki/spaces/:id/changesets': {
     request: (of) => ({
@@ -640,6 +661,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'GET /wiki/spaces/:id/docs': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/doc-index': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/docs/:slug': { request: (of) => ({ params: { id: of.wikiSpaceId, slug: of.wikiDocSlug } }) },
+  'GET /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
+  'PUT /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
+  'DELETE /wiki/spaces/:id/share': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/plan': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/plan/versions': { request: (of) => ({ params: { id: of.wikiSpaceId } }) },
   'GET /wiki/spaces/:id/plan/versions/:version': {
@@ -647,6 +671,11 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   },
   'POST /wiki/spaces/:id/plan/versions/:version/confirm': {
     request: (of) => ({ params: { id: of.wikiSpaceId, version: of.wikiPlanVersion }, body: {} }),
+  },
+  // The version in force (1, the census's confirmed one): the owner is answered WIKI_RUNNER_EXECUTES under the default
+  // executor, never a 404.
+  'POST /wiki/spaces/:id/plan/versions/:version/build': {
+    request: (of) => ({ params: { id: of.wikiSpaceId, version: 1 }, body: {} }),
   },
   'POST /wiki/spaces/:id/plan/edits': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
   'POST /wiki/spaces/:id/plan/redraft': { request: (of) => ({ params: { id: of.wikiSpaceId }, body: {} }) },
@@ -859,6 +888,11 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
         workspaceId: of.workspaceId,
       },
     }),
+  },
+  // Two different runners, so B's own request is a reorder the route answers, not a duplicate
+  // `@ArrayUnique` refuses.
+  'POST /runners/reorder body ids[]': {
+    request: (of, mine) => ({ params: {}, body: { ids: [mine.runnerId, of.spare.runnerId] } }),
   },
 
   // ── sessions ─────────────────────────────────────────────────────────────────────────────────

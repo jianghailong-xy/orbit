@@ -104,6 +104,10 @@ type HeartbeatRequest struct {
 	// beat once the startup update has looked, so the control plane can tell a runner too old to
 	// report it — which omits it — from one that reports.
 	SelfUpdate *SelfUpdateReport `json:"selfUpdate,omitempty"`
+	// ManagedWorkload is what a managed instance is doing (managed_sleep.go). Only a managed instance
+	// sends it; the control plane stores it only from the instance its manager authorized, and puts
+	// nothing to sleep without a fresh one.
+	ManagedWorkload *ManagedWorkload `json:"managedWorkload,omitempty"`
 }
 
 // SelfUpdateReport mirrors @orbit/shared RunnerSelfUpdate: whether this runner can replace itself
@@ -204,6 +208,9 @@ type EngineAccountReport struct {
 	// clients warn about ahead of time as Claude Code does. Omitted where the CLI recorded none.
 	// Claude only.
 	LoginExpiresAt string `json:"loginExpiresAt,omitempty"`
+	// The site this account's login is on, "mainland-cn" (kimi.com) or "global" (kimi.ai); omitted
+	// when it has none (kimi_region.go). Kimi only: the engine's own kimiRegion stays Default's.
+	KimiRegion string `json:"kimiRegion,omitempty"`
 }
 
 // EngineUpdateReport is the updater's last word on one engine, carried alongside that engine's
@@ -303,6 +310,7 @@ type ModelCatalog struct {
 	OpenCode    []ModelInfo `json:"opencode,omitempty"`
 	Antigravity []ModelInfo `json:"antigravity,omitempty"`
 	Dsh         []ModelInfo `json:"dsh,omitempty"`
+	Cursor      []ModelInfo `json:"cursor,omitempty"`
 }
 
 type ModelInfo struct {
@@ -323,6 +331,25 @@ type ModelInfo struct {
 	// Whether this model has the runtime's fast lane. A pointer for the same reason: nil is "could
 	// not say" and false is "asked, and it does not", which the clients must tell apart.
 	FastMode *bool `json:"fastMode,omitempty"`
+	// Every setting the model takes beside its name, as the runtime lists them: Cursor CLI's effort,
+	// context size, fast lane and thinking (cursor_models.go). Absent for a runtime that lists none.
+	Parameters []ModelParameter `json:"parameters,omitempty"`
+}
+
+// ModelParameter is one setting a model takes, with the values it accepts and the one it starts on.
+// ID is what selects it, and is the model's own: one model's effort is `effort`, another's
+// `reasoning_effort`.
+type ModelParameter struct {
+	ID       string                `json:"id"`
+	Label    string                `json:"label"`
+	Category string                `json:"category,omitempty"`
+	Default  string                `json:"default,omitempty"`
+	Values   []ModelParameterValue `json:"values"`
+}
+
+type ModelParameterValue struct {
+	Value string `json:"value"`
+	Label string `json:"label"`
 }
 
 type HeartbeatResponse struct {
@@ -399,6 +426,81 @@ type HeartbeatResponse struct {
 	// named here is nobody else's to do. Nil from older control planes and whenever this beat
 	// claimed nothing; nothing acts on it until this binary declares integration-job/v1.
 	IntegrationJobs []IntegrationJobCommand `json:"integrationJobs,omitempty"`
+	// Repository operations this process has just claimed: the wiki's pipelines run on the server,
+	// which holds no repository, so a step that needs to know what the repository says asks this
+	// machine (docs/wiki-server-execution-design.md §7). Each entry is already RUNNING in the
+	// control plane, claimed for this leaseOwner. At most two per beat. Nil from older control
+	// planes and whenever this beat claimed nothing; nothing acts on it until this binary declares
+	// wiki-repo-op/v1.
+	WikiRepoOps []WikiRepoOpCommand `json:"wikiRepoOps,omitempty"`
+	// Cursor API keys somebody is waiting to have checked, each handed over once (cursor_key_check.go).
+	// Nil from older control planes, and from any that has not heard this binary declare
+	// cursor-key-check/v1.
+	CursorKeyChecks []CursorKeyCheckCommand `json:"cursorKeyChecks,omitempty"`
+	// ManagedSleep: the manager is draining this managed instance to sleep (managed_sleep.go). Nil
+	// from older control planes and for every other runner; nothing acts on it unless this process is
+	// a managed instance.
+	ManagedSleep *ManagedSleepRequest `json:"managedSleep,omitempty"`
+}
+
+// WikiRepoOpCommand mirrors @orbit/shared: one claimed repository operation — what to read, at which
+// commit, in which checkout, under the lease its result is fenced to (contract `repoOps`, design §7).
+type WikiRepoOpCommand struct {
+	ID   string `json:"id"`
+	Kind string `json:"kind"`
+	// Echoed back on every renewal, fragment and result; a write under a generation that has moved is
+	// refused STALE_CLAIM, which is how a takeover retires the process it took over from.
+	ClaimGeneration int64  `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+	// The checkout to read, as the workspace stores it; `~` is expanded here.
+	WorkDir string `json:"workDir"`
+	// The space's repository as it is recorded, for the check every operation makes before it reads.
+	RepoURLNorm   string `json:"repoUrlNorm"`
+	RootCommitSha string `json:"rootCommitSha"`
+	// What the kind reads: a read's items, a diff's two commits, a snapshot's skip sha.
+	Input map[string]interface{} `json:"input"`
+}
+
+// WikiRepoOpProgressRequest is the lease renewal of a long operation (POST
+// /runner/wiki/repo-ops/:id/progress).
+type WikiRepoOpProgressRequest struct {
+	ClaimGeneration int64  `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+}
+
+// WikiRepoOpFragmentRequest carries one piece of a snapshot too large for one request body (POST
+// /runner/wiki/repo-ops/:id/fragments). The server reassembles the pieces by ordinal, hashes the whole
+// and compares it with the digest the result names.
+type WikiRepoOpFragmentRequest struct {
+	ClaimGeneration int64  `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+	Sha             string `json:"sha"`
+	Index           int    `json:"index"`
+	Total           int    `json:"total"`
+	Content         string `json:"content"`
+}
+
+// WikiRepoOpFragmentResponse is the running count of staged pieces; informational, never a receipt.
+type WikiRepoOpFragmentResponse struct {
+	Accepted bool `json:"accepted"`
+	Received int  `json:"received"`
+}
+
+// WikiRepoOpResultRequest is what one repository operation came to (POST
+// /runner/wiki/repo-ops/:id/result).
+type WikiRepoOpResultRequest struct {
+	ClaimGeneration int64                  `json:"claimGeneration"`
+	LeaseOwner      string                 `json:"leaseOwner"`
+	State           string                 `json:"state"`
+	Result          map[string]interface{} `json:"result,omitempty"`
+	Error           string                 `json:"error,omitempty"`
+}
+
+// WikiRepoOpResultResponse says whether the result was taken; a 409 means this process's claim had
+// already moved on and it must stop.
+type WikiRepoOpResultResponse struct {
+	Accepted bool   `json:"accepted"`
+	State    string `json:"state"`
 }
 
 // IntegrationJobCommand mirrors @orbit/shared: one claimed integration job, carrying everything
@@ -483,6 +585,19 @@ type IntegrationUpstreamMoved struct {
 	Commits int `json:"commits,omitempty"`
 }
 
+// IntegrationJobReleaseRequest hands a claimed job back (§2.2 J-T11): the claim it gives up.
+type IntegrationJobReleaseRequest struct {
+	ClaimGeneration string `json:"claimGeneration"`
+	LeaseOwner      string `json:"leaseOwner"`
+}
+
+// IntegrationJobReleaseResponse says whether the job went back to the queue; when it did not, State is
+// what it ended as instead (CANCELLED: somebody had asked it to stop).
+type IntegrationJobReleaseResponse struct {
+	Released bool   `json:"released"`
+	State    string `json:"state"`
+}
+
 // IntegrationJobResultRequest is what the job came to, with everything a reader needs to check
 // that what landed is what was tested.
 type IntegrationJobResultRequest struct {
@@ -501,12 +616,16 @@ type IntegrationJobResultRequest struct {
 	AheadOfUpstream *int   `json:"aheadOfUpstream,omitempty"`
 	// With NOTHING_TO_LAND: whether the source tip is an ancestor of the upstream, as this runner
 	// measured it. Absent on every other answer, which the control plane reads as "not measured".
-	SourceOnUpstream *bool                    `json:"sourceOnUpstream,omitempty"`
-	FilesChanged     *int                     `json:"filesChanged,omitempty"`
-	Checks           []IntegrationCheckResult `json:"checks,omitempty"`
-	Conflicts        []string                 `json:"conflicts,omitempty"`
-	ErrorCode        string                   `json:"errorCode,omitempty"`
-	ErrorDetail      map[string]any           `json:"errorDetail,omitempty"`
+	SourceOnUpstream *bool `json:"sourceOnUpstream,omitempty"`
+	// With NOTHING_TO_LAND: true when the branch carried commits of its own and the rebase found every
+	// one of them already in the base, false when it carried none. Absent on every other answer, and
+	// from an older runner, which the control plane reads as "not measured".
+	SourceFullyApplied *bool                    `json:"sourceFullyApplied,omitempty"`
+	FilesChanged       *int                     `json:"filesChanged,omitempty"`
+	Checks             []IntegrationCheckResult `json:"checks,omitempty"`
+	Conflicts          []string                 `json:"conflicts,omitempty"`
+	ErrorCode          string                   `json:"errorCode,omitempty"`
+	ErrorDetail        map[string]any           `json:"errorDetail,omitempty"`
 }
 
 // IntegrationJobResultResponse is the control plane's answer: whether it took the result.
@@ -630,6 +749,12 @@ type LoginResultRequest struct {
 	// The Codex account being signed in. For a new account this is the slot the runner just
 	// added, which is how the control plane learns its id.
 	Account string `json:"account,omitempty"`
+	// With URL: when that link stops working, RFC 3339 — Cursor CLI's, the time `agent login` is sure to
+	// wait on it (cursorLoginLinkLifetime). Omitted where the CLI's link has no such time.
+	ExpiresAt string `json:"expiresAt,omitempty"`
+	// With a failure: why, when a client answers it differently from any other — loginReasonExpired, the
+	// link running out before anyone signed in with it. Omitted for every other failure.
+	Reason string `json:"reason,omitempty"`
 }
 
 // MergeCommand mirrors @orbit/shared: a request to merge one session's worktree branch into
@@ -668,6 +793,14 @@ type ImportResultRequest struct {
 	Ok         bool   `json:"ok,omitempty"`
 	Error      string `json:"error,omitempty"`
 	Title      string `json:"title,omitempty"`
+}
+
+// SessionNamingRequest reports the title an engine gave its session. Replaces is the title the
+// claim carried: the control plane renames the session only while it still reads exactly that, so
+// a rename the person made in the meantime stands.
+type SessionNamingRequest struct {
+	Replaces string `json:"replaces"`
+	Title    string `json:"title"`
 }
 
 // ImportResultResponse is the control plane's receipt: applied=false on a replayed ok (the
@@ -858,10 +991,15 @@ type AgentExecConfig struct {
 	// FastMode asks Claude Code for its fast lane — the same thing `/fast` turns on
 	// interactively. Unlike Effort it is not a flag: it is a settings key, and one the
 	// engine reads once at startup (claude_spawn.go), so it moves only across a re-spawn.
-	FastMode     bool                   `json:"fastMode"`
-	MaxTurns     *int                   `json:"maxTurns"`
-	MaxBudgetUsd *float64               `json:"maxBudgetUsd"`
-	McpConfig    map[string]interface{} `json:"mcpConfig"`
+	FastMode bool `json:"fastMode"`
+	// PromptSuggestions asks Claude Code to predict the person's next message after each turn
+	// (`--prompt-suggestions`), which this runner files as a prompt_suggestion event. The
+	// control plane decides it per session; absent is off, so an older control plane never turns
+	// it on. A spawn flag like FastMode's settings key: it moves only across a re-spawn.
+	PromptSuggestions bool                   `json:"promptSuggestions,omitempty"`
+	MaxTurns          *int                   `json:"maxTurns"`
+	MaxBudgetUsd      *float64               `json:"maxBudgetUsd"`
+	McpConfig         map[string]interface{} `json:"mcpConfig"`
 	// Custom env vars injected into the coding-engine process.
 	Env map[string]string `json:"env"`
 }
@@ -952,10 +1090,22 @@ type ClaimedSession struct {
 	// was created and nothing runs in the workDir; runSessionProcess ends the run FAILED with it
 	// instead of starting an engine. Runner-internal.
 	SourceRefusal *SourcePinRefusal `json:"-"`
-	// WikiMaintenance is present on a Wiki maintenance session only: the run it is pinned to and started
-	// clean for (wiki_maintenance_session.go). A runner is handed one only once it declares
-	// wiki-maintenance-run/v1.
-	WikiMaintenance *WikiMaintenanceRun `json:"wikiMaintenance,omitempty"`
+	// Naming asks this runner to name the session through the engine running it, once its opening
+	// turn is underway (session_naming.go). The control plane sends it only while the session still
+	// carries the title cut from its prompt, it holds no key it could name the session with itself,
+	// and the engine has a way to answer from inside the process already running — Claude Code's
+	// generate_session_title, a Codex side thread. Absent from an older control plane, which names
+	// sessions itself or not at all.
+	Naming *SessionNamingJob `json:"naming,omitempty"`
+}
+
+// SessionNamingJob is what to name a session by. Description is the session's opening request,
+// already bounded; Instructions is Orbit's naming prompt, for an engine that takes a prompt of
+// Orbit's — the Codex side thread. Claude Code's generate_session_title brings a prompt of its own
+// and reads Description alone.
+type SessionNamingJob struct {
+	Description  string `json:"description"`
+	Instructions string `json:"instructions"`
 }
 
 // SessionSource is the frozen SOURCE snapshot: the INTENT (which repository, which line), frozen
@@ -1137,8 +1287,6 @@ type ReclaimSession struct {
 	// Source, cf. ClaimedSession.Source. On reclaim it is read, never re-derived (SR29): a session
 	// already PINNED comes back on the SHA its first claim froze.
 	Source *SessionSource `json:"source,omitempty"`
-	// WikiMaintenance, cf. ClaimedSession.WikiMaintenance: a restarted runner starts the run clean again.
-	WikiMaintenance *WikiMaintenanceRun `json:"wikiMaintenance,omitempty"`
 }
 
 type ReclaimResponse struct {
@@ -1384,6 +1532,9 @@ const (
 	// Interactive sessions (Route B)
 	evUser    = "user"
 	evTurnEnd = "turn_end"
+	// What the person will probably type next, predicted by Claude Code after a turn ended
+	// (claude_prompt_suggestion.go). Durable, and filed against the turn it follows.
+	evPromptSuggestion = "prompt_suggestion"
 	// How far a user message got on its way into the engine's conversation: enqueued ->
 	// written -> acknowledged, or failed with a reason (claude_delivery.go). The `user`
 	// event that opens a turn carries its own first state; this reports every one after.

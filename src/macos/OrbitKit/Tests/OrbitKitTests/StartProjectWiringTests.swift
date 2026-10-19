@@ -81,6 +81,16 @@ final class StartProjectWiringTests: XCTestCase {
                        "and not off Automatic, which is how a started project runs")
         XCTAssertTrue(console.contains("projectEscalationSeconds = document.exceptionEscalationSeconds ?? projectEscalationSeconds"),
                       "the escalation window the card quotes is read off the same document")
+        // The main branch is read before the card is delivered, so it never opens on main and then
+        // moves to the branch the read names (web's card waits for the same read).
+        let read = try XCTUnwrap(refresh.range(of: "startIntegration = integration"))
+        let adopted = try XCTUnwrap(refresh.range(of: "adoptStartRequest()"))
+        XCTAssertLessThan(read.lowerBound, adopted.lowerBound)
+        XCTAssertTrue(refresh.contains("if StartProject.live(openItems: openItems, started: projectStarted) != nil,"),
+                      "and only while a start is asked for")
+        let draft = code(try section(console, from: "func startDraft(for row: ProjectOpenItemRow) -> StartSettingsDraft {",
+                                     to: "\n    func setStartDraft("))
+        XCTAssertTrue(draft.contains("return StartSettingsDraft(request.settings, standing: startIntegration)"))
     }
 
     func testTheChangeCardIsDeliveredForAStartedProjectWhoseServerSaysWhatMoved() throws {
@@ -176,8 +186,25 @@ final class StartProjectWiringTests: XCTestCase {
         XCTAssertTrue(start.contains("Menu {"), "Tasks land on is picked from a menu")
         XCTAssertTrue(start.contains("Toggle(isOn: lineBinding(.projectBranch, draft))"))
         XCTAssertTrue(start.contains("Toggle(isOn: lineBinding(.main, draft))"))
+        XCTAssertTrue(start.contains("Text(RunSettings.lineMain(draft.main))"),
+                      "Directly into the main branch on the card")
+        // Main branch (board ① ② ⑥ ⑦): under the line, only with a branch to name, picked on the
+        // shared sheet, saying where its branch came from while it is the repository's last choice.
+        XCTAssertTrue(start.contains("if let upstream = draft.upstream {"))
+        XCTAssertTrue(start.contains("mainBranchRow(upstream, editable: editable)"))
+        XCTAssertTrue(start.contains("RunSettings.lastChoiceNote(upstream: upstream, lastMainBranch: lastMainBranch)"))
+        XCTAssertTrue(start.contains("MainBranchPicker(current: upstream, branches: branches,"))
+        XCTAssertTrue(start.contains("update { $0.upstream = name }"))
+        XCTAssertTrue(start.contains("branches: console.startIntegration?.branches,"),
+                      "the conversation's card offers the branches the integration read reported")
+        XCTAssertTrue(start.contains("lastMainBranch: console.startIntegration?.lastMainBranch,"))
         XCTAssertTrue(start.contains("Text(RunSettings.automaticSays(automatic: draft.automatic, line: draft.line,"),
                       "the Automatic sentence follows the switch and the line chosen")
+        XCTAssertTrue(start.contains("hasMergeCheck: draft.hasMergeCheck, main: draft.main))"),
+                      "and names the main branch on the card")
+        XCTAssertTrue(start.contains("escalationSeconds: escalationSeconds, main: draft.main)"),
+                      "and so does what still comes to the owner")
+        XCTAssertTrue(start.contains("Text(RunSettings.mergeCheckHint(draft.main))"))
         XCTAssertTrue(start.contains("let items = StartProject.comesToYou(automatic: draft.automatic, line: draft.line,"),
                       "what still comes to the owner is listed under the switch, off the same draft")
         XCTAssertTrue(start.contains("private var opensCoordinator: Bool { draft.automatic && !hasCoordinator }"),
@@ -192,6 +219,17 @@ final class StartProjectWiringTests: XCTestCase {
                        "the ready check's warnings are the coordinator's, and the card draws none")
         XCTAssertTrue(start.contains("if let levels = plan.levels {"),
                       "the plan is drawn by level, the batch review's rule")
+        // docs/mocks/start-card-web-width (approved 2026-10-09): the toggles only while the clamps
+        // hide words, and the plan as the task graph while the whole of it fits.
+        XCTAssertTrue(start.contains("if whyOpen || whyCut {"), "More only while the coordinator's words are cut")
+        XCTAssertTrue(start.contains("if criteriaOpen || !cutCriteria.isEmpty {"),
+                      "Read all only while a criterion is cut")
+        XCTAssertTrue(start.contains("let drawn = StartProject.planGraph(graph, availableWidth: Double(planWidth))"),
+                      "the plan is drawn as the task graph by OrbitKit's rule")
+        XCTAssertTrue(start.contains("ProjectGraphFullScreen(graph: graph, expanded: $graphExpanded, onOpenTask: openTask)"),
+                      "and a plan listed by level opens the project page's task graph full screen")
+        XCTAssertTrue(start.contains("graph: console.projectGraph)"),
+                      "the conversation's card is given the graph its plan is read off")
         XCTAssertTrue(start.contains("Text(StartProject.barCaption(opensCoordinator: opensCoordinator, startsNow: plan.startsNow,"),
                       "and the line under Start says what pressing it does")
         XCTAssertTrue(start.contains("escalationSeconds: console.projectEscalationSeconds,"),

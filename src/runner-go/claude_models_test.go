@@ -36,6 +36,7 @@ esac
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
+	privateOrbitHome(t)
 
 	models, err := fetchClaudeModelCatalog(context.Background())
 	if err != nil {
@@ -308,6 +309,7 @@ esac
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
+	privateOrbitHome(t)
 
 	models, err := fetchClaudeModelCatalog(context.Background())
 	if err != nil {
@@ -340,4 +342,65 @@ esac
 			t.Errorf("%s: FastMode = %v, want %v", model.Value, *model.FastMode, expected.fast)
 		}
 	}
+}
+
+// TestFetchClaudeModelCatalogRunsInPrivateProbeDirectory: every probe of a round starts in the
+// runner's private probe directory, never in the one the runner itself runs in — `/` under launchd,
+// where Claude Code's start-up walk read the whole disk and, on a Mac, had the system ask the user in
+// the runner's name for access to Downloads, Photos and network volumes, hour after hour.
+func TestFetchClaudeModelCatalogRunsInPrivateProbeDirectory(t *testing.T) {
+	machine := privateOrbitHome(t)
+	pwds := filepath.Join(t.TempDir(), "pwds")
+	t.Setenv("CAPTURE_PWDS", pwds)
+	dir := t.TempDir()
+	writeFakeBin(t, dir, "claude", `pwd -P >> "$CAPTURE_PWDS"
+prompt=""
+for arg in "$@"; do
+  case "$arg" in /model*|/context|/fast) prompt="$arg" ;; esac
+done
+case "$prompt" in
+  "/model "*) echo "Set model to Opus 5.5 for this session only" ;;
+  "/context") echo "**Tokens:** 18.2k / 1m (2%)" ;;
+  "/fast") printf '{"type":"result","subtype":"success","result":"Fast mode OFF (this session only)"}\n' ;;
+esac`)
+	t.Setenv("PATH", dir)
+
+	if _, err := fetchClaudeModelCatalog(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(pwds)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.EvalSymlinks(filepath.Join(machine, claudeProbeDirName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Split(strings.TrimSpace(string(data)), "\n")
+	// Three probes per alias: the name, the fast lane, the context window.
+	if len(got) != 3*len(claudeModelAliases) {
+		t.Fatalf("claude started %d times, want %d: %q", len(got), 3*len(claudeModelAliases), got)
+	}
+	for i, cwd := range got {
+		if cwd != want {
+			t.Fatalf("probe %d ran in %q, want the private probe directory %q", i, cwd, want)
+		}
+	}
+	if info, err := os.Stat(want); err != nil {
+		t.Fatal(err)
+	} else if info.Mode().Perm() != 0o700 {
+		t.Fatalf("probe directory mode = %04o, want 0700", info.Mode().Perm())
+	}
+}
+
+// privateOrbitHome points ORBIT_HOME at a fresh directory with the mode the runner keeps its home in,
+// which privateProbeDir insists on — t.TempDir hands out its directories 0755.
+func privateOrbitHome(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ORBIT_HOME", dir)
+	return dir
 }

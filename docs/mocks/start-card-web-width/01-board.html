@@ -1,0 +1,172 @@
+<!doctype html>
+<!-- Design mock: on the web, "Start this project?" in a coordinator conversation stops at 720px wide, and its
+     More / Read all toggles are drawn only while the clamp hides text. Every frame is a screenshot of the real
+     session page (WorkspaceView + index.css on vite, Chromium, deviceScaleFactor 2), fed by src/web/ui-migration's
+     fixtures plus the real project's title, 6 criteria, 10 tasks and 15 edges (34cbCXaNMJIHWoigS7XWd, 2026-10-09).
+     "现在" is main 3ced69192 (StartProjectCard.tsx, index.css and ReviewCard unchanged on main 5e17800a0); "改后" is
+     the same tree with the change in it (StartProjectCard.tsx + index.css, +51/-14 lines); the width options inject
+     one CSS rule into that page. Dashed outlines and labels are drawn on top. Decided 2026-10-09 ("按推荐的来")
+     and implemented: StartProjectCard.tsx + index.css, and the same toggle rule in ApprovalCards.swift. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Web · Start 卡：宽窗口限宽 720，More / Read all 只在有截断时出现</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1840px; }
+  .m-sub { line-height: 1.75; max-width: 1640px; }
+  .m-sub code, .m-cap code, .rules code, .files code, .ask code { font-size: 11.5px; }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .row-card { display: grid; grid-template-columns: 752px minmax(0, 1fr); gap: 40px; align-items: start; }
+  .stack { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  .stack .fig { width: 752px; }
+  .stack .fig.w1280 { width: 671px; }
+  .row3 { display: grid; grid-template-columns: 672fr 752fr 912fr; gap: 22px; align-items: start; }
+  .fig { position: relative; }
+  .shot { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .08), 0 1px 3px rgba(15, 23, 42, .06); }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .fl { font-size: 12.5px; font-weight: 700; color: var(--text-1); margin: 0 0 8px 2px; display: flex; gap: 8px; align-items: center; }
+  .fl span.d { font-weight: 400; color: var(--text-3); }
+  .mk { position: absolute; border: 1.5px dashed var(--warning-solid); border-radius: 7px; pointer-events: none; }
+  .mk-l { position: absolute; top: 50%; transform: translateY(-50%); white-space: nowrap; font-size: 12px; font-weight: 700;
+          color: #fff; background: var(--warning-solid); border-radius: 5px; padding: 1px 7px; }
+  .mk-l-right { left: calc(100% + 12px); }
+  .mk-l-above { left: 50%; top: auto; bottom: calc(100% + 8px); transform: translateX(-50%); }
+  .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .m-k.alt { background: #fff1e8; color: #c2410c; }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 8px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { font-weight: 600; color: var(--text-1); }
+  .rules td.same { color: var(--text-3); }
+  .rules td.chg { color: #0958d9; font-weight: 600; }
+  .grid-bottom { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b { color: var(--text-1); }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.8; color: #5c4210; }
+  .ask b { color: #3d2b08; }
+  .ask ol { margin: 6px 0 0; padding-left: 20px; }
+  .ask li + li { margin-top: 4px; }
+  .ask .rec { color: #16833a; font-weight: 700; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <h1 class="m-h1 zh">Web · Start 卡：宽窗口下最宽 720 px，More 和 Read all 只在有字被截掉时出现</h1>
+  <p class="m-sub zh">你截图里的 Start 卡，内容、顺序和数据都对（我按项目 <code>34cbCXaNMJIHWoigS7XWd</code> 的 6 条标准、10 个任务和 15 条依赖逐项核过），只有两处不对：宽窗口下整张卡铺满对话；协调者原话和标准都已显示全时，More 和 Read all 6 in full 还在，点了只是换个字。
+  下面每张图都是真实会话页的截图（vite + 仓库里 ui-migration 的 fixture，项目数据照抄这个项目），不是画的：「现在」是 main <code>3ced69192</code>，「改后」是同一份代码改了 <code>StartProjectCard.tsx</code> 和 <code>index.css</code> 跑出来的（这两个文件在最新 main <code>5e17800a0</code> 上没有变化）。虚线和标签是标注。<b>只动这一张卡</b>：输入框、别的消息、手机网页、项目页的 Start 对话框都不变，卡里的文案一个字不改。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web</span>你截图的宽度：2560 宽窗口，对话区约 1,920 px</div>
+    <div class="row2">
+      <div>
+        <div class="fl zh"><span class="m-k">现在</span>① 卡片铺满对话</div>
+        <div class="fig"><img class="shot" src="01a-today.png" alt=""><span class="mk" style="left:2.144%;top:50.795%;width:95.712%;height:2.020%"><span class="mk-l mk-l-above zh">名字和开关相距约 1,760 px</span></span><span class="mk" style="left:2.246%;top:29.885%;width:1.969%;height:1.642%"><span class="mk-l mk-l-right zh">原话只有 1 行</span></span><span class="mk" style="left:1.582%;top:45.372%;width:5.172%;height:1.642%"><span class="mk-l mk-l-right zh">6 条都已显示全</span></span></div>
+        <p class="m-cap zh">开关、下拉框和数值都在最右边，离左边的名字约 1,760 px；每条标准一行一百多个字。原话只有一行，下面还是有 More；6 条标准都已显示全，下面还是有 Read all 6 in full。这两个点了都只是换个字。</p>
+      </div>
+      <div>
+        <div class="fl zh"><span class="m-k new">改后</span>② 最宽 720 px，靠左 <span class="m-k rec">推荐</span></div>
+        <div class="fig"><img class="shot" src="01b-proposal.png" alt=""><span class="mk" style="left:0.868%;top:19.145%;width:37.060%;height:72.053%"><span class="mk-l mk-l-right zh">最宽 720 px</span></span><span class="mk" style="left:2.246%;top:26.151%;width:34.303%;height:3.826%"><span class="mk-l mk-l-right zh">正好 3 行：没有 More</span></span><span class="mk" style="left:1.582%;top:47.130%;width:5.172%;height:1.502%"><span class="mk-l mk-l-right zh">5 条被截断：有 Read all</span></span></div>
+        <p class="m-cap zh">卡片和上面那条回复左对齐，右边空着；输入框和别的消息不动。原话在 720 下正好 3 行，所以没有 More；5 条标准被截成两行，所以有 Read all 6 in full。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k new">改后</span>原大，和几种情况</div>
+    <div class="row-card">
+      <div>
+        <div class="fl zh">② 的卡片，原大</div>
+        <div class="fig"><img class="shot" src="01c-proposal-card.png" alt=""><span class="mk" style="left:5.053%;top:47.137%;width:89.894%;height:2.515%"></span></div>
+        <p class="m-cap zh">开关、下拉框、数值离名字约 556 px（现在约 1,760 px）。标准每条最多两行，和 iOS 的卡一样；其余和现在完全相同。</p>
+      </div>
+      <div class="stack">
+        <div>
+          <div class="fl zh"><span class="m-k state">状态</span>③ 原话超过三行：有 More</div>
+          <div class="fig"><img class="shot" src="01d-long-why.png" alt=""><span class="mk" style="left:5.319%;top:80.985%;width:5.130%;height:10.904%"><span class="mk-l mk-l-right zh">超过 3 行才有 More</span></span></div>
+          <p class="m-cap zh">用一段 7 行的原话试：截成 3 行，下面有 More。</p>
+        </div>
+        <div>
+          <div class="fl zh"><span class="m-k state">状态</span>③ 点开 More 之后</div>
+          <div class="fig"><img class="shot" src="01e-long-why-open.png" alt=""><span class="mk" style="left:5.319%;top:85.683%;width:4.729%;height:8.210%"><span class="mk-l mk-l-right zh">展开后是 Less</span></span></div>
+          <p class="m-cap zh">显示全文，链接变成 Less。窗口宽度再怎么变，展开的都不会自己收起。</p>
+        </div>
+        <div>
+          <div class="fl zh"><span class="m-k state">状态</span>④ 标准都在两行以内：没有 Read all</div>
+          <div class="fig"><img class="shot" src="01f-short-criteria.png" alt=""></div>
+          <p class="m-cap zh">换成一组短标准（每条一行）。现在这里也会有一个 Read all 6 in full，点了没变化。</p>
+        </div>
+        <div>
+          <div class="fl zh"><span class="m-k state">状态</span>⑤ 1280 宽窗口：和现在一样</div>
+          <div class="fig w1280"><img class="shot" src="01g-window-1280.png" alt=""></div>
+          <p class="m-cap zh">对话区约 640 px，没到 720，卡片照旧跟对话一样宽。这里原话 4 行截成 3 行，有 More；6 条标准都被截断，有 Read all。改后和现在的截图逐字节相同。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k rec">已定：720</span>⑥ 最宽多少 · 同一个 2560 窗口，截到 How it runs 为止</div>
+    <div class="row3">
+      <div>
+        <div class="fl zh">640 <span class="d">和项目页的 Start 对话框一样宽</span></div>
+        <div class="fig"><img class="shot" src="01h-width-640.png" alt=""></div>
+        <p class="m-cap zh">6 条标准被截断；名字和开关相距约 476 px。</p>
+      </div>
+      <div>
+        <div class="fl zh">720 <span class="m-k rec">推荐</span><span class="d">和窄屏打开卡片的审阅弹窗一样宽</span></div>
+        <div class="fig"><img class="shot" src="01h-width-720.png" alt=""></div>
+        <p class="m-cap zh">5 条被截断；原话正好 3 行；相距约 556 px。</p>
+      </div>
+      <div>
+        <div class="fl zh">880</div>
+        <div class="fig"><img class="shot" src="01h-width-880.png" alt=""></div>
+        <p class="m-cap zh">3 条被截断，折行少一些；开关离名字更远，约 716 px。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="grid-bottom">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">规则</span>改了什么、没改什么</div>
+        <table class="rules zh">
+          <tr><th>情况</th><th>现在</th><th>改后</th></tr>
+          <tr><td>对话区宽于 720 px（左栏和会话列表都开着时，窗口宽于约 1,360 px）</td><td>卡片和对话一样宽</td><td class="chg">最宽 720 px，靠左（① → ②）</td></tr>
+          <tr><td>对话区不到 720 px</td><td>和对话一样宽</td><td class="same">不变（⑤）</td></tr>
+          <tr><td>手机网页（预览行 + 审阅弹窗），项目页的 Start 对话框（640 px）</td><td>—</td><td class="same">不变：本来就不到 720</td></tr>
+          <tr><td>协调者原话在 3 行以内</td><td>有 More，点了只变成 Less</td><td class="chg">没有 More（②）</td></tr>
+          <tr><td>原话超过 3 行</td><td>3 行 + More；点开是全文 + Less</td><td class="same">不变（③）</td></tr>
+          <tr><td>每条标准都在两行内显示全</td><td>有 Read all N in full，点了没变化</td><td class="chg">没有（④）</td></tr>
+          <tr><td>至少一条标准被截断</td><td>Read all N in full</td><td class="same">不变（②）</td></tr>
+          <tr><td>拖动窗口改变宽度</td><td>—</td><td class="chg">重新量：被截掉就出现，不再截掉就消失；已展开的不会收起</td></tr>
+          <tr><td>文案、按钮、Enter 快捷键、按下 Start 做什么</td><td>—</td><td class="same">不变</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">改动</span>只改 Web 的这张卡</div>
+        <ul class="files zh">
+          <li><b><code>src/web/src/index.css</code></b>（Start 卡那一节，约 L10464）：加一条 <code>.start-card { max-width: 720px; }</code>。</li>
+          <li><b><code>src/web/src/components/StartProjectCard.tsx</code></b>：加一个小 hook，排版后比较 <code>scrollHeight</code> 和 <code>clientHeight</code>，宽度变了（ResizeObserver）再量一次；More 和 Read all 只在有字被截掉、或已经展开时才画。约增 45 行、删 14 行。</li>
+          <li><b>测试</b>：<code>StartProjectCard.test.tsx</code>。jsdom 不排版，测试里给元素指定高度，测「截掉才出现」「没截掉不出现」「展开后不消失」。版面用真浏览器截图核对，本板就是那份代码跑出来的。</li>
+          <li><b>不动</b>：文案（<code>lib/projectStart.ts</code>）、OrbitKit 的文案对照测试、服务端。</li>
+        </ul>
+        <div class="ask zh">
+          <b>已定（2026-10-09）：按推荐。</b>三项都取绿色那一项，已照此实现（Web 和 iOS / macOS）。
+          <ol>
+            <li>最宽多少：640 ／ <span class="rec">720</span> ／ 880（见 ⑥）</li>
+            <li>范围：<span class="rec">只改 Start 卡</span> ／ 对话里的其它决策卡（Confirm the new criteria?、Does this evidence settle the task?、Confirm this task is done?、Is this project done?）一起限宽。它们在宽窗口下也铺满，但大多是文字，没有名字在左、控件在右的行。</li>
+            <li>iOS 和 macOS 的 Start 卡也一直显示 More 和 Read all（<code>ApprovalCards.swift</code>），原话短时点了同样没变化：<span class="rec">一起改成同一条规则</span> ／ 这次只改 Web。SwiftUI 只在 CI 上编译，要走 probe 分支看截图。</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

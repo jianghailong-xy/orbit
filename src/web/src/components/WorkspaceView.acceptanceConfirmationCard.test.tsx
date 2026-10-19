@@ -5,7 +5,6 @@ import { act } from 'react';
 import { flushSync } from 'react-dom';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
-import { App as AntApp } from 'antd';
 import { MemoryRouter, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
@@ -400,6 +399,19 @@ beforeEach(() => {
         limits: { maxTasks: 500, maxMarks: 500 },
       });
     }
+    // The line the start card's Main branch row reads: a repository nothing has bound yet, whose
+    // owner never chose a main branch for it, so the card opens on main.
+    if (path === `/projects/${PROJECT_PUBLIC}/integration`) {
+      return reply({
+        line: null, lineAbsentReason: 'NOT_DECIDED', ref: null, upstreamRef: null, upstreamChosenAt: null,
+        lastMainBranch: null, source: null, locked: false, startedAt: null,
+        mergeCheckCommand: null, mergeCheckCommandAbsentReason: 'NOT_CONFIGURED', mergeCheckTimeoutSeconds: null,
+        escalationSeconds: 7_200, repository: 'example/orbit', branches: null,
+        commitsAheadOfUpstream: null, commitsAheadOfUpstreamAbsentReason: 'NO_LANDING_YET',
+        lastUpstreamSyncAt: null, lastUpstreamSyncAbsentReason: 'NEVER_SYNCED',
+        integratingCount: 0, queuedCount: 0, mergeCheckOnTip: 'UNKNOWN', inFlight: null,
+      });
+    }
     // Nothing is waiting to be merged into main either: the promotion card reads this door
     // wherever a conversation coordinates a project, and null is the ordinary answer —
     // no candidate, no card (contract §3.6).
@@ -493,10 +505,8 @@ async function mount(path: string): Promise<void> {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
         <MemoryRouter initialEntries={[path]}>
-          <AntApp>
-            <WorkspaceView runner={RUNNER} />
-            <NavigationProbe />
-          </AntApp>
+          <WorkspaceView runner={RUNNER} />
+          <NavigationProbe />
         </MemoryRouter>
       </QueryClientProvider>,
     );
@@ -618,9 +628,13 @@ describe('the start card in WorkspaceView', { timeout: 60_000 }, () => {
     await openSettlementReview();
     const card = (): HTMLElement => reviewForm()!.querySelector<HTMLElement>('.start-card')!;
     expect(reviewForm()!.querySelectorAll('.settlement-card.start-card')).toHaveLength(1);
-    // The plan by level, off the dependency graph: A starts with the project, B after it.
-    expect([...card().querySelectorAll('.start-card-level')].map((level) => level.textContent))
-      .toEqual(['1Athe sealNow', '2Bthe card']);
+    // The plan by level, off the dependency graph: A starts with the project, B after it. The graph is
+    // the card's own read, answered after the card is drawn: on a wide screen nothing else is waited
+    // for first, so the list is waited for here.
+    await waitForUi(() => {
+      expect([...card().querySelectorAll('.start-card-level')].map((level) => level.textContent))
+        .toEqual(['1Athe sealNow', '2Bthe card']);
+    });
     // One setting changed on the card before the press: at most 5 tasks, not the suggested 3.
     const count5 = card().querySelector<HTMLInputElement>('.start-card-count input')!;
     await act(async () => {

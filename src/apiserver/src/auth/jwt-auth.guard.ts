@@ -8,9 +8,11 @@ import {
 import { Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { PUBLIC_ID_FIELDS, toUuid } from '@orbit/shared';
-import type { AuthUser } from '../common/current-user.decorator';
+import type { AuthCredential, AuthUser } from '../common/current-user.decorator';
 import { visitorAddress } from '../shared/public-surface.guard';
 import { ALLOW_QUERY_TOKEN } from './allow-query-token.decorator';
+import { DisabledAccounts } from './disabled-accounts';
+import { Impersonation, impersonationRefusal } from './impersonation';
 import { PatRequestAudit, noteRefusal } from './pat-request-audit';
 import {
   type PatDeclaration,
@@ -36,6 +38,12 @@ export class JwtAuthGuard implements CanActivate {
     @Optional() private readonly pats?: PatService,
     // Provided alongside PatService. Without it a token's writes go unrecorded, and nothing else changes.
     @Optional() private readonly audit?: PatRequestAudit,
+    // Provided alongside PatService, which reads the same one for a personal access token. Without it
+    // no access token's account is disabled.
+    @Optional() private readonly disabled?: DisabledAccounts,
+    // Provided alongside PatService. Without it an administrator's token for viewing another account is
+    // answered 401, as any token signed with a key this guard does not hold is.
+    @Optional() private readonly impersonation?: Impersonation,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -69,6 +77,8 @@ export class JwtAuthGuard implements CanActivate {
         ip: visitorAddress(req),
         userAgent: req.headers['user-agent'],
       });
+      // A disabled account's token was refused 403 ACCOUNT_DISABLED by `verify` (docs/google-sign-in-
+      // design.md §5.5), before anything is recorded of it: not its use, and not its refused writes.
       if (!grant) throw new UnauthorizedException('invalid token');
       const user: AuthUser = {
         userId: grant.userId,
@@ -95,14 +105,40 @@ export class JwtAuthGuard implements CanActivate {
       return true;
     }
 
-    try {
-      const payload = await this.jwt.verifyAsync(token);
-      const user: AuthUser = { userId: payload.sub, email: payload.email, credential: { kind: 'LOGIN' } };
+    // An administrator viewing Orbit as another account: its reads, and nothing else. Told apart before
+    // the login, whose key does not verify it.
+    const viewing = await this.impersonation?.verify(token);
+    if (viewing === null) throw new UnauthorizedException('invalid token');
+    if (viewing) {
+      // It ends with either account disabled: the one viewed, or the administrator viewing it.
+      if (this.disabled?.has(viewing.userId) || this.disabled?.has(viewing.administratorId)) {
+        throw new UnauthorizedException('account disabled');
+      }
+      const user: AuthUser = {
+        userId: viewing.userId,
+        email: viewing.email,
+        credential: { kind: 'IMPERSONATION', administratorId: viewing.administratorId, expiresAt: viewing.expiresAt },
+      };
       req.user = user;
+      const refusal = impersonationRefusal(this.reflector, context.getHandler(), context.getClass(), req.method);
+      if (refusal) throw refusal;
       return true;
+    }
+
+    let payload: { sub: string; email: string; sid?: string };
+    try {
+      payload = await this.jwt.verifyAsync(token);
     } catch {
       throw new UnauthorizedException('invalid token');
     }
+    // A disabled account's access token is a 401, not ACCOUNT_DISABLED (§5.5): the client answers it
+    // by refreshing, the refresh is refused 403 ACCOUNT_DISABLED, and the client signs out on that.
+    if (this.disabled?.has(payload.sub)) throw new UnauthorizedException('account disabled');
+    // The login session is read from the token, not looked up: an access token outlives its session.
+    const credential: AuthCredential = { kind: 'LOGIN', ...(payload.sid ? { loginSessionId: payload.sid } : {}) };
+    const user: AuthUser = { userId: payload.sub, email: payload.email, credential };
+    req.user = user;
+    return true;
   }
 
   /**

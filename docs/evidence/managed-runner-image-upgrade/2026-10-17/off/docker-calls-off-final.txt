@@ -1,0 +1,7 @@
+14:36:14	compose version
+14:36:15	inspect --format {{.Image}} orbit-web
+14:36:15	tag sha256:8aae0190d7f9f3750d6280827eebf98f98f888e39942bd368736236cb4f877ed orbit-web:previous-release
+14:36:15	compose config --services
+14:36:15	compose build --build-arg PREVIOUS_RELEASE_IMAGE=orbit-web:previous-release apiserver wiki-worker web
+14:37:52	compose up -d --wait apiserver wiki-worker web gateway
+14:38:03	compose ps

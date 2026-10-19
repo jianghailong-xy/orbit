@@ -1,0 +1,379 @@
+{
+  "note": "Written by src/runner-go/codex_chatgpt_backend_recording_test.go from a real codex app-server signed in with a fake ChatGPT login against a recorder: the calls it makes for itself around a turn. Read by src/apiserver/src/providers/codex-login-gateway.spec.ts, which holds the gateway's own allowed paths (loginGatewayAllows) to it. Re-record on a codex upgrade.",
+  "codex": "codex-cli 0.162.0",
+  "account": "acct-RECORDED-0000-1111",
+  "startup": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/backend-api/wham/accounts/check",
+        "headers": [
+          [
+            "accept",
+            "*/*"
+          ],
+          [
+            "authorization",
+            "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im93bmVyQHJlY29yZGVkLmludmFsaWQiLCJleHAiOjE3OTIzNjgxNDYsImh0dHBzOi8vYXBpLm9wZW5haS5jb20vYXV0aCI6eyJjaGF0Z3B0X2FjY291bnRfaWQiOiJhY2N0LVJFQ09SREVELTAwMDAtMTExMSIsImNoYXRncHRfcGxhbl90eXBlIjoicGx1cyIsImNoYXRncHRfdXNlcl9pZCI6InVzZXItUkVDT1JERUQifSwiaWF0IjoxNzkxNTA0MTQ2fQ.signature"
+          ],
+          [
+            "chatgpt-account-id",
+            "acct-RECORDED-0000-1111"
+          ],
+          [
+            "host",
+            "127.0.0.1:39055"
+          ],
+          [
+            "user-agent",
+            "codex_cli_rs/0.162.0 (Debian 13.0.0; x86_64) unknown"
+          ]
+        ],
+        "bodyBase64": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": [
+          [
+            "content-type",
+            "application/json"
+          ]
+        ],
+        "bodyBase64": "eyJhY2NvdW50X29yZGVyaW5nIjpbImFjY3QtUkVDT1JERUQtMDAwMC0xMTExIl0sImFjY291bnRzIjpbeyJhY2NvdW50X3JvdXRpbmdfb3ZlcnJpZGUiOiJOT19DT05TVFJBSU5UIiwiaWQiOiJhY2N0LVJFQ09SREVELTAwMDAtMTExMSIsIm5hbWUiOm51bGwsInBsYW5fdHlwZSI6InBsdXMiLCJwcm9maWxlX3BpY3R1cmVfdXJsIjpudWxsLCJzdHJ1Y3R1cmUiOiJwZXJzb25hbCIsIndvcmtzcGFjZV9iYWNrZW5kX29yaWdpbiI6Ik5PX0NPTlNUUkFJTlQifV0sImRlZmF1bHRfYWNjb3VudF9pZCI6ImFjY3QtUkVDT1JERUQtMDAwMC0xMTExIn0="
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/backend-api/codex/models?client_version=0.162.0",
+        "headers": [
+          [
+            "accept",
+            "*/*"
+          ],
+          [
+            "authorization",
+            "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im93bmVyQHJlY29yZGVkLmludmFsaWQiLCJleHAiOjE3OTIzNjgxNDYsImh0dHBzOi8vYXBpLm9wZW5haS5jb20vYXV0aCI6eyJjaGF0Z3B0X2FjY291bnRfaWQiOiJhY2N0LVJFQ09SREVELTAwMDAtMTExMSIsImNoYXRncHRfcGxhbl90eXBlIjoicGx1cyIsImNoYXRncHRfdXNlcl9pZCI6InVzZXItUkVDT1JERUQifSwiaWF0IjoxNzkxNTA0MTQ2fQ.signature"
+          ],
+          [
+            "chatgpt-account-id",
+            "acct-RECORDED-0000-1111"
+          ],
+          [
+            "host",
+            "127.0.0.1:39055"
+          ],
+          [
+            "originator",
+            "codex_cli_rs"
+          ],
+          [
+            "user-agent",
+            "codex_cli_rs/0.162.0 (Debian 13.0.0; x86_64) unknown"
+          ],
+          [
+            "version",
+            "0.162.0"
+          ]
+        ],
+        "bodyBase64": ""
+      },
+      "response": {
+        "status": 404,
+        "headers": [
+          [
+            "content-type",
+            "application/json"
+          ]
+        ],
+        "bodyBase64": "eyJkZXRhaWwiOiJOb3QgRm91bmQifQ=="
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/backend-api/codex/models?client_version=0.162.0",
+        "headers": [
+          [
+            "accept",
+            "*/*"
+          ],
+          [
+            "authorization",
+            "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im93bmVyQHJlY29yZGVkLmludmFsaWQiLCJleHAiOjE3OTIzNjgxNDYsImh0dHBzOi8vYXBpLm9wZW5haS5jb20vYXV0aCI6eyJjaGF0Z3B0X2FjY291bnRfaWQiOiJhY2N0LVJFQ09SREVELTAwMDAtMTExMSIsImNoYXRncHRfcGxhbl90eXBlIjoicGx1cyIsImNoYXRncHRfdXNlcl9pZCI6InVzZXItUkVDT1JERUQifSwiaWF0IjoxNzkxNTA0MTQ2fQ.signature"
+          ],
+          [
+            "chatgpt-account-id",
+            "acct-RECORDED-0000-1111"
+          ],
+          [
+            "host",
+            "127.0.0.1:39055"
+          ],
+          [
+            "originator",
+            "codex_cli_rs"
+          ],
+          [
+            "user-agent",
+            "codex_cli_rs/0.162.0 (Debian 13.0.0; x86_64) unknown (codex_cli_rs; 0.1.0)"
+          ],
+          [
+            "version",
+            "0.162.0"
+          ]
+        ],
+        "bodyBase64": ""
+      },
+      "response": {
+        "status": 404,
+        "headers": [
+          [
+            "content-type",
+            "application/json"
+          ]
+        ],
+        "bodyBase64": "eyJkZXRhaWwiOiJOb3QgRm91bmQifQ=="
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/backend-api/codex/analytics-events/events",
+        "headers": [
+          [
+            "accept",
+            "*/*"
+          ],
+          [
+            "authorization",
+            "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im93bmVyQHJlY29yZGVkLmludmFsaWQiLCJleHAiOjE3OTIzNjgxNDYsImh0dHBzOi8vYXBpLm9wZW5haS5jb20vYXV0aCI6eyJjaGF0Z3B0X2FjY291bnRfaWQiOiJhY2N0LVJFQ09SREVELTAwMDAtMTExMSIsImNoYXRncHRfcGxhbl90eXBlIjoicGx1cyIsImNoYXRncHRfdXNlcl9pZCI6InVzZXItUkVDT1JERUQifSwiaWF0IjoxNzkxNTA0MTQ2fQ.signature"
+          ],
+          [
+            "chatgpt-account-id",
+            "acct-RECORDED-0000-1111"
+          ],
+          [
+            "content-length",
+            "669"
+          ],
+          [
+            "content-type",
+            "application/json"
+          ],
+          [
+            "host",
+            "127.0.0.1:39055"
+          ],
+          [
+            "originator",
+            "codex_cli_rs"
+          ],
+          [
+            "user-agent",
+            "codex_cli_rs/0.162.0 (Debian 13.0.0; x86_64) unknown (codex_cli_rs; 0.1.0)"
+          ]
+        ],
+        "bodyBase64": "eyJldmVudHMiOlt7ImV2ZW50X3R5cGUiOiJjb2RleF90aHJlYWRfaW5pdGlhbGl6ZWQiLCJldmVudF9wYXJhbXMiOnsidGhyZWFkX2lkIjoiMDFhMTFkZjctZWI2Ni03MzIxLWIxZWMtMDkzODE1NTYxZGQ1Iiwic2Vzc2lvbl9pZCI6IjAxYTExZGY3LWViNjYtNzMyMS1iMWVjLTA5MzgxNTU2MWRkNSIsImFwcF9zZXJ2ZXJfY2xpZW50Ijp7InByb2R1Y3RfY2xpZW50X2lkIjoiY29kZXhfY2xpX3JzIiwiY2xpZW50X25hbWUiOiJjb2RleF9jbGlfcnMiLCJjbGllbnRfdmVyc2lvbiI6IjAuMS4wIiwicnBjX3RyYW5zcG9ydCI6InN0ZGlvIiwiZXhwZXJpbWVudGFsX2FwaV9lbmFibGVkIjp0cnVlfSwicnVudGltZSI6eyJjb2RleF9yc192ZXJzaW9uIjoiMC4xNjIuMCIsInJ1bnRpbWVfb3MiOiJsaW51eCIsInJ1bnRpbWVfb3NfdmVyc2lvbiI6IjEzLjAuMCIsInJ1bnRpbWVfYXJjaCI6Ing4Nl82NCJ9LCJtb2RlbCI6ImdwdC01LjEtY29kZXgiLCJlcGhlbWVyYWwiOmZhbHNlLCJpc193b3JrdHJlZSI6bnVsbCwidGhyZWFkX3NvdXJjZSI6InVzZXIiLCJpbml0aWFsaXphdGlvbl9tb2RlIjoibmV3Iiwic3ViYWdlbnRfc291cmNlIjpudWxsLCJwYXJlbnRfdGhyZWFkX2lkIjpudWxsLCJmb3JrZWRfZnJvbV90aHJlYWRfaWQiOm51bGwsImNyZWF0ZWRfYXQiOjE3OTE1MDQxNDl9fV19"
+      },
+      "response": {
+        "status": 404,
+        "headers": [
+          [
+            "content-type",
+            "application/json"
+          ]
+        ],
+        "bodyBase64": "eyJkZXRhaWwiOiJOb3QgRm91bmQifQ=="
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/backend-api/ps/mcp",
+        "headers": [
+          [
+            "accept",
+            "text/event-stream, application/json"
+          ],
+          [
+            "content-length",
+            "217"
+          ],
+          [
+            "content-type",
+            "application/json"
+          ],
+          [
+            "host",
+            "127.0.0.1:39055"
+          ],
+          [
+            "originator",
+            "codex_cli_rs"
+          ],
+          [
+            "user-agent",
+            "codex-mcp-client/0.162.0"
+          ],
+          [
+            "x-openai-product-sku",
+            "codex"
+          ]
+        ],
+        "bodyBase64": "eyJqc29ucnBjIjoiMi4wIiwiaWQiOjAsIm1ldGhvZCI6ImluaXRpYWxpemUiLCJwYXJhbXMiOnsicHJvdG9jb2xWZXJzaW9uIjoiMjAyNS0wNi0xOCIsImNhcGFiaWxpdGllcyI6eyJlbGljaXRhdGlvbiI6eyJmb3JtIjp7fSwidXJsIjp7fX19LCJjbGllbnRJbmZvIjp7Im5hbWUiOiJjb2RleC1tY3AtY2xpZW50IiwidGl0bGUiOiJDb2RleCIsInZlcnNpb24iOiIwLjE2Mi4wIn19fQ=="
+      },
+      "response": {
+        "status": 404,
+        "headers": [
+          [
+            "content-type",
+            "application/json"
+          ]
+        ],
+        "bodyBase64": "eyJkZXRhaWwiOiJOb3QgRm91bmQifQ=="
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/backend-api/ps/mcp",
+        "headers": [
+          [
+            "accept",
+            "text/event-stream, application/json"
+          ],
+          [
+            "content-length",
+            "217"
+          ],
+          [
+            "content-type",
+            "application/json"
+          ],
+          [
+            "host",
+            "127.0.0.1:39055"
+          ],
+          [
+            "originator",
+            "codex_cli_rs"
+          ],
+          [
+            "user-agent",
+            "codex-mcp-client/0.162.0"
+          ],
+          [
+            "x-openai-product-sku",
+            "codex"
+          ]
+        ],
+        "bodyBase64": "eyJqc29ucnBjIjoiMi4wIiwiaWQiOjAsIm1ldGhvZCI6ImluaXRpYWxpemUiLCJwYXJhbXMiOnsicHJvdG9jb2xWZXJzaW9uIjoiMjAyNS0wNi0xOCIsImNhcGFiaWxpdGllcyI6eyJlbGljaXRhdGlvbiI6eyJmb3JtIjp7fSwidXJsIjp7fX19LCJjbGllbnRJbmZvIjp7Im5hbWUiOiJjb2RleC1tY3AtY2xpZW50IiwidGl0bGUiOiJDb2RleCIsInZlcnNpb24iOiIwLjE2Mi4wIn19fQ=="
+      },
+      "response": {
+        "status": 404,
+        "headers": [
+          [
+            "content-type",
+            "application/json"
+          ]
+        ],
+        "bodyBase64": "eyJkZXRhaWwiOiJOb3QgRm91bmQifQ=="
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/backend-api/wham/settings/user",
+        "headers": [
+          [
+            "accept",
+            "*/*"
+          ],
+          [
+            "authorization",
+            "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im93bmVyQHJlY29yZGVkLmludmFsaWQiLCJleHAiOjE3OTIzNjgxNDYsImh0dHBzOi8vYXBpLm9wZW5haS5jb20vYXV0aCI6eyJjaGF0Z3B0X2FjY291bnRfaWQiOiJhY2N0LVJFQ09SREVELTAwMDAtMTExMSIsImNoYXRncHRfcGxhbl90eXBlIjoicGx1cyIsImNoYXRncHRfdXNlcl9pZCI6InVzZXItUkVDT1JERUQifSwiaWF0IjoxNzkxNTA0MTQ2fQ.signature"
+          ],
+          [
+            "cache-control",
+            "no-cache, no-store"
+          ],
+          [
+            "chatgpt-account-id",
+            "acct-RECORDED-0000-1111"
+          ],
+          [
+            "host",
+            "127.0.0.1:39055"
+          ],
+          [
+            "user-agent",
+            "codex_cli_rs/0.162.0 (Debian 13.0.0; x86_64) unknown (codex_cli_rs; 0.1.0)"
+          ]
+        ],
+        "bodyBase64": ""
+      },
+      "response": {
+        "status": 404,
+        "headers": [
+          [
+            "content-type",
+            "application/json"
+          ]
+        ],
+        "bodyBase64": "eyJkZXRhaWwiOiJOb3QgRm91bmQifQ=="
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/backend-api/codex/analytics-events/events",
+        "headers": [
+          [
+            "accept",
+            "*/*"
+          ],
+          [
+            "authorization",
+            "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6Im93bmVyQHJlY29yZGVkLmludmFsaWQiLCJleHAiOjE3OTIzNjgxNDYsImh0dHBzOi8vYXBpLm9wZW5haS5jb20vYXV0aCI6eyJjaGF0Z3B0X2FjY291bnRfaWQiOiJhY2N0LVJFQ09SREVELTAwMDAtMTExMSIsImNoYXRncHRfcGxhbl90eXBlIjoicGx1cyIsImNoYXRncHRfdXNlcl9pZCI6InVzZXItUkVDT1JERUQifSwiaWF0IjoxNzkxNTA0MTQ2fQ.signature"
+          ],
+          [
+            "chatgpt-account-id",
+            "acct-RECORDED-0000-1111"
+          ],
+          [
+            "content-length",
+            "2067"
+          ],
+          [
+            "content-type",
+            "application/json"
+          ],
+          [
+            "host",
+            "127.0.0.1:39055"
+          ],
+          [
+            "originator",
+            "codex_cli_rs"
+          ],
+          [
+            "user-agent",
+            "codex_cli_rs/0.162.0 (Debian 13.0.0; x86_64) unknown (codex_cli_rs; 0.1.0)"
+          ]
+        ],
+        "bodyBase64": "eyJldmVudHMiOlt7ImV2ZW50X3R5cGUiOiJjb2RleF90dXJuX2V2ZW50IiwiZXZlbnRfcGFyYW1zIjp7InRocmVhZF9pZCI6IjAxYTExZGY3LWViNjYtNzMyMS1iMWVjLTA5MzgxNTU2MWRkNSIsInNlc3Npb25faWQiOiIwMWExMWRmNy1lYjY2LTczMjEtYjFlYy0wOTM4MTU1NjFkZDUiLCJ0dXJuX2lkIjoiMDFhMTFkZjctZWNmNC03MmMwLWJiNGEtZmNhNGUwYzI2ZWVmIiwiYWN0aXZlX3BsdWdpbl9pZHNfYXRfdHVybl9zdGFydCI6W10sInZvaWNlX3Nlc3Npb25faWQiOm51bGwsInJvb3RfdHVybl9pZCI6IjAxYTExZGY3LWVjZjQtNzJjMC1iYjRhLWZjYTRlMGMyNmVlZiIsInR1cm5fdHJpZ2dlciI6bnVsbCwiY29kZXhfdHVybl9zb3VyY2UiOm51bGwsInN1Ym1pc3Npb25fdHlwZSI6bnVsbCwiYXBwX3NlcnZlcl9jbGllbnQiOnsicHJvZHVjdF9jbGllbnRfaWQiOiJjb2RleF9jbGlfcnMiLCJjbGllbnRfbmFtZSI6ImNvZGV4X2NsaV9ycyIsImNsaWVudF92ZXJzaW9uIjoiMC4xLjAiLCJycGNfdHJhbnNwb3J0Ijoic3RkaW8iLCJleHBlcmltZW50YWxfYXBpX2VuYWJsZWQiOnRydWV9LCJydW50aW1lIjp7ImNvZGV4X3JzX3ZlcnNpb24iOiIwLjE2Mi4wIiwicnVudGltZV9vcyI6ImxpbnV4IiwicnVudGltZV9vc192ZXJzaW9uIjoiMTMuMC4wIiwicnVudGltZV9hcmNoIjoieDg2XzY0In0sImVwaGVtZXJhbCI6ZmFsc2UsInRocmVhZF9zb3VyY2UiOiJ1c2VyIiwiaW5pdGlhbGl6YXRpb25fbW9kZSI6Im5ldyIsInN1YmFnZW50X3NvdXJjZSI6bnVsbCwicGFyZW50X3RocmVhZF9pZCI6bnVsbCwibW9kZWwiOiJncHQtNS4xLWNvZGV4IiwibW9kZWxfcHJvdmlkZXIiOiJvcGVuYWkiLCJzYW5kYm94X3BvbGljeSI6ImZ1bGxfYWNjZXNzIiwicmVhc29uaW5nX2VmZm9ydCI6bnVsbCwicmVhc29uaW5nX3N1bW1hcnkiOiJhdXRvIiwic2VydmljZV90aWVyIjoiZGVmYXVsdCIsImFwcHJvdmFsX3BvbGljeSI6Im5ldmVyIiwiYXBwcm92YWxzX3Jldmlld2VyIjoidXNlciIsImd1YXJkaWFuX3YyX2VuYWJsZWQiOmZhbHNlLCJtdWx0aV9hZ2VudF92ZXJzaW9uIjoidjEiLCJzYW5kYm94X25ldHdvcmtfYWNjZXNzIjp0cnVlLCJjb2xsYWJvcmF0aW9uX21vZGUiOiJkZWZhdWx0IiwicGVyc29uYWxpdHkiOm51bGwsIndvcmtzcGFjZV9raW5kIjpudWxsLCJudW1faW5wdXRfaW1hZ2VzIjowLCJpbWFnZV9wcmVwYXJhdGlvbnMiOltdLCJpc19maXJzdF90dXJuIjp0cnVlLCJzdGF0dXMiOiJjb21wbGV0ZWQiLCJleHBsaWNpdF9jbGllbnRfaW50ZXJydXB0X3JlcXVlc3RlZF9hdF9tcyI6bnVsbCwidHVybl9lcnJvciI6bnVsbCwiY29kZXhfZXJyb3Jfa2luZCI6bnVsbCwiY29kZXhfZXJyb3JfaHR0cF9zdGF0dXNfY29kZSI6bnVsbCwidXNhZ2VfbGltaXRfd2luZG93X21pbnV0ZXMiOm51bGwsInN0ZWVyX2NvdW50IjowLCJ0b3RhbF90b29sX2NhbGxfY291bnQiOjAsInNoZWxsX2NvbW1hbmRfY291bnQiOjAsImZpbGVfY2hhbmdlX2NvdW50IjowLCJtY3BfdG9vbF9jYWxsX2NvdW50IjowLCJkeW5hbWljX3Rvb2xfY2FsbF9jb3VudCI6MCwic3ViYWdlbnRfdG9vbF9jYWxsX2NvdW50IjowLCJ3ZWJfc2VhcmNoX2NvdW50IjowLCJpbWFnZV9nZW5lcmF0aW9uX2NvdW50IjowLCJpbnB1dF90b2tlbnMiOjExMjkwLCJjYWNoZWRfaW5wdXRfdG9rZW5zIjo5OTg0LCJjYWNoZV93cml0ZV9pbnB1dF90b2tlbnMiOjAsIm91dHB1dF90b2tlbnMiOjU3LCJyZWFzb25pbmdfb3V0cHV0X3Rva2VucyI6NDgsInRvdGFsX3Rva2VucyI6MTEzNDcsImJlZm9yZV9maXJzdF9zYW1wbGluZ19tcyI6ODA4LCJzYW1wbGluZ19tcyI6NzEsImNvbXBhY3Rpb25fbXMiOjAsImJldHdlZW5fc2FtcGxpbmdfb3ZlcmhlYWRfbXMiOjAsInRvb2xfYmxvY2tpbmdfbXMiOjAsImFmdGVyX2xhc3Rfc2FtcGxpbmdfbXMiOjEwLCJzYW1wbGluZ19yZXF1ZXN0X2NvdW50IjoxLCJzYW1wbGluZ19yZXRyeV9jb3VudCI6MCwidG9vbHNfY2hhbmdlX2NvdW50IjowLCJkdXJhdGlvbl9tcyI6ODg5LCJzdGFydGVkX2F0IjoxNzkxNTA0MTQ5LCJjb21wbGV0ZWRfYXQiOjE3OTE1MDQxNTB9fV19"
+      },
+      "response": {
+        "status": 404,
+        "headers": [
+          [
+            "content-type",
+            "application/json"
+          ]
+        ],
+        "bodyBase64": "eyJkZXRhaWwiOiJOb3QgRm91bmQifQ=="
+      }
+    }
+  ]
+}

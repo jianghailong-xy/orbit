@@ -9,11 +9,12 @@ export class ShareLinkIncludeDto {
   @IsOptional() @IsBoolean() commentsAndFiles?: boolean;
   @IsOptional() @IsBoolean() conversations?: boolean;
   @IsOptional() @IsBoolean() toolOutput?: boolean;
+  @IsOptional() @IsBoolean() footnotes?: boolean;
 }
 
 /**
- * `PUT /{sessions|tasks|projects}/:id/share`: open the link, or change the one that is open. Both
- * fields are optional and a field left out is left as it is; `expiresAt: null` means Never.
+ * `PUT /{sessions|tasks|projects|wiki/spaces}/:id/share`: open the link, or change the one that is
+ * open. Both fields are optional and a field left out is left as it is; `expiresAt: null` means Never.
  */
 export class PutShareLinkDto {
   @IsOptional() @ValidateNested() @Type(() => ShareLinkIncludeDto) include?: ShareLinkIncludeDto;

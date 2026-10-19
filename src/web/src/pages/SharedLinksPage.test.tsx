@@ -156,10 +156,17 @@ const rows = () =>
     where: row.querySelector('.shared-link-where')?.textContent,
     chips: [...row.querySelectorAll('.shared-link-chip')].map((chip) => chip.textContent),
     updates: row.querySelector('.shared-link-updates')?.textContent,
-    actions: [...row.querySelectorAll('.shared-link-actions .ant-btn')].map((b) => b.textContent?.trim()),
+    actions: [...row.querySelectorAll('.shared-link-actions button')].map((b) => b.textContent?.trim()),
   }));
 
 const banner = () => page().querySelector<HTMLElement>('.shared-links-banner');
+
+/** The anchored question a Turn off asks, its words by what the dialog is named and described by. */
+const question = () => document.body.querySelector<HTMLElement>('[role="dialog"]');
+const nameOf = (el: Element): string | undefined =>
+  document.getElementById(el.getAttribute('aria-labelledby') ?? '')?.textContent ?? undefined;
+const descriptionOf = (el: Element): string | undefined =>
+  document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent ?? undefined;
 
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -218,15 +225,15 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
 
     expect(banner()?.textContent).toContain('3 links are for sessions completed more than 30 days ago.');
     expect(banner()?.textContent).toContain('They still open for anyone who has them.');
-    const button = banner()!.querySelector('.ant-btn');
+    const button = banner()!.querySelector('button');
     expect(button?.textContent?.trim()).toBe('Turn off these 3');
 
     await click(button, 'Turn off these 3');
     // One question for the batch, then one request naming exactly the three.
     expect(turnOffShareLinks).not.toHaveBeenCalled();
-    const asked = document.body.querySelector('.ant-popconfirm');
-    expect(asked?.querySelector('.ant-popconfirm-title')?.textContent).toBe('Turn off these 3 links?');
-    const confirm = [...asked!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Turn off');
+    const asked = question();
+    expect(nameOf(asked!)).toBe('Turn off these 3 links?');
+    const confirm = [...asked!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Turn off');
     await click(confirm, 'Turn off');
 
     expect(turnOffShareLinks).toHaveBeenCalledTimes(1);
@@ -276,7 +283,7 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     const row = [...page().querySelectorAll<HTMLElement>('.shared-link-row')].find(
       (r) => r.querySelector('.shared-link-title')?.textContent === TASK.root.title,
     );
-    await click([...row!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
+    await click([...row!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
 
     await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
     expect(getShareLink).toHaveBeenCalledWith('TASK', TASK.root.id);
@@ -302,11 +309,35 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     const project = [...page().querySelectorAll<HTMLElement>('.shared-link-row')].find(
       (r) => r.querySelector('.shared-link-title')?.textContent === PROJECT.root.title,
     );
-    await click([...project!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
+    await click([...project!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
 
     await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
     expect(getShareLink).toHaveBeenCalledWith('PROJECT', 'P1');
     expect(shareDialogName()).toBe('Share project');
+  });
+
+  it('a wiki row is the space by name, says Wiki and what it includes, and its Settings opens the Share dialog on that space', async () => {
+    const WIKI: ShareLink = {
+      ...sessionLink('orbit'),
+      kind: 'WIKI',
+      include: { footnotes: true },
+      root: { id: 'W1', title: 'orbit', slug: 'orbit' },
+    };
+    serve([WIKI]);
+    vi.mocked(getShareLink).mockResolvedValue({ link: WIKI, counts: { documents: 12, footnotes: 486 } });
+    await open();
+
+    const [row] = rows();
+    expect(row).toMatchObject({ title: 'orbit', where: 'Wiki', chips: ['Documents', 'Footnotes'], actions: ['Copy', 'Settings', 'Turn off'] });
+    const wiki = page().querySelector<HTMLElement>('.shared-link-row[data-kind="WIKI"]')!;
+    expect(wiki.querySelector('.shared-link-kind')?.textContent).toBe('W');
+    // Footnotes can carry command output and file contents: its chip is the one to notice.
+    expect(wiki.querySelector('.shared-link-chip.is-warn')?.textContent).toBe('Footnotes');
+    await click([...wiki.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Settings'), 'Settings');
+
+    await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
+    expect(getShareLink).toHaveBeenCalledWith('WIKI', 'W1');
+    expect(shareDialogName()).toBe('Share wiki');
   });
 
   it('Settings opens the Share dialog on that link’s session', async () => {
@@ -317,7 +348,7 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     const recent = [...page().querySelectorAll<HTMLElement>('.shared-link-row')].find(
       (row) => row.querySelector('.shared-link-title')?.textContent === RECENT.root.title,
     );
-    const settings = [...recent!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Settings');
+    const settings = [...recent!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Settings');
     await click(settings, 'Settings');
 
     await vi.waitFor(() => expect(document.body.querySelector('[role="dialog"].share-dialog')).not.toBeNull());
@@ -332,12 +363,12 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
     const row = [...page().querySelectorAll<HTMLElement>('.shared-link-row')].find(
       (r) => r.querySelector('.shared-link-title')?.textContent === OPEN.root.title,
     );
-    await click([...row!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Turn off'), 'Turn off');
-    const asked = document.body.querySelector('.ant-popconfirm');
-    expect(asked?.querySelector('.ant-popconfirm-title')?.textContent).toBe('Turn off this link?');
-    expect(asked?.querySelector('.ant-popconfirm-description')?.textContent).toBe('Anyone who has it loses access right away.');
+    await click([...row!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Turn off'), 'Turn off');
+    const asked = question();
+    expect(nameOf(asked!)).toBe('Turn off this link?');
+    expect(descriptionOf(asked!)).toBe('Anyone who has it loses access right away.');
     expect(turnOffShareLinks).not.toHaveBeenCalled();
-    await click([...asked!.querySelectorAll('.ant-btn')].find((b) => b.textContent?.trim() === 'Turn off'), 'confirm');
+    await click([...asked!.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Turn off'), 'confirm');
     expect(vi.mocked(turnOffShareLinks).mock.calls).toEqual([[[OPEN.id]]]);
   });
 
@@ -370,7 +401,7 @@ describe('Settings → Shared links', { timeout: 60_000 }, () => {
       { title: EXPIRED.root.title, where: `Session · Expired ${day(EXPIRED.expiresAt!)}`, actions: ['Share again'] },
     ]);
 
-    const again = [...page().querySelectorAll('.shared-link-actions .ant-btn')].find(
+    const again = [...page().querySelectorAll('.shared-link-actions button')].find(
       (b) => b.textContent?.trim() === 'Share again',
     );
     await click(again, 'Share again');

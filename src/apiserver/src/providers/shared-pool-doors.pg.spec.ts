@@ -278,7 +278,7 @@ suite('a shared pool, door by door: every cell of §2.5, on real PostgreSQL', { 
       assert.equal((await call(200, who.id, 'GET', at)).json.viewerRole, role);
       // The list an agent of theirs reads to learn which slugs it may pass as `provider`.
       const usable = (await call(200, who.runnerToken, 'GET', 'runner/providers')).json as Array<{ slug: string; runtime: string }>;
-      assert.deepEqual(usable.filter((p) => p.slug === pool.slug), [{ slug: pool.slug, label: 'Team Codex', runtime: 'codex', builtin: false }]);
+      assert.deepEqual(usable.filter((p) => p.slug === pool.slug), [{ slug: pool.slug, label: 'Team Codex', runtime: 'codex', engines: ['codex'], builtin: false }]);
     }
     assert.deepEqual((await call(200, otto.id, 'GET', 'providers/shared-pools')).json, []);
     const page = await call(404, otto.id, 'GET', at);

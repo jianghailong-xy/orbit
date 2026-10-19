@@ -1,0 +1,341 @@
+{
+ "script": "src/web/scripts/audit-antd.mjs (base and final: the branch's own; merged: the project tip's, with --check-owners)",
+ "reports": {
+  "base": {
+   "baseline": {
+    "commit": "7732f14f82d4e6b4406d7d164c4b672f63aa0f56",
+    "scopeHash": "bb238f9ed5588bd9e5c3ae2d4f32a9302b85fe7d219d5c05c6b1f16e024d5a2a"
+   },
+   "sha256": "6f9b43c4741fad28b7a07decc15536e84a66bd2e140f70ee717a5d1d4340c8e1",
+   "path": "/var/tmp/kw2-246921c8/scratch/antd-audit-base.json"
+  },
+  "final": {
+   "baseline": {
+    "commit": "aed0a7bab6e39a50edaeea4cf16cecdae212b6d5",
+    "scopeHash": "5f4e2ba03f4100e5db0e3050e5e3119a457b64af0ffe8507dfcfd654d90abb01"
+   },
+   "sha256": "026347dfe92f557cdc96e23c8b2c0e1634dd3114d22584fb5f7ae89b9abd406c",
+   "path": "/var/tmp/kw2-246921c8/scratch/antd-audit-final.json"
+  },
+  "merged": {
+   "baseline": {
+    "commit": "05529b2e59c8e202ec7ab0f1b0fd36e04a35f00a",
+    "scopeHash": "a038fbeb310764274b41b9bd5f8779ea7c57d23d95a71862ec6034d67fb455b1"
+   },
+   "sha256": "918c5e04de4aa20d116284ea9b693ac01ac2bca8e99773922216c5c5c77793ff",
+   "path": "/var/tmp/kw2-246921c8/scratch/antd-audit-merged.json"
+  }
+ },
+ "counts": {
+  "scannedFiles": {
+   "base": 690,
+   "final": 691
+  },
+  "productionFiles": {
+   "base": 343,
+   "final": 343
+  },
+  "testFiles": {
+   "base": 345,
+   "final": 346
+  },
+  "antdProductionFiles": {
+   "base": 100,
+   "final": 100
+  },
+  "antdTestFiles": {
+   "base": 76,
+   "final": 76
+  },
+  "antSelectorTestFiles": {
+   "base": 62,
+   "final": 62
+  },
+  "antClassTestFiles": {
+   "base": 69,
+   "final": 69
+  },
+  "iconProductionFiles": {
+   "base": 97,
+   "final": 97
+  },
+  "iconTestFiles": {
+   "base": 0,
+   "final": 0
+  },
+  "relevantSourceFiles": {
+   "base": 285,
+   "final": 285
+  },
+  "retirementBlockingFiles": {
+   "base": 241,
+   "final": 241
+  },
+  "hitLines": {
+   "ant-class": {
+    "base": 457,
+    "final": 457
+   },
+   "ant-design-support": {
+    "base": 19,
+    "final": 19
+   },
+   "ant-selector": {
+    "base": 428,
+    "final": 428
+   },
+   "antd-reference": {
+    "base": 351,
+    "final": 351
+   },
+   "icon-class": {
+    "base": 77,
+    "final": 77
+   },
+   "icon-reference": {
+    "base": 108,
+    "final": 108
+   },
+   "imperative-confirm": {
+    "base": 22,
+    "final": 22
+   },
+   "imperative-feedback": {
+    "base": 218,
+    "final": 218
+   },
+   "internal-ref": {
+    "base": 5,
+    "final": 5
+   },
+   "provider": {
+    "base": 88,
+    "final": 88
+   },
+   "rc-support": {
+    "base": 231,
+    "final": 231
+   },
+   "ref-focus": {
+    "base": 25,
+    "final": 25
+   },
+   "theme": {
+    "base": 2,
+    "final": 2
+   },
+   "use-app": {
+    "base": 16,
+    "final": 16
+   },
+   "use-token": {
+    "base": 1,
+    "final": 1
+   }
+  }
+ },
+ "countsChanged": [
+  "scannedFiles",
+  "testFiles"
+ ],
+ "dependenciesUnchanged": true,
+ "changedFiles": {
+  "src/web/src/components/ui/Menu.tsx": {
+   "base": {
+    "category": "production",
+    "sha256": "3a24d50dc145dfe410c1865bf259b60cf6950c6d44094288154f186d58571dd4",
+    "imports": {
+     "import @ant-design/icons": [
+      "CheckOutlined",
+      "RightOutlined"
+     ]
+    },
+    "hitKinds": {
+     "icon-reference": 1
+    },
+    "blocksRetirement": false
+   },
+   "final": {
+    "category": "production",
+    "sha256": "81f886a14bc9b280d611f2e942cf21ab4079d9e4f9501167cb7d3eea42cca5c4",
+    "imports": {
+     "import @ant-design/icons": [
+      "CheckOutlined",
+      "RightOutlined"
+     ]
+    },
+    "hitKinds": {
+     "icon-reference": 1
+    },
+    "blocksRetirement": false
+   }
+  },
+  "src/web/src/components/ui/Overlay.tsx": {
+   "base": {
+    "category": "production",
+    "sha256": "9cf7e1e40a22465077c080aed14a1fc36e0c0b8e78963a1a0e3de15f9b1fd6af",
+    "imports": {
+     "import @ant-design/icons": [
+      "CloseOutlined"
+     ]
+    },
+    "hitKinds": {
+     "icon-reference": 1
+    },
+    "blocksRetirement": false
+   },
+   "final": {
+    "category": "production",
+    "sha256": "76e0a14d8e5d8213d5e1e403af9e02467466123183e415164c50bf4c12acc64a",
+    "imports": {
+     "import @ant-design/icons": [
+      "CloseOutlined"
+     ]
+    },
+    "hitKinds": {
+     "icon-reference": 1
+    },
+    "blocksRetirement": false
+   }
+  },
+  "src/web/src/components/ui/Select.tsx": {
+   "base": {
+    "category": "production",
+    "sha256": "04b7f6ac35a9b1bb2cd6199086055d87d681351209ea523335c14f1e88c1dae0",
+    "imports": {
+     "import @ant-design/icons": [
+      "CloseCircleFilled",
+      "DownOutlined",
+      "LoadingOutlined"
+     ]
+    },
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "ref-focus": 1
+    },
+    "blocksRetirement": true
+   },
+   "final": {
+    "category": "production",
+    "sha256": "97957af9046fb148d34028a43cc99b7527f164920f05f51604bd8b66f66d9874",
+    "imports": {
+     "import @ant-design/icons": [
+      "CloseCircleFilled",
+      "DownOutlined",
+      "LoadingOutlined"
+     ]
+    },
+    "hitKinds": {
+     "antd-reference": 1,
+     "icon-reference": 1,
+     "ref-focus": 1
+    },
+    "blocksRetirement": true
+   }
+  },
+  "src/web/src/components/ui/__fixtures__/ChoicesFixture.tsx": {
+   "base": {
+    "category": "production",
+    "sha256": "d0aa89eb9bf93d294c3955dfa1117e24e389c2c23c7c5da9de4f38d8d607c75f",
+    "imports": {
+     "import antd": [
+      "App",
+      "Button",
+      "ConfigProvider",
+      "Dropdown",
+      "Modal",
+      "Popover",
+      "Select",
+      "Tooltip"
+     ],
+     "import @ant-design/icons": [
+      "CodeOutlined",
+      "GlobalOutlined",
+      "LockOutlined",
+      "PaperClipOutlined",
+      "PictureOutlined",
+      "ThunderboltOutlined"
+     ]
+    },
+    "hitKinds": {
+     "antd-reference": 2,
+     "icon-reference": 1,
+     "provider": 1
+    },
+    "blocksRetirement": true
+   },
+   "final": {
+    "category": "production",
+    "sha256": "a4af042bbf41a1c9c6ef4f54f0aaec36bbc7cb1593a6b3ba006ced9577ae284d",
+    "imports": {
+     "import antd": [
+      "App",
+      "Button",
+      "ConfigProvider",
+      "Dropdown",
+      "Modal",
+      "Popconfirm",
+      "Popover",
+      "Select",
+      "Tooltip"
+     ],
+     "import @ant-design/icons": [
+      "CodeOutlined",
+      "GlobalOutlined",
+      "LockOutlined",
+      "PaperClipOutlined",
+      "PictureOutlined",
+      "ThunderboltOutlined"
+     ]
+    },
+    "hitKinds": {
+     "antd-reference": 2,
+     "icon-reference": 1,
+     "provider": 1
+    },
+    "blocksRetirement": true
+   }
+  },
+  "src/web/src/components/ui/keyboardWindow.test.tsx": {
+   "base": null,
+   "final": {
+    "category": "test",
+    "sha256": "7c409fb8a5848e82ec72182b16f20a005b4a89140b22a50566ee41dab8be5b7b",
+    "imports": {},
+    "hitKinds": {},
+    "blocksRetirement": false
+   }
+  }
+ },
+ "ownersOnMergedTree": {
+  "projectTip": "3aa26fb97644f24551dc9c70149021f7f7f9453f",
+  "records": [
+   "2026-10-07.json",
+   "2026-10-07b.json"
+  ],
+  "unowned": [
+   {
+    "path": "src/web/src/components/ProjectDoneConversation.test.tsx",
+    "reason": "no owner"
+   },
+   {
+    "path": "src/web/src/components/RunnerEngines.accountFold.test.tsx",
+    "reason": "no owner"
+   }
+  ],
+  "unownedFromThisBranch": [],
+  "pending": [],
+  "owners": {
+   "KEEP": 1,
+   "P4.2": 81,
+   "P4.3a": 82,
+   "P4.3b": 33,
+   "P4.4": 50,
+   "P5.1": 28,
+   "P5.2": 11,
+   "P5.3": 90,
+   "P6": 36
+  }
+ }
+}

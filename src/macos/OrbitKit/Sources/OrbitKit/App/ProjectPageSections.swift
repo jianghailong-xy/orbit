@@ -44,10 +44,11 @@ extension ProjectPage {
 
     // MARK: - Coordinator: a conversation that can be reached
 
-    /// The card's one press: a reply while the conversation is waiting on the reader, otherwise a
+    /// The card's one press, which always opens the conversation: while something there waits on the
+    /// reader (`waiting`, the session's `pendingApprovals`), it says how much; otherwise it is the
     /// way in.
-    public static func coordinatorPress(finished: Bool, needsReply: Bool) -> String {
-        finished || !needsReply ? "Open coordinator" : "Reply to coordinator"
+    public static func coordinatorPress(finished: Bool, waiting: Int) -> String {
+        finished || waiting == 0 ? "Open coordinator" : "Review \(waiting) request\(waiting == 1 ? "" : "s")"
     }
 
     /// The box under the rows — the work standing behind the conversation — counted from the

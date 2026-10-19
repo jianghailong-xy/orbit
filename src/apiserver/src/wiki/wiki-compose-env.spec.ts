@@ -45,11 +45,11 @@ function interpolations(compose: string): Array<{ name: string; line: number }> 
   );
 }
 
-/** The apiserver service's `environment:` mapping, each value as written less its quotes. */
-function apiserverEnvironment(compose: string): Map<string, string> {
+/** One service's `environment:` mapping, each value as written less its quotes. */
+function serviceEnvironment(compose: string, service: string): Map<string, string> {
   const lines = compose.split('\n');
-  const start = lines.indexOf('  apiserver:', lines.indexOf('services:'));
-  assert.ok(start > 0, 'docker-compose.yml has no apiserver service');
+  const start = lines.indexOf(`  ${service}:`, lines.indexOf('services:'));
+  assert.ok(start > 0, `docker-compose.yml has no ${service} service`);
   const environment = new Map<string, string>();
   let inEnvironment = false;
   for (const line of lines.slice(start + 1)) {
@@ -90,7 +90,7 @@ test('no interpolation in docker-compose.yml reads a variable the runner puts in
 });
 
 test("the apiserver's ORBIT_WIKI comes from ORBIT_WIKI_MODE and its ORBIT_WATCHES from ORBIT_WATCHES_MODE", () => {
-  const environment = apiserverEnvironment(read('docker-compose.yml'));
+  const environment = serviceEnvironment(read('docker-compose.yml'), 'apiserver');
   for (const [container, host] of [
     ['ORBIT_WIKI', 'ORBIT_WIKI_MODE'],
     ['ORBIT_WATCHES', 'ORBIT_WATCHES_MODE'],

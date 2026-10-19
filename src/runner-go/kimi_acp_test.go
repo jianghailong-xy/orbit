@@ -818,24 +818,113 @@ func TestHandleKimiNotificationMapsTranscriptEvents(t *testing.T) {
 	for _, update := range updates {
 		handleKimiNotification("session-1", kimiNotification(t, "session-1", update), emit, &mu, &active, gauge, nil)
 	}
-	if len(events) != 4 {
+	// Each stretch closes the moment the stream moves on: the thought is durable before the
+	// reply starts, and the reply before the tool call it preceded.
+	if len(events) != 6 {
 		t.Fatalf("events = %#v", events)
 	}
-	if events[0].typ != evThinkingDelta || events[1].typ != evTextDelta ||
-		events[2].typ != evToolUse || events[3].typ != evToolResult {
+	if events[0].typ != evThinkingDelta || events[1].typ != evThinking ||
+		events[2].typ != evTextDelta || events[3].typ != evAssistant ||
+		events[4].typ != evToolUse || events[5].typ != evToolResult {
 		t.Fatalf("event types = %#v", events)
+	}
+	if events[1].payload["text"] != "think" || events[3].payload["text"] != "hello" {
+		t.Fatalf("durable blocks = %#v, %#v", events[1].payload, events[3].payload)
 	}
 	if active.thought.String() != "think" || active.text.String() != "hello" {
 		t.Fatalf("active buffers = thought %q text %q", active.thought.String(), active.text.String())
 	}
-	if events[3].payload["content"] != "contents" || events[3].payload["isError"] != false {
-		t.Fatalf("tool result = %#v", events[3].payload)
+	if events[5].payload["content"] != "contents" || events[5].payload["isError"] != false {
+		t.Fatalf("tool result = %#v", events[5].payload)
 	}
 	// Terminal tool updates are replace-style and can be repeated by an ACP
 	// transport retry; Orbit must persist exactly one result.
 	handleKimiNotification("session-1", kimiNotification(t, "session-1", updates[3]), emit, &mu, &active, gauge, nil)
-	if len(events) != 4 {
+	if len(events) != 6 {
 		t.Fatalf("duplicate terminal update emitted another event: %#v", events)
+	}
+}
+
+// The durable record follows the order the stream produced it: a stretch of reasoning or reply
+// is closed the moment the stream moves on, so a thought that preceded a tool call reads before
+// it. Buffering the whole turn instead — what this guards against — rendered every thought
+// after every tool call and reply, whatever the true order was.
+func TestKimiTurnPersistsStretchesInStreamOrder(t *testing.T) {
+	type event struct {
+		typ     string
+		payload map[string]interface{}
+	}
+	var events []event
+	emit := func(typ string, payload map[string]interface{}) {
+		events = append(events, event{typ: typ, payload: payload})
+	}
+	active := &kimiActiveTurn{orbitTurnID: "turn-1", seenTools: map[string]bool{}, doneTools: map[string]bool{}}
+	var mu sync.Mutex
+	gauge := &kimiUsageGauge{}
+	notify := func(update map[string]interface{}) {
+		handleKimiNotification("session-1", kimiNotification(t, "session-1", update), emit, &mu, &active, gauge, nil)
+	}
+	chunk := func(kind, text string) map[string]interface{} {
+		return map[string]interface{}{
+			"sessionUpdate": kind,
+			"content":       map[string]interface{}{"type": "text", "text": text},
+		}
+	}
+	notify(chunk("agent_thought_chunk", "plan first"))
+	notify(chunk("agent_message_chunk", "I'll read it."))
+	notify(map[string]interface{}{"sessionUpdate": "tool_call", "toolCallId": "1:t", "title": "Read"})
+	notify(map[string]interface{}{"sessionUpdate": "tool_call_update", "toolCallId": "1:t", "status": "completed", "rawOutput": "x"})
+	notify(chunk("agent_thought_chunk", "now decide"))
+	notify(chunk("agent_message_chunk", "Done."))
+
+	var durable []event
+	for _, e := range events {
+		if e.typ != evThinkingDelta && e.typ != evTextDelta {
+			durable = append(durable, e)
+		}
+	}
+	want := []struct {
+		typ  string
+		text string
+	}{
+		{evThinking, "plan first"},
+		{evAssistant, "I'll read it."},
+		{evToolUse, ""},
+		{evToolResult, ""},
+		{evThinking, "now decide"},
+	}
+	if len(durable) != len(want) {
+		t.Fatalf("durable events = %#v", durable)
+	}
+	for i, w := range want {
+		if durable[i].typ != w.typ {
+			t.Fatalf("durable[%d] = %v, want %v: %#v", i, durable[i].typ, w.typ, durable)
+		}
+		if w.text != "" && durable[i].payload["text"] != w.text {
+			t.Fatalf("durable[%d] text = %v, want %q", i, durable[i].payload["text"], w.text)
+		}
+	}
+	// The stretch still open when the turn ends is the only one its end persists.
+	active.flushThought(emit)
+	active.flushText(emit)
+	last := events[len(events)-1]
+	if last.typ != evAssistant || last.payload["text"] != "Done." {
+		t.Fatalf("turn-end flush = %#v, want the open stretch", last)
+	}
+	// And nothing twice: a second end-of-turn flush finds every stretch landed.
+	flushed := len(events)
+	active.flushThought(emit)
+	active.flushText(emit)
+	if len(events) != flushed {
+		t.Fatalf("turn end re-emitted stretches: %#v", events[flushed:])
+	}
+	// A stretch resumed after a flush persists only its tail, not the turn's text again.
+	notify(chunk("agent_message_chunk", " more"))
+	active.flushThought(emit)
+	active.flushText(emit)
+	last = events[len(events)-1]
+	if last.typ != evAssistant || last.payload["text"] != "more" {
+		t.Fatalf("turn-end flush = %#v, want only the open stretch", last)
 	}
 }
 
@@ -940,6 +1029,34 @@ func TestHandleKimiUsageUpdateRecordsTheContextReading(t *testing.T) {
 	}
 }
 
+// kimiTurnSaidNothing is the second half of "this prompt never opened a turn" (kimiNoTurn): a prompt
+// Kimi queued instead of running sends no notification of any kind, so a silent stream beside a
+// missing record is a turn that never started. Anything the turn did say or do — even one tool call
+// with no words, a plan, or reasoning of its own — is a turn that ran.
+func TestKimiTurnSaidNothingOnlyForASilentStream(t *testing.T) {
+	silent := &kimiActiveTurn{seenTools: map[string]bool{}}
+	if !kimiTurnSaidNothing(silent) {
+		t.Fatal("a turn that said and did nothing is reported as having said something")
+	}
+	said := &kimiActiveTurn{seenTools: map[string]bool{}}
+	said.text.WriteString("  \n ")
+	if !kimiTurnSaidNothing(said) {
+		t.Fatal("whitespace-only reply text counts as an answer")
+	}
+	said.thought.WriteString("a thought of its own")
+	if kimiTurnSaidNothing(said) {
+		t.Fatal("a turn that reasoned is reported as silent")
+	}
+	inTool := &kimiActiveTurn{seenTools: map[string]bool{"t1": true}}
+	if kimiTurnSaidNothing(inTool) {
+		t.Fatal("a turn that called a tool is reported as silent")
+	}
+	planned := &kimiActiveTurn{seenTools: map[string]bool{}, plans: 1}
+	if kimiTurnSaidNothing(planned) {
+		t.Fatal("a turn that published a plan is reported as silent")
+	}
+}
+
 // The denominator Kimi reports beats the catalog's: it follows the model the session is actually
 // on, while the catalog is keyed on the id the agent was configured with.
 func TestKimiTurnEndCarriesTheReportedWindowThenTheCatalog(t *testing.T) {
@@ -949,7 +1066,7 @@ func TestKimiTurnEndCarriesTheReportedWindowThenTheCatalog(t *testing.T) {
 	})
 	job := &ClaimedSession{Provider: providerKimi, Agent: AgentExecConfig{Model: "kimi-k2.7"}}
 
-	got := kimiTurnEndPayload(&kimiUsageGauge{tokens: 21166, window: 1_048_576}, "completed", job)
+	got := kimiTurnEndPayload(&kimiUsageGauge{tokens: 21166, window: 1_048_576}, "completed", 1, job)
 	if got["contextTokens"] != 21166 {
 		t.Fatalf("contextTokens = %v, want 21166", got["contextTokens"])
 	}
@@ -962,7 +1079,7 @@ func TestKimiTurnEndCarriesTheReportedWindowThenTheCatalog(t *testing.T) {
 
 	// Kimi said nothing about the window (an older build, or a turn with no usage report): the
 	// catalog answers, exactly as it does for the other engines.
-	got = kimiTurnEndPayload(&kimiUsageGauge{tokens: 21166}, "completed", job)
+	got = kimiTurnEndPayload(&kimiUsageGauge{tokens: 21166}, "completed", 1, job)
 	if got["contextWindow"] != 262_144 {
 		t.Fatalf("contextWindow = %v, want the catalog's 262144", got["contextWindow"])
 	}
@@ -970,7 +1087,7 @@ func TestKimiTurnEndCarriesTheReportedWindowThenTheCatalog(t *testing.T) {
 	// Neither has an answer: the key is absent, which is what leaves the clients on their own
 	// fallback instead of dividing by zero.
 	byok := &ClaimedSession{Provider: providerKimi, Agent: AgentExecConfig{Model: "kimi-unlisted"}}
-	got = kimiTurnEndPayload(&kimiUsageGauge{tokens: 21166}, "completed", byok)
+	got = kimiTurnEndPayload(&kimiUsageGauge{tokens: 21166}, "completed", 1, byok)
 	if _, ok := got["contextWindow"]; ok {
 		t.Fatalf("unknown window reported anyway: %#v", got)
 	}
@@ -1056,7 +1173,7 @@ func TestKimiUsageUpdateAfterTheTurnSettlesReachesTheNextTurnEnd(t *testing.T) {
 	activeMu.Lock()
 	active = nil
 	activeMu.Unlock()
-	first := kimiTurnEndPayload(gauge, "completed", job)
+	first := kimiTurnEndPayload(gauge, "completed", 1, job)
 	if first["contextTokens"] != 0 {
 		t.Fatalf("first turn_end = %v, want 0: Kimi has not reported anything yet", first["contextTokens"])
 	}
@@ -1080,7 +1197,7 @@ func TestKimiUsageUpdateAfterTheTurnSettlesReachesTheNextTurnEnd(t *testing.T) {
 	activeMu.Lock()
 	active = nil
 	activeMu.Unlock()
-	second := kimiTurnEndPayload(gauge, "completed", job)
+	second := kimiTurnEndPayload(gauge, "completed", 1, job)
 	if second["contextTokens"] != 33383 {
 		t.Fatalf("second turn_end contextTokens = %v, want 33383", second["contextTokens"])
 	}
@@ -1119,7 +1236,7 @@ func TestKimiContextPingReportsTheSameReadingAsTurnEnd(t *testing.T) {
 	if len(pings) != 1 {
 		t.Fatalf("pings = %#v, want one", pings)
 	}
-	end := kimiTurnEndPayload(gauge, "completed", job)
+	end := kimiTurnEndPayload(gauge, "completed", 1, job)
 	if pings[0]["contextTokens"] != end["contextTokens"] || pings[0]["contextWindow"] != end["contextWindow"] {
 		t.Fatalf("ping %#v disagrees with turn_end %#v", pings[0], end)
 	}

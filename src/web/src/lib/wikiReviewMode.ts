@@ -13,7 +13,7 @@
  * it still waits in Review: the server counts what it did and says whether Revert run… would take
  * anything back, so every run — an Automatic one nothing of which waits anywhere included — folds into
  * one row, opens and reverts. What the server does not say yet, these readings leave out rather than
- * invent: how many sessions a run read and on which provider.
+ * invent: how many sessions a run read.
  */
 import {
   WIKI_DEFAULT_MAINTENANCE_SETTINGS,
@@ -57,7 +57,7 @@ export const WIKI_MODE_NOTES: Record<WikiReviewMode, string> = {
   manual: 'Every change from sessions, maintenance and imports waits for you in Review.',
   tiered: 'Your own words and machine-checked entries apply at once; the rest show as Unreviewed and are not sent to agents.',
   automatic:
-    'local-vllm checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason.',
+    'The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason.',
 };
 /** The mode a space is made with, which the list tags `default`. */
 export const WIKI_DEFAULT_REVIEW_MODE: WikiReviewMode = 'tiered';
@@ -103,18 +103,11 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 /** Maintenance: the card, its Set up form, and the rows it shows once it is on. */
 export const WIKI_MAINTENANCE = 'Maintenance';
 export const WIKI_MAINTENANCE_NAME = WIKI_HISTORY_MAINTENANCE;
-export const WIKI_MAINTENANCE_NOTE =
-  'Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the workspace you pick, with the provider pinned.';
 export const WIKI_OFF = 'Off';
 export const WIKI_ON = 'On';
 export const WIKI_SET_UP = 'Set up…';
 export const WIKI_SET_UP_TITLE = 'Set up maintenance';
 export const WIKI_STATUS = 'Status';
-export const WIKI_WORKSPACE = 'Workspace';
-export const WIKI_WORKSPACE_NOTE = 'The runner that checks out this codebase; maintenance runs there.';
-export const WIKI_PROVIDER = 'Provider';
-export const WIKI_PROVIDER_NOTE = 'Pinned: a run never falls back to another provider.';
-export const WIKI_PINNED_NO_FALLBACK = 'pinned, no fallback';
 export const WIKI_DAILY_LIMIT = 'Daily limit';
 export const WIKI_RUNS_A_DAY = 'runs a day';
 export const wikiRunsADay = (runs: number): string => (runs === 1 ? '1 run a day' : `${runs} ${WIKI_RUNS_A_DAY}`);
@@ -146,19 +139,28 @@ export const WIKI_TURN_ON = 'Turn on';
 export const WIKI_TURN_OFF = 'Turn off';
 export const WIKI_MAINTENANCE_EDIT = 'Edit';
 export const WIKI_SAVE = 'Save';
-/** What the pickers say before the owner has a workspace, or a provider this build can list. */
+/** What the workspace picker says before the owner has picked one. */
 export const WIKI_NO_WORKSPACE = 'Pick a workspace';
+
+/**
+ * Maintenance as the server executes the wiki (design §2.2, mock 35 ①②; contract `jobs.executor.read`): there is no
+ * provider — the model is the deployment's System model, said read-only with its state — the workspace is where the
+ * repository is read from, and one sentence says where the material goes.
+ */
+export const WIKI_REPO_FROM = 'Reads the repository from';
+export const WIKI_REPO_FROM_NOTE = 'The runner that checks out this codebase; the server reads the repository there.';
+export const WIKI_MODEL = 'Model';
+export const WIKI_MODEL_NOTE = 'Set by this deployment, the same for every space.';
+export const WIKI_MAINTENANCE_NOTE_SERVER =
+  'Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the server with this deployment’s System model.';
+export const WIKI_PRIVACY_NOTE =
+  'The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model.';
 
 /** A workspace as the picker lists it: its name, and the runner it lives on. */
 export function wikiWorkspaceLabel(workspace: { name?: string | null; runner?: { name?: string | null; displayName?: string | null } | null }): string {
   const runner = workspace.runner?.displayName || workspace.runner?.name || null;
   const name = workspace.name || '—';
   return runner ? `${name} · ${runner}` : name;
-}
-
-/** A provider as the picker lists it: its slug, and the model it runs when it names one. */
-export function wikiProviderLabel(provider: string, model: string | null | undefined): string {
-  return model ? `${provider} · ${model}` : provider;
 }
 
 /**

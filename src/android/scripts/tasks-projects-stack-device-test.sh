@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+# A11 real-account journeys against the isolated Orbit stack (/var/tmp/a11-stack: apiserver at the fixed
+# server SHA, its own PostgreSQL and runner). No fixture: every write is read back from the stack's API by the
+# test itself (RealStackDeviceTest). Instrumentation arguments come from A11_STACK_ARGS (key=value lines).
+set -euo pipefail
+
+if (( $# < 4 || $# > 5 )); then
+  echo "Usage: $0 API APP_APK TEST_APK EVIDENCE_DIR [SERIAL]" >&2
+  exit 2
+fi
+api="$1"
+[[ "$api" =~ ^(29|3[0-6])$ ]] || { echo 'Expected API29–36' >&2; exit 2; }
+apk="$(realpath "$2")"
+tests="$(realpath "$3")"
+output="$(realpath -m "$4")"
+serial="${5:-}"
+[[ -f "$apk" && -f "$tests" ]] || { echo 'Both APKs are required' >&2; exit 2; }
+mkdir -p "$output"
+[[ -z "$(ls -A "$output")" ]] || { echo 'Use a new evidence directory' >&2; exit 2; }
+export ANDROID_HOME="${ANDROID_HOME:-/opt/android-sdk}"
+export ANDROID_USER_HOME="${ANDROID_USER_HOME:-/var/lib/orbit/android/user}"
+export ANDROID_AVD_HOME="${ANDROID_AVD_HOME:-/var/lib/orbit/android/avd}"
+# Every adb call runs with the lock's fd closed: an adb server this script happens to start must not
+# inherit fd 9 and hold ui.lock after the script exits (a daemon that did held it for 40 minutes).
+adb="$(mktemp -d)/adb"
+printf '#!/bin/sh\nexec "%s" "$@" 9>&-\n' "$ANDROID_HOME/platform-tools/adb" > "$adb"
+chmod +x "$adb"
+"$adb" start-server
+package='io.orbitd.android.debug'
+runner='io.orbitd.android.debug.test/androidx.test.runner.AndroidJUnitRunner'
+emulator_pid=''
+exec 9>"${ANDROID_DEVICE_LOCK:-/var/lib/orbit/android/ui.lock}"
+flock -w "${ANDROID_DEVICE_LOCK_WAIT:-7200}" 9 || { echo "Device busy; continue offline work" >&2; exit 75; }
+cleanup() {
+  local result=$?
+  if [[ -n "${fixture_pid:-}" ]]; then
+    kill "$fixture_pid" 2>/dev/null || true
+    wait "$fixture_pid" 2>/dev/null || true
+  fi
+  if [[ -n "${serial:-}" ]]; then "$adb" -s "$serial" shell am force-stop "$package" >/dev/null 2>&1 || true; "$adb" -s "$serial" reverse --remove "tcp:${stack_port:-3711}" >/dev/null 2>&1 || true; fi
+  if [[ -n "${old_font:-}" ]]; then
+    if [[ "$old_font" == null ]]; then
+      "$adb" -s "$serial" shell settings delete system font_scale >/dev/null || true
+    else
+      "$adb" -s "$serial" shell settings put system font_scale "$old_font" >/dev/null || true
+    fi
+    "$adb" -s "$serial" shell wm size "${old_size:-reset}" >/dev/null || true
+    "$adb" -s "$serial" shell wm density "${old_density:-reset}" >/dev/null || true
+    "$adb" -s "$serial" shell cmd uimode night "$old_night" >/dev/null || true
+  fi
+  if [[ -n "${old_handwriting:-}" ]]; then
+    if [[ "$old_handwriting" == null ]]; then
+      "$adb" -s "$serial" shell settings delete secure stylus_handwriting_enabled >/dev/null || true
+    else
+      "$adb" -s "$serial" shell settings put secure stylus_handwriting_enabled "$old_handwriting" >/dev/null || true
+    fi
+  fi
+  if [[ -n "${old_font:-}" ]]; then
+    actual_font="$("$adb" -s "$serial" shell settings get system font_scale | tr -d '\r')"
+    actual_size="$("$adb" -s "$serial" shell wm size | sed -n 's/Override size: //p' | tr -d '\r')"
+    actual_density="$("$adb" -s "$serial" shell wm density | sed -n 's/Override density: //p' | tr -d '\r')"
+    actual_night="$("$adb" -s "$serial" shell cmd uimode night | awk '{print $NF}' | tr -d '\r')"
+    printf 'font=%s expected=%s\nsize=%s expected=%s\ndensity=%s expected=%s\nnight=%s expected=%s\n' \
+      "$actual_font" "$old_font" "$actual_size" "$old_size" "$actual_density" "$old_density" "$actual_night" "$old_night" > "$output/restored-settings.txt"
+    [[ "$actual_font" == "$old_font" && "$actual_size" == "$old_size" && "$actual_density" == "$old_density" && "$actual_night" == "$old_night" ]] || result=1
+  fi
+  if [[ -n "$emulator_pid" ]]; then
+    kill "$emulator_pid" 2>/dev/null || true
+    wait "$emulator_pid" 2>/dev/null || true
+    timeout 20 "$adb" -s "$serial" wait-for-disconnect > "$output/disconnect.txt" 2>&1 || result=1
+    local deadline=$((SECONDS + 20))
+    while "$adb" devices | grep -Eq "^$serial[[:space:]]"; do
+      if (( SECONDS >= deadline )); then result=1; break; fi
+      sleep 0.25
+    done
+  fi
+  printf 'exit_code=%s\nfinished_utc=%s\n' "$result" "$(date -u +%FT%TZ)" >> "$output/result.txt"
+  exit "$result"
+}
+trap cleanup EXIT
+printf 'scope=A11 Tasks/Projects UI; isolated real Orbit stack (fixed server SHA, test accounts); not production, not a physical device\nstarted_utc=%s\n' "$(date -u +%FT%TZ)" > "$output/result.txt"
+if [[ -z "$serial" ]]; then
+  if [[ "$api" == 36 ]]; then
+    serial=emulator-5554
+  else
+    serial=emulator-5556
+    if "$adb" devices | grep -Eq "^$serial[[:space:]]"; then
+      echo 'Port 5556 in use; pass an existing serial explicitly' >&2
+      exit 1
+    fi
+    "$ANDROID_HOME/emulator/emulator" -avd "orbit-ui-api$api" -port 5556 \
+      -no-window -no-audio -no-boot-anim -no-snapshot -gpu swiftshader \
+      -accel on -memory 2048 -cores 2 -camera-back none -camera-front none \
+      > "$output/emulator.log" 2>&1 &
+    emulator_pid=$!
+  fi
+fi
+timeout 300 "$adb" -s "$serial" wait-for-device
+deadline=$((SECONDS + 300))
+until [[ "$("$adb" -s "$serial" shell getprop sys.boot_completed | tr -d '\r')" == 1 ]]; do
+  (( SECONDS < deadline )) || { echo 'Boot timed out' >&2; exit 1; }
+  sleep 2
+done
+[[ "$("$adb" -s "$serial" shell getprop ro.build.version.sdk | tr -d '\r')" == "$api" ]]
+{
+  printf 'serial=%s\n' "$serial"
+  for property in ro.product.model ro.build.version.release ro.build.version.sdk ro.build.fingerprint \
+      ro.build.version.security_patch ro.kernel.qemu ro.com.google.gmsversion; do
+    printf '%s=%s\n' "$property" "$("$adb" -s "$serial" shell getprop "$property" | tr -d '\r')"
+  done
+  "$adb" -s "$serial" shell pm list packages --show-versioncode com.google.android.gms
+} > "$output/device.txt"
+sha256sum "$apk" "$tests" > "$output/apks.sha256"
+"$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" > "$output/apk-badging.txt"
+grep -F "package: name='$package'" "$output/apk-badging.txt" >/dev/null
+"$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "$apk" > "$output/signature.txt"
+"$adb" -s "$serial" install -r "$apk" > "$output/install-app.txt"
+"$adb" -s "$serial" install -r "$tests" > "$output/install-tests.txt"
+"$adb" -s "$serial" shell input keyevent KEYCODE_WAKEUP
+"$adb" -s "$serial" shell wm dismiss-keyguard
+
+
+old_font=''
+if [[ "$("$adb" -s "$serial" shell getprop ro.kernel.qemu | tr -d '\r')" == 1 ]]; then
+  old_size="$("$adb" -s "$serial" shell wm size | sed -n 's/Override size: //p' | tr -d '\r')"
+  old_density="$("$adb" -s "$serial" shell wm density | sed -n 's/Override density: //p' | tr -d '\r')"
+  old_font="$("$adb" -s "$serial" shell settings get system font_scale | tr -d '\r')"
+  old_night="$("$adb" -s "$serial" shell cmd uimode night | awk '{print $NF}' | tr -d '\r')"
+  "$adb" -s "$serial" shell wm size 720x1280
+  "$adb" -s "$serial" shell wm density 320
+  "$adb" -s "$serial" shell settings put system font_scale "${A11_FONT_SCALE:-1.0}"
+  "$adb" -s "$serial" shell cmd uimode night "${A11_NIGHT:-no}"
+  if (( api >= 34 )); then
+    old_handwriting="$("$adb" -s "$serial" shell settings get secure stylus_handwriting_enabled | tr -d '\r')"
+    "$adb" -s "$serial" shell settings put secure stylus_handwriting_enabled 0
+  fi
+fi
+deadline=$((SECONDS + 30))
+until "$adb" -s "$serial" shell wm size > "$output/window-ready.txt" 2>&1; do
+  (( SECONDS < deadline )) || { echo 'Window service did not settle after display configuration' >&2; exit 1; }
+  sleep 1
+done
+{
+  printf 'requested_font_scale=%s\nrequested_night=%s\n' "${A11_FONT_SCALE:-1.0}" "${A11_NIGHT:-no}"
+  printf 'input_scope=phone touchscreen keyboard; stylus handwriting not tested\noriginal_stylus_handwriting_enabled=%s\n' "${old_handwriting:-unchanged}"
+  printf 'cold_link_kind=%s\n' "${A11_COLD_LINK:-session}"
+  printf 'back_input=%s\n' "${A11_BACK_INPUT:-key}"
+  "$adb" -s "$serial" shell settings get secure navigation_mode
+  "$adb" -s "$serial" shell wm size
+  "$adb" -s "$serial" shell wm density
+  "$adb" -s "$serial" shell settings get system font_scale
+  "$adb" -s "$serial" shell cmd uimode night
+  "$adb" -s "$serial" shell ime list -s
+  "$adb" -s "$serial" shell settings get secure stylus_handwriting_enabled
+  "$adb" -s "$serial" shell settings get secure enabled_accessibility_services
+  "$adb" -s "$serial" shell pm list packages --show-versioncode com.google.android.marvin.talkback
+} > "$output/conditions.txt"
+[[ "$("$adb" -s "$serial" shell cmd uimode night | awk '{print $NF}' | tr -d '\r')" == "${A11_NIGHT:-no}" ]] || { echo 'Requested night mode did not apply; not running under mislabeled conditions' >&2; exit 1; }
+stack_server="${A11_STACK_SERVER:-http://127.0.0.1:3711}"
+stack_port="${stack_server##*:}"
+args_file="${A11_STACK_ARGS:?A11_STACK_ARGS must name a key=value file}"
+curl --fail --silent "$stack_server/api/health" > "$output/stack-health.json"
+cat "${A11_STACK_DIR:-/var/tmp/a11-stack}/SOURCE_SHA" > "$output/stack-source-sha.txt" 2>/dev/null || true
+instrument_args=()
+while IFS='=' read -r key value; do
+  [[ -z "$key" || "$key" == \#* ]] && continue
+  instrument_args+=(-e "$key" "$value")
+done < "$args_file"
+grep -v -i 'password' "$args_file" > "$output/instrument-args.txt" || true
+"$adb" -s "$serial" reverse "tcp:$stack_port" "tcp:$stack_port"
+"$adb" -s "$serial" shell am force-stop "$package"
+"$adb" -s "$serial" shell run-as "$package" rm -rf files/a11-tasks-projects files/a11-captures.tar
+"$adb" -s "$serial" shell run-as "$package" mkdir -p files/a11-tasks-projects
+start="$("$adb" -s "$serial" shell date +%s | tr -d '\r').000"
+test_class=io.orbitd.android.taskprojects.RealStackDeviceTest
+test_selection="${A11_TEST:-$test_class}"
+timeout "${A11_INSTRUMENT_TIMEOUT:-1200}" "$adb" -s "$serial" shell am instrument -w -r "${instrument_args[@]}" -e class "$test_selection" "$runner" > "$output/instrumentation.txt" 2>&1
+pid="$(sed -n 's/.*a11_pid=\([0-9]*\).*/\1/p' "$output/instrumentation.txt" | head -1)"
+[[ -n "$pid" ]]
+"$adb" -s "$serial" logcat -d -v threadtime --pid="$pid" -T "$start" > "$output/logcat.txt"
+"$adb" -s "$serial" shell run-as "$package" tar -cf files/a11-captures.tar -C files a11-tasks-projects > "$output/capture-create.txt" 2>&1
+"$adb" -s "$serial" exec-out run-as "$package" cat files/a11-captures.tar > "$output/captures.tar"
+tar --no-same-owner -xf "$output/captures.tar" -C "$output"
+chmod -R a+rX "$output/a11-tasks-projects"
+# The test accounts' passwords are generated when the stack is seeded: look for the ones this run was given, and for any JWT.
+leaked=0
+for key in ownerPassword memberPassword; do
+  secret="$(sed -n "s/^$key=//p" "$args_file" | base64 -d 2>/dev/null || true)"
+  [[ -n "$secret" ]] && grep -F -q -- "$secret" "$output/logcat.txt" && leaked=1
+done
+if (( leaked )) || grep -E 'eyJhbGciOi' "$output/logcat.txt"; then
+  echo 'Stack credential or token found in logcat' >&2
+  exit 1
+fi
+grep -Eq 'OK \([0-9]+ tests?\)' "$output/instrumentation.txt"
+if grep -E 'FAILURES!!!|INSTRUMENTATION_FAILED|Process crashed|INSTRUMENTATION_STATUS_CODE: -[234]' "$output/instrumentation.txt"; then exit 1; fi

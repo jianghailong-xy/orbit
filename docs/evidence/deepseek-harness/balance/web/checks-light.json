@@ -1,0 +1,154 @@
+[
+  {
+    "name": "providers: both DeepSeek rows show the balance",
+    "ok": true
+  },
+  {
+    "name": "providers: same line on both rows",
+    "ok": true,
+    "detail": "Account balance ¥110.00 · updated 2 min ago"
+  },
+  {
+    "name": "providers: no line on Anthropic or Kimi",
+    "ok": true
+  },
+  {
+    "name": "web-03-edit-deepseek: balance section",
+    "ok": true
+  },
+  {
+    "name": "web-03-edit-deepseek: shared line",
+    "ok": true
+  },
+  {
+    "name": "web-03-edit-deepseek: whole-account note",
+    "ok": true
+  },
+  {
+    "name": "web-03-edit-deepseek: section right under the key",
+    "ok": true
+  },
+  {
+    "name": "web-04-edit-deepseek-harness: balance section",
+    "ok": true
+  },
+  {
+    "name": "web-04-edit-deepseek-harness: shared line",
+    "ok": true
+  },
+  {
+    "name": "web-04-edit-deepseek-harness: whole-account note",
+    "ok": true
+  },
+  {
+    "name": "web-04-edit-deepseek-harness: section right under the key",
+    "ok": true
+  },
+  {
+    "name": "refresh: the section shows the new read",
+    "ok": true
+  },
+  {
+    "name": "states list",
+    "ok": true
+  },
+  {
+    "name": "states list: DeepSeek",
+    "ok": true,
+    "detail": "Account balance ¥110.00 · updated 2 min ago"
+  },
+  {
+    "name": "states list: DeepSeek Intl",
+    "ok": true,
+    "detail": "Account balance ¥110.00 · $5.00 updated 2 min ago"
+  },
+  {
+    "name": "states list: DeepSeek Team",
+    "ok": true,
+    "detail": "Balance ¥0.42 — too low, DeepSeek calls will fail Top up on DeepSeek ↗"
+  },
+  {
+    "name": "states list: DeepSeek Old key",
+    "ok": true,
+    "detail": "Balance unavailable: API key rejected · Retry"
+  },
+  {
+    "name": "states list: DeepSeek Old key shows no amount",
+    "ok": true,
+    "detail": "Balance unavailable: API key rejected · Retry"
+  },
+  {
+    "name": "states list: DeepSeek Direct",
+    "ok": true,
+    "detail": "Balance unavailable: network error · Retry"
+  },
+  {
+    "name": "states list: DeepSeek Direct shows no amount",
+    "ok": true,
+    "detail": "Balance unavailable: network error · Retry"
+  },
+  {
+    "name": "states list: DeepSeek Busy",
+    "ok": true,
+    "detail": "Balance unavailable: DeepSeek error · Retry"
+  },
+  {
+    "name": "states list: DeepSeek Busy shows no amount",
+    "ok": true,
+    "detail": "Balance unavailable: DeepSeek error · Retry"
+  },
+  {
+    "name": "states list: DeepSeek Slow",
+    "ok": true,
+    "detail": "Checking account balance…"
+  },
+  {
+    "name": "states list: DeepSeek Slow shows no amount",
+    "ok": true,
+    "detail": "Checking account balance…"
+  },
+  {
+    "name": "web-05a-section-multi-currency",
+    "ok": true
+  },
+  {
+    "name": "web-05b-section-low",
+    "ok": true
+  },
+  {
+    "name": "web-05c-section-key-rejected",
+    "ok": true
+  },
+  {
+    "name": "web-05c-section-key-rejected: no amount anywhere in the section",
+    "ok": true,
+    "detail": "DeepSeek account balance Couldn't get the balance DeepSeek rejected this API key (401 Authentication Fails). Paste a valid key above and save, then retry. Balance unknown Tried just now Retry"
+  },
+  {
+    "name": "web-05d-section-network",
+    "ok": true
+  },
+  {
+    "name": "web-05d-section-network: no amount anywhere in the section",
+    "ok": true,
+    "detail": "DeepSeek account balance Couldn't get the balance Couldn't reach api.deepseek.com — the request timed out after 10 s. The key itself wasn't checked. Balance unknown Tried 1 min ago Retry"
+  },
+  {
+    "name": "web-05e-section-upstream",
+    "ok": true
+  },
+  {
+    "name": "web-05e-section-upstream: no amount anywhere in the section",
+    "ok": true,
+    "detail": "DeepSeek account balance Couldn't get the balance DeepSeek answered 503 Server Overloaded. The key itself wasn't checked. Balance unknown Tried just now Retry"
+  },
+  {
+    "name": "web-05f-section-loading",
+    "ok": true
+  },
+  {
+    "name": "web-05f-section-loading: no amount anywhere in the section",
+    "ok": true,
+    "detail": "DeepSeek account balance Total Checking balance… Refresh"
+  }
+]

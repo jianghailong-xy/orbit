@@ -1,0 +1,10 @@
+ ❯ src/components/ui/Floating.test.tsx (4 tests | 3 failed) 21ms
+     × puts the start edge 20px before the anchor centre, rounded down 14ms
+     × flipped to the end, ends 20px past the anchor’s start edge, rounded up 2ms
+     × asked for the end, mirrors both 2ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 3 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  src/components/ui/Floating.test.tsx > useWholePixelOffsets pointAt > puts the start edge 20px before the anchor centre, rounded down
+ FAIL  src/components/ui/Floating.test.tsx > useWholePixelOffsets pointAt > flipped to the end, ends 20px past the anchor’s start edge, rounded up
+ FAIL  src/components/ui/Floating.test.tsx > useWholePixelOffsets pointAt > asked for the end, mirrors both
+ Test Files  1 failed (1)
+      Tests  3 failed | 1 passed (4)

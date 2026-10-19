@@ -43,8 +43,24 @@ describe('where the conversation’s exception cards come from', () => {
       'the cards are still drawn without a moment of their own',
     ).toContain('exceptionCardRows(openItems.data, transcriptEvents)');
     expect(view, 'the row is not handed the card its anchor is about').toContain(
-      'element: <ItemAsCard',
+      '<ItemAsCard',
     );
+  });
+
+  it('hands each card the project’s main branch, off the promotion reads the pane already holds', () => {
+    const view = source();
+    expect(view, 'the cards are not told which branch a re-check’s merge goes into').toContain(
+      'currentPromotion.data?.upstreamRef ?? mergedPromotions.data?.[0]?.upstreamRef',
+    );
+    expect(view).toContain('main={coordinatedMain} />');
+  });
+
+  it('tells the coordinator a card’s merge by the main branch the open-items read names', () => {
+    const view = source();
+    expect(view, 'the chat context is not told which branch a re-check’s merge goes into').toContain(
+      'const chatMain = mainBranchName(openItems.data?.mainBranch);',
+    );
+    expect(view).toContain('openItemChatContext({ projectTitle: chatProjectTitle, projectId, row: subject.row, now, main: chatMain })');
   });
 
   it('hands them to the transcript as inserts, and keeps no block of its own', () => {

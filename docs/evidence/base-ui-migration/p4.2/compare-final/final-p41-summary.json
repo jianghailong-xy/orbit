@@ -1,0 +1,554 @@
+{
+ "beyond": [
+  {
+   "clusters": [
+    [
+     [
+      366,
+      373
+     ],
+     [
+      95,
+      102
+     ],
+     8,
+     1
+    ],
+    [
+     [
+      59,
+      65
+     ],
+     [
+      180,
+      181
+     ],
+     8,
+     16
+    ],
+    [
+     [
+      80,
+      86
+     ],
+     [
+      180,
+      181
+     ],
+     7,
+     16
+    ],
+    [
+     [
+      122,
+      122
+     ],
+     [
+      180,
+      180
+     ],
+     1,
+     1
+    ],
+    [
+     [
+      42,
+      43
+     ],
+     [
+      199,
+      203
+     ],
+     7,
+     33
+    ],
+    [
+     [
+      121,
+      123
+     ],
+     [
+      203,
+      205
+     ],
+     5,
+     1
+    ]
+   ],
+   "max": 33,
+   "pixels": 64,
+   "shot": "chromium-dark-phone/p41-profile-photo.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      849,
+      852
+     ],
+     [
+      151,
+      153
+     ],
+     7,
+     2
+    ],
+    [
+     [
+      1030,
+      1034
+     ],
+     [
+      242,
+      247
+     ],
+     7,
+     1
+    ],
+    [
+     [
+      1058,
+      1059
+     ],
+     [
+      379,
+      381
+     ],
+     5,
+     1
+    ],
+    [
+     [
+      500,
+      501
+     ],
+     [
+      408,
+      410
+     ],
+     4,
+     1
+    ],
+    [
+     [
+      1058,
+      1059
+     ],
+     [
+      408,
+      410
+     ],
+     4,
+     1
+    ],
+    [
+     [
+      17,
+      46
+     ],
+     [
+      859,
+      875
+     ],
+     318,
+     30
+    ]
+   ],
+   "max": 30,
+   "pixels": 354,
+   "shot": "chromium-light-desktop/p41-profile-photo.png"
+  },
+  {
+   "clusters": [
+    [
+     [
+      16,
+      23
+     ],
+     [
+      95,
+      102
+     ],
+     9,
+     1
+    ],
+    [
+     [
+      366,
+      373
+     ],
+     [
+      95,
+      102
+     ],
+     8,
+     1
+    ],
+    [
+     [
+      59,
+      65
+     ],
+     [
+      180,
+      181
+     ],
+     7,
+     16
+    ],
+    [
+     [
+      80,
+      86
+     ],
+     [
+      180,
+      181
+     ],
+     6,
+     16
+    ],
+    [
+     [
+      121,
+      122
+     ],
+     [
+      180,
+      180
+     ],
+     2,
+     1
+    ],
+    [
+     [
+      42,
+      43
+     ],
+     [
+      199,
+      203
+     ],
+     6,
+     32
+    ]
+   ],
+   "max": 32,
+   "pixels": 58,
+   "shot": "chromium-light-phone/p41-profile-photo.png"
+  }
+ ],
+ "missing": [],
+ "screenshots": {
+  "antialias": 17,
+  "beyond": 3,
+  "identical": 252,
+  "missing": 0
+ },
+ "styleDeltas": {},
+ "tests": {
+  "notPassedDel": [],
+  "notPassedRef": [],
+  "total": 96
+ },
+ "traces": {
+  "differing": {
+   "chromium-dark-desktop :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Manage",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "step": "manage access tokens"
+    }
+   ],
+   "chromium-light-desktop :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Manage",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "step": "manage access tokens"
+    }
+   ],
+   "chromium-light-phone :: P4.1 settings › every control: mode, switches while saving, theme and the way to tokens": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Manage",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "manage access tokens",
+      "url": "/settings/access-tokens"
+     },
+     "step": "manage access tokens"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens"
+      ],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Access tokens",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "step": "escape closes the dialog"
+    }
+   ],
+   "webkit-dark-desktop :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+    {
+     "del": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Sign In",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "step": "wrong password"
+    }
+   ],
+   "webkit-dark-phone :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+    {
+     "del": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Sign In",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "step": "wrong password"
+    }
+   ],
+   "webkit-light-desktop :: P4.1 access tokens › an administrator: a user's tokens in the users page dialog": [
+    {
+     "del": {
+      "alerts": [],
+      "dialogs": [],
+      "focus": {
+       "name": "Access tokens",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "ref": {
+      "alerts": [],
+      "dialogs": [
+       "Access tokens"
+      ],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [],
+      "step": "escape closes the dialog",
+      "url": "/admin"
+     },
+     "step": "escape closes the dialog"
+    }
+   ],
+   "webkit-light-desktop :: P4.1 sign-in and first-run setup › login: a signed-out link, a wrong password, then where it was going": [
+    {
+     "del": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": "body",
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "ref": {
+      "alerts": [
+       "Invalid email or password"
+      ],
+      "dialogs": [],
+      "focus": {
+       "name": "Sign In",
+       "role": "button"
+      },
+      "invalid": [],
+      "notifications": "",
+      "requests": [
+       {
+        "body": {
+         "email": "reviewer@example.test",
+         "password": "wrong password"
+        },
+        "method": "POST",
+        "path": "/api/auth/login"
+       }
+      ],
+      "step": "wrong password",
+      "url": "/login?next=%2Fcli-login%3Fcode%3DWXYZ4-8K2QP"
+     },
+     "step": "wrong password"
+    }
+   ]
+  },
+  "equal": 88,
+  "total": 96
+ }
+}

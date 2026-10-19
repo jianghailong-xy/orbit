@@ -1,0 +1,5 @@
+mr-01a14aea-881f-71ea-ac19-0bcb23607ce2
+HostConfig.Mounts: [{"Type":"volume","Source":"mr-data-01a14aea-881f-71ea-ac19-0bcb23607ce2","Target":"/var/lib/orbit","VolumeOptions":{}},{"Type":"volume","Source":"mr-boot-01a14aea-881f-71ea-ac19-0bcb23607ce2-g1","Target":"/run/orbit-bootstrap","VolumeOptions":{"NoCopy":true,"Labels":{"orbit.managed-runner.generation":"1","orbit.managed-runner.instance":"orbit-92523c8f","orbit.managed-runner.kind":"bootstrap","orbit.managed-runner.owner":"01a14aea-8817-765b-a82c-c40d22972fa5","orbit.managed-runner.runner":"01a14aea-881f-71ea-ac19-0bcb23607ce2"}}},{"Type":"tmpfs","Target":"/tmp","TmpfsOptions":{"SizeBytes":1073741824,"Mode":1023,"Options":[["exec"]]}}]
+HostConfig.Tmpfs: null
+Mounts: tmpfs:/tmp rw=true volume:/run/orbit-bootstrap rw=true volume:/var/lib/orbit rw=true 
+User=10001:10001 ReadonlyRootfs=true CapDrop=[ALL] Memory=4294967296

@@ -1,0 +1,167 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="../project-merge-sessions-page/kit.css">
+<script src="../project-merge-sessions-page/kit.js"></script>
+<style>
+/* 2026-10-11 · 合入检查卡改成「已合入」那一行的样子 · 本篇新增样式 */
+body { width: max-content; }
+.phone { height: 608px; }   /* 这页的内容到「Today」两行就完了，不必留满 852pt 的白 */
+.panel { width: 886px; margin: 0 0 34px; }
+.pgrid { display: grid; grid-template-columns: 393px 393px; gap: 26px 44px; }
+.pcap { font-size: 13.5px; font-weight: 650; color: #16161a; margin: 0 0 7px; }
+.pcap span { font-weight: 400; color: #6a6a72; }
+
+/* ① 现在这张卡：ProjectMergeCardView .checking（iOS 字号：13pt 标题 / 11pt 状态与元信息 / 13pt 环） */
+.oldchk { margin-top: 10px; }
+.oldchk .oh { display: flex; align-items: center; gap: 8px; }
+.oldchk .oh b { font-size: 13px; font-weight: 650; color: var(--tint); letter-spacing: -.01em; white-space: nowrap; }
+.oldchk .os { margin-left: auto; font-size: 11px; color: var(--l2); }
+.oldchk .oh svg.ch { margin-left: 2px; }
+.oldchk .ol { display: flex; align-items: center; gap: 11px; margin-top: 8px; font-size: 11px; color: var(--l2);
+              font-variant-numeric: tabular-nums; white-space: nowrap; }
+.oldchk .ol b { color: var(--tint); font-weight: 650; }
+.oldchk .ol b.w { color: var(--l2); font-weight: 600; }
+.oldchk .ol .ou { margin-left: auto; }
+
+/* 改后：一条合入行 —— 与时间线里「Merged into main」那一行同一套排版 */
+.ncard { background: rgba(120,120,128,.1); border-radius: 14px; margin-top: 10px; padding: 12px; }
+.nrow { display: flex; align-items: center; gap: 11px; }
+.ntile { width: 30px; height: 30px; border-radius: 50%; flex: none; display: flex; align-items: center; justify-content: center;
+         background: rgba(62,105,246,.13); color: var(--tint); }
+.ntile.grey { background: rgba(120,120,128,.14); color: var(--l2); }
+.ntile.warn { background: rgba(255,149,0,.16); color: var(--orange); }
+.ntile.sq { border-radius: 8px; width: 28px; height: 28px; }
+.nbody { flex: 1; min-width: 0; }
+.nt { display: flex; align-items: baseline; gap: 8px; }
+.nt b { font-size: 17px; font-weight: 600; letter-spacing: -.01em; flex: 1; min-width: 0;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nt b.warn { color: var(--amber-ink); }
+.nclk { flex: none; font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--tint); }
+.nclk.grey { color: var(--l2); font-weight: 600; }
+.nclk.warn { color: var(--amber-ink); }
+.nd { font-size: 15px; color: var(--l2); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 无灰底：整行直接落在页面上，和时间线里的行一模一样 */
+.plain { margin-top: 6px; padding: 10px 0 11px; }
+
+/* ③ 留在合入卡这一族：同一个头，字放大到和刚定的 Landing 卡一样（ring 15 / 16.5 bold / 状态 13 / 时间行 13） */
+.fam .oh b { font-size: 16.5px; font-weight: 650; }
+.fam .os { font-size: 13px; }
+.fam .ol { font-size: 13px; gap: 6px; }
+.fam .ol b { font-size: 13px; }
+.fam .ol .ou { margin-left: auto; }
+
+/* 会话行上的多枚标签（今天这一页的真实样子） */
+.chip2 { font-size: 12px; font-weight: 600; border-radius: 5px; padding: 1px 7px; flex: none; white-space: nowrap;
+         background: rgba(120,120,128,.14); color: #3a3a3c; }
+.chip2.pink { background: rgba(255,59,48,.12); color: #B3352C; }
+.chip2.amber { background: rgba(255,149,0,.16); color: var(--amber-ink); }
+
+/* ⑥ 同一条行，两个时刻 */
+.two { display: flex; gap: 44px; align-items: flex-start; }
+.two > div { width: 393px; }
+.msA { background: rgba(120,120,128,.1); border-radius: 14px; padding: 12px; }
+.msB { padding: 10px 0 11px; }
+.pline { font-size: 13px; color: #6a6a72; margin: 14px 0 0; }
+.leg span { display: block; }
+</style>
+<body>
+<h1>合入检查卡：抄「已合入」那一行的样子</h1>
+<p class="lede" style="max-width:1720px">
+现在这张卡（图 ①）讲的是「Orbit 正把这次改动合入 main」，用的是「灰底 + 13pt 蓝标题 + 右侧 checking + chevron」；同一件事做成的样子——时间线里的 <b>Merged into main</b> 行——是「30pt 圆图标 + 17pt 标题 + 右侧时间 + 15pt 明细」。同一件事的两个时刻，一个像设置项，一个像状态行。<br>
+<b>推荐图 ②：</b>保留灰底卡，但这一行换成和「已合入」完全同一套排版——圆 tile（蓝环在转）、17pt <b>Merge check</b>、右边放真正在动的那个数（已用时间）、第二行 15pt 灰字写状态和新鲜度。检查通过后卡片消失、时间线里出现 <b>Merged into main</b>：读者看到的是同一条行换了个状态，而不是一张卡换成另一张卡。<br>
+<b>要定的两处：</b>是抄「已合入」那一行（②），还是留在合入卡这一族、只把字补齐到和刚定的 Landing 卡一样（③）；灰底卡留不留（图 ④）。</p>
+
+<h2 style="font-size:19px;margin:0 0 16px">① 现在 &nbsp;·&nbsp; ② 推荐 &nbsp;·&nbsp; ③④ 两个备选</h2>
+<div class="row" id="figs"></div>
+
+<h2 style="font-size:19px;margin:40px 0 16px">⑤ 一条行消息，六种状态</h2>
+<div class="panel" id="states"></div>
+
+<h2 style="font-size:19px;margin:40px 0 16px">⑥ 同一条行，两个时刻</h2>
+<div class="panel" id="pair"></div>
+
+<script>
+// ── 页面零件（项目 sessions 页，iOS） ─────────────────────────
+const P = 'Wiki 服务端执行与 System model';
+IC.grid = '<rect x="4" y="4" width="7" height="7" rx="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.6"/>';
+const navIOS = (n) => `<div class="nav"><div class="circ">${ic('chevl', 21, '#000', 2.4)}</div>
+<div class="ttl"><b>${P}</b><span>Project · ${n} sessions</span></div><div class="circ">${ic('grid', 19, '#000', 2.1)}</div></div>`;
+const progIOS = (done, total, run) => `<div class="pcard"><div class="prog"><span class="meter" style="width:66px"><i style="width:${done / total * 100}%;background:var(--green)"></i><i style="width:${run / total * 100}%;background:var(--tint)"></i></span><span class="pmeta">${done}/${total} done · ${run} running</span></div></div>`;
+const chip2 = (t, cls = '') => `<span class="chip2 ${cls}">${t}</span>`;
+const srow = ({ t, tm, chips = '', sub, run, eye }) => `<div class="r"><div class="a"><span class="t">${t}</span>${eye ? ic('eye', 19, '#6b6b70', 1.6) : ''}${run ? spinner() : ''}<span class="tm">${tm}</span></div>
+<div class="b">${chips}<span class="sub">${sub}</span></div></div>`;
+const coordRowIOS = () => srow({ t: P, tm: '11m ago', eye: true, run: true,
+  chips: chip2('Coordinator') + chip2('模型更新', 'pink') + chip2('代码审查', 'amber'),
+  sub: 'Watching any 1 of 1 · Open · now' });
+const mergedRowNow = () => `<div class="ms"><span class="mi">${ic('merge', 16, 'var(--green-ink)', 2.2)}</span>
+<div class="mb"><div class="a"><b>Merged into main</b><span class="tm">11m ago</span></div><div class="bb"><span class="sha">8ed0ea7</span> · 1 task · automatically</div></div></div>`;
+const page = (card, merged = '') => phone(`${statusBar('9:17', 100)}${navIOS(76)}
+<div class="list">${progIOS(44, 46, 0)}${card}${sh('Coordinator')}${coordRowIOS()}${sh('Today')}${srow({ t: 'Task: 维护每日轮数上限在服务端路由…', tm: '11m ago', sub: 'Recap · 9:05 AM Fixed the wiki daily-limit NULL tra…' })}${merged}${srow({ t: '执行任务：P10 · 本部署切换到服务…', tm: '30m ago', sub: 'Recap · 8:45 AM 第 101 轮已收尾：生产被他人部署…' })}</div>`);
+const mark = (html, n, style = '') => `<div class="mk" style="${style}">${html}${n ? badge(n) : ''}</div>`;
+
+// ── ① 现在的合入检查卡 ────────────────────────────────────────
+const oldCard = `<div class="mc chk oldchk">
+<div class="oh">${ic('ring', 13, 'var(--tint)', 2.3)}<b>Merge check</b><span class="os">checking</span><svg class="i ch" viewBox="0 0 24 24" style="width:13px;height:13px;color:var(--l3);stroke-width:2.6">${IC.chevr}</svg></div>
+<div class="ol"><span>Elapsed <b>2m 40s</b></span><span>Waited <b class="w">0m 0s</b></span><span class="ou">Updated 2m ago</span></div></div>`;
+
+// ── 改后的一条合入行 ──────────────────────────────────────────
+const ringTile = (cls = '') => `<span class="ntile ${cls}">${ic('ring', 16, 'currentColor', 2.2)}</span>`;
+const tileTri = () => `<span class="ntile warn">${ic('warn', 16, 'currentColor', 2.1)}</span>`;
+const nrow = ({ tile, title = 'Merge check', titleCls = '', clock, clockCls = '', detail }) =>
+  `<div class="nrow">${tile}<div class="nbody">
+<div class="nt"><b class="${titleCls}">${title}</b><span class="nclk ${clockCls}">${clock}</span></div>
+<div class="nd">${detail}</div></div></div>`;
+const newCard = (o) => `<div class="ncard">${nrow(o)}</div>`;
+
+const figA = newCard({ tile: ringTile(), clock: '2m 40s', detail: 'checking · updated 2m ago' });
+// ③ 留在合入卡这一族：同一个头（环 + 词 + 右侧阶段 + chevron），只是字放大到和刚定的 Landing 卡一样
+const figB = `<div class="mc chk oldchk fam">
+<div class="oh">${ic('ring', 15, 'var(--tint)', 2.3)}<b>Merge check</b><span class="os">checking</span><svg class="i ch" viewBox="0 0 24 24" style="width:12px;height:12px;color:var(--l3);stroke-width:2.6">${IC.chevr}</svg></div>
+<div class="ol"><span>Elapsed <b>2m 40s</b> · Waited <b class="w">0m 0s</b></span><span class="ou">Updated 2m ago</span></div></div>`;
+const figC = `<div class="plain">${nrow({ tile: ringTile(), clock: '2m 40s', detail: 'checking · updated 2m ago' })}</div>`;
+
+document.getElementById('figs').innerHTML = [
+  fig('now', '① 现在', page(mark(oldCard, 1, 'margin-top:10px;border-radius:16px')),
+    `<b>现在：像一行设置，不像一个状态</b><ol>
+<li>${n(1)}13pt 蓝标题、右侧 11pt 的 checking、右侧 chevron；第二行 11pt 三个小事实（Elapsed / Waited / Updated）。</li>
+<li>卡片下面、时间线里的「Merged into main」是 30pt 圆图标 + 17pt 标题 + 右侧时间 + 15pt 明细。同一件事，两种长相。</li>
+<li>这一行里真正在动的那个数（已用时间 2m 40s）只有 11pt，是全卡最小的字之一。</li></ol>`),
+  fig('after', '② 推荐', page(mark(figA, 1, 'margin-top:10px;border-radius:16px')),
+    `<b>推荐：这一行换成「已合入」那一套</b><ol>
+<li>${n(1)}30pt 圆 tile，蓝环在转（运行中）；排队时同一个环不动、变灰（图⑤）。</li>
+<li>17pt <b>Merge check</b>，右边是真正在动的那个数——已用时间 <b>2m 40s</b>，15pt 等宽数字；跑着=蓝，排队=灰。</li>
+<li>第二行 15pt 灰字：状态词 + 新鲜度，<code>checking · updated 2m ago</code>；等过 runner 时插 <code>waited 1m 20s</code>。</li>
+<li>灰底卡保留：这是项目自己的状态，不是一条会话。整行可点，打开在途任务列表（和今天 chevron 的去处一样）——时间线里那行也是整行可点，所以不再画 chevron。</li>
+<li>字变大，行只略微变高一点；仍是同一张灰底卡、两行字。检查通过 → 卡片消失、时间线里出现「Merged into main」：同一条行换个状态（图⑥）。</li></ol>`),
+  fig('after', '③ 备选：留在合入卡这一族', page(mark(figB, 1, 'margin-top:10px;border-radius:16px')),
+    `<b>备选：不换长相，只把这一张卡补到和刚定的 Landing 卡一样</b><ol>
+<li>${n(1)}同一个头：环 15pt + <b>Merge check</b> 16.5pt、右侧阶段词 13pt、chevron 保留——和今天批准的那张 Landing 卡（灰卡、同一个头）并排时是同一族。</li>
+<li>时间行放到 13pt，和 Landing 卡的时间行一模一样：<code>Elapsed 2m 40s · Waited 0m 0s</code> 在左、<code>Updated 2m ago</code> 在右。</li>
+<li>好处：改动最小，页面上三张卡（进度 / Landing / Merge check）立刻一致；候选出现时卡片长出身子，头不动。</li>
+<li>坏处：它就是今天这张卡放大字号——检查中仍然不像它将要变成的那一行（图⑥右边那条），11pt→13pt 的已用时间也不是最显眼的数。</li></ol>`),
+  fig('after', '④ 备选：不要灰底', page(figC),
+    `<b>备选：整行直接放在进度卡下面，和时间线里的行一模一样</b><ol>
+<li>最彻底的一致：检查通过后这一行「掉进」Today，排版一个字都不变。</li>
+<li>代价：夹在进度卡和下面的分组之间，一条裸行容易读成列表里的一行；也不再有一点「Orbit 正在为这个项目干活」的存在感。</li></ol>`),
+].join('');
+
+// ── ⑤ 六种状态 ────────────────────────────────────────────────
+const st = (label, html, note) => `<div><div class="pcap">${label} <span>${note}</span></div>${html}</div>`;
+const greyRing = () => `<span class="ntile grey">${ic('ring', 16, 'currentColor', 2.2)}</span>`;
+document.getElementById('states').innerHTML = `<div class="pgrid">
+${st('检查中（运行）', newCard({ tile: ringTile(), clock: '2m 40s', detail: 'checking · updated 2m ago' }), '蓝环在转，数字在走')}
+${st('排队中（还没被 runner 领走）', newCard({ tile: greyRing(), clock: '1m 5s', clockCls: 'grey', detail: 'queued · updated just now' }), '同一个环，不动、变灰')}
+${st('检查中 · 等过 runner', newCard({ tile: ringTile(), clock: '3m 50s', detail: 'checking · waited 1m 20s · updated just now' }), '原来的「Waited」接在状态词后面')}
+${st('超时（runner 不再上报）', newCard({ tile: tileTri(), titleCls: 'warn', clock: 'Timed out', clockCls: 'warn', detail: 'no report for 110m · limit 10m' }), '三角代替环，右侧改成状态词')}
+${st('读不到服务端', newCard({ tile: greyRing(), clock: '3m 12s', clockCls: 'grey', detail: 'Update unavailable · updated 12m ago' }), '时钟冻结在最后一次读数')}
+${st('两个任务在途', newCard({ tile: ringTile(), clock: '4m 2s', detail: 'checking · 2 jobs · updated 1m ago' }), '数量接在状态词后面')}
+</div>
+<div class="leg" style="margin-top:18px"><span><b>规则：</b>左边那个圆说状态（蓝=在跑、灰=在等或读不到、橙=超时）；右边那个数是这一行真正在动的东西；第二行是把今天卡里的 Elapsed / Waited / Updated 收进一条 15pt 明细——已用时间升到标题右边（因为它是被盯着看的那个数），Elapsed 这个词因此不再需要，「Waited」在有等待时才出现。</span></div>`;
+
+// ── ⑥ 两个时刻 ────────────────────────────────────────────────
+document.getElementById('pair').innerHTML = `<div class="two">
+<div><div class="pcap">检查中 <span>· 项目页顶部</span></div><div class="msA">${nrow({ tile: ringTile(), clock: '2m 40s', detail: 'checking · updated 2m ago' })}</div></div>
+<div><div class="pcap">已合入 <span>· Today 时间线</span></div><div class="msB">${mergedRowNow()}</div></div>
+</div>
+<div class="leg" style="margin-top:18px"><span><b>同一套排版：</b>30pt 圆 + 17pt 标题 + 右侧时间 + 15pt 明细。左边这条的「时间」是正在走的已用时间（蓝，等宽数字），右边那条的「时间」是合入时刻（11m ago）；左边第一格是蓝色转环，右边是绿色合入箭头——颜色和图标说状态，排版不动。</span></div>`;
+</script>
+</body></html>

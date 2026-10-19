@@ -1,0 +1,3 @@
+chromium-dark-desktop  p41-profile-photo.png          all=    36 gt2=    10 max= 40 clusters=  2 [5px x520-527 y168-183 m40] [5px x520-527 y152-159 m33]
+chromium-dark-phone    p41-profile-photo.png          all=    48 gt2=    20 max= 33 clusters=  4 [5px x80-87 y176-183 m16] [5px x56-71 y176-183 m16] [5px x40-47 y216-223 m33]
+chromium-light-phone   p41-profile-photo.png          all=    41 gt2=    20 max= 32 clusters=  4 [5px x80-87 y176-183 m16] [5px x56-71 y176-183 m16] [5px x40-47 y216-223 m32]

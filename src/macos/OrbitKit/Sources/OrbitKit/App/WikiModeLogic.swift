@@ -42,7 +42,7 @@ public enum WikiModeCopy {
         case .tiered:
             return "Your own words and machine-checked entries apply at once; the rest show as Unreviewed and are not sent to agents."
         case .automatic:
-            return "local-vllm checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason."
+            return "The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason."
         case .unknown:
             return ""
         }
@@ -55,17 +55,11 @@ public enum WikiModeCopy {
 
     public static let maintenance = "Maintenance"                                 // WIKI_MAINTENANCE
     public static let maintenanceName = WikiCopy.historyMaintenance               // WIKI_MAINTENANCE_NAME
-    public static let maintenanceNote = "Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the workspace you pick, with the provider pinned."
     public static let off = "Off"                                                 // WIKI_OFF
     public static let on = "On"                                                   // WIKI_ON
     public static let setUp = "Set up…"                                           // WIKI_SET_UP
     public static let setUpTitle = "Set up maintenance"                           // WIKI_SET_UP_TITLE
     public static let status = "Status"                                           // WIKI_STATUS
-    public static let workspace = "Workspace"                                     // WIKI_WORKSPACE
-    public static let workspaceNote = "The runner that checks out this codebase; maintenance runs there."
-    public static let provider = "Provider"                                       // WIKI_PROVIDER
-    public static let providerNote = "Pinned: a run never falls back to another provider."
-    public static let pinnedNoFallback = "pinned, no fallback"                    // WIKI_PINNED_NO_FALLBACK
     public static let dailyLimit = "Daily limit"                                  // WIKI_DAILY_LIMIT
     public static let runsADayUnit = "runs a day"                                 // WIKI_RUNS_A_DAY
     public static let dailyLimitNote = "A run starts when 20 sessions have settled, or when the oldest waits a day. Each run writes at most 30 changes."
@@ -81,6 +75,15 @@ public enum WikiModeCopy {
     public static let maintenanceEdit = "Edit"                                    // WIKI_MAINTENANCE_EDIT
     public static let save = "Save"                                               // WIKI_SAVE
     public static let noWorkspace = "Pick a workspace"                            // WIKI_NO_WORKSPACE
+
+    // MARK: maintenance as the server executes the wiki (mock 35 ①②, P9)
+
+    public static let repoFrom = "Reads the repository from"                      // WIKI_REPO_FROM
+    public static let repoFromNote = "The runner that checks out this codebase; the server reads the repository there."
+    public static let model = "Model"                                             // WIKI_MODEL
+    public static let modelNote = "Set by this deployment, the same for every space."   // WIKI_MODEL_NOTE
+    public static let maintenanceNoteServer = "Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the server with this deployment’s System model."
+    public static let privacyNote = "The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model."
 
     /// `8 runs a day` (`wikiRunsADay`).
     public static func runsADay(_ runs: Int) -> String { runs == 1 ? "1 run a day" : "\(runs) \(runsADayUnit)" }
@@ -231,12 +234,6 @@ public enum WikiModeLogic {
         let named = (name?.isEmpty == false ? name : nil) ?? "—"
         guard let runner, !runner.isEmpty else { return named }
         return "\(named) · \(runner)"
-    }
-
-    /// A provider as the picker lists it: its slug, and the model it runs when it names one.
-    public static func providerLabel(_ provider: String, model: String?) -> String {
-        guard let model, !model.isEmpty else { return provider }
-        return "\(provider) · \(model)"
     }
 
     /// The three ways a look-back is picked, in the order both clients list them: none, some days, all of

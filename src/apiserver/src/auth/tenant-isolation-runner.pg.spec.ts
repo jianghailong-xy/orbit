@@ -42,6 +42,7 @@ import { Client } from 'pg';
 
 import { prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
+import { openItemsNoLongerOwed } from '../projects/project-open-item';
 import { call, startApiserver, type Apiserver, type Reply } from './pat-test-apiserver';
 import { type Tenant, type TenantRequest } from './tenant-isolation-cases';
 import {
@@ -202,14 +203,40 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     // ── jobs and operations the machine holds the claim of ──
     const codebase = await db.projectCodebase.findFirstOrThrow({ where: { projectId: of.projectId }, select: { id: true } });
     const integrationJobId = randomUUID();
+    // A task of the project's own for this landing: the first half's fixture already holds a QUEUED
+    // landing of the project's task, and `project_integration_job_task_inflight_key` allows one live
+    // LAND_TASK a task (0281 J3) — the two were the same task until this line, which made this spec red
+    // before it ran a single case (a4c1b1f8f).
+    // Nothing either census holds is lost by it: each still stands up a landing of its own. The first
+    // half's queued job stays on the project's task, where its Retry case names it. The two cases here
+    // name this job by its id and its claim (lease owner, generation), never by its task, and the task
+    // is made as `projectTaskId` is, OPEN in the same project. And it is returned with the rest
+    // (`landingTaskId`), so a write naming it is still one of A's to the write trap.
+    const landingTaskId = await task('task whose landing the machine holds', { projectId: of.projectId });
     await db.projectIntegrationJob.create({
       data: {
-        id: integrationJobId, projectId: of.projectId, ownerId, codebaseId: codebase.id, kind: 'LAND_TASK', taskId: of.projectTaskId,
+        id: integrationJobId, projectId: of.projectId, ownerId, codebaseId: codebase.id, kind: 'LAND_TASK', taskId: landingTaskId,
         serialKey: `census:${integrationJobId}`, targetRef: `refs/heads/project/${of.projectId}`, upstreamRef: 'refs/heads/main',
         sourceRef: 'refs/heads/census', state: 'RUNNING', runnerId: of.runnerId, claimLeaseOwner: leaseOwner, claimGeneration: 1n,
         claimedAt: new Date(), heartbeatAt: new Date(), startedAt: new Date(), idempotencyKey: `census:${integrationJobId}`,
       },
     });
+    // A wiki repository operation of the machine's, claimed by it: the job it answers, and the row the
+    // three repo-op doors name (migration 0402). Claimed as the integration job above is, so a case on it
+    // carries the claim rather than an id alone.
+    const wikiRepoOpId = randomUUID();
+    const wikiRepoJobId = randomUUID();
+    await sql.query(
+      `INSERT INTO "wiki_job" ("id","owner_id","space_id","kind","state") VALUES ($1,$2,$3,'maintain','queued')`,
+      [wikiRepoJobId, ownerId, of.wikiSpaceId],
+    );
+    await sql.query(
+      `INSERT INTO "wiki_repo_op"
+         ("id","job_id","owner_id","space_id","workspace_id","runner_id","kind","input","state",
+          "lease_owner","claim_generation","claimed_at","heartbeat_at")
+       VALUES ($1,$2,$3,$4,$5,$6,'snapshot','{}','running',$7,1,now(),now())`,
+      [wikiRepoOpId, wikiRepoJobId, ownerId, of.wikiSpaceId, of.workspaceId, of.runnerId, leaseOwner],
+    );
     const codexOperationId = randomUUID();
     await sql.query(
       `INSERT INTO "codex_rate_limit_reset_operation"
@@ -237,17 +264,31 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     ];
 
     // ── the project's coordinator's items ──
+    // Failures of a task of their own, which nothing is attempting. A failure is owed only while no
+    // attempt at its task is in flight (`openItemOwed`, since 2e8169a0d), and the first half's fixture
+    // has one in flight at `projectTaskId`: its attempt session. Hung on that task, both items were owed
+    // by nobody from the moment they were made, and the escalation tick's backstop closed them a minute
+    // after the apiserver started — a write of A's the trap pinned on whichever request was in flight,
+    // or on none when the fixtures took longer than that minute. Returned with the rest
+    // (`failedTaskId`), as `landingTaskId` is, so a write naming it is still one of A's to the trap.
+    const failedTaskId = await task('task whose failure the coordinator holds', { projectId: of.projectId });
     const coordinatorItem = (title: string) =>
       db.projectOpenItem.create({
         data: {
           projectId: of.projectId, ownerId, kind: 'TASK_FAILED', state: 'OPEN', assignee: 'COORDINATOR', assigneeReason: 'DEFAULT',
-          taskId: of.projectTaskId, dedupeKey: `TF:${of.projectTaskId}:${randomUUID()}`, title,
+          taskId: failedTaskId, dedupeKey: `TF:${failedTaskId}:${randomUUID()}`, title,
           payload: { how: 'RUN_FAILED', chain: { failuresInChain: 1, limit: 3 } }, waitingSince: new Date(), assignedAt: new Date(),
         } as never,
         select: { id: true },
       });
     const coordinatorItemId = (await coordinatorItem('Task failed, for the census to resolve')).id;
     const handOverItemId = (await coordinatorItem('Task failed, for the census to hand over')).id;
+    // Asked here rather than left to the clock, which answers it only once the trap is set, and only
+    // when the fixtures were quicker than its minute.
+    assert.deepEqual(
+      [...await openItemsNoLongerOwed(db, [coordinatorItemId, handOverItemId])], [],
+      'an item nobody owes is closed by the backstop on its next tick, mid-census',
+    );
 
     // ── a watch the calling session observes, providers by slug, a task in the list ──
     const watchId = idOf(
@@ -284,50 +325,13 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       },
     });
 
-    // ── the wiki: a workspace bound to the space, and the space's maintenance ──
+    // ── the wiki: a workspace bound to the space, a session in it, and an import job of the space's ──
     ok(await as('POST', `/wiki/spaces/${of.wikiSpaceId}/workspaces`, { workspaceId: of.workspaceId }), 'binding the space');
     const wikiSessionId = await open('wiki session');
-    const maintenanceListId = idOf(await as('POST', '/task-lists', { title: `${name} wiki maintenance` }), 'a maintenance list');
-    const maintenanceTaskId = await task('wiki maintenance', { listId: maintenanceListId });
-    await sql.query(
-      `UPDATE "wiki_space" SET "settings" = "settings" || jsonb_build_object('maintenance', jsonb_build_object('listId', $1::text)) WHERE "id" = $2`,
-      [maintenanceListId, of.wikiSpaceId],
-    );
-    const wikiMaintainerSessionId = await open('wiki maintainer', { taskId: maintenanceTaskId });
-    // The draft the space asked for when it was made, made now into the maintainer's task.
-    const draft = await db.wikiPlanJob.findFirst({
-      where: { spaceId: of.wikiSpaceId, kind: { in: ['draft', 'revise'] }, state: { in: ['queued', 'held', 'made'] } },
-      select: { id: true },
+    const wikiImportJobId = randomUUID();
+    await db.wikiJob.create({
+      data: { id: wikiImportJobId, ownerId, spaceId: of.wikiSpaceId, kind: 'import', input: {}, state: 'succeeded', report: {}, endedAt: new Date() },
     });
-    const wikiPlanJobId = draft?.id ?? randomUUID();
-    await db.wikiPlanJob.upsert({
-      where: { id: wikiPlanJobId },
-      update: { state: 'made', taskId: maintenanceTaskId, madeAt: new Date(), heldReason: null, heldAt: null },
-      create: { id: wikiPlanJobId, spaceId: of.wikiSpaceId, ownerId, kind: 'draft', trigger: 'owner', state: 'made', taskId: maintenanceTaskId, madeAt: new Date() },
-    });
-    const confirmedDoc = await db.wikiPlanDoc.findFirstOrThrow({ where: { ownerId, slug: of.wikiDocSlug, plan: { status: 'confirmed' } }, select: { id: true } });
-    await db.wikiPlanSection.create({
-      data: {
-        docId: confirmedDoc.id, ownerId, position: 0, key: 'intro', title: 'Introduction', kind: 'overview', covers: 'what the census holds',
-        length: 200, sources: { docs: [], code: [], contracts: [], sessions: null },
-      },
-    });
-    const opOf = async (sessionId: string) => {
-      const changesetId = randomUUID();
-      await db.wikiChangeset.create({
-        data: { id: changesetId, ownerId, spaceId: of.wikiSpaceId, origin: 'agent', sessionId, status: 'pending', expiresAt: new Date(Date.now() + 7 * 86_400_000) },
-      });
-      const opId = randomUUID();
-      await db.wikiChangesetOp.create({
-        data: {
-          id: opId, changesetId, ownerId, seq: 0, op: 'add', decision: 'verifying',
-          payload: { kind: 'concept', title: 'A census concept', summary: 'From the census.', fields: { definition: 'x', boundaries: 'y' } },
-        },
-      });
-      return opId;
-    };
-    const wikiVerifyingOpId = await opOf(wikiSessionId);
-    const wikiAdoptableOpId = await opOf(await open('ended wiki session', { status: 'SUCCEEDED', completedAt: new Date() }));
 
     // ── what the account shares: a session, a task and a project, each with something under it ──
     const sharedSessionId = await open('shared session');
@@ -349,12 +353,12 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     return {
       callingSessionId, coordinatorSessionId, newCoordinatorSessionId, machineSessionId, runtimeSessionId, orphanSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, turnSessionId, shellTurnId,
-      finalizeSessionId, completeSessionId, sessionAttachmentId, allowedApprovalId, artifactRequestId, integrationJobId,
-      codexOperationId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
-      deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, watchId, verifierTaskId, verifiedTaskId,
+      finalizeSessionId, completeSessionId, sessionAttachmentId, allowedApprovalId, artifactRequestId, integrationJobId, landingTaskId,
+      codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
+      deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, failedTaskId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,
-      confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId, wikiMaintainerSessionId,
-      wikiPlanJobId, wikiVerifyingOpId, wikiAdoptableOpId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
+      confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId,
+      wikiImportJobId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
       sharedTaskRunSessionId, sharedTaskAttachmentId, sharedProjectId, sharedProjectTaskId, sharedProjectRunSessionId,
       sharedProjectAttachmentId,
     };

@@ -10,7 +10,11 @@
  *   2. the four verdicts, each with its own result — supported applies as Auto and is pushed, partial
  *      as Unreviewed, unsupported is rejected with its reason (which the next similar[] shows), and a
  *      duplicate becomes a reinforce of the entry it names — and the trail each leaves on its op;
- *   3. only the session that proposed may report, and anything of another owner's is a 404;
+ *   3. only the ops of the session that proposed are read and verified for it, and anything of another owner's
+ *      is a 404 — through the server's own verify job's reads and writes (`WikiService.listVerifications`,
+ *      `recordVerifications`), since the runner door hands a session no material and takes no verdict of its own:
+ *      its list says who verifies and how many of the session's ops wait, a submission queues the one verify job,
+ *      and the server's maintenance run queues none and verifies its own ops in its own job;
  *   4. no clock moves a waiting op, a space no longer Automatic records no verdict, and a revert
  *      withdraws what still waits;
  *   5. more than 30% unsupported among the latest 50 verdicts sends the space back to Tiered, and the
@@ -48,6 +52,8 @@ import { WikiController } from './wiki.controller';
 import { appendWikiContext } from './wiki-push';
 import { WikiRetrieval } from './wiki-retrieval';
 import { isSpotCheckDraw, WikiService, type WikiPrincipal } from './wiki.service';
+import { wikiMaintainJobPrincipal } from '../wiki-worker/wiki-maintain-job';
+import { wikiVerifyPrincipal } from '../wiki-worker/wiki-verify-job';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -362,18 +368,42 @@ async function pushed(h: Harness, ownerId: string, workspaceId: string, sessionI
   return new Set([...String(content).matchAll(/\(orbit-wiki:([0-9A-Za-z]+)\)/gu)].map((match) => toUuid(match[1])));
 }
 
-/** What the verification list hands the calling session, every page of it. */
-async function listed(h: Harness, who: Caller, spaceId: string): Promise<VerificationItem[]> {
+/**
+ * What the verification list hands the server's verify job for one proposing session's ops, every page of it: the
+ * job's own read (`WikiService.listVerifications`, wiki-worker/wiki-verify-job.ts), which the runner door no longer
+ * hands any session.
+ */
+async function listed(h: Harness, ownerId: string, sessionId: string, spaceId: string): Promise<VerificationItem[]> {
   const items: VerificationItem[] = [];
   let after: string | null = null;
   for (let page = 0; page < 50; page += 1) {
-    const answer = await call(h, who, 'GET', `/runner/wiki/spaces/${spaceId}/verifications?limit=2${after ? `&after=${after}` : ''}`);
-    expectStatus(answer, 200, 'the verification list');
-    items.push(...(answer.body.items as VerificationItem[]));
-    after = answer.body.next;
+    const answer = await h.service.listVerifications(wikiVerifyPrincipal(ownerId, sessionId), spaceId, { after, limit: 2 });
+    items.push(...(answer.items as unknown as VerificationItem[]));
+    after = answer.next;
     if (!after) return items;
   }
   throw new Error('the verification list never ended');
+}
+
+/** Verdicts for one proposing session's ops, recorded as the server's verify job records them (`recordVerifications`). */
+function report(h: Harness, ownerId: string, sessionId: string, spaceId: string, verdicts: unknown[]) {
+  return h.service.recordVerifications(wikiVerifyPrincipal(ownerId, sessionId), spaceId, verdicts);
+}
+
+/** A verdict the service refused, with the status a door would have answered it with. */
+function refusedWith(outcome: { status: string }, status: number, why: string): void {
+  assert.equal(outcome.status, 'refused', `${why}: ${JSON.stringify(outcome)}`);
+  assert.equal((outcome as { httpStatus?: number }).httpStatus, status, `${why}: ${JSON.stringify(outcome)}`);
+}
+
+/** How many verify jobs this session and space are owed (contract `jobs.make`). */
+async function verifyJobs(h: Harness, ownerId: string, spaceId: string, sessionId: string): Promise<number> {
+  const { rows } = await h.sql.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM "wiki_job"
+      WHERE "owner_id" = $1 AND "space_id" = $2 AND "kind" = 'verify' AND "input" ->> 'sessionId' = $3`,
+    [ownerId, spaceId, sessionId],
+  );
+  return Number(rows[0].n);
 }
 
 function verdict(opId: string, value: string, over: Record<string, unknown> = {}): Record<string, unknown> {
@@ -466,7 +496,7 @@ test('verification · an op Automatic takes waits for its verdict, and nothing o
       idempotencyKey: `secret-${randomUUID()}`,
     });
     expectStatus(proposed, 200, 'the proposal');
-    const items = await listed(h, mine, space);
+    const items = await listed(h, owner.id, proposer, space);
     assert.equal(items.length, ops.length + 1, 'every op this session is waiting on, over every page');
     const amend = items.find((item) => item.op === 'amend')!;
     assert.equal(toUuid(amend.entryId!), target);
@@ -508,23 +538,20 @@ test('verification · four verdicts, each with its own result, and the trail eac
   const proposed = await call(h, mine, 'POST', '/runner/wiki/changesets', request);
   expectStatus(proposed, 200, 'the proposal');
   const [supported, partial, unsupported, duplicate] = (proposed.body.ops as Outcome[]).map((op) => op);
-  const items = await listed(h, mine, space);
-  const itemOf = (outcome: Outcome) => items.find((item) => item.opId === outcome.opId)!;
+  const items = await listed(h, owner.id, proposer, space);
+  const itemOf = (outcome: Outcome) => items.find((item) => toUuid(item.opId) === toUuid(outcome.opId!))!;
   const neighbour = itemOf(duplicate).similar.find((near) => toUuid(near.id) === existing);
   assert.ok(neighbour, `the duplicate's similar[] names the entry it duplicates: ${JSON.stringify(itemOf(duplicate).similar)}`);
   assert.equal(neighbour!.status, 'active');
 
-  const report = await call(h, mine, 'POST', `/runner/wiki/spaces/${space}/verifications`, {
-    verdicts: [
-      verdict(supported.opId!, 'supported'),
-      verdict(partial.opId!, 'partial'),
-      verdict(unsupported.opId!, 'unsupported', { reason: 'Nothing in the cited output mentions tmpfs.' }),
-      verdict(duplicate.opId!, 'duplicate', { duplicateOf: neighbour!.id, reason: 'The space already says this.' }),
-    ],
-  });
-  expectStatus(report, 200, 'the report');
-  assert.equal(report.body.mode, 'automatic');
-  assert.deepEqual((report.body.outcomes as Array<{ status: string }>).map((o) => o.status), ['applied', 'applied', 'rejected', 'reinforced']);
+  const reported = await report(h, owner.id, proposer, space, [
+    verdict(supported.opId!, 'supported'),
+    verdict(partial.opId!, 'partial'),
+    verdict(unsupported.opId!, 'unsupported', { reason: 'Nothing in the cited output mentions tmpfs.' }),
+    verdict(duplicate.opId!, 'duplicate', { duplicateOf: neighbour!.id, reason: 'The space already says this.' }),
+  ]);
+  assert.equal(reported.mode, 'automatic');
+  assert.deepEqual(reported.outcomes.map((o) => o.status), ['applied', 'applied', 'rejected', 'reinforced']);
 
   await t.test('supported applies as Auto and is pushed; partial applies as Unreviewed and is not', async () => {
     const s = await entryRow(h, supported.entryId!);
@@ -604,11 +631,10 @@ test('verification · four verdicts, each with its own result, and the trail eac
   });
 
   await t.test('the same verdict again is its recorded answer; another verdict is refused', async () => {
-    const same = await call(h, mine, 'POST', `/runner/wiki/spaces/${space}/verifications`, { verdicts: [verdict(supported.opId!, 'supported')] });
-    expectStatus(same, 200, 'the same verdict again');
-    assert.equal(same.body.outcomes[0].replayed, true);
-    const other = await call(h, mine, 'POST', `/runner/wiki/spaces/${space}/verifications`, { verdicts: [verdict(supported.opId!, 'unsupported')] });
-    expectStatus(other, 409, 'another verdict for a verified op');
+    const same = await report(h, owner.id, proposer, space, [verdict(supported.opId!, 'supported')]);
+    assert.equal((same.outcomes[0] as { replayed?: boolean }).replayed, true, `the same verdict again: ${JSON.stringify(same.outcomes[0])}`);
+    const other = await report(h, owner.id, proposer, space, [verdict(supported.opId!, 'unsupported')]);
+    refusedWith(other.outcomes[0], 409, 'another verdict for a verified op');
     assert.equal((await opRow(h, supported.opId!)).verificationVerdict, 'supported', 'the first verdict stands');
   });
 
@@ -630,11 +656,8 @@ test('verification · four verdicts, each with its own result, and the trail eac
       ops: [{ op: 'amend', entryId: touched, baseRevision: 1, changes: { summary: 'The owner\'s own wording.' } }],
     });
     expectStatus(owners, 200, 'the owner amends');
-    const verified = await call(h, mine, 'POST', `/runner/wiki/spaces/${space}/verifications`, {
-      verdicts: [verdict(first.opId!, 'supported'), verdict(second.opId!, 'supported')],
-    });
-    expectStatus(verified, 200, 'the two verdicts');
-    assert.deepEqual((verified.body.outcomes as Array<{ status: string }>).map((o) => o.status), ['applied', 'conflict']);
+    const verified = await report(h, owner.id, proposer, space, [verdict(first.opId!, 'supported'), verdict(second.opId!, 'supported')]);
+    assert.deepEqual(verified.outcomes.map((o) => o.status), ['applied', 'conflict']);
     const amended = await entryRow(h, machineWritten);
     assert.equal(amended.currentRevision, 2);
     assert.equal(amended.summary, 'Amended after verification.');
@@ -654,22 +677,18 @@ test('verification · four verdicts, each with its own result, and the trail eac
     });
     expectStatus(lone, 200, 'the proposal');
     const opId = (lone.body.ops[0] as Outcome).opId!;
-    const refused = await call(h, mine, 'POST', `/runner/wiki/spaces/${space}/verifications`, {
-      verdicts: [verdict(opId, 'duplicate', { duplicateOf: stray })],
-    });
-    expectStatus(refused, 400, 'a duplicate of an entry that is not among its neighbours');
-    assert.equal(refused.body.outcomes[0].code, 'WIKI_SCHEMA');
-    const shapeless = await call(h, mine, 'POST', `/runner/wiki/spaces/${space}/verifications`, {
-      verdicts: [{ opId, verdict: 'probably', reason: 'x', model: 'm' }],
-    });
-    expectStatus(shapeless, 400, 'a verdict that is not one');
+    const refused = await report(h, owner.id, proposer, space, [verdict(opId, 'duplicate', { duplicateOf: stray })]);
+    refusedWith(refused.outcomes[0], 400, 'a duplicate of an entry that is not among its neighbours');
+    assert.equal((refused.outcomes[0] as { code?: string }).code, 'WIKI_SCHEMA');
+    const shapeless = await report(h, owner.id, proposer, space, [{ opId, verdict: 'probably', reason: 'x', model: 'm' }]);
+    refusedWith(shapeless.outcomes[0], 400, 'a verdict that is not one');
     assert.equal((await opRow(h, opId)).decision, 'verifying', 'and the op keeps waiting');
   });
 });
 
-// ── 3. who reports ──────────────────────────────────────────────────────────────────────────────
+// ── 3. whose ops are verified ───────────────────────────────────────────────────────────────────
 
-test('verification · only the session that proposed reports, and another owner\'s is a 404', { skip, concurrency: 1, timeout: 300_000 }, async () => {
+test('verification · only the session that proposed is verified for, and another owner\'s is a 404', { skip, concurrency: 1, timeout: 300_000 }, async () => {
   const h = await boot();
   const owner = await account(h, 'proposer');
   const machine = await runner(h, owner.id);
@@ -685,16 +704,18 @@ test('verification · only the session that proposed reports, and another owner\
   expectStatus(answer, 200, 'the proposal');
   const opId = (answer.body.ops[0] as Outcome).opId!;
 
-  // Another session of the same owner, on the same machine: it sees none of it, and may report none of it.
+  // Another session of the same owner, on the same machine: none of it is read for it, and no verdict for it lands.
   const sibling = await session(h, owner.id, ws, machine);
-  const theirs = { runner: machine, headers: { 'x-orbit-session-id': sibling } };
-  assert.deepEqual(await listed(h, theirs, space), [], 'another session lists none of this session\'s ops');
-  const sibling404 = await call(h, theirs, 'POST', `/runner/wiki/spaces/${space}/verifications`, { verdicts: [verdict(opId, 'supported')] });
-  expectStatus(sibling404, 404, 'another session reporting this session\'s op');
+  assert.deepEqual(await listed(h, owner.id, sibling, space), [], 'another session\'s list holds none of this session\'s ops');
+  refusedWith((await report(h, owner.id, sibling, space, [verdict(opId, 'supported')])).outcomes[0], 404, 'a verdict for this session\'s op as another session\'s');
+  assert.equal(
+    (await call(h, { runner: machine, headers: { 'x-orbit-session-id': sibling } }, 'GET', `/runner/wiki/spaces/${space}/verifications`)).body.waiting,
+    0,
+    'and the door counts none of them as waiting for it',
+  );
 
-  // No session at all: nobody to be the proposer.
+  // No session at all: the door has nobody to count for.
   expectStatus(await call(h, { runner: machine }, 'GET', `/runner/wiki/spaces/${space}/verifications`), 400, 'a headless list');
-  expectStatus(await call(h, { runner: machine }, 'POST', `/runner/wiki/spaces/${space}/verifications`, { verdicts: [verdict(opId, 'supported')] }), 400, 'a headless report');
 
   // Another owner: their own session and runner, our space and our op.
   const stranger = await account(h, 'stranger');
@@ -704,17 +725,80 @@ test('verification · only the session that proposed reports, and another owner\
   const strangerSession = await session(h, stranger.id, strangerWs, strangerMachine);
   const them = { runner: strangerMachine, headers: { 'x-orbit-session-id': strangerSession } };
   expectStatus(await call(h, them, 'GET', `/runner/wiki/spaces/${space}/verifications`), 404, 'another owner lists our space');
-  expectStatus(await call(h, them, 'POST', `/runner/wiki/spaces/${space}/verifications`, { verdicts: [verdict(opId, 'supported')] }), 404, 'another owner reports into our space');
-  expectStatus(await call(h, them, 'POST', `/runner/wiki/spaces/${strangerSpace}/verifications`, { verdicts: [verdict(opId, 'supported')] }), 404, 'another owner reports our op through their own space');
+  const notFound = (error: unknown) => (error as { getStatus?: () => number }).getStatus?.() === 404;
+  await assert.rejects(h.service.listVerifications(wikiVerifyPrincipal(stranger.id, strangerSession), space), notFound, 'another owner\'s list of our space');
+  await assert.rejects(report(h, stranger.id, strangerSession, space, [verdict(opId, 'supported')]), notFound, 'another owner\'s verdict in our space');
+  refusedWith((await report(h, stranger.id, strangerSession, strangerSpace, [verdict(opId, 'supported')])).outcomes[0], 404, 'our op through their own space');
   // A header naming a session this runner does not host is no session at all.
   expectStatus(await call(h, { runner: strangerMachine, headers: { 'x-orbit-session-id': proposer } }, 'GET', `/runner/wiki/spaces/${space}/verifications`), 403, 'another machine borrowing our session id');
 
   assert.equal((await opRow(h, opId)).decision, 'verifying', 'none of that recorded anything');
-  const own = await call(h, { runner: machine, headers: { 'x-orbit-session-id': proposer } }, 'POST', `/runner/wiki/spaces/${space}/verifications`, {
-    verdicts: [verdict(opId, 'supported')],
-  });
-  expectStatus(own, 200, 'the proposer reports');
+  const own = await report(h, owner.id, proposer, space, [verdict(opId, 'supported')]);
+  assert.equal(own.outcomes[0].status, 'applied', 'the proposer\'s op is verified for it');
   assert.equal((await opRow(h, opId)).verificationVerdict, 'supported');
+});
+
+// ── What the runner door still hands a session, and what a submission queues ────────────────────
+
+test('verification · the server verifies: the door hands out no material and takes no verdict, a submission queues one job, and the server\'s own run verifies itself', { skip, concurrency: 1, timeout: 300_000 }, async () => {
+  const h = await boot();
+  const owner = await account(h, 'server-verifies');
+  const machine = await runner(h, owner.id);
+  const ws = await workspace(h, owner.id);
+  const space = await modeSpace(h, owner, 'automatic', ws);
+
+  // A submission's answer says who verifies and queues the one job; asking for a verification is that same job.
+  const proposer = await session(h, owner.id, ws, machine);
+  const cite = await toolCall(h, proposer, 'Bash', 'what was observed');
+  const mine = { runner: machine, headers: { 'x-orbit-session-id': proposer } };
+  const proposed = await call(h, mine, 'POST', '/runner/wiki/changesets', {
+    rationale: 'the spec records a pitfall', idempotencyKey: `server-verifies-${randomUUID()}`,
+    ops: [{ op: 'add', entry: draft('pitfall', 'A pitfall the server verifies'), sources: [{ kind: 'tool_call', ref: cite }] }],
+  });
+  expectStatus(proposed, 200, 'the proposal');
+  assert.equal(proposed.body.servedBy, 'server', 'the answer says who verifies');
+  assert.equal(await verifyJobs(h, owner.id, space, proposer), 1, 'the submission queued one job');
+  const asked = await call(h, mine, 'POST', `/runner/wiki/spaces/${space}/verifications/request`);
+  expectStatus(asked, 200, 'asking for a verification');
+  assert.equal(asked.body.servedBy, 'server');
+  assert.ok(asked.body.jobId, 'the ask names the job it waits on');
+  assert.equal(await verifyJobs(h, owner.id, space, proposer), 1, 'asking again is the same job');
+
+  // The door's list hands the session no material: it says who verifies, and how many of the session's ops wait.
+  const opId = String(proposed.body.ops[0].opId);
+  const page = await call(h, mine, 'GET', `/runner/wiki/spaces/${space}/verifications`);
+  expectStatus(page, 200, 'the list');
+  assert.deepEqual(page.body.items, [], 'no material is handed out');
+  assert.equal(page.body.next, null);
+  assert.equal(page.body.servedBy, 'server', 'the list says who verifies');
+  assert.equal(page.body.waiting, 1, "and how many of the session's ops wait");
+  // Nor does it take a verdict of the session's own: there is no route for one.
+  expectStatus(await call(h, mine, 'POST', `/runner/wiki/spaces/${space}/verifications`, { verdicts: [verdict(opId, 'supported')] }), 404, "a session's own verdict");
+  assert.equal((await opRow(h, opId)).decision, 'verifying', 'nothing was recorded');
+  // The verdict the server's job records decides the op, and the count follows it.
+  assert.equal((await report(h, owner.id, proposer, space, [verdict(opId, 'supported')])).outcomes[0].status, 'applied');
+  assert.equal((await call(h, mine, 'GET', `/runner/wiki/spaces/${space}/verifications`)).body.waiting, 0, 'nothing waits once its verdict is in');
+
+  // The server's own maintenance run — no session, its own wiki job — is told nothing of the server's verification,
+  // queues no job, and verifies its own ops in its own job (wiki-worker/wiki-maintain-job.ts, `verifyOwn`).
+  const runJob = randomUUID();
+  const runCite = await toolCall(h, await session(h, owner.id, ws, machine), 'Bash', 'what the run observed');
+  const ran = await h.service.submitChangeset(wikiMaintainJobPrincipal(owner.id, runJob), space, {
+    rationale: 'the run records a pitfall', idempotencyKey: `run-${randomUUID()}`,
+    ops: [{ op: 'add', entry: draft('pitfall', 'A pitfall the run verifies itself'), sources: [{ kind: 'tool_call', ref: runCite }] }],
+  });
+  assert.equal(ran.servedBy, undefined, "the run is told nothing of the server's own verification");
+  assert.deepEqual((ran.ops as Outcome[]).map((op) => [op.status, op.waitsFor]), [['pending', 'verification']]);
+  const { rows: queued } = await h.sql.query<{ n: string }>(
+    `SELECT count(*)::text AS n FROM "wiki_job" WHERE "owner_id" = $1 AND "space_id" = $2 AND "kind" = 'verify'`,
+    [owner.id, space],
+  );
+  assert.equal(Number(queued[0].n), 1, 'the run queued no job of its own');
+  const runPrincipal = wikiVerifyPrincipal(owner.id, null, runJob);
+  const runItems = await h.service.listVerifications(runPrincipal, space);
+  assert.deepEqual(runItems.items.map((item) => item.entry.title), ['A pitfall the run verifies itself'], 'the run reads its own ops');
+  const runVerdict = await h.service.recordVerifications(runPrincipal, space, [verdict(runItems.items[0].opId, 'supported')]);
+  assert.equal(runVerdict.outcomes[0].status, 'applied', 'and records their verdicts itself');
 });
 
 // ── 4. no clock, and a space that left Automatic ────────────────────────────────────────────────
@@ -741,23 +825,23 @@ test('verification · no clock moves a waiting op, a space out of Automatic reco
   await t.test('switched out of Automatic, the space records no verdict, and its ops wait on untouched', async () => {
     const waiting = await propose('A pitfall caught by a switch');
     expectStatus(await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${space}`, { reviewMode: 'tiered' }), 200, 'the owner switches');
-    const refused = await call(h, mine, 'POST', `/runner/wiki/spaces/${space}/verifications`, { verdicts: [verdict(waiting.opId!, 'supported')] });
-    expectStatus(refused, 409, 'a verdict in a Tiered space');
-    assert.match(refused.body.outcomes[0].message, /not automatic/u);
+    const refused = (await report(h, owner.id, proposer, space, [verdict(waiting.opId!, 'supported')])).outcomes[0];
+    refusedWith(refused, 409, 'a verdict in a Tiered space');
+    assert.match((refused as { message?: string }).message ?? '', /not automatic/u);
     assert.equal((await opRow(h, waiting.opId!)).decision, 'verifying');
     assert.equal((await entryRow(h, waiting.entryId!)).status, 'proposed');
-    const list = await call(h, mine, 'GET', `/runner/wiki/spaces/${space}/verifications`);
-    assert.equal(list.body.mode, 'tiered', 'the list says so, before any model is asked');
+    const list = await h.service.listVerifications(wikiVerifyPrincipal(owner.id, proposer), space);
+    assert.equal(list.mode, 'tiered', 'the list says so, before any model is asked');
 
     // A month passes, as far as the rows are concerned: nothing a clock does moves the op.
     await h.sql.query(
       `UPDATE "wiki_changeset" SET "created_at" = now() - interval '30 days', "expires_at" = now() - interval '16 days' WHERE "id" = $1`,
       [toUuid(waiting.changesetId)],
     );
-    assert.equal((await listed(h, mine, space)).some((item) => item.opId === waiting.opId), true, 'it is still waiting');
+    assert.equal((await listed(h, owner.id, proposer, space)).some((item) => toUuid(item.opId) === toUuid(waiting.opId!)), true, 'it is still waiting');
     expectStatus(await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${space}`, { reviewMode: 'automatic' }), 200, 'the owner switches back');
-    const recorded = await call(h, mine, 'POST', `/runner/wiki/spaces/${space}/verifications`, { verdicts: [verdict(waiting.opId!, 'supported')] });
-    expectStatus(recorded, 200, 'the verdict, a month on');
+    const recorded = await report(h, owner.id, proposer, space, [verdict(waiting.opId!, 'supported')]);
+    assert.equal(recorded.outcomes[0].status, 'applied', 'the verdict, a month on');
     assert.equal((await entryRow(h, waiting.entryId!)).trust, 'auto');
   });
 
@@ -768,8 +852,7 @@ test('verification · no clock moves a waiting op, a space out of Automatic reco
     const op = await opRow(h, waiting.opId!);
     assert.equal(op.decision, 'withdrawn');
     assert.equal((await entryRow(h, waiting.entryId!)).status, 'rejected', 'its proposed lineage goes with it');
-    const late = await call(h, mine, 'POST', `/runner/wiki/spaces/${space}/verifications`, { verdicts: [verdict(waiting.opId!, 'supported')] });
-    expectStatus(late, 409, 'a verdict for a withdrawn op');
+    refusedWith((await report(h, owner.id, proposer, space, [verdict(waiting.opId!, 'supported')])).outcomes[0], 409, 'a verdict for a withdrawn op');
     const changeset = await h.prisma.wikiChangeset.findFirstOrThrow({ where: { id: toUuid(waiting.changesetId) } });
     assert.equal(changeset.status, 'settled');
   });

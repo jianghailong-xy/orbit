@@ -1,0 +1,92 @@
+diff --git a/src/web/src/components/ui/Menu.tsx b/src/web/src/components/ui/Menu.tsx
+index d586606cf..3a6bb969e 100644
+--- a/src/web/src/components/ui/Menu.tsx
++++ b/src/web/src/components/ui/Menu.tsx
+@@ -29,6 +29,10 @@ export interface MenuProps extends FloatingProps {
+   disabled?: boolean;
+   /** The composer's existing phone attachment density; desktop stays compact. */
+   variant?: 'default' | 'attachment';
++  /** False leaves ↑ and ↓ on the closed trigger to the page, as the replaced dropdown's trigger did (the Tasks
++   *  page steps through its rows with them); Enter, Space and a click still open it, and the open menu keeps its
++   *  arrows. */
++  openOnArrowKeys?: boolean;
+ }
+ 
+ /**
+@@ -101,7 +105,7 @@ function Items({ items, container, zIndex }: { items: MenuItem[]; container: ()
+   });
+ }
+ 
+-export function Menu({ trigger, items, disabled, variant = 'default', side = 'bottom', align = 'start',
++export function Menu({ trigger, items, disabled, variant = 'default', openOnArrowKeys = true, side = 'bottom', align = 'start',
+   popupClassName, popupStyle, returnFocus, ...state }: MenuProps) {
+   const layer = useFloating(state);
+   const anchor = useRef<HTMLButtonElement>(null);
+@@ -124,6 +128,9 @@ export function Menu({ trigger, items, disabled, variant = 'default', side = 'bo
+       // do with focus in it (the menu convention).
+       const menu = popup.current;
+       if (layer.open && menu) handOver(event, menu.querySelector<HTMLElement>('[data-highlighted]') ?? menu, ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', 'Tab']);
++      // Not opening on the arrows: Base UI's handler, which would open the menu and stop the key, is skipped, so the
++      // key goes on to the page's own handler.
++      else if (!layer.open && !openOnArrowKeys && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) event.preventBaseUIHandler();
+     }} />
+     <BaseMenu.Portal container={layer.container()}>
+       <BaseMenu.Positioner ref={positioner} side={side} align={align} {...placement} positionMethod={layer.positionMethod} className="orbit-floating-positioner" style={{ zIndex: layer.zIndex }}>
+diff --git a/src/web/src/pages/TaskListView.tsx b/src/web/src/pages/TaskListView.tsx
+index 879fb3df7..3ae5f89e0 100644
+--- a/src/web/src/pages/TaskListView.tsx
++++ b/src/web/src/pages/TaskListView.tsx
+@@ -930,6 +930,8 @@ export function TaskListView() {
+     setAssignOpen(true);
+   };
+ 
++  // Whether the list took the Space being pressed (see the keyup below).
++  const spaceTaken = useRef(false);
+   // Keyboard driving of the list. Up/Down step the cursor, opening each task like tabs —
+   // the same selection and the same address a click drives; Shift+Up/Down extend the
+   // multi-selection as the cursor moves; Space checks the cursor row; Cmd/Ctrl+A checks
+@@ -937,6 +939,7 @@ export function TaskListView() {
+   // its own keys.
+   useEffect(() => {
+     const onKey = (e: KeyboardEvent): void => {
++      if (e.key === ' ') spaceTaken.current = false;
+       if (e.altKey || isTypingTarget(e.target)) return;
+       if (rows.length === 0) return;
+       const mod = e.metaKey || e.ctrlKey;
+@@ -950,6 +953,7 @@ export function TaskListView() {
+         // Space scrolls the detail panel when the focus is inside it; don't steal that.
+         if (document.activeElement?.closest('.task-detail-panel')) return;
+         e.preventDefault();
++        spaceTaken.current = true;
+         pickRow(selectedTaskId, false);
+         return;
+       }
+@@ -977,6 +981,19 @@ export function TaskListView() {
+     return () => window.removeEventListener('keydown', onKey);
+   }, [rows, rowIds, selectedTaskId, openTask]);
+ 
++  // A Space the list took (it checked the cursor row) must not also press the control that has focus. A native
++  // checkbox or button never acts on a Space whose keydown was prevented, but a row's checkbox is drawn as a span
++  // that acts on the keyup, so that keyup is prevented too — in the capture phase, before the checkbox reads it.
++  useEffect(() => {
++    const onKeyUp = (e: KeyboardEvent): void => {
++      if (e.key !== ' ' || !spaceTaken.current) return;
++      spaceTaken.current = false;
++      e.preventDefault();
++    };
++    window.addEventListener('keyup', onKeyUp, true);
++    return () => window.removeEventListener('keyup', onKeyUp, true);
++  }, []);
++
+   // Esc clears a multi-selection first, and only falls through to the detail panel's own
+   // Esc (a window listener too, but in the bubble phase) once there is none left.
+   useEffect(() => {
+@@ -1270,6 +1287,8 @@ export function TaskListView() {
+                 <Menu
+                   open={scopeMenuOpen}
+                   onOpenChange={setScopeMenuOpen}
++                  // The title keeps focus after a pick, and ↑/↓ step through the tasks (see the keys above).
++                  openOnArrowKeys={false}
+                   popupClassName="tasks-scope-menu"
+                   items={taskScopeMenuItems(
+                     taskLists.data ?? [],

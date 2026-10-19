@@ -1,0 +1,136 @@
+<!doctype html>
+<!-- Design mock: the project page's task graph (ProjectDependencyGraph) drawn in the start card's Plan. Every
+     frame is a screenshot of the real session page on vite (Chromium, deviceScaleFactor 2) — the tree of board
+     01's proposal (720px cap, clamp fix) with the graph mounted in the Plan — fed by src/web/ui-migration's
+     fixtures plus the real project's 10 tasks and 15 edges (34cbCXaNMJIHWoigS7XWd). The graph is the project
+     page's own component and layout (dagre), given three optional props for the card: direction, embedded
+     (no wheel/drag capture, always fitted, no count panel) and full-screen-only. Decided 2026-10-09 ("按推荐的来")
+     and implemented: StartPlanGraph.tsx + ProjectDependencyGraph.tsx, and StartProject.planGraph on iOS / macOS. -->
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>Web · Start 卡的 Plan 画成项目页的任务图</title>
+<link rel="stylesheet" href="../../../src/web/src/index.css">
+<link rel="stylesheet" href="../project-progress/mock.css">
+<style>
+  .m-sheet { width: 1840px; }
+  .m-sub { line-height: 1.75; max-width: 1660px; }
+  .m-sub code, .m-cap code, .rules code, .files code, .ask code { font-size: 11.5px; }
+  .row2 { display: grid; grid-template-columns: 752px 752px; gap: 26px; align-items: start; }
+  .row-side { display: grid; grid-template-columns: 752px minmax(0, 1fr); gap: 26px; align-items: start; }
+  .fig { position: relative; }
+  .shot { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px rgba(15, 23, 42, .08), 0 1px 3px rgba(15, 23, 42, .06); }
+  .m-cap { font-size: 12.5px; line-height: 1.75; color: var(--text-2); margin: 10px 2px 0; }
+  .m-cap b { color: var(--text-1); }
+  .fl { font-size: 12.5px; font-weight: 700; color: var(--text-1); margin: 0 0 8px 2px; display: flex; gap: 8px; align-items: center; }
+  .fl span.d { font-weight: 400; color: var(--text-3); }
+  .m-k.rec { background: #e8f7ee; color: #16833a; }
+  .m-k.alt { background: #fff1e8; color: #c2410c; }
+  .m-k.no { background: #fdecec; color: #b42318; }
+  .stage-gap { margin-top: 26px; }
+  .rules { border-collapse: collapse; font-size: 12.5px; line-height: 1.65; width: 100%; }
+  .rules th, .rules td { border: 1px solid #dde0e6; padding: 8px 11px; text-align: left; vertical-align: top; }
+  .rules th { background: #f5f6f8; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  .rules td:first-child { font-weight: 600; color: var(--text-1); }
+  .rules td.same { color: var(--text-3); }
+  .rules td.chg { color: #0958d9; font-weight: 600; }
+  .grid-bottom { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 26px; align-items: start; }
+  .files { margin: 0; padding: 12px 16px; list-style: none; background: #f5f6f8; border-radius: 8px;
+           font-size: 12.5px; line-height: 1.75; color: #3f4652; }
+  .files li + li { margin-top: 6px; }
+  .files b { color: var(--text-1); }
+  .ask { margin-top: 14px; padding: 12px 16px; border-radius: 8px; background: #fff8e6; border: 1px solid #f5d79e;
+         font-size: 12.5px; line-height: 1.8; color: #5c4210; }
+  .ask b { color: #3d2b08; }
+  .ask ol { margin: 6px 0 0; padding-left: 20px; }
+  .ask li + li { margin-top: 4px; }
+  .ask .rec { color: #16833a; font-weight: 700; }
+</style>
+</head>
+<body class="m">
+<section class="m-sheet">
+  <h1 class="m-h1 zh">Web · Start 卡的 Plan 画成项目页的任务图</h1>
+  <p class="m-sub zh">你问 Plan 能不能展示项目页的任务图。<b>可以</b>：卡片已经读了同一份 <code>GET /projects/:id/dependency-graph</code>，项目页的任务图组件（<code>ProjectDependencyGraph</code>）可以直接放进来，不多一次请求。难点在宽度：项目页从左往右画，这个项目放进 720 的卡里只能缩到 0.5 倍；从上往下画（项目页在手机上就是这样画的）能放下，0.8 倍。
+  下面都是真实截图：01 板改后的那份代码（卡片最宽 720，More / Read all 修好），再把项目页的任务图放进 Plan 跑出来的，数据照抄这个项目（10 个任务、15 条依赖）。图就是项目页那一个，排法也一样，只给卡片加了三个可选参数：方向、嵌在卡里（不吃滚轮、不拖、总是整张缩放）、只开全屏。</p>
+
+  <div class="m-stage">
+    <div class="m-stage-l zh"><span class="m-k">桌面 Web</span>2560 宽窗口，卡片 720（01 板的推荐）</div>
+    <div class="row2">
+      <div>
+        <div class="fl zh"><span class="m-k">现在</span>① 分层列表</div>
+        <div class="fig"><img class="shot" src="02a-plan-list.png" alt=""></div>
+        <p class="m-cap zh">按层列出编号，一层只有一个任务时才写标题。看得出先后，看不出谁等谁：W2 · W3 是什么、W9 等哪几个，都要点 View tasks 才知道。</p>
+      </div>
+      <div>
+        <div class="fl zh"><span class="m-k new">A</span>② 换成任务图，从上往下，整张缩放 <span class="m-k rec">推荐</span></div>
+        <div class="fig"><img class="shot" src="02b-plan-graph.png" alt=""></div>
+        <p class="m-cap zh">10 个任务都在，0.8 倍，标题读得出；谁等谁一眼能看到（W2、W3 都等 W1；W9 等 W5、W6、W7）。W1 写 Ready to run，其余写 Waiting on N。右上角 ⤢ 打开全屏。在卡里它只是一张图：滚轮照常滚对话，不会被它吃掉，也不能拖。卡片比列表高 327 px（1,320 → 1,647）。</p>
+      </div>
+    </div>
+    <div class="row-side stage-gap">
+      <div>
+        <div class="fl zh"><span class="m-k alt">B</span>③ 列表不动，加一个 Task graph ⤢</div>
+        <div class="fig"><img class="shot" src="02c-plan-list-link.png" alt=""></div>
+        <p class="m-cap zh">卡片和现在一样高。点 Task graph 打开右边这个全屏图：就是项目页的全屏任务图，1:1，能拖能缩放。iOS 的项目页也是从一行点开任务图（一个 sheet）。</p>
+      </div>
+      <div>
+        <div class="fl zh">③ 点开后：项目页同一个全屏任务图 <span class="d">（整屏缩小显示）</span></div>
+        <div class="fig"><img class="shot" src="02d-full-screen.png" alt=""></div>
+      </div>
+    </div>
+    <div class="row-side stage-gap">
+      <div>
+        <div class="fl zh"><span class="m-k no">不推荐</span>④ 照项目页从左往右画</div>
+        <div class="fig"><img class="shot" src="02e-plan-graph-lr.png" alt=""></div>
+        <p class="m-cap zh">6 层横着排要约 1,260 px，720 的卡里只能缩到 0.5 倍，字太小。</p>
+      </div>
+      <div>
+        <div class="fl zh">另：任务图本身的排法和「层」不完全一样</div>
+        <p class="m-cap zh" style="margin-top:0">图是项目页的排法（dagre），它会为了少绕线把任务往下挪：② 里 W2 排在 W3 下面一行，W7、W8 和 W5、W6 排在同一行，而列表按「最晚的前置 + 1」把 W2、W3 放第 2 层、W7、W8 放第 3 层。所以画图时节标题去掉 in 6 levels，只写 <b>Plan · 10 tasks</b>，免得数行数对不上。</p>
+      </div>
+    </div>
+    <div class="stage-gap">
+      <div class="fl zh"><span class="m-k state">对照</span>⑤ 如果卡片不限宽（现在铺满对话的样子）：从左往右 1:1，和项目页一模一样 <span class="d">（缩小显示）</span></div>
+      <div class="fig"><img class="shot" src="02f-plan-graph-lr-wide.png" alt=""></div>
+      <p class="m-cap zh">图本身最好看，但 01 板说的问题都还在：设置项的开关离名字约 1,760 px，标准一行一百多字。</p>
+    </div>
+  </div>
+
+  <div class="m-stage">
+    <div class="grid-bottom">
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">规则</span>按 A 做时</div>
+        <table class="rules zh">
+          <tr><th>情况</th><th>现在</th><th>改后</th></tr>
+          <tr><td>整张图在卡里能放到 0.7 倍以上（项目页自己判断「放得下」用的同一条线）</td><td>分层列表</td><td class="chg">任务图，从上往下，整张缩放（②）</td></tr>
+          <tr><td>放不下：任务多、层多；手机网页的审阅弹窗；服务端把图折叠或截断了</td><td>分层列表</td><td class="chg">保留分层列表，加 Task graph ⤢（③）</td></tr>
+          <tr><td>卡片宽度（01 板待定 1）</td><td>—</td><td>640 宽 0.72 倍；720 宽 0.8 倍；880 宽 0.97 倍</td></tr>
+          <tr><td>滚轮、拖动</td><td>—</td><td class="chg">滚轮滚对话；图不拖、不缩放；要放大点右上角 ⤢</td></tr>
+          <tr><td>点一个任务</td><td>—</td><td class="chg">和项目页一样打开那个任务（转到项目页上的任务面板，Back 回到会话）</td></tr>
+          <tr><td>Now / You</td><td>列表上有</td><td class="chg">图上 W1 写 Ready to run；W10 不单独标 You，Comes to you 里已经写了</td></tr>
+          <tr><td>节标题</td><td>Plan · 10 tasks in 6 levels</td><td class="chg">Plan · 10 tasks（见 ④ 右边）</td></tr>
+          <tr><td>View tasks ›、Start 和底栏那行字、项目页的任务图</td><td>—</td><td class="same">不变</td></tr>
+        </table>
+      </div>
+      <div>
+        <div class="m-stage-l zh"><span class="m-k state">改动</span>只改 Web</div>
+        <ul class="files zh">
+          <li><b><code>src/web/src/components/ProjectDependencyGraph.tsx</code></b>：加三个可选参数：方向（从上往下 / 从左往右）、嵌在卡里（不吃滚轮、不拖、总是整张缩放、不显示左上角的计数）、只开全屏（给 Task graph ⤢ 用）。项目页不传这些参数，行为不变。约 40 行。</li>
+          <li><b><code>src/web/src/components/StartProjectCard.tsx</code></b>：Plan 一节先算整张缩放的倍数，0.7 以上画图，否则列表 + Task graph ⤢。图走项目页同一个按需加载的入口，数据用卡片已经读过的那份。</li>
+          <li><b><code>src/web/src/lib/projectStart.ts</code></b>：新文案 <code>Task graph</code>，OrbitKit 的文案对照测试跟着加一条。</li>
+          <li><b>测试</b>：<code>StartProjectCard.test.tsx</code>（什么时候画图、什么时候是列表）、<code>ProjectDependencyGraph.test.tsx</code>（嵌入时不吃滚轮、只开全屏）；版面用真浏览器截图核对。</li>
+        </ul>
+        <div class="ask zh">
+          <b>已定（2026-10-09）：按推荐。</b>三项都取绿色那一项，已照此实现（Web 和 iOS / macOS）。
+          <ol>
+            <li>Plan 怎么画：<span class="rec">A 任务图，放不下时退回列表 + Task graph</span> ／ B 一直是列表 + Task graph ／ 不变</li>
+            <li>和 01 板的宽度一起定：640 时图是 0.72 倍（刚过线），<span class="rec">720 时 0.8 倍</span>，880 时 0.97 倍。</li>
+            <li>iOS 的 Start 卡也只有分层列表，iOS 项目页已经有任务图（sheet）：<span class="rec">按同一条规则一起改</span>（手机上放不下，所以是列表 + 一行 Task graph 打开那个 sheet）／ 只改 Web。</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+</body>
+</html>

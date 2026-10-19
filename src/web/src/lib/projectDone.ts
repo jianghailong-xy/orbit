@@ -1,4 +1,5 @@
 import type { CriterionLandingReason, DoneRequest, ProjectDoneBy, ProjectOpenItemRow } from '@orbit/shared';
+import { DEFAULT_MAIN_BRANCH } from './projectStart';
 import { formatSpan } from './watches';
 
 /**
@@ -103,6 +104,24 @@ export const PROJECT_DONE_COPY = {
   landedOnMain: 'landed on main',
 } as const;
 
+/**
+ * The words above that say main, said of the project's main branch by name — the branch its work
+ * ends up on (`integration.upstreamRef`). For a project on main each says its constant's words; the
+ * constants stay, as the native parity tests read them.
+ */
+export function whyNotDoneOn(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `on ${main}`;
+}
+export function whyNotDoneWaitingDetail(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `Goes to ${main} after the merge check — the coordinator is handling it.`;
+}
+export function whyNotDoneNeedsCallDetail(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `Orbit saw no merge for it. The coordinator checked ${main} has it and asked you to record the project done.`;
+}
+export function landedOn(main: string = DEFAULT_MAIN_BRANCH): string {
+  return `landed on ${main}`;
+}
+
 export type ProjectDoneCriterion = {
   definitionId: string;
   satisfied: boolean;
@@ -147,6 +166,8 @@ export type ProjectDoneDocument = {
   doneBy?: ProjectDoneBy | null;
   doneAt?: string | null;
   acceptedGaps?: readonly Record<string, unknown>[] | null;
+  /** The project's main branch, which the cards' "on main" names. */
+  integration?: { upstreamRef?: string | null } | null;
 };
 
 export type DoneRequestRow = {
@@ -186,23 +207,24 @@ function nothingToLandCount(counts: ProjectDoneCounts): number {
   return (counts.byReason?.NOTHING_TO_LAND ?? 0) + (counts.byReason?.CODELESS ?? 0);
 }
 
-/** Counts are deliberately read from `derivedDone.counts`; this function never inspects tasks. */
-export function projectDoneTally(counts: ProjectDoneCounts | undefined): string {
+/** Counts are deliberately read from `derivedDone.counts`; this function never inspects tasks. The
+ *  tallies say where work landed on `main`, the project's main branch by name. */
+export function projectDoneTally(counts: ProjectDoneCounts | undefined, main: string = DEFAULT_MAIN_BRANCH): string {
   if (!counts) return '';
   return [
     `${counts.criteria} criteria`,
     `${counts.met} met`,
-    `${counts.onMain} ${PROJECT_DONE_COPY.landedOnMain}`,
+    `${counts.onMain} ${landedOn(main)}`,
     ...reasonParts(counts),
   ].join(' · ');
 }
 
 /** The compact tally in the request card: the heading already states the number of criteria. */
-export function projectDoneCardTally(counts: ProjectDoneCounts | undefined): string {
+export function projectDoneCardTally(counts: ProjectDoneCounts | undefined, main: string = DEFAULT_MAIN_BRANCH): string {
   if (!counts) return '';
   return [
     `${counts.met} met`,
-    `${counts.onMain} ${PROJECT_DONE_COPY.landedOnMain}`,
+    `${counts.onMain} ${landedOn(main)}`,
     `${nothingToLandCount(counts)} ${PROJECT_DONE_COPY.nothingToLand}`,
   ].join(' · ');
 }
@@ -211,11 +233,12 @@ export function projectDoneCardTally(counts: ProjectDoneCounts | undefined): str
 export function projectDoneReceiptTally(
   counts: ProjectDoneCounts | undefined,
   acceptedGaps: number,
+  main: string = DEFAULT_MAIN_BRANCH,
 ): string {
   if (!counts) return `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`;
   return [
     `${counts.criteria} criteria met`,
-    `${counts.onMain} ${PROJECT_DONE_COPY.landedOnMain}`,
+    `${counts.onMain} ${landedOn(main)}`,
     `${nothingToLandCount(counts)} ${PROJECT_DONE_COPY.nothingToLand}`,
     `${acceptedGaps} ${PROJECT_DONE_COPY.gapsAccepted}`,
   ].join(' · ');
@@ -230,6 +253,7 @@ export function projectDoneReceiptTally(
  */
 export function projectWhyNotDoneTally(
   derivedDone: Pick<ProjectDerivedDone, 'criteria'> | undefined,
+  main: string = DEFAULT_MAIN_BRANCH,
 ): string {
   if (!derivedDone) return '';
   const met = derivedDone.criteria.filter((criterion) => criterion.satisfied);
@@ -240,7 +264,7 @@ export function projectWhyNotDoneTally(
   ])) as Record<CriterionLandingReason, number>;
   return [
     `${derivedDone.criteria.length} criteria`,
-    `${met.filter((criterion) => criterion.landingReason == null).length} ${PROJECT_DONE_COPY.onMain}`,
+    `${met.filter((criterion) => criterion.landingReason == null).length} ${whyNotDoneOn(main)}`,
     ...reasonParts({ byReason }),
     ...(notMet > 0 ? [`${notMet} ${PROJECT_DONE_COPY.notMet}`] : []),
   ].join(' · ');
@@ -312,15 +336,16 @@ export function doneRequestWaiting(waitingSince: string | null | undefined, now:
   return Number.isNaN(at) ? null : `waiting ${formatSpan(now - at)}`;
 }
 
-/** A stable reason label, used by the Why-not-done card and its compact project-page row. */
-export function landingReasonLabel(reason: CriterionLandingReason | null): string {
+/** A stable reason label, used by the Why-not-done card and its compact project-page row. Work with
+ *  no reason not to be there landed on `main`, the project's main branch by name. */
+export function landingReasonLabel(reason: CriterionLandingReason | null, main: string = DEFAULT_MAIN_BRANCH): string {
   switch (reason) {
     case 'IN_FLIGHT': return 'In flight';
     case 'ON_PROJECT_BRANCH': return PROJECT_DONE_COPY.onProjectBranch;
     case 'NO_RECEIPT': return PROJECT_DONE_COPY.mergedOutsideOrbit;
     case 'NOTHING_TO_LAND': return PROJECT_DONE_COPY.nothingToLand;
     case 'CODELESS': return 'No code to land';
-    default: return 'Landed on main';
+    default: return `Landed on ${main}`;
   }
 }
 

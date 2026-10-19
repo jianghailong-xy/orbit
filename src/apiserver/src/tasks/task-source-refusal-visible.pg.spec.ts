@@ -423,13 +423,25 @@ interface Resolution {
  * Anything else the caller sees as a failed assertion, because a fixture that cannot fetch for a
  * third reason would prove nothing about this one.
  */
+/**
+ * The runner's claim of a session, as the lease routes make it: PENDING -> RUNNING is dropped in
+ * silence for a session that has a recorded engine unless the same transaction declares it reads
+ * that engine (migration 0414, `common/session-scheduling.ts`). Every claim in this file says so.
+ */
+async function claimSession(db: PrismaClient, sessionId: string): Promise<void> {
+  await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('orbit.claim_reads_session_engine', '1', true)`;
+    await tx.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+  });
+}
+
 async function runnerResolvesSource(
   stack: Stack,
   f: Fixture,
   sessionId: string,
 ): Promise<Resolution> {
   // The claim's own write: the run is this runner's now.
-  await stack.db.session.update({ where: { id: sessionId }, data: { status: RunStatus.RUNNING } });
+  await claimSession(stack.db, sessionId);
   const selected = await stack.db.session.findUniqueOrThrow({
     where: { id: sessionId },
     select: { sourceState: true, sourceKind: true, sourceRef: true, sourceRequiredContains: true },
@@ -594,9 +606,9 @@ test('(a) a start whose integration line does not exist is refused at resolution
       assert.ok(refusalNotesForTask[0]!.body.includes(`refs/heads/${f.branch}`),
         'the note does not name the ref that was not there');
       assert.ok(refusalNotesForTask[0]!.body.includes(resolution.stderr));
-      assert.ok(!refusalNotesForTask[0]!.body.includes('在检出时'),
+      assert.ok(!refusalNotesForTask[0]!.body.includes('refused it at checkout'),
         'the note tells the reader the checkout refused this start');
-      assert.ok(!notes.some((note) => note.body.includes('可重新运行本任务重试')),
+      assert.ok(!notes.some((note) => note.body.includes('Run this task again to retry')),
         'the timeline still tells whoever reads it to run the task again');
 
       // And the coordinator is told: one wake, delivered to the standing conversation, whose one

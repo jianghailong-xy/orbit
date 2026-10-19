@@ -24,9 +24,10 @@ func codexIsolatedHome(t *testing.T, scratch string) string {
 }
 
 // The app-server runs in a CODEX_HOME of the session's own, with its SQLite state beside it, and no
-// shared partition is bootstrapped. The runner's home lends its configuration and nothing else: not
-// its history, which a fresh state database would make Codex read in full before answering
-// initialize — on a busy runner, for longer than the handshake was allowed — and not its login.
+// shared partition is bootstrapped. Nothing of the runner's home comes with it: not the account's
+// configuration — the session's is the one Orbit builds for it — not its history, which a fresh
+// state database would make Codex read in full before answering initialize (on a busy runner, for
+// longer than the handshake was allowed), and not its login.
 func TestCodexCredentialIsolatedSessionRunsInAHomeOfItsOwn(t *testing.T) {
 	m := newCodexAccountDispatchMachine(t)
 	m.signIn(t, m.defaultHome)
@@ -55,8 +56,8 @@ func TestCodexCredentialIsolatedSessionRunsInAHomeOfItsOwn(t *testing.T) {
 	if spawns[0].CodexHome != home || spawns[0].sqliteHome(t) != home {
 		t.Fatalf("the app-server ran in %q on %s, want both %s", spawns[0].CodexHome, spawns[0].sqliteHome(t), home)
 	}
-	if got, err := os.Readlink(filepath.Join(home, "config.toml")); err != nil || got != filepath.Join(m.defaultHome, "config.toml") {
-		t.Fatalf("config.toml links to %q (%v), want the runner's", got, err)
+	if _, err := os.Lstat(filepath.Join(home, "config.toml")); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("the session's home carries the runner's configuration (config.toml: %v)", err)
 	}
 	if info, err := os.Lstat(filepath.Join(home, "sessions")); err == nil && info.Mode()&os.ModeSymlink != 0 {
 		t.Fatal("the session's home links the runner's history")

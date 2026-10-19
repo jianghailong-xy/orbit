@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseReferencedTasks, summarizeReferencedTasks } from './referencedTask';
 import {
   EIGHT_TASKS,
+  IN_ENGLISH,
   NEVER_RAN,
   ONE_TASK,
   TWO_TASKS,
@@ -14,7 +15,8 @@ import {
  * Held to the wording the apiserver writes (tasks/reference-expansion.ts `describeTask`) and proved
  * against this deployment's own notes, copied out of `run_event` (referencedTask.fixtures.ts) —
  * including the note that carries eight of them and the one that shares a note with the inventory a
- * returning engine was handed.
+ * returning engine was handed. Those are all Chinese, as every transcript from before 2026-10 is; the
+ * English the block is written in now is `IN_ENGLISH`, which the apiserver's own spec writes.
  */
 describe('parseReferencedTasks', () => {
   it('reads every field of one block, id included', () => {
@@ -83,6 +85,37 @@ describe('parseReferencedTasks', () => {
     expect(parsed?.tasks[7].suffixes).toEqual(['验收任务']);
   });
 
+  it('reads the English the block is written in now, field for field, as it reads the Chinese', () => {
+    const parsed = parseReferencedTasks(IN_ENGLISH);
+
+    expect(parsed?.tasks).toEqual([
+      {
+        id: '34DH29mTc7OQ6AwxAFIJu',
+        title: 'Claude QA: verify the Watch core backend and its recovery semantics',
+        status: 'DONE',
+        suffixes: ['verification task'],
+        list: '(no list)',
+        assignee: 'orbit',
+        runs: 1,
+        executed: 1,
+        lastRun: 'SUCCEEDED, 144 turns',
+      },
+      {
+        id: '349vy0HknpSjHwdwJ31O1',
+        title: 'P0 | Review and publish the docs and the community baseline',
+        status: 'OPEN',
+        suffixes: [],
+        list: '(no list)',
+        assignee: '(unassigned)',
+        runs: 0,
+        executed: 0,
+        lastRun: 'never run',
+      },
+    ]);
+    // The sentence addressed to the agent is no field, and nothing of the note is left over.
+    expect(parsed?.rest).toBe('');
+  });
+
   it('hands another block in the same note back untouched', () => {
     const parsed = parseReferencedTasks(WITH_BACKGROUND_JOBS);
 
@@ -103,6 +136,9 @@ describe('parseReferencedTasks', () => {
     expect(parseReferencedTasks(null)).toBeNull();
     // A list reference is a shape this deployment has never sent one of, and nobody guesses at it.
     expect(parseReferencedTasks('<referenced-list id="34OEE9MQXMEm0h0Ptm1GG">\n  标题   x\n</referenced-list>')).toBeNull();
+    expect(parseReferencedTasks('<referenced-list id="34OEE9MQXMEm0h0Ptm1GG">\n  Title       x\n</referenced-list>')).toBeNull();
+    // The English is read word for word too: a runs line reworded is no runs line.
+    expect(parseReferencedTasks(IN_ENGLISH.replace(/^ {2}Runs .*$/gm, '  Runs     ran once'))).toBeNull();
   });
 
   it('draws the blocks it can read and leaves beside them the one it cannot', () => {
@@ -127,5 +163,6 @@ describe('summarizeReferencedTasks', () => {
   it('counts several by status, in the order the note named them', () => {
     expect(summarize(EIGHT_TASKS)).toBe('7 DONE, 1 OPEN');
     expect(summarize(TWO_TASKS)).toBe('1 DONE, 1 OPEN');
+    expect(summarize(IN_ENGLISH)).toBe('1 DONE, 1 OPEN');
   });
 });

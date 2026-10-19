@@ -50,8 +50,11 @@ function fixture(options: {
       findFirst: async ({ where }: { where: { slug: string; enabled?: boolean } }) =>
         options.rows?.find((provider) => provider.slug === where.slug &&
           (where.enabled === undefined || provider.enabled)) ?? null,
+      // The owner's keys: what the built-in `dsh` picks its default DeepSeek key from (§3.3).
+      findMany: async () => (options.rows ?? []).filter((provider) => provider.enabled),
     },
     providerPool: { findFirst: async () => null },
+    providerSlugAlias: { findUnique: async () => null },
     session: {
       findFirst: async () => session,
       findUniqueOrThrow: async () => session,
@@ -99,7 +102,8 @@ async function rejectsUpgrade(operation: () => Promise<unknown>) {
 test('P1b dsh preflight: direct Harness creation requires a heartbeat capability', async () => {
   for (const capabilities of [undefined, [], ['provider:claude'], ['dsh'], ['provider:dsh']]) {
     for (const permissionMode of [undefined, PermissionMode.BYPASS]) {
-      const f = fixture({ capabilities,
+      // The built-in `dsh` runs on the owner's default DeepSeek key (docs/provider-engine-contract.md §3.3).
+      const f = fixture({ capabilities, rows: [row('my-deepseek', 'claude')],
         capabilitiesReportedAt: !capabilities || capabilities.includes('provider:dsh') ? null : new Date() });
       await rejectsUpgrade(() => f.service.create(ownerId, { ...opening, provider: 'dsh', permissionMode }));
       assert.deepEqual(f.creates, [], JSON.stringify(capabilities));
@@ -143,8 +147,9 @@ test('P1b dsh preflight: resume and config reject withdrawn direct and borrowed 
 
 test('P1b dsh preflight: capable runners still reject unverified Harness permissions', async () => {
   for (const operation of ['create', 'resume', 'config']) {
-    // Plan has no enforceable Harness equivalent (P4); Default, Auto and Don't Ask are admitted.
-    const f = fixture({ capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date(),
+    // Plan has no enforceable Harness equivalent (P4); Default, Auto and Don't Ask are admitted. The built-in
+    // `dsh` creates on the owner's default DeepSeek key (§3.3).
+    const f = fixture({ capabilities: ['provider:dsh'], capabilitiesReportedAt: new Date(), rows: [row('my-deepseek', 'claude')],
       status: operation === 'config' ? RunStatus.AWAITING_INPUT : RunStatus.FAILED, permissionMode: PermissionMode.PLAN });
     await assert.rejects(() => operation === 'create'
       ? f.service.create(ownerId, { ...opening, provider: 'dsh', permissionMode: PermissionMode.PLAN })
@@ -178,11 +183,13 @@ test('P1b dsh preflight: existing engines and legacy DeepSeek routes remain avai
 
 test('P1b dsh preflight: unresolved and disabled provider identities fail closed', async () => {
   for (const rows of [[], [row('harness-key', 'dsh', false)], [row('harness-key', 'unknown-runtime')]]) {
+    // A key on a protocol no engine speaks runs nowhere (PROVIDER_ENGINE_INCOMPATIBLE, §3.2).
     const explicit = fixture({ rows });
-    await assert.rejects(() => explicit.service.create(ownerId, { ...opening, provider: 'harness-key' }), /provider.*not available/);
+    await assert.rejects(() => explicit.service.create(ownerId, { ...opening, provider: 'harness-key' }),
+      /provider.*not available|cannot run on any engine/);
     assert.deepEqual(explicit.creates, []);
     const inherited = fixture({ rows, seed: 'harness-key' });
-    await assert.rejects(() => inherited.service.create(ownerId, opening), /provider.*not available/);
+    await assert.rejects(() => inherited.service.create(ownerId, opening), /provider.*not available|cannot run on any engine/);
     assert.deepEqual(inherited.creates, []);
     for (const operation of ['resume', 'config']) {
       const f = fixture({ rows, provider: 'harness-key', providerBuiltin: false,
@@ -214,14 +221,25 @@ test('P1b dsh dispatch: capability filters preserve configured dsh keyword colli
     user: { findUnique: async () => ({ role: 'ADMIN' }) },
     modelProvider: { findMany: async (query: unknown) => { seen.push(query); return [{ slug: 'harness-key' }]; } },
   };
+  // A session recorded on the runtime is filtered by that alone (migration 0414); the collisions are
+  // preserved where they still decide anything, on a row without an engine.
   assert.deepEqual(await providerDispatchWhereOn(db as never, ownerId, AgentProvider.DSH), {
     OR: [
-      { provider: AgentProvider.DSH, providerBuiltin: true },
-      { provider: { in: ['harness-key'] }, providerBuiltin: false },
+      { engine: AgentProvider.DSH },
+      { AND: [
+        { engine: null },
+        { OR: [
+          { provider: AgentProvider.DSH, providerBuiltin: true },
+          { provider: { in: ['harness-key'] }, providerBuiltin: false },
+        ] },
+      ] },
     ],
   });
   assert.deepEqual(seen[0], { where: { runtime: AgentProvider.DSH, enabled: true, OR: [{ ownerId: null }, { ownerId }] }, select: { slug: true } });
   assert.deepEqual(await providerDispatchWhereOn(db as never, ownerId, AgentProvider.ANTIGRAVITY), {
-    provider: { in: ['antigravity', 'harness-key'] },
+    OR: [
+      { engine: AgentProvider.ANTIGRAVITY },
+      { AND: [{ engine: null }, { provider: { in: ['antigravity', 'harness-key'] } }] },
+    ],
   });
 });

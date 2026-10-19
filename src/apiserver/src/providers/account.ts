@@ -49,10 +49,14 @@ export const ACCOUNT_CHOICE = {
   codex: 'codexAccount',
   claude: 'claudeAccount',
   antigravity: 'antigravityAccount',
+  kimi: 'kimiAccount',
+  cursor: 'cursorAccount',
 } as const satisfies Record<AccountEngine, string>;
 
 export const ACCOUNT_PINNED = {
   codex: 'codexAccountPinned',
   claude: 'claudeAccountPinned',
   antigravity: 'antigravityAccountPinned',
+  kimi: 'kimiAccountPinned',
+  cursor: 'cursorAccountPinned',
 } as const satisfies Record<AccountEngine, string>;

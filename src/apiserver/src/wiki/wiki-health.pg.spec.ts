@@ -1,6 +1,7 @@
 /**
  * A space's health (criterion 5; contracts/wiki.contract.json `maintenance.health`), against a real
- * PostgreSQL and over the doors' real routes.
+ * PostgreSQL and over the owner door's real routes, with each run made and ended the way the server's
+ * maintenance job makes and ends it (`considerWikiMaintenance`, `finishWikiMaintenanceJob`).
  *
  * What criterion 5 asks of the server, each read back from what the routes answered and what was sent:
  *
@@ -8,13 +9,13 @@
  *      racing on the row still tell the owner once;
  *   2. a run that succeeds sets the streak back to zero, and the next streak tells the owner once more,
  *      at its own third failure;
- *   3. another account reads nothing of the space: its health is the plain 404, and its own failing runs
- *      ring its own owner's phone and nobody else's;
+ *   3. another account reads nothing of the space: its health is the plain 404, its own failing runs
+ *      ring its own owner's phone and nobody else's, and its run's end cannot be told in another's space;
  *
  * and beside them, the read the Wiki home's status line draws from: every active entry of the space (not
  * the 200 a list stops at), maintenance off until the owner turns it on, the backlog counted from the
  * facts as the read is made, and the looks — off, ok, behind, running, failing — with the day's runs used
- * up said so. The read writes nothing.
+ * up said so, and the run under way the one whose wiki job has not ended. The read writes nothing.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-health.pg.spec.ts
  *
@@ -23,7 +24,7 @@
  * sending, as in the other wiki specs.
  */
 import assert from 'node:assert/strict';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 
 import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
@@ -40,15 +41,11 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
-import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { RunnerWikiMaintainController } from '../runner-api/runner-wiki-maintain.controller';
-import { RunnerWikiMaintenanceController } from '../runner-api/runner-wiki-maintenance.controller';
-import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { WikiController } from './wiki.controller';
 import { WikiHealth } from './wiki-health';
 import { WikiHealthController } from './wiki-health.controller';
 import { WikiMaintenance } from './wiki-maintenance';
-import { considerWikiMaintenance } from './wiki-maintenance-run';
+import { considerWikiMaintenance, finishWikiMaintenanceJob } from './wiki-maintenance-run';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService } from './wiki.service';
 
@@ -71,6 +68,7 @@ interface Harness {
   app: INestApplication;
   bearers: Map<string, string>;
   pushed: Pushed[];
+  maintenance: WikiMaintenance;
 }
 
 let harness: Promise<Harness> | undefined;
@@ -98,14 +96,13 @@ function boot(): Promise<Harness> {
     const maintenance = new WikiMaintenance(prisma as unknown as PrismaService, push);
 
     @Module({
-      controllers: [WikiController, WikiHealthController, RunnerWikiController, RunnerWikiMaintenanceController, RunnerWikiMaintainController],
+      controllers: [WikiController, WikiHealthController],
       providers: [
         { provide: WikiService, useValue: service },
         { provide: WikiMaintenance, useValue: maintenance },
         { provide: WikiHealth, useValue: new WikiHealth(prisma as unknown as PrismaService) },
         { provide: WikiRetrieval, useValue: new WikiRetrieval(prisma as unknown as PrismaService) },
         { provide: PrismaService, useValue: prisma },
-        RunnerAuthGuard,
         JwtAuthGuard,
         Reflector,
         {
@@ -127,7 +124,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, bearers, pushed };
+    return { base: await app.getUrl(), sql, prisma, app, bearers, pushed, maintenance };
   })();
   return harness;
 }
@@ -150,15 +147,11 @@ interface Answer {
 
 interface Caller {
   bearer?: string;
-  runner?: string;
-  session?: string;
 }
 
 async function call(h: Harness, who: Caller, method: string, route: string, body?: unknown): Promise<Answer> {
   const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (who.bearer) headers.authorization = `Bearer ${who.bearer}`;
-  if (who.runner) headers['x-runner-token'] = who.runner;
-  if (who.session) headers['x-orbit-session-id'] = who.session;
   const response = await fetch(`${h.base}/api${route}`, {
     method,
     headers,
@@ -201,17 +194,6 @@ async function account(h: Harness, name: string): Promise<Account> {
   return { id, bearer: `bearer-${id}` };
 }
 
-async function runner(h: Harness, ownerId: string): Promise<{ id: string; token: string }> {
-  const id = randomUUID();
-  const token = `runner-${id}`;
-  await h.sql.query(`INSERT INTO "runner"("id","name","owner_id","token_hash") VALUES ($1,'spec',$2,$3)`, [
-    id,
-    ownerId,
-    createHash('sha256').update(token).digest('hex'),
-  ]);
-  return { id, token };
-}
-
 async function workspace(h: Harness, ownerId: string): Promise<string> {
   const id = randomUUID();
   await h.sql.query(`INSERT INTO "workspace"("id","name","owner_id","env","work_dir") VALUES ($1,'spec',$2,'{}','~/orbit')`, [id, ownerId]);
@@ -236,7 +218,6 @@ async function session(
 
 interface Space {
   owner: Account;
-  machine: { id: string; token: string };
   spaceId: string;
   workspaceId: string;
 }
@@ -244,7 +225,6 @@ interface Space {
 /** A space bound to a workspace of its owner's, with its maintenance as `maintenance` says: off when absent. */
 async function space(h: Harness, name: string, maintenance?: Record<string, unknown>): Promise<Space> {
   const owner = await account(h, name);
-  const machine = await runner(h, owner.id);
   const workspaceId = await workspace(h, owner.id);
   const made = await call(h, { bearer: owner.bearer }, 'POST', '/wiki/spaces', {
     title: `${name} space`,
@@ -253,14 +233,14 @@ async function space(h: Harness, name: string, maintenance?: Record<string, unkn
   expectStatus(made, 201, 'the owner creates a space');
   const spaceId = toUuid(made.body.id as string);
   expectStatus(await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/workspaces`, { workspaceId }), 200, 'the owner binds the workspace');
-  const s = { owner, machine, spaceId, workspaceId };
+  const s = { owner, spaceId, workspaceId };
   if (maintenance) await turnOn(h, s, maintenance);
   return s;
 }
 
 async function turnOn(h: Harness, s: Space, settings: Record<string, unknown> = {}): Promise<void> {
   const on = await call(h, { bearer: s.owner.bearer }, 'PATCH', `/wiki/spaces/${s.spaceId}`, {
-    maintenance: { enabled: true, workspaceId: s.workspaceId, provider: 'local-vllm', ...settings },
+    maintenance: { enabled: true, workspaceId: s.workspaceId, ...settings },
   });
   expectStatus(on, 200, 'the owner turns maintenance on');
 }
@@ -275,68 +255,59 @@ async function settledSessions(h: Harness, s: Space, count: number, minutes = 30
 }
 
 /**
- * The space's maintenance task, made by a fact as the trigger makes it, and its run under way: the task
- * IN_PROGRESS, its session on the space's runner, and the run's start read — what a claim and
- * `orbit wiki maintain` would have done. Answers the run's session and the position its task expects.
+ * The space's maintenance run, made by a fact as the trigger makes it — a `maintain` job and its run row — and under
+ * way: the job claimed under a lease and the run row started, as the worker starts it. Answers the run's job, its row,
+ * and the position the row expects.
  */
-async function startRun(h: Harness, s: Space): Promise<{ taskId: string; run: string; expect: string }> {
+async function startRun(h: Harness, s: Space): Promise<{ jobId: string; runId: string; expect: string }> {
   const sessions = await settledSessions(h, s, WIKI_MAINTENANCE_RULES.backlogThreshold);
   const made = await considerWikiMaintenance(h.prisma as unknown as PrismaService, s.owner.id, s.spaceId, {
     sessionIds: [sessions[0]!],
     taskIds: [],
   });
-  assert.equal(made.made, true, `a due space makes its maintenance task: ${JSON.stringify(made)}`);
+  assert.equal(made.made, true, `a due space makes its maintenance run: ${JSON.stringify(made)}`);
   if (!made.made) throw new Error('unreachable');
-  await h.sql.query(`UPDATE "task" SET "status" = 'IN_PROGRESS' WHERE "id" = $1`, [made.taskId]);
-  const run = await session(h, s.owner.id, {
-    workspaceId: s.workspaceId, runnerId: s.machine.id, taskId: made.taskId, status: 'RUNNING', lastTurnAt: minutesAgo(1),
+  await h.prisma.wikiJob.update({
+    where: { id: made.jobId },
+    data: { state: 'running', startedAt: new Date(), leaseOwner: randomUUID(), leaseGeneration: randomUUID(), leaseDeadlineAt: new Date(Date.now() + 60_000) },
   });
-  expectStatus(await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/run`), 200, 'the run reads where it starts');
-  return { taskId: made.taskId, run, expect: made.expect };
+  await h.prisma.wikiMaintenanceRun.update({ where: { id: made.runId }, data: { startedAt: new Date(), lastStartedAt: new Date(), attempts: 1 } });
+  return { jobId: made.jobId, runId: made.runId, expect: made.expect };
 }
 
-/** Page the dossiers a run covers, up to what its task expects, as `orbit wiki maintain` does: the token it may advance to. */
-async function pageToExpected(h: Harness, s: Space, run: string, expect: string): Promise<string> {
+/** Page the dossiers a run covers, up to what its row expects, as the server's run reads them: the token it may advance to. */
+async function pageToExpected(h: Harness, s: Space, expect: string): Promise<string> {
   let after = '';
   for (let n = 0; n < 100; n += 1) {
-    const query = new URLSearchParams({ until: expect, limit: '10', ...(after ? { after } : {}) });
-    const page = await call(h, { runner: s.machine.token, session: run }, 'GET', `/runner/wiki/spaces/${s.spaceId}/dossiers?${query}`);
-    expectStatus(page, 200, 'the run reads a page');
-    after = page.body.cursor as string;
-    if (!page.body.more) return after;
+    const page = await h.maintenance.dossierPage(s.owner.id, s.spaceId, { until: expect, limit: 10, after: after || null });
+    after = page.cursor as string;
+    if (!page.more) return after;
   }
   throw new Error('the pages never ended');
 }
 
 /**
- * A run reporting that it did not succeed: through the cursor route (a truncated turn) or the finish route —
- * saying whose the failure was when `failureKind` is given, as `orbit wiki maintain` does since migration 0356.
+ * A run's end that did not succeed, as the server's maintenance job reports it (`finishWikiMaintenanceJob`) —
+ * saying whose the failure was when `failureKind` is given, as the job does.
  */
-async function fail(h: Harness, s: Space, run: string, via: 'cursor' | 'finish', error: string, failureKind?: 'infra' | 'content'): Promise<void> {
-  const answer = via === 'cursor'
-    ? await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/cursor`, {
-      outcome: 'truncated',
-      error,
-      ...(failureKind ? { failureKind } : {}),
-    })
-    : await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/finish`, {
-      outcome: 'failed',
-      error,
-      ...(failureKind ? { failureKind } : {}),
-      report: { stoppedAt: 'extract', ops: { refused: 0 } },
-    });
-  expectStatus(answer, 200, `a failed run is recorded through the ${via} route`);
-  assert.equal(answer.body.advanced, false);
+async function fail(h: Harness, s: Space, jobId: string, error: string, failureKind?: 'infra' | 'content'): Promise<void> {
+  const answer = await finishWikiMaintenanceJob(h.prisma as unknown as PrismaService, h.maintenance, s.owner.id, s.spaceId, jobId, {
+    outcome: 'failed',
+    error,
+    ...(failureKind ? { failureKind } : {}),
+    report: { stoppedAt: 'extract', ops: { refused: 0 } },
+  });
+  assert.equal(answer.advanced, false, 'a failed run moves nothing');
 }
 
-/** A run reporting that it succeeded, at the token its pages reached. */
-async function succeed(h: Harness, s: Space, run: string, token: string): Promise<void> {
-  const answer = await call(h, { runner: s.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/finish`, {
+/** A run's end that succeeded, at the token its pages reached. */
+async function succeed(h: Harness, s: Space, jobId: string, token: string): Promise<void> {
+  const answer = await finishWikiMaintenanceJob(h.prisma as unknown as PrismaService, h.maintenance, s.owner.id, s.spaceId, jobId, {
     to: token,
     outcome: 'succeeded',
     report: { ops: { refused: 0 }, tokens: { input: 0, output: 0, calls: 0 } },
   });
-  expectStatus(answer, 200, 'a succeeded run is recorded');
+  assert.equal(answer.outcome, 'succeeded');
 }
 
 async function health(h: Harness, s: Space, who: Account = s.owner): Promise<Answer> {
@@ -416,16 +387,20 @@ test('the status line\'s read: every active entry of the space, and maintenance 
 test('a run under way reads as running, and a day whose runs are used up says so', { skip }, async () => {
   const h = await boot();
   const s = await space(h, 'health-running', { dailyRunLimit: 1 });
-  const { run } = await startRun(h, s);
+  const { jobId } = await startRun(h, s);
   const running = await readHealth(h, s);
   assert.equal(running.maintenance.look, 'running');
-  assert.equal(toUuid(running.maintenance.running.sessionId), run, 'the run under way is the session that started it');
+  assert.deepEqual([toUuid(running.maintenance.running.jobId), running.maintenance.running.sessionId], [jobId, null],
+    'the run under way is the job that runs it, with no session');
   assert.ok(Date.parse(running.maintenance.running.startedAt) <= Date.now());
-  assert.equal(running.maintenance.dailyLimitReached, true, 'one task made today, and the limit is one');
+  assert.equal(running.maintenance.dailyLimitReached, true, 'one run made today, and the limit is one');
   assert.equal(running.maintenance.lastRun, null, 'no run has ended yet');
 
-  // Its task ended without the run saying how: it is no longer under way.
-  await h.sql.query(`UPDATE "task" SET "status" = 'FAILED' WHERE "id" = (SELECT "task_id" FROM "session" WHERE "id" = $1)`, [run]);
+  // Its job ended without the run saying how — cancelled, say: it is no longer under way.
+  await h.prisma.wikiJob.update({
+    where: { id: jobId },
+    data: { state: 'cancelled', endedAt: new Date(), leaseOwner: null, leaseGeneration: null, leaseDeadlineAt: null },
+  });
   const ended = await readHealth(h, s);
   assert.equal(ended.maintenance.running, null);
   assert.notEqual(ended.maintenance.look, 'running');
@@ -436,21 +411,21 @@ test('a run under way reads as running, and a day whose runs are used up says so
 test('three failed runs in a row tell the owner once; a success sets the streak to zero, and the next streak tells once more', { skip }, async () => {
   const h = await boot();
   const s = await space(h, 'health-streak', { dailyRunLimit: 48 });
-  const { run, expect } = await startRun(h, s);
-  const token = await pageToExpected(h, s, run, expect);
+  const { jobId, expect } = await startRun(h, s);
+  const token = await pageToExpected(h, s, expect);
   const threshold = WIKI_MAINTENANCE_HEALTH.notifyAfterFailures;
   assert.equal(threshold, 3);
 
-  await fail(h, s, run, 'cursor', 'the run reached its limit of 120 model turns and was cut short');
-  await fail(h, s, run, 'finish', 'extract: the local model answered 502');
+  await fail(h, s, jobId, 'extract: the model gave no usable answer for a session');
+  await fail(h, s, jobId, 'extract: the local model answered 502');
   assert.equal(pushesFor(h, s).length, 0, 'two failures tell nobody');
   const two = await readHealth(h, s);
   assert.equal(two.maintenance.look, 'failing');
   assert.equal(two.maintenance.consecutiveFailures, 2);
-  assert.equal(toUuid(two.maintenance.lastRun.sessionId), run, 'View run opens the run that failed');
+  assert.equal(toUuid(two.maintenance.lastRun.jobId), jobId, 'View run opens the run that failed: its row on Activity');
   assert.equal(two.maintenance.lastRun.outcome, 'failed');
 
-  await fail(h, s, run, 'finish', 'extract: the local model answered 502 again');
+  await fail(h, s, jobId, 'extract: the local model answered 502 again');
   assert.deepEqual(pushesFor(h, s), [{
     ownerId: s.owner.id,
     spaceId: s.spaceId,
@@ -459,8 +434,8 @@ test('three failed runs in a row tell the owner once; a success sets the streak 
     lastError: 'extract: the local model answered 502 again',
   }], 'the third failure tells the owner, once');
 
-  await fail(h, s, run, 'cursor', 'cut short again');
-  await fail(h, s, run, 'finish', 'and again');
+  await fail(h, s, jobId, 'failed again');
+  await fail(h, s, jobId, 'and again');
   assert.equal(pushesFor(h, s).length, 1, 'the fourth and fifth failures of the streak tell nobody');
   const five = await readHealth(h, s);
   assert.equal(five.maintenance.consecutiveFailures, 5);
@@ -468,7 +443,7 @@ test('three failed runs in a row tell the owner once; a success sets the streak 
   assert.equal(five.maintenance.lastOkAt, null);
 
   // The run succeeds: the streak is zero again, and the space is maintained.
-  await succeed(h, s, run, token);
+  await succeed(h, s, jobId, token);
   const ok = await readHealth(h, s);
   assert.equal(ok.maintenance.consecutiveFailures, 0, 'a success sets the streak back to zero');
   assert.equal(ok.maintenance.look, 'ok');
@@ -478,17 +453,17 @@ test('three failed runs in a row tell the owner once; a success sets the streak 
   assert.equal((await h.sql.query<{ n: number }>(`SELECT "consecutive_failures" AS n FROM "wiki_cursor" WHERE "space_id" = $1`, [s.spaceId])).rows[0]!.n, 0);
 
   // The next streak is a streak of its own: told once more, at its own third failure.
-  await fail(h, s, run, 'finish', 'one');
-  await fail(h, s, run, 'finish', 'two');
+  await fail(h, s, jobId, 'one');
+  await fail(h, s, jobId, 'two');
   assert.equal(pushesFor(h, s).length, 1);
-  await fail(h, s, run, 'cursor', 'three');
+  await fail(h, s, jobId, 'three');
   assert.equal(pushesFor(h, s).length, 2, 'the new streak\'s third failure tells the owner again');
   assert.equal(pushesFor(h, s)[1]!.lastError, 'three');
 
   // Reports racing on the row: each counts, and only the one that reads the threshold back tells.
-  await succeed(h, s, run, token); // a token at the watermark: a success that moves nothing, and ends the streak
+  await succeed(h, s, jobId, token); // a token at the watermark: a success that moves nothing, and ends the streak
   assert.equal((await readHealth(h, s)).maintenance.consecutiveFailures, 0);
-  await Promise.all(Array.from({ length: 5 }, (_unused, n) => fail(h, s, run, n % 2 === 0 ? 'cursor' : 'finish', `raced ${n}`)));
+  await Promise.all(Array.from({ length: 5 }, (_unused, n) => fail(h, s, jobId, `raced ${n}`)));
   assert.equal((await readHealth(h, s)).maintenance.consecutiveFailures, 5, 'every racing report counted');
   assert.equal(pushesFor(h, s).length, 3, 'and the streak told the owner exactly once');
   assert.equal(pushesFor(h, s)[2]!.failures, threshold);
@@ -499,36 +474,36 @@ test('three failed runs in a row tell the owner once; a success sets the streak 
 test('the last failure says whose it was — the platform\'s or the run\'s — and why, until the run that failed succeeds', { skip }, async () => {
   const h = await boot();
   const s = await space(h, 'health-kind', { dailyRunLimit: 48 });
-  const { run, expect } = await startRun(h, s);
+  const { jobId, expect } = await startRun(h, s);
   assert.equal((await readHealth(h, s)).maintenance.lastFailure, null, 'no run of the space has failed yet');
 
-  // The run stopped on the server: `orbit wiki maintain` says so, and the health tells it from the run's own.
-  await fail(h, s, run, 'finish', 'verify: POST /runner/wiki/spaces/x/verifications -> 500', 'infra');
+  // The run stopped on the platform: the job says so, and the health tells it from the run's own.
+  await fail(h, s, jobId, 'verify: POST http://127.0.0.1:8000/v1/chat/completions -> 500', 'infra');
   const infra = await readHealth(h, s);
   assert.equal(infra.maintenance.lastFailure.kind, 'infra');
-  assert.equal(infra.maintenance.lastFailure.reason, 'verify: POST /runner/wiki/spaces/x/verifications -> 500');
-  assert.equal(toUuid(infra.maintenance.lastFailure.sessionId), run);
+  assert.equal(infra.maintenance.lastFailure.reason, 'verify: POST http://127.0.0.1:8000/v1/chat/completions -> 500');
+  assert.equal(toUuid(infra.maintenance.lastFailure.jobId), jobId);
   assert.equal(infra.maintenance.lastFailure.at, infra.maintenance.lastRun.endedAt, 'it is the run that ended last');
   const row = (await h.sql.query<{ failure_kind: string; outcome: string }>(
-    `SELECT "failure_kind","outcome" FROM "wiki_maintenance_run" WHERE "session_id" = $1`, [run])).rows[0]!;
+    `SELECT "failure_kind","outcome" FROM "wiki_maintenance_run" WHERE "job_id" = $1`, [jobId])).rows[0]!;
   assert.deepEqual([row.outcome, row.failure_kind], ['failed', 'infra'], 'the run row keeps whose the failure was');
 
-  // A failure that says nothing of whose it was — a runner older than the field — is read off its error: a 500
-  // is the platform's, and a turn limit the run's own.
-  await fail(h, s, run, 'finish', 'self-check: orbit wiki maintain: POST /runner/wiki/spaces/x/maintenance/changesets -> 500');
-  assert.equal((await readHealth(h, s)).maintenance.lastFailure.kind, 'infra', 'an older runner\'s 500');
-  await fail(h, s, run, 'cursor', 'the run reached its limit of 120 model turns');
+  // A failure that says nothing of whose it was is read off its error: a 500 is the platform's, and a model that
+  // answered nothing usable the run's own.
+  await fail(h, s, jobId, 'propose: POST /api/wiki/changesets -> 500');
+  assert.equal((await readHealth(h, s)).maintenance.lastFailure.kind, 'infra', 'a 500 the run met');
+  await fail(h, s, jobId, 'extract: the model gave no usable answer for a session');
   const content = await readHealth(h, s);
   assert.deepEqual([content.maintenance.lastFailure.kind, content.maintenance.lastFailure.reason],
-    ['content', 'the run reached its limit of 120 model turns']);
+    ['content', 'extract: the model gave no usable answer for a session']);
 
   // The same run's retry succeeds: its row says how its latest attempt ended, and no failure stands.
-  await succeed(h, s, run, await pageToExpected(h, s, run, expect));
+  await succeed(h, s, jobId, await pageToExpected(h, s, expect));
   const ok = await readHealth(h, s);
   assert.equal(ok.maintenance.lastRun.outcome, 'succeeded');
   assert.equal(ok.maintenance.lastFailure, null, 'the run that failed succeeded since');
   assert.equal((await h.sql.query<{ failure_kind: string | null }>(
-    `SELECT "failure_kind" FROM "wiki_maintenance_run" WHERE "session_id" = $1`, [run])).rows[0]!.failure_kind, null,
+    `SELECT "failure_kind" FROM "wiki_maintenance_run" WHERE "job_id" = $1`, [jobId])).rows[0]!.failure_kind, null,
     'a succeeded run has no failure kind');
 });
 
@@ -549,19 +524,19 @@ test('another account reads nothing of the space: its health is a 404, and its f
   expectStatus(await health(h, mine), 200, 'its owner reads it');
 
   // Their runs fail three times: their owner is told, and nobody else.
-  const { run } = await startRun(h, theirs);
-  for (const n of [1, 2, 3]) await fail(h, theirs, run, 'finish', `theirs ${n}`);
+  const { jobId } = await startRun(h, theirs);
+  for (const n of [1, 2, 3]) await fail(h, theirs, jobId, `theirs ${n}`);
   assert.deepEqual(pushesFor(h, theirs).map((one) => one.ownerId), [theirs.owner.id]);
   assert.equal(h.pushed.some((one) => one.ownerId === mine.owner.id), false, 'my phone does not ring for their space');
   // Their failures are no part of my space's health.
   const my = await readHealth(h, mine);
   assert.equal(my.maintenance.consecutiveFailures, 0);
   assert.notEqual(my.maintenance.look, 'failing');
-  // And their runner cannot report into my space: the run is not a maintenance session of it.
-  const foreign = await call(h, { runner: theirs.machine.token, session: run }, 'POST', `/runner/wiki/spaces/${mine.spaceId}/cursor`, {
-    outcome: 'failed',
-    error: 'not yours',
-  });
-  assert.equal(foreign.status, 404, `another owner's runner is answered the plain 404: ${JSON.stringify(foreign.body).slice(0, 300)}`);
+  // And their run's end cannot be told in my space: to their account my space is no space at all.
+  await assert.rejects(
+    finishWikiMaintenanceJob(h.prisma as unknown as PrismaService, h.maintenance, theirs.owner.id, mine.spaceId, jobId, { outcome: 'failed', error: 'not yours' }),
+    /no such wiki space/u,
+    "another owner's run is answered the plain not-found",
+  );
   assert.equal((await readHealth(h, mine)).maintenance.consecutiveFailures, 0);
 });

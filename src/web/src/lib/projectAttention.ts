@@ -11,7 +11,7 @@ import {
 import type { ProjectSection, SectionProject } from '../components/ProjectSections';
 import type { ProjectPanoramaBuckets } from '../components/ProjectPanoramaHeader';
 import { READY_TO_CLOSE } from './projectDone';
-import { READY_TO_START } from './projectStart';
+import { mainBranchName, READY_TO_START } from './projectStart';
 
 /**
  * The projects index is an execution-and-attention router, not a second activity feed.
@@ -45,6 +45,9 @@ export interface AttentionProject {
    *  null on a project that has not decided a line and has not integrated anything yet. */
   integration?: ProjectListIntegration | null;
   coordinatorActivity?: ProjectListCoordinatorActivity | null;
+  /** The project's main branch by name, which a merge approval names; null with no repository
+   *  bound and absent from an older server, and then it is main. */
+  mainBranch?: string | null;
 }
 
 /**
@@ -441,8 +444,8 @@ export const COORDINATOR_LEAD_COPY: Record<CoordinatorLeadKind, string> = {
  * sentence somebody has to write, and it should say so at the compiler rather than draw an empty
  * chip nobody looks at twice.
  */
-const OWNER_ITEM_SAYS: Record<OwnerItemKind, (item: ProjectOwnerItem) => string> = {
-  PROMOTION_APPROVAL: () => 'Needs you · Approve merge to main',
+const OWNER_ITEM_SAYS: Record<OwnerItemKind, (item: ProjectOwnerItem, main: string) => string> = {
+  PROMOTION_APPROVAL: (_item, main) => `Needs you · Approve merge to ${main}`,
   COORDINATOR_QUESTION: (item) =>
     `Needs you · ${item.count} question${item.count === 1 ? '' : 's'} from coordinator`,
   ESCALATED: (item) => `Needs you · ${item.count} escalated to you`,
@@ -547,7 +550,7 @@ export function attentionChipOf(project: AttentionProject, now: number): Attenti
     const item = leadOwnerItem(project);
     if (!item) return null;
     const age = elapsedLabel(item.oldestWaitingSince, now);
-    const says = OWNER_ITEM_SAYS[item.kind](item);
+    const says = OWNER_ITEM_SAYS[item.kind](item, mainBranchName(project.mainBranch));
     return { tone: 'warning', text: [says, age].filter(Boolean).join(' · ') };
   }
 
@@ -661,6 +664,9 @@ export interface SidebarProject {
   /** Absent from a server that predates it; null on a project with no coordinator bound. */
   coordinatorActivity?: ProjectListCoordinatorActivity | null;
   integration?: ProjectListIntegration | null;
+  /** The project's main branch by name, which its landing line names; null with no repository
+   *  bound and absent from an older server, and then it is main. */
+  mainBranch?: string | null;
 }
 
 /** The four owner items this project is waiting on the reader for, of the kinds this build names. */

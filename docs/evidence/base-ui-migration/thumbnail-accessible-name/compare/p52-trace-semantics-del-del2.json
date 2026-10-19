@@ -1,0 +1,270 @@
+{
+ "antd": {
+  "del": {
+   "classes": [],
+   "first": [],
+   "steps": 0,
+   "tests": 0
+  },
+  "ref": {
+   "classes": [],
+   "first": [],
+   "steps": 0,
+   "tests": 0
+  }
+ },
+ "missing": [],
+ "presentation": {
+  "viewerName": {
+   "differing": 0,
+   "examples": []
+  }
+ },
+ "semantic": [
+  {
+   "fields": {
+    "pictures": [
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -21.08,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        122.42,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        486.59,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        754.98,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        1018.98,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        1303.97,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        1841.33,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        2131.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      }
+     ],
+     [
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        -24.08,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userWide"
+      },
+      {
+       "at": "1",
+       "box": [
+        98.41,
+        119.42,
+        110,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "userTall"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        483.59,
+        338,
+        226
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "markdown"
+      },
+      {
+       "at": "2",
+       "box": [
+        26,
+        751.98,
+        338,
+        212
+       ],
+       "class": "md-image",
+       "opens": "alone",
+       "picture": "artifact"
+      },
+      {
+       "at": "3",
+       "box": [
+        27,
+        1015.98,
+        337.98,
+        219.98
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "result"
+      },
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        1300.97,
+        220,
+        220
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "later"
+      },
+      {
+       "at": "8",
+       "box": [
+        27,
+        1838.33,
+        337.98,
+        225.33
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "clipped"
+      },
+      {
+       "at": "11",
+       "box": [
+        144,
+        2128.66,
+        220,
+        137.5
+       ],
+       "class": "chat-image",
+       "opens": "group",
+       "picture": "putBack"
+      }
+     ]
+    ],
+    "placeholders": [
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        1529.97,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ],
+     [
+      {
+       "at": "6",
+       "box": [
+        98.41,
+        1526.97,
+        120,
+        90
+       ],
+       "class": "chat-image chat-image-loading"
+      }
+     ]
+    ],
+    "scroll": [
+     {
+      "gap": 1649,
+      "height": 2431,
+      "top": 110
+     },
+     {
+      "gap": 1646,
+      "height": 2431,
+      "top": 113
+     }
+    ]
+   },
+   "index": 3,
+   "step": "keyboard focus on a picture on its own",
+   "test": "chromium-dark-phone :: P5.2 the transcript’s pictures › load through the authorized route, hold their place while they do, and fail in place"
+  }
+ ],
+ "steps": 516,
+ "tests": 56
+}

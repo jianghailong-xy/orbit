@@ -531,8 +531,9 @@ func downloadAndSwap(server, key string, manifest Manifest, logf func(string)) b
 		logf("download failed: " + err.Error() + "\n")
 		return false
 	}
-	// /dl binaries are unsigned: the manifest's digest is what ties this download to the release it
-	// announces. Checked before anything is decompressed or written next to the executable.
+	// No signature on a /dl binary is checked here (a macOS one may carry a Developer ID, which only
+	// macOS reads): the manifest's digest is what ties this download to the release it announces.
+	// Checked before anything is decompressed or written next to the executable.
 	sum := sha256.Sum256(body)
 	got, want := hex.EncodeToString(sum[:]), manifest.Assets[key].SHA256
 	if want == "" {

@@ -1,0 +1,14 @@
+docs(evidence): the client.yml probe's runs, for the plan-note revision
+
+The merge check cannot compile OrbitApp, so the coordinator asked for the P9
+routine: a probe branch whose push buys client.yml's macOS (OrbitKit tests +
+OrbitApp build) and iOS Simulator jobs. Both jobs passed on run 37762671046 at
+the probe commit, which is this delivery's tip plus one temporary dispatch
+workflow (kept here, deleted with its branch); the plain push of the tip ran
+the rest of client.yml (navigation and font-token gates) green with the Mac
+jobs skipped by design.
+
+No source changes: the compiled commit and this tip differ in `docs/evidence/`
+alone.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

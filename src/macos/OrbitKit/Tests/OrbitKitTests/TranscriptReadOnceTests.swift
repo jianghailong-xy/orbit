@@ -151,7 +151,7 @@ final class TranscriptReadOnceTests: XCTestCase {
             .user(user("u2", "", note: Self.jobNote)),                 // a job's news: not a question
             .assistant(AssistantBubble(id: "a1", text: "ok", streamingText: "", seq: 3, turnId: nil)),
             .user(user("u3", "and the dark theme", note: Self.jobNote)), // typed on the wake: one
-            .user(user("u4", WatchFixture.matchWake())),               // a watch's wake: one
+            .user(user("u4", WatchFixture.matchWake())),               // a watch's wake: not one
             .interrupt(id: "x1", seq: 9),
             .user(user("u5", "queued", queued: true)),                 // not asked yet
             .assistant(AssistantBubble(id: "u1", text: "dup", streamingText: "", seq: 4, turnId: nil)),
@@ -179,9 +179,9 @@ final class TranscriptReadOnceTests: XCTestCase {
         XCTAssertNil(questions.above("a0"))
         XCTAssertNil(questions.above("u1"), "an id met twice stops at its first")
         XCTAssertEqual(questions.above("a1"), "u1", "a job's news is a line inside the answer")
-        XCTAssertEqual(questions.above("x1"), "u4")
-        XCTAssertEqual(questions.above("a2"), "u4", "a queued turn has not been asked")
-        XCTAssertEqual(questions.above("trimmed"), "u4", "an anchor no longer held: every question")
-        XCTAssertEqual(questions.last, "u4")
+        XCTAssertEqual(questions.above("x1"), "u3", "a watch's wake is a line inside the answer too")
+        XCTAssertEqual(questions.above("a2"), "u3", "a queued turn has not been asked")
+        XCTAssertEqual(questions.above("trimmed"), "u3", "an anchor no longer held: every question")
+        XCTAssertEqual(questions.last, "u3")
     }
 }

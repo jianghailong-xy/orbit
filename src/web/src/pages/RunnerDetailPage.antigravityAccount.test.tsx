@@ -2,7 +2,6 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { App as AntdApp } from 'antd';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
@@ -119,15 +118,13 @@ function mount(r: Runner, ws: ReturnType<typeof workspace>) {
   root = createRoot(host);
   act(() =>
     root!.render(
-      <AntdApp>
-        <QueryClientProvider client={qc}>
-          <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
-            <Routes>
-              <Route path="/runners/:id" element={<RunnerDetailPage />} />
-            </Routes>
-          </MemoryRouter>
-        </QueryClientProvider>
-      </AntdApp>,
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={[`/runners/${RUNNER_ID}`]}>
+          <Routes>
+            <Route path="/runners/:id" element={<RunnerDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
     ),
   );
   return { patches };
