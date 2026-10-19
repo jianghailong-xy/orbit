@@ -1,0 +1,402 @@
+{
+  "runId": "l1m-20261019100149",
+  "startedAt": "2026-10-19T10:01:49.651Z",
+  "volume": {
+    "pvc": "mr-data-98c938b2-26ad-47e8-9ed3-6a67f6ef32d6",
+    "pv": "pvc-2ec56b85-59cc-4462-8b74-dc295fa227cf",
+    "accessModes": [
+      "ReadWriteOnce"
+    ],
+    "volumeMode": "Filesystem",
+    "reclaimPolicy": "Retain",
+    "driver": "rbd.csi.ceph.com",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ea2d45d-e77e-4d63-9f3f-e5723c97054b",
+    "fsType": "ext4",
+    "image": "orbit-mr-rbd/csi-vol-1ea2d45d-e77e-4d63-9f3f-e5723c97054b",
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "mounter": "rbd"
+  },
+  "placements": {
+    "1-writing-on-first": {
+      "at": "2026-10-19T10:01:57.805Z",
+      "volumeAttachments": [
+        {
+          "name": "csi-d9bed5015594ef3a55a1a0643e5c7af06a4197f0e47b351e686a7d7a46f2f703",
+          "node": "orbit-mr-lab",
+          "attached": true,
+          "deleting": false,
+          "attachError": null,
+          "detachError": null
+        }
+      ],
+      "mappedOn": {
+        "orbit-mr-lab": [
+          "rbd1 orbit-mr-rbd/csi-vol-1ea2d45d-e77e-4d63-9f3f-e5723c97054b"
+        ],
+        "orbit-mr-lab-2": []
+      },
+      "watchers": [
+        {
+          "address": "10.77.0.1:0/1221986369",
+          "client": 234387,
+          "cookie": 18446462598732840962
+        }
+      ]
+    },
+    "2-released-by-first": {
+      "at": "2026-10-19T10:03:40.531Z",
+      "volumeAttachments": [],
+      "mappedOn": {
+        "orbit-mr-lab": [],
+        "orbit-mr-lab-2": []
+      },
+      "watchers": []
+    },
+    "3-on-second": {
+      "at": "2026-10-19T10:04:36.933Z",
+      "volumeAttachments": [
+        {
+          "name": "csi-d92a005c1a3a6c2582468e57ece75810d3525ed8fb6ab73169d44a5a6409719b",
+          "node": "orbit-mr-lab-2",
+          "attached": true,
+          "deleting": false,
+          "attachError": null,
+          "detachError": null
+        }
+      ],
+      "mappedOn": {
+        "orbit-mr-lab": [],
+        "orbit-mr-lab-2": [
+          "rbd0 orbit-mr-rbd/csi-vol-1ea2d45d-e77e-4d63-9f3f-e5723c97054b"
+        ]
+      },
+      "watchers": [
+        {
+          "address": "10.77.0.2:0/4131058703",
+          "client": 234482,
+          "cookie": 18446462598732840961
+        }
+      ]
+    },
+    "4-released-by-second": {
+      "at": "2026-10-19T10:05:40.323Z",
+      "volumeAttachments": [],
+      "mappedOn": {
+        "orbit-mr-lab": [],
+        "orbit-mr-lab-2": []
+      },
+      "watchers": []
+    },
+    "5-back-on-first": {
+      "at": "2026-10-19T10:05:49.896Z",
+      "volumeAttachments": [
+        {
+          "name": "csi-d9bed5015594ef3a55a1a0643e5c7af06a4197f0e47b351e686a7d7a46f2f703",
+          "node": "orbit-mr-lab",
+          "attached": true,
+          "deleting": false,
+          "attachError": null,
+          "detachError": null
+        }
+      ],
+      "mappedOn": {
+        "orbit-mr-lab": [
+          "rbd1 orbit-mr-rbd/csi-vol-1ea2d45d-e77e-4d63-9f3f-e5723c97054b"
+        ],
+        "orbit-mr-lab-2": []
+      },
+      "watchers": [
+        {
+          "address": "10.77.0.1:0/1221986369",
+          "client": 234387,
+          "cookie": 18446462598732840963
+        }
+      ]
+    },
+    "6-released-at-end": {
+      "at": "2026-10-19T10:06:00.149Z",
+      "volumeAttachments": [],
+      "mappedOn": {
+        "orbit-mr-lab": [],
+        "orbit-mr-lab-2": []
+      },
+      "watchers": []
+    },
+    "verify-on-node-2": {
+      "at": "2026-10-19T11:04:38.675Z",
+      "volumeAttachments": [
+        {
+          "name": "csi-d92a005c1a3a6c2582468e57ece75810d3525ed8fb6ab73169d44a5a6409719b",
+          "node": "orbit-mr-lab-2",
+          "attached": true,
+          "deleting": false,
+          "attachError": null,
+          "detachError": null
+        }
+      ],
+      "mappedOn": {
+        "orbit-mr-lab": [],
+        "orbit-mr-lab-2": [
+          "rbd0 orbit-mr-rbd/csi-vol-1ea2d45d-e77e-4d63-9f3f-e5723c97054b"
+        ]
+      },
+      "watchers": [
+        {
+          "address": "10.77.0.2:0/1474065980",
+          "client": 264214,
+          "cookie": 18446462598732840961
+        }
+      ]
+    }
+  },
+  "onFirstNode": {
+    "ordinarySHA256": "240d6d3a108a078f27fc452b104c950933248ae9ae2acefa3a5c978805ec1ce2",
+    "gitCommit": "cdbd304938611ddb99090d390db5fe60c8baafa5",
+    "gitFsck": "",
+    "sqliteIntegrity": [
+      "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "committedRows": 104,
+    "rowSHA256": "2dacf7857c0db1386d95442d80a38358d546f674ec30fdf08f4c867de143ac22",
+    "prefixRows": 0,
+    "prefixSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "acknowledgedRows": 104,
+    "mountInfo": [
+      "1689 1674 251:16 / /var/lib/orbit rw,relatime - ext4 /dev/rbd1 rw,stripe=1024"
+    ],
+    "randomSHA256": "efc85fed4f22169c63095cb80a22d32fa93890cf06cb6949f9a43f6284e7874d",
+    "pod": "l1m-20261019100149-a",
+    "node": "orbit-mr-lab"
+  },
+  "comparisons": [
+    {
+      "what": "second node: ordinarySHA256",
+      "same": true
+    },
+    {
+      "what": "second node: gitCommit",
+      "same": true
+    },
+    {
+      "what": "second node: rowSHA256",
+      "same": true
+    },
+    {
+      "what": "second node: committedRows",
+      "same": true
+    },
+    {
+      "what": "second node: randomSHA256",
+      "same": true
+    },
+    {
+      "what": "second node: SQLite integrity_check",
+      "same": true
+    },
+    {
+      "what": "second node: the first node's rows unchanged under the new ones",
+      "same": true
+    },
+    {
+      "what": "second node: SQLite integrity_check after writing",
+      "same": true
+    },
+    {
+      "what": "back on the first node: ordinarySHA256",
+      "same": true
+    },
+    {
+      "what": "back on the first node: gitCommit",
+      "same": true
+    },
+    {
+      "what": "back on the first node: rowSHA256",
+      "same": true
+    },
+    {
+      "what": "back on the first node: committedRows",
+      "same": true
+    },
+    {
+      "what": "back on the first node: randomSHA256",
+      "same": true
+    },
+    {
+      "what": "back on the first node: SQLite integrity_check",
+      "same": true
+    },
+    {
+      "what": "after the restart: ordinarySHA256",
+      "same": true
+    },
+    {
+      "what": "after the restart: gitCommit",
+      "same": true
+    },
+    {
+      "what": "after the restart: rowSHA256",
+      "same": true
+    },
+    {
+      "what": "after the restart: committedRows",
+      "same": true
+    },
+    {
+      "what": "after the restart: randomSHA256",
+      "same": true
+    },
+    {
+      "what": "after the restart: SQLite integrity_check",
+      "same": true
+    },
+    {
+      "what": "after the restart: ordinarySHA256",
+      "same": true
+    },
+    {
+      "what": "after the restart: gitCommit",
+      "same": true
+    },
+    {
+      "what": "after the restart: rowSHA256",
+      "same": true
+    },
+    {
+      "what": "after the restart: committedRows",
+      "same": true
+    },
+    {
+      "what": "after the restart: randomSHA256",
+      "same": true
+    },
+    {
+      "what": "after the restart: SQLite integrity_check",
+      "same": true
+    }
+  ],
+  "onSecondNodeArrived": {
+    "ordinarySHA256": "240d6d3a108a078f27fc452b104c950933248ae9ae2acefa3a5c978805ec1ce2",
+    "gitCommit": "cdbd304938611ddb99090d390db5fe60c8baafa5",
+    "gitFsck": "",
+    "sqliteIntegrity": [
+      "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "committedRows": 104,
+    "rowSHA256": "2dacf7857c0db1386d95442d80a38358d546f674ec30fdf08f4c867de143ac22",
+    "prefixRows": 104,
+    "prefixSHA256": "2dacf7857c0db1386d95442d80a38358d546f674ec30fdf08f4c867de143ac22",
+    "acknowledgedRows": 104,
+    "mountInfo": [
+      "633 618 251:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=1024"
+    ],
+    "randomSHA256": "efc85fed4f22169c63095cb80a22d32fa93890cf06cb6949f9a43f6284e7874d",
+    "pod": "l1m-20261019100149-b",
+    "node": "orbit-mr-lab-2"
+  },
+  "onSecondNodeWritten": {
+    "ordinarySHA256": "240d6d3a108a078f27fc452b104c950933248ae9ae2acefa3a5c978805ec1ce2",
+    "gitCommit": "cdbd304938611ddb99090d390db5fe60c8baafa5",
+    "gitFsck": "",
+    "sqliteIntegrity": [
+      "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "committedRows": 158,
+    "rowSHA256": "9a1323cb050f4eb03392cd3b358ca5c935f6d2c94bb55c3598f65ea1a54f35f2",
+    "prefixRows": 104,
+    "prefixSHA256": "2dacf7857c0db1386d95442d80a38358d546f674ec30fdf08f4c867de143ac22",
+    "acknowledgedRows": 158,
+    "mountInfo": [
+      "633 618 251:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=1024"
+    ],
+    "randomSHA256": "efc85fed4f22169c63095cb80a22d32fa93890cf06cb6949f9a43f6284e7874d",
+    "pod": "l1m-20261019100149-b",
+    "node": "orbit-mr-lab-2"
+  },
+  "backOnFirstNode": {
+    "ordinarySHA256": "240d6d3a108a078f27fc452b104c950933248ae9ae2acefa3a5c978805ec1ce2",
+    "gitCommit": "cdbd304938611ddb99090d390db5fe60c8baafa5",
+    "gitFsck": "",
+    "sqliteIntegrity": [
+      "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "committedRows": 158,
+    "rowSHA256": "9a1323cb050f4eb03392cd3b358ca5c935f6d2c94bb55c3598f65ea1a54f35f2",
+    "prefixRows": 158,
+    "prefixSHA256": "9a1323cb050f4eb03392cd3b358ca5c935f6d2c94bb55c3598f65ea1a54f35f2",
+    "acknowledgedRows": 158,
+    "mountInfo": [
+      "1698 1683 251:16 / /var/lib/orbit rw,relatime - ext4 /dev/rbd1 rw,stripe=1024"
+    ],
+    "randomSHA256": "efc85fed4f22169c63095cb80a22d32fa93890cf06cb6949f9a43f6284e7874d",
+    "pod": "l1m-20261019100149-c",
+    "node": "orbit-mr-lab"
+  },
+  "timingsSeconds": {
+    "podOnFirstReady": 7.2,
+    "firstReleased": 13.4,
+    "podOnSecondReady": 53.4,
+    "secondReleased": 13.8,
+    "podBackOnFirstReady": 8.3,
+    "backReleased": 8.0
+  },
+  "finishedAt": "2026-10-19T10:06:01.255Z",
+  "failures": 0,
+  "verifications": [
+    {
+      "ordinarySHA256": "240d6d3a108a078f27fc452b104c950933248ae9ae2acefa3a5c978805ec1ce2",
+      "gitCommit": "cdbd304938611ddb99090d390db5fe60c8baafa5",
+      "gitFsck": "",
+      "sqliteIntegrity": [
+        "ok"
+      ],
+      "sqliteJournalMode": "wal",
+      "committedRows": 158,
+      "rowSHA256": "9a1323cb050f4eb03392cd3b358ca5c935f6d2c94bb55c3598f65ea1a54f35f2",
+      "prefixRows": 158,
+      "prefixSHA256": "9a1323cb050f4eb03392cd3b358ca5c935f6d2c94bb55c3598f65ea1a54f35f2",
+      "acknowledgedRows": 158,
+      "mountInfo": [
+        "634 619 251:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=1024"
+      ],
+      "randomSHA256": "efc85fed4f22169c63095cb80a22d32fa93890cf06cb6949f9a43f6284e7874d",
+      "pod": "l1m-20261019100149-v2-102501",
+      "node": "orbit-mr-lab-2",
+      "bootIds": {
+        "orbit-mr-lab": "bbcabf6d-38ae-4c06-b26e-900e2f9db524",
+        "orbit-mr-lab-2": "cfb1b7e5-79df-47ad-92a1-510079d4ee69"
+      },
+      "verifiedAt": "2026-10-19T10:25:25.200Z",
+      "failures": 0
+    },
+    {
+      "ordinarySHA256": "240d6d3a108a078f27fc452b104c950933248ae9ae2acefa3a5c978805ec1ce2",
+      "gitCommit": "cdbd304938611ddb99090d390db5fe60c8baafa5",
+      "gitFsck": "",
+      "sqliteIntegrity": [
+        "ok"
+      ],
+      "sqliteJournalMode": "wal",
+      "committedRows": 158,
+      "rowSHA256": "9a1323cb050f4eb03392cd3b358ca5c935f6d2c94bb55c3598f65ea1a54f35f2",
+      "prefixRows": 158,
+      "prefixSHA256": "9a1323cb050f4eb03392cd3b358ca5c935f6d2c94bb55c3598f65ea1a54f35f2",
+      "acknowledgedRows": 158,
+      "mountInfo": [
+        "633 618 251:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=1024"
+      ],
+      "randomSHA256": "efc85fed4f22169c63095cb80a22d32fa93890cf06cb6949f9a43f6284e7874d",
+      "pod": "l1m-20261019100149-v2-110346",
+      "node": "orbit-mr-lab-2",
+      "bootIds": {
+        "orbit-mr-lab": "18da4e69-f824-43c3-b5c0-0f22a55a6fe5",
+        "orbit-mr-lab-2": "8b01a31d-fbba-4913-b4ce-29aa66d94847"
+      },
+      "verifiedAt": "2026-10-19T11:04:47.344Z",
+      "failures": 0
+    }
+  ]
+}

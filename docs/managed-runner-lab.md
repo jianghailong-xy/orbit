@@ -1,14 +1,17 @@
 # Managed runner single-machine lab
 
 A disposable test environment for the managed runner project: one KVM virtual machine on the HPC
-host (Orbit runner `workstation-gpu`) running single-node k3s, a single-host Ceph cluster and
-Ceph-CSI RBD. The owner authorized it on 2026-10-17 as the project's "authorized isolated test
-environment", limited to one machine, one node and one failure domain. It changes nothing on the
-host beyond its own files and its own transient systemd unit, it is off unless a test window needs
-it, and it does not enable managed runners anywhere: the server switch stays off by default, and
-no default entry point (root Compose, `.env.example`, `/upgrade`, release, install or start
-scripts) refers to it. [The design contract](managed-runner-design.md) is the baseline; this page
-records how the lab follows it and where it departs from it.
+host (Orbit runner `workstation-gpu`) running k3s, a single-host Ceph cluster and Ceph-CSI RBD, and
+since 2026-10-19 a second, smaller VM that joins it as a second k3s node ([Two nodes](#two-nodes-l1)).
+The owner authorized the first VM on 2026-10-17 as the project's "authorized isolated test
+environment", limited to one machine, one node and one failure domain. On 2026-10-19 they added the
+second VM, so that one volume can move between two nodes; it is still one physical machine and one
+failure domain. The lab changes nothing on the host beyond its own files and its own transient
+systemd units, it is off unless a test window needs it, and it does not enable managed runners
+anywhere: the server switch stays off by default, and no default entry point (root Compose,
+`.env.example`, `/upgrade`, release, install or start scripts) refers to it.
+[The design contract](managed-runner-design.md) is the baseline; this page records how the lab
+follows it and where it departs from it.
 
 The scripts are in [`scripts/managed-runner/lab/`](../scripts/managed-runner/lab/), with every
 version and checksum pinned in [`lab.env`](../scripts/managed-runner/lab/lab.env).
@@ -18,33 +21,45 @@ version and checksum pinned in [`lab.env`](../scripts/managed-runner/lab/lab.env
 ```text
 HPC host (Debian 13, kernel 6.12, ~15 GiB RAM, shared by every Orbit session)
   orbit-runner-root.service ............ the Orbit runner and its sessions (not touched)
-  orbit-mr-lab.service (transient) ..... qemu-system-x86_64, its own cgroup in system.slice:
+  orbit-mr-lab.service (transient) ..... first VM's qemu, its own cgroup in system.slice:
   |                                      MemoryMax 6656M, OOMScoreAdjust 1000, CPUQuota 400%
   |  127.0.0.1:16222 -> guest :22    (SSH)          QEMU user network (slirp): no bridge,
   |  127.0.0.1:16443 -> guest :6443  (k3s API)      no tap, no firewall change; the guest
-  |                                                 reaches host services at 10.0.2.2
+  |  127.0.0.1:16230 (listens) .. the link          reaches host services at 10.0.2.2
+  orbit-mr-lab-2.service (transient) ... second VM's qemu (two-node mode only), system.slice:
+  |                                      MemoryMax 3584M, OOMScoreAdjust 1000, CPUQuota 200%
+  |  127.0.0.1:16223 -> guest :22    (SSH)          its own QEMU user network
+  |  -> 127.0.0.1:16230 (connects) .. the link: a QEMU socket netdev, Ethernet frames between
+  |                                   the two qemu processes over one loopback TCP connection
   /mnt/data/managed-runner-lab/ (0700) .. every disk, key, log and kubeconfig of the lab
 
-Guest orbit-mr-lab (Ubuntu 26.04.1 LTS, kernel 7.0.0-34-generic, 4 vCPU, 6 GiB, 10.0.2.15)
+Guest orbit-mr-lab (Ubuntu 26.04.1 LTS, kernel 7.0.0-34-generic, 4 vCPU, 6 GiB)
+  user network 10.0.2.15, link lablink0 10.77.0.1/24
   Ceph 20.2.4 under cephadm/podman ...... 1 mon, 1 mgr, 3 OSDs on vdb/vdc/vdd (one virtual disk
-  |                                       each on /mnt/data); outside Kubernetes, so for k3s it
-  |                                       is an external Ceph test backend at 10.0.2.15
-  k3s v1.36.5 (single node) ............. Ceph-CSI Operator v1.1.0 -> Ceph-CSI v3.18.0 RBD driver
+  |                                       each on /mnt/data), all on 10.77.0.1; outside
+  |                                       Kubernetes, so for k3s an external Ceph test backend
+  k3s v1.36.5 server, node 10.77.0.1 .... Ceph-CSI Operator v1.1.0 -> Ceph-CSI v3.18.0 RBD driver
                                           StorageClass runner-data, namespace orbit-mr-test
+
+Guest orbit-mr-lab-2 (same image and kernel, 2 vCPU, 3 GiB), two-node mode only
+  user network 10.0.2.15 (its own), link lablink0 10.77.0.2/24
+  k3s v1.36.5 agent, node 10.77.0.2 ..... Ceph-CSI node plugin; kernel RBD client of the first
+                                          VM's Ceph over the link; no Ceph of its own
 ```
 
 Nothing of Kubernetes, Ceph or CSI is installed on the host, and the host loads no `rbd`, `nbd`,
-`ceph` or `libceph` module: RBD devices are mapped by the guest's kernel. `status.sh` prints the
-host's module list and the qemu process's listening sockets (only the two 127.0.0.1 forwards).
-The host keeps only `kubectl` (v1.36.5, checksum-verified) in `/mnt/data/managed-runner-lab/bin/`.
+`ceph` or `libceph` module: RBD devices are mapped by the guests' kernels. `status.sh` prints the
+host's module list, each qemu process's listening sockets (only 127.0.0.1) and the link's one
+connection. The host keeps only `kubectl` (v1.36.5, checksum-verified) in
+`/mnt/data/managed-runner-lab/bin/`.
 
 ## Versions
 
 | Component | Version | Pin |
 | --- | --- | --- |
-| Guest image | Ubuntu 26.04 LTS cloud image, release 20260927 (26.04.1) | SHA-256 `8800651811af…7332b2`, checked against `SHA256SUMS`, whose signature by Ubuntu's image key `D2EB4462…7DB87C81` is verified |
-| Guest kernel | `7.0.0-34-generic`; `rbd.ko` is in the base modules package and loads at boot | from the image |
-| Kubernetes | k3s `v1.36.5+k3s1` (Kubernetes 1.36.5, inside Ceph-CSI v3.18.0's tested 1.34–1.36) | binary and `install.sh` by SHA-256 |
+| Guest image | Ubuntu 26.04 LTS cloud image, release 20260927 (26.04.1), for both VMs | SHA-256 `8800651811af…7332b2`, checked against `SHA256SUMS`, whose signature by Ubuntu's image key `D2EB4462…7DB87C81` is verified |
+| Guest kernel | `7.0.0-34-generic` in both VMs; `rbd.ko` is in the base modules package and loads at boot | from the image |
+| Kubernetes | k3s `v1.36.5+k3s1` (Kubernetes 1.36.5, inside Ceph-CSI v3.18.0's tested 1.34–1.36): the server in the first VM, the same binary as the agent in the second | binary and `install.sh` by SHA-256 |
 | Ceph | Tentacle `20.2.4` (2026-08-19 security release, CVE-2025-30156 and three others) | `quay.io/ceph/ceph@sha256:6bb1c8a4…` for every daemon; `cephadm` 20.2.4 by SHA-256 |
 | Ceph-CSI | `v3.18.0` RBD driver | `quay.io/cephcsi/cephcsi:v3.18.0@sha256:0a92e5c8…` |
 | CSI deployment | Ceph-CSI Operator `v1.1.0` | `install.yaml` by SHA-256, operator image by digest |
@@ -60,7 +75,9 @@ image build pin.
 
 | Contract baseline | Lab | Why |
 | --- | --- | --- |
-| External Ceph supplied by a storage owner | Ceph in the same VM, deployed by cephadm with podman, independent of k3s | No storage owner or cluster exists; the owner authorized building one inside the VM. k3s reaches it like any external cluster (MON at 10.0.2.15:6789). |
+| External Ceph supplied by a storage owner | Ceph in the first VM, deployed by cephadm with podman, independent of k3s | No storage owner or cluster exists; the owner authorized building one inside the VM. k3s reaches it like any external cluster (MON at 10.77.0.1:6789, on the link). |
+| Nodes on separate machines and a real network | Two VMs on one host, joined by a QEMU socket netdev over 127.0.0.1; Ceph's public network and the k3s nodes' addresses are the link's 10.77.0.0/24 | The owner's 2026-10-19 decision: a second node without a second machine or any change to the host's network. Cross-node attach, detach and mount are real; physical failures are not (one machine, one failure domain). |
+| CSI controller plugin wherever the scheduler puts it | Pinned to the first VM by the Driver's `controllerPlugin.affinity` | The second VM is the one failed on purpose; with the provisioner and attacher on it, its hard stop would also stop every attach and detach. |
 | CRUSH failure domain from the storage owner (`host` or wider) | Failure domain `osd`; pool size 3, `min_size` 2 | One host. The contract forbids a single copy (`size 1`/`min_size 1`), so three OSDs keep three replicas; they share one VM and one physical HDD, so the replicas exercise replication and degraded-I/O rules but protect against no hardware failure. |
 | Distro Ceph packages | Upstream 20.2.4 container image under cephadm | Ubuntu 26.04's own Ceph is 20.2.0 with only an RGW fix (2026-10-05); it lacks the CephX fix that introduced `aes256k`. download.ceph.com has no 26.04 packages. |
 | Direct Ceph-CSI install "following its pinned Operator instructions" | Ceph-CSI Operator v1.1.0 with an image set ConfigMap pinning v3.18.0 and the sidecars | v3.17+ recommends the operator; Helm is deprecated in v3.18. |
@@ -79,15 +96,17 @@ StorageClass and PVCs are rendered from the repository's templates by `ceph_rbd.
 | What | Value |
 | --- | --- |
 | VM, Kubernetes node, kubeconfig context | `orbit-mr-lab` |
+| Second VM, its Kubernetes node | `orbit-mr-lab-2` (unit `orbit-mr-lab-2.service`); no context of its own: the one kubeconfig and context serve both nodes |
+| Link | `lablink0` in both guests (MAC `52:54:00:4c:00:01` and `…:02`), 10.77.0.1/24 and 10.77.0.2/24; the first qemu listens on 127.0.0.1:16230, the second connects |
 | kubeconfig | `/mnt/data/managed-runner-lab/kubeconfig.json` (0600, JSON as the manager profile expects); context `orbit-mr-lab`, cluster `orbit-mr-lab`, user `orbit-mr-lab-admin` (k3s admin client certificate, cluster-admin), server `https://127.0.0.1:16443`, default namespace `orbit-mr-test` |
 | Test namespace | `orbit-mr-test` |
 | StorageClass | `runner-data` (not default; the k3s local-path class is disabled, so it is the only class) |
 | Ceph pool | `orbit-mr-rbd`: replicated, size 3, `min_size` 2, 32 PGs, application `rbd` |
 | Ceph FSID / CSI `clusterID` | New on every `create.sh`; read it from `state/facts.json`. The current one is `12b3f1b2-c9ec-11f1-80c0-525400123456`. |
-| CSI | namespace `ceph-csi-operator-system`; Driver `rbd.csi.ceph.com`; CephConnection `orbit-mr-lab-ceph` (monitor `10.0.2.15:6789`); ClientProfile named after the FSID; image set ConfigMap `orbit-mr-lab-images` |
+| CSI | namespace `ceph-csi-operator-system`; Driver `rbd.csi.ceph.com`; CephConnection `orbit-mr-lab-ceph` (monitor `10.77.0.1:6789`); ClientProfile named after the FSID; image set ConfigMap `orbit-mr-lab-images` |
 | CephX identity of the CSI driver | `client.orbit-mr-csi`: `mon 'profile rbd'`, `osd 'profile rbd pool=orbit-mr-rbd'`, `mgr 'profile rbd pool=orbit-mr-rbd'` |
 | CSI Secret | `ceph-csi-operator-system/orbit-mr-csi-rbd` (`userID`, `userKey`), referenced by the StorageClass for provisioner, controller publish, controller expand and node stage |
-| SSH | `ssh -i /mnt/data/managed-runner-lab/ssh/id_ed25519 -p 16222 ubuntu@127.0.0.1` |
+| SSH | `ssh -i /mnt/data/managed-runner-lab/ssh/id_ed25519 -p 16222 ubuntu@127.0.0.1`; the second VM on port 16223 (same key) |
 
 The CSI key goes from `ceph auth print-key` straight into `kubectl create secret` inside the guest
 and is compared with the Secret by hash. It is never printed, logged, written to the host or kept
@@ -116,15 +135,16 @@ client libraries (Tentacle packages in its Rocky Linux 10 image) provision with 
 | --- | --- |
 | Guest | 4 vCPU, 6144 MiB RAM; no swap inside the guest |
 | Unit `orbit-mr-lab.service` | `MemoryMax=6656M` (guest RAM plus qemu's own memory), `OOMScoreAdjust=1000` (under host-wide memory pressure the kernel's OOM killer picks the VM first, ahead of processes in the runner's cgroup, whose `OOMPolicy=stop` would stop every session), `CPUQuota=400%` |
-| Boot guard | `start.sh` refuses to boot when the host's `MemAvailable` is below 2048 MiB (`LAB_MIN_AVAILABLE_MIB`) and says why |
-| Disks | root 40 GiB qcow2 overlay on the verified image; three 20 GiB qcow2 OSD disks; all thin, `cache=none`, on the /mnt/data HDD |
+| Second guest | 2 vCPU, 3072 MiB RAM; unit `orbit-mr-lab-2.service` with `MemoryMax=3584M`, `OOMScoreAdjust=1000`, `CPUQuota=200%`; kubelet `system-reserved` cpu 250m, memory 512 MiB (no Ceph beside it), the same hard eviction |
+| Boot guard | `start.sh` refuses to boot when the host's `MemAvailable` is below the floor of what it is about to boot, and says why: 2048 MiB for the first VM (`LAB_MIN_AVAILABLE_MIB`), 1536 MiB for the second (`LAB2_MIN_AVAILABLE_MIB`), 3584 MiB for both together |
+| Disks | first VM: root 40 GiB qcow2 overlay on the verified image, three 20 GiB qcow2 OSD disks; second VM: root 30 GiB qcow2 overlay (`disks/node2-root.qcow2`); all thin, `cache=none`, on the /mnt/data HDD |
 | Ceph | `osd_memory_target` 896 MiB per OSD (the smallest value Ceph accepts), autotune off; `mon_memory_target` 512 MiB; one mon, one mgr; no dashboard, monitoring stack, ceph-exporter or device monitoring; mgr modules `nfs` and `nvmeof` off |
 | k3s | traefik, servicelb, metrics-server, local-path and the Helm controller disabled; kubelet `system-reserved` cpu 1, memory 3 GiB (Ceph runs outside the kubelet's accounting), hard eviction below 256 MiB |
 | Returning memory | virtio-balloon free page reporting, at 32 KiB granularity (`page_reporting_order` 3; the default 2 MiB returned almost nothing of a busy guest's free memory), and clean page cache dropped at the end of `create.sh` and `start.sh` and every 5 minutes by `orbit-lab-drop-caches.timer` |
 
 ### Memory measured
 
-Figures in MiB from 2026-10-17: the unit's cgroup (`memory.current`, `memory.swap.current`), the
+The two-node figures of 2026-10-19 are in [Two nodes](#memory-measured-1). Figures in MiB from 2026-10-17: the unit's cgroup (`memory.current`, `memory.swap.current`), the
 guest's own statistics through the balloon, and the host's `/proc/meminfo`. Other sessions kept
 running on the host throughout, so the host's `MemAvailable` also moved on its own; the unit's
 figures are the VM's footprint.
@@ -163,12 +183,13 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 
 | Script | What it does |
 | --- | --- |
-| `create.sh` | Builds the lab, or finishes an interrupted build: verified downloads, disks, cloud-init seed, boot (through `start.sh`), guest packages, Ceph, k3s, kubeconfig, Ceph-CSI, StorageClass, namespace, facts, a page-cache drop, health. Each step skips what exists, so rerun it after any failure. Leaves the VM running. |
-| `start.sh` | Boots the VM as `orbit-mr-lab.service` behind the memory guard, waits until `status.sh` reports healthy and drops the guest's page cache (`--no-wait` returns after SSH). |
-| `stop.sh` | ACPI shutdown through QMP and a wait for qemu to exit (15–22 s measured); `--force` stops the unit after the timeout. Use it, not `systemctl stop`, which cuts the power. |
-| `status.sh` | Host boundary (kernel modules, listening sockets), unit memory, guest memory through the balloon, Ceph health, k3s node, Ceph-CSI workloads, StorageClass and namespace; exit 1 when running but unhealthy, `--wait SECONDS` to wait for health. |
-| `smoke.sh run` / `smoke.sh verify RUN_ID` | The storage smoke test below; reports go to `state/smoke-RUN_ID.json`. |
-| `destroy.sh --yes-destroy-lab` | Shuts down and deletes the disks (all Ceph and PVC data), seed, SSH key and kubeconfig; keeps downloads, logs and earlier reports (`--purge` removes everything). |
+| `create.sh [--nodes 2]` | Builds the lab, or finishes an interrupted build: verified downloads, disks, cloud-init seeds, boot (through `start.sh`), guest packages, the link NIC, Ceph, k3s, kubeconfig, Ceph-CSI, StorageClass, namespace, facts, a page-cache drop, health. With `--nodes 2` it then builds the second VM: its disk and seed, boot, packages, link NIC, the join token, the k3s agent and the CSI node plugin on it. Each step skips what exists, so rerun it after any failure. A lab from before the link gets its Ceph and k3s moved onto it ([below](#moving-ceph-and-k3s-onto-the-link)). Leaves the VMs running. |
+| `start.sh [--nodes 2]` | Single-node mode by default: boots the first VM as `orbit-mr-lab.service`. `--nodes 2` is two-node mode: the first VM if it is off, then the second as `orbit-mr-lab-2.service`; it also brings the second back after a hard stop. Behind the memory guard for what it boots, it waits until `status.sh` reports healthy, cordons the second node in single-node mode and uncordons it in two-node mode, and drops the guests' page cache (`--no-wait` returns after SSH). |
+| `stop.sh [--node 2] [--hard]` | ACPI shutdown through QMP and a wait for qemu to exit, the second VM first (15–22 s measured for the first); `--force` stops a unit after the timeout. Use it, not `systemctl stop`, which cuts the power. `--node 2` stops only the second VM, cordoned first: back to single-node mode. `--node 2 --hard` kills the second VM's qemu with SIGKILL instead, for failure tests ([below](#a-hard-stop-of-the-second-node)). |
+| `status.sh` | Host boundary (kernel modules, listening sockets, the link's connection), each unit's memory, guest memory through the balloon, both guests' health (Ceph, the link, Ceph reached from the second VM), every running VM's node Ready, Ceph-CSI workloads and the node plugin on each of those nodes, StorageClass and namespace; with the second VM off its node is reported, not required. Exit 1 when running but unhealthy, `--wait SECONDS` to wait for health. |
+| `smoke.sh run` / `smoke.sh verify RUN_ID` | The single-node storage smoke test below; reports go to `state/smoke-RUN_ID.json`. |
+| `two-node.py topology\|migrate\|hard-stop\|verify RUN_ID\|memory LABEL` | The two-node checks ([below](#two-nodes-l1)): one PVC moving between the nodes, the second node's hard stop and recovery, the data after a restart, memory; reports go to `state/two-node-RUN_ID.json`. |
+| `destroy.sh --yes-destroy-lab [--node 2]` | Shuts down and deletes the disks (all Ceph and PVC data), seeds, SSH key and kubeconfig; keeps downloads, logs and earlier reports (`--purge` removes everything). `--node 2` deletes only the second VM's disk and seed and its node in the cluster; it holds no Ceph data. |
 | `test-server.sh start [--managed\|--managed-false\|--managed-false-no-profile]\|stop\|status\|secrets` | The isolated test control plane on the host, all on 127.0.0.1 and outside the runner's cgroup with memory caps: PostgreSQL (container `orbit-mr-lab-pg`, port 15433), this checkout's apiserver (unit `orbit-mr-lab-api`, port 13710, built beforehand), a TLS front with a lab-only CA (unit `orbit-mr-lab-tls`, port 13711, the address Pods use: `https://10.0.2.2:13711`) and `fake-model.py` (unit `orbit-mr-lab-fake-model`, port 13712). Data, secrets and logs in `LAB_DIR/test-server`, or in `LAB_TEST_SERVER_DIR`, which keeps a task's database apart. `--managed` turns managed runners on with the profile `single-writer.py profile` wrote, `--managed-false` names the same profile with the switch explicitly `false`, `--managed-false-no-profile` sets `false` and names no profile (no Kubernetes or Ceph configuration at all); `secrets` only makes the secrets and the lab CA. |
 | `single-writer.py` | The manager's own Pods in the lab ([below](#single-writer-protection-t02a)): the manager's ServiceAccount and least-privilege RBAC, the admission webhook (k3s's AdmissionConfiguration with the webhook's bearer token, and the repository's webhook template), the image import under its digest, the manager profile, and the checks: second Pods, outages, the probe payload inside the runner container, storage records, credential replay at the runner door, stopping the runner, a force delete and an incomplete fencing receipt. |
 | `manager-lab.py` | The manager against real k3s ([below](#manager-reconciliation-t04)): the T04 server directory, a second apiserver replica, owners and their concurrent sign-ins and ensures, the database against k3s (`consistency`), a recorder of every change, a stand-in Claude login on a runner's volume, a killed runner process, an operator's delete or eviction, an API outage, a controller crash timed on a create, the switch checks and one owner against another. |
@@ -185,12 +206,13 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 A test window:
 
 ```sh
-sudo scripts/managed-runner/lab/start.sh            # refuses below 2 GiB MemAvailable
+sudo scripts/managed-runner/lab/start.sh            # single-node mode; refuses below 2 GiB MemAvailable
+sudo scripts/managed-runner/lab/start.sh --nodes 2  # or two-node mode; refuses below 3.5 GiB for both
 K="/mnt/data/managed-runner-lab/bin/kubectl --kubeconfig /mnt/data/managed-runner-lab/kubeconfig.json --context orbit-mr-lab"
-$K get nodes
+$K get nodes -o wide
 $K -n orbit-mr-test get pvc
 ssh -i /mnt/data/managed-runner-lab/ssh/id_ed25519 -p 16222 ubuntu@127.0.0.1 sudo cephadm shell -- ceph -s
-sudo scripts/managed-runner/lab/stop.sh             # leave it off between test windows
+sudo scripts/managed-runner/lab/stop.sh             # both VMs, the second first; leave them off between windows
 ```
 
 Pass `--kubeconfig` and `--context` on every command; never point another tool at a default or
@@ -612,24 +634,224 @@ SLEEPING on its own); the two restored claims with their PVs and images, as reta
 `backups/t08b-20261018T150259Z` (the trial's) and `backups/t08b-20261018T152419Z` (0700). The lost volumes' claims, PVs and
 images were deleted, as the test required. The webhook is removed, the test server and gate are stopped, and the VM is off.
 
+## Two nodes (L1)
+
+Recorded 2026-10-19 by task L1. On 2026-10-19 the owner decided to add a second, smaller KVM VM on
+the same host as a second k3s node, so that the cross-node parts of criteria 2 and 8 can be tested
+here (T02, then T08x). It runs only a k3s agent; Ceph stays a single-host cluster in the first VM.
+The records are in [the evidence](evidence/managed-runner-two-node-lab/2026-10-19/README.md).
+
+### Topology
+
+| | First VM | Second VM |
+| --- | --- | --- |
+| Unit, size | `orbit-mr-lab.service`: 4 vCPU, 6144 MiB, `MemoryMax=6656M` | `orbit-mr-lab-2.service`: 2 vCPU, 3072 MiB, `MemoryMax=3584M` |
+| Disks, in `/mnt/data/managed-runner-lab/disks` | `root.qcow2` (40 GiB) and three OSD disks | `node2-root.qcow2` (30 GiB), an overlay on the same verified image |
+| User network | 10.0.2.15; 127.0.0.1:16222 → :22, 127.0.0.1:16443 → :6443 | its own, also 10.0.2.15; 127.0.0.1:16223 → :22 |
+| Link | `lablink0` 10.77.0.1/24 (`52:54:00:4c:00:01`); qemu listens on 127.0.0.1:16230 | `lablink0` 10.77.0.2/24 (`52:54:00:4c:00:02`); qemu connects to 127.0.0.1:16230 |
+| Kubernetes node | `orbit-mr-lab`: k3s server (control plane), InternalIP 10.77.0.1, Pod CIDR 10.42.0.0/24 | `orbit-mr-lab-2`: k3s agent of `https://10.77.0.1:6443`, InternalIP 10.77.0.2, Pod CIDR 10.42.1.0/24 |
+| Labels | k3s's own: `kubernetes.io/hostname`, `node-role.kubernetes.io/control-plane=true`, `node.kubernetes.io/instance-type=k3s`, arch and os | the same without the control-plane role; no zone or region labels, since both are one machine |
+| Allocatable | 3 CPU, 2592 MiB | 1750m CPU, 2134 MiB |
+| Ceph | MON (3300, 6789), mgr and 3 OSDs, all on 10.77.0.1; `public_network` 10.77.0.0/24 | none: its kernel RBD client reaches the first VM's MON and OSDs over the link |
+| Ceph-CSI | operator, controller plugin (pinned here), node plugin | node plugin (the DaemonSet's second Pod) |
+
+Both run Ubuntu 26.04.1 with kernel 7.0.0-34-generic and k3s v1.36.5+k3s1, from the same pinned
+image and binary; the second VM's kernel maps the `aes256k` CSI key like the first. Flannel's VXLAN
+runs over `lablink0` (`flannel-iface`), and the API server advertises 10.77.0.1. The join token goes
+from the server's `agent-token` into the agent's `/etc/rancher/k3s/agent-token` (0600) through an
+SSH pipe and is compared by hash; it is never printed or written on the host. The lab sets no
+separate agent token, so this is k3s's server token, held by the two guests only.
+
+### The link
+
+- A QEMU socket netdev: one more virtio NIC in each VM, the first qemu listening on 127.0.0.1:16230
+  and the second connecting to it, the two exchanging Ethernet frames over that one TCP connection.
+  No bridge, tap, host address or route, and no change to the host's network or firewall; `ss` on
+  the host shows the listener and the one connection.
+- 10.77.0.0/24 is clear of the HPC LAN (192.168.1.0/24), Docker's networks (172.16.0.0/12 and
+  192.168.0.0/16, its default pools), k3s's Pods and Services (10.42.0.0/16, 10.43.0.0/16), podman's
+  default (10.88.0.0/16) and the QEMU user network (10.0.2.0/24) that both VMs keep for downloads.
+- In each guest `provision.sh link` writes `/etc/netplan/60-orbit-lab-link.yaml`: the NIC matched by
+  its MAC, named `lablink0`, a static address, no DHCP or IPv6, and `ignore-carrier`, so that the
+  address stays while the other VM is off. A new VM's seed gives DHCP to its user-network NIC only
+  (the first VM's install, from when it had one NIC, already names that NIC by its MAC).
+- The first VM always has its link NIC, in single-node mode too, so Ceph and k3s keep one address
+  in both modes. A round trip over the link takes 0.3–0.7 ms idle (`agent-health`), up to 9 ms
+  while both VMs boot.
+- Only the listening end waits for a new connection. If the first VM's qemu went while the second
+  ran, the second's end would stay down until its own qemu starts again; so `stop.sh` stops the
+  second VM first and `start.sh` starts the first first.
+
+### Moving Ceph and k3s onto the link
+
+The single-node lab had Ceph and its k3s node on 10.0.2.15, the user network's address, which the
+second VM cannot reach: its own user network gives it the same address. `create.sh` moved them in
+place on 2026-10-19, keeping the FSID, pools, images, keys, claims and imported images.
+`provision.sh ceph` and `provision.sh k3s` do this whenever they find another address:
+
+1. First, the Pods that map RBD in the first VM are deleted, because a kernel client mapped through
+   the old addresses would hang once they move. Here that was the L0 smoke Pod
+   `lab-20261017061552-b`, recreated afterwards on its claim.
+2. While the MON still answers at 10.0.2.15: `ceph config set global public_network 10.77.0.0/24`
+   and `ceph orch host set-addr orbit-mr-lab 10.77.0.1`.
+3. `ceph mon getmap`, then `monmaptool --rm orbit-mr-lab` and `monmaptool --addv orbit-mr-lab
+   [v2:10.77.0.1:3300,v1:10.77.0.1:6789]`. The MON is stopped and the map injected with
+   `ceph-mon -i orbit-mr-lab --inject-monmap` in `cephadm shell --name mon.orbit-mr-lab`. `mon_host`
+   and the MON's `public network` are rewritten in `/etc/ceph/ceph.conf` and in every daemon's
+   `config` under `/var/lib/ceph/FSID`. Then the MON is started again. This is Ceph's "Changing a
+   Monitor's IP address" (the advanced method).
+4. The mgr, the three OSDs and the crash agent are restarted, and they bind to the new public
+   network. A quick restart of a cephadm unit can fail with "Device or resource busy", because its
+   last container's conmon is still there; systemd starts it again by itself. `ceph orch ps
+   --refresh` then clears cephadm's stale "failed daemon" warning.
+5. k3s gets `node-ip: 10.77.0.1`, `flannel-iface: lablink0` and `tls-san` in `config.yaml`, then a
+   restart. The k3s installer restarts the service only for a new binary or unit, so `provision.sh`
+   remembers the config k3s last started with and asks for the restart when it differs.
+6. The CephConnection's monitor became `10.77.0.1:6789`, and the operator rewrote `ceph-csi-config`.
+
+No test data was lost. All 31 claims of earlier tasks are still `Bound`. Their 32 PVs (one
+`Released`, as before) and the RBD images behind them are still there: 36 claims, 37 PVs and 37
+images in all after this task's five claims. The pool `orbit-mr-rbd` and the StorageClass
+`runner-data` keep their names, and the FSID is unchanged. The L0 smoke volume was read again after
+the move and after each later restart, in both modes. Each time it had the same ordinary file, Git
+commit, 107 SQLite rows (row hash) and random-file SHA-256, with `integrity_check` `ok`, now mapped
+through 10.77.0.1; these are also the hashes of the coordinator's L0 review run of 2026-10-17. A new
+lab bootstraps Ceph on the link address directly.
+
+### Two modes
+
+| | Single-node mode | Two-node mode |
+| --- | --- | --- |
+| Start | `start.sh` | `start.sh --nodes 2` |
+| Running | the first VM | both; the first boots first |
+| Memory guard | host `MemAvailable` ≥ 2048 MiB | ≥ 3584 MiB to boot both, ≥ 1536 MiB to add the second to a running first |
+| The second node | registered, `NotReady` (unreachable) and cordoned | `Ready` and schedulable |
+| Stop | `stop.sh` | `stop.sh` (the second VM first), or `stop.sh --node 2` back to single-node mode |
+
+Single-node mode is the lab as T03–T08b used it, plus one node that stays `NotReady` and cordoned:
+nothing new is scheduled onto it, and its node-plugin Pod waits there. Before a two-node window,
+make sure no other experiment, dind host or pg spec batch runs on HPC (`docker ps`,
+`systemctl list-units --type=service --state=running`, `free -m`). If one does, wait, and tell the
+coordinator in a task comment.
+
+### A hard stop of the second node
+
+`stop.sh --node 2 --hard` kills the second VM's qemu with SIGKILL. That is a power cut: the guest
+gets no shutdown, the node is not cordoned and nothing tells the cluster. `start.sh --nodes 2` brings
+the VM back: the memory guard for the second VM, the boot, both nodes `Ready` and the node uncordoned.
+`two-node.py hard-stop` does both around a writer Pod on the second node. It samples every 5 s
+(`rbd status` every 15 s); the timeline is in the evidence. Observed on 2026-10-19, with the power
+cut at 10:08:12Z:
+
+| Time | Node `orbit-mr-lab-2` | The Pod (writer on an RWO claim) | VolumeAttachment | RBD watcher |
+| --- | --- | --- | --- | --- |
+| Before | `Ready` | `Running`, Ready | attached to `orbit-mr-lab-2` | `10.77.0.2:0/…`, the second VM's kernel |
+| Cut + 34 s | `Ready` (stale) | `Running`, Ready (stale) | attached | gone: Ceph drops a watch after 30 s without pings (sampled every 15 s) |
+| Cut + 48 s | `Unknown` (`NodeStatusUnknown`), taints `unreachable:NoSchedule` and `unreachable:NoExecute` | `Running`, Ready `False` | attached | none |
+| Cut + 5 min 48 s | `Unknown` | evicted by the `NoExecute` taint after its 300 s toleration: `deletionTimestamp` set, still `Running`, because no kubelet confirms the stop | attached | none |
+| Cut + 7 min, end of the window | `Unknown` | Terminating | still attached; nothing detached it | none |
+| Boot + 31 s (10:15:47Z) | `Ready` again, taints gone | the kubelet found no containers: `Failed` | attached | none |
+| Boot + 52 s | `Ready` | removed | deleted (detached) | none |
+
+The claim was then mounted on the first node. It held 121 rows, including every one of the 120
+acknowledged before the cut, and `integrity_check` was `ok` after SQLite's WAL recovery. Cleanup
+left no Pod, VolumeAttachment or watcher. Within the 7 minutes nothing moved the volume off the dead
+node: there was no detach while the Pod stayed Terminating, and no replacement Pod, since none was
+asked for. Whether and how a successor may take the volume, and how the old node is fenced, is for
+T02 to establish.
+
+A finding: after this test Ceph reported `BLUESTORE_SLOW_OP_ALERT` for osd.2, slow BlueStore
+operations on the shared HDD. By default the alert stays for 24 hours, which held `status.sh`
+unhealthy. The lab now sets `bluestore_slow_ops_warn_lifetime` to 600 s (`provision.sh ceph`), and
+the alert cleared 10 minutes later.
+
+### Smoke results
+
+`two-node.py migrate` (run `l1m-20261019100149`) uses the repository's probe payload, with each Pod
+pinned to its node by a required node affinity:
+
+| Step | Result |
+| --- | --- |
+| PVC from `runner-data` | `Bound`: RWO, `Filesystem`, ext4, `Retain`, mounter `rbd`, image `orbit-mr-rbd/csi-vol-1ea2d45d…` |
+| First node | Pod Ready in 7.2 s; VolumeAttachment `csi-d9bed501…` on `orbit-mr-lab`; `/dev/rbd1` mapped by the first VM, watcher `10.77.0.1`. It wrote 104 SQLite rows (WAL, `synchronous=FULL`), an ordinary file, a Git commit and 32 MiB of random bytes; `integrity_check` `ok` |
+| To the second node | Pod deleted: VolumeAttachment gone and device unmapped 13.4 s later. Pod on `orbit-mr-lab-2` Ready in 53.4 s (the probe image's first pull there); VolumeAttachment `csi-d92a005c…` on `orbit-mr-lab-2`; `/dev/rbd0` mapped by the second VM, watcher `10.77.0.2`. Same file, Git commit, row hash, row count and random-file SHA-256; `integrity_check` `ok`. It wrote 54 more rows there, and the first 104 hashed as before |
+| Back to the first node | VolumeAttachment gone 13.8 s after the delete; Pod on `orbit-mr-lab` in 8.3 s, `csi-d9bed501…` again; 158 rows with the same hashes as on the second node, `integrity_check` `ok` |
+| Both VMs stopped and started | `stop.sh` stopped the second VM in 6 s, then the first in 18 s. `start.sh --nodes 2` booted both behind the 3584 MiB guard: SSH after 41 s and 45 s, healthy 2 min 20 s after the start (both nodes `Ready`, Ceph `HEALTH_OK`, the node plugin on both). `two-node.py verify` on the second node found the same 158 rows and hashes, `integrity_check` `ok`. The L0 smoke volume came back on the first node as before |
+| The second VM destroyed and rebuilt | `destroy.sh --yes-destroy-lab --node 2` stopped it, deleted its node and the node's password Secret, and removed its disk and seed; the first VM and Ceph were untouched. `create.sh --nodes 2` built a new one: the node `orbit-mr-lab-2` was back with a new UID, the node plugin was ready 1.5 minutes after the boot, and `two-node.py verify` there found the same 158 rows and hashes |
+| Single-node mode | `smoke.sh run` (run `lab-20261019104803`) with the second VM off and its node cordoned, then `stop.sh`, `start.sh` and `smoke.sh verify`: the same results as L0. Pod recreation and the restart kept the file, Git, 103 SQLite rows and random-file hashes with `integrity_check` `ok`; a second Pod on the same node and RWO claim was admitted and ran; a `ReadWriteOncePod` claim's second Pod stayed `Pending`, the scheduler now counting the cordoned node as unschedulable. `smoke.sh` waits for its own image to be unmapped, no longer for every RBD device of the VM, which the remounted L0 volume kept mapped |
+
+A VolumeAttachment belongs to one volume and one node, so each move deleted the old one before the
+new node's was created; there were never two at once.
+
+### Memory measured
+
+Figures in MiB from 2026-10-19: each unit's cgroup (`memory.current` and `memory.swap.current`), the
+guests' own figures through the balloon (in use = total minus available), and the host's
+`/proc/meminfo` (`two-node.py memory`, `state/memory.jsonl`). Other sessions kept the host busy: one
+session's tests took its `MemAvailable` down to 2.6 GiB for a moment at 10:53 with only the first
+VM up, so the units' figures are the VMs' footprint and the host's are context.
+
+| Moment | First VM: host RAM + swap | First guest in use | Second VM: host RAM + swap | Second guest in use | Host `MemAvailable` |
+| --- | --- | --- | --- | --- | --- |
+| Both off (10:22:38) | – | – | – | – | 7179 |
+| Two-node mode, idle, 5 min after healthy (10:30:32) | 2758 + 4 | 1548 | 1014 + 2 | 533 | 5074 |
+| Two-node mode, idle, 10 min (10:35:33) | 2323 + 428 | 1591 | 724 + 251 | 531 | 6200 |
+| Single-node mode, 5 min after the second VM stopped (10:41:27) | 2332 + 414 | 1581 | – | – | 7179 |
+| Single-node mode, booted, healthy, page cache dropped (10:52:49) | 2971 + 30 | 1509 | – | – | 5642 |
+| Both off again (10:50:22, 10:54:39) | – | – | – | – | 9674, 8788 |
+
+- At rest the first VM costs the host 2.7–3.0 GiB in either mode and the second about 1.0 GiB, so
+  two-node mode holds about 3.7 GiB of host memory; the 9 GiB is their guest RAM, the most they can
+  take.
+- In use in the second guest at rest: k3s agent 191, containerd 164, the CSI node plugin 87 and about
+  100 for the OS; 548 in all. In the first, as in L0: k3s server 527, ceph-mgr 215, containerd 174,
+  three OSDs about 150 each, Ceph-CSI and its operator about 390 together.
+- Peaks: 3675 MiB for the first VM's unit while Ceph and k3s moved; 2779 MiB for the second's on its
+  first boot, which pulled the Ceph-CSI and probe images (about 1.2 GiB in its page cache until
+  `provision.sh trim`), and 1188–1201 on later boots. While the hard-stop test ran, the host swapped
+  out up to 1.7 GiB of the first VM's pages.
+- The guard's floors follow from this: 2048 MiB for the first VM, as before, and 1536 MiB for the
+  second (its footprint at rest plus a margin), so 3584 MiB for both.
+- Timings: `create.sh --nodes 2` took 3.5 minutes in all. The second VM went from its first boot to
+  a `Ready` node with the node plugin in about 2 minutes: SSH after 32 s, the agent 14 s after its
+  token, then 70 s for the plugin's images. Later boots reached `Ready` in 31 s, and its shutdown
+  took 6 s.
+
+### For T02 and T08x
+
+- An image imported into the first VM's containerd (`single-writer.py import`, `runner-image.py
+  import`) is not in the second's: those tools reach only the first VM. Import it into the second as
+  well, over SSH on port 16223 (`sudo k3s ctr images import …` works on the agent), before a runner
+  Pod is scheduled there.
+- Pods on either node reach a test server on the host at `https://10.0.2.2:13711` through their own
+  VM's user network. The admission webhook is called by the API server in the first VM.
+- The manager sets no node for a runner Pod: cordon a node to choose. `start.sh --nodes 2`
+  uncordons the second node, and `stop.sh --node 2` cordons it.
+- The CSI controller plugin stays on the first VM, so attach and detach keep working while the
+  second is down.
+
 ## Known limits
 
-- **One physical machine, one node, one failure domain.** The multi-node parts of criterion 2
-  (mounting on a second node, refusing duplicate Pods across nodes, takeover after the old node
-  stops or is fenced) and criterion 8's cross-node migration cannot be verified here; they wait for
-  a multi-machine cluster or another decision by the owner. Single-machine evidence must not be
-  presented as covering them. Criteria 3–7 and the single-node parts of 2 and 8 can be tested here.
+- **One physical machine, one failure domain.** Since L1 the lab has two k3s nodes, so a volume
+  can be mounted by one node after the other and a node can be stopped hard. Both nodes are VMs on
+  one host, with one power supply, one kernel underneath and one HDD; their link is a loopback TCP
+  connection, and Ceph is a single-host cluster inside the first VM (three OSDs on one disk). A
+  failure of the host, its disk or its network takes both nodes and the storage. Nothing here
+  proves high availability across physical machines, and two-node evidence must say so. In
+  single-node mode the lab is what it was before: criteria 3–7 and the single-node parts of 2 and 8.
+- The scripts stop the second node hard (`stop.sh --node 2 --hard`); they offer no network
+  partition that keeps both VMs running.
 - The admission guard is installed only for a test window (`single-writer.py admission install`)
   and removed after it (`admission remove`): with no test server answering, `failurePolicy: Fail`
   refuses every Pod create in `orbit-mr-test`. No fencing procedure, Rook or CSI snapshots are
-  installed. `ceph-rbd-verify.py`'s live phases need two nodes.
+  installed. `ceph-rbd-verify.py`'s live phases need two nodes and were not run in L1.
 - The three replicas share one VM and one HDD: no durability against hardware failure, and I/O is
   bound by that disk.
 - Kernel RBD and OSDs share one kernel. Shutdown ordering is handled; severe memory pressure inside
   the guest can still stall RBD I/O, the reason production keeps them apart.
 - The host can swap guest memory when the host itself runs short (it did during the first
-  provisioning); the VM then slows down. `OOMScoreAdjust=1000` makes the VM, not the runner, the
-  host OOM killer's first choice.
+  provisioning, and in L1 while the two-node checks ran); the VMs then slow down.
+  `OOMScoreAdjust=1000` makes the VMs, not the runner, the host OOM killer's first choice.
 - The kubeconfig is k3s's cluster-admin. The manager's own identity is the ServiceAccount
   `orbit-mr-manager` (`single-writer.py identity`), with only the verbs the Kubernetes backend calls;
   the webhook's caller is k3s's API server, which presents a bearer token from its AdmissionConfiguration.

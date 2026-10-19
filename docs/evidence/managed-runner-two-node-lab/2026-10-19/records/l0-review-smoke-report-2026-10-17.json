@@ -1,0 +1,87 @@
+{
+  "runId": "lab-20261017061552",
+  "pvc": "mr-data-b3c54306-e474-4fce-a316-228ce37a5266",
+  "startedAt": "2026-10-17T06:15:52Z",
+  "volume": {
+    "pv": "pvc-c869968e-0f44-4365-800c-0448f74f8892",
+    "pvUID": "c9fdac01-70ab-4b6b-82fd-b6c1256be9b3",
+    "accessModes": [
+      "ReadWriteOnce"
+    ],
+    "volumeMode": "Filesystem",
+    "reclaimPolicy": "Retain",
+    "driver": "rbd.csi.ceph.com",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd",
+    "fsType": "ext4",
+    "pool": "orbit-mr-rbd",
+    "image": "csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd",
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "mounter": "rbd"
+  },
+  "beforeDelete": {
+    "ordinarySHA256": "e97f6f889c44745966e9e3ff7140109ee9e983a59af8ff3b7175443a98bde3d8",
+    "gitCommit": "fa0b8af5b62282243219ba766b4fc72587c9ef6a",
+    "gitFsck": "",
+    "sqliteIntegrity": [
+      "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "committedRows": 107,
+    "rowSHA256": "1f88dd9f706b6ff9053856bece7b5afdc1e3ff7a2f15dbfb0262953320a0ea8e",
+    "mountInfo": [
+      "1516 1501 251:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=1024"
+    ],
+    "randomSHA256": "c7e6c66e359cba6aa3f2c949e34692c6b8342705620e0fa93cfc9bf5cbe80e8c",
+    "pod": "lab-20261017061552-a"
+  },
+  "unmappedAfterDelete": true,
+  "afterRecreate": {
+    "ordinarySHA256": "e97f6f889c44745966e9e3ff7140109ee9e983a59af8ff3b7175443a98bde3d8",
+    "gitCommit": "fa0b8af5b62282243219ba766b4fc72587c9ef6a",
+    "gitFsck": "",
+    "sqliteIntegrity": [
+      "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "committedRows": 107,
+    "rowSHA256": "1f88dd9f706b6ff9053856bece7b5afdc1e3ff7a2f15dbfb0262953320a0ea8e",
+    "mountInfo": [
+      "1516 1501 251:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=1024"
+    ],
+    "randomSHA256": "c7e6c66e359cba6aa3f2c949e34692c6b8342705620e0fa93cfc9bf5cbe80e8c",
+    "pod": "lab-20261017061552-b"
+  },
+  "secondPodSameNode": {
+    "admitted": true,
+    "phase": "Running",
+    "write": "written",
+    "seenByFirstPod": "second-pod",
+    "mountInfo": "1634 1619 251:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=1024",
+    "volumeAttachments": 1
+  },
+  "readWriteOncePodSecondPod": {
+    "phase": "Pending",
+    "events": "0/1 nodes are available: 1 node(s) unavailable due to PersistentVolumeClaim with ReadWriteOncePod access mode already in-use by another pod. no new claims to deallocate, preemption: 0/1 nodes are available: 1 No preemption victims found for incoming pod.",
+    "pvc": "mr-data-83283361-0bc1-4cdf-a05d-647fc0b120cf"
+  },
+  "finishedAt": "2026-10-17T06:17:29Z",
+  "failures": 0,
+  "afterReboot": {
+    "ordinarySHA256": "e97f6f889c44745966e9e3ff7140109ee9e983a59af8ff3b7175443a98bde3d8",
+    "gitCommit": "fa0b8af5b62282243219ba766b4fc72587c9ef6a",
+    "gitFsck": "",
+    "sqliteIntegrity": [
+      "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "committedRows": 107,
+    "rowSHA256": "1f88dd9f706b6ff9053856bece7b5afdc1e3ff7a2f15dbfb0262953320a0ea8e",
+    "mountInfo": [
+      "1548 1533 251:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=1024"
+    ],
+    "randomSHA256": "c7e6c66e359cba6aa3f2c949e34692c6b8342705620e0fa93cfc9bf5cbe80e8c",
+    "verifiedAt": "2026-10-17T06:19:10Z",
+    "bootId": "93ab0c17-de6b-478a-b1da-8a157c405c9d",
+    "failures": 0
+  }
+}
