@@ -367,20 +367,24 @@ test("a landing session's log is the reader's; another account's session, anothe
     const job = await claim(stack, w);
     await output(stack, w, job, 0, 'the landing printed this\n');
     // The enqueue opened the landing subject (§2.9 LS1) and pre-generated the session id; the
-    // session row itself is what `ensureLandingSession` inserts after a claim, which is not wired
-    // into the claim path yet — this spec stands it up the way that function writes it.
+    // session row itself is what `ensureLandingSession` inserts after a claim, which the claim's
+    // dispatch now does (the engine-path guard task). A build where that compensation point is not
+    // wired yet leaves this spec to stand the row up the way that function writes it.
     const landing = await stack.db.projectLanding.findFirstOrThrow({
       where: { taskId }, select: { id: true, sessionId: true },
     });
     const landingSessionId = landing.sessionId;
-    await stack.db.session.create({
-      data: {
-        id: landingSessionId, title: 'the landing', prompt: 'Orbit runs this landing.', ownerId: w.ownerId,
-        creatorId: w.ownerId, workspaceId: w.workspaceId, status: 'AWAITING_INPUT',
-        sessionKind: 'LANDING', startsTaskWork: false, provider: 'orbit', providerBuiltin: true,
-        titleManagedByProject: true, dispatchOrigin: 'USER', runSource: 'MANUAL',
-      },
-    });
+    const inserted = await stack.db.session.findUnique({ where: { id: landingSessionId }, select: { id: true } });
+    if (!inserted) {
+      await stack.db.session.create({
+        data: {
+          id: landingSessionId, title: 'the landing', prompt: 'Orbit runs this landing.', ownerId: w.ownerId,
+          creatorId: w.ownerId, workspaceId: w.workspaceId, status: 'AWAITING_INPUT',
+          sessionKind: 'LANDING', startsTaskWork: false, provider: 'orbit', providerBuiltin: true,
+          titleManagedByProject: true, dispatchOrigin: 'USER', runSource: 'MANUAL',
+        },
+      });
+    }
     assert.equal(
       (await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: job.jobId }, select: { landingId: true } })).landingId,
       landing.id,
