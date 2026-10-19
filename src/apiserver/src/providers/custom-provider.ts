@@ -43,6 +43,10 @@ import {
 export function isBuiltinProvider(slug?: string | null, providerBuiltin = true): boolean {
   if (!slug || slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX) return true;
   if (slug === AgentProvider.OPENCODE || slug === AgentProvider.ANTIGRAVITY || slug === AgentProvider.CURSOR) return true;
+  // The LANDING session's provider (0436) is the platform's own value, not a configured key: like a
+  // built-in engine's slug it is never looked up as one. It has no engine (builtinSessionEngine
+  // returns null), but "built-in" is what says no configured row answers to it.
+  if (slug === LANDING_PROVIDER_SLUG) return true;
   if (slug === AgentProvider.KIMI || slug === AgentProvider.DSH) return providerBuiltin;
   return false;
 }
