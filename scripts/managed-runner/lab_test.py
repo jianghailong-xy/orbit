@@ -4,6 +4,7 @@
 import asyncio
 import base64
 import importlib.util
+import ipaddress
 import json
 from pathlib import Path
 import re
@@ -73,6 +74,75 @@ class LabTest(unittest.TestCase):
         # A shell trace would print the CephX key on its way into the Kubernetes Secret.
         for script in [*LAB.glob("*.sh"), *LAB.glob("guest/*.sh")]:
             self.assertNotRegex(script.read_text(), r"set -[a-z]*x|bash -x", script.name)
+
+
+class TwoNodeLabTest(unittest.TestCase):
+    """The second VM and the link between the two (task L1), offline."""
+
+    def test_the_link_subnet_is_clear_of_every_network_around_it(self):
+        link = ipaddress.ip_network(render.ENV["LAB_LINK_NET"])
+        around = {"HPC LAN": "192.168.1.0/24", "Docker default bridge and pools": "172.16.0.0/12",
+                  "Docker pools": "192.168.0.0/16", "k3s Pods": "10.42.0.0/16", "k3s Services": "10.43.0.0/16",
+                  "podman default": "10.88.0.0/16", "QEMU user network": "10.0.2.0/24"}
+        for name, network in around.items():
+            self.assertFalse(link.overlaps(ipaddress.ip_network(network)), name)
+        first, second = (ipaddress.ip_address(render.ENV[key]) for key in ("LAB_LINK_IP", "LAB2_LINK_IP"))
+        self.assertIn(first, link)
+        self.assertIn(second, link)
+        self.assertNotEqual(first, second)
+
+    def test_names_ports_and_macs_of_the_two_vms_differ(self):
+        env = render.ENV
+        self.assertNotEqual(env["LAB_NAME"], env["LAB2_NAME"])
+        self.assertNotEqual(env["LAB_UNIT"], env["LAB2_UNIT"])
+        ports = [env[key] for key in ("LAB_SSH_PORT", "LAB2_SSH_PORT", "LAB_API_PORT", "LAB_LINK_PORT", "LAB_TEST_PG_PORT",
+                                      "LAB_TEST_API_PORT", "LAB_TEST_TLS_PORT", "LAB_TEST_FAKE_MODEL_PORT")]
+        self.assertEqual(len(set(ports)), len(ports))
+        macs = [env[key] for key in ("LAB_USER_MAC", "LAB_LINK_MAC", "LAB2_USER_MAC", "LAB2_LINK_MAC")]
+        self.assertEqual(len(set(macs)), len(macs))
+        for mac in macs:
+            self.assertRegex(mac, r"^52:54:00(:[0-9a-f]{2}){3}$")
+        # The first VM keeps the user-network MAC its installed netplan matches (qemu's default for a first NIC).
+        self.assertEqual(env["LAB_USER_MAC"], "52:54:00:12:34:56")
+
+    def test_the_second_vm_is_the_owner_s_size(self):
+        self.assertEqual((render.ENV["LAB2_VCPUS"], render.ENV["LAB2_MEMORY_MIB"]), ("2", "3072"))
+        self.assertGreater(int(render.ENV["LAB2_UNIT_MEMORY_MAX"].rstrip("M")), 3072)
+        self.assertTrue(render.ENV["LAB_DIR"].startswith("/mnt/data/"))
+
+    def test_ceph_csi_reaches_the_monitor_on_the_link_and_its_controller_stays_on_the_first_vm(self):
+        items = {item["kind"]: item for item in render.csi(FSID)}
+        monitor = render.ENV["LAB_LINK_IP"] + ":6789"
+        self.assertEqual(items["CephConnection"]["spec"]["monitors"], [monitor])
+        self.assertEqual(render.storage_environment(FSID)["ceph"]["monitors"], [monitor])
+        terms = items["Driver"]["spec"]["controllerPlugin"]["affinity"]["nodeAffinity"][
+            "requiredDuringSchedulingIgnoredDuringExecution"]["nodeSelectorTerms"]
+        self.assertEqual(terms, [{"matchExpressions": [{"key": "kubernetes.io/hostname", "operator": "In",
+                                                        "values": [render.ENV["LAB_NAME"]]}]}])
+        self.assertNotIn("affinity", items["Driver"]["spec"]["nodePlugin"])  # a node plugin on every node
+
+    def test_a_probe_pod_goes_to_the_node_it_names(self):
+        pod = render.probe_pod("p", "c", "r", sleep=True, node=render.ENV["LAB2_NAME"])
+        [term] = pod["spec"]["affinity"]["nodeAffinity"]["requiredDuringSchedulingIgnoredDuringExecution"]["nodeSelectorTerms"]
+        self.assertEqual(term["matchExpressions"][0]["values"], [render.ENV["LAB2_NAME"]])
+        self.assertNotIn("affinity", render.probe_pod("p", "c", "r", sleep=True)["spec"])
+
+    def test_dhcp_goes_to_the_user_network_nic_only(self):
+        config = (LAB / "cloud-init/network-config").read_text()
+        self.assertEqual(set(re.findall(r"@@[A-Z_]+@@", config)), {"@@USER_MAC@@"})
+        self.assertEqual(config.count("macaddress:"), 1)
+        self.assertIn("dhcp4: true", config)
+        self.assertEqual(sorted(set(re.findall(r"@@[A-Z_]+@@", (LAB / "cloud-init/user-data").read_text()))),
+                         ["@@LAB_NAME@@", "@@LINK_IP@@", "@@SSH_PUBLIC_KEY@@"])
+
+    def test_the_two_node_checks_load_and_read_only_the_lab_context(self):
+        spec = importlib.util.spec_from_file_location("lab_two_node", LAB / "two-node.py")
+        two_node = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(two_node)
+        self.assertEqual(two_node.NODES, {1: render.ENV["LAB_NAME"], 2: render.ENV["LAB2_NAME"]})
+        source = (LAB / "two-node.py").read_text()
+        self.assertIn('"--context", ENV["LAB_NAME"]', source)
+        self.assertNotIn("KUBECONFIG=", source)
 
 
 class SingleWriterLabTest(unittest.TestCase):

@@ -81,9 +81,10 @@ with open(path, 'wb') as stream:
   say "writer quiesced after $(jq .committedRows <<<"$before") committed rows; integrity $(jq -c .sqliteIntegrity <<<"$before")"
 
   # 2. Delete the Pod, wait until the node has released the volume, start a new Pod on the same PVC.
+  # Other claims may be mapped in the VM; only this one's image must go.
   k delete pod "$pod" --wait=true >/dev/null
   deadline=$(( SECONDS + 300 ))
-  until [ -z "$(lab_ssh 'ls /sys/bus/rbd/devices/ 2>/dev/null')" ]; do
+  while lab_ssh "grep -qx '$(jq -r .volume.image "$report")' /sys/bus/rbd/devices/*/name 2>/dev/null"; do
     [ "$SECONDS" -lt "$deadline" ] || die "the RBD device stayed mapped after the Pod was deleted"
     sleep 2
   done

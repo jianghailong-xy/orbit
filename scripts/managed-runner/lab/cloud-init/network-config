@@ -1,0 +1,9 @@
+# NoCloud network configuration of a lab VM; create.sh replaces @@USER_MAC@@. Only the QEMU user
+# network's NIC is named here, so that DHCP never goes to the link NIC (each VM has two NICs from
+# its first boot); guest/provision.sh link configures the link.
+version: 2
+ethernets:
+  user0:
+    match:
+      macaddress: "@@USER_MAC@@"
+    dhcp4: true

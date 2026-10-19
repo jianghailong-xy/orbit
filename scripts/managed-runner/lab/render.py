@@ -7,8 +7,9 @@
   render.py operator INSTALL_YAML         Ceph-CSI Operator all-in-one manifest, operator image pinned by digest
   render.py csi --fsid FSID               image set, CephConnection, ClientProfile (named FSID) and Driver
   render.py namespace                     the namespace for later tests
-  render.py probe-pod --name N --pvc P --run-id R [--sleep]
-                                          a Pod running the repository's ceph-rbd-payload.py on that PVC
+  render.py probe-pod --name N --pvc P --run-id R [--sleep] [--node NODE]
+                                          a Pod running the repository's ceph-rbd-payload.py on that PVC,
+                                          scheduled onto NODE when given (two-node mode)
 """
 
 import argparse
@@ -41,7 +42,7 @@ def storage_environment(fsid, pvc_name="unused", owner="unused", runner="unused"
     secret = {"name": ENV["LAB_CSI_SECRET"], "namespace": ENV["LAB_CSI_NAMESPACE"]}
     return {
         "kubernetes": {"namespace": ENV["LAB_NAMESPACE"]},
-        "ceph": {"fsid": fsid, "monitors": [ENV["LAB_GUEST_IP"] + ":6789"], "pool": ENV["LAB_POOL"]},
+        "ceph": {"fsid": fsid, "monitors": [ENV["LAB_LINK_IP"] + ":6789"], "pool": ENV["LAB_POOL"]},
         "csi": {
             "clusterID": fsid,  # the Ceph FSID, which is also the ClientProfile's name
             "driver": ENV["LAB_CSI_DRIVER"],
@@ -72,22 +73,31 @@ def csi(fsid):
                   "attacher": ENV["CSI_ATTACHER_IMAGE"], "resizer": ENV["CSI_RESIZER_IMAGE"],
                   "registrar": ENV["CSI_REGISTRAR_IMAGE"]}},
         {"apiVersion": "csi.ceph.io/v1", "kind": "CephConnection", "metadata": meta(ENV["LAB_CEPH_CONNECTION"]),
-         "spec": {"monitors": [ENV["LAB_GUEST_IP"] + ":6789"]}},
+         "spec": {"monitors": [ENV["LAB_LINK_IP"] + ":6789"]}},
         {"apiVersion": "csi.ceph.io/v1", "kind": "ClientProfile", "metadata": meta(fsid),
          "spec": {"cephConnectionRef": {"name": ENV["LAB_CEPH_CONNECTION"]}, "rbd": {}}},
         {"apiVersion": "csi.ceph.io/v1", "kind": "Driver", "metadata": meta(ENV["LAB_CSI_DRIVER"]),
          "spec": {"imageSet": {"name": ENV["LAB_CSI_IMAGESET"]}, "snapshotPolicy": "none",
                   "deployCsiAddons": False, "attachRequired": True, "fsGroupPolicy": "File",
-                  "controllerPlugin": {"replicas": 1, **pull}, "nodePlugin": pull}},
+                  # The provisioner and attacher stay on the first VM, the node that is never failed on
+                  # purpose: with them on the second, its hard stop would also stop every attach and detach.
+                  "controllerPlugin": {"replicas": 1, "affinity": node_affinity(ENV["LAB_NAME"]), **pull},
+                  "nodePlugin": pull}},
     ]
 
 
-def probe_pod(name, pvc, run_id, sleep):
+def node_affinity(node):
+    """Required scheduling onto one node, by its hostname label."""
+    term = {"matchExpressions": [{"key": "kubernetes.io/hostname", "operator": "In", "values": [node]}]}
+    return {"nodeAffinity": {"requiredDuringSchedulingIgnoredDuringExecution": {"nodeSelectorTerms": [term]}}}
+
+
+def probe_pod(name, pvc, run_id, sleep, node=None):
     payload = ["python3", "/probe/ceph-rbd-payload.py", "writer", "--run-id", run_id]
     idle = ["python3", "-c", "import signal, sys, time\n"
             "signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))\ntime.sleep(10 ** 9)"]
     field = lambda path: {"valueFrom": {"fieldRef": {"fieldPath": path}}}  # noqa: E731
-    return {
+    pod = {
         "apiVersion": "v1", "kind": "Pod",
         "metadata": {"name": name, "namespace": ENV["LAB_NAMESPACE"]},
         "spec": {
@@ -112,6 +122,9 @@ def probe_pod(name, pvc, run_id, sleep):
                         {"name": "tmp", "emptyDir": {"sizeLimit": "64Mi"}}],
         },
     }
+    if node:
+        pod["spec"]["affinity"] = node_affinity(node)
+    return pod
 
 
 def main():
@@ -127,6 +140,7 @@ def main():
     parser.add_argument("--pvc")
     parser.add_argument("--run-id")
     parser.add_argument("--sleep", action="store_true")
+    parser.add_argument("--node")
     args = parser.parse_args()
     if args.what == "operator":
         sys.stdout.write(operator(args.install_yaml))
@@ -142,7 +156,7 @@ def main():
     elif args.what == "namespace":
         result = {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": ENV["LAB_NAMESPACE"]}}
     else:
-        result = probe_pod(args.name, args.pvc, args.run_id, args.sleep)
+        result = probe_pod(args.name, args.pvc, args.run_id, args.sleep, args.node)
     json.dump(result, sys.stdout, indent=2)
     sys.stdout.write("\n")
 
