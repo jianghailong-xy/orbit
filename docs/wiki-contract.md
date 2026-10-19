@@ -879,7 +879,7 @@ JSON 里是 `space.settings.maintenance` 与 `maintenance`；实现在 `src/apis
   （21.7）。触发器建运行之前用 `wikiMaintenanceRunsToday` 读它。存着的值越界、
   或是契约已经没有的键（早先的 `dailyTokenBudget`），读出来一律是默认值。
 - `provider` 不再是设置（P11，2026-10-19）：服务端的运行调部署的 System model（§23），没有哪次运行跑在 provider 上，也没有请求再设它——
-  写入里带的 `provider` 被门的白名单丢掉，不报错。读出来照旧带存着的值（或 `local-vllm`），给还按服务端执行之前的设置来画的客户端。
+  写入里带的 `provider` 被门的白名单丢掉，不报错。读出来照旧带存着的值（或 `local-vllm`），留作历史：2026-10-19 起三端都不再显示、也不再提交它。
   P11 之前它只收 Claude Code 运行时上的配置型 provider，内置引擎、别的运行时上的 provider、账号池一律 400，认领时找不到就拒绝那次运行。
 - `workspaceId`：从哪个 owner 自己的 workspace 的 checkout 读 space 的仓库——它所在的 runner 回答服务端的仓库操作（§26），维护运行和 plan
   作业都是。打开维护必须给出它。
@@ -1379,7 +1379,7 @@ JSON 里是 `maintenance.health`；服务端在 `src/apiserver/src/wiki/wiki-hea
     或 null；`kind` 是 `infra` 或 `content`（19.7），`reason` 是它的 error。客户端据此区分「平台挂了」与「运行本身失败」；本契约版本客户端尚未使用。
   - `look`：状态行画哪一种（20.2）。
 - `executor`（P9）：`jobs.executor.read` 的回答（§24.5 的「读」），P11 起对每个账号都是 `{ mode: 'server', serverExecutes: true }`。比它早的控制面
-  没有这个字段，客户端读作 runner。
+  没有这个字段，客户端当作没这么说：服务端的那部分都不画（§24.5 的「读」）。
 - `systemModel`（P9）：§23.5 读到的 System model 状态（`{ state, model, since, checkedAt, workerSeenAt }`，不含地址和 key），在 `serverExecutes`
   为真时读——P11 起总是如此；把账号留在 runner 上的控制面给 null，那时模型不归这个账号管。状态行的服务端原因就从它和 `repo` 说出来。
 
@@ -1560,7 +1560,8 @@ JSON 里是 `plan.jobs`；迁移 `0338_wiki_plan_job`；服务端在 `src/apiser
   plan 页的「Writing documents」读它）、`succeeded`（存下的 `version`；生成作业是它写的已确认版本）、`failed`（最后一轮检查闸的 `errors`、`error`、
   运行报告 `report`，以及它最后那份草稿 `draft`，照送进检查闸时的样子；或它的 wiki_job 在说明怎么结束之前就结束了）。作业种类
   `draft | revise | build`。读里的 `waitingFor`、`taskId`、`provider`、`sessionId` 是 runner 路径的：服务端跑的作业都是 null，服务端执行之前
-  由任务建出的作业保留它的 `taskId` 与 `sessionId`。
+  由任务建出的作业保留它的 `taskId` 与 `sessionId`。2026-10-19 起客户端不再读 `waitingFor`、`taskId`、`provider`；保留了会话的作业，
+  它的 View run 打开那次会话。
 - **进度、结束与材料**：作业在进程里写——进度（`plan.jobs.progress`：`{ attempt }`，1 到 `rules.attemptsMax`；生成作业是
   `{ docs: { done, total }, current }`）、结束（`plan.jobs.finish`：`{ outcome, version?, errors?, error?, report?, draft?, attempt? }`；成功时
   `version` 必须是这个 wiki_job 存下的本 space 的草稿——生成作业则是 owner 确认过的版本；报告至多 16,000 字节，草稿至多 1,000,000 字节；
@@ -2162,7 +2163,7 @@ worker 在 `src/apiserver/src/wiki-worker/`（入口 `main.ts`、配置 `wiki-sy
   或 `worker_seen_at` 已超过 `workerStaleSeconds` = 60 秒，就是它，设置页和健康行显示「wiki worker 未运行」；这时 `since` 是最后一次心跳。
 - 不返回地址和 key，也不返回 `last_error`。
 - P9 起多一个 `executor`：`jobs.executor.read` 的回答（§24.5 的「读」），P11 起对每个账号都是 `{ mode: 'server', serverExecutes: true }`。设置页
-  据此在服务端执行时画 System model、不画 provider；其余五个字段是部署的，每个账号读到的都一样。
+  据此画 System model；其余五个字段是部署的，每个账号读到的都一样。
 
 ### 23.6 `/api/metrics`（`systemModel.metrics`）
 
@@ -2302,8 +2303,9 @@ P11（2026-10-19；owner 2026-10-18 在卡片 34iAuONJEvJY2LIpuSMu4 上的决定
 - **读（`jobs.executor.read`，P9）**：读接口告诉提问的账号 `{ mode, serverExecutes }`，P11 起对每个账号都是 `{ mode: 'server', serverExecutes: true }`
   （`src/shared/src/wikiJobs.ts` 的 `WIKI_EXECUTOR_READ`）。`mode` 仍是 `modes`（`runner` / `canary` / `server`）之一：前两个是 P11 之前的控制面
   才会说的，那时开关把账号留在 runner 上，`serverExecutes` 就是 false。`GET /api/wiki/system-model` 和 `GET /api/wiki/spaces/:id/health` 都带它；
-  客户端在 `serverExecutes` 为真时画服务端的设置、Runs 卡和状态行的服务端原因——P11 起的服务端总是这样；控制面说别的、或读不到这个字段
-  （旧控制面）时，照旧画以前的。客户端（web、macOS/iOS、Android）本期不改。
+  客户端在 `serverExecutes` 为真时画服务端的设置、Runs 卡和状态行的服务端原因——P11 起的服务端总是这样；读不到它（还在加载、控制面说别的、
+  或是没有这个字段的旧控制面）时，这些都不画。三端为 runner 模式准备的画法在 2026-10-19 删除（任务 34iFf4zifQFM8anHrjpFW），不画别的来代替：
+  没有 provider 可选、可看，没有 runner 的说法，也没有 plan 作业的 provider 和它等的任务。
 
 ### 24.6 运行行与计数
 

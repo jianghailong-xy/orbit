@@ -438,7 +438,8 @@ P11（2026-10-19）收尾以后，前四条是上线的经过：现在没有执�
   - runner 上留下的是仓库操作（`wiki-repo-op/v1`）、三个 MCP 工具和 `orbit wiki search|get|propose|import|verify`，其中 `import` 与 `verify` 只请求
     服务端、等它做完；
   - 客户端（web、macOS/iOS、Android）本期不改：读接口照旧回 `executor: { mode: 'server', serverExecutes: true }`，它们画 runner 的那部分由之后的
-    任务清理；
+    任务清理——2026-10-19 由任务 34iFf4zifQFM8anHrjpFW 完成：三端只按 `serverExecutes` 画服务端那部分，runner 的画法、文案和共享夹具里 runner 的行
+    都已删除，读接口形状不变；
   - runner 的发版不在这次改动里，由协调方升版本、上线。
 
 ## 11. 合同与文档
