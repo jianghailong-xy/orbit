@@ -972,6 +972,32 @@ def takeover_fence(ctx, step):
                         'finalizerOffToReady': al.seconds_between(released_at, ready['at']), 'cutToReady': al.seconds_between(taken['killedAt'], ready['at'])}}
 
 
+GIT_FILES = r'''
+import json, os, sys
+repo = os.path.join(sys.argv[1], 'repo')
+names = ['note.txt', '.git/HEAD', '.git/refs/heads/master', '.git/index', '.git/config', '.git/COMMIT_EDITMSG']
+objects = [os.path.join(d, f) for d, _, fs in os.walk(os.path.join(repo, '.git/objects')) for f in fs]
+size = lambda p: os.path.getsize(p) if os.path.exists(p) else None
+print(json.dumps({'files': {n: size(os.path.join(repo, n)) for n in names},
+                  'looseObjects': sorted([os.path.relpath(p, repo), os.path.getsize(p)] for p in objects)}))
+'''
+
+
+def git_files(pod, run):
+    """The sizes of a probe repository's files: what a power cut left of a Git commit nobody fsynced."""
+    return json.loads(sw.pod_exec(pod, 'python3', '-c', GIT_FILES, f'{wl.PROBE_ROOT}/{run}').stdout)
+
+
+def probe_check(run):
+    """wake-lab.py's probe check, every field compared and reported, nothing raised."""
+    m, pod = ml.running_pod(OWNER)
+    result = json.loads(sw.pod_exec(pod['metadata']['name'], 'python3', '-c', wl.PROBE, 'check', f'{wl.PROBE_ROOT}/{run}').stdout)
+    written = ml.owner_state(OWNER)['probes'][run]
+    return {'run': run, 'writtenAt': written['at'], 'writtenByGeneration': written['generation'], 'writtenByPod': written['pod'],
+            'checkedByGeneration': m['generation'], 'written': written['data'], 'data': result,
+            'same': {k: written['data'][k] == result[k] for k in ('randomSha256', 'rows', 'rowsSha256', 'gitHead')}}
+
+
 def takeover_data(ctx, step):
     """The data after the takeover on the first node: what the writer acknowledged, the probes, the session and the volume."""
     taken = ctx['takeover']
@@ -988,9 +1014,16 @@ def takeover_data(ctx, step):
     step.check('the writer\'s ordinary file, Git commit and random file as before', recovered['ordinarySHA256'] == before['ordinarySHA256']
                and recovered['gitCommit'] == before['gitCommit'] and recovered['randomSHA256'] == before['randomSHA256'] and 'error' not in recovered['gitFsck'],
                {'gitFsck': recovered['gitFsck'][:80]})
-    probes = {run: capture(wl.cmd_probe, name=OWNER, action='check', run=run) for run in ('p1', 'p2')}
-    for run, probe in probes.items():
-        step.check(f'probe {run}: the same random bytes, SQLite rows and Git commit, integrity_check ok', probe['allSame'], probe['same'])
+    probes = {run: probe_check(run) for run in ('p1', 'p2')}
+    step.check('probe p1 (written on the first node): the same random bytes, SQLite rows and Git commit, integrity_check ok',
+               all(probes['p1']['same'].values()) and probes['p1']['data']['integrityCheck'] == 'ok', probes['p1']['same'])
+    # p2 was written on the second node shortly before its power was cut. What it fsynced (the random file, the SQLite rows with
+    # synchronous=FULL) must be there; its Git commit was not fsynced (Git's default) and is reported as found, not judged.
+    p2 = probes['p2']
+    step.check('probe p2 (written on the second node before the cut): the fsynced random bytes and SQLite rows the same, integrity_check ok',
+               all(p2['same'][k] for k in ('randomSha256', 'rows', 'rowsSha256')) and p2['data']['integrityCheck'] == 'ok', p2['same'])
+    p2['secondsBeforeTheCut'] = al.seconds_between(p2['writtenAt'], taken['killedAt'].replace('Z', '+00:00'))
+    p2['gitFiles'] = git_files(m['pod_name'], 'p2')
     found = al.answered(al.owner_uuid(OWNER), 'T02-ANN-DURING-LOSS', timeout=300, after=taken['demand']['at'])
     step.check('the message sent while the node was down was answered by ann\'s runner after the takeover',
                found['event']['ingested_by_runner_id'] == m['runner_id'] and al.seconds_between(taken['finalizerOffAt'], found['event']['ingested_at']) > 0,
