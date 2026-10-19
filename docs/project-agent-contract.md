@@ -267,6 +267,17 @@ v1 **不新建这张表**，而是把 `agent_id` **保序重指向**到新的 `a
 | `snapshotFrozenAt` | `DateTime?` | **create-frozen 集合**的封存时刻。非 null 后，§6 中冻结时刻为 Session create 的那九列一律只读（§6 S4） |
 | `workspaceId` / `assignedRunnerId` / `provider` / `providerBuiltin` / `model` / `effort` / `permissionMode`（既有） | | **已经是快照的一部分**，v1 不新增列、不改语义，只把"何时冻结"写进 §6 |
 
+#### 3.6.1 落地会话（`session.kind = 'LANDING'`）与集成线的读法
+
+每一次集成尝试——一个任务的落地，或项目分支合入 main 的一轮——都属于一个**落地会话**（`docs/project-integration-line-contract.md` §2.9 LS1–LS6）。它的地址是 `project_landing.session_id`：主体打开时预生成，会话行在首次领取提交后插入；它不是 engine 会话，createTurn / send / reply / interrupt / resume / rename / fork / share 一律 409 `SESSION_IS_PLATFORM_DRIVEN`。
+
+协调会话读集成线只有两条路：
+
+- **读整条集成线**用 `project_integration_get`（runner 门 `GET /runner/projects/:id/integration`）。队列（`queue`）、每一代（`generations`）、每个任务的最新落地（`landTasks`）与活跃/最近一次的合入候选（`promotions`）都带 `landingSessionId`；`task_get` 的 `integration.landTask.landingSessionId`、各重跑门的应答与 `project_get` 的在途落地同样带它。它是只读的作业与日志读口。
+- **读一次落地**用 `session_get`（`GET /sessions/:id`），`sessionId` 就是那个 `landingSessionId`。它返回落地视图：主体、当前尝试、阶段、轮次、检查、活性、阻塞原因、待办与各代。主体打开后、会话行插入前也能读，链接不会因为行还没写而变成死链。
+
+**不要直接查生产库的 `project_integration_job`**（连同 `project_landing`、`project_promotion`）：这些事实由上面两个读口提供，查询生产库既绕过租户范围，也会把内部列当成对外契约。本条取代 34Y7 项目指令里「直接查库看作业」的做法。
+
 ---
 
 ## 4. 关系图
@@ -1189,3 +1200,4 @@ runner 侧的任何改动（02E 的 capability 上报、05A 的 CLI）**必须�
 | v1.2 | 2026-08-21 | 01V 对 v1.1 的独立复验 FAIL（评论 `34ArzVefRCxRrqdDh1cEi`，被审 `b810be89`） | 见 §0.1 的四项结论：§11.2 步骤 4 的语句顺序（M7）、两组拒绝谓词的唯一优先级（H4 / C8 / E3）、PAC↔PCC 与数据库 CHECK 的双向闭合（E4，含 PCC 同步）、AC1/3/6/8 的四条指名用例（`04A.20` / `03C.15` / AC6 的 API 引用 / `06B.8`）。同批新增自检 `00.12`–`00.16` |
 | v1.3 | 2026-08-21 | 01V 对 v1.2 的第三轮独立复核 FAIL（评论 `34AtY6AGHMBfp1FH7v9eQ` + 补充 `34AtZerHln1UBUWZDnw4h`，被审 `47cfc22a`） | 见 §0.2 的三项结论：`execution_contract` 写入规则统一到 §11.1 L5 的三行请求形状表（§2 / §3.4 / K3 / L3 / `02C.2` 改为引用）、WHO 交集在可执行模型上按 H4 定序并直接跑两个反例、`executionContract` 进入反例模型的 `Db33` / fixture / resolver / `world` 投影 / `S10_FIELDS`。同批新增自检 `00.17`–`00.19`；不改生产代码，不提前实现 PCC §12.1 步骤 6j |
 | v1.4 | 2026-10-03 | 项目「任务智能选择模型」（`34Z2CCqHygFxrbqBlPljx`）的 P0 任务（`34ZI8yUtHWCE4C5m5AfYj`） | 见 §0.3 的三项结论：LEGACY WITH 链在 task pin 之后新增可选的路由步骤，只作用于新建运行，`modelRouting` 打开才生效、否则影子模式只记录（§7.2 P7、§11.1 L1 / L7）；`with.source` 增加 LEGACY 专用的 `router`，路由决策另存于 `task_route_decision`（§7.2 P6、§7.5）；跨引擎路由不是 fallback，只在 owner 显式列出的引擎之间进行（§7.4 R1–R4）。同批：§2 两条术语、§8.2 一行权限、§11.4 一行兼容。不改 V1 路径、不改 §6 冻结语义、不新增 §12 错误码 |
+| v1.5 | 2026-10-20 | 落地会话项目（`34a0e97BOc6shsNLJbIuM`）的读口任务（`34a140Mipf0se59bmofvJ`） | 新增 §3.6.1：落地会话是 `kind = 'LANDING'` 的会话，地址为 `project_landing.session_id`；协调会话读集成线用 `project_integration_get`，读一次落地用 `session_get` 带 `landingSessionId`，不直接查生产库的 `project_integration_job`（取代 34Y7 项目指令里的直接查库做法）。只有文档，无行为改动 |

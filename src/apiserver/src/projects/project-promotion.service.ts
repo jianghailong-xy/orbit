@@ -1611,7 +1611,7 @@ async function blockPromotion(
 export async function requeuePromotionCheck(
   tx: Prisma.TransactionClient,
   input: { promotionId: string; retry: LandingRetryRequest },
-): Promise<{ jobId: string; generation: number } | null> {
+): Promise<{ jobId: string; generation: number; landingSessionId: string | null } | null> {
   const promotion = await tx.projectPromotion.findUnique({
     where: { id: input.promotionId },
     select: PROMOTION_COLUMNS,
@@ -1648,9 +1648,21 @@ export async function requeuePromotionCheck(
   });
   const queued = await tx.projectIntegrationJob.findUniqueOrThrow({
     where: { id: jobId },
-    select: { generation: true },
+    select: { generation: true, landingId: true },
   });
-  return { jobId, generation: queued.generation };
+  // §2.9: the round (or, on a MAIN line, the task segment) this re-check belongs to, so the door's
+  // answer can address the landing session. Its id is pre-generated on the subject row.
+  const landing = queued.landingId
+    ? await tx.projectLanding.findUnique({
+        where: { id: queued.landingId },
+        select: { sessionId: true },
+      })
+    : null;
+  return {
+    jobId,
+    generation: queued.generation,
+    landingSessionId: landing?.sessionId ?? null,
+  };
 }
 
 /**

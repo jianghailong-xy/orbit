@@ -647,6 +647,14 @@ test('Automatic: the coordinator reruns a red landing with a reason — one new 
 
       const retried = await retry(stack, w, task.taskId, `  ${REASON}  `);
 
+      // §2.9 LS6: the answer addresses the landing session the new generation belongs to — the
+      // task's open segment, whose id was settled when the subject opened.
+      const segment = await stack.db.projectLanding.findFirstOrThrow({
+        where: { taskId: task.taskId, subject: 'TASK' },
+        select: { sessionId: true },
+      });
+      assert.equal(retried.landingSessionId, segment.sessionId);
+
       const rows = await landings(stack.db, task.taskId);
       assert.deepEqual(rows.map((row) => [row.generation, row.state]), [[1, 'CHECK_FAILED'], [2, 'QUEUED']],
         'exactly one new generation, queued behind the failed one');
@@ -1255,6 +1263,12 @@ test('owner promotion recheck records USER and a READY result is automatically m
         data: { assignee: 'OWNER', assigneeReason: 'ESCALATED', assignedAt: new Date(), escalatedAt: new Date() },
       });
       const retried = await ownerPromotionRetry(stack, w, promotionId, REASON);
+      // §2.9 LS6: a promotion check's answer addresses the round it belongs to.
+      const round = await stack.db.projectLanding.findFirstOrThrow({
+        where: { promotionId, subject: 'PROMOTION' },
+        select: { sessionId: true },
+      });
+      assert.equal(retried.landingSessionId, round.sessionId);
       const job = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: retried.jobId } });
       assert.equal(job.generation, 2);
       assert.equal(job.retryRequestedByUserId, w.ownerId);
@@ -1412,6 +1426,18 @@ test('timed out: the owner retries a landing whose runner never answered its cla
       // The press answers with the view the job list redraws from: the next generation, the owner's.
       assert.deepEqual(view.inFlightJobs?.map((job) => [job.generation, job.state, job.retriedBy, job.timedOut]),
         [[2, 'QUEUED', 'OWNER', false]]);
+      // §2.9 LS6: the answer carries the landing session of the generation it queued, on the queue
+      // item and on the task's current landing alike.
+      const segment = await stack.db.projectLanding.findFirstOrThrow({
+        where: { taskId: task.taskId, subject: 'TASK' },
+        select: { sessionId: true },
+      });
+      assert.equal(view.landingSessionId, segment.sessionId, 'the press answers the landing it queued');
+      assert.deepEqual(view.inFlightJobs?.map((job) => job.landingSessionId), [segment.sessionId]);
+      assert.equal(
+        view.landTasks?.find((entry) => entry.taskId === task.taskId)?.integration.landTask?.landingSessionId,
+        segment.sessionId,
+      );
       // The retry is the answer to the timeout: no item is opened about it.
       assert.deepEqual(await itemsOf(stack.db, task.taskId), []);
 
@@ -1575,6 +1601,12 @@ test('timed out: integration_retry (promotionId) ends a silent RUNNING check and
     const w = await world(stack, 'timeout-check', true);
     const { promotionId } = await failedPromotion(stack, w, 'timeout-check');
     const retried = await promotionRetry(stack, w, promotionId, REASON);
+    const round = await stack.db.projectLanding.findFirstOrThrow({
+      where: { promotionId, subject: 'PROMOTION' },
+      select: { sessionId: true },
+    });
+    assert.equal(retried.landingSessionId, round.sessionId,
+      'a rerun answers the round the candidate belongs to');
     const [running] = await claim(stack, w, 'timeout-check-rerun');
     assert.equal(running?.jobId, retried.jobId);
 
@@ -1653,6 +1685,12 @@ test('timed out: the owner\'s promotion retry ends the silent check without an i
     // timed-out check may still be pressed by the owner, exactly as a timed-out landing (J-T1b).
     const pressed = await ownerPromotionRetry(stack, w, promotionId, 'its runner is gone; re-run the check');
     assert.deepEqual(pressed.handlingItemIds, [], 'no item of the owner\'s is marked handling');
+    const round = await stack.db.projectLanding.findFirstOrThrow({
+      where: { promotionId, subject: 'PROMOTION' },
+      select: { sessionId: true },
+    });
+    assert.equal(pressed.landingSessionId, round.sessionId,
+      'the owner\'s door answers the same landing session as the coordinator\'s');
     const rows = await stack.db.projectIntegrationJob.findMany({
       where: { promotionId },
       orderBy: [{ generation: 'asc' }],

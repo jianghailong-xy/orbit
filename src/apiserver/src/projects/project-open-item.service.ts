@@ -348,6 +348,10 @@ export interface IntegrationRetried {
   jobId: string;
   generation: number;
   sourceRef: string;
+  /** The landing session the queued generation belongs to (§2.9) — `session_get` by this id reads
+   *  the landing. Pre-generated when the subject opened, so it is here before the row exists;
+   *  null only for a generation written before 0436. */
+  landingSessionId: string | null;
   /** The failed generation it reruns, and what that one failed of. */
   retryOfJobId: string;
   failureClass: RetryableLandingFailureClass;
@@ -375,12 +379,22 @@ export interface PromotionCheckRetried {
   /** The check this rerun queued. */
   jobId: string;
   generation: number;
+  /** The landing session of the round this check belongs to (§2.9), or null where no subject was
+   *  opened for it (a candidate with no source session on a MAIN line). */
+  landingSessionId: string | null;
   /** The failed job it reruns — the candidate's check or its landing — and what that one failed of. */
   retryOfJobId: string;
   failureClass: RetryableLandingFailureClass;
   reason: string;
   /** The coordinator's open items about the candidate, now being handled by this check. */
   handlingItemIds: string[];
+}
+
+/** The integration view the owner's Retry answers with, and the landing session the rerun queued
+ *  (§2.9). The generation is in the view as well; this says which landing it opened, so the press
+ *  and the six doors that answer an `IntegrationRetried` all name one address. */
+export interface IntegrationRetriedView extends ProjectIntegrationView {
+  landingSessionId: string | null;
 }
 
 /** What the owner's LAND_TASK stop (J-T8) left the job as. */
@@ -1852,6 +1866,7 @@ export class ProjectOpenItemService {
         jobId: queued.jobId,
         generation: queued.generation,
         sourceRef: queued.sourceRef,
+        landingSessionId: queued.landingSessionId,
         retryOfJobId: decision.retryOfJobId,
         failureClass: decision.failureClass,
         reason,
@@ -1882,7 +1897,7 @@ export class ProjectOpenItemService {
     ownerId: string,
     projectId: string,
     jobId: string,
-  ): Promise<ProjectIntegrationView> {
+  ): Promise<IntegrationRetriedView> {
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, ownerId },
       select: { exceptionEscalationSeconds: true },
@@ -1909,13 +1924,16 @@ export class ProjectOpenItemService {
             + `${job.state === 'RUNNING' ? 'running' : 'queued'}: nothing is retried beside it.`,
         });
     }
-    await this.retryIntegration(
+    const retried = await this.retryIntegration(
       ownerId, projectId, job.taskId, { reason: timedOutRetryReason(job) }, undefined, { userId: ownerId }, jobId,
     );
-    return readProjectIntegrationView(this.prisma, projectId, projectIntegrationView(
-      await readProjectCodebase(this.prisma, projectId),
-      project.exceptionEscalationSeconds,
-    ));
+    return {
+      ...(await readProjectIntegrationView(this.prisma, projectId, projectIntegrationView(
+        await readProjectCodebase(this.prisma, projectId),
+        project.exceptionEscalationSeconds,
+      ))),
+      landingSessionId: retried.landingSessionId,
+    };
   }
 
   /**
@@ -2223,6 +2241,7 @@ export class ProjectOpenItemService {
         jobId: queued.jobId,
         generation: queued.generation,
         sourceRef: queued.sourceRef,
+        landingSessionId: queued.landingSessionId,
         retryOfJobId: decision.retryOfJobId,
         failureClass: decision.failureClass,
         reason,
@@ -2365,6 +2384,7 @@ export class ProjectOpenItemService {
         promotionId,
         jobId: queued.jobId,
         generation: queued.generation,
+        landingSessionId: queued.landingSessionId,
         retryOfJobId: decision.retryOfJobId,
         failureClass: decision.failureClass,
         reason,

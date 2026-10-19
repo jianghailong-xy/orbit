@@ -412,6 +412,9 @@ export interface IntegrationJobGeneration<Instant = string> {
   kind: IntegrationJobKind;
   generation: number;
   state: IntegrationJobState;
+  /** The landing session of this attempt's subject (§2.9), as `landTasks` and the queue carry it;
+   *  null for a job written before 0436. Absent from a server that predates the field. */
+  landingSessionId?: string | null;
   /** The step it last reported, or stopped at; null before its first claim. */
   phase: IntegrationJobPhase | null;
   /** Why it ended as an error (contract J12); null unless `state` is `ERROR`. */
@@ -624,6 +627,14 @@ export type IntegrationJobBlockingReason = LandTaskBlockingReason;
 export interface LandTaskIntegrationView<Instant = string> {
   jobId: string;
   state: IntegrationJobState;
+  /**
+   * The landing session this generation belongs to (§2.9): `project_landing.session_id`, which is
+   * pre-generated when the subject opens, so it is present even before the session row is inserted
+   * and even when the job's own source session has since been deleted (0424: `session_id` is a
+   * history reference). `session_get` serves that session's landing view by this id. Null when the
+   * attempt has no subject (a job written before 0436); absent from a server that predates the field.
+   */
+  landingSessionId?: string | null;
   /** The runner's step, or the one the attempt stopped at; null before its first report. */
   phase: IntegrationJobPhase | null;
   /** Why the attempt ended as an error (contract J12), null unless `state` is `ERROR`. Absent from a

@@ -340,7 +340,7 @@ test('retryIntegration reruns the landing in the runner owner scope, as the acti
   const openItems = {
     retryIntegration: async (...call: unknown[]) => {
       seen.push(call);
-      return { taskId: 'task-1', jobId: 'job-2', generation: 2 };
+      return { taskId: 'task-1', jobId: 'job-2', generation: 2, landingSessionId: 'landing-session-1' };
     },
   } as never;
   const controller = new RunnerProjectsController(
@@ -355,7 +355,8 @@ test('retryIntegration reruns the landing in the runner owner scope, as the acti
   const retried = await controller.retryIntegration(RUNNER, ` ${SESSION_ID} `, 'project-1', 'task-1', body);
 
   assert.deepEqual(seen, [['owner-1', 'project-1', 'task-1', body, SESSION_ID]]);
-  assert.deepEqual(retried, { taskId: 'task-1', jobId: 'job-2', generation: 2 });
+  assert.deepEqual(retried, { taskId: 'task-1', jobId: 'job-2', generation: 2, landingSessionId: 'landing-session-1' },
+    'the answer reaches the caller whole, the landing session address included');
   // A missing header is passed on as missing, for the service to refuse — never read as the owner.
   await controller.retryIntegration(RUNNER, undefined, 'project-1', 'task-1', body);
   assert.deepEqual(seen[1], ['owner-1', 'project-1', 'task-1', body, undefined]);

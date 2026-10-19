@@ -41,7 +41,9 @@ func TestMCPIntegrationRetryIsPartOfTheBaseTools(t *testing.T) {
 	desc := mcpToolDescription(toolDescriptors(false, false), "integration_retry")
 	for _, want := range []string{"CHECK_FAILED", "CHECK_TIMED_OUT", "ERROR", "task_start", "CONFLICT", "task_reopen",
 		"MAIN_SYNC", "absorb the upstream on the project line first", "its next landing lands by MERGE",
-		"promotionId", "the account owner's card, or the Automatic setting", "being handled", "superseded"} {
+		"promotionId", "the account owner's card, or the Automatic setting", "being handled", "superseded",
+		// §2.9 LS6: the answer addresses the landing session the new generation belongs to.
+		"landingSessionId", "session_get"} {
 		if !strings.Contains(desc, want) {
 			t.Fatalf("integration_retry's description does not mention %q: %q", want, desc)
 		}

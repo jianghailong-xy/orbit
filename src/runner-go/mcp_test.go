@@ -1778,3 +1778,17 @@ func TestMCPProviderAndAgentDescriptionsFollowTheDecoupledModel(t *testing.T) {
 		}
 	}
 }
+
+// §2.9 LS6: the reads that carry a landing's address say so, so a coordinator opens the LANDING
+// session with session_get instead of going to the integration tables itself.
+func TestMCPReadsNameTheLandingSession(t *testing.T) {
+	tools := toolDescriptors(false, false)
+	for _, tool := range []string{"task_get", "project_get"} {
+		desc := mcpToolDescription(tools, tool)
+		for _, want := range []string{"landingSessionId", "session_get"} {
+			if !strings.Contains(desc, want) {
+				t.Fatalf("%s's description does not mention %q: %q", tool, want, desc)
+			}
+		}
+	}
+}
