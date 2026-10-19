@@ -495,9 +495,12 @@ test('one task segment collects the DONE, integration_retry, the owner rerun, th
       assert.equal(landing.episode, 1);
       assert.equal(landing.settledAt, null);
       assert.ok(firstJob.generation === 1);
-      // LS1: the subject names a pre-generated session id, and no session row exists yet — no
-      // compensation point has been wired.
-      assert.equal(await stack.db.session.count({ where: { id: landing.sessionId } }), 0);
+      // LS1: the subject names a pre-generated session id, and the claim that just committed is
+      // the compensation point that inserted its row.
+      assert.equal(await stack.db.session.count({ where: { id: landing.sessionId } }), 1);
+      assert.equal((await stack.db.session.findUniqueOrThrow({
+        where: { id: landing.sessionId }, select: { sessionKind: true },
+      })).sessionKind, 'LANDING');
 
       // The first generation fails: a failure is not a settlement fact.
       assert.equal((await report(stack, w, first, RED)).accepted, true);
@@ -604,8 +607,9 @@ test('one task segment collects the DONE, integration_retry, the owner rerun, th
 
       assert.equal(await stack.db.projectLanding.count({ where: { taskId: task.taskId } }), 1,
         'one task, one unsettled segment');
-      // No session row was ever inserted: `ensure` has no compensation point in this build.
-      assert.equal(await stack.db.session.count({ where: { id: landing.sessionId } }), 0);
+      // The segment kept one container: its first claim inserted the row, and every later
+      // generation joined the same subject.
+      assert.equal(await stack.db.session.count({ where: { id: landing.sessionId } }), 1);
     } finally {
       await stack.db.$disconnect();
     }
@@ -699,8 +703,10 @@ test('one merge round: superseded candidates, the Automatic re-check and the own
       const settled = await stack.db.projectLanding.findUniqueOrThrow({ where: { id: candidateA.id } });
       assert.equal(settled.settledAs, 'MERGED');
       assert.ok(settled.settledAt);
-      // No session row existed to close; `ensure` is not wired.
-      assert.equal(await stack.db.session.count({ where: { id: settled.sessionId } }), 0);
+      // MERGED closed the container the round's first claim opened.
+      assert.equal(await stack.db.session.findUniqueOrThrow({
+        where: { id: settled.sessionId }, select: { status: true },
+      }).then((row) => row.status), RunStatus.SUCCEEDED);
 
       // The next candidate after MERGED opens a new round with a new subject.
       const d = await doneTask(stack, w, 'round-d');
@@ -804,8 +810,9 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       const job = await claimLanding(stack, w, 'lease-ensure');
       const { landing } = await subjectOfJob(stack.db, job.jobId);
 
+      // The claim's dispatch already inserted it; ensure is the idempotent answer for a retry.
       const ensured = await ensureLandingSession(stack.db, landing.id, job.jobId);
-      assert.ok(ensured?.created);
+      assert.equal(ensured?.created, false);
       assert.equal(ensured.sessionId, landing.sessionId);
       const session = await stack.db.session.findUniqueOrThrow({ where: { id: landing.sessionId } });
       assert.equal(session.sessionKind, 'LANDING');
@@ -853,7 +860,8 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       const episode2 = (await subjectOfJob(stack.db, next.jobId)).landing;
       assert.equal(episode2.episode, 2);
       assert.notEqual(episode2.id, landing.id);
-      assert.equal(await ensureLandingSession(stack.db, episode2.id, next.jobId).then((r) => r?.created), true);
+      assert.equal(await ensureLandingSession(stack.db, episode2.id, next.jobId).then((r) => r?.created), false,
+        'the second episode\'s claim inserted its row; ensure joins it');
       const session2 = await stack.db.session.findUniqueOrThrow({ where: { id: episode2.sessionId } });
       assert.equal(session2.title, `Land · ${task.title} (#2)`);
       // End the attempt so no in-flight generation holds the settlement (LS3).
@@ -870,7 +878,8 @@ test('ensure writes the LS1 row — LANDING, AWAITING_INPUT, no engine, creator,
       assert.equal((await report(stack, pw, await claimLanding(stack, pw, 'lease-ensure-p', 'LAND_TASK'), LANDED)).accepted, true);
       const promoJob = await claimLanding(stack, pw, 'lease-ensure-promo-check', 'CHECK_PROMOTION');
       const promoLanding = (await subjectOfJob(stack.db, promoJob.jobId)).landing;
-      assert.equal(await ensureLandingSession(stack.db, promoLanding.id, promoJob.jobId).then((r) => r?.created), true);
+      assert.equal(await ensureLandingSession(stack.db, promoLanding.id, promoJob.jobId).then((r) => r?.created), false,
+        'the promotion round\'s claim inserted its row; ensure joins it');
       const promoSession = await stack.db.session.findUniqueOrThrow({ where: { id: promoLanding.sessionId } });
       assert.equal(promoSession.workspaceId, pw.workspaceId);
       assert.match(promoSession.title, /^Merge project\/.+ → main · #1$/);

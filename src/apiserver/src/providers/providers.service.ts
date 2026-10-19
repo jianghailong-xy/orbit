@@ -45,6 +45,7 @@ import { storedCredential } from './engine-provider';
 import { geminiApiModel, isInternalHost } from './held-key';
 import { keyFingerprint } from './provider-engine-resolution';
 import { LANDING_PROVIDER_SLUG, pickFreeSlug, slugBase } from './provider-slug';
+import { assertEngineSession } from '../sessions/engine-session';
 
 /**
  * The slugs whose `model_provider` row is a compatibility guard, not a provider: migrations 0080, 0367
@@ -744,6 +745,8 @@ export class ProvidersService {
     runnerId: string,
     sessionId: string,
     report: { state?: unknown; keyFingerprint?: unknown },
+    /** The runner's account, so another account's landing id is not answered as one. */
+    ownerId?: string,
   ): Promise<{ recorded: boolean }> {
     const state = report?.state as CursorKeyCheckState;
     if (!CURSOR_KEY_CHECK_STATES.includes(state)) throw new BadRequestException('Unknown Cursor key check state');
@@ -753,8 +756,11 @@ export class ProvidersService {
     }
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
-      select: { assignedRunnerId: true, ownerId: true, provider: true, providerBuiltin: true, engine: true },
+      select: { assignedRunnerId: true, ownerId: true, provider: true, providerBuiltin: true, engine: true, sessionKind: true },
     });
+    // Before the ownership answer, but only for a row of this runner's own account: another
+    // account's landing id is answered exactly as any other id of theirs (§2.9 LS6 + tenant scope).
+    if (session && (ownerId === undefined || session.ownerId === ownerId)) assertEngineSession(session);
     if (!session || session.assignedRunnerId !== runnerId) {
       throw new ForbiddenException('session does not belong to this runner');
     }

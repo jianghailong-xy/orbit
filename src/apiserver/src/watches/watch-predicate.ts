@@ -97,6 +97,8 @@ export type WatchTargetFact =
     }
   | {
       kind: 'SESSION';
+      /** CONVERSATION, or LANDING for the platform-driven container a landing subject opens. */
+      sessionKind: string;
       status: string;
       endReason: string | null;
       completedAt: Date | null;
@@ -200,7 +202,12 @@ export function leafHolds(test: WatchLeafTest, fact: WatchTargetFact, now: numbe
       return deadline !== null && deadline <= now;
     }
     case 'SESSION_TURN_SETTLED':
-      return fact.kind === 'SESSION' && !(UNSETTLED_SESSION_STATUSES as readonly string[]).includes(fact.status);
+      if (fact.kind !== 'SESSION') return false;
+      // A LANDING container sits at AWAITING_INPUT for as long as its subject is open (LS1), which
+      // is not a turn that settled: awaiting the landing means awaiting the landing's END, and the
+      // row is terminal only once the settlement wrote `completed_at` (SUCCEEDED / CANCELLED).
+      if (fact.sessionKind === 'LANDING') return fact.completedAt !== null;
+      return !(UNSETTLED_SESSION_STATUSES as readonly string[]).includes(fact.status);
     case 'SESSION_RUN_TERMINAL':
       return fact.kind === 'SESSION' && TERMINAL_RUN_STATES.includes(deriveSessionRunState(fact));
     case 'SESSION_LIFECYCLE_TERMINAL':

@@ -268,6 +268,10 @@ import {
 } from './scheduled-wakeup';
 import { nextAutoRetryAt } from '../sessions/auto-retry.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
+import {
+  assertEngineSession as assertEngineSessionRow,
+  assertEngineSessionById as assertEngineSessionRowById,
+} from '../sessions/engine-session';
 import { appendSessionMessageContext } from '../sessions/session-message';
 import { SessionRequestService } from '../sessions/session-request.service';
 import {
@@ -1240,6 +1244,16 @@ export class RunnerApiController {
           ),
         ]
       : [];
+    // The three session ids this body may carry. None of them may name a LANDING row: the platform
+    // drives those and no runner hosts, reports on or changes one (§2.9 LS6). Checked before the
+    // runner row and any session row is written, so a body naming one changes nothing at all. The
+    // raw field is read rather than the parsed one: a heartbeat without a lease owner ignores the
+    // field downstream, but naming a landing in it is still refused.
+    await this.assertNoLandingSessionNamed([
+      ...(dto?.supervisedSessionIds ?? []),
+      ...(dto?.sessions ?? []).map((s) => s?.sessionId),
+      ...(dto?.expiredCommitErrors ?? []).map((e) => e?.sessionId),
+    ], (runner as { ownerId?: string }).ownerId);
     const reportedEngines = dto?.engines == null ? null : (sanitizeRunnerEngines(dto.engines) ?? []);
     // Read the engine health this heartbeat is about to overwrite, but only when the incoming
     // report actually claims a signed-out engine — otherwise there is no transition to find and
@@ -1461,6 +1475,7 @@ export class RunnerApiController {
             id: { in: supervisedSessionIds },
             assignedRunnerId: runner.id,
             status: { in: OPEN },
+            sessionKind: 'CONVERSATION',
             inboxLeaseOwner: heartbeatLeaseOwner,
           },
           select: { id: true },
@@ -1491,6 +1506,7 @@ export class RunnerApiController {
                 id: s.sessionId,
                 assignedRunnerId: runner.id,
                 status: { in: OPEN },
+                sessionKind: 'CONVERSATION',
                 ...(heartbeatLeaseOwner ? { inboxLeaseOwner: heartbeatLeaseOwner } : {}),
               },
               data: {
@@ -2586,6 +2602,7 @@ export class RunnerApiController {
         where: {
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
+          sessionKind: 'CONVERSATION',
           ...providerWhere,
           cancelRequestedAt: null,
         },
@@ -2601,6 +2618,7 @@ export class RunnerApiController {
           id: { in: unmarked },
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
+          sessionKind: 'CONVERSATION',
           ...providerWhere,
           cancelRequestedAt: null,
         },
@@ -2632,6 +2650,7 @@ export class RunnerApiController {
       where: {
         assignedRunnerId: runnerId,
         status: RunStatus.PENDING,
+        sessionKind: 'CONVERSATION',
         cancelRequestedAt: null,
         sourceState: { not: 'UNBOUND' },
       },
@@ -2647,6 +2666,7 @@ export class RunnerApiController {
           id: { in: unmarked },
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
+          sessionKind: 'CONVERSATION',
           cancelRequestedAt: null,
           sourceState: { not: 'UNBOUND' },
         },
@@ -2791,7 +2811,14 @@ export class RunnerApiController {
     );
     const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
     const sessions = await this.prisma.session.findMany({
-      where: { assignedRunnerId: runner.id, ownerId: runner.ownerId, status: { in: OPEN } },
+      where: {
+        assignedRunnerId: runner.id,
+        ownerId: runner.ownerId,
+        status: { in: OPEN },
+        // A reclaim re-hands live work to a runner that lost contact; a LANDING is never work a
+        // runner holds (§2.9 LS6).
+        sessionKind: 'CONVERSATION',
+      },
       include: {
         // Same standing "always allow" grants the claim path sends: a reclaimed session must
         // not start re-asking about calls this workspace already approved permanently.
@@ -3142,6 +3169,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SourcePinRequest,
   ): Promise<SourcePinResponse> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     const outcome = await withTransactionRetry(
       this.prisma,
       async (tx) => {
@@ -3196,6 +3224,7 @@ export class RunnerApiController {
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<TakeoverTurnLeasesResponse> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     if (!leaseOwner) throw new BadRequestException('leaseOwner is required');
     const expectedLeaseOwner = parseLeaseGeneration(dto?.expectedLeaseOwner ?? undefined);
@@ -3362,6 +3391,7 @@ export class RunnerApiController {
     @Body() dto: ActivateTurnLeasesRequest,
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<ActivateTurnLeasesResponse> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     const generation = parseLeaseGeneration(dto?.leaseGeneration);
     if (!generation) throw new BadRequestException('leaseGeneration is required');
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
@@ -3548,6 +3578,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto?: ReleaseTurnLeasesRequest,
   ): Promise<{ ok: true }> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     const generation = parseLeaseGeneration(dto?.leaseGeneration);
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     // Retried whole. A release is idempotent by construction — it clears an ownership this
@@ -3608,6 +3639,7 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string; ownerId: string },
     @Param('id', PublicIdPipe) sessionId: string,
   ): Promise<OrchestrationCredentialResponse> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     return { orchestrationToken: await this.orchestration.reissue(runner, sessionId) };
   }
 
@@ -3671,7 +3703,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('attId', PublicIdPipe) attId: string,
   ): Promise<StreamableFile> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     const att = await this.prisma.attachment.findFirst({
       where: { id: attId, sessionId },
       select: { data: true, mimeType: true },
@@ -3698,7 +3730,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @UploadedFileParam() file: UploadedFile | undefined,
   ): Promise<{ id: string }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id);
+    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     assertValidUpload(file);
     const f = file as UploadedFile;
     const row = await this.prisma.attachment.create({
@@ -3722,7 +3754,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ArtifactResultRequest,
   ): Promise<{ ok: true }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id);
+    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (!dto?.requestId) throw new BadRequestException('requestId is required');
     await withTransactionRetry(this.prisma, async (tx) => {
       const turn = await tx.conversationTurn.findFirst({
@@ -4494,7 +4526,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ApprovalCreateRequest,
   ): Promise<{ id: string; status: ApprovalStatus }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id);
+    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     // Stripped before the lookup, not only before the write, so a retry finds the row the first
     // call created: the idempotency key and the column it was stored in have to agree.
     const toolUseId = stripNul(dto.toolUseId);
@@ -4667,7 +4699,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('approvalId', PublicIdPipe) approvalId: string,
   ): Promise<ApprovalDecisionResponse> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     const deadline = Date.now() + APPROVAL_LONG_POLL_MS;
     for (;;) {
       const a = await this.prisma.approval.findFirst({
@@ -4728,7 +4760,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: BackgroundWakeDto,
   ): Promise<BackgroundWakeReceipt> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (!this.sessions) throw new Error('background wakes are filed through SessionsService, which this controller was built without');
     const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${dto.wakeId}`;
     let merged = false;
@@ -4779,7 +4811,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ScheduledWakeupDto,
   ): Promise<ScheduledWakeupReceipt> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (dto.stop === true) return cancelScheduledWakeup(this.prisma, sessionId);
     return withTransactionRetry(
       this.prisma,
@@ -4801,7 +4833,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SessionNamingDto,
   ): Promise<{ applied: boolean }> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (!this.sessions) throw new Error('SessionsService is unavailable');
     return { applied: await this.sessions.applyEngineTitle(sessionId, stripNul(dto.replaces), stripNul(dto.title)) };
   }
@@ -4821,7 +4853,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('turnId', PublicIdPipe) turnId: string,
   ): Promise<{ suggestion?: string }> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     const turn = await this.prisma.conversationTurn.findUnique({ where: { id: turnId } });
     // The turn is the source of truth for the person's text (the runner's `user` echo carries
     // generated context beside it). No turn of this session, or one opened with attachments and
@@ -4860,6 +4892,7 @@ export class RunnerApiController {
     // this body — without the pipe the id reaches `where: { id: dto.turnId }` exactly as sent.
     @Body(PublicIdPipe.forFields('turnId')) body: TurnCompleteRequest,
   ) {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     // Stripped once, at the edge, rather than at each write: `result` alone reaches the session's
     // `error`, a turn's `deliveryFailureReason` and two different task comments below, and the
     // worktree snapshot reaches two rows more — a per-write strip is a list to keep in sync, which
@@ -6198,6 +6231,7 @@ export class RunnerApiController {
   @Post('sessions/:id/events')
   @HttpCode(202)
   async events(@CurrentRunner() runner: { id: string }, @Param('id', PublicIdPipe) sessionId: string, @Body() batch: RunEventBatch) {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     const leaseOwner = parseLeaseGeneration(batch?.leaseOwner);
     // Sanitized here, at the edge, so nothing downstream can carry a byte Postgres refuses:
     // every write below — run_event.payload, tool_call, the denormalized preview columns — is
@@ -6931,6 +6965,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() body: RunFinalizeRequest,
   ): Promise<RunFinalizeResponse> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     // See turnComplete: the engine's last words (`result`, `error`) and the branch's per-file
     // patches all land in text/jsonb here, and a NUL in any of them fails the whole statement.
     const dto = stripNul(body);
@@ -7243,6 +7278,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() body: { leaseOwner?: string; ok?: boolean; error?: string; title?: string },
   ) {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     // See turnComplete: the title is read out of the transcript file being imported, so it is
     // workspace bytes reaching a text column.
     const dto = stripNul(body);
@@ -7348,6 +7384,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SessionMergeResultRequest,
   ) {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     if (
       dto?.status !== 'merged' &&
       dto?.status !== 'conflict' &&
@@ -7632,6 +7669,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SessionCommitResultRequest,
   ) {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     if (
       dto?.status !== 'committed' &&
       dto?.status !== 'nochange' &&
@@ -7741,7 +7779,7 @@ export class RunnerApiController {
     // See turnComplete: these patches are file content, and `git diff` only hides a NUL behind
     // "Binary files differ" when it sits in the first 8000 bytes.
     const dto = stripNul(body);
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     // See turnComplete: a healed base with an omitted legacy `omitempty` slice means the newly
     // computed snapshot is empty, never that the old changedFiles still belong to the new base.
     const changedFilesSnapshot =
@@ -7812,7 +7850,7 @@ export class RunnerApiController {
     workDir: string | null;
     title: string;
   }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id);
+    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     const runtimeSessionId = session.runtimeSessionId ?? undefined;
     if (!runtimeSessionId) {
       throw new NotFoundException('session has no runtime session ID');
@@ -7853,7 +7891,7 @@ export class RunnerApiController {
     events: { seq: number; type: string; payload: unknown; ts: Date }[];
     hasMore: boolean;
   }> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     const asInt = (s: string | undefined, fallback: number): number => {
       const n = Number(s);
       return s !== undefined && s !== '' && Number.isFinite(n) ? Math.trunc(n) : fallback;
@@ -8181,10 +8219,51 @@ export class RunnerApiController {
     return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }
 
-  private async assertSessionOwnership(sessionId: string, runnerId: string) {
+  /**
+   * The engine-path guard for a door that names the session only by id (§2.9 LS6): a LANDING row is
+   * the platform's own container, never something a runner may report into or act on.
+   */
+  private assertEngineSessionById(sessionId: string, ownerId?: string): Promise<void> {
+    return assertEngineSessionRowById(this.prisma, sessionId, ownerId);
+  }
+
+  /**
+   * A heartbeat names sessions in its body — supervised ids, worktree snapshots, expired commit
+   * attempts. A LANDING row may be named by none of them (§2.9 LS6); the whole heartbeat is refused
+   * rather than the offending field silently dropped, because no runner ever hosts one.
+   */
+  private async assertNoLandingSessionNamed(
+    sessionIds: readonly (string | undefined | null)[],
+    ownerId?: string,
+  ): Promise<void> {
+    const ids = [
+      ...new Set(
+        sessionIds
+          .filter((id): id is string => typeof id === 'string' && SESSION_ID_RE.test(id))
+          .map((id) => id.toLowerCase()),
+      ),
+    ];
+    if (ids.length === 0) return;
+    // A unit double that does not model the session table cannot answer; production always can.
+    const delegate = (this.prisma as unknown as { session?: { findFirst?: unknown } }).session;
+    if (typeof delegate?.findFirst !== 'function') return;
+    const landing = await this.prisma.session.findFirst({
+      // Owner-scoped: another account's landing id must answer exactly as any other id of theirs,
+      // not as 409 SESSION_IS_PLATFORM_DRIVEN (which would confirm the id exists and is a landing).
+      where: { id: { in: ids }, ...(ownerId ? { ownerId } : {}), sessionKind: 'LANDING' },
+      select: { sessionKind: true },
+    });
+    if (landing) assertEngineSessionRow(landing);
+  }
+
+  private async assertSessionOwnership(sessionId: string, runnerId: string, ownerId?: string) {
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
     });
+    // Before the ownership comparison, but only for a row of this caller's own account: a runner is
+    // refused its own LANDING as a structural fact (409 SESSION_IS_PLATFORM_DRIVEN), while another
+    // account's landing is answered exactly as any other id of theirs is.
+    if (session && (ownerId === undefined || session.ownerId === ownerId)) assertEngineSessionRow(session);
     if (!session || session.assignedRunnerId !== runnerId) {
       throw new ForbiddenException('session does not belong to this runner');
     }

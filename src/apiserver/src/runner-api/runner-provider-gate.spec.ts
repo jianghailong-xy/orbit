@@ -115,6 +115,7 @@ test('an OpenCode-capable runner that does not name Antigravity has its Antigrav
     id: { in: ['agy-1'] },
     assignedRunnerId: RUNNER.id,
     status: 'PENDING',
+    sessionKind: 'CONVERSATION',
     OR: [
       { engine: AgentProvider.ANTIGRAVITY },
       { AND: [{ engine: null }, { provider: { in: [AgentProvider.ANTIGRAVITY] } }] },

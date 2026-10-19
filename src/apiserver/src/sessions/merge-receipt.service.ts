@@ -32,6 +32,7 @@ import {
   normalizeSha,
   resultLanded,
 } from './merge-receipt';
+import { assertEngineSession } from './engine-session';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { storeDerivedProjectStatus } from '../projects/project-done-derived';
 import {
@@ -312,9 +313,11 @@ export class MergeReceiptService {
     const run = async (db: Prisma.TransactionClient) => {
       const session = await db.session.findFirst({
         where: { id: sessionId, ownerId },
-        select: { id: true, branch: true, taskId: true, mergeStatus: true, task: { select: { projectId: true } } },
+        select: { id: true, branch: true, taskId: true, mergeStatus: true, sessionKind: true, task: { select: { projectId: true } } },
       });
       if (!session) throw new NotFoundException('session not found');
+      // A landing session has no branch of its own to record a merge against (§2.9 LS6).
+      assertEngineSession(session);
 
       const sourceBranch = (input.sourceBranch ?? session.branch ?? '').trim();
       const targetBranch = (input.targetBranch ?? '').trim();

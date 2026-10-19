@@ -68,7 +68,7 @@ import {
   supersedeHandledItems,
 } from '../projects/project-open-item';
 import { sessionReportedWork } from '../projects/landing-source-branch';
-import { settleLandingAfterJobResult } from '../projects/landing-session';
+import { settleLandingAfterJobResult, ensureLandingSession } from '../projects/landing-session';
 import { mainBranchOf } from '../projects/project-criterion-landing';
 import { readInFlightJobs, readProjectCodebase } from '../projects/project-integration-line';
 import {
@@ -161,6 +161,8 @@ export class IntegrationJobRelay {
   ): Promise<{ answer: IntegrationJobReleaseResponse; after: IntegrationResultAftermath | null }> {
     const released = await releaseIntegrationJob(this.prisma, { jobId, runnerId, ownerId, body });
     if (released.released) {
+      // The job goes back to QUEUED, but its subject WAS claimed: LS1's row is owed regardless.
+      await ensureLandingSessionAfterClaim(this.prisma, jobId);
       return { answer: { released: true, state: 'QUEUED' }, after: null };
     }
     const applied = await this.applyResult(jobId, runnerId, {
@@ -252,6 +254,8 @@ interface ClaimedRow {
   confirmedAutomatically: boolean;
   /** The protocol this claim is made under (§2.2 J-T4): `'v2'` or null (legacy). */
   progressProtocol: string | null;
+  /** The landing subject this attempt belongs to (§2.9 SQL): what the claim's session row is for. */
+  landingId: string | null;
 }
 
 /**
@@ -299,6 +303,11 @@ export async function dispatchIntegrationJobs(
       });
     if (!row) break;
     taken.push(row.serialKey);
+    // §2.9 LS1's compensation point: the claim is committed, so the subject's session row is owed
+    // — at the latest before this command is handed out. Only a claimed subject can reach here; a
+    // candidate superseded while QUEUED never does. A failure does not cost the runner its command
+    // (the row is a record of the claim, not part of it) and the next progress/result compensates.
+    await ensureLandingSessionAfterClaim(prisma, row.id);
     if (!row.workDir) {
       // Nothing to work in. Ended here rather than handed over, so it opens an item instead of
       // being redelivered every 30 seconds to a runner that cannot act on it — and the item is
@@ -567,6 +576,7 @@ async function claimOne(
       -- claim because the command this beat builds is where the check would have been handed over.
       j."skip_merge_check" AS "skipMergeCheck",
       j."progress_protocol" AS "progressProtocol",
+      j."landing_id" AS "landingId",
       j."source_sha" AS "jobSourceSha",
       j."promotion_id" AS "promotionId",
       j."confirmed_automatically" AS "confirmedAutomatically",
@@ -862,6 +872,9 @@ export async function receiveIntegrationJobProgress(
     SELECT "cancel_requested_at" AS "cancelRequestedAt"
       FROM "project_integration_job"
      WHERE "id" = ${jobId}::uuid`);
+  // §2.9 LS1's compensation point: the report's write is committed, so a subject still without its
+  // session row (a claim whose insert failed) is given one now.
+  await ensureLandingSessionAfterClaim(prisma, jobId);
   return { accepted: true, cancelRequested: job?.cancelRequestedAt != null };
 }
 
@@ -1957,7 +1970,37 @@ export async function applyIntegrationJobResult(
   // their own transaction — never inside this one, and never from a claim. Idempotent: a resend
   // finds the job terminal, and this still runs and settles what is still open.
   await settleLandingAfterJobResult(prisma, input.jobId);
+  // §2.9 LS1's last compensation point: the result is committed and its subjects settled, so a
+  // subject that never got its row gets one now — terminal, exactly as `ensure` writes a settled
+  // subject. It runs after settlement on purpose: the row then starts in the status the subject
+  // ended in, instead of being inserted open and moved a statement later.
+  await ensureLandingSessionAfterClaim(prisma, input.jobId);
   return applied;
+}
+
+/**
+ * Insert the LANDING session row of the subject a claimed job belongs to (contract §2.9 LS1).
+ *
+ * Called only after a claim is committed — dispatch, a progress report, a result — which is the
+ * rule LS1 states: only a claimed subject opens a conversation, and never a clock. The subject is
+ * read off the job row rather than passed in, so a caller cannot name a subject this attempt does
+ * not belong to. A subject whose row already exists is a no-op (`ensure` answers `created: false`),
+ * and a failure here is logged rather than thrown: the fact that warranted the row is committed
+ * either way, and the next compensation point tries again.
+ */
+async function ensureLandingSessionAfterClaim(prisma: PrismaService, jobId: string): Promise<void> {
+  try {
+    const job = await prisma.projectIntegrationJob.findUnique({
+      where: { id: jobId },
+      select: { landingId: true },
+    });
+    if (!job?.landingId) return;
+    await ensureLandingSession(prisma, job.landingId, jobId);
+  } catch (error) {
+    logger.warn(
+      `landing session for job ${jobId} not ensured: ${(error as Error)?.message ?? String(error)}`,
+    );
+  }
 }
 
 /** What the abandon door answers once the job is ended. */

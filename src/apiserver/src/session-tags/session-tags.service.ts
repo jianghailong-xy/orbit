@@ -12,6 +12,7 @@ import { orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
+import { assertEngineSession } from '../sessions/engine-session';
 import { CreateSessionTagDto, UpdateSessionTagDto } from './dto';
 
 // The 7 always-present preset-color tags (positions 0..6), seeded per owner on first use.
@@ -137,9 +138,11 @@ export class SessionTagsService {
   async setForSession(ownerId: string, sessionId: string, tagIds: string[]) {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, ownerId },
-      select: { id: true },
+      select: { id: true, sessionKind: true },
     });
     if (!session) throw new NotFoundException('session not found');
+    // Tagging is a conversation affordance; the platform's landing container takes none (§2.9 LS6).
+    assertEngineSession(session);
     const ids = [...new Set(tagIds)];
     if (ids.length > 0) {
       const owned = await this.prisma.sessionTag.count({ where: { id: { in: ids }, ownerId } });

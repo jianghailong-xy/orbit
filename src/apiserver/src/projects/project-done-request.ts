@@ -233,6 +233,9 @@ export async function readDoneState(
     where: {
       ownerId,
       status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
+      // "Nothing is still running" counts engine runs; the landing container is the platform's
+      // own and is never one (§2.9 LS6).
+      sessionKind: 'CONVERSATION',
       task: { projectId },
       ...(askingSessionId ? { id: { not: askingSessionId } } : {}),
     },

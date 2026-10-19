@@ -912,6 +912,13 @@ export interface RunnerRepoCleanupResult {
 }
 
 /**
+ * What drives a session (migration 0436, contract §2.9): CONVERSATION for every session an engine
+ * may run, LANDING for the platform-driven container a landing subject opens. Optional on payloads
+ * — a server older than the column omits it, and a client that does not know it ignores it.
+ */
+export type SessionKind = 'CONVERSATION' | 'LANDING';
+
+/**
  * The landing this conversation produced work for (contract §2.9 LS1, migration 0436): the newest
  * generation of integration work whose source session this is, and the subject it belongs to.
  *
@@ -2595,6 +2602,10 @@ export interface SessionSearchHit {
    *  highlight by locating the query inside it — no offset is carried, since collapsing the
    *  whitespace would invalidate one anyway. */
   snippet: string | null;
+  /** What drives the session. Every row a search answers is a CONVERSATION — LANDING rows are
+   *  excluded from every list — but the field is carried so a row read anywhere names its kind.
+   *  Absent from servers older than migration 0436. */
+  sessionKind?: SessionKind;
 }
 
 /** GET /sessions/search. `contentSearched` is false when the query was too short to search

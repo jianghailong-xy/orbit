@@ -58,7 +58,7 @@ export class RunnerProvidersController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: CursorKeyCheckDto,
   ) {
-    return this.providers.recordCursorKeyCheck(runner.id, sessionId, dto);
+    return this.providers.recordCursorKeyCheck(runner.id, sessionId, dto, runner.ownerId);
   }
 
   /**

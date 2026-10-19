@@ -669,7 +669,8 @@ async function readFacts(tx: Prisma.TransactionClient, targets: readonly TargetR
   const sessionIds = ids('SESSION');
   if (sessionIds.length > 0) {
     const sessions = await tx.$queryRaw<Array<Extract<WatchTargetFact, { kind: 'SESSION' }> & { id: string; ownerId: string }>>`
-      SELECT s."id", s."owner_id" AS "ownerId", s."status"::text AS "status", s."end_reason" AS "endReason",
+      SELECT s."id", s."owner_id" AS "ownerId", s."kind" AS "sessionKind", s."status"::text AS "status",
+             s."end_reason" AS "endReason",
              s."completed_at" AS "completedAt", s."archived_at" AS "archivedAt", s."deleted_at" AS "deletedAt",
              EXISTS (SELECT 1 FROM "approval" a WHERE a."session_id" = s."id" AND a."status" = 'PENDING') AS "pendingApproval"
       FROM "session" s

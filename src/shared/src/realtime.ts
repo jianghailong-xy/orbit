@@ -118,6 +118,10 @@ export interface SessionProjectMembership {
  *  with the `GET /sessions` list response so the client can upsert it verbatim. */
 export interface ControlSessionSummary {
   id: string;
+  /** What drives the session (contract §2.9): CONVERSATION, or LANDING for the platform-driven
+   *  container a landing subject opens. Optional for rolling-version peers; a landing publishes no
+   *  `session.created` / `session.updated` at all. */
+  sessionKind?: 'CONVERSATION' | 'LANDING';
   /** Work item whose run this session represents. Optional for rolling-version compatibility;
    *  null means an ordinary conversation rather than a task run. */
   taskId?: string | null;

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertEngineSession } from '../sessions/engine-session';
 import { assertValidUpload, toBytes, UploadedFile } from './attachments.media';
 
 @Injectable()
@@ -32,9 +33,12 @@ export class AttachmentsService {
     if (sessionId) {
       const session = await this.prisma.session.findFirst({
         where: { id: sessionId, ownerId },
-        select: { id: true },
+        select: { id: true, sessionKind: true },
       });
       if (!session) throw new NotFoundException('session not found');
+      // An upload scoped to a session is an input to an engine turn; a LANDING takes none
+      // (§2.9 LS6).
+      assertEngineSession(session);
     }
     if (taskId) {
       const task = await this.prisma.task.findFirst({

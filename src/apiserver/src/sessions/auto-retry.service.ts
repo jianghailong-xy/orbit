@@ -31,6 +31,7 @@ import {
 } from '../projects/task-aggregation';
 import { RealtimeService } from '../realtime/realtime.service';
 import { deriveSessionCapabilities } from './session-state';
+import { assertEngineSession } from './engine-session';
 import { MANAGED_RUNNER_DEMAND, type ManagedRunnerDemand } from '../managed-runners/managed-runner-demand';
 import { SessionsService, type SessionResumeAnswer } from './sessions.service';
 import { isBackgroundWakeTurn } from '../runner-api/background-job-wake';
@@ -305,6 +306,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         retryAt: { lte: now },
         deletedAt: null,
         completedAt: null,
+        // A landing is never re-sent: its AWAITING_INPUT means only that the subject is open.
+        sessionKind: 'CONVERSATION',
         OR: [
           { status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
           { status: RunStatus.FAILED },
@@ -978,9 +981,11 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
   ): Promise<SessionResumeAnswer> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, prompt: true, numTurns: true },
+      select: { id: true, prompt: true, numTurns: true, sessionKind: true },
     });
     if (!session) throw new NotFoundException('session not found');
+    // Re-sending is an engine door; a LANDING has no failed turn of its own to retry (§2.9 LS6).
+    assertEngineSession(session);
     const message = await this.messageToResend(session.id, session.prompt, session.numTurns);
     if (!message.content) {
       throw new ConflictException('this session has no message for a retry to re-send');
@@ -1754,6 +1759,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         retryAt: null,
         deletedAt: null,
         completedAt: null,
+        // Only a conversation can hold a retry claim; the landing container never gets one.
+        sessionKind: 'CONVERSATION',
         status: { in: [RunStatus.FAILED, RunStatus.AWAITING_INPUT] },
       },
       orderBy: { retryClaimedAt: 'asc' },

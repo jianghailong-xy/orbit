@@ -81,6 +81,7 @@ test('heartbeat cancels supervised sessions not owned by this process', async ()
     id: { in: [SESSION_B, SESSION_A] },
     assignedRunnerId: RUNNER_ID,
     status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+    sessionKind: 'CONVERSATION',
     inboxLeaseOwner: OWNER,
   });
 });

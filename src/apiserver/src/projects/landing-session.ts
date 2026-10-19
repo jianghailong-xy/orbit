@@ -23,11 +23,11 @@ import { LANDING_PROVIDER_SLUG } from '../providers/provider-slug';
  * CANCELLED). Every `project_integration_job` of that work names it through `landing_id`; the
  * subject names the session that will represent it.
  *
- * WHAT THIS FILE DELIBERATELY DOES NOT DO (yet). `ensureLandingSession` is complete and tested, but
- * NOTHING CALLS IT. The compensation points that would insert the session row after a claim are
- * wired by the task that also installs the engine-path guards and the list/seed exclusions; until
- * then no LANDING session row exists in production and no engine can reach one. The settlement
- * edges below ARE wired: they only move rows the subject owns.
+ * WHAT ACTIVATES THE INSERT. `ensureLandingSession` is called from the compensation points LS1
+ * names, all of them after a claim has committed: the heartbeat's dispatch (when the claim that
+ * warrants the row is made), a progress report, a result, and a release that hands a claimed job
+ * back. Nothing else calls it, and never a clock or a QUEUED candidate. The engine-path guards and
+ * the list/seed exclusions (LS6) are installed in the same delivery as these calls.
  */
 
 const logger = new Logger('LandingSession');

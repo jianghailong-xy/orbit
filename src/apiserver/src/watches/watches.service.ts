@@ -35,6 +35,7 @@ import { loggedRetry, transactionRetryDelayMs, withTransactionRetry } from '../c
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { readTaskWorkCarriers, taskRunOverlay } from '../sessions/task-work-carrier';
+import { assertEngineSession } from '../sessions/engine-session';
 import { CreateWatchDto, UpdateWatchDto } from './dto';
 import { countWatchCreate, countWatchDuplicateSuppressed, countWatchRedrive, countWatchRolloutRefusal } from './watch-metrics';
 import {
@@ -700,15 +701,24 @@ export class WatchesService {
     });
     const sessions = await tx.session.findMany({
       where: { id: { in: ids('SESSION') }, ownerId },
-      select: { id: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true },
+      select: {
+        id: true, sessionKind: true, status: true, endReason: true,
+        completedAt: true, archivedAt: true, deletedAt: true,
+      },
     });
     const unreadable = request.targets.length - tasks.length - sessions.length;
     if (unreadable > 0) {
       throw watchRefusal('PERMISSION_DENIED', `${unreadable} of ${request.targets.length} targets cannot be read by this account`);
     }
     if (request.observerSessionId !== null) {
-      const observer = await tx.session.findFirst({ where: { id: request.observerSessionId, ownerId }, select: { id: true } });
+      const observer = await tx.session.findFirst({
+        where: { id: request.observerSessionId, ownerId },
+        select: { id: true, sessionKind: true },
+      });
       if (!observer) throw watchRefusal('PERMISSION_DENIED', 'the observer session cannot be read by this account');
+      // A watch wakes a conversation; the platform drives a landing, so there is nothing to wake
+      // (§2.9 LS6). Refused as the engine door's own 409, not as a permission problem.
+      assertEngineSession(observer);
     }
     const approvals = await tx.approval.findMany({
       where: { sessionId: { in: sessions.map((session) => session.id) }, status: 'PENDING' },
@@ -742,6 +752,7 @@ export class WatchesService {
         ...target,
         fact: {
           kind: 'SESSION',
+          sessionKind: session.sessionKind,
           status: session.status,
           endReason: session.endReason,
           completedAt: session.completedAt,

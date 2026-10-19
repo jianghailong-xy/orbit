@@ -1,9 +1,19 @@
 import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import type { SessionTurnIntent } from '@orbit/shared';
+import type { SessionKind, SessionLandingView, SessionTurnIntent } from '@orbit/shared';
 import { MERGE_RECEIPT_RESULTS, type MergeReceiptResult } from './merge-receipt';
 
 const MERGE_RECEIPT_RESULT_VALUES = [...MERGE_RECEIPT_RESULTS];
+
+/**
+ * The optional fields a session payload carries once the platform's landing containers exist
+ * (contract §2.9 LS6): `sessionKind` on every row, and `landing` — the subject's view — on one
+ * read directly. Both optional, so a client built before migration 0436 ignores them.
+ */
+export interface SessionLandingFields {
+  sessionKind?: SessionKind;
+  landing?: SessionLandingView | null;
+}
 
 export interface CreateSessionDto {
   /** Optional display title; defaults to a slice of the prompt. */

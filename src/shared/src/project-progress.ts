@@ -296,6 +296,106 @@ export interface ProjectIntegrationJob<Instant = string> {
   retryable: boolean;
 }
 
+// ── The landing session's view (contract §2.9 LS1, LS6) ─────────────────────────────────────────
+
+/** One finished check of the current attempt: `{ name, command, expectedExitCode, exitCode,
+ *  timedOut, durationMs, outputTail }`, the runner's own result shape. Read as data — the landing
+ *  view carries it through without re-typing what the runner reports. */
+export type LandingCheckResult = Record<string, unknown>;
+
+/** The newest attempt of a landing subject, as its session's page draws it. */
+export interface SessionLandingAttempt<Instant = string> {
+  jobId: string;
+  kind: IntegrationJobKind;
+  /** QUEUED | RUNNING | READY | CONFIRMED | MERGED | DECLINED | CANCELLED | ERROR | … */
+  state: string;
+  /** Which landing of its subject this attempt is, counting from 1. */
+  generation: number;
+  phase: IntegrationJobPhase | null;
+  /** The round inside the current claim, from 1; null before one was reported. */
+  round: number | null;
+  step: string | null;
+  /** The claim generation: 0 before the first claim, one more per takeover. */
+  claim: number;
+  runnerName: string | null;
+  /** The work session this attempt is about, when that row still exists. NULL once it was purged:
+   *  `job.session_id` is a history reference with no relation (0424), so a gone source reads null
+   *  rather than failing the read. */
+  sourceSessionId: string | null;
+  /** The branch the attempt writes, as the job froze it. */
+  targetRef: string;
+  startedAt: Instant;
+  heartbeatAt: Instant | null;
+  outputMovedAt: Instant | null;
+  progressProtocol: string | null;
+  /** The check in flight under a v2 claim; null between checks and for a legacy claim. */
+  check: ProjectIntegrationCheck<Instant> | null;
+  /** §7.2 V6's liveness, read at the moment this view was built; null while queued. */
+  liveness: IntegrationJobLiveness | null;
+  /** Why it waits, or where it stopped. */
+  blockingReason: IntegrationJobBlockingReason | null;
+  timedOut: boolean;
+  limitSeconds: number | null;
+}
+
+/** One entry of the landing's todo list: an OPEN integration item of its project. The item's own
+ *  card is where it is answered; the landing only lists it. */
+export interface SessionLandingTodo<Instant = string> {
+  id: string;
+  kind: string;
+  state: string;
+  title: string;
+  waitingSince: Instant;
+}
+
+/** One generation (segment/round) of the landing subject. `sessionId` is the landing session's id —
+ *  pre-generated when the subject opened, whether or not its row exists yet. */
+export interface SessionLandingGeneration<Instant = string> {
+  sessionId: string;
+  episode: number;
+  openedAt: Instant;
+  settledAt: Instant | null;
+  settledAs: string | null;
+}
+
+/**
+ * The landing view `GET /sessions/:id` and `session_get` answer for a LANDING session (contract
+ * §2.9 LS1, LS6; errata E4): the subject, its newest attempt, the phase/round/checks/activity the
+ * attempt reports, why it is blocked, its OPEN todos, and every generation of the subject.
+ *
+ * The session row may not exist yet — the row is inserted after the first claim commits — so the
+ * same view is reachable through `project_landing.session_id` from the moment the subject opens.
+ * The timeline and the per-check output are later readers on top of this one, which is why neither
+ * is part of it yet.
+ */
+export interface SessionLandingView<Instant = string> {
+  /** The LANDING session's id: `project_landing.session_id`, pre-generated. */
+  sessionId: string;
+  projectId: string;
+  subject: 'TASK' | 'PROMOTION';
+  taskId: string | null;
+  promotionId: string | null;
+  episode: number;
+  openedAt: Instant;
+  settledAt: Instant | null;
+  /** LANDED | ALREADY_LANDED | NOTHING_TO_LAND | MERGED | HANDLED | DECLINED | CANCELLED | DELETED,
+   *  or null while the subject is open. */
+  settledAs: string | null;
+  /** The newest attempt's phase and round, lifted so a card can draw them without reaching into it. */
+  phase: IntegrationJobPhase | null;
+  round: number | null;
+  /** The newest attempt's finished check results (runner shape), `[]` when it has none. */
+  checks: LandingCheckResult[];
+  liveness: IntegrationJobLiveness | null;
+  blockingReason: IntegrationJobBlockingReason | null;
+  /** The newest attempt of the subject, whatever its state; null for a subject no attempt claimed. */
+  currentAttempt: SessionLandingAttempt<Instant> | null;
+  /** The subject's integration items still OPEN, oldest first. */
+  todos: SessionLandingTodo<Instant>[];
+  /** Every generation of the subject, oldest first. */
+  generations: SessionLandingGeneration<Instant>[];
+}
+
 /**
  * One generation of an integration job, as the agent read port lists it (contract §2.2 J-T3, §2.9
  * LS6): the queue's entry for an attempt still in flight, each task's newest `LAND_TASK`, and each

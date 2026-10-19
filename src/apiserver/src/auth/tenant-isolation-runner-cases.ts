@@ -67,6 +67,8 @@ export interface RunnerObjects {
   runtimeSessionId: string;
   /** An open session whose machine was deregistered: no runner at all. */
   orphanSessionId: string;
+  /** An OPEN landing session of this account: the platform's container, on no runner (§2.9 LS6). */
+  landingSessionId: string;
   /** RUNNING, no inbox lease. */
   takeoverSessionId: string;
   /** RUNNING, its inbox leased to `leaseOwner` at `leaseGeneration`. */
@@ -340,10 +342,14 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { replaces: 'not its title', title: 'named by the census' } }),
   },
-  // A session not on a Cursor key: its own runner is answered `recorded: false`, and nothing is written.
+  // A session not on a Cursor key: its own runner is answered `recorded: false`, and nothing is
+  // written. This one names the account's OPEN LANDING session, which is what the route's own
+  // owner-scoped guard is held to: another account's runner must be answered exactly as it is for
+  // an id that names nothing (no 409 that would confirm the landing exists), while the owner's
+  // runner is answered SESSION_IS_PLATFORM_DRIVEN.
   'POST /runner/sessions/:id/cursor-key-check': {
     as: RUNNER,
-    request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { state: 'INVALID', keyFingerprint: '0123456789abcdef' } }),
+    request: (of) => ({ params: { id: of.runner.landingSessionId }, body: { state: 'INVALID', keyFingerprint: '0123456789abcdef' } }),
   },
   'POST /runner/sessions/:id/turns/:turnId/suggestion': {
     as: RUNNER,

@@ -95,7 +95,10 @@ function harness({
     // same scope — this runner's sessions — so it mirrors the harness state unless a test
     // overrides it to simulate a race.
     session: {
-      findFirst: async (args: unknown) => {
+      findFirst: async (args: { select?: Record<string, unknown> }) => {
+        // The engine-path guard asks whether this id is a LANDING row before the route's own read;
+        // it is a different question from the unlocked idempotency preflight below.
+        if (args?.select?.sessionKind === true) return { sessionKind: 'CONVERSATION' };
         preflightCalls.push(args);
         if (preflight !== undefined) return preflight;
         return owned ? { inboxLeaseOwner: LEASE_OWNER, inboxLeaseGeneration: current, status } : null;
