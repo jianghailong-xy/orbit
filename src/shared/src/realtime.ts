@@ -106,12 +106,14 @@ export interface ControlEvent {
   data: Record<string, unknown>;
 }
 
-/** Project membership derived from coordinator, task, context, judgment or root-session links. */
+/** Project membership derived from coordinator, landing, task, context, judgment or root-session
+ *  links. `LANDING` is the platform-driven container of a landing subject (contract §2.9 LS6): it
+ *  is listed only by `GET /sessions?projectId=&includeLanding=1`, never by a flat list. */
 export interface SessionProjectMembership {
   projectId: string;
   projectTitle: string;
   projectStatus: `${ProjectStatus}`;
-  role: 'COORDINATOR' | 'TASK' | 'CONTEXT' | 'JUDGMENT' | 'CHILD';
+  role: 'COORDINATOR' | 'LANDING' | 'TASK' | 'CONTEXT' | 'JUDGMENT' | 'CHILD';
 }
 
 /** `data` for `session.created` / `session.updated`: the slim list-row summary, field-aligned

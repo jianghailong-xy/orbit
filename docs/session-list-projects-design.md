@@ -52,6 +52,8 @@
 
 集成线契约修订 12（§2.9 LS6，对实现的要求）：平铺的 `GET /sessions`（不带 `projectId` 的各 view）、`GET /sessions/compact`、`GET /sessions/search`、`GET /sessions/counts`，以及 agent 工具 `session_list`、`session_search`，默认排除落地会话；`GET /sessions?projectId=` 只在带 `includeLanding=1` 时把该项目的落地会话以 `LANDING` 角色返回，项目会话页带上它。直接链接的 `GET /sessions/:id`、`session_get` 不受列表排除规则影响。
 
+`includeLanding=1` 读回的 `LANDING` 行另带可选的 `landing` 摘要：`{ subject: 'TASK' | 'PROMOTION', state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED', settledAs, settledAt }`（`settledAs` 只在 `SETTLED` 时有值）。`AWAITING_DECISION` 指段里有 OPEN 的集成类待办，或候选为 `BLOCKED`；`SETTLED` 的行在 `view=completed` 里。分组与 24 小时窗口在客户端：Landings 组只列等决定的与 24 小时内结案的，从不列在途的与已合入的合入轮，已结的折叠成「Earlier · n landed」。
+
 ### 3.3 `/projects/sidebar` 补进度数字
 
 每个项目加 `taskCounts: { done, failed, total }`，取自触发器维护的 `project_task_status_count`：`done` 是 DONE，`failed` 是 FAILED，`total` 是除 CANCELLED 外的全部。`buckets.running`、`attention`、`coordinatorActivity` 已经有了。

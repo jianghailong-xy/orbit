@@ -31,6 +31,13 @@ import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
  * Anyone adding a source to the list row must add it here (`open-list-version.pg.spec.ts` pins
  * the ones the row shows).
  *
+ * `includeLanding` is the one source that is not always read: only the project grouping's
+ * landing-aware list can see a LANDING row (contract §2.9 LS6), so `project_landing` joins the
+ * version, and the session fingerprint counts LANDING rows, only when that flag is on. An insert
+ * or a settlement then moves the landing-aware ETag and leaves the plain list's exactly where it
+ * was; the other landing facts a row shows (its OPEN integration items, its BLOCKED candidate)
+ * are sources already.
+ *
  * The rest of the list is a fact about the clock, not the rows: a runner going offline, a job going
  * quiet, a share link expiring, a review window or an escalation passing. Each is a threshold that
  * flips once while the data stands still, so the version carries how many have flipped, decided on
@@ -42,6 +49,7 @@ export async function readOpenListVersion(
   prisma: PrismaService,
   ownerId: string,
   nowMs: number = Date.now(),
+  includeLanding: boolean = false,
 ): Promise<string> {
   const o = Prisma.sql`${ownerId}::uuid`;
   // How many row versions, and an order-free fingerprint of which.
@@ -59,7 +67,7 @@ export async function readOpenListVersion(
   const [row] = await prisma.$queryRaw<Array<Record<string, unknown>>>(Prisma.sql`
     WITH owned AS MATERIALIZED (
       SELECT s.id, s.ctid::text || ':' || s.xmin::text AS v, s.status::text AS status,
-             s.task_id, s.context_task_id, s.assigned_runner_id,
+             s.kind AS kind, s.task_id, s.context_task_id, s.assigned_runner_id,
              COALESCE(s.completed_at, s.archived_at) IS NULL AND s.deleted_at IS NULL AS open,
              ${worktreeOperationFenceSql('s')} AS fenced,
              CASE WHEN cardinality(s.running_bg_jobs) > 0
@@ -97,7 +105,12 @@ export async function readOpenListVersion(
        WHERE e.owner_id = ${o}
     )
     SELECT
-      (SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended(v, 0)), 0)::text FROM owned) AS session,
+      -- A landing container is in no flat view (contract §2.9 LS6), so its row versions count only
+      -- for the project grouping's landing-aware read: a landing inserted or settled moves that
+      -- list's version and leaves this one exactly where it was. Every other source reads the
+      -- same account-wide set either way.
+      (SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended(v, 0)), 0)::text
+         FROM owned WHERE ${includeLanding ? Prisma.sql`TRUE` : Prisma.sql`kind = 'CONVERSATION'`}) AS session,
       -- The queued gate counts every running turn on the runner a PENDING row waits for.
       ${rowsOf('x', Prisma.sql`FROM session x WHERE x.status = 'RUNNING' AND x.owner_id <> ${o}
         AND x.assigned_runner_id IN (SELECT assigned_runner_id FROM owned WHERE status = 'PENDING')`)} AS foreign_running,
@@ -107,6 +120,9 @@ export async function readOpenListVersion(
       -- (a foreign-key estimate that ignores its NULLs) and would scan all of it for a few thousand ids.
       ${rowsOf('x', Prisma.sql`FROM task x WHERE x.id = ANY(ARRAY(SELECT id FROM task_ids))`)} AS task,
       ${ownedBy('project')} AS project,
+      -- Only read by the project grouping's landing-aware list (contract §2.9 LS6). A constant
+      -- when that is off, so this version stays exactly where it was across landing writes.
+      ${includeLanding ? ownedBy('project_landing') : Prisma.sql`'0/0'`} AS landing,
       ${rowsOf('x', Prisma.sql`FROM project_coordinator_wake x JOIN project p ON p.id = x.project_id
         WHERE p.owner_id = ${o} AND x.status IN ('DELIVERED', 'SESSION_OPENED')`)} AS coordinator_wake,
       ${ownedBy('project_open_item')} AS open_item,
