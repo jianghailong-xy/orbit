@@ -1385,7 +1385,7 @@ export async function stopInFlightJob(
         actor: input.actor ?? { type: 'PLATFORM' },
         reason: input.reason ?? null,
         data: { cause: input.cause ?? 'STOP', state: 'CANCELLED' },
-        text: cancelledText(),
+        text: cancelledText(true),
         at: input.now,
       });
       return { outcome: 'CANCELLED', errorCode: null };

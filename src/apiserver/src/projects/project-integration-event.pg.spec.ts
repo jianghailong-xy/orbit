@@ -670,6 +670,12 @@ test('a failure, the coordinator rerun and the owner rerun each sign their own l
       assert.equal(handledEntry.claim, 1);
       assert.ok(timeline.sections[1].entries.indexOf(handledEntry)
         > timeline.sections[1].entries.findIndex((entry) => entry.kind === 'ENQUEUED'));
+      const failureEntry = timeline.sections[0].entries.find((entry) => entry.kind === 'RESULT')!;
+      assert.match(failureEntry.text, /Check failed · nothing was pushed/);
+      const sectionOf = (entry: unknown) => timeline.sections
+        .findIndex((section) => (section.entries as unknown[]).includes(entry));
+      assert.ok(sectionOf(handledEntry) > sectionOf(failureEntry),
+        'the handling line comes after the failure line it answers');
 
       await assertNoLandingRunEvents(stack, landing.sessionId);
     } finally {
@@ -697,8 +703,9 @@ test('a stolen push records the moved commits: Automatic re-checks, the owner co
       const automaticLanding = await claimLanding(stack, w, 'lease-a-land', 'LAND_PROMOTION');
       assert.equal(automaticLanding.kind, 'LAND_PROMOTION');
 
-      // Main moved under the automatic landing: the fact is recorded on the landing, and the
-      // candidate is checked again — the line says which of the two things happened.
+      // The automatic landing reached PUSH and the remote would not take it: the runner answers
+      // READY with the commits main gained, the refusal is recorded on this landing, and the
+      // candidate is checked again — the v4 board draws both lines, refusal first.
       const movedThree = {
         total: 3,
         commits: [
@@ -708,7 +715,7 @@ test('a stolen push records the moved commits: Automatic re-checks, the owner co
         ],
       };
       await reportDirect(stack, w, automaticLanding, {
-        ...promotionReady('1'.repeat(40)), phase: 'FETCH', checks: [], conflicts: [],
+        ...promotionReady('1'.repeat(40)), phase: 'PUSH', checks: [], conflicts: [],
         upstreamMovedCommits: movedThree,
       });
       const recheck = await claimLanding(stack, w, 'lease-a-recheck', 'CHECK_PROMOTION');
@@ -874,11 +881,22 @@ test('a stolen push records the moved commits: Automatic re-checks, the owner co
       assert.equal(confirmation.actor?.type, 'AUTOMATIC');
       const attempt = firstLanding.find((entry) => entry.kind === 'AUTOMATIC_ATTEMPT')!;
       assert.match(attempt.text, /Automatic merge 1 of 3/);
-      // The v4 board order: the automatic landing's section ends with the recheck it decided; the
-      // owner-confirmed landing's ends with the next generation, after the push it was refused.
+      // The v4 board order: the automatic landing's refused push is drawn with the commits main
+      // gained, before the answer and the recheck it decided; the owner-confirmed landing's ends
+      // with the next generation, after the push it was refused.
+      const automaticEntries = timeline.sections[1].entries;
       assert.deepEqual(
-        timeline.sections[1].entries.map((entry) => entry.kind),
-        ['CONFIRMATION', 'AUTOMATIC_ATTEMPT', 'ENQUEUED', 'CLAIMED', 'RESULT', 'RECHECK_ON_MOVED_MAIN'],
+        automaticEntries.map((entry) => entry.kind),
+        ['CONFIRMATION', 'AUTOMATIC_ATTEMPT', 'ENQUEUED', 'CLAIMED', 'PUSH_REFUSED', 'RESULT', 'RECHECK_ON_MOVED_MAIN'],
+      );
+      const automaticRefused = automaticEntries.find((entry) => entry.kind === 'PUSH_REFUSED')!;
+      assert.match(
+        automaticRefused.text,
+        /Push refused · main moved 3 commits, 3 from outside the queue \(feat\(macos\): a window that reopens, fix\(web\): a table that scrolls, chore: a dependency bump\)/,
+      );
+      assert.ok(
+        automaticEntries.indexOf(automaticRefused)
+          < automaticEntries.findIndex((entry) => entry.kind === 'RECHECK_ON_MOVED_MAIN'),
       );
       const ownerSection = timeline.sections[3].entries;
       assert.deepEqual(
@@ -962,9 +980,17 @@ test('a takeover and a stopped runner\'s hand-back are facts of their own', { sk
     assert.match(releasedRow.text, /Handed back by runner timeline-takeover-runner · claim 2/);
 
     const timeline = await timelineOf(stack, w, landing.sessionId);
-    const kinds = timeline.sections[0].entries.map((entry) => entry.kind);
-    assert.ok(kinds.indexOf('CLAIMED') < kinds.indexOf('TAKEN_OVER'));
-    assert.ok(kinds.indexOf('TAKEN_OVER') < kinds.indexOf('RELEASED'));
+    // J-T11 bumps the row's claim generation to the one a later claim will take, but nobody holds
+    // it: the released attempt is back in the queue, and the timeline draws no claim for it.
+    const releasedJob = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+      where: { id: first.jobId }, select: { state: true, claimGeneration: true },
+    });
+    assert.equal(releasedJob.state, 'QUEUED');
+    assert.equal(releasedJob.claimGeneration, 3n);
+    assert.deepEqual(
+      timeline.sections[0].entries.map((entry) => entry.kind),
+      ['ENQUEUED', 'CLAIMED', 'TAKEN_OVER', 'RELEASED'],
+    );
     assert.equal(task.taskId.length > 0, true);
   } finally {
     await stack.db.$disconnect();
@@ -996,6 +1022,15 @@ test('a timeout ended by the candidate\'s recheck gate and by M-T13 says which d
       assert.equal((recheckTimeout.data as Record<string, unknown>).cause, 'RECHECK');
       assert.match(recheckTimeout.text, /Timed out · no report for/);
       assert.equal(recheckTimeout.actorType, 'PLATFORM');
+      // The timeout end moves the row's claim generation to the next one, which nobody ever took:
+      // the attempt is drawn with the claim that was taken and the timeout, and no phantom claim.
+      const recheckRound = (await subjectOfJob(stack.db, check.jobId)).landing;
+      const recheckTimeline = await timelineOf(stack, w, recheckRound.sessionId);
+      const recheckSection = recheckTimeline.sections.find((section) => section.jobId === check.jobId)!;
+      assert.deepEqual(
+        recheckSection.entries.map((entry) => entry.kind),
+        ['ENQUEUED', 'CLAIMED', 'TIMED_OUT', 'RESULT_FALLBACK'],
+      );
       assert.equal(task.taskId.length > 0, true);
 
       // (b) M-T13's retirement ends a silent check of a candidate whose work a receipt says landed.
@@ -1022,6 +1057,15 @@ test('a timeout ended by the candidate\'s recheck gate and by M-T13 says which d
       const m13Events = await eventsOf(stack.db, offeredCheck.jobId);
       const m13Timeout = m13Events.find((row) => row.kind === 'TIMED_OUT')!;
       assert.equal((m13Timeout.data as Record<string, unknown>).cause, 'M13');
+      // Same shape at the other door: the retirement ends the attempt, and the generation it
+      // bumps to was never claimed.
+      const offeredRound = (await subjectOfJob(stack.db, offeredCheck.jobId)).landing;
+      const m13Timeline = await timelineOf(stack, main, offeredRound.sessionId);
+      const m13Section = m13Timeline.sections.find((section) => section.jobId === offeredCheck.jobId)!;
+      assert.deepEqual(
+        m13Section.entries.map((entry) => entry.kind),
+        ['ENQUEUED', 'CLAIMED', 'TIMED_OUT', 'RESULT_FALLBACK'],
+      );
     } finally {
       await stack.db.$disconnect();
     }
@@ -1135,8 +1179,40 @@ test('an answer asked before the work settled is recorded: requeued, or stopped 
       assert.equal(cancelled.state, 'CANCELLED');
       const [cancelledEvent] = (await eventsOf(stack.db, first.jobId)).filter((row) => row.kind === 'CANCELLED');
       assert.equal(cancelledEvent.claimGeneration, 2n);
-      assert.match(cancelledEvent.text, /cancelled before it ran/);
+      // This attempt ran and answered; only the queued generation is "cancelled before it ran".
+      assert.match(cancelledEvent.text, /cancelled when the answer came back/);
       await assertNoLandingRunEvents(stack, landing.sessionId);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a candidate check that answered before its task work settled goes back to the queue',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'timeline-check-too-early');
+      const task = await doneTask(stack, w, 'timeline-check-too-early');
+      const landingJob = await claimLanding(stack, w, 'lease-1', 'LAND_TASK');
+      assert.equal((await report(stack, w, landingJob, { ...GREEN, checks: [GREEN_CHECK] })).accepted, true);
+      const check = await claimLanding(stack, w, 'lease-check', 'CHECK_PROMOTION');
+      const { landing: round } = await subjectOfJob(stack.db, check.jobId);
+      // The work the candidate is about finishes AFTER the check was claimed: the tip it resolves
+      // could still move, so its READY is the same question asked too early.
+      await stack.db.session.update({
+        where: { id: task.sessionId },
+        data: { finishedAt: new Date(Date.now() + 1_000) },
+      });
+      const early = await report(stack, w, check, promotionReady('1'.repeat(40)));
+      assert.equal(early.accepted, true);
+      assert.equal(early.state, 'QUEUED');
+      const [requeued] = (await eventsOf(stack.db, check.jobId)).filter((row) => row.kind === 'REQUEUED');
+      assert.equal(requeued.claimGeneration, 1n);
+      assert.match(requeued.text, /Sent back to the queue/);
+      const checkSection = (await timelineOf(stack, w, round.sessionId)).sections
+        .find((section) => section.jobId === check.jobId)!;
+      assert.deepEqual(checkSection.entries.map((entry) => entry.kind), ['ENQUEUED', 'CLAIMED', 'REQUEUED']);
+      await assertNoLandingRunEvents(stack, round.sessionId);
     } finally {
       await stack.db.$disconnect();
     }
@@ -1263,9 +1339,19 @@ test('the owner\'s stop and abandon are signed, and a queued stop says it never 
       const abandonedTimeline = await timelineOf(
         stack, w, (await subjectOfJob(stack.db, abandoned.jobId)).landing.sessionId,
       );
-      const abandonedEntries = abandonedTimeline.sections.flatMap((section) => section.entries);
-      assert.ok(abandonedEntries.some((entry) => entry.kind === 'ABANDONED'));
-      assert.equal(abandonedEntries.some((entry) => entry.kind === 'TIMED_OUT'), false);
+      // The abandon's CAS moves the claim generation to the next one, which nobody took: the
+      // attempt is drawn with the claim that ran, the answer it never gave, who it was handed to
+      // and the abandon — and no phantom claim on the generation the row now names.
+      const abandonedSection = abandonedTimeline.sections.find(
+        (section) => section.jobId === abandoned.jobId,
+      )!;
+      assert.deepEqual(
+        abandonedSection.entries.map((entry) => entry.kind),
+        ['ENQUEUED', 'CLAIMED', 'RESULT', 'HANDED_TO', 'ABANDONED'],
+      );
+      assert.equal(abandonedTimeline.sections.some(
+        (section) => section.entries.some((entry) => entry.kind === 'TIMED_OUT'),
+      ), false);
       assert.equal(abandonedTask.taskId.length > 0, true);
     } finally {
       await stack.db.$disconnect();

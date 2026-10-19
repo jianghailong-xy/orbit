@@ -1732,7 +1732,7 @@ export async function applyIntegrationJobResult(
         actor: { type: 'PLATFORM' },
         ...(cancelRequested ? { reason: 'the answer was asked for while the work was still moving' } : {}),
         data: { cause: 'TASK_WORK_STILL_MOVING' },
-        text: cancelRequested ? cancelledText() : requeuedText(),
+        text: cancelRequested ? cancelledText(false) : requeuedText(),
       });
       // A stopped generation that answered too early still ends here, so the DONE written after
       // the reopen has room for its own generation (J-T8) — the same requeue every other terminal
@@ -1838,7 +1838,7 @@ export async function applyIntegrationJobResult(
             actor: { type: 'PLATFORM' },
             ...(cancelRequested ? { reason: 'the check answered while the work was still moving' } : {}),
             data: { cause: 'CANDIDATE_WORK_STILL_MOVING' },
-            text: cancelRequested ? cancelledText() : requeuedText(),
+            text: cancelRequested ? cancelledText(false) : requeuedText(),
           });
           return {
             answer: {
@@ -2370,10 +2370,12 @@ async function appendResultEvents(
 
   // J-T13 / M-T12: the push was refused because the upstream moved, with the control plane's own
   // reading of each commit (`outsideQueue`, and `landedBy` — ids for this account, only the reason
-  // for another account's). Only an ERROR is a refused push: a READY that found main moved never
-  // reached the push (the automatic landing hands the candidate back and checks again), and its
-  // moved list belongs to the recheck line alone.
-  if (input.upstreamMovedCommits && input.effectiveState === 'ERROR') {
+  // for another account's). A refused push is what the runner says it is: it reached PUSH and the
+  // remote would not take it, whether it answers ERROR (an owner-confirmed landing ends there) or
+  // READY (an Automatic landing hands the candidate back and checks again) — the v4 board shows
+  // `Push refused` before `main moved … checking again` in both. A moved list reported before the
+  // push (phase FETCH) is not a refusal and belongs to the recheck line alone.
+  if (input.upstreamMovedCommits && phase === 'PUSH') {
     await appendIntegrationJobEvent(tx, {
       jobId: job.id,
       key: 'push-refused',

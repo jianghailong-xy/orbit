@@ -3247,7 +3247,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				},
 				"round": map[string]interface{}{
 					"type":        "string",
-					"description": "Narrow the page to one round inside the claim, from 1.",
+					"description": "Narrow the page to one round inside the claim, from 0 (the facts from before its first round).",
 				},
 				"check": map[string]interface{}{
 					"type":        "string",

@@ -266,10 +266,14 @@ export async function readLandingTimeline(
     }
     entries.push(...(events.get(job.id) ?? []));
     // J-T11 / §2.9 LS2: a claim whose backfill failed (the INSERT after the claim statement is
-    // best-effort) still has its committed claim on the job row. The timeline derives the current
-    // claim from it rather than showing an attempt that was never taken up.
-    if (claim > 0 && !entries.some((entry) => (entry.kind === 'CLAIMED' || entry.kind === 'TAKEN_OVER')
-        && entry.claim === claim)) {
+    // best-effort) still has its committed claim on the row — but only while the attempt is still
+    // RUNNING under it. Three doors move `claim_generation` without anybody claiming: the J-T9
+    // timeout end, the J-T10 abandon and the J-T11 release; a terminal or QUEUED row that names
+    // claim N did not take a claim N, and drawing one would invent an attempt. The number is read
+    // from the row, and the row is only believed while it says an attempt is under way.
+    if (claim > 0 && job.state === 'RUNNING'
+        && !entries.some((entry) => (entry.kind === 'CLAIMED' || entry.kind === 'TAKEN_OVER')
+          && entry.claim === claim)) {
       const runnerName = job.runnerId ? runnerNames.get(job.runnerId) ?? null : null;
       entries.push(derivedEntry({
         kind: 'CLAIMED',

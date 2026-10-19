@@ -353,8 +353,11 @@ export function stopRequestedText(claim: number | null): string {
   return claim != null && claim > 0 ? `Stop requested · claim ${claim}` : 'Stop requested';
 }
 
-export function cancelledText(): string {
-  return 'Stopped · cancelled before it ran';
+/** A generation a stop ended: either from the queue (it never ran) or when its answer came back. */
+export function cancelledText(beforeItRan: boolean): string {
+  return beforeItRan
+    ? 'Stopped · cancelled before it ran'
+    : 'Stopped · cancelled when the answer came back';
 }
 
 export function abandonedText(by: 'OWNER' | 'COORDINATOR', reason: string | null): string {
