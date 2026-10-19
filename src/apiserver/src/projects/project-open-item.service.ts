@@ -1782,7 +1782,7 @@ export class ProjectOpenItemService {
         ownerBlockers,
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
-      if (decision.endsTimedOutJob && !(silent && await endTimedOutLanding(tx, silent))) {
+      if (decision.endsTimedOutJob && (silent ? await endTimedOutLanding(tx, silent) : null) === null) {
         throw new ConflictException({
           code: INTEGRATION_RETRY_IN_FLIGHT,
           message: 'this landing\'s runner reported again while the retry was being decided, so it has not '
@@ -2171,7 +2171,7 @@ export class ProjectOpenItemService {
         openItems,
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
-      if (decision.endsTimedOutJob && !(silent && await endTimedOutLanding(tx, silent))) {
+      if (decision.endsTimedOutJob && (silent ? await endTimedOutLanding(tx, silent) : null) === null) {
         throw new ConflictException({
           code: INTEGRATION_RETRY_IN_FLIGHT,
           message: 'this check\'s runner reported again while the retry was being decided, so it has not '

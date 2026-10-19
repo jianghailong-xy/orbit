@@ -218,6 +218,10 @@ export interface ProjectIntegrationJob<Instant = string> {
   timedOut: boolean;
   /** How long the current step may go without a report; null while queued. */
   limitSeconds: number | null;
+  /** The protocol this job's current claim was written with (§2.2 J-T4): `'v2'` for a runner that
+   *  reports periodically, null for a legacy claim that only reports at step boundaries. Absent
+   *  from a server older than the field. */
+  progressProtocol?: string | null;
   /** Whether the owner's Retry (`POST /projects/:id/integration/jobs/:jobId/retry`) takes this job
    *  now. Clients draw the button from this rather than from `timedOut`, so which timed-out jobs a
    *  retry can end is the server's to say. */
@@ -981,6 +985,18 @@ export interface ProjectPromotionView<Instant = string> {
     phase: IntegrationJobPhase | null;
     startedAt: Instant;
   } | null;
+  /**
+   * That job has been asked to stop and has not ended yet: the card draws it as "cancelling"
+   * (§3.3 M-T10). The promotion keeps the state it was in until the job's own result settles
+   * whether it landed; absent from a server older than the field.
+   */
+  cancelRequested?: boolean;
+  /**
+   * That job's current claim has passed the push boundary (§2.2 J-T4) — a v2 claim that reported
+   * `PUSH` under this `claim_generation`, or a legacy claim at `PUSH` / `VERIFY`. Cancel is no
+   * longer accepted past it; the result is the fact. Absent from a server older than the field.
+   */
+  pushBoundaryPassed?: boolean;
   /**
    * The merge, once it happened (state C). `byUserId` is who pressed Merge; `automatic` is true when
    * nobody did — the project's Automatic setting merged its own branch because the check was clean

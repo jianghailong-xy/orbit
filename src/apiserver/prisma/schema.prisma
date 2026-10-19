@@ -2976,6 +2976,36 @@ model ProjectIntegrationJob {
   /// on the new claim a takeover writes); the result decides the rest (J-T12).
   cancelRequestedAt DateTime? @map("cancel_requested_at") @db.Timestamptz(3)
 
+  /// The progress protocol the CURRENT claim was made under (0434, contract §2.1/§2.2 J-T4). The
+  /// server writes `v2` for a runner that declared `integration-progress/v2`; NULL is a legacy
+  /// claim, which reports only at step boundaries and whose PUSH report is best effort. Every rule
+  /// that has to tell the two apart — the timeout (§7.2 V6), J12's error code, the push boundary —
+  /// reads this column, never the runner as it is now.
+  progressProtocol String? @map("progress_protocol")
+  /// The push boundary as a row fact (0434, contract §2.1 J-T4): the `claim_generation` under which
+  /// the server accepted a synchronous `phase = PUSH` report. A v2 claim is past the boundary when
+  /// this equals its `claim_generation`. Never cleared: a takeover of a LEGACY claim with this NULL
+  /// writes the generation it took over, because that runner's push may have happened and a legacy
+  /// PUSH report cannot prove it did not.
+  pushReportedGeneration BigInt? @map("push_reported_generation")
+  /// The round inside the current claim, from 1, as the v2 reports name it (0434, J-T4).
+  round Int?
+  /// The named sub-step inside `phase` (0434, J-T4): WAITING_LOCAL_LOCK inside FETCH, PREPARE
+  /// inside CHECK. It does not widen the `phase` closed set.
+  step String?
+  /// When the current step began, where a "step" is the (phase, sub-step) pair (0434, J-T4;
+  /// §7.2 V6 counts the landing's main clock from it). Written by the claim (FETCH starts here) and
+  /// whenever a report changes that pair — including a sub-step going back to none; a pure renewal
+  /// that repeats the pair leaves it where it was.
+  stepStartedAt DateTime? @map("step_started_at") @db.Timestamptz(3)
+  /// When the current step's output last moved, as the server computed it from the report's
+  /// `outputIdleMs` (received-at minus idle). NULL means the report did not measure it (0434).
+  outputMovedAt DateTime? @map("output_moved_at") @db.Timestamptz(3)
+  /// The check in flight under a v2 claim: `{ name, index, count, budgetSeconds, startedAt }`
+  /// (0434, contract §2.1's note on J-T4's current check — this column is where that note's open
+  /// choice was settled). `checks` above holds the finished results, a different shape.
+  currentCheck Json? @map("current_check")
+
   /// The three tips this job froze, and the merge commit that absorbed upstream into the target.
   sourceSha       String? @map("source_sha") @db.Char(40)
   targetShaBefore String? @map("target_sha_before") @db.Char(40)

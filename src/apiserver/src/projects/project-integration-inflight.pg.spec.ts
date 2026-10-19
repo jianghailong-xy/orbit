@@ -391,6 +391,9 @@ test('the landing line describes running work before the queue, on real PostgreS
             startedAt: jobs[0].startedAt, queuedAt: jobs[0].queuedAt, heartbeatAt: jobs[0].heartbeatAt,
             runnerName: 'workstation-gpu', retriedBy: null, timedOut: false, limitSeconds: 600,
             retryable: false,
+            // A row claimed before the progress protocol existed — which is every fixture here — is
+            // a legacy claim (§2.2 J-T4). The optional field travels on the wire from 0434.
+            progressProtocol: null,
           });
           assert.deepEqual(
             { taskTitle: jobs[0].taskTitle, kind: jobs[0].kind, phase: jobs[0].phase, state: jobs[0].state,

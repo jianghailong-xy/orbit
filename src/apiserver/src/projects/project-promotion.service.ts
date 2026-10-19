@@ -18,6 +18,7 @@ import {
   LandingWorkSessionFacts,
   PROMOTION_AUTOMATIC_LAND,
   integrationSerialKey,
+  pushBoundaryPassed,
   queuePromotionJob,
   queueTaskBranchCandidate,
   shortBranchName,
@@ -415,7 +416,7 @@ export class ProjectPromotionService {
    * merge differently, and the card the owner pressed has to be the card they get back.
    */
   private async view(row: PromotionRow): Promise<ProjectPromotionView> {
-    const [tasks, upstreamSyncedAt, execution, onPass] = await Promise.all([
+    const [tasks, upstreamSyncedAt, merge, onPass] = await Promise.all([
       this.tasksOf(row),
       this.lastUpstreamSync(row.projectId),
       this.mergeExecution(row),
@@ -434,23 +435,48 @@ export class ProjectPromotionService {
         typicalMs: medianMs(await this.recentCheckDurations(row.projectId)),
       }
       : null;
-    return promotionView(row, { tasks, upstreamSyncedAt, recheck, execution, onPass });
+    return promotionView(row, {
+      tasks, upstreamSyncedAt, recheck, onPass,
+      execution: merge.execution,
+      cancelRequested: merge.cancelRequested,
+      pushBoundaryPassed: merge.pushBoundaryPassed,
+    });
   }
 
-  private async mergeExecution(row: PromotionRow): Promise<ProjectPromotionView['execution']> {
-    if (!row.landJobId || (row.state !== 'CONFIRMED' && row.state !== 'RECHECKING')) return null;
+  /**
+   * The confirmed merge's own job — never another project job — and the two facts §3.3 M-T10 draws
+   * "cancelling" from: it has been asked to stop and has not ended, and it is (not) past the push
+   * boundary. Both are false when there is no live landing: a queued job has not been asked (a queue
+   * stop ends the job and the candidate at once), and no push is in flight.
+   */
+  private async mergeExecution(row: PromotionRow): Promise<{
+    execution: ProjectPromotionView['execution'];
+    cancelRequested: boolean;
+    pushBoundaryPassed: boolean;
+  }> {
+    if (!row.landJobId || (row.state !== 'CONFIRMED' && row.state !== 'RECHECKING')) {
+      return { execution: null, cancelRequested: false, pushBoundaryPassed: false };
+    }
     const job = await this.prisma.projectIntegrationJob.findFirst({
       where: {
         id: row.landJobId, projectId: row.projectId, promotionId: row.id,
         kind: 'LAND_PROMOTION', state: { in: ['QUEUED', 'RUNNING'] },
       },
-      select: { state: true, phase: true, startedAt: true, createdAt: true },
+      select: {
+        state: true, phase: true, startedAt: true, createdAt: true, cancelRequestedAt: true,
+        progressProtocol: true, pushReportedGeneration: true, claimGeneration: true,
+      },
     });
-    return job ? {
-      state: job.state as 'QUEUED' | 'RUNNING',
-      phase: job.phase as IntegrationJobPhase | null,
-      startedAt: job.state === 'RUNNING' ? job.startedAt ?? job.createdAt : job.createdAt,
-    } : null;
+    if (!job) return { execution: null, cancelRequested: false, pushBoundaryPassed: false };
+    return {
+      execution: {
+        state: job.state as 'QUEUED' | 'RUNNING',
+        phase: job.phase as IntegrationJobPhase | null,
+        startedAt: job.state === 'RUNNING' ? job.startedAt ?? job.createdAt : job.createdAt,
+      },
+      cancelRequested: job.state === 'RUNNING' && job.cancelRequestedAt != null,
+      pushBoundaryPassed: pushBoundaryPassed(job),
+    };
   }
 
   /** What this merge would carry, in the order the row lists it, with the titles the card shows. */
@@ -623,9 +649,11 @@ async function applyDecline(
  *    BLOCKED — the same ending an abandoned landing gets. Asking such a row to stop would leave it
  *    holding the main serial slot with nobody able to end it.
  *
- * The push boundary is read off a legacy claim's `phase`: PUSH and VERIFY both mean the runner may
- * have pushed (it reports VERIFY after the push), so the door refuses there. A v2 claim is decided
- * by `push_reported_generation` when the progress protocol lands (`34a1400z5T8WzXuLEQfWM`).
+ * The push boundary is read off the job row by J-T4's rule (`pushBoundaryPassed`): a v2 claim is
+ * past it when `push_reported_generation` equals its `claim_generation` — the synchronous PUSH
+ * report the progress route writes — and a legacy claim when `phase` is PUSH or VERIFY. Past it the
+ * door still refuses with 409 PROMOTION_NOT_READY, because the result is the fact (M-T8). The card
+ * draws the same two facts from `cancelRequested` / `pushBoundaryPassed` (§3.6).
  */
 async function applyCancel(tx: Prisma.TransactionClient, row: PromotionRow): Promise<void> {
   if (row.state !== 'CONFIRMED' && row.state !== 'RECHECKING') {
@@ -639,9 +667,11 @@ async function applyCancel(tx: Prisma.TransactionClient, row: PromotionRow): Pro
   if (row.landJobId) {
     const job = await tx.projectIntegrationJob.findFirst({
       where: { id: row.landJobId, projectId: row.projectId },
-      select: { state: true, phase: true },
+      select: {
+        state: true, phase: true, progressProtocol: true, pushReportedGeneration: true, claimGeneration: true,
+      },
     });
-    if (job?.state === 'RUNNING' && (job.phase === 'PUSH' || job.phase === 'VERIFY')) {
+    if (job && pushBoundaryPassed(job)) {
       throw new ConflictException({
         code: PROMOTION_NOT_READY,
         message: 'this merge is already being pushed and cannot be called back',

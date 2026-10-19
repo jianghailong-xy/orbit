@@ -14,7 +14,7 @@ import {
 
 import type { PrismaService } from '../prisma/prisma.service';
 import { branchName } from './project-criterion-landing';
-import { IntegrationCheckSource, endTimedOutLanding, integrationJobLimitSeconds, timedOutErrorCode } from './project-integration-job';
+import { IntegrationCheckSource, endTimedOutLanding, integrationJobLimitSeconds } from './project-integration-job';
 import { readProjectLandTaskViews } from './project-task-integration';
 
 /**
@@ -554,6 +554,8 @@ interface InFlightJobRow extends IntegrationCheckSource {
   retryRequestedByUserId: string | null;
   /** Seconds since the runner last said anything about it, by the database's clock. */
   silentSeconds: number | null;
+  /** The protocol the current claim was made under (§2.2 J-T4): `'v2'`, or null for a legacy claim. */
+  progressProtocol: string | null;
   /** Another job on the same runner, repository and target ref was claimed first and still runs. */
   behindAnotherOnRunner: boolean;
 }
@@ -597,6 +599,7 @@ export async function readInFlightJobs(
            cb."merge_check_command" AS "mergeCheckCommand",
            cb."merge_check_timeout_seconds" AS "mergeCheckTimeoutSeconds",
            j."skip_merge_check" AS "skipMergeCheck",
+           j."progress_protocol" AS "progressProtocol",
            EXTRACT(EPOCH FROM now() - COALESCE(j."heartbeat_at", j."claimed_at"))::float8 AS "silentSeconds",
            (j."state" = 'RUNNING' AND j."heartbeat_at" <= j."claimed_at" AND EXISTS (
               SELECT 1
@@ -640,6 +643,7 @@ export async function readInFlightJobs(
       retriedBy: row.retryRequestedByUserId ? 'OWNER' : row.retryRequestedBySessionId ? 'COORDINATOR' : null,
       timedOut,
       limitSeconds,
+      progressProtocol: row.progressProtocol,
       retryable: timedOut && row.kind === 'LAND_TASK',
     };
   });
@@ -688,7 +692,8 @@ export type InFlightStop =
  * `readInFlightJobs` — this function has no timeout rule of its own): a request written onto it
  * would never be collected, and it would hold its `serial_key` for ever, so it is ended on the spot
  * as the ERROR it is, with J12's code (`timedOutErrorCode`: a check is always `RUNNER_LOST`; a
- * landing's legacy claim is `PUSH_OUTCOME_UNKNOWN`).
+ * landing is `RUNNER_LOST` only when its current claim is v2 and recorded no PUSH, and
+ * `PUSH_OUTCOME_UNKNOWN` otherwise — a legacy claim cannot prove nothing was pushed).
  *
  * `NONE` is an ordinary answer: the caller raced a result, a claim or another stop and the row has
  * already moved, so it must act on nothing. A caller that needs to know whether the promotion may
@@ -710,8 +715,9 @@ export async function stopInFlightJob(
     if (ended.count === 1) return { outcome: 'CANCELLED', errorCode: null };
     // It was claimed between the read and the write: fall through and ask that claim to stop.
   } else if (job.timedOut) {
-    if (await endTimedOutLanding(tx, job)) {
-      return { outcome: 'ENDED', errorCode: timedOutErrorCode(job.kind) };
+    const errorCode = await endTimedOutLanding(tx, job);
+    if (errorCode !== null) {
+      return { outcome: 'ENDED', errorCode };
     }
     // The compare-and-set lost: it reported again between the read and the write, so it is talking
     // after all and gets the ordinary ask below.
