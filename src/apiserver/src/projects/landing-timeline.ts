@@ -11,6 +11,7 @@ import type { PrismaService } from '../prisma/prisma.service';
 import { AUTOMATIC_MERGE_ATTEMPTS } from './project-promotion';
 import {
   automaticAttemptText,
+  claimedText,
   confirmationText,
   fixesItemText,
   handlingText,
@@ -88,6 +89,7 @@ const TIMELINE_JOB_COLUMNS = {
   sourceFullyApplied: true,
   landedSha: true,
   targetShaBefore: true,
+  runnerId: true,
   targetRef: true,
   upstreamRef: true,
   sourceRef: true,
@@ -99,11 +101,13 @@ const TIMELINE_JOB_COLUMNS = {
 
 type TimelineJob = Prisma.ProjectIntegrationJobGetPayload<{ select: typeof TIMELINE_JOB_COLUMNS }>;
 
-/** The section heading, written by the server: one per attempt of the subject. */
-export function sectionTitle(kind: string, generation: number): string {
-  if (kind === 'CHECK_PROMOTION') return `Merge check · ${generation}`;
-  if (kind === 'LAND_PROMOTION') return `Merge to main · ${generation}`;
-  return `Generation ${generation}`;
+/** The section heading, written by the server: one per attempt of the subject, numbered by its
+ *  order among the subject's attempts of that kind (so a superseded candidate's check and its
+ *  replacement's check are `Merge check · 1` and `Merge check · 2`, never two of one number). */
+export function sectionTitle(kind: string, ordinal: number): string {
+  if (kind === 'CHECK_PROMOTION') return `Merge check · ${ordinal}`;
+  if (kind === 'LAND_PROMOTION') return `Merge to main · ${ordinal}`;
+  return `Generation ${ordinal}`;
 }
 
 /**
@@ -112,7 +116,7 @@ export function sectionTitle(kind: string, generation: number): string {
  */
 export async function readLandingTimeline(
   prisma: Pick<PrismaService, '$queryRaw' | 'projectIntegrationJob' | 'projectOpenItem'
-    | 'projectPromotion' | 'task'>,
+    | 'projectPromotion' | 'task' | 'runner'>,
   subject: LandingTimelineSubject,
 ): Promise<SessionLandingTimeline<Date>> {
   const all = await prisma.projectIntegrationJob.findMany({
@@ -184,6 +188,20 @@ export async function readLandingTimeline(
     itemsByJob.set(item.handlingJobId, list);
   }
 
+  // The runner a claim line names, read once for the attempts that need it (a claim whose event is
+  // missing is derived below; the stored ones already carry their name).
+  const runnerIds = [...new Set(jobs.map((job) => job.runnerId).filter((id): id is string => id != null))];
+  const runnerNames = new Map<string, string>();
+  if (runnerIds.length > 0) {
+    const rows = await prisma.runner.findMany({ where: { id: { in: runnerIds } }, select: { id: true, name: true } });
+    for (const row of rows) runnerNames.set(row.id, row.name);
+  }
+
+  // Section numbers are their ORDER WITHIN THE SUBJECT, not the job's own generation: a round can
+  // hold a superseded candidate and the candidate that replaced it, both generation 1 of their own
+  // candidate, and two sections titled `Merge check · 1` would be one heading for two attempts.
+  const sectionOrdinals = new Map<string, number>();
+
   const sections: IntegrationTimelineSection<Date>[] = jobs.map((job) => {
     const entries: IntegrationTimelineEntry<Date>[] = [];
     const claim = Number(job.claimGeneration);
@@ -229,8 +247,10 @@ export async function readLandingTimeline(
       const handled = item.state !== 'OPEN';
       entries.push(derivedEntry({
         kind: 'HANDLING',
-        at: (handled ? item.resolvedAt : item.handlingStartedAt) ?? job.createdAt,
-        claim: 0,
+        // The generation that took the item over — its claim, not the enqueue — so the line is
+        // drawn with that attempt rather than ahead of it.
+        at: job.claimedAt ?? (handled ? item.resolvedAt : item.handlingStartedAt) ?? job.createdAt,
+        claim: claim,
         actor: item.handlingSessionId
           ? { type: 'COORDINATOR', sessionId: item.handlingSessionId }
           : item.handlingUserId ? { type: 'OWNER', userId: item.handlingUserId } : null,
@@ -245,6 +265,22 @@ export async function readLandingTimeline(
       }));
     }
     entries.push(...(events.get(job.id) ?? []));
+    // J-T11 / §2.9 LS2: a claim whose backfill failed (the INSERT after the claim statement is
+    // best-effort) still has its committed claim on the job row. The timeline derives the current
+    // claim from it rather than showing an attempt that was never taken up.
+    if (claim > 0 && !entries.some((entry) => (entry.kind === 'CLAIMED' || entry.kind === 'TAKEN_OVER')
+        && entry.claim === claim)) {
+      const runnerName = job.runnerId ? runnerNames.get(job.runnerId) ?? null : null;
+      entries.push(derivedEntry({
+        kind: 'CLAIMED',
+        at: job.claimedAt ?? job.createdAt,
+        claim,
+        phase: job.phase,
+        actor: { type: 'RUNNER' },
+        data: { claimGeneration: claim, runnerId: job.runnerId, runnerName },
+        text: claimedText(claim, runnerName),
+      }));
+    }
     // J-T9's timeout end, for a job whose row says it timed out and that has no `TIMED_OUT` event
     // (a row written before the ledger, or an end this build does not record). The two causes the
     // row cannot tell apart are written as events; this is the ordinary end derived from the row.
@@ -331,11 +367,13 @@ export async function readLandingTimeline(
       }));
     }
     entries.sort(compareEntries);
+    const ordinal = (sectionOrdinals.get(job.kind) ?? 0) + 1;
+    sectionOrdinals.set(job.kind, ordinal);
     return {
-      title: sectionTitle(job.kind, job.generation),
+      title: sectionTitle(job.kind, ordinal),
       jobId: job.id,
       kind: job.kind as IntegrationJobKind,
-      generation: job.generation,
+      generation: ordinal,
       state: job.state,
       entries,
     };
@@ -423,6 +461,10 @@ function timeoutDetail(job: TimelineJob): {
   const detail = job.errorDetail;
   if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return null;
   const record = detail as Record<string, unknown>;
+  // J-T10's abandonment carries the same `limitSeconds` — it is the lease it was judged from — but
+  // it is a decision somebody took, not a report that never came. The abandon line says it; the
+  // timeout line must not be drawn on top of it.
+  if (record.abandoned === true) return null;
   if (typeof record.limitSeconds !== 'number') return null;
   return {
     cause: 'TIMEOUT',

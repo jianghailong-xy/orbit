@@ -473,7 +473,9 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			return toolResult("project_integration_get requires an Orbit Session: the line is read as "+
 				"a session in the project", true)
 		}
-		raw, err := s.t.getProjectIntegration(s.sessionID, id, getString(args, "jobId"), getString(args, "cursor"))
+		raw, err := s.t.getProjectIntegration(s.sessionID, id,
+			getString(args, "jobId"), getString(args, "claim"), getString(args, "round"),
+			getString(args, "check"), getString(args, "cursor"), getString(args, "timelineCursor"))
 		if err != nil {
 			return toolResult("read project integration failed: "+err.Error(), true)
 		}
@@ -3226,8 +3228,10 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"interface that is allowed to serve them. Read only. The acting session must belong to " +
 				"the project (its coordinator, a session of one of its tasks, or a child of one); another " +
 				"project's session is refused, and another account's project answers 404. jobId names " +
-				"one attempt and serves what its checks printed under `log`; cursor continues that " +
-				"page. Without jobId the line is served as it always was.",
+				"one attempt and serves what its checks printed under `log` and its timeline under " +
+				"`timeline`; claim, round and check narrow either page, cursor continues the log " +
+				"page and timelineCursor continues the timeline page. Without jobId the line is " +
+				"served as it always was.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",
@@ -3237,9 +3241,25 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"type":        "string",
 					"description": "Narrow the page to one job, as the queue or a task's landing names it.",
 				},
+				"claim": map[string]interface{}{
+					"type":        "string",
+					"description": "Narrow the page to one claim generation, from 0 (the enqueue).",
+				},
+				"round": map[string]interface{}{
+					"type":        "string",
+					"description": "Narrow the page to one round inside the claim, from 1.",
+				},
+				"check": map[string]interface{}{
+					"type":        "string",
+					"description": "Narrow the check log to one check's position in the run, from 1.",
+				},
 				"cursor": map[string]interface{}{
 					"type":        "string",
-					"description": "Continue a paged read from this cursor.",
+					"description": "Continue the check log page from this cursor.",
+				},
+				"timelineCursor": map[string]interface{}{
+					"type":        "string",
+					"description": "Continue the attempt timeline page from this cursor.",
 				},
 			}, "projectId"),
 		},

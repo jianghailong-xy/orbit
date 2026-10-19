@@ -377,6 +377,7 @@ export type IntegrationJobEventKind =
   | 'RECHECK_ON_MOVED_MAIN'
   | 'NEXT_GENERATION'
   | 'RESULT'
+  | 'REQUEUED'
   | 'HANDED_TO'
   | 'STOP_REQUESTED'
   | 'CANCELLED'
@@ -439,7 +440,9 @@ export interface IntegrationTimelineEntry<Instant = string> {
 }
 
 /** One section of the timeline: a task landing's generation, or one merge round's attempt.
- *  `title` is the server-written heading (`Generation 1`, `Merge check · 2`, `Merge to main · 1`). */
+ *  `title` is the server-written heading (`Generation 1`, `Merge check · 2`, `Merge to main · 1`);
+ *  `generation` is the section's number among the subject's attempts of its kind, which is the
+ *  number the title carries — not the job's own per-candidate generation. */
 export interface IntegrationTimelineSection<Instant = string> {
   title: string;
   jobId: string;

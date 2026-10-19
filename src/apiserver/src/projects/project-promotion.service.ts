@@ -25,7 +25,7 @@ import {
   workBranchEndedOn,
 } from './project-integration-job';
 import { type InFlightStop, stopInFlightJob } from './project-integration-line';
-import { appendIntegrationJobEvent, movedMainText } from './project-integration-event';
+import { movedMainText } from './project-integration-event';
 import { settleLandingAfterPromotionDecision } from './landing-session';
 import { openItemOwed } from './project-open-item';
 import {
@@ -797,6 +797,14 @@ export interface PromotionJobOutcome {
    */
   requeuedUnderConfirmation?: boolean;
   /**
+   * A moved-main fact this transition produced, for the relay to write into the timeline AFTER the
+   * job's own result lines: an automatic landing's recheck (M-T12) or the next generation under an
+   * owner's confirmation (J-T13). The promotion decides it; the relay owns the job's claim and round
+   * and the transaction that writes them, so the line is written there and lands after the answer it
+   * follows on the board.
+   */
+  movedMain?: { kind: 'RECHECK_ON_MOVED_MAIN' | 'NEXT_GENERATION'; text: string; data: Record<string, unknown> };
+  /**
    * Whether the owner's approval card should be opened for this promotion, and the facts it is
    * about — read off the promotion rather than off the job that just finished, because a landing
    * handed back after main moved (M-T12) reports the tip it found, not the one the check passed on.
@@ -1484,21 +1492,24 @@ async function checkAgainOnMovedMain(
       landJobId: null,
     },
   });
-  // §2.9 LS2's fourth fact the job row could not tell apart afterwards (M-T12): the automatic
-  // landing found main moved and the candidate is checked again on the new main. Written on the
-  // landing that came back, in the transaction that queued the recheck.
-  await appendIntegrationJobEvent(tx, {
-    jobId: input.endedJobId,
-    key: 'recheck-on-moved-main',
-    kind: 'RECHECK_ON_MOVED_MAIN',
-    data: {
-      nextJobId: checkJobId,
-      attempt: input.attempt,
-      ...(input.moved ? { upstreamMovedCommits: input.moved } : {}),
+  return {
+    promotionId: promotion.id,
+    state: 'CHECKING',
+    receiptIds: [],
+    openApproval: null,
+    // §2.9 LS2's fourth fact the job row could not tell apart afterwards (M-T12): the automatic
+    // landing found main moved and the candidate is checked again on the new main. The relay writes
+    // it on the landing that came back, with that attempt's claim and round.
+    movedMain: {
+      kind: 'RECHECK_ON_MOVED_MAIN',
+      text: movedMainText(input.moved, 'checking again on the new main'),
+      data: {
+        nextJobId: checkJobId,
+        attempt: input.attempt,
+        ...(input.moved ? { upstreamMovedCommits: input.moved } : {}),
+      },
     },
-    text: movedMainText(input.moved, 'checking again on the new main'),
-  });
-  return { promotionId: promotion.id, state: 'CHECKING', receiptIds: [], openApproval: null };
+  };
 }
 
 /**
@@ -1571,25 +1582,24 @@ async function landAgainAfterMovedUpstream(
     where: { id: promotion.id },
     data: { landJobId: nextJobId },
   });
-  // §2.9 LS2's fifth fact the job row could not tell apart afterwards (J-T13, owner decision
-  // 2026-10-19): the owner-confirmed landing's push was refused because main moved, and the next
-  // generation runs under the SAME confirmation. Written on the landing that was refused.
-  await appendIntegrationJobEvent(tx, {
-    jobId: input.jobId,
-    key: 'next-generation',
-    kind: 'NEXT_GENERATION',
-    data: {
-      nextJobId,
-      ...(input.movedCommits ? { upstreamMovedCommits: input.movedCommits } : {}),
-    },
-    text: movedMainText(input.movedCommits ?? null, 're-checking before merging'),
-  });
   return {
     promotionId: promotion.id,
     state: promotion.state as PromotionState,
     receiptIds: [],
     openApproval: null,
     requeuedUnderConfirmation: true,
+    // §2.9 LS2's fifth fact the job row could not tell apart afterwards (J-T13, owner decision
+    // 2026-10-19): the owner-confirmed landing's push was refused because main moved, and the next
+    // generation runs under the SAME confirmation. The relay writes it on the landing that was
+    // refused, after that attempt's answer.
+    movedMain: {
+      kind: 'NEXT_GENERATION',
+      text: movedMainText(input.movedCommits ?? null, 're-checking before merging'),
+      data: {
+        nextJobId,
+        ...(input.movedCommits ? { upstreamMovedCommits: input.movedCommits } : {}),
+      },
+    },
   };
 }
 

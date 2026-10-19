@@ -45,6 +45,7 @@ export const INTEGRATION_JOB_EVENT_KINDS = [
   'RECHECK_ON_MOVED_MAIN',
   'NEXT_GENERATION',
   'RESULT',
+  'REQUEUED',
   'HANDED_TO',
   'STOP_REQUESTED',
   'CANCELLED',
@@ -411,6 +412,13 @@ export function fixesItemText(): string {
   return 'Filed to fix an exception';
 }
 
+/** J-T1a / J-T1e's answer about work that could still move: the row goes back to the queue, or —
+ *  with a stop already asked — ends CANCELLED. It is not an answer, and the timeline says so rather
+ *  than leaving the attempt with no record of why it was asked again. */
+export function requeuedText(): string {
+  return 'Sent back to the queue · the task\'s work had not stopped moving';
+}
+
 /** The promotion's current state, as the round's timeline states it. `blockedReason` is the
  *  candidate's NOW, never history: 0409's column is cleared when a recheck is queued, and a past
  *  block is read off the attempt row that recorded it. */
@@ -525,19 +533,23 @@ export async function readIntegrationJobTimeline(
   return readEventPage(prisma, selectors);
 }
 
-/** One page of one attempt's facts. Shared with the landing view, which pages a whole subject. */
+/** One page of one attempt's facts, in the ledger's own order. Shared with nothing else: the
+ *  landing view reads a whole subject in display order (`readSubjectEvents`). */
 export async function readEventPage(
   prisma: Pick<PrismaService, '$queryRaw'>,
   selectors: IntegrationEventSelectors,
 ): Promise<IntegrationTimelinePage<Date>> {
   const cursor = selectors.cursor ? decodeEventCursor(selectors.cursor) : null;
+  // A ROUND FILTER SPELLS "ROUND N" THE WAY THE SORT DOES — a fact with no round belongs to round
+  // 0, the enqueue/first claim, and `round=0` is how a caller asks for those.
   const narrowed = Prisma.sql`
     ${selectors.claim !== undefined ? Prisma.sql`AND "claim_generation" = ${BigInt(selectors.claim)}` : Prisma.empty}
-    ${selectors.round !== undefined ? Prisma.sql`AND "round" = ${selectors.round}` : Prisma.empty}
-    ${cursor
-      ? Prisma.sql`AND ("claim_generation", COALESCE("round", 0), "at", "seq")
-                   > (${BigInt(cursor.claim)}::bigint, ${cursor.round}::int, ${cursor.at.toISOString()}::timestamptz, ${BigInt(cursor.seq)})`
-      : Prisma.empty}`;
+    ${selectors.round !== undefined ? Prisma.sql`AND COALESCE("round", 0) = ${selectors.round}` : Prisma.empty}
+    ${cursor ? Prisma.sql`AND "seq" > ${BigInt(cursor.seq)}` : Prisma.empty}`;
+  // PAGES CONTINUE ON `seq`, NOT ON `at`. A fact's own instant may be backdated (a v2 check's
+  // start, a check start reconstructed from the result's durations), so a fact written after a
+  // page can sort before that page's last line — continuing on the instant would starve it for
+  // ever. The ledger's sequence is the one order every appended fact moves forward in.
   const rows = await prisma.$queryRaw<EventRow[]>(Prisma.sql`
     SELECT "id", "seq", "kind", "claim_generation" AS "claim", "round", "check_name" AS "checkName",
            "check_index" AS "checkIndex", "phase", "step", "actor_type" AS "actorType",
@@ -546,7 +558,7 @@ export async function readEventPage(
       FROM "project_integration_job_event"
      WHERE "job_id" = ${selectors.jobId}::uuid
        ${narrowed}
-     ORDER BY "claim_generation" ASC, COALESCE("round", 0) ASC, "at" ASC, "seq" ASC
+     ORDER BY "seq" ASC
      LIMIT ${INTEGRATION_EVENT_PAGE_SIZE + 1}`);
   const entries = rows.slice(0, INTEGRATION_EVENT_PAGE_SIZE).map((row) => eventEntry(row));
   const last = rows.length > INTEGRATION_EVENT_PAGE_SIZE ? entries.at(-1) : null;
@@ -584,23 +596,18 @@ export function eventEntry(row: EventRow): IntegrationTimelineEntry<Date> {
   };
 }
 
-/** The continuation a page answers with: the position of its last entry. Opaque to the caller. */
+/** The continuation a page answers with: the ledger position of its last entry. Opaque to the
+ *  caller. Only the sequence travels: it is the one key that moves forward for every append. */
 function encodeEventCursor(entry: IntegrationTimelineEntry<Date>): string {
-  return Buffer.from(JSON.stringify({
-    c: entry.claim, r: entry.round ?? 0, a: entry.at.toISOString(), s: entry.seq,
-  }), 'utf8').toString('base64url');
+  return Buffer.from(JSON.stringify({ s: entry.seq }), 'utf8').toString('base64url');
 }
 
 /** A cursor this module issued, or a 400 — never a query that silently starts somewhere else. */
-function decodeEventCursor(raw: string): { claim: number; round: number; at: Date; seq: number } {
+function decodeEventCursor(raw: string): { seq: number } {
   try {
     const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as Record<string, unknown>;
-    const { c, r, a, s } = parsed;
-    const at = typeof a === 'string' ? new Date(a) : null;
-    if (Number.isSafeInteger(c) && Number.isSafeInteger(r) && (c as number) >= 0 && (r as number) >= 0
-        && Number.isSafeInteger(s) && (s as number) >= 1
-        && at !== null && !Number.isNaN(at.getTime())) {
-      return { claim: c as number, round: r as number, at, seq: s as number };
+    if (Number.isSafeInteger(parsed.s) && (parsed.s as number) >= 1) {
+      return { seq: parsed.s as number };
     }
   } catch {
     // The refusal below is the answer for every malformed cursor, whatever its shape.

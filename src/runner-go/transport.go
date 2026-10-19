@@ -1333,10 +1333,11 @@ func (t *Transport) getProject(id string) (json.RawMessage, error) {
 // and each merge candidate's newest check and merge. READ ONLY.
 //
 // The session header is the authority the server checks against project membership; jobId names one
-// attempt and serves its check output under `log`, and cursor continues that page (§2.9 LS2).
-// This is the door that replaces a coordinator querying the production database: the alternative to
-// calling it is not a smaller answer, it is an ungoverned one.
-func (t *Transport) getProjectIntegration(sessionID, id, jobID, cursor string) (json.RawMessage, error) {
+// attempt and serves its check output under `log` (continued by cursor) and its timeline (continued
+// by timelineCursor), narrowed by claim, round and check (§2.9 LS2). This is the door that replaces
+// a coordinator querying the production database: the alternative to calling it is not a smaller
+// answer, it is an ungoverned one.
+func (t *Transport) getProjectIntegration(sessionID, id, jobID, claim, round, check, cursor, timelineCursor string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(id); err != nil {
 		return nil, err
 	}
@@ -1349,11 +1350,13 @@ func (t *Transport) getProjectIntegration(sessionID, id, jobID, cursor string) (
 		}
 	}
 	query := url.Values{}
-	if jobID != "" {
-		query.Set("jobId", jobID)
-	}
-	if cursor != "" {
-		query.Set("cursor", cursor)
+	for name, value := range map[string]string{
+		"jobId": jobID, "claim": claim, "round": round, "check": check,
+		"cursor": cursor, "timelineCursor": timelineCursor,
+	} {
+		if value != "" {
+			query.Set(name, value)
+		}
 	}
 	path := "/runner/projects/" + url.PathEscape(id) + "/integration"
 	if encoded := query.Encode(); encoded != "" {

@@ -874,7 +874,7 @@ export type TimeoutEndCause = 'RETRY' | 'RECHECK' | 'M13' | 'STOP' | 'SUPERSEDE'
 export async function endTimedOutLanding(
   tx: Prisma.TransactionClient,
   job: { jobId: string; kind: string; phase: string | null; heartbeatAt: Date | null; startedAt: Date;
-         limitSeconds: number | null; runnerName: string | null },
+         limitSeconds: number | null; runnerName: string | null; round?: number | null },
   cause: TimeoutEndCause = 'STOP',
 ): Promise<'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN' | null> {
   // J12 reads the current claim's protocol and the push fact off the row rather than off a caller:
@@ -928,6 +928,7 @@ export async function endTimedOutLanding(
     key: 'timed-out',
     kind: 'TIMED_OUT',
     claim: Number(claim?.claimGeneration ?? 0n),
+    round: job.round ?? null,
     phase: job.phase,
     actor: { type: 'PLATFORM' },
     data: {

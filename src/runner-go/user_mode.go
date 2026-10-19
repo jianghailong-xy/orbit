@@ -408,7 +408,7 @@ func (u *userTransport) removeTaskDependency(id, dependsOnTaskID string) (json.R
 // the task commands.
 type projectTransport interface {
 	getProject(id string) (json.RawMessage, error)
-	getProjectIntegration(sessionID, id, jobID, cursor string) (json.RawMessage, error)
+	getProjectIntegration(sessionID, id, jobID, claim, round, check, cursor, timelineCursor string) (json.RawMessage, error)
 	getProjectHandoffs(id, state string) (json.RawMessage, error)
 	resolveProjectBlocker(projectID, blockerID string, body map[string]interface{}) (json.RawMessage, error)
 	recordProjectMergeEvidence(id string, body map[string]interface{}) (json.RawMessage, error)
@@ -447,13 +447,15 @@ func (u *userTransport) getProject(id string) (json.RawMessage, error) {
 // the settings and the queue the project page draws; the agent's route adds the per-task and
 // per-candidate detail, so this call answers what the person's page shows rather than the agent
 // read — the same relationship `project get` has with the runner route.
-func (u *userTransport) getProjectIntegration(_ string, id, jobID, cursor string) (json.RawMessage, error) {
+func (u *userTransport) getProjectIntegration(_ string, id, jobID, claim, round, check, cursor, timelineCursor string) (json.RawMessage, error) {
 	query := url.Values{}
-	if jobID != "" {
-		query.Set("jobId", jobID)
-	}
-	if cursor != "" {
-		query.Set("cursor", cursor)
+	for name, value := range map[string]string{
+		"jobId": jobID, "claim": claim, "round": round, "check": check,
+		"cursor": cursor, "timelineCursor": timelineCursor,
+	} {
+		if value != "" {
+			query.Set(name, value)
+		}
 	}
 	rest := "/integration"
 	if encoded := query.Encode(); encoded != "" {

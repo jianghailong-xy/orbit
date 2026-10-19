@@ -92,6 +92,7 @@ import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import {
   abandonedText,
   appendIntegrationJobEvent,
+  cancelledText,
   checkFinishedText,
   checkStartedText,
   claimedText,
@@ -99,6 +100,7 @@ import {
   pushRefusedText,
   recordCommittedIntegrationJobEvent,
   releasedText,
+  requeuedText,
   resultText,
   roundText,
   stepText,
@@ -662,7 +664,6 @@ async function backfillClaimEvent(
         claimGeneration: claim,
         runnerId: heartbeat.runnerId,
         runnerName,
-        leaseOwner: heartbeat.leaseOwner,
         previousState: row.previousState,
       },
       text: takeover ? takenOverText(claim, runnerName) : claimedText(claim, runnerName),
@@ -911,7 +912,11 @@ export async function receiveIntegrationJobProgress(
          AND "state" = 'RUNNING'
          AND "claim_lease_owner" = ${report.leaseOwner}
          AND "claim_generation" = ${BigInt(report.claimGeneration)}
-       FOR UPDATE`);
+       -- FOR NO KEY UPDATE, not FOR UPDATE: this is a renewal, nothing here changes a key, and the
+       -- FOR KEY SHARE that every log-chunk and event INSERT takes on the same row must not wait on
+       -- a heartbeat (§2.9 LS2 — the progress gate is a job gate, and its writers must not queue
+       -- behind each other's key-share locks).
+       FOR NO KEY UPDATE`);
     if (!before) throw await progressRefusal(tx, { jobId, ownerId });
     await tx.$executeRaw(Prisma.sql`
       UPDATE "project_integration_job"
@@ -1106,9 +1111,15 @@ async function appendProgressEvents(
     });
   }
   if (input.report.phase !== input.before.phase || input.report.step !== input.before.step) {
+    // The occurrence number is what keeps a step that starts twice inside one claim — a LAND_TASK's
+    // re-fetch — from colliding with its own earlier line. It is computed under the row lock, and a
+    // replayed report never reaches here (it changes nothing).
+    const stepOrdinal = 1 + await tx.projectIntegrationJobEvent.count({
+      where: { jobId: input.jobId, kind: 'STEP', claimGeneration: BigInt(claim) },
+    });
     await appendIntegrationJobEvent(tx, {
       jobId: input.jobId,
-      key: `step:${claim}:${round ?? 0}:${input.report.phase}:${input.report.step ?? 'none'}`,
+      key: `step:${claim}:${round ?? 0}:${input.report.phase}:${input.report.step ?? 'none'}:${stepOrdinal}`,
       kind: 'STEP',
       claim,
       round,
@@ -1337,11 +1348,14 @@ export type IntegrationJobReleaseOutcome =
  * job goes back to QUEUED for the next heartbeat that asks for work — on a stopping runner, its next
  * process — instead of staying RUNNING until the lease runs out ten minutes after its last report.
  *
- * One conditional UPDATE, fenced like a result on the job, this runner, RUNNING and the exact claim
- * the request names. The claim generation moves on, so a late report under the claim given back is
- * refused STALE_CLAIM; the lease and the step are cleared, which frees the serial key (J1); the first
- * `started_at` stays. A job somebody asked to stop matches nothing here: a QUEUED row with a stop
- * request is never claimed, so it answers `released: false` and the caller ends it (J-T12).
+ * ONE TRANSACTION (§2.9 LS2): the row moves back to QUEUED and the timeline's `RELEASED` fact is
+ * written with it. Release is a fact of the job gate like any other — only the claim and the
+ * takeover are the contract's after-commit exceptions — so the hand-back never leaves a row that
+ * moved without its line. The fence is the claim the request names: the row is read FOR NO KEY
+ * UPDATE under it, and a stop already asked answers `released: false` for the caller to end (J-T12).
+ * The claim generation moves on, so a late report under the claim given back is refused
+ * STALE_CLAIM; the lease and the step are cleared, which frees the serial key (J1); the first
+ * `started_at` stays.
  */
 export async function releaseIntegrationJob(
   prisma: PrismaService,
@@ -1353,82 +1367,61 @@ export async function releaseIntegrationJob(
     throw new IntegrationJobRefused('INVALID_RESULT', 'a release names the claim it gives back: claimGeneration and leaseOwner');
   }
   const claimGeneration = BigInt(body.claimGeneration);
-  const moved = await prisma.projectIntegrationJob.updateMany({
-    where: {
-      id: input.jobId,
-      runnerId: input.runnerId,
-      ...(input.ownerId != null ? { ownerId: input.ownerId } : {}),
-      state: 'RUNNING',
-      claimLeaseOwner: body.leaseOwner,
-      claimGeneration,
-      cancelRequestedAt: null,
-    },
-    data: {
-      state: 'QUEUED',
-      phase: null,
-      claimGeneration: { increment: 1 },
-      claimLeaseOwner: null,
-      claimedAt: null,
-      heartbeatAt: null,
-    },
-  });
-  if (moved.count === 1) {
-    // J-T11 (§2.9 LS2): the hand-back is a fact of its own — the job row only leaves
-    // `claim_generation + 1` behind, with no time and no cause. Written after the update committed,
-    // in an independent transaction; a failure costs the timeline one line, never the release.
-    await recordReleasedEvent(prisma, input.jobId, claimGeneration, input.runnerId);
-    return { released: true };
-  }
-  // Nothing moved: say why, from the row as it is now, and among the reporting runner's owner's jobs
-  // only — another account's job is answered as one that does not exist.
-  const job = await prisma.projectIntegrationJob.findFirst({
-    where: { id: input.jobId, ...(input.ownerId != null ? { ownerId: input.ownerId } : {}) },
-    select: {
-      state: true, runnerId: true, claimLeaseOwner: true, claimGeneration: true, cancelRequestedAt: true, phase: true,
-    },
-  });
-  if (!job) throw new IntegrationJobRefused('NOT_FOUND');
-  if (isTerminalJobState(job.state)) throw new IntegrationJobRefused('ALREADY_FINAL');
-  if (job.state !== 'RUNNING' || job.runnerId !== input.runnerId
-      || job.claimLeaseOwner !== body.leaseOwner || job.claimGeneration !== claimGeneration) {
-    throw new IntegrationJobRefused('STALE_CLAIM');
-  }
-  if (job.cancelRequestedAt) {
-    return { released: false, phase: INTEGRATION_JOB_PHASES.includes(job.phase as never) ? job.phase as IntegrationJobPhase : null };
-  }
-  // Only a race the UPDATE lost ends here (a second release of the same claim, say): answered as the
-  // claim that has moved on, which is what the row says by the time anything could act on it.
-  throw new IntegrationJobRefused('STALE_CLAIM');
-}
-
-/**
- * J-T11's hand-back as a timeline fact (§2.9 LS2): the job row keeps only `claim_generation + 1`,
- * so the time and the runner that gave it back live here. Its own auto-commit INSERT, after the
- * release committed, idempotent on the claim it names.
- */
-async function recordReleasedEvent(
-  prisma: PrismaService,
-  jobId: string,
-  claimGeneration: bigint,
-  runnerId: string,
-): Promise<void> {
-  try {
-    const runner = await prisma.runner.findFirst({ where: { id: runnerId }, select: { name: true } });
-    await recordCommittedIntegrationJobEvent(prisma, {
-      jobId,
+  return withTransactionRetry(prisma, async (tx) => {
+    const [held] = await tx.$queryRaw<Array<{
+      state: string; runnerId: string | null; leaseOwner: string | null; claimGeneration: bigint;
+      cancelRequestedAt: Date | null; phase: string | null; round: number | null;
+    }>>(Prisma.sql`
+      SELECT "state", "runner_id" AS "runnerId", "claim_lease_owner" AS "leaseOwner",
+             "claim_generation" AS "claimGeneration", "cancel_requested_at" AS "cancelRequestedAt",
+             "phase", "round"
+        FROM "project_integration_job"
+       WHERE "id" = ${input.jobId}::uuid
+         ${input.ownerId != null ? Prisma.sql`AND "owner_id" = ${input.ownerId}::uuid` : Prisma.empty}
+       FOR NO KEY UPDATE`);
+    // Another account's job is answered as one that does not exist, exactly as the result route does.
+    if (!held) throw new IntegrationJobRefused('NOT_FOUND');
+    if (isTerminalJobState(held.state)) throw new IntegrationJobRefused('ALREADY_FINAL');
+    if (held.state !== 'RUNNING' || held.runnerId !== input.runnerId
+        || held.leaseOwner !== body.leaseOwner || held.claimGeneration !== claimGeneration) {
+      throw new IntegrationJobRefused('STALE_CLAIM');
+    }
+    // A job somebody asked to stop is not handed back: a QUEUED row with a stop request is never
+    // claimed, so the caller ends it through the result transaction (J-T12).
+    if (held.cancelRequestedAt) {
+      return {
+        released: false,
+        phase: INTEGRATION_JOB_PHASES.includes(held.phase as never) ? held.phase as IntegrationJobPhase : null,
+      };
+    }
+    const runner = await tx.runner.findFirst({ where: { id: input.runnerId }, select: { name: true } });
+    await tx.projectIntegrationJob.updateMany({
+      where: { id: input.jobId, state: 'RUNNING', claimGeneration },
+      data: {
+        state: 'QUEUED',
+        phase: null,
+        claimGeneration: { increment: 1 },
+        claimLeaseOwner: null,
+        claimedAt: null,
+        heartbeatAt: null,
+      },
+    });
+    await appendIntegrationJobEvent(tx, {
+      jobId: input.jobId,
       key: `released:${claimGeneration.toString()}`,
       kind: 'RELEASED',
       claim: claimGeneration,
+      round: held.round ?? null,
       actor: { type: 'RUNNER' },
-      data: { claimGeneration: claimGeneration.toString(), runnerId, runnerName: runner?.name ?? null },
+      data: { claimGeneration: claimGeneration.toString(), runnerId: input.runnerId, runnerName: runner?.name ?? null },
       text: releasedText(Number(claimGeneration), runner?.name ?? null),
     });
-  } catch (error) {
-    logger.warn(`release event for job ${jobId} not recorded: ${(error as Error)?.message ?? String(error)}`);
-  }
+    return { released: true };
+  }, loggedRetry(logger, 'integrationJob.release'));
 }
 
-/** What the caller must do after the transaction that applied a result committed. */export interface IntegrationResultAftermath {
+/** What the caller must do after the transaction that applied a result committed. */
+export interface IntegrationResultAftermath {
   projectId: string;
   landedTaskId: string | null;
   /**
@@ -1723,6 +1716,21 @@ export async function applyIntegrationJobResult(
             heartbeatAt: null,
           },
       });
+      // §2.9 LS2: the requeue (or, stopped, the CANCELLED end) is a fact of this door's
+      // transaction. The row goes back without an answer, and without this line the attempt would
+      // show no reason for being asked again.
+      await appendIntegrationJobEvent(tx, {
+        jobId: job.id,
+        key: cancelRequested ? 'cancelled' : `requeued:${Number(job.claimGeneration)}`,
+        kind: cancelRequested ? 'CANCELLED' : 'REQUEUED',
+        claim: Number(job.claimGeneration),
+        round: job.round ?? null,
+        phase: job.phase,
+        actor: { type: 'PLATFORM' },
+        ...(cancelRequested ? { reason: 'the answer was asked for while the work was still moving' } : {}),
+        data: { cause: 'TASK_WORK_STILL_MOVING' },
+        text: cancelRequested ? cancelledText() : requeuedText(),
+      });
       // A stopped generation that answered too early still ends here, so the DONE written after
       // the reopen has room for its own generation (J-T8) — the same requeue every other terminal
       // result takes below.
@@ -1814,6 +1822,20 @@ export async function applyIntegrationJobResult(
                 claimedAt: null,
                 heartbeatAt: null,
               },
+          });
+          // §2.9 LS2: the requeue (or the stopped end) is this door's fact, and the timeline owes
+          // it the reason the check was asked again.
+          await appendIntegrationJobEvent(tx, {
+            jobId: job.id,
+            key: cancelRequested ? 'cancelled' : `requeued:${Number(job.claimGeneration)}`,
+            kind: cancelRequested ? 'CANCELLED' : 'REQUEUED',
+            claim: Number(job.claimGeneration),
+            round: job.round ?? null,
+            phase: job.phase,
+            actor: { type: 'PLATFORM' },
+            ...(cancelRequested ? { reason: 'the check answered while the work was still moving' } : {}),
+            data: { cause: 'CANDIDATE_WORK_STILL_MOVING' },
+            text: cancelRequested ? cancelledText() : requeuedText(),
           });
           return {
             answer: {
@@ -2188,6 +2210,7 @@ export async function applyIntegrationJobResult(
       upstreamMovedCommits,
       platformEnd,
       handedTo,
+      movedMain: promotion?.movedMain ?? null,
       finishedAt: terminalData.finishedAt,
     });
 
@@ -2262,6 +2285,8 @@ async function appendResultEvents(
     upstreamMovedCommits: UpstreamMovedCommitsEnriched | null;
     platformEnd?: IntegrationJobPlatformEnd | undefined;
     handedTo: { itemId: string; assignee: 'COORDINATOR' | 'OWNER'; itemKind: string } | null;
+    /** A moved-main fact the promotion's own transition produced, written after the answer. */
+    movedMain?: { kind: 'RECHECK_ON_MOVED_MAIN' | 'NEXT_GENERATION'; text: string; data: Record<string, unknown> } | null;
     finishedAt: Date;
   },
 ): Promise<void> {
@@ -2374,6 +2399,22 @@ async function appendResultEvents(
     }),
     at: input.finishedAt,
   });
+
+  // A moved main the promotion answered inside this same transaction: checking again (M-T12) or
+  // the next generation under an owner's confirmation (J-T13). It is written AFTER the answer it
+  // follows, with this attempt's claim and round, so the section draws in the order the door acted.
+  if (input.movedMain) {
+    await appendIntegrationJobEvent(tx, {
+      jobId: job.id,
+      key: input.movedMain.kind === 'RECHECK_ON_MOVED_MAIN' ? 'recheck-on-moved-main' : 'next-generation',
+      kind: input.movedMain.kind,
+      claim,
+      round,
+      data: input.movedMain.data,
+      text: input.movedMain.text,
+      at: input.finishedAt,
+    });
+  }
 
   // Who it was handed to, in the transaction that opened the item (LS2): derived lines read the
   // item's own row, but "this attempt handed it to somebody" is the attempt's fact.

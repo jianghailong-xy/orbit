@@ -94,6 +94,7 @@ CREATE TABLE "project_integration_job_event" (
     'RECHECK_ON_MOVED_MAIN',
     'NEXT_GENERATION',
     'RESULT',
+    'REQUEUED',
     'HANDED_TO',
     'STOP_REQUESTED',
     'CANCELLED',

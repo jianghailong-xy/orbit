@@ -60,8 +60,8 @@ import { WakeDispositionService } from './wake-disposition.service';
  * WHAT IS REPLAYED. Every case drives the product's own doors: a task's DONE through its acceptance
  * command, the heartbeat that claims and takes over, the progress and result routes, the retry and
  * owner-rerun doors, the promotion confirmation and its landing, the stop and abandon doors, and
- * the receipt that retires a candidate. Nothing inserts an event row except the two cases about
- * paging, which need more rows than a queue produces and say so.
+ * the receipt that retires a candidate. Nothing inserts an event row except the paging case and the claim-fallback
+ * fixture, which say so where they do.
  *
  * WHAT IS ASSERTED. The order of a section's lines, the sections' titles (`Generation N`,
  * `Merge check · N`, `Merge to main · N`), the signature on a line whose fact a person or a
@@ -664,8 +664,12 @@ test('a failure, the coordinator rerun and the owner rerun each sign their own l
       assert.equal(thirdRetry.actor?.type, 'OWNER');
       assert.equal(thirdRetry.actor?.userId, w.ownerId);
       assert.match(thirdRetry.text, /Rerun by the owner · run it once more by hand/);
-      // 0368's handling line sits beside the generation that took over the item.
-      assert.ok(timeline.sections[1].entries.some((entry) => entry.kind === 'HANDLING'));
+      // 0368's handling line sits beside the generation that took over the item — its claim, not
+      // claim 0 — so it is drawn with that attempt and after the generation whose failure it answers.
+      const handledEntry = timeline.sections[1].entries.find((entry) => entry.kind === 'HANDLING')!;
+      assert.equal(handledEntry.claim, 1);
+      assert.ok(timeline.sections[1].entries.indexOf(handledEntry)
+        > timeline.sections[1].entries.findIndex((entry) => entry.kind === 'ENQUEUED'));
 
       await assertNoLandingRunEvents(stack, landing.sessionId);
     } finally {
@@ -870,8 +874,17 @@ test('a stolen push records the moved commits: Automatic re-checks, the owner co
       assert.equal(confirmation.actor?.type, 'AUTOMATIC');
       const attempt = firstLanding.find((entry) => entry.kind === 'AUTOMATIC_ATTEMPT')!;
       assert.match(attempt.text, /Automatic merge 1 of 3/);
+      // The v4 board order: the automatic landing's section ends with the recheck it decided; the
+      // owner-confirmed landing's ends with the next generation, after the push it was refused.
+      assert.deepEqual(
+        timeline.sections[1].entries.map((entry) => entry.kind),
+        ['ENQUEUED', 'CLAIMED', 'RESULT', 'RECHECK_ON_MOVED_MAIN'],
+      );
       const ownerSection = timeline.sections[3].entries;
-      assert.ok(ownerSection.some((entry) => entry.kind === 'PUSH_REFUSED'));
+      assert.deepEqual(
+        ownerSection.map((entry) => entry.kind),
+        ['ENQUEUED', 'CLAIMED', 'PUSH_REFUSED', 'RESULT', 'NEXT_GENERATION'],
+      );
       // The owner's press is the candidate's current confirmation, drawn on the attempt it put on
       // the queue (the next generation after the refused push), signed with the person.
       const ownerConfirmation = timeline.sections[4].entries.find((entry) => entry.kind === 'CONFIRMATION')!;
@@ -881,6 +894,23 @@ test('a stolen push records the moved commits: Automatic re-checks, the owner co
       // attempt names, never replayed history.
       const state = timeline.facts.find((fact) => fact.kind === 'PROMOTION_STATE')!;
       assert.equal((state.data as Record<string, unknown>).promotionId, promotionId);
+
+      // A second candidate joins the open round with a generation 1 of its own. Sections are
+      // numbered by their order within the subject, so its check is `Merge check · 3` — never a
+      // second `Merge check · 1` under one heading.
+      const successor = await doneTask(stack, w, 'timeline-round-successor');
+      const successorLanding = await claimLanding(stack, w, 'lease-successor', 'LAND_TASK');
+      assert.equal((await report(stack, w, successorLanding, { ...GREEN, checks: [GREEN_CHECK] })).accepted, true);
+      const successorCheck = await claimLanding(stack, w, 'lease-successor-check', 'CHECK_PROMOTION');
+      const successorSubject = await subjectOfJob(stack.db, successorCheck.jobId);
+      assert.equal(successorSubject.landing.id, round.id, 'the later candidate joins the open round');
+      assert.equal(successorSubject.job.generation, 1, 'its own per-candidate generation is 1');
+      const numbered = await timelineOf(stack, w, round.sessionId);
+      assert.deepEqual(numbered.sections.map((section) => section.title), [
+        'Merge check · 1', 'Merge to main · 1', 'Merge check · 2', 'Merge to main · 2', 'Merge to main · 3',
+        'Merge check · 3',
+      ]);
+      assert.ok(successor.taskId.length > 0);
 
       await assertNoLandingRunEvents(stack, round.sessionId);
     } finally {
@@ -992,6 +1022,177 @@ test('a timeout ended by the candidate\'s recheck gate and by M-T13 says which d
     }
   });
 
+// ── facts carry the claim and round they ended ──────────────────────────────────────────────
+
+test('a stop or a timeout that ends round 2 is drawn after round 2\'s lines', { skip, timeout: 240_000 }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'timeline-round2');
+    const stoppedTask = await doneTask(stack, w, 'timeline-round2-stop');
+    const stopped = await claimLanding(stack, w, 'lease-stop', 'LAND_TASK');
+    const { landing: stoppedLanding } = await subjectOfJob(stack.db, stopped.jobId);
+    for (const round of [1, 2]) {
+      assert.equal((await stack.api.integrationJobProgress({ id: w.runnerId }, stopped.jobId, {
+        claimGeneration: stopped.claimGeneration,
+        leaseOwner: stopped.leaseOwner,
+        phase: 'CHECK',
+        round,
+      })).accepted, true);
+    }
+    assert.equal((await stack.openItems.stopTaskIntegrationAsOwner(
+      w.ownerId, w.projectId, stoppedTask.taskId, undefined,
+    )).state, 'CANCELLING');
+    const [stopEvent] = (await eventsOf(stack.db, stopped.jobId)).filter((row) => row.kind === 'STOP_REQUESTED');
+    assert.equal(stopEvent.claimGeneration, 1n);
+    assert.equal(stopEvent.round, 2);
+    const stoppedTimeline = await timelineOf(stack, w, stoppedLanding.sessionId);
+    const stoppedEntries = stoppedTimeline.sections[0].entries;
+    const roundTwo = stoppedEntries.findIndex((entry) => entry.kind === 'ROUND' && entry.round === 2);
+    assert.ok(roundTwo >= 0);
+    assert.ok(stoppedEntries.findIndex((entry) => entry.kind === 'STOP_REQUESTED') > roundTwo);
+    // The runner answers the ask, which frees the serial slot for the next case (J1).
+    assert.equal((await report(stack, w, stopped, { state: 'CANCELLED', phase: 'CHECK', checks: [] })).accepted, true);
+
+    // A timed-out landing is ended by the owner's rerun door; its TIMED_OUT line belongs to the
+    // round it stopped in, not to round 0.
+    const timedTask = await doneTask(stack, w, 'timeline-round2-timeout');
+    const timed = await claimLanding(stack, w, 'lease-timeout', 'LAND_TASK');
+    const { landing: timedLanding } = await subjectOfJob(stack.db, timed.jobId);
+    for (const round of [1, 2]) {
+      assert.equal((await stack.api.integrationJobProgress({ id: w.runnerId }, timed.jobId, {
+        claimGeneration: timed.claimGeneration,
+        leaseOwner: timed.leaseOwner,
+        phase: 'CHECK',
+        round,
+      })).accepted, true);
+    }
+    await stack.db.projectIntegrationJob.update({
+      where: { id: timed.jobId },
+      data: { heartbeatAt: new Date(Date.now() - 11 * 60_000) },
+    });
+    await stack.ownerRetry.retryIntegration(
+      { userId: w.ownerId, email: `${w.ownerId}@timeline.invalid` }, w.projectId, timedTask.taskId,
+      { reason: 'the runner stopped reporting' },
+    );
+    const [timeoutEvent] = (await eventsOf(stack.db, timed.jobId)).filter((row) => row.kind === 'TIMED_OUT');
+    assert.equal(timeoutEvent.round, 2);
+    assert.equal(timeoutEvent.claimGeneration, 1n);
+    const timedTimeline = await timelineOf(stack, w, timedLanding.sessionId);
+    const timedEntries = timedTimeline.sections[0].entries;
+    const timedRoundTwo = timedEntries.findIndex((entry) => entry.kind === 'ROUND' && entry.round === 2);
+    assert.ok(timedRoundTwo >= 0);
+    assert.ok(timedEntries.findIndex((entry) => entry.kind === 'TIMED_OUT') > timedRoundTwo);
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+// ── answers asked too early are recorded ────────────────────────────────────────────────────
+
+test('an answer asked before the work settled is recorded: requeued, or stopped and cancelled',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'timeline-too-early');
+      const task = await doneTask(stack, w, 'timeline-too-early');
+      const first = await claimLanding(stack, w, 'lease-1', 'LAND_TASK');
+      const { landing } = await subjectOfJob(stack.db, first.jobId);
+      // The work session finishes AFTER the claim: the answer is about a branch that could still
+      // move, and the relay neither writes it down nor leaves the attempt without a line.
+      const early = (): Failure => ({
+        state: 'ALREADY_LANDED', phase: 'FETCH', sourceSha: 'b'.repeat(40),
+        targetShaBefore: 'c'.repeat(40), testedSha: 'd'.repeat(40), testedTreeSha: 'e'.repeat(40), checks: [],
+      });
+      await stack.db.session.update({
+        where: { id: task.sessionId },
+        data: { finishedAt: new Date(Date.now() + 1_000), worktreeBranch: task.branch },
+      });
+      const requeued = await report(stack, w, first, early());
+      assert.equal(requeued.accepted, true);
+      assert.equal(requeued.state, 'QUEUED');
+      const [requeuedEvent] = (await eventsOf(stack.db, first.jobId)).filter((row) => row.kind === 'REQUEUED');
+      assert.equal(requeuedEvent.claimGeneration, 1n);
+      assert.match(requeuedEvent.text, /Sent back to the queue/);
+
+      // The same attempt claimed again, then stopped: the too-early answer ends it CANCELLED, and
+      // the cancellation is the door's own fact.
+      const second = await claimLanding(stack, w, 'lease-2', 'LAND_TASK');
+      assert.equal(second.jobId, first.jobId);
+      assert.equal((await stack.openItems.stopTaskIntegrationAsOwner(
+        w.ownerId, w.projectId, task.taskId, undefined,
+      )).state, 'CANCELLING');
+      await stack.db.session.update({
+        where: { id: task.sessionId },
+        data: { finishedAt: new Date(Date.now() + 2_000) },
+      });
+      const cancelled = await report(stack, w, second, early());
+      assert.equal(cancelled.accepted, true);
+      assert.equal(cancelled.state, 'CANCELLED');
+      const [cancelledEvent] = (await eventsOf(stack.db, first.jobId)).filter((row) => row.kind === 'CANCELLED');
+      assert.equal(cancelledEvent.claimGeneration, 2n);
+      assert.match(cancelledEvent.text, /cancelled before it ran/);
+      await assertNoLandingRunEvents(stack, landing.sessionId);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+// ── a claim whose backfill never landed ─────────────────────────────────────────────────────
+
+test('a claim whose backfill was lost is still drawn from the committed job row', { skip, timeout: 240_000 }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'timeline-claim-fallback');
+    const task = await doneTask(stack, w, 'timeline-claim-fallback');
+    const realJob = await stack.db.projectIntegrationJob.findFirstOrThrow({
+      where: { taskId: task.taskId, kind: 'LAND_TASK' }, select: { id: true, landingId: true },
+    });
+    const { landing } = await subjectOfJob(stack.db, realJob.id);
+    // The real generation is stopped (a queued generation ends CANCELLED on the spot), leaving the
+    // task with no in-flight landing to collide with the fixture below.
+    await stack.openItems.stopTaskIntegrationAsOwner(w.ownerId, w.projectId, task.taskId, undefined);
+    // A claimed attempt whose CLAIMED fact never made it to the ledger — the after-commit backfill
+    // can fail, and this is the row it leaves. No event row is inserted for it here.
+    const codebase = await stack.db.projectCodebase.findFirstOrThrow({
+      where: { projectId: w.projectId }, select: { id: true, integrationRef: true, upstreamRef: true },
+    });
+    const claimedJobId = randomUUID();
+    await stack.db.projectIntegrationJob.create({
+      data: {
+        id: claimedJobId,
+        projectId: w.projectId,
+        ownerId: w.ownerId,
+        codebaseId: codebase.id,
+        kind: 'LAND_TASK',
+        generation: 2,
+        taskId: task.taskId,
+        sessionId: task.sessionId,
+        landingId: landing.id,
+        serialKey: `fixture:claim-fallback:${claimedJobId}`,
+        targetRef: codebase.integrationRef,
+        upstreamRef: codebase.upstreamRef,
+        sourceRef: `refs/heads/${task.branch}`,
+        state: 'RUNNING',
+        runnerId: w.runnerId,
+        claimedAt: new Date(),
+        heartbeatAt: new Date(),
+        claimGeneration: 1n,
+        idempotencyKey: `fixture:claim-fallback:${claimedJobId}`,
+      },
+    });
+    const timeline = await timelineOf(stack, w, landing.sessionId);
+    const section = timeline.sections.find((row) => row.jobId === claimedJobId)!;
+    const claim = section.entries.find((entry) => entry.kind === 'CLAIMED' || entry.kind === 'TAKEN_OVER')!;
+    assert.equal(claim.id, null, 'the line is derived from the row, not stored');
+    assert.equal(claim.claim, 1);
+    assert.equal(claim.actor?.type, 'RUNNER');
+    assert.match(claim.text, /Claimed by runner timeline-claim-fallback-runner · claim 1/);
+    await assertNoLandingRunEvents(stack, landing.sessionId);
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
 // ── the owner's stop and abandon ─────────────────────────────────────────────────────────────
 
 test('the owner\'s stop and abandon are signed, and a queued stop says it never ran',
@@ -1051,6 +1252,15 @@ test('the owner\'s stop and abandon are signed, and a queued stop says it never 
       assert.match(abandonedRow.text, /Abandoned by the owner · the machine is gone for the day/);
       assert.ok(abandonedEvents.some((row) => row.kind === 'RESULT'
         && (row.data as Record<string, unknown>).abandoned === true));
+      // J-T10's abandonment carries the same limitSeconds a timeout does, but it is a decision
+      // somebody took — the timeline draws the abandon line and never a timeout on top of it.
+      assert.equal(abandonedEvents.some((row) => row.kind === 'TIMED_OUT'), false);
+      const abandonedTimeline = await timelineOf(
+        stack, w, (await subjectOfJob(stack.db, abandoned.jobId)).landing.sessionId,
+      );
+      const abandonedEntries = abandonedTimeline.sections.flatMap((section) => section.entries);
+      assert.ok(abandonedEntries.some((entry) => entry.kind === 'ABANDONED'));
+      assert.equal(abandonedEntries.some((entry) => entry.kind === 'TIMED_OUT'), false);
       assert.equal(abandonedTask.taskId.length > 0, true);
     } finally {
       await stack.db.$disconnect();
@@ -1094,11 +1304,30 @@ test('the runner read pages one attempt\'s timeline by claim and round, and cont
       assert.equal(first.timeline!.entries.length, 100, 'one page holds a hundred facts');
       assert.ok(first.timeline!.nextCursor);
       assert.ok(first.timeline!.entries.every((entry) => entry.claim === 1));
+      // A fact appended after the first page, with an older `at` than every line on it: continuing
+      // on the instant would starve it for ever, so the page continues on the ledger's sequence and
+      // it must be served.
+      await stack.db.projectIntegrationJobEvent.create({
+        data: {
+          jobId: job.id,
+          key: 'page-backdated',
+          kind: 'CHECK_STARTED',
+          claimGeneration: 1n,
+          round: 1,
+          checkName: 'MERGE_CHECK',
+          checkIndex: 1,
+          phase: 'CHECK',
+          text: 'Backdated line',
+          at: new Date(Date.now() - 3_600_000),
+        },
+      });
       const second = await readProjectIntegrationRead(
         prisma, { id: w.projectId, title: project.title, exceptionEscalationSeconds: project.exceptionEscalationSeconds },
         { jobId: job.id, claim: 1, timelineCursor: first.timeline!.nextCursor! },
       );
-      assert.equal(second.timeline!.entries.length, 5);
+      assert.equal(second.timeline!.entries.length, 6);
+      assert.ok(second.timeline!.entries.some((entry) => entry.text === 'Backdated line'),
+        'a fact appended after the page is served by the next one, whatever its instant');
       assert.equal(second.timeline!.nextCursor, null);
       const claimTwo = await readProjectIntegrationRead(
         prisma, { id: w.projectId, title: project.title, exceptionEscalationSeconds: project.exceptionEscalationSeconds },
@@ -1106,6 +1335,15 @@ test('the runner read pages one attempt\'s timeline by claim and round, and cont
       );
       assert.equal(claimTwo.timeline!.entries.length, 45);
       assert.ok(claimTwo.timeline!.entries.every((entry) => entry.claim === 2 && entry.round === 1));
+      // Round 0 is the narrowing that names the facts with no round — the enqueue — the way the
+      // sort places them.
+      const roundZero = await readProjectIntegrationRead(
+        prisma, { id: w.projectId, title: project.title, exceptionEscalationSeconds: project.exceptionEscalationSeconds },
+        { jobId: job.id, round: 0 },
+      );
+      assert.equal(roundZero.timeline!.entries.length, 1);
+      assert.equal(roundZero.timeline!.entries[0].kind, 'ENQUEUED');
+      assert.equal(roundZero.timeline!.entries[0].round, null);
       // The page echo carries the continuation the caller passed.
       assert.equal(second.pagination.timelineCursor, first.timeline!.nextCursor);
     } finally {
