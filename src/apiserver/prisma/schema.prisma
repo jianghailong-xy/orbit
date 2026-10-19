@@ -3032,6 +3032,11 @@ model ProjectIntegrationJob {
   conflicts   String[] @default([])
   errorCode   String?  @map("error_code")
   errorDetail Json?    @map("error_detail")
+  /// The commits that moved the upstream under a LAND_PROMOTION (migration 0435, contract §2.1
+  /// `upstream_moved_commits`, J-T13 / M-T12): the result's `upstreamMovedCommits` with the control
+  /// plane's own `outsideQueue` and `landedBy` on each entry. Deliberately not in `errorDetail`:
+  /// that column is copied verbatim into an INTEGRATION_ERROR item's payload and delivery text.
+  upstreamMovedCommits Json? @map("upstream_moved_commits")
   /// The receipts this job wrote, so a reader of the job can find them without guessing the key.
   receiptIds  String[] @default([]) @map("receipt_ids")
   /// A LAND_PROMOTION queued by the project's Automatic setting instead of the owner's press

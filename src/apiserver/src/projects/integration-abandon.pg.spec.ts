@@ -390,6 +390,42 @@ test('abandon: the lease gate, J12\'s code, and only-end-never-re-queue', {
     );
   });
 
+  await t.test('(3b) J12: what an abandoned PUSH report left is offered to the next landing on the key', async () => {
+    // The v2 PUSH report records the commit about to be pushed; the abandon that follows cannot say
+    // whether it went out. The row keeps `tested_sha`, and the next landing on the same serial key
+    // is handed it so its own fetch can check and repair (J12) — the abandon door enters the repair
+    // exactly as a stop does.
+    const w = await world(stack, 'repair', 'PROJECT_BRANCH');
+    await doneTask(stack, w, 'repair-first');
+    const land = await claim(stack, w);
+    assert.equal(land.kind, 'LAND_TASK');
+    const tested = sha('6');
+    await receiveIntegrationJobProgress(stack.prisma, w.runnerId, land.jobId, {
+      claimGeneration: land.claimGeneration,
+      leaseOwner: land.leaseOwner,
+      phase: 'PUSH',
+      testedSha: tested,
+      testedTreeSha: sha('7'),
+      sourceSha: sha('8'),
+      targetShaBefore: UPSTREAM_TIP,
+    });
+    await ageClaim(stack, land.jobId, 11 * 60_000);
+    const abandoned = await abandonIntegrationJob(stack.prisma, {
+      jobId: land.jobId, projectId: w.projectId, ownerId: w.ownerId, by: 'owner',
+    });
+    assert.equal(abandoned.abandoned.errorCode, 'PUSH_OUTCOME_UNKNOWN');
+    const ended = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+      where: { id: land.jobId }, select: { testedSha: true },
+    });
+    assert.equal(ended.testedSha, tested, 'the PUSH report left the commit the next landing must check');
+
+    await doneTask(stack, w, 'repair-next');
+    const [handed] = await beat(stack, w);
+    assert.ok(handed, 'the next landing is handed out on the released slot');
+    assert.deepEqual(handed!.unknownPushes, [{ jobId: land.jobId, testedSha: tested }],
+      'the abandoned unknown push is offered to the repair');
+  });
+
   await t.test('(4) J12: a legacy landing may have pushed, and a check never can', async () => {
     const legacy = await world(stack, 'code-legacy', 'PROJECT_BRANCH');
     await doneTask(stack, legacy, 'code-legacy');
