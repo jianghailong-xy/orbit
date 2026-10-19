@@ -1093,3 +1093,49 @@ test('a source work session reads the newest generation and its subject as sourc
     await stack.db.$disconnect();
   }
 });
+
+// ── the doors' own facts ───────────────────────────────────────────────────────────────────────
+
+test('the landing view carries the queue’s Retry fact and J-T4’s push boundary for its attempt',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'doors');
+      await doneTask(stack, w, 'doors');
+      const job = await claimLanding(stack, w, 'lease-doors');
+      const { landing } = await subjectOfJob(stack.db, job.jobId);
+
+      // A claim inside its reporting window is not retried, and its first phase is nowhere near
+      // the push. The page reads both as the server's answers.
+      const fresh = await stack.sessions.get(w.ownerId, landing.sessionId);
+      assert.equal(fresh.sessionKind, 'LANDING');
+      assert.equal(fresh.landing.currentAttempt.retryable, false,
+        'a claim inside its window is not one the owner’s Retry takes');
+      assert.equal(fresh.landing.currentAttempt.pushBoundaryPassed, false);
+
+      // A v2 claim that recorded its synchronous PUSH report is past J-T4's boundary, and the
+      // view says so — the same row fact the stop and cancel doors read.
+      await stack.db.projectIntegrationJob.update({
+        where: { id: job.jobId },
+        data: {
+          progressProtocol: 'v2',
+          pushReportedGeneration: BigInt(job.claimGeneration),
+        },
+      });
+      const pushed = await stack.sessions.get(w.ownerId, landing.sessionId);
+      assert.equal(pushed.landing.currentAttempt.pushBoundaryPassed, true,
+        'the push boundary is push_reported_generation = claim_generation');
+
+      // Silent past its lease: the timeout the Retry door takes. `retryable` is the in-flight
+      // row's own answer (a timed-out LAND_TASK), not the page's reading of `timedOut`.
+      await stack.db.projectIntegrationJob.update({
+        where: { id: job.jobId },
+        data: { heartbeatAt: new Date(Date.now() - 11 * 60_000) },
+      });
+      const silent = await stack.sessions.get(w.ownerId, landing.sessionId);
+      assert.equal(silent.landing.currentAttempt.timedOut, true);
+      assert.equal(silent.landing.currentAttempt.retryable, true);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });

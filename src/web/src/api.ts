@@ -8,6 +8,7 @@ import type {
   OwnerAnswerCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionLandingView,
   SessionMessageCard,
   SessionReplyCard,
   SessionMoveTargets,
@@ -1717,6 +1718,12 @@ export interface TaskRunRoute {
  *  per-session git worktree result (null until the runner reports completion). */
 export interface SessionDetail {
   id: string;
+  /** What drives the session (contract §2.9 LS6): `LANDING` is platform work with no engine.
+   *  Optional, because a server that predates the column does not send it. */
+  sessionKind?: 'CONVERSATION' | 'LANDING';
+  /** A LANDING session's subject view (§2.9 LS1/LS6): its attempt, phase, checks, liveness,
+   *  timeline and todos. Present on a landing and on the pre-generated id before its row exists. */
+  landing?: SessionLandingView | null;
   /** Latest run outcome and sidebar lifecycle location are independent product dimensions. */
   runState?: string;
   lifecycleState?: string;

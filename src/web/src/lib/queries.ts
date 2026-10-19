@@ -3,6 +3,7 @@ import type {
   EventSearchResponse,
   LinkPreviewRef,
   LinkPreviewsResponse,
+  ProjectIntegrationLogPage,
   ProjectIntegrationView,
   ProjectManualReady,
   ProjectPromotionView,
@@ -893,6 +894,39 @@ export const projectIntegrationQuery = (projectId: string) =>
     queryFn: () =>
       api<ProjectIntegrationView>(`/projects/${encodeURIComponent(projectId)}/integration`),
     refetchInterval: 30_000,
+  });
+
+/** The selectors one page of a landing's check output is read by (contract §2.2 J-T4, §2.9 LS2). */
+export interface LandingLogSelectors {
+  jobId: string;
+  claim?: number;
+  round?: number;
+  check?: number;
+  cursor?: string;
+}
+
+/**
+ * One page of a landing session's check output (`GET /sessions/:id/landing/log`, contract §2.9
+ * LS2). Read only when a log is opened: the page loads the chunk behind the `Log ›` a check's
+ * timeline line carries, and continues the same narrowed read with the cursor it answers.
+ */
+export const landingLogQuery = (sessionId: string, selectors: LandingLogSelectors) =>
+  queryOptions({
+    queryKey: [
+      'session', sessionId, 'landing-log',
+      selectors.jobId, selectors.claim ?? null, selectors.round ?? null,
+      selectors.check ?? null, selectors.cursor ?? null,
+    ] as const,
+    queryFn: () => {
+      const query = new URLSearchParams({ jobId: selectors.jobId });
+      if (selectors.claim != null) query.set('claim', String(selectors.claim));
+      if (selectors.round != null) query.set('round', String(selectors.round));
+      if (selectors.check != null) query.set('check', String(selectors.check));
+      if (selectors.cursor) query.set('cursor', selectors.cursor);
+      return api<ProjectIntegrationLogPage>(
+        `/sessions/${encodeURIComponent(sessionId)}/landing/log?${query.toString()}`,
+      );
+    },
   });
 
 /**
