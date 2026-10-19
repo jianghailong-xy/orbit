@@ -33,6 +33,20 @@ Robolectric NATIVE captures from `ProjectLandingCardViewTest.theV6LivenessReadin
 (written under `src/android/build/evidence/a11f-landing-card/`), plus `3-timed-out.png` from that
 class's timed-out case. 360dp × 640dp, xhdpi, light theme.
 
+## Against the v4 board
+
+- `04-project-sessions-page` (landing card, merge check row, timed-out card): the head's mark,
+  title, right-hand live number and one detail line are the captured card; the body — the task, the
+  branch, `Nothing to do — it lands on its own.` — is unchanged. The board's `checking · updated
+  just now` is replaced by the step/claim/liveness clauses this task specifies.
+- `05-landing-session-page` legend: all five readings appear as the legend words them — LIVE's
+  `output Ns ago`, QUIET's `no output for Nm · within its Nm budget`, SILENT's `no word from runner
+  <name> for Nm` with the clock frozen at the last report, LEGACY's `reports only between steps`,
+  and LEASE_EXPIRED as main's `Timed out` / `No report for Nm · limit Nm`.
+- `06-list-chat-task`: the timed-out project row is amber words, `Merge to main · timed out · no
+  report for 23m`, and lights no needs-you dot.
+- `07-android`: the same anatomy on the NATIVE capture, at 360dp.
+
 ## No macOS/iOS screenshot
 
 This session runs on Linux; there is no Mac or simulator here. The Swift half is held by
