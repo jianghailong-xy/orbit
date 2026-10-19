@@ -17,9 +17,9 @@
  *   8. another tenant's read is a 404, every one of them;
  *
  * and beside them what the design leans on: the pure rules (folding, fact tokens, the body's cut, the
- * threshold), only a maintenance run of the space writes, a write from a plan version no longer in
- * force is refused, the reads (directory, document, index) say what the page shows, and the
- * migration's CHECKs are the contract's closed sets.
+ * threshold), only the server's own jobs write — the build and maintenance jobs' principal, which no
+ * door builds — a write from a plan version no longer in force is refused, the reads (directory,
+ * document, index) say what the page shows, and the migration's CHECKs are the contract's closed sets.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-docs.pg.spec.ts
  *
@@ -32,7 +32,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { after, test } from 'node:test';
 
-import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
+import { HttpException, type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
@@ -57,10 +57,8 @@ import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '.
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
 import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { RunnerWikiDocsController } from '../runner-api/runner-wiki-docs.controller';
-import { RunnerWikiPlanController } from '../runner-api/runner-wiki-plan.controller';
 import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
-import { classifyDoc, docStatusOf, factTokens, findQuote, parseSectionBody, WikiDocs } from './wiki-docs';
+import { classifyDoc, docStatusOf, factTokens, findQuote, parseSectionBody, WikiDocs, wikiDocsBuildJobPrincipal } from './wiki-docs';
 import { WikiDocsController } from './wiki-docs.controller';
 import { WikiPlans } from './wiki-plan';
 import { WikiPlanController } from './wiki-plan.controller';
@@ -85,6 +83,8 @@ interface Harness {
   app: INestApplication;
   service: WikiService;
   docs: WikiDocs;
+  /** The plan's service: what the server's plan job stores a draft through. */
+  plans: WikiPlans;
   bearers: Map<string, string>;
   /** Every space `wiki.changed` was published for by the documents, in order. */
   published: string[];
@@ -109,7 +109,7 @@ function boot(): Promise<Harness> {
     const docs = new WikiDocs(prisma as unknown as PrismaService, service, recorder);
 
     @Module({
-      controllers: [WikiController, WikiPlanController, WikiDocsController, RunnerWikiController, RunnerWikiPlanController, RunnerWikiDocsController],
+      controllers: [WikiController, WikiPlanController, WikiDocsController, RunnerWikiController],
       providers: [
         { provide: WikiService, useValue: service },
         { provide: WikiPlans, useValue: plans },
@@ -138,7 +138,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, service, docs, bearers, published };
+    return { base: await app.getUrl(), sql, prisma, app, service, docs, plans, bearers, published };
   })();
   return harness;
 }
@@ -183,6 +183,19 @@ async function call(h: Harness, who: Caller, method: string, route: string, body
     parsed = { unparsed: text };
   }
   return { status: response.status, body: parsed };
+}
+
+/**
+ * A call of the server's own writer, answered as a door would answer it: what it returned as a 200, or the status and
+ * body of what it threw — so a refusal reads here exactly as it reads on any door.
+ */
+async function served(run: () => Promise<unknown>): Promise<Answer> {
+  try {
+    return { status: 200, body: JSON.parse(JSON.stringify(await run())) };
+  } catch (error) {
+    if (error instanceof HttpException) return { status: error.getStatus(), body: error.getResponse() };
+    throw error;
+  }
 }
 
 function expectStatus(answer: Answer, status: number, why: string): void {
@@ -243,13 +256,13 @@ async function session(h: Harness, ownerId: string, workspaceId: string, runnerI
   return id;
 }
 
-async function task(h: Harness, ownerId: string, listId: string, assigneeId: string, title = 'Wiki maintenance run'): Promise<string> {
+async function task(h: Harness, ownerId: string, assigneeId: string, title: string): Promise<string> {
   const id = randomUUID();
   await h.sql.query(
-    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","status","assignee_id","list_id",
+    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","status","assignee_id",
                          "completion_criterion","updated_at")
-     VALUES ($1,$2,$3,'USER',$3,'OPEN'::task_status,$4,$5,'OWNER_CONFIRMED',now())`,
-    [id, title, ownerId, assigneeId, listId],
+     VALUES ($1,$2,$3,'USER',$3,'OPEN'::task_status,$4,'OWNER_CONFIRMED',now())`,
+    [id, title, ownerId, assigneeId],
   );
   return id;
 }
@@ -295,17 +308,19 @@ const TASK_TITLE = '阶段 2 runner 托管 agent 后台作业';
 
 /**
  * One owner's world: a runner, a bound workspace whose env holds LITERAL, a space (Tiered, a new space's
- * default) with maintenance on and a maintenance run of it, an ordinary session of the same workspace,
- * and the records the footnotes cite.
+ * default) with maintenance on — its first draft made as the wiki-worker's job, which drafts its plan
+ * here — the server's writer of its documents, an ordinary session of the same workspace, and the
+ * records the footnotes cite.
  */
 interface Scene {
   owner: Account;
   runner: { id: string; token: string };
   ws: string;
   spaceId: string;
-  listId: string;
-  maintainer: Caller;
-  maintenanceSession: string;
+  /** The wiki_job the space's first draft was made as: the author of the plan versions drafted here. */
+  drafter: { ownerId: string; spaceId: string; wikiJobId: string };
+  /** The server's own principal for the documents (`wikiDocsBuildJobPrincipal`): what its build and maintenance jobs write as. */
+  writer: WikiPrincipal;
   ordinary: string;
   r: { t1: string; e1: string; tc1: string; c1: string; t2: string; taskId: string };
 }
@@ -320,10 +335,14 @@ async function scene(h: Harness, title = 'A documented space'): Promise<Scene> {
   expectStatus(await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/workspaces`, { workspaceId: ws }), 200, 'the owner binds the workspace');
   const on = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: true, workspaceId: ws } });
   expectStatus(on, 200, 'the owner turns maintenance on');
-  const listId = toUuid(on.body.settings.maintenance.listId as string);
-  const maintenanceSession = await session(h, owner.id, ws, machine.id, await task(h, owner.id, listId, ws));
+  // The draft the space's creation asked for waited for a maintenance workspace; named now, it is made as a wiki_job.
+  const drafting = await h.sql.query<{ job_id: string }>(
+    `SELECT "job_id" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = 'draft' AND "state" = 'made' AND "job_id" IS NOT NULL`,
+    [spaceId],
+  );
+  assert.equal(drafting.rowCount, 1, 'the space\'s first draft is made on the server');
   const ordinary = await session(h, owner.id, ws, machine.id, null, SESSION_TITLE);
-  const taskId = await task(h, owner.id, listId, ws, TASK_TITLE);
+  const taskId = await task(h, owner.id, ws, TASK_TITLE);
   const r = {
     t1: await turn(h, ordinary, T1),
     e1: await event(h, ordinary, 'assistant', { text: E1 }),
@@ -332,7 +351,16 @@ async function scene(h: Harness, title = 'A documented space'): Promise<Scene> {
     t2: await turn(h, ordinary, T2),
     taskId,
   };
-  return { owner, runner: machine, ws, spaceId, listId, maintainer: { runner: machine.token, session: maintenanceSession }, maintenanceSession, ordinary, r };
+  return {
+    owner,
+    runner: machine,
+    ws,
+    spaceId,
+    drafter: { ownerId: owner.id, spaceId, wikiJobId: drafting.rows[0].job_id },
+    writer: wikiDocsBuildJobPrincipal(owner.id),
+    ordinary,
+    r,
+  };
 }
 
 // ── the plan ────────────────────────────────────────────────────────────────────────────────────
@@ -398,19 +426,18 @@ function planOf(docs: DocSpec[]): Record<string, unknown> {
 
 const REPO = { sha: 'a'.repeat(40), checked: 3, missing: [] };
 
-/** A draft from the maintenance run, and the owner's confirmation of it: the version now in force. */
+/** A draft from the server's plan job, and the owner's confirmation of it: the version now in force. */
 async function confirmPlan(h: Harness, s: Scene, docs: DocSpec[] = DOCS, baseVersion: number | null = null): Promise<number> {
-  const drafted = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/drafts`, {
+  const drafted = await h.plans.submitServerDraft(s.drafter, {
     baseVersion,
     target: { min: 1, max: 10 },
     plan: planOf(docs),
     repoCheck: REPO,
     model: 'qwen3.8-27b-fp8',
   });
-  expectStatus(drafted, 200, 'the maintenance run drafts the plan');
-  const confirmed = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/versions/${drafted.body.version}/confirm`);
+  const confirmed = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/versions/${drafted.version}/confirm`);
   expectStatus(confirmed, 200, 'the owner confirms the plan');
-  return drafted.body.version as number;
+  return drafted.version;
 }
 
 // ── writes ──────────────────────────────────────────────────────────────────────────────────────
@@ -443,8 +470,9 @@ function writeBody(planVersion: number, sections: SectionSpec[], extra: Record<s
   };
 }
 
-async function writeDoc(h: Harness, s: Scene, slug: string, body: unknown, who: Caller = s.maintainer): Promise<Answer> {
-  return call(h, who, 'POST', `/runner/wiki/spaces/${s.spaceId}/docs/${slug}`, body);
+/** One document's sections, written as the server's build and maintenance jobs write them (`WikiDocs.write`). */
+async function writeDoc(h: Harness, s: Scene, slug: string, body: unknown, who: WikiPrincipal = s.writer): Promise<Answer> {
+  return served(() => h.docs.write(who, s.spaceId, slug, body as Record<string, unknown>));
 }
 
 /** A code footnote the runner checked at a sha, and found. */
@@ -579,18 +607,18 @@ test('with no confirmed plan a write is refused — a draft is not enough — an
   const none = await writeDoc(h, s, 'session-runtime', body);
   expectStatus(none, 409, 'a write to a space with no plan at all');
   assert.equal(none.body.code, 'WIKI_PLAN_UNCONFIRMED');
-  const state = await call(h, s.maintainer, 'GET', `/runner/wiki/spaces/${s.spaceId}/docs`);
-  expectStatus(state, 200, 'the maintenance run reads what is written');
+  const state = await served(() => h.docs.writerState(s.writer, s.spaceId));
+  expectStatus(state, 200, 'the server\'s writer reads what is written');
   assert.equal(state.body.planVersion, null);
   assert.deepEqual(state.body.docs, []);
 
   // A draft nobody confirmed is not a plan documents are written from.
-  const drafted = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/drafts`, {
+  const drafted = await served(() => h.plans.submitServerDraft(s.drafter, {
     baseVersion: null,
     target: { min: 1, max: 10 },
     plan: planOf(DOCS),
     repoCheck: REPO,
-  });
+  }));
   expectStatus(drafted, 200, 'a draft');
   const draftOnly = await writeDoc(h, s, 'session-runtime', body);
   expectStatus(draftOnly, 409, 'a write to a space whose only plan is a draft');
@@ -972,7 +1000,8 @@ test('an entry rejected, retired or whose anchor went missing withdraws the sent
   assert.equal((await stored(h, s.spaceId, 'session-runtime')).doc?.status, 'ok');
 
   // An anchor gone missing, and a retirement, do the same.
-  const checked = await h.service.recordAnchorChecks({ ownerId: s.owner.id, sessionId: s.maintenanceSession }, s.spaceId, {
+  // The server's maintain job reports what its anchor check found on origin/main.
+  const checked = await h.service.recordAnchorChecks({ ownerId: s.owner.id, jobId: randomUUID() }, s.spaceId, {
     ref: 'f'.repeat(40),
     entries: [{ entryId: p, revision: 1, checks: [{ index: 0, type: 'path', state: 'missing' }] }],
   });
@@ -991,7 +1020,7 @@ test('an entry rejected, retired or whose anchor went missing withdraws the sent
   ]);
 
   // What the reads say: the section stale, the sentences withdrawn and why, the entries as they stand.
-  const state = await call(h, s.maintainer, 'GET', `/runner/wiki/spaces/${s.spaceId}/docs`);
+  const state = await served(() => h.docs.writerState(s.writer, s.spaceId));
   expectStatus(state, 200, 'what is written');
   const doc = state.body.docs.find((d: { slug: string }) => d.slug === 'session-runtime');
   assert.deepEqual(doc.sections.map((sec: { key: string; stale: boolean; repoSha: string }) => [sec.key, sec.stale, sec.repoSha]), [['s3', true, HEAD]]);
@@ -1127,10 +1156,10 @@ test('another owner reads none of it, and writes none of it: every route is a 40
     expectStatus(answer, 404, `another owner reads ${route}`);
     assert.ok(!JSON.stringify(answer.body).includes('会话运行模型'), 'and learns nothing of it');
   }
-  // Another owner's maintenance run, on their own runner: the same 404, and nothing moves.
-  expectStatus(await call(h, stranger.maintainer, 'GET', `/runner/wiki/spaces/${s.spaceId}/docs`), 404, 'another owner\'s run reads what is written');
-  expectStatus(await writeDoc(h, s, 'session-runtime', writeBody(version, [{ key: 's1', markdown: '别人写的[1]。', footnotes: [code('x')] }]), stranger.maintainer), 404,
-    'another owner\'s run writes');
+  // Another owner's jobs, writing as their own owner into this space: the same 404, and nothing moves.
+  expectStatus(await served(() => h.docs.writerState(stranger.writer, s.spaceId)), 404, 'another owner\'s job reads what is written');
+  expectStatus(await writeDoc(h, s, 'session-runtime', writeBody(version, [{ key: 's1', markdown: '别人写的[1]。', footnotes: [code('x')] }]), stranger.writer), 404,
+    'another owner\'s job writes');
   assert.deepEqual([...(await stored(h, s.spaceId, 'session-runtime')).sections.keys()], ['s2']);
   // Their own space has no plan: an empty directory, and no document.
   const theirs = await call(h, { bearer: stranger.owner.bearer }, 'GET', `/wiki/spaces/${stranger.spaceId}/docs`);
@@ -1140,13 +1169,14 @@ test('another owner reads none of it, and writes none of it: every route is a 40
   expectStatus(await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${randomUUID()}/docs`), 404, 'an unknown space');
   expectStatus(await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs/no-such-doc`), 404, 'a document the plan does not have');
 
-  // Only a maintenance run of the space writes: not an ordinary session, not a headless call, not the owner's door.
+  // Only the server's own jobs write: a principal with a session — maintenance or agent — is refused before anything
+  // is read or written, and the owner's door has no write.
   const body = writeBody(version, [{ key: 's1', markdown: '一句[1]。', footnotes: [code('x')] }]);
-  const ordinary = await writeDoc(h, s, 'session-runtime', body, { runner: s.runner.token, session: s.ordinary });
-  expectStatus(ordinary, 403, 'an ordinary session writes');
-  assert.equal(ordinary.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
-  expectStatus(await writeDoc(h, s, 'session-runtime', body, { runner: s.runner.token }), 400, 'a headless write');
-  expectStatus(await call(h, { runner: s.runner.token, session: s.ordinary }, 'GET', `/runner/wiki/spaces/${s.spaceId}/docs`), 403, 'an ordinary session reads what is written');
+  for (const origin of ['maintenance', 'agent'] as const) {
+    const asSession: WikiPrincipal = { origin, ownerId: s.owner.id, userId: null, sessionId: s.ordinary, toolCallId: null };
+    await assert.rejects(h.docs.write(asSession, s.spaceId, 'session-runtime', body), /written by the server's own jobs or import/u, `a session writes as ${origin}`);
+    await assert.rejects(h.docs.writerState(asSession, s.spaceId), /written by the server's own jobs or import/u, `a session reads what is written as ${origin}`);
+  }
   for (const method of ['POST', 'PUT', 'PATCH']) {
     expectStatus(await call(h, { bearer: s.owner.bearer }, method, `/wiki/spaces/${s.spaceId}/docs/session-runtime`, body), 404, `the owner ${method}s a document on the user door`);
   }
@@ -1240,11 +1270,11 @@ test('a written document\'s lead on the directory: its first section\'s first tw
   assert.deepEqual(read.get('ops-runbook'), [true, null], 'nor has one whose first section is not written');
 
   // The file the first sentence cites is gone from origin/main: the sentence is withdrawn, and the lead reads past it.
-  const withdrawn = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs/withdrawals`, {
+  const withdrawn = await served(() => h.docs.withdrawPaths(s.writer, s.spaceId, {
     repoSha: HEAD,
     paths: [{ path: 'src/gone.ts', change: 'deleted' }],
-  });
-  expectStatus(withdrawn, 200, 'the run withdraws what cites the deleted file');
+  }));
+  expectStatus(withdrawn, 200, 'the server\'s maintain job withdraws what cites the deleted file');
   assert.equal(withdrawn.body.withdrawn, 1);
   read = await leads();
   assert.deepEqual(read.get('session-runtime'), [true, 'turn 先落库再投递。它不用 WebSocket。'], 'the withdrawn sentence is skipped');

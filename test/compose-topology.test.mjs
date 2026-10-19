@@ -20,8 +20,8 @@
 // services in a Compose profile that is off by default and that a fresh install switches on, and nothing of
 // Kubernetes, Rook, Ceph or CSI. That is one more service, docker-channel — the restricted Docker channel,
 // the only holder of the Docker socket — whose whole definition (m) pins, and four lines of the apiserver's,
-// pinned with the wiki executor switch below. An existing deployment's .env names neither, so it runs the
-// same six services as before, its apiserver with the switch off.
+// pinned below. An existing deployment's .env names neither, so it runs the same six services as before,
+// its apiserver with the switch off.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -226,15 +226,9 @@ function directivesNotInBaseline(block, baselineBlock) {
 // cannot tell a READER of the flag from prose about its removal — which is exactly why it carves
 // out the migration's own comment. Naming it here put main's only red on the board.
 //
-// The exceptions are two approved blocks of the apiserver's. They are listed here as directives — comments
-// explaining them do not count — so a line added anywhere else still turns this red exactly as it did before.
+// The exception is an approved block of the apiserver's. It is listed here as directives — comments
+// explaining it do not count — so a line added anywhere else still turns this red exactly as it did before.
 const APPROVED_APISERVER_BLOCKS = [
-  // The wiki executor switch (docs/wiki-server-execution-design.md §2.1 and §10, P3, 2026-10-08): two
-  // variables the apiserver and the wiki worker both read, defaulting to the path that has always run.
-  [
-    '      ORBIT_WIKI_EXECUTOR: "${ORBIT_WIKI_EXECUTOR:-runner}"',
-    '      ORBIT_WIKI_EXECUTOR_CANARY_OWNERS: "${ORBIT_WIKI_EXECUTOR_CANARY_OWNERS:-}"',
-  ],
   // Managed runners on this host's Docker (2026-10-17, the top of this file): the switch, off unless the
   // host's .env says true; the profile's fixed path; and the directory holding the profile and the Docker
   // channel's token and socket, read-only, with /dev/null standing in where .env names none, so that an
@@ -324,9 +318,7 @@ test('(k) removing the sidecars is subtraction: setting the approved wiki worker
 // The definition the owner approved on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), every
 // directive of it in order: the apiserver's image with the worker's entry point, no port, no mount, no
 // build of its own, no migration — it waits for the apiserver, which applies them — and the System
-// model's four variables. Changing any of it is a new decision, made here. The executor switch's two
-// variables joined it on 2026-10-08 (P3, §2.1): the same pair the apiserver reads, so the process that
-// queues a job and the one that runs it decide the same about an account, defaulting to runner.
+// model's four variables. Changing any of it is a new decision, made here.
 test('(l) the wiki worker is exactly the service the owner approved on 2026-10-07', () => {
   assert.deepEqual(directives(currentServices.get(WIKI_WORKER)), [
     '  wiki-worker:',
@@ -341,8 +333,6 @@ test('(l) the wiki worker is exactly the service the owner approved on 2026-10-0
     '      ORBIT_WIKI_MODEL_API_KEY: "${ORBIT_WIKI_MODEL_API_KEY:-}"',
     '      ORBIT_WIKI_MODEL: "${ORBIT_WIKI_MODEL:-}"',
     '      ORBIT_WIKI_MODEL_CONCURRENCY: "${ORBIT_WIKI_MODEL_CONCURRENCY:-4}"',
-    '      ORBIT_WIKI_EXECUTOR: "${ORBIT_WIKI_EXECUTOR:-runner}"',
-    '      ORBIT_WIKI_EXECUTOR_CANARY_OWNERS: "${ORBIT_WIKI_EXECUTOR_CANARY_OWNERS:-}"',
     '    depends_on:',
     '      apiserver:',
     '        condition: service_healthy',

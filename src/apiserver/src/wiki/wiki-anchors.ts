@@ -5,7 +5,6 @@ import {
   WIKI_GIT_ANCHOR_TYPES,
   WIKI_LIMITS,
   toUuid,
-  wikiMaintenanceSettings,
   type WikiAnchor,
   type WikiAnchorCheck,
   type WikiAnchorCheckInput,
@@ -22,12 +21,12 @@ import {
  * `anchorRules.verify`, criterion 4): which anchors a Wiki maintenance run re-verifies, what a report
  * of them may say, and what the entry's anchors read as afterwards.
  *
- * GIT RUNS ON THE RUNNER, NEVER HERE. A path, a symbol and a commit are checked by `orbit wiki anchors
- * verify` in the runner's own checkout, on the commit origin/main names after a fetch; this file hands
- * that command the anchors and reads back what it found. What the server decides for itself is what a
- * finding MEANS: a symbol is held to its baseline — its own `regionSha256`, or the region its first
- * check found — so a region that moved reads `changed` whatever the runner thought, and only the
- * owner's Re-confirm moves the baseline.
+ * GIT RUNS ON THE RUNNER, NEVER HERE. A path, a symbol and a commit are checked by the anchors repository
+ * operation (`repoOps`; `orbit wiki anchors verify` before P11) in the runner's own checkout, on the commit
+ * origin/main names after a fetch; this file hands the maintenance run the anchors to send it, and reads
+ * back what it found. What the server decides for itself is what a finding MEANS: a symbol is
+ * held to its baseline — its own `regionSha256`, or the region its first check found — so a region that
+ * moved reads `changed` whatever the runner thought, and only the owner's Re-confirm moves the baseline.
  *
  * WHAT IS WRITTEN, AND BY WHOM. Everything here is pure or a read. The check itself, the entry's
  * `anchor_state` and the system challenge a broken anchor files are written by `WikiService`
@@ -35,8 +34,8 @@ import {
  * entry (design §3); this file does not import it, so the service can import this one.
  */
 
-/** Reads the anchors list needs: the entries, the space's settings, its bindings and their workspaces. */
-type AnchorReader = Pick<Prisma.TransactionClient, '$queryRaw' | 'session' | 'wikiSpace' | 'wikiSpaceWorkspace' | 'workspace'>;
+/** Reads the anchors list needs: the entries. */
+type AnchorReader = Pick<Prisma.TransactionClient, '$queryRaw'>;
 
 const GIT_TYPES: ReadonlySet<string> = new Set(WIKI_GIT_ANCHOR_TYPES);
 
@@ -262,7 +261,7 @@ export function anchorsChecked(
  * Whether a reported check is the check of the anchor it would be laid on: the type is the anchor's,
  * and every identity field the check carries equals the anchor's own — a path anchor's `path`, a
  * symbol's `path` and `symbol`, a commit's `sha`. A check that carries no identity at all (the
- * runner's own CLI reports none) matches on the type alone; one that carries a wrong identity
+ * runner's own CLI reported none before P11) matches on the type alone; one that carries a wrong identity
  * matches nothing, and the server refuses the entry rather than write it on the wrong anchor
  * (contract `anchorRules.verify.identity`).
  */
@@ -463,32 +462,17 @@ export function anchorReportEntry(raw: unknown, index: number): AnchorReportEntr
 // ── The list a maintenance run re-verifies (contract `anchorRules.verify.list`) ──────────────────
 
 /**
- * One page of the space's active entries that carry a git anchor, in id order, each with its current
- * revision and its git anchors; and the checkout the space's workspace names on this runner.
+ * One page of the space's active entries that carry a git anchor, in id order, each with its current revision
+ * and the git anchors a check still owes — the list the server's own maintenance run re-verifies (contract
+ * `maintenance.job.server`, P8). Only ACTIVE entries: they are what the push reads and what a challenge takes
+ * out of it; a proposal waiting in Review is checked once it applies. There is no session and no runner on this
+ * side — the checks travel as a `wiki_repo_op` the space's workspace routes — so it returns the entries alone,
+ * with no checkout for the caller to name.
  *
- * Only ACTIVE entries: they are what the push reads and what a challenge takes out of it. A proposal
- * waiting in Review is checked once it applies.
- */
-export async function listWikiAnchors(
-  reader: AnchorReader,
-  input: { ownerId: string; runnerId: string; spaceId: string; sessionId: string; after: string | null; limit: number | null },
-): Promise<WikiAnchorList> {
-  const limit = Math.min(Math.max(input.limit ?? WIKI_ANCHOR_RULES.listEntriesDefault, 1), WIKI_ANCHOR_RULES.listEntriesMax);
-  const page = await anchorPage(reader, input, limit, null);
-  return { spaceId: input.spaceId, repo: await anchorRepoOf(reader, input), entries: page.entries, next: page.next };
-}
-
-/**
- * The same page for the server's own maintenance run (contract `maintenance.job.server`, P8): there is no
- * session and no runner on this side — the checks travel as a `wiki_repo_op` the space's workspace routes,
- * and this returns the entries alone, with no checkout for the caller to name. The entries are exactly the
- * runner's list's: active, git-anchored, in id order, one page at a time.
- *
- * Each entry carries only the anchors a check at `proof.sha` still owes (`anchorsDueAt`), because this side
- * is the one that re-runs: an entry every anchor of which still holds there — checked at exactly this commit,
- * or verified on one since which nothing its answer depends on has moved — comes back with none, and the run
- * leaves it alone rather than re-check what only the same answer can come of. The runner's own list is not
- * this list: it is handed every anchor, always.
+ * Each entry carries only the anchors a check at `proof.sha` still owes (`anchorsDueAt`): an entry every anchor
+ * of which still holds there — checked at exactly this commit, or verified on one since which nothing its answer
+ * depends on has moved — comes back with none, and the run leaves it alone rather than re-check what only the
+ * same answer can come of.
  */
 export async function listWikiAnchorsForJob(
   reader: AnchorReader,
@@ -524,15 +508,12 @@ export async function anchorCheckRefs(
   return rows.map((row) => ({ ref: row.ref, anchors: Number(row.anchors) }));
 }
 
-/**
- * The page's rows as entries: the one read both lists above make. `proof` is what lets an entry's anchors be
- * left out (the server's own run), or null to hand every git anchor (the runner's).
- */
+/** The page's rows as entries, each with the anchors a check at `proof.sha` still owes. */
 async function anchorPage(
   reader: AnchorReader,
   input: { ownerId: string; spaceId: string; after: string | null },
   limit: number,
-  proof: WikiAnchorProof | null,
+  proof: WikiAnchorProof,
 ): Promise<Pick<WikiAnchorList, 'entries' | 'next'>> {
   const rows = await reader.$queryRaw<Array<{ id: string; currentRevision: number; anchors: unknown }>>`
     SELECT e."id" AS "id", e."current_revision" AS "currentRevision", e."anchors" AS "anchors"
@@ -552,47 +533,9 @@ async function anchorPage(
       return {
         entryId: row.id,
         revision: Number(row.currentRevision),
-        anchors: proof === null ? dueAnchors(anchors) : anchorsDueAt(anchors, proof),
+        anchors: anchorsDueAt(anchors, proof),
       };
     }),
     next: rows.length > limit ? page[page.length - 1].id : null,
   };
-}
-
-/**
- * The checkout a run re-verifies in when it names none (contract `anchorRules.verify.repo`): the work
- * directory of a workspace bound to the space — the calling session's own when it is one of them, else
- * the space's maintenance workspace, else the first bound workspace that lives on this runner — as the
- * workspace stores it. A leading `~` is the runner's to expand: this server does not know its home.
- */
-async function anchorRepoOf(
-  reader: AnchorReader,
-  input: { ownerId: string; runnerId: string; spaceId: string; sessionId: string },
-): Promise<WikiAnchorList['repo']> {
-  const bound = await reader.wikiSpaceWorkspace.findMany({
-    where: { spaceId: input.spaceId, ownerId: input.ownerId },
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    select: { workspaceId: true },
-  });
-  if (bound.length === 0) return null;
-  const session = await reader.session.findFirst({ where: { id: input.sessionId, ownerId: input.ownerId }, select: { workspaceId: true } });
-  const space = await reader.wikiSpace.findFirst({ where: { id: input.spaceId, ownerId: input.ownerId }, select: { settings: true } });
-  const settings = (space?.settings ?? {}) as Record<string, unknown>;
-  const maintained = wikiMaintenanceSettings(settings.maintenance).workspaceId;
-  const ids = bound.map((row) => row.workspaceId);
-  const order = [...new Set([session?.workspaceId, maintained, ...ids].filter((id): id is string => !!id && ids.includes(id)))];
-  const workspaces = await reader.workspace.findMany({
-    where: { id: { in: order }, ownerId: input.ownerId, deletedAt: null },
-    select: { id: true, workDir: true, runnerId: true, targetRunnerId: true },
-  });
-  const byId = new Map(workspaces.map((workspace) => [workspace.id, workspace]));
-  for (const id of order) {
-    const workspace = byId.get(id);
-    const workDir = workspace?.workDir?.trim();
-    if (!workspace || !workDir) continue;
-    // The session runs here, so its own workspace does; any other has to say it lives on this runner.
-    const here = id === session?.workspaceId || workspace.runnerId === input.runnerId || workspace.targetRunnerId === input.runnerId;
-    if (here) return { workspaceId: workspace.id, workDir };
-  }
-  return null;
 }

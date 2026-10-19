@@ -19,7 +19,6 @@ class WikiPlanContractTest {
     private val contract get() = WikiSharedFiles.contract
     private val plan get() = contract.fobj("plan")
     private val userRoutes get() = contract.fobj("agentSurface").fobj("doors").fobj("user").fstrings("routes").toSet()
-    private val maintenanceRoutes get() = contract.fobj("agentSurface").fobj("doors").fobj("runner").fstrings("maintenanceRoutes").toSet()
 
     @Test fun theClosedSetsAreTheContracts() {
         // The section kinds the Edit sheets offer are the contract's, in its order, each with a name of its own.
@@ -37,18 +36,16 @@ class WikiPlanContractTest {
         assertEquals(plan.fobj("gate").fstrings("checks").toSet(), WikiPlanLogic.gateOrder.toSet())
     }
 
-    /** The owner's six routes are the user door's — and the Kotlin client calls exactly those; the runner door has the
-     * maintenance run's three, none of which confirms or decides anything. */
+    /** The owner's six routes are the user door's — and the Kotlin client calls exactly those; the runner door has no
+     * route of the plan. */
     @Test fun theOwnersRoutesAreOnTheUserDoor() {
         val routes = plan.fobj("routes")
         listOf("state", "versions", "version", "edit", "confirm", "decide").forEach { name ->
             assertTrue("${routes.fstr(name)} is not a route the user door declares", routes.fstr(name) in userRoutes)
         }
-        listOf("runnerState", "draft", "propose").forEach { name ->
-            val route = routes.fstr(name)
-            assertTrue("$route is not a maintenance route", route in maintenanceRoutes)
-            assertFalse(route, route.contains("confirm") || route.contains("decide"))
-        }
+        val runner = contract.fobj("agentSurface").fobj("doors").fobj("runner").values.filterIsInstance<JsonArray>()
+            .flatMap { list -> list.map { it.jsonPrimitive.content } }
+        assertFalse("the runner door has a route of the plan: $runner", runner.any { it.contains("/plan") })
         assertTrue(plan.fobj("who").fstr("owner").contains("WIKI_OWNER_CHANNEL_ONLY"))
         // What this client sends for each: the same routes, all on the user door.
         val called = clientRoutes { client ->
@@ -63,7 +60,7 @@ class WikiPlanContractTest {
     }
 
     /** The plan's jobs (contract `plan.jobs`): what the pages branch on is the contract's, and the owner's redraft is the
-     * user door's route; the run's five are the runner door's maintenance routes. */
+     * user door's route. */
     @Test fun theJobsClosedSetsAndRoutesAreTheContracts() {
         val jobs = plan.fobj("jobs")
         assertEquals(setOf("draft", "revise", "build"), jobs.fobj("kinds").keys)
@@ -88,9 +85,6 @@ class WikiPlanContractTest {
         assertEquals("local-vllm · attempt 1 of 3 · started 1h ago", running?.text)
         val routes = jobs.fobj("routes")
         assertTrue("the redraft is not a route of the user door", routes.fstr("redraft") in userRoutes)
-        listOf("context", "progress", "finish", "check", "materials").forEach { assertTrue("$it is not a maintenance route", routes.fstr(it) in maintenanceRoutes) }
-        val refusals = contract["refusals"] as JsonArray
-        assertEquals(409, refusals.map { it.jsonObject }.first { it["code"].text() == "WIKI_PLAN_NO_JOB" }.fint("httpStatus"))
     }
 
     /** The plan as the server answers it: the version in force, the draft, the pending proposals. */

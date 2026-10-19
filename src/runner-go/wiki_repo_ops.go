@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -30,7 +32,7 @@ import (
 //              an answer too large for one request body uploaded in fragments, as a snapshot is. A request
 //              that names a limit is answered within it, the way an older control plane asks.
 //   diff       `--name-status -M` between two commits, and the design documents the range added.
-//   anchors    the maintenance run's own anchor checks (wiki_anchors.go), reused.
+//   anchors    each path, symbol and commit anchor checked with git (wiki_anchors.go).
 //
 // EVERY ONE OF THEM CHECKS ITS CHECKOUT FIRST: the repository's origin URL must be the space's
 // `repo.urlNorm` and the checkout's root commit must be the space's `rootCommitSha` (design §7, "the
@@ -120,7 +122,7 @@ type wikiRepoOpReadPiece struct {
 	// Why it is not there: "too_large" for a file over wikiRepoOpWholeFileBytes. Absent otherwise.
 	Reason string `json:"reason,omitempty"`
 	// The file's size in bytes at the commit; 0 when the commit has no such path.
-	Size int64 `json:"size,omitempty"`
+	Size int64  `json:"size,omitempty"`
 	Text string `json:"text,omitempty"`
 	// The answer was cut at the limit the request named, so its end is not the file's.
 	Truncated bool `json:"truncated,omitempty"`
@@ -316,6 +318,34 @@ func wikiRepoOpStartsFrom(root, commit, first string) bool {
 	return contains(strings.Fields(roots), first)
 }
 
+var (
+	wikiRepoSCP    = regexp.MustCompile(`^(?:[^@/\s]+@)?([^:/\s]+):([^/\s]\S*)$`)
+	wikiRepoScheme = regexp.MustCompile(`(?i)^[a-z][a-z0-9+.-]*://`)
+	wikiRepoRemote = regexp.MustCompile(`(?i)^([a-z][a-z0-9+.-]*)://(?:[^@/]*@)?([^/]*)(.*)$`)
+)
+
+// normalizeWikiRepoURL is the server's normalizeRepoUrl (canonicalRepoUrl, then no scheme, no trailing / or
+// .git): `git@github.com:a/b.git` and `https://github.com/a/b` both read `github.com/a/b`.
+func normalizeWikiRepoURL(raw string) string {
+	u := strings.TrimSpace(raw)
+	if m := wikiRepoSCP.FindStringSubmatch(u); m != nil && !wikiRepoScheme.MatchString(u) {
+		u = "ssh://" + m[1] + "/" + m[2]
+	}
+	if m := wikiRepoRemote.FindStringSubmatch(u); m != nil {
+		u = strings.ToLower(m[1]) + "://" + strings.ToLower(m[2]) + m[3]
+	}
+	trim := func(s string) string {
+		for {
+			next := strings.TrimSuffix(strings.TrimRight(s, "/"), ".git")
+			if next == s {
+				return s
+			}
+			s = next
+		}
+	}
+	return trim(wikiRepoScheme.ReplaceAllString(trim(u), ""))
+}
+
 // ── snapshot ────────────────────────────────────────────────────────────────────────────────────
 
 func wikiRepoOpSnapshot(cmd WikiRepoOpCommand, root, ref string, input wikiRepoOpInput) wikiRepoOpOutcome {
@@ -404,6 +434,51 @@ func wikiRepoOpReachable(root, ref string) ([]string, error) {
 		}
 	}
 	return commits, nil
+}
+
+// How much of a repository's README tells the model what the repository is.
+const wikiMaintainAboutMaxChars = 300
+
+var (
+	wikiMaintainTag      = regexp.MustCompile(`<[^>]*>`)
+	wikiMaintainMdLink   = regexp.MustCompile(`!?\[([^\]]*)\]\([^)]*\)`)
+	wikiMaintainEmphasis = regexp.MustCompile("[*_`]{1,3}")
+)
+
+// wikiMaintainAbout is a sentence or two of what the repository is: the first paragraph of its README on
+// origin/main that says something, markup taken out. Empty when there is none.
+func wikiMaintainAbout(root, ref string) string {
+	readme, err := wikiImportGit(root, "show", ref+":README.md")
+	if err != nil {
+		return ""
+	}
+	for _, paragraph := range strings.Split(readme, "\n\n") {
+		text := wikiMaintainTag.ReplaceAllString(paragraph, " ")
+		text = wikiMaintainMdLink.ReplaceAllString(text, "$1")
+		text = wikiMaintainEmphasis.ReplaceAllString(html.UnescapeString(text), "")
+		text = strings.Join(strings.Fields(text), " ")
+		if strings.HasPrefix(text, "#") || len([]rune(text)) < 40 {
+			continue
+		}
+		return cutRunes(text, wikiMaintainAboutMaxChars)
+	}
+	return ""
+}
+
+func cutRunes(text string, max int) string {
+	runes := []rune(text)
+	if len(runes) <= max {
+		return text
+	}
+	return string(runes[:max])
+}
+
+// shortWikiHash is enough of a commit's hash to tell two apart at a glance.
+func shortWikiHash(hash string) string {
+	if len(hash) > 12 {
+		return hash[:12]
+	}
+	return hash
 }
 
 // ── read ────────────────────────────────────────────────────────────────────────────────────────
@@ -505,7 +580,8 @@ func wikiRepoOpCut(text string, max int) (string, bool) {
 
 // wikiRepoOpSectionText is one section of a Markdown document: the heading that reads as the named one and
 // the lines under it, up to the next heading of its level or above — the same reading of a section the
-// plan's gate does (wikiPlanFindSection), applied to the text instead of to the headings alone.
+// server's plan gate does (wiki-plan-repo.ts wikiPlanFindSection), applied to the text instead of to the
+// headings alone.
 func wikiRepoOpSectionText(text, section string) string {
 	lines := strings.Split(text, "\n")
 	type heading struct {
@@ -641,7 +717,7 @@ func wikiRepoOpDiff(root string, input wikiRepoOpInput) wikiRepoOpOutcome {
 
 // ── anchors ─────────────────────────────────────────────────────────────────────────────────────
 
-// wikiRepoOpAnchors reuses the maintenance run's own checks (wiki_anchors.go): one state per anchor, and
+// wikiRepoOpAnchors runs the anchor checks of wiki_anchors.go: one state per anchor, and
 // git failing to check one is the operation failing rather than an anchor coming back `missing`.
 func wikiRepoOpAnchors(root, ref string, input wikiRepoOpInput) wikiRepoOpOutcome {
 	sha := strings.ToLower(strings.TrimSpace(input.Sha))

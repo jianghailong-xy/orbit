@@ -14,8 +14,9 @@
  *      header is refused.
  *
  * and beside them what the design leans on: a field declared as needing adding passes and is shown,
- * only a maintenance run of the space drafts or proposes, a draft built on a version that is no longer
- * the newest is refused, and the migration's CHECKs are the contract's closed sets.
+ * the server's plan job drafts and proposes — its wiki_job the author (`submitServerDraft`,
+ * `proposeServer`) — a draft built on a version that is no longer the newest is refused, and the
+ * migration's CHECKs are the contract's closed sets.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-plan.pg.spec.ts
  *
@@ -26,7 +27,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 
-import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
+import { HttpException, type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
@@ -47,8 +48,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
-import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { RunnerWikiPlanController } from '../runner-api/runner-wiki-plan.controller';
 import { requireConfirmedPlan, WikiPlans } from './wiki-plan';
 import { WikiPlanController } from './wiki-plan.controller';
 import { WikiRetrieval } from './wiki-retrieval';
@@ -66,6 +65,8 @@ interface Harness {
   bearers: Map<string, string>;
   /** Every space `wiki.changed` was published for by the plan, in order. */
   published: string[];
+  /** The plan's service: what the server's plan job drafts and proposes through. */
+  plans: WikiPlans;
 }
 
 let harness: Promise<Harness> | undefined;
@@ -85,13 +86,12 @@ function boot(): Promise<Harness> {
     const plans = new WikiPlans(prisma as unknown as PrismaService, recorder);
 
     @Module({
-      controllers: [WikiController, WikiPlanController, RunnerWikiPlanController],
+      controllers: [WikiController, WikiPlanController],
       providers: [
         { provide: WikiService, useValue: service },
         { provide: WikiPlans, useValue: plans },
         { provide: WikiRetrieval, useValue: new WikiRetrieval(prisma as unknown as PrismaService) },
         { provide: PrismaService, useValue: prisma },
-        RunnerAuthGuard,
         JwtAuthGuard,
         Reflector,
         {
@@ -113,7 +113,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, bearers, published };
+    return { base: await app.getUrl(), sql, prisma, app, bearers, published, plans };
   })();
   return harness;
 }
@@ -158,6 +158,19 @@ async function call(h: Harness, who: Caller, method: string, route: string, body
     parsed = { unparsed: text };
   }
   return { status: response.status, body: parsed };
+}
+
+/**
+ * A call of the server's own writer, answered as a door would answer it: what it returned as a 200, or the status and
+ * body of what it threw — so the gate's refusals read here exactly as they read on any door.
+ */
+async function served(run: () => Promise<unknown>): Promise<Answer> {
+  try {
+    return { status: 200, body: JSON.parse(JSON.stringify(await run())) };
+  } catch (error) {
+    if (error instanceof HttpException) return { status: error.getStatus(), body: error.getResponse() };
+    throw error;
+  }
 }
 
 function expectStatus(answer: Answer, status: number, why: string): void {
@@ -216,17 +229,6 @@ async function session(h: Harness, ownerId: string, workspaceId: string, runnerI
   return id;
 }
 
-async function task(h: Harness, ownerId: string, listId: string, assigneeId: string): Promise<string> {
-  const id = randomUUID();
-  await h.sql.query(
-    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","status","assignee_id","list_id",
-                         "completion_criterion","updated_at")
-     VALUES ($1,'Wiki maintenance run',$2,'USER',$2,'OPEN'::task_status,$3,$4,'OWNER_CONFIRMED',now())`,
-    [id, ownerId, assigneeId, listId],
-  );
-  return id;
-}
-
 async function project(h: Harness, ownerId: string, title: string): Promise<string> {
   const id = randomUUID();
   await h.sql.query(`INSERT INTO "project"("id","title","owner_id","updated_at") VALUES ($1,$2,$3,now())`, [id, title, ownerId]);
@@ -247,17 +249,24 @@ async function entry(h: Harness, ownerId: string, spaceId: string): Promise<stri
   return id;
 }
 
+/** The server's plan job, as the plan's writers know it: its owner, its space, and the wiki_job that runs it. */
+interface Drafter {
+  ownerId: string;
+  spaceId: string;
+  wikiJobId: string;
+}
+
 /**
- * One owner's world: a runner, a bound workspace, a space with maintenance on and a maintenance run of
- * it, an ordinary session of the same workspace, two projects (one title shared by two of them) and
- * the topics the drafts name.
+ * One owner's world: a runner, a bound workspace, a space with maintenance on and the wiki_job its first
+ * draft was made as on the server, a session of the same workspace, two projects (one title shared by
+ * two of them) and the topics the drafts name.
  */
 interface Scene {
   owner: Account;
-  runner: { id: string; token: string };
   spaceId: string;
-  maintainer: Caller;
-  maintenanceSession: string;
+  /** The space's first draft, made as the wiki-worker's job once maintenance named its workspace: what drafts and proposes here. */
+  drafter: Drafter;
+  /** A session of the owner's: a proposal's fact, and the session header the owner channel refuses. */
   ordinary: string;
   projectId: string;
 }
@@ -275,8 +284,12 @@ async function scene(h: Harness): Promise<Scene> {
   expectStatus(await call(h, { bearer: owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/workspaces`, { workspaceId: ws }), 200, 'the owner binds the workspace');
   const on = await call(h, { bearer: owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: true, workspaceId: ws } });
   expectStatus(on, 200, 'the owner turns maintenance on');
-  const listId = toUuid(on.body.settings.maintenance.listId as string);
-  const maintenanceSession = await session(h, owner.id, ws, machine.id, await task(h, owner.id, listId, ws));
+  // The draft the space's creation asked for waited for a maintenance workspace; named now, it is made as a wiki_job.
+  const made_ = await h.sql.query<{ job_id: string }>(
+    `SELECT "job_id" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = 'draft' AND "state" = 'made' AND "job_id" IS NOT NULL`,
+    [spaceId],
+  );
+  assert.equal(made_.rowCount, 1, 'the space\'s first draft is made on the server');
   const ordinary = await session(h, owner.id, ws, machine.id);
   const projectId = await project(h, owner.id, PROJECT);
   await project(h, owner.id, TWIN);
@@ -284,10 +297,8 @@ async function scene(h: Harness): Promise<Scene> {
   for (const slug of ['wiki', 'sessions']) await topic(h, owner.id, spaceId, slug);
   return {
     owner,
-    runner: machine,
     spaceId,
-    maintainer: { runner: machine.token, session: maintenanceSession },
-    maintenanceSession,
+    drafter: { ownerId: owner.id, spaceId, wikiJobId: made_.rows[0].job_id },
     ordinary,
     projectId,
   };
@@ -358,8 +369,14 @@ function draftBody(baseVersion: number | null, plan: Record<string, unknown>, ex
   return { baseVersion, plan, repoCheck: REPO, model: 'qwen3.8-27b-fp8', ...extra };
 }
 
+/** The server's plan job stores a draft, as the wiki-worker's plan_draft job does. */
 async function draft(h: Harness, s: Scene, baseVersion: number | null, plan: Record<string, unknown>, extra: Record<string, unknown> = {}): Promise<Answer> {
-  return call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/drafts`, draftBody(baseVersion, plan, extra));
+  return served(() => h.plans.submitServerDraft(s.drafter, draftBody(baseVersion, plan, extra)));
+}
+
+/** The server's maintenance job proposes a change to the confirmed plan, as the wiki-worker's does. */
+async function propose(h: Harness, s: Scene, body: Record<string, unknown>): Promise<Answer> {
+  return served(() => h.plans.proposeServer(s.drafter, body));
 }
 
 async function confirm(h: Harness, s: Scene, version: number, who: Caller = { bearer: s.owner.bearer }): Promise<Answer> {
@@ -425,10 +442,10 @@ test('with no confirmed plan requireConfirmedPlan refuses — a draft is not eno
   await refused('a space whose only version is a draft nobody confirmed');
 
   // A proposal needs a confirmed plan too: there is nothing in force to change.
-  const early = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/proposals`, {
+  const early = await propose(h, s, {
     reason: 'Too early',
     change: { doc: docOf(20, 21) },
-    facts: [{ kind: 'session', id: s.maintenanceSession }],
+    facts: [{ kind: 'session', id: s.ordinary }],
   });
   expectStatus(early, 409, 'a proposal to a space with no confirmed plan');
   assert.equal(early.body.code, 'WIKI_PLAN_UNCONFIRMED');
@@ -471,7 +488,7 @@ test('a revision is a new version, and a confirmed version is never changed', { 
   assert.deepEqual(one.body.repoCheck, REPO);
   assert.deepEqual(one.body.gate.checks, { schema: 'passed', docCount: 'passed', protected: 'passed', references: 'passed' });
   assert.deepEqual(one.body.target, { min: WIKI_PLAN_RULES.docsMin, max: WIKI_PLAN_RULES.docsMax });
-  assert.equal(toUuid(one.body.authorSessionId as string), s.maintenanceSession);
+  assert.deepEqual([one.body.authorSessionId, toUuid(one.body.authorJobId as string)], [null, s.drafter.wikiJobId], 'the server\'s job drafted it, and no session');
 
   // A redraft: version 2, a draft beside the confirmed version 1, which does not move.
   const redraft = await draft(h, s, 1, planOf(21), { target: { min: 20, max: 22 } });
@@ -599,7 +616,7 @@ test('the gate stops a field outside the schema, a count outside the target, and
   // Nothing a refused draft sent was stored: versions 1 to 3 are the three that passed.
   assert.deepEqual(await statuses(h, s.spaceId), [[1, 'superseded'], [2, 'superseded'], [3, 'draft']]);
   // Without a repository check the draft is not taken, and its sha must be one.
-  const noRepo = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/drafts`, { baseVersion: 3, plan: planOf(20) });
+  const noRepo = await served(() => h.plans.submitServerDraft(s.drafter, { baseVersion: 3, plan: planOf(20) }));
   expectGate(noRepo, 'schema', 'repoCheck', 'a draft with no repository check');
   expectGate(await draft(h, s, 3, planOf(20), { repoCheck: { sha: 'main', checked: 1, missing: [] } }), 'schema', 'repoCheck.sha', 'a sha that is not one');
 });
@@ -662,17 +679,17 @@ test('the gate reads a closed-set value as what its wrapping holds, and names wh
     title: 'Hand-back convention', kind: 'conventions', covers: 'Rebase onto main, name the branch and the sha, and do not merge.', length: 300,
     sources: { sessions: { keywords: ['rebase', 'merge'], entryKinds: ['`decision`'], topics: ['`wiki`'], evidence: 'the owner saying how to hand work back' } },
   });
-  const propose = (doc: Record<string, unknown>): Promise<Answer> => call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/proposals`, {
+  const proposeDoc = (doc: Record<string, unknown>): Promise<Answer> => propose(h, s, {
     reason: 'A convention the plan has no section for.', change: { doc }, facts: [{ kind: '`entry`', id: knowledge }],
   });
-  const made = await propose(extended);
+  const made = await proposeDoc(extended);
   expectStatus(made, 200, 'the proposal of 10-01, its kind in backticks');
   assert.deepEqual(made.body.change.doc.sections[3].sources.sessions.entryKinds, ['decision']);
   assert.deepEqual(made.body.change.doc.sections[3].sources.sessions.topics, ['wiki']);
   assert.equal(made.body.facts[0].kind, 'entry');
   const misspelt = docOf(5, 20);
   (misspelt.sections as unknown[]).push({ title: 'Hand-back convention', kind: 'conventions', covers: 'x', length: 300, sources: { sessions: { entryKinds: ['`dicision`'] } } });
-  const wrong = await propose(misspelt);
+  const wrong = await proposeDoc(misspelt);
   expectGate(wrong, 'references', 'change.doc.sections[3].sources.sessions.entryKinds[0]', 'a misspelt kind in backticks');
   assert.ok(messageAt(wrong, 'change.doc.sections[3].sources.sessions.entryKinds[0]').startsWith('"dicision" is no kind of entry: one of'));
 });
@@ -718,12 +735,11 @@ test('a topic the space does not have is refused with the space\'s topics listed
     });
     return { reason: 'Pitfalls the plan has no section for.', change: { doc }, facts: [{ kind: 'entry', id: knowledge }] };
   };
-  const path = `/runner/wiki/spaces/${s.spaceId}/plan/proposals`;
-  const wrong = await call(h, s.maintainer, 'POST', path, proposalOf(['doc-5', 'evidence-wait-queue']));
+  const wrong = await propose(h, s, proposalOf(['doc-5', 'evidence-wait-queue']));
   expectGate(wrong, 'references', 'change.doc.sections[3].sources.sessions.topics[0]', 'a document\'s slug named as a proposal\'s topic');
   assert.deepEqual(errorsAt(wrong, 'change.doc.sections[3].sources.sessions.topics[0]'), [`"doc-5" is not a topic of this space: ${listed}`]);
   assert.deepEqual(errorsAt(wrong, 'change.doc.sections[3].sources.sessions.topics[1]'), [`"evidence-wait-queue" is not a topic of this space: ${listed}`]);
-  const taken = await call(h, s.maintainer, 'POST', path, proposalOf(['wiki']));
+  const taken = await propose(h, s, proposalOf(['wiki']));
   expectStatus(taken, 200, 'the same proposal naming the space\'s topic');
   assert.deepEqual(taken.body.change.doc.sections[3].sources.sessions.topics, ['wiki']);
 });
@@ -766,14 +782,12 @@ test('a proposal changes nothing until the owner accepts it; accepting makes a d
   const before = await snapshot(h, s.spaceId, 1);
   const knowledge = await entry(h, s.owner.id, s.spaceId);
 
-  const propose = (body: Record<string, unknown>): Promise<Answer> =>
-    call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/proposals`, body);
   // A new document in a new category, for knowledge that fits no section.
   const newDoc = docOf(20, 21, { category: 'ops', slug: 'backups' });
-  const made = await propose({
+  const made = await propose(h, s, {
     reason: 'Backups came up in three sessions and no document covers them.',
     change: { doc: newDoc, category: { key: 'ops', title: 'Operations' } },
-    facts: [{ kind: 'entry', id: knowledge }, { kind: 'session', id: s.maintenanceSession }],
+    facts: [{ kind: 'entry', id: knowledge }, { kind: 'session', id: s.ordinary }],
   });
   expectStatus(made, 200, 'a proposal for a new document');
   assert.equal(made.body.status, 'pending');
@@ -781,7 +795,7 @@ test('a proposal changes nothing until the owner accepts it; accepting makes a d
   // A section added to an existing document, the other way a proposal changes the plan.
   const extended = docOf(5, 20);
   (extended.sections as unknown[]).push({ title: 'Decisions', kind: 'decisions', covers: 'Why it is this way.', length: 400, sources: { sessions: { projects: [PROJECT], keywords: ['why'] } } });
-  const second = await propose({ reason: 'A decision that fits no section of doc-5.', change: { doc: extended }, facts: [{ kind: 'entry', id: knowledge }] });
+  const second = await propose(h, s, { reason: 'A decision that fits no section of doc-5.', change: { doc: extended }, facts: [{ kind: 'entry', id: knowledge }] });
   expectStatus(second, 200, 'a proposal that adds a section');
 
   // Before anyone answers, the plan is as it was: the same versions, the same confirmed rows.
@@ -794,7 +808,7 @@ test('a proposal changes nothing until the owner accepts it; accepting makes a d
   assert.deepEqual(state.body.proposals.map((p: { id: string }) => toUuid(p.id)), [toUuid(made.body.id as string), toUuid(second.body.id as string)]);
 
   // The gate holds a proposal too: a protected document, a fact that is not one, a field made up.
-  const bad = await propose({
+  const bad = await propose(h, s, {
     reason: 'x',
     change: { doc: docOf(21, 22, { slug: 'extra-doc', protected: true, mood: 'hopeful' }) },
     facts: [{ kind: 'entry', id: randomUUID() }],
@@ -838,24 +852,13 @@ test('a proposal changes nothing until the owner accepts it; accepting makes a d
 
 // ── 5. who ──────────────────────────────────────────────────────────────────────────────────────
 
-test('only a maintenance run drafts or proposes; the owner channel alone reads, edits, confirms and decides', { skip }, async () => {
+test('the owner channel alone reads, edits, confirms and decides: a request that names a session is refused before anything is read', { skip }, async () => {
   const h = await boot();
   const s = await scene(h);
-  const body = draftBody(null, planOf(20));
-  // Another session of the owner is not a maintenance run; a call with no session names nobody.
-  const ordinary = await call(h, { runner: s.runner.token, session: s.ordinary }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/drafts`, body);
-  expectStatus(ordinary, 403, 'an ordinary session drafting');
-  assert.equal(ordinary.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
-  expectStatus(await call(h, { runner: s.runner.token }, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/drafts`, body), 400, 'a headless draft');
-  const reads = await call(h, { runner: s.runner.token, session: s.ordinary }, 'GET', `/runner/wiki/spaces/${s.spaceId}/plan`);
-  expectStatus(reads, 403, 'an ordinary session reading the plan on the runner door');
-  expectStatus(await draft(h, s, null, planOf(20)), 200, 'the maintenance run drafts');
-  const runnerRead = await call(h, s.maintainer, 'GET', `/runner/wiki/spaces/${s.spaceId}/plan`);
-  expectStatus(runnerRead, 200, 'the maintenance run reads the plan');
-  assert.equal(runnerRead.body.draft.version, 1);
+  expectStatus(await draft(h, s, null, planOf(20)), 200, 'the server\'s plan job drafts');
 
   // Every user-door route, with a session header: refused before anything is read.
-  const header: Caller = { bearer: s.owner.bearer, session: s.maintenanceSession };
+  const header: Caller = { bearer: s.owner.bearer, session: s.ordinary };
   for (const [method, route, payload] of [
     ['POST', `/wiki/spaces/${s.spaceId}/plan/versions/1/confirm`, undefined],
     ['GET', `/wiki/spaces/${s.spaceId}/plan`, undefined],
@@ -877,12 +880,12 @@ test('another owner reads and does none of it: every plan route is a 404', { ski
   const s = await scene(h);
   expectStatus(await draft(h, s, null, planOf(20)), 200, 'the owner\'s draft');
   expectStatus(await confirm(h, s, 1), 200, 'the owner confirms it');
-  const proposal = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/proposals`, {
+  const proposal = await propose(h, s, {
     reason: 'x',
     change: { doc: docOf(20, 21) },
-    facts: [{ kind: 'session', id: s.maintenanceSession }],
+    facts: [{ kind: 'session', id: s.ordinary }],
   });
-  expectStatus(proposal, 200, 'the maintenance run proposes');
+  expectStatus(proposal, 200, 'the server\'s maintenance job proposes');
 
   const other = await account(h, 'another owner');
   const them: Caller = { bearer: other.bearer };
@@ -898,15 +901,16 @@ test('another owner reads and does none of it: every plan route is a 404', { ski
     expectStatus(answer, 404, `another owner: ${method} ${route}`);
     assert.ok(!JSON.stringify(answer.body).includes('Document 1'), `another owner: ${method} ${route} told something of the plan`);
   }
-  // Another owner's maintenance run, through their own runner, finds no such space either.
+  // Another owner's plan job, writing as its own owner into this space, finds no such space either: the server's
+  // writers ask for the space of the job's owner before they read anything of it.
   const theirs = await scene(h);
-  for (const [method, route, payload] of [
-    ['GET', `/runner/wiki/spaces/${s.spaceId}/plan`, undefined],
-    ['POST', `/runner/wiki/spaces/${s.spaceId}/plan/drafts`, draftBody(1, planOf(20))],
-    ['POST', `/runner/wiki/spaces/${s.spaceId}/plan/proposals`, { reason: 'x', change: { doc: docOf(20, 21) }, facts: [] }],
-  ] as const) {
-    expectStatus(await call(h, theirs.maintainer, method, route, payload), 404, `another owner's run: ${method} ${route}`);
-  }
+  const intruder: Drafter = { ...theirs.drafter, spaceId: s.spaceId };
+  expectStatus(await served(() => h.plans.submitServerDraft(intruder, draftBody(1, planOf(20)))), 404, 'another owner\'s job drafting');
+  expectStatus(
+    await served(() => h.plans.proposeServer(intruder, { reason: 'x', change: { doc: docOf(20, 21) }, facts: [] })),
+    404,
+    'another owner\'s job proposing',
+  );
   // Nothing moved.
   assert.deepEqual(await statuses(h, s.spaceId), [[1, 'confirmed']]);
   assert.equal((await planState(h, s)).body.proposals.length, 1);

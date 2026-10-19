@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -101,28 +100,24 @@ func TestWikiRepoOpsOfOneCheckoutAtOnceAllAnswerWhileMainMoves(t *testing.T) {
 	}
 }
 
-// `orbit wiki anchors verify` runs in a maintenance session — a process of its own — and fetches the
-// same checkout the runner's operations fetch: the same race, across processes. The command runs here in
-// a child process, against the anchors door this test serves, beside a snapshot and a read in this one.
-func TestWikiAnchorsVerifyInAnotherProcessAndTheRunnersOperationsAllAnswerWhileMainMoves(t *testing.T) {
-	if os.Getenv("ORBIT_WIKI_FETCH_RACE_CHILD") == "1" {
-		// The maintenance session's process. "ready" is the parent's cue to start its own operations.
+// A wiki fetch of the same checkout from another process — another runner on the machine with the same work
+// directory — takes the same lock the runner's operations take, and the operations beside it all answer: the
+// same race, across processes. The other process's fetch runs here in a child process, beside a snapshot and
+// a read in this one.
+func TestWikiFetchInAnotherProcessAndTheRunnersOperationsAllAnswerWhileMainMoves(t *testing.T) {
+	if repo := os.Getenv("ORBIT_WIKI_FETCH_RACE_REPO"); os.Getenv("ORBIT_WIKI_FETCH_RACE_CHILD") == "1" {
+		// The other process. "ready" is the parent's cue to start its own operations.
 		fmt.Println("ready")
-		var out strings.Builder
-		if err := cmdWikiCLI([]string{"anchors", "verify", "--space", "space-1", "--repo", os.Getenv("ORBIT_WIKI_FETCH_RACE_REPO")},
-			strings.NewReader(""), &out); err != nil {
-			t.Fatalf("orbit wiki anchors verify: %v\n%s", err, out.String())
+		if err := fetchWikiOriginMain(repo); err != nil {
+			t.Fatalf("the other process's fetch: %v", err)
 		}
 		return
 	}
 	f := newWikiRepoOpFixture(t)
-	requests := wikiAnchorsDoor(t, func(string) (int, string) {
-		return http.StatusOK, anchorsListReply(f.checkout, "", `{"entryId":"e1","revision":1,"anchors":[{"index":0,"type":"path","path":"docs/moved.md"}]}`)
-	}, recordEveryEntry)
 	moved := f.push(t, "main moves", func() { f.write(t, "docs/moved.md", "# Moved\n\nmain moved on.\n") })
 	holdPacksUntilAllAsk(t, f.home, 3)
 
-	child := exec.Command(os.Args[0], "-test.run=^TestWikiAnchorsVerifyInAnotherProcessAndTheRunnersOperationsAllAnswerWhileMainMoves$")
+	child := exec.Command(os.Args[0], "-test.run=^TestWikiFetchInAnotherProcessAndTheRunnersOperationsAllAnswerWhileMainMoves$")
 	child.Env = append(os.Environ(), "ORBIT_WIKI_FETCH_RACE_CHILD=1", "ORBIT_WIKI_FETCH_RACE_REPO="+f.checkout)
 	stdout, err := child.StdoutPipe()
 	if err != nil {
@@ -136,7 +131,7 @@ func TestWikiAnchorsVerifyInAnotherProcessAndTheRunnersOperationsAllAnswerWhileM
 	if line, err := childOut.ReadString('\n'); err != nil || line != "ready\n" {
 		_ = child.Process.Kill()
 		_ = child.Wait()
-		t.Fatalf("the anchors verify process did not start: %q, %v", line, err)
+		t.Fatalf("the other process did not start: %q, %v", line, err)
 	}
 
 	commands := []WikiRepoOpCommand{
@@ -155,11 +150,11 @@ func TestWikiAnchorsVerifyInAnotherProcessAndTheRunnersOperationsAllAnswerWhileM
 	wg.Wait()
 	rest, _ := io.ReadAll(childOut)
 	if err := child.Wait(); err != nil {
-		t.Errorf("orbit wiki anchors verify, in its own process beside the runner's operations: %v\n%s", err, rest)
+		t.Errorf("the other process's fetch, beside the runner's operations: %v\n%s", err, rest)
 	}
 	for i, outcome := range outcomes {
 		if outcome.state != "succeeded" {
-			t.Errorf("the runner's %s beside orbit wiki anchors verify: %s", commands[i].Kind, outcome.err)
+			t.Errorf("the runner's %s beside the other process's fetch: %s", commands[i].Kind, outcome.err)
 		}
 	}
 	if t.Failed() {
@@ -168,8 +163,7 @@ func TestWikiAnchorsVerifyInAnotherProcessAndTheRunnersOperationsAllAnswerWhileM
 	if outcomes[0].result["sha"] != moved {
 		t.Fatalf("the snapshot was taken at %v, want %s", outcomes[0].result["sha"], moved)
 	}
-	reports := reportsOf(requests())
-	if len(reports) != 1 || reports[0]["ref"] != moved {
-		t.Fatalf("anchors verify reported %v, want one report at the commit main moved to (%s)", reports, moved)
+	if got := mustGit(t, f.checkout, "rev-parse", "refs/remotes/origin/main"); got != moved {
+		t.Fatalf("origin/main is %s after the fetches, want %s", got, moved)
 	}
 }
