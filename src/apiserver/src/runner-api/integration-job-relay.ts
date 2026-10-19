@@ -1292,6 +1292,9 @@ export async function applyIntegrationJobResult(
         // open can say so — a red reported by a landing whose check never ran must not read as a
         // check that failed.
         skipMergeCheck: true, skipReason: true, skipApprovedByUserId: true, skipApprovalId: true,
+        // §2.9 LS1 / §4.2: the landing subject this attempt belongs to, whose session the item it
+        // opens names, and the round this claim last reported (the failure's own round).
+        landingId: true, round: true,
       },
     });
     if (!job) throw new IntegrationJobRefused('NOT_FOUND');
@@ -1875,6 +1878,15 @@ export async function applyIntegrationJobResult(
       const mainBranch = job.kind === 'LAND_TASK'
         ? null
         : mainBranchOf(await readProjectCodebase(tx, job.projectId));
+      // §4.2 / §2.9 LS1: the landing session this attempt belongs to. Read from the landing row —
+      // its session id is pre-generated when the subject opens, so it exists even before the claim
+      // inserted the session itself. The item's card opens it (`OPEN_LANDING`).
+      const landingSessionId = job.landingId
+        ? (await tx.projectLanding.findUnique({
+            where: { id: job.landingId },
+            select: { sessionId: true },
+          }))?.sessionId ?? null
+        : null;
       const opened = await recordIntegrationFailure(tx, {
         projectId: job.projectId,
         ownerId: job.ownerId,
@@ -1901,6 +1913,10 @@ export async function applyIntegrationJobResult(
           // J-T13: at the payload's TOP level, a field of its own — the delivery text's generator
           // does not read it, so the replay it does stays byte-for-byte the same.
           upstreamMovedCommits,
+          // §4.2 / §2.9: the same rule for the landing session and the round it failed in — the
+          // card reads them, the delivery text never does.
+          landingSessionId,
+          round: job.round ?? null,
           generation: job.generation,
           retry: job.retryOfJobId
             ? {
@@ -2329,6 +2345,11 @@ function fullyAppliedComment(input: {
     /** J-T13's commits, when a LAND_PROMOTION ended because the upstream moved under it. Its own
      *  top-level field, never inside `errorDetail` (which the delivery text quotes verbatim). */
     upstreamMovedCommits: UpstreamMovedCommitsEnriched | null;
+    /** §2.9 LS1: the landing session this attempt belongs to; null for a job with no subject.
+     *  Top-level, never inside `errorDetail`, and never read by the delivery text (G6). */
+    landingSessionId: string | null;
+    /** The round the failed claim last reported, from 1; null before one was reported (§2.2 J-T4). */
+    round: number | null;
     /** Which generation of the landing this was, and — when the coordinator asked for it through
      *  `integration_retry` — what it reran and why (migration 0344). */
     generation: number;
@@ -2354,6 +2375,11 @@ function fullyAppliedComment(input: {
   const classified = {
     failureClass: landingFailureClass({ state, checks: detail.checks }),
     generation: detail.generation,
+    // §4.2's payload: the landing this failure belongs to and the round it failed in, at the top
+    // level of every INTEGRATION_* kind. `errorDetail` is quoted verbatim by the delivery text (G6),
+    // so these never go inside it.
+    landingSessionId: detail.landingSessionId,
+    round: detail.round,
     ...(detail.retry ? { retry: detail.retry } : {}),
     ...(detail.skippedCheck ? { skippedCheck: detail.skippedCheck } : {}),
   };

@@ -8,7 +8,9 @@ import {
   OPEN_ITEM_DOOR_ASSIGNEES,
   OPEN_ITEM_DIRECT_DOOR_TABLE,
   OPEN_ITEM_DOOR_TABLE,
+  appendOpenLanding,
   cellForOpenItem,
+  doorsForCell,
   doorsForOpenItem,
   knownGapsForCell,
   openItemActionsFromDoors,
@@ -39,6 +41,10 @@ const CONTROLLER_FILES = [
   // TASK_FAILED cell names (§4.7), so the controllers that dispatch the matrix's owner routes are
   // part of what the route census has to see.
   'tasks/tasks.controller.ts',
+  // The landing session's two doors (OPEN_LANDING, §2.9 LS1): the coordinator's `session_get`
+  // answers on the runner route, and the owner's own route is their session page.
+  'sessions/sessions.controller.ts',
+  'runner-api/runner-sessions.controller.ts',
 ].map((file) => path.join(SRC, file));
 
 const EXPECTED_GAPS = [] as const;
@@ -460,4 +466,142 @@ test('a failed task’s RETRY is the run-again door its holder owns', () => {
     .filter((door) => door.action === 'RETRY' && door.kind === 'MCP');
   assert.ok(coordinatorRetries.some((door) => door.mcp === 'task_start' && canExecute(door)),
     'the coordinator’s run-again door is the task_start tool, and runner-go dispatches it');
+});
+
+const LANDING_SESSION_ID = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a74';
+
+/** The row a cell reads, with the landing session its failure recorded (§4.2's payload). */
+function withLandingSession(row: ReturnType<typeof sampleFor>) {
+  return { ...row, payload: { ...row.payload, landingSessionId: LANDING_SESSION_ID } };
+}
+
+test('OPEN_LANDING is the last action of every integration cell that names a landing session, for both holders', () => {
+  const routes = allRouteMetadata();
+  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const canExecute = executableByRegistry(routes, names);
+  const cells = OPEN_ITEM_DOOR_TABLE.filter((cell) => cell.todoType.startsWith('INTEGRATION_'));
+  assert.ok(cells.length > 0);
+  assert.deepEqual([...new Set(cells.map((cell) => cell.assignee))].sort(), ['COORDINATOR', 'OWNER'],
+    'both holders of an integration cell must be in the census');
+
+  for (const cell of cells) {
+    const where = `${cell.todoType}/${cell.sourceJob}/${cell.failureClass}/${cell.assignee}`;
+    const plain = sampleFor(cell);
+    const row = withLandingSession(plain);
+    const actions = openItemActionsFromDoors(row);
+    assert.deepEqual(actions.slice(-1), ['OPEN_LANDING'],
+      `${where} does not end with OPEN_LANDING: ${actions.join(', ')}`);
+    // Everything the row offered before is still there, in the same order: the press is appended,
+    // never inserted ahead of a door the cell already had.
+    assert.deepEqual(actions.slice(0, -1), openItemActionsFromDoors(plain),
+      `${where} changed the actions it already had`);
+
+    const door = doorsForOpenItem(row).find((candidate) => candidate.action === 'OPEN_LANDING');
+    assert.ok(door, `${where} holds no OPEN_LANDING door`);
+    assert.equal(door.id, 'open-landing');
+    assert.equal(door.holder, cell.assignee);
+    assert.equal(door.capability, 'LOOKUP');
+    assert.deepEqual([...door.outcomes], []);
+    assert.equal(door.resolving, false);
+    assert.equal(door.implemented, true);
+    if (cell.assignee === 'COORDINATOR') {
+      assert.equal(door.kind, 'MCP', `${where}: the coordinator opens it with the tool`);
+      assert.equal(door.mcp, 'session_get');
+      assert.equal(door.route, '/runner/sessions/:id');
+    } else {
+      assert.equal(door.kind, 'ROUTE', `${where}: the owner opens it on their own route`);
+      assert.equal(door.route, '/sessions/:id');
+    }
+    assert.ok(canExecute(door), `${where}: no registry dispatches this landing door`);
+    // The door is the last one the cell lists, which is where the card appends it.
+    assert.equal(doorsForOpenItem(row).at(-1), door, `${where}: OPEN_LANDING is not the cell's last door`);
+  }
+});
+
+test('a row that names no landing session, and a kind that lands nothing, never offers OPEN_LANDING', () => {
+  for (const cell of OPEN_ITEM_DOOR_TABLE) {
+    const where = `${cell.todoType}/${cell.sourceJob}/${cell.failureClass}/${cell.assignee}`;
+    const row = sampleFor(cell);
+    assert.equal(openItemActionsFromDoors(row).includes('OPEN_LANDING'), false,
+      `${where}: projected OPEN_LANDING without a landing session to open`);
+    if (!cell.todoType.startsWith('INTEGRATION_')) {
+      const withSession = withLandingSession(row);
+      assert.equal(doorsForOpenItem(withSession).some((door) => door.action === 'OPEN_LANDING'), false,
+        `${where}: a kind that lands nothing holds a landing door`);
+      assert.equal(openItemActionsFromDoors(withSession).includes('OPEN_LANDING'), false,
+        `${where}: a kind that lands nothing projects a landing press`);
+    }
+  }
+});
+
+test('an OPEN_LANDING door that is not implemented is not drawn as a press', () => {
+  const cell: OpenItemDoorCell = OPEN_ITEM_DOOR_TABLE.find((candidate) =>
+    candidate.todoType === 'INTEGRATION_CONFLICT' && candidate.sourceJob === 'LAND_TASK'
+    && candidate.failureClass === 'CONFLICT' && candidate.assignee === 'COORDINATOR')!;
+  const input = withLandingSession(sampleFor(cell));
+  const held = doorsForOpenItem(input).find((door) => door.action === 'OPEN_LANDING')!;
+
+  assert.deepEqual(appendOpenLanding(['OPEN_TASK_SESSION'], input, [held], 'COORDINATOR'),
+    ['OPEN_TASK_SESSION', 'OPEN_LANDING']);
+  // A matrix row that later turns the door off leaves the action list as it was: the projection's
+  // hardcoded list has to carry this filter itself, because the census rows name no session.
+  assert.deepEqual(appendOpenLanding(['OPEN_TASK_SESSION'], input, [{ ...held, implemented: false }], 'COORDINATOR'),
+    ['OPEN_TASK_SESSION']);
+  // A door held by somebody else is not this holder's press.
+  assert.deepEqual(appendOpenLanding(['OPEN_TASK_SESSION'], input, [held], 'OWNER'),
+    ['OPEN_TASK_SESSION']);
+  // And without the session, nothing is appended even for an implemented door.
+  assert.deepEqual(appendOpenLanding(['OPEN_TASK_SESSION'], sampleFor(cell), [held], 'COORDINATOR'),
+    ['OPEN_TASK_SESSION']);
+});
+
+/**
+ * G6: `open-item:v1`'s text is replayed byte for byte, and the payload fields this revision adds
+ * are for the card, never for the message. The generators are unchanged, and this holds them
+ * there: the same item with and without them renders the same words — for all three integration
+ * kinds, in both scopes, and through the re-keyed preface a landed fix writes.
+ */
+test('the landing session, round and moved commits move no delivery text', () => {
+  const ITEM = {
+    id: ITEM_ID,
+    title: 'Integration failed',
+    projectId: PROJECT_ID,
+    promotionId: null as string | null,
+  };
+  const addedFields = {
+    landingSessionId: LANDING_SESSION_ID,
+    round: 3,
+    upstreamMovedCommits: { total: 1, commits: [{ sha: 'a'.repeat(40), subject: 'somebody else landed first' }] },
+  };
+  const landedFixes = [{
+    taskId: FIX_TASK_ID,
+    jobId: FIX_JOB_ID,
+    state: 'LANDED',
+    targetRef: 'refs/heads/project/34YhlsSkybFDaTXbOfcxM',
+    landedSha: 'a'.repeat(40),
+  }];
+  for (const kind of ['INTEGRATION_CONFLICT', 'INTEGRATION_CHECK_FAILED', 'INTEGRATION_ERROR'] as const) {
+    for (const scope of [
+      { label: 'a task landing', taskId: TASK_ID, promotionId: null },
+      { label: 'a candidate', taskId: null, promotionId: PROMOTION_ID },
+    ]) {
+      for (const rekeyed of [false, true]) {
+        const payload = {
+          jobKind: 'LAND_TASK', phase: 'LAND_TASK', targetRef: 'refs/heads/project/x',
+          files: ['src/a.ts'], errorCode: 'TARGET_MOVED', errorDetail: { why: 'the remote moved' },
+          failureClass: 'ERROR', generation: 1,
+        };
+        const item = {
+          ...ITEM, kind,
+          taskId: scope.taskId, promotionId: scope.promotionId,
+          payload,
+          ...(rekeyed ? { landedFixes, failedSourceSha: 'b'.repeat(40) } : {}),
+        };
+        const before = openItemMessage(item);
+        const after = openItemMessage({ ...item, payload: { ...payload, ...addedFields } });
+        assert.equal(after, before,
+          `${kind}/${scope.label}${rekeyed ? ' (re-keyed)' : ''}: the new payload fields moved the delivery text`);
+      }
+    }
+  }
 });

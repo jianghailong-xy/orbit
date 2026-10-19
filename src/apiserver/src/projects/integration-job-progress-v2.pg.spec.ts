@@ -549,6 +549,50 @@ test('the v2 claim, its reports, and the push boundary', {
     assert.notEqual(await readOpenListVersion(stack.prisma, w.ownerId), afterEnd,
       'a write to a QUEUED job moves the version');
   });
+
+  await t.test('(7) the failure’s payload names the landing and the round at its top level, never '
+    + 'inside the quoted error detail', async () => {
+    const w = await world(stack, 'item-payload', 'PROJECT_BRANCH');
+    await doneTask(stack, w, 'item-payload');
+    const job = await claim(stack, w);
+    await receiveIntegrationJobProgress(stack.prisma, w.runnerId, job.jobId, {
+      claimGeneration: job.claimGeneration, leaseOwner: job.leaseOwner, phase: 'CHECK', round: 2,
+    });
+    await report(stack, w, job, {
+      state: 'ERROR', phase: 'CHECK', errorCode: 'FETCH_FAILED',
+      errorDetail: { code: 'FETCH_FAILED', step: 'CHECK' },
+    });
+
+    const opened = await stack.db.projectOpenItem.findFirstOrThrow({
+      where: { projectId: w.projectId, kind: 'INTEGRATION_ERROR' },
+      select: { payload: true },
+    });
+    const payload = opened.payload as {
+      round?: number | null;
+      landingSessionId?: string;
+      errorDetail?: Record<string, unknown> | null;
+    };
+    const failed = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+      where: { id: job.jobId },
+      select: { landingId: true, round: true },
+    });
+    const landing = await stack.db.projectLanding.findUniqueOrThrow({
+      where: { id: failed.landingId! },
+      select: { sessionId: true },
+    });
+    assert.equal(failed.round, 2, 'the row kept the round the last report named');
+    assert.equal(payload.landingSessionId, landing.sessionId,
+      'the item names the landing its attempt belongs to');
+    assert.equal(payload.round, 2, 'the item names the round the failure happened in');
+    // G6: `errorDetail` is quoted verbatim by the delivery text, so the two new fields are theirs
+    // at the top level and never inside it.
+    assert.deepEqual(payload.errorDetail, { code: 'FETCH_FAILED', step: 'CHECK' },
+      'the runner’s own error detail is carried through unextended');
+    for (const field of ['landingSessionId', 'round', 'upstreamMovedCommits']) {
+      assert.equal(field in (payload.errorDetail ?? {}), false,
+        `${field} was hidden inside the quoted error detail`);
+    }
+  });
 });
 
 test('timeouts and J12 branch on the claim\'s protocol', {

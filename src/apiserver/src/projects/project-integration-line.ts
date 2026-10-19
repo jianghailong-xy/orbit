@@ -747,6 +747,7 @@ function inFlightOf(job: ProjectIntegrationJob<Date>): ProjectIntegrationInFligh
     heartbeatAt: job.heartbeatAt,
     waitMs: claimedWaitMs(job),
     jobId: job.jobId,
+    landingSessionId: job.landingSessionId,
     taskId: job.taskId,
     promotionId: job.promotionId ?? null,
     runner: job.runnerName,

@@ -125,7 +125,7 @@ async function job(
           claimGeneration?: number; round?: number | null; step?: string | null;
           stepStartedAt?: Date | null; outputMovedAt?: Date | null;
           currentCheck?: Prisma.InputJsonValue | null; serialKey?: string;
-          cancelRequestedAt?: Date | null },
+          cancelRequestedAt?: Date | null; landingId?: string | null },
 ): Promise<string> {
   const id = randomUUID();
   await db.projectIntegrationJob.create({
@@ -134,6 +134,9 @@ async function job(
       projectId: f.projectId,
       ownerId: f.ownerId,
       codebaseId: f.codebaseId,
+      // §2.9 LS1: the landing subject this attempt belongs to, which the line hands to a client
+      // that opens it. Absent in the older fixtures, exactly as on a row an older build queued.
+      landingId: spec.landingId ?? null,
       kind: spec.kind ?? (spec.taskId ? 'LAND_TASK' : 'LAND_PROMOTION'),
       phase: spec.phase ?? null,
       checks: spec.checks ?? [],
@@ -348,6 +351,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           // The wait it paid: enqueued at :30, claimed at :60.
           waitMs: 30_000,
           jobId: running,
+          landingSessionId: null,
           taskId,
           promotionId: null,
           runner: null,
@@ -390,6 +394,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           heartbeatAt: null,
           waitMs: 10_000,
           jobId: running,
+          landingSessionId: null,
           taskId,
           promotionId: null,
           runner: null,
@@ -417,7 +422,7 @@ test('the landing line describes running work before the queue, on real PostgreS
         assert.deepEqual(view.inFlight, {
           taskTitle: null, kind: 'LAND_PROMOTION', phase: null,
           state: 'RUNNING', startedAt: at(10), heartbeatAt: null, waitMs: 10_000,
-          jobId: promotion, taskId: null, promotionId: null, runner: null, claim: 0,
+          jobId: promotion, taskId: null, landingSessionId: null, promotionId: null, runner: null, claim: 0,
           round: null, check: null, stepStartedAt: null, outputMovedAt: null,
           progressProtocol: null, typicalMs: null, liveness: 'LEASE_EXPIRED', blockingReason: null,
         });        assert.deepEqual(await listInFlight(db, f), view.inFlight);
@@ -433,7 +438,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           // A queued job's whole clock is the wait, so it carries no separate measurement of one.
           taskTitle: 'Oldest queued task', kind: 'LAND_TASK', phase: null,
           state: 'QUEUED', startedAt: at(0), heartbeatAt: null, waitMs: null,
-          jobId: older, taskId, promotionId: null, runner: null, claim: 0,
+          jobId: older, taskId, landingSessionId: null, promotionId: null, runner: null, claim: 0,
           round: null, check: null, stepStartedAt: null, outputMovedAt: null,
           progressProtocol: null, typicalMs: null, liveness: null,
           // No session, so there is no workspace whose runner could take it.
@@ -456,7 +461,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           assert.deepEqual((await read(db, f)).inFlight, {
             taskTitle: null, kind: 'CHECK_PROMOTION', phase,
             state: 'RUNNING', startedAt: at(10), heartbeatAt: null, waitMs: 10_000,
-            jobId: id, taskId: null, promotionId: null, runner: null, claim: 0,
+            jobId: id, taskId: null, landingSessionId: null, promotionId: null, runner: null, claim: 0,
             round: null, check: null, stepStartedAt: null, outputMovedAt: null,
             progressProtocol: null, typicalMs: null, liveness: 'LEASE_EXPIRED', blockingReason: null,
           });
@@ -558,7 +563,8 @@ test('the landing line describes running work before the queue, on real PostgreS
               // The line's own "Waited …", derived from the two instants the row above carries: a
               // claimed job's wait is its claim minus its enqueue (project-integration-line.ts).
               waitMs: jobs[0].startedAt.getTime() - jobs[0].queuedAt.getTime(),
-              jobId: jobs[0].jobId, taskId: jobs[0].taskId, promotionId: jobs[0].promotionId,
+              jobId: jobs[0].jobId, landingSessionId: jobs[0].landingSessionId,
+              taskId: jobs[0].taskId, promotionId: jobs[0].promotionId,
               runner: jobs[0].runnerName, claim: jobs[0].claim, round: jobs[0].round,
               check: jobs[0].check, stepStartedAt: jobs[0].stepStartedAt,
               outputMovedAt: jobs[0].outputMovedAt, progressProtocol: jobs[0].progressProtocol,
@@ -989,6 +995,49 @@ test('the landing line describes running work before the queue, on real PostgreS
           assert.equal(((await read(db, g)).inFlightJobs ?? [])
             .find((job) => job.jobId === taskAcceptance)?.typicalMs, null);
         });
+
+      await t.test('(s) a job names its landing session in the line and in the job list, and the '
+        + 'session survives on a queued job too', async () => {
+        const f = await fixture(db, 'landing-session');
+        const taskId = await task(db, f, 'C7 · 落地有自己的会话');
+        const queuedTaskId = await task(db, f, 'C8 · 排队中的落地');
+        const runningLanding = { id: randomUUID(), sessionId: randomUUID(), taskId };
+        const queuedLanding = { id: randomUUID(), sessionId: randomUUID(), taskId: queuedTaskId };
+        for (const landing of [runningLanding, queuedLanding]) {
+          await db.projectLanding.create({
+            data: {
+              id: landing.id, projectId: f.projectId, ownerId: f.ownerId, codebaseId: f.codebaseId,
+              subject: 'TASK', taskId: landing.taskId, episode: 1, sessionId: landing.sessionId,
+            },
+          });
+        }
+        // A RUNNING job and a QUEUED one, each on its own task's landing (J3 allows one in-flight
+        // landing per task): the line describes the running one and the list carries both.
+        const running = await job(db, f, {
+          at: at(0), claimedAt: at(10), state: 'RUNNING', taskId,
+          landingId: runningLanding.id, idempotency: 'with-session',
+        });
+        const queued = await job(db, f, {
+          at: at(20), state: 'QUEUED', taskId: queuedTaskId, landingId: queuedLanding.id,
+          idempotency: 'queued-session', serialKey: `${f.projectId}:refs/heads/other`,
+        });
+
+        const view = await read(db, f);
+        assert.equal(view.inFlight?.jobId, running);
+        assert.equal(view.inFlight?.landingSessionId, runningLanding.sessionId,
+          'the line opens the landing its job belongs to');
+        const jobs = view.inFlightJobs ?? [];
+        assert.equal(jobs.find((entry) => entry.jobId === running)?.landingSessionId,
+          runningLanding.sessionId, 'the job list lost the running landing');
+        assert.equal(jobs.find((entry) => entry.jobId === queued)?.landingSessionId,
+          queuedLanding.sessionId, 'a queued job carries the landing it will join');
+        // Every entry carries the field — the ones with a subject and the ones without — so a list
+        // row and the page describe one job the same way.
+        assert.ok(jobs.every((entry) => 'landingSessionId' in entry),
+          'an in-flight job did not state its landing session at all');
+        assert.deepEqual(await listInFlight(db, f), view.inFlight,
+          'the list row and the view agree, field by field');
+      });
     } finally {
       await db.$disconnect();
       // Both halves of the harness: the `pg` Client holds an open socket, and a spec that leaves it

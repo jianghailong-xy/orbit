@@ -375,6 +375,22 @@ function openCoordinator(holder: OpenItemDoorAssignee): OpenItemDoor {
   });
 }
 
+/**
+ * The landing session of the attempt this item is about (§2.9 LS1): a LOOKUP, so it resolves
+ * nothing — it opens the conversation that owns the landing and the failure is read there. The two
+ * holders open it their own way: the coordinator calls `session_get` (the runner route the tool
+ * answers on), and the owner's own route is their client's session page.
+ */
+function openLanding(holder: OpenItemDoorAssignee): OpenItemDoor {
+  const owner = holder === 'OWNER';
+  return door(holder, 'open-landing', 'session_get', owner ? 'ROUTE' : 'MCP', 'LOOKUP', [], {
+    action: 'OPEN_LANDING',
+    mcp: owner ? undefined : 'session_get',
+    route: owner ? '/sessions/:id' : '/runner/sessions/:id',
+    resolving: false,
+  });
+}
+
 function answer(holder: OpenItemDoorAssignee): OpenItemDoor {
   return door(holder, 'answer-question', 'open_item_answer', 'ROUTE', 'ANSWER', ['ANSWERED'], {
     action: 'ANSWER',
@@ -520,7 +536,7 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     if (assignee === 'COORDINATOR') doors.push(askOwner(assignee));
     if (assignee === 'OWNER') doors.push(askAgain(assignee));
     if (failureClass === 'CONFLICT') doors.push(createSyncTask(assignee));
-    doors.push(createFixTask(assignee), handClose(assignee), handOver(assignee));
+    doors.push(createFixTask(assignee), handClose(assignee), handOver(assignee), openLanding(assignee));
     return doors;
   }
 
@@ -556,7 +572,7 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
       doors.push(...retryTask(assignee, true));
     }
   }
-  doors.push(createFixTask(assignee), handClose(assignee), handOver(assignee));
+  doors.push(createFixTask(assignee), handClose(assignee), handOver(assignee), openLanding(assignee));
   return doors;
 }
 
@@ -640,6 +656,38 @@ export function doorsForOpenItem(input: OpenItemDoorInput): readonly OpenItemDoo
   return cellForOpenItem(input)?.doors ?? [];
 }
 
+/** Whether the row's payload names the landing session its attempt belongs to (§2.9 LS1). */
+function hasLandingSession(input: OpenItemDoorInput): boolean {
+  const payload = input.payload;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return false;
+  const value = (payload as { landingSessionId?: unknown }).landingSessionId;
+  return typeof value === 'string' && value !== '';
+}
+
+/**
+ * The projection's last step: append `OPEN_LANDING` to an integration row's actions when the row
+ * names a landing session and its cell holds an implemented door for it.
+ *
+ * The list is hardcoded and filtered by action and holder like every other action, so the
+ * `implemented` check is this one action's extra rule: the door exists in every integration cell
+ * from the day it is registered, and a matrix row that later turns it off must not leave a press
+ * that opens nothing. The census rows carry no `landingSessionId`, which is exactly why that
+ * filter has to be said here rather than left to the table's own checks.
+ */
+export function appendOpenLanding(
+  actions: readonly OpenItemAction[],
+  input: OpenItemDoorInput,
+  doors: readonly OpenItemDoor[],
+  assignee: OpenItemDoorAssignee,
+): OpenItemAction[] {
+  if (!hasLandingSession(input) || !isIntegration(normalizeTodo(input.kind) ?? 'INTEGRATION_ERROR')) {
+    return [...actions];
+  }
+  const held = doors.some((candidate) => candidate.action === 'OPEN_LANDING'
+    && candidate.holder === assignee && candidate.implemented);
+  return held ? [...actions, 'OPEN_LANDING'] : [...actions];
+}
+
 /** The action projection consumed by `project-open-item.ts`; order is the long-standing UI order. */
 export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemAction[] {
   const assignee = normalizeAssignee(input.assignee);
@@ -657,8 +705,10 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
     const actions: OpenItemAction[] = isIntegration(normalizeTodo(input.kind) ?? 'INTEGRATION_ERROR')
       ? ['ASK_COORDINATOR_AGAIN', 'RETRY', 'REVIEW']
       : ['ASK_COORDINATOR_AGAIN', 'REVIEW'];
-    return actions.filter((action) => (action !== 'ASK_COORDINATOR_AGAIN' || (assignee === 'OWNER' && input.askable))
-      && doors.some((candidate) => candidate.action === action && candidate.holder === assignee));
+    return appendOpenLanding(actions.filter((action) =>
+      (action !== 'ASK_COORDINATOR_AGAIN' || (assignee === 'OWNER' && input.askable))
+      && doors.some((candidate) => candidate.action === action && candidate.holder === assignee)),
+    input, doors, assignee);
   }
   if (!input.taskId) return [];
   const doors = directDoors.length > 0
@@ -672,8 +722,10 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
   const actions: OpenItemAction[] = assignee === 'COORDINATOR'
     ? ['OPEN_COORDINATOR', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK']
     : ['ASK_COORDINATOR_AGAIN', 'OPEN_TASK_SESSION', 'RETRY', 'CANCEL_TASK'];
-  return actions.filter((action) => (action !== 'ASK_COORDINATOR_AGAIN' || input.askable)
-    && doors.some((candidate) => candidate.action === action && candidate.holder === assignee));
+  return appendOpenLanding(actions.filter((action) =>
+    (action !== 'ASK_COORDINATOR_AGAIN' || input.askable)
+    && doors.some((candidate) => candidate.action === action && candidate.holder === assignee)),
+  input, doors, assignee);
 }
 
 /**
