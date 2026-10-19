@@ -865,7 +865,15 @@ func TestCursorACPEventMapping(t *testing.T) {
 func TestCursorACPToolNameNormalization(t *testing.T) {
 	t.Run("recorded", func(t *testing.T) {
 		first, then := cursorTurns(cursorMessage("turn-1", "first message"))
-		run := runCursorSession(t, cursorRunOptions{recording: "multi-turn-tools-default/turns", first: first, then: then})
+		// Each card answered as P0 answered it, so what Cursor streamed for it is what that answer got: only the
+		// MCP call refused (a call Orbit refuses settles as not run, whatever the recording streams).
+		run := runCursorSession(t, cursorRunOptions{recording: "multi-turn-tools-default/turns", first: first, then: then,
+			approve: func(card cursorTestCard) cursorTestDecision {
+				if card.ToolName == "mcp__p0probe__record" {
+					return cursorTestDecision{Status: "DENIED"}
+				}
+				return cursorTestDecision{Status: "ALLOWED"}
+			}})
 		results := map[string]map[string]interface{}{}
 		for _, result := range run.of("turn-1", evToolResult) {
 			results[asString(result["toolUseId"])] = result

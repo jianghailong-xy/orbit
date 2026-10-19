@@ -12,7 +12,9 @@ package main
 // it in_progress, and complete it. So a card goes out once its input is whole — at in_progress, and an
 // edit at its completion, the only update that carries the change it made — under the name and input
 // of the Orbit tool it is (cursorToolCall). There is no `failed` status: the outcome is read from
-// rawOutput (cursorToolResult).
+// rawOutput (cursorToolResult) — except a call Orbit refused, which Cursor completes with nothing at all
+// when it is a command or an edit: the permission bridge marks its card first (refuse), and it settles
+// as not run.
 //
 // A sub-agent's own updates arrive under the sub-agent's session id, which subagent_spawned binds to
 // the Task card that launched it: they go out stamped with that card's id (parentToolUseId, which the
@@ -55,6 +57,8 @@ type cursorTool struct {
 	// subagent is the kind of sub-agent a Task card launched, once subagent_spawned names it.
 	subagent      string
 	emitted, done bool
+	// refused: Orbit answered the permission request about this call with no allow, so it did not run.
+	refused bool
 }
 
 type cursorTurn struct {
@@ -632,10 +636,12 @@ func cursorTodos(value interface{}) []interface{} {
 }
 
 // cursorToolResult is a completed card's outcome. Cursor has no failed status (§4.1): a refusal, an
-// error or a non-zero exit code is read from rawOutput.
+// error or a non-zero exit code is read from rawOutput. A command or an edit Orbit refused completes
+// with no rawOutput at all, which would read as a success with nothing to show, so that refusal is Orbit's
+// own (refused); an MCP call Orbit refused says {rejected:true}.
 func cursorToolResult(tool *cursorTool) (string, bool) {
 	out := mapValue(tool.rawOutput)
-	if out["rejected"] == true {
+	if tool.refused || out["rejected"] == true {
 		return "Not run: the tool call was rejected.", true
 	}
 	if failure := out["error"]; failure != nil && failure != false {
@@ -748,6 +754,19 @@ func (m *cursorEventMapper) permissionAsk(toolCall map[string]interface{}) (curs
 		ask.Name, ask.Input, _ = cursorToolCall(tool)
 	}
 	return ask, ask.Name != ""
+}
+
+// refuse marks the running turn's card toolID as a call Orbit did not allow, before Orbit's answer goes
+// out: whatever Cursor CLI completes it with, it settles as not run (cursorToolResult). No card of that id
+// in that turn, nothing to mark.
+func (m *cursorEventMapper) refuse(turnID, toolID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if turn := m.active; turn != nil && turn.id == turnID {
+		if tool := turn.tools[toolID]; tool != nil {
+			tool.refused = true
+		}
+	}
 }
 
 // cursorRequestTool reads a permission request's own tool call the way formatOperation writes it
