@@ -583,6 +583,9 @@ interface InFlightJobRow extends IntegrationCheckSource {
   serialBlockOwnerId: string | null;
   serialBlockKind: string | null;
   serialBlockTaskTitle: string | null;
+  /** The landing session of this attempt's subject (`project_landing.session_id`, §2.9); null for
+   *  a job written before 0436. Pre-generated when the subject opens, so it needs no session row. */
+  landingSessionId: string | null;
 }
 
 /** The current check as the row stores it (`{ name, index, count, budgetSeconds, startedAt }`),
@@ -705,6 +708,7 @@ function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): Pro
     jobId: row.id,
     kind: row.kind,
     state: running ? 'RUNNING' : 'QUEUED',
+    landingSessionId: row.landingSessionId ?? null,
     phase: row.phase,
     taskId: row.taskId,
     taskTitle: row.taskTitle,
@@ -888,9 +892,11 @@ async function readInFlightJobsForProjects(
            sync_block."openItemId" AS "syncBlockOpenItemId", sync_block."taskTitle" AS "syncBlockTaskTitle",
            sync_block."handlingGeneration" AS "syncHandlingGeneration",
            running_block."jobId" AS "serialBlockJobId", running_block."ownerId" AS "serialBlockOwnerId",
-           running_block."kind" AS "serialBlockKind", running_block."taskTitle" AS "serialBlockTaskTitle"
+           running_block."kind" AS "serialBlockKind", running_block."taskTitle" AS "serialBlockTaskTitle",
+           landing."session_id" AS "landingSessionId"
       FROM "project_integration_job" j
       JOIN "project_codebase" cb ON cb."id" = j."codebase_id"
+      LEFT JOIN "project_landing" landing ON landing."id" = j."landing_id"
       LEFT JOIN "task" t ON t."id" = j."task_id"
       LEFT JOIN "session" s ON s."id" = j."session_id"
       LEFT JOIN "task" st ON st."id" = s."task_id"
@@ -1015,6 +1021,8 @@ interface PromotionJobRow {
   claimedAt: Date | null;
   heartbeatAt: Date | null;
   finishedAt: Date | null;
+  /** The attempt's landing session (`project_landing.session_id`, §2.9); null before 0436. */
+  landingSessionId: string | null;
 }
 
 /**
@@ -1067,8 +1075,10 @@ export async function readProjectPromotionIntegrationViews(
            j."phase", j."error_code" AS "errorCode", j."task_id" AS "taskId",
            t."title" AS "taskTitle", j."round", j."current_check" AS "currentCheck",
            j."created_at" AS "createdAt", j."claimed_at" AS "claimedAt",
-           j."heartbeat_at" AS "heartbeatAt", j."finished_at" AS "finishedAt"
+           j."heartbeat_at" AS "heartbeatAt", j."finished_at" AS "finishedAt",
+           landing."session_id" AS "landingSessionId"
       FROM "project_integration_job" j
+      LEFT JOIN "project_landing" landing ON landing."id" = j."landing_id"
       LEFT JOIN "task" t ON t."id" = j."task_id"
      WHERE j."project_id" = ${projectId}::uuid
        AND j."promotion_id" IN (${ids})
@@ -1115,6 +1125,7 @@ function promotionGenerationOf(row: PromotionJobRow): IntegrationJobGeneration<D
     kind: row.kind as IntegrationJobKind,
     generation: row.generation,
     state: row.state as IntegrationJobState,
+    landingSessionId: row.landingSessionId ?? null,
     phase: row.phase as IntegrationJobPhase | null,
     errorCode: row.errorCode,
     taskId: row.taskId,
@@ -1218,6 +1229,7 @@ function currentAttempts(
       kind: job.kind,
       generation: job.generation,
       state: job.state,
+      landingSessionId: job.landingSessionId ?? null,
       phase: job.phase,
       errorCode: null,
       taskId: job.taskId,
@@ -1240,6 +1252,7 @@ function currentAttempts(
       kind: 'LAND_TASK',
       generation: Number(job.generation),
       state: job.state,
+      landingSessionId: job.landingSessionId ?? null,
       phase: job.phase,
       errorCode: job.errorCode ?? null,
       taskId,

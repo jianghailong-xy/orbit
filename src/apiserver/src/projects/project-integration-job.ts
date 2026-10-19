@@ -937,7 +937,7 @@ export async function queueLandingRetry(
      */
     skipMergeCheck?: LandingSkipMergeCheck;
   },
-): Promise<{ jobId: string; generation: number; sourceRef: string } | null> {
+): Promise<{ jobId: string; generation: number; sourceRef: string; landingSessionId: string } | null> {
   const task = await tx.task.findFirst({
     where: { id: input.taskId, ownerId: input.ownerId, projectId: input.projectId },
     select: { codeless: true, sessions: workSessionsOfTaskSelect() },
@@ -949,7 +949,7 @@ export async function queueLandingRetry(
     select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
   });
   if (!codebase || codebase.integrationRef === codebase.upstreamRef) return null;
-  const jobId = await queueLandTask(tx, {
+  const queued = await queueLandTask(tx, {
     ownerId: input.ownerId,
     projectId: input.projectId,
     taskId: input.taskId,
@@ -958,12 +958,17 @@ export async function queueLandingRetry(
     retry: input.retry,
     skipMergeCheck: input.skipMergeCheck,
   });
-  if (jobId === null) return null;
-  const queued = await tx.projectIntegrationJob.findUniqueOrThrow({
-    where: { id: jobId },
+  if (queued === null) return null;
+  const job = await tx.projectIntegrationJob.findUniqueOrThrow({
+    where: { id: queued.jobId },
     select: { generation: true, sourceRef: true },
   });
-  return { jobId, generation: queued.generation, sourceRef: queued.sourceRef };
+  return {
+    jobId: queued.jobId,
+    generation: job.generation,
+    sourceRef: job.sourceRef,
+    landingSessionId: queued.landingSessionId,
+  };
 }
 
 // ── enqueue (J-T1a) ───────────────────────────────────────────────────────────────────────────
@@ -1270,7 +1275,7 @@ async function queueLandingForWork(
       ? null
       : { kind: 'PROMOTION', promotionId: candidate.promotionId, jobId: candidate.jobId };
   }
-  const jobId = await queueLandTask(tx, {
+  const queued = await queueLandTask(tx, {
     ownerId: input.ownerId,
     projectId: input.projectId,
     taskId: input.taskId,
@@ -1278,7 +1283,7 @@ async function queueLandingForWork(
     session: input.session,
     idempotencyKey: input.idempotencyKey,
   });
-  return jobId === null ? null : { kind: 'LAND_TASK', jobId };
+  return queued === null ? null : { kind: 'LAND_TASK', jobId: queued.jobId };
 }
 
 /**
@@ -1305,7 +1310,7 @@ async function queueLandTask(
     /** Set only for the generation `integration_skip_merge_check` asked for (0393). */
     skipMergeCheck?: LandingSkipMergeCheck;
   },
-): Promise<string | null> {
+): Promise<{ jobId: string; landingSessionId: string } | null> {
   const inflight = await tx.projectIntegrationJob.count({
     where: { taskId: input.taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] } },
   });
@@ -1395,7 +1400,9 @@ async function queueLandTask(
     return null;
   }
   await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.session.id));
-  return created[0].id;
+  // §2.9: the subject's session id travels with the row it was queued under, so a caller that
+  // answers with "which landing did I queue" (the retry doors) needs no second read.
+  return { jobId: created[0].id, landingSessionId: landing.sessionId };
 }
 
 /**
@@ -1479,14 +1486,14 @@ async function backfillFinishedCodeTasks(
       if (made) queued.push(candidate.id);
       continue;
     }
-    const jobId = await queueLandTask(tx, {
+    const job = await queueLandTask(tx, {
       ownerId: input.ownerId,
       projectId: input.projectId,
       taskId: candidate.id,
       codebase: input.codebase,
       session,
     });
-    if (jobId) queued.push(candidate.id);
+    if (job) queued.push(candidate.id);
   }
   return queued;
 }

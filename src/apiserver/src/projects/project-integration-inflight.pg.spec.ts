@@ -547,6 +547,8 @@ test('the landing line describes running work before the queue, on real PostgreS
             // without them reads their empty forms: no promotion, no current check, no round.
             promotionId: null, claim: 0, round: null, check: null, stepStartedAt: null,
             outputMovedAt: null, typicalMs: null,
+            // No landing subject was opened for this fixture's job, so there is no address to it.
+            landingSessionId: null,
             // Claimed one minute before its last report, which is inside the lease.
             liveness: 'LEGACY', blockingReason: null,
           });
@@ -931,6 +933,8 @@ test('the landing line describes running work before the queue, on real PostgreS
           check: { name: 'MERGE_CHECK', index: 1, count: 2, budgetSeconds: 3600,
             startedAt: checkStartedAt },
           stepStartedAt: checkStartedAt, outputMovedAt, typicalMs: null,
+          // This fixture writes its jobs directly, with no landing subject beside them.
+          landingSessionId: null,
           liveness: 'LIVE', blockingReason: null, retryable: false,
         });
         const promotion = view.inFlightJobs?.find((entry) => entry.kind === 'LAND_PROMOTION');
