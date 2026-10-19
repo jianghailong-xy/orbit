@@ -80,6 +80,7 @@ test('P1 cursor rows on a runner that has not declared Cursor CLI carry the upgr
     // Recorded on Cursor CLI whatever credential it spends, and — for a row without an engine — the slug.
     assert.deepEqual(marked[0].where, {
       id: { in: ['cursor-1'] }, assignedRunnerId: runner.id, status: 'PENDING',
+      sessionKind: 'CONVERSATION',
       OR: [{ engine: 'cursor' }, { AND: [{ engine: null }, { provider: { in: ['cursor'] } }] }],
       cancelRequestedAt: null,
     });

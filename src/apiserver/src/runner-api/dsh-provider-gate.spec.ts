@@ -83,6 +83,7 @@ test('P1b dsh provider notices distinguish native and legacy colliding identitie
   // identities, where a configured `dsh` keyword collision stays configured (migration 0414).
   assert.deepEqual(marked[0].where, {
     id: { in: ['native'] }, assignedRunnerId: runner.id, status: 'PENDING',
+    sessionKind: 'CONVERSATION',
     OR: [
       { engine: 'dsh' },
       { AND: [

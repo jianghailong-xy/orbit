@@ -45,6 +45,7 @@ import { storedCredential } from './engine-provider';
 import { geminiApiModel, isInternalHost } from './held-key';
 import { keyFingerprint } from './provider-engine-resolution';
 import { LANDING_PROVIDER_SLUG, pickFreeSlug, slugBase } from './provider-slug';
+import { assertEngineSession } from '../sessions/engine-session';
 
 /**
  * The slugs whose `model_provider` row is a compatibility guard, not a provider: migrations 0080, 0367
@@ -753,8 +754,11 @@ export class ProvidersService {
     }
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
-      select: { assignedRunnerId: true, ownerId: true, provider: true, providerBuiltin: true, engine: true },
+      select: { assignedRunnerId: true, ownerId: true, provider: true, providerBuiltin: true, engine: true, sessionKind: true },
     });
+    // Before the ownership answer: a LANDING row is the platform's own container, not a session
+    // this runner was refused because it is another machine's (§2.9 LS6).
+    if (session) assertEngineSession(session);
     if (!session || session.assignedRunnerId !== runnerId) {
       throw new ForbiddenException('session does not belong to this runner');
     }
