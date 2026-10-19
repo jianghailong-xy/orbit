@@ -2387,7 +2387,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // replaced, and neither half of the 0177 pair is touched, so it is not another writer of the
       // DONE fence. `session.kind` is backfilled by its constant default; the provider move rewrites
       // only rows that held the name `orbit`, and every statement can run twice against the result.
-      '0436_landing_sessions'],
+      '0436_landing_sessions',
+      // Check output, one chunk per row (0437, docs/project-integration-line-contract.md §2.2 J-T4's
+      // output route, §2.9 LS2; design docs/landing-session-design.md §8 phase 3): one new table,
+      // `project_integration_job_log`, with its unique idempotency key, its page index, its CHECKs
+      // (the two check names, positive claim/round/index bounds, a non-negative seq and truncated
+      // count, and a 64 KiB chunk ceiling) and a foreign key to `project_integration_job` that
+      // cascades. Only `project_integration_job` is named (rank 60): no `task`, `session`,
+      // `project` or `project_acceptance_*` object and none of the six preserved triggers/functions,
+      // and no function, trigger or type is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: the table is new and every stored row
+      // is one a runner uploads after this lands.
+      '0437_integration_job_log'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -11,7 +11,7 @@
  * as `Date`, everything downstream of JSON holds them as ISO strings. Parameterising it is what
  * lets both sides name the same interface instead of keeping two that drift.
  */
-import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobPhase, IntegrationJobState } from './dto';
+import type { IntegrationCheckResult, IntegrationJobKind, IntegrationJobOutputCheck, IntegrationJobPhase, IntegrationJobState } from './dto';
 import type { ProjectStartRequest, ProjectStartSettingKey, ProjectStartSettings } from './project-start';
 import type { DoneRequest } from './project-done';
 
@@ -484,6 +484,39 @@ export interface ProjectIntegrationReadPagination {
 }
 
 /**
+ * One stored chunk of a check's output (contract §2.2 J-T4's output route, §2.9 LS2), as the log
+ * reads return it. `truncatedBytes` is non-zero only where the server dropped a middle: the reader
+ * draws one "N bytes omitted" line immediately before this chunk and nothing else.
+ */
+export interface ProjectIntegrationLogEntry<Instant = string> {
+  jobId: string;
+  /** The claim generation the chunk was uploaded under. */
+  claim: number;
+  /** The round inside that claim. */
+  round: number;
+  check: IntegrationJobOutputCheck;
+  /** The chunk's number within this check, from 0. */
+  seq: number;
+  /** The chunk's text, already redacted by the runner. */
+  text: string;
+  /** Bytes dropped from the middle immediately before this chunk; 0 elsewhere. */
+  truncatedBytes: number;
+  at: Instant;
+}
+
+/**
+ * One page of a check's output, as `GET /sessions/:id/landing/log` and the runner read's `log` slot
+ * serve it. Entries are in production order — claim, then round, then check position, then seq — and
+ * `nextCursor` continues the same narrowed read.
+ */
+export interface ProjectIntegrationLogPage<Instant = string> {
+  /** The job the page is about; null when the landing has no attempt yet. */
+  jobId: string | null;
+  entries: ProjectIntegrationLogEntry<Instant>[];
+  nextCursor: string | null;
+}
+
+/**
  * `GET /runner/projects/:id/integration` — the agent's read of a project's integration line
  * (`project_integration_get`, contract §2.2 J-T4, §2.9 LS6).
  *
@@ -512,6 +545,9 @@ export interface ProjectIntegrationRead<Instant = string> {
   promotions: ProjectPromotionIntegrationRead<Instant>[];
   /** The timeline and log page slots, echoed as the read resolved them. */
   pagination: ProjectIntegrationReadPagination;
+  /** The check output of the job the request named by `jobId`; absent when it named none, so a
+   *  caller that only wants the line reads the shape it always did. */
+  log?: ProjectIntegrationLogPage<Instant> | null;
 }
 
 /** The integration claim's existing lease window, also used to stop stale activity indicators. */

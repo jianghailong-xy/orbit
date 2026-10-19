@@ -3221,9 +3221,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"do NOT query the production database directly — these are the same facts, served by the " +
 				"interface that is allowed to serve them. Read only. The acting session must belong to " +
 				"the project (its coordinator, a session of one of its tasks, or a child of one); another " +
-				"project's session is refused, and another account's project answers 404. jobId and " +
-				"cursor are the page selectors the timeline and check-log reads will use: they are " +
-				"accepted now and echoed under pagination.",
+				"project's session is refused, and another account's project answers 404. jobId names " +
+				"one attempt and serves what its checks printed under `log`; cursor continues that " +
+				"page. Without jobId the line is served as it always was.",
 			"inputSchema": obj(map[string]interface{}{
 				"projectId": map[string]interface{}{
 					"type":        "string",

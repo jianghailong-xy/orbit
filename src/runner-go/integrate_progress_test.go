@@ -32,6 +32,7 @@ type progressControlPlane struct {
 	at       []time.Time
 	results  []IntegrationJobResultRequest
 	releases []IntegrationJobReleaseRequest
+	outputs  []IntegrationJobOutputRequest
 	// answer decides the answer to the nth progress report (1-based). Nil accepts and denies.
 	answer func(n int, req IntegrationJobProgressRequest) (status int, payload string)
 }
@@ -60,6 +61,12 @@ func (cp *progressControlPlane) serve(t *testing.T) *httptest.Server {
 			cp.releases = append(cp.releases, body)
 			cp.mu.Unlock()
 			_, _ = w.Write([]byte(`{"released":true,"state":"QUEUED"}`))
+		case strings.HasSuffix(r.URL.Path, "/output"):
+			var body IntegrationJobOutputRequest
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			cp.outputs = append(cp.outputs, body)
+			cp.mu.Unlock()
+			_, _ = w.Write([]byte(`{"accepted":true}`))
 		case strings.HasSuffix(r.URL.Path, "/result"):
 			var body IntegrationJobResultRequest
 			_ = json.NewDecoder(r.Body).Decode(&body)
@@ -86,6 +93,13 @@ func (cp *progressControlPlane) snapshot() (reports []IntegrationJobProgressRequ
 
 // waitForReport waits for a report the test is looking for, so a case asserts on what was sent
 // rather than on how fast the machine happened to be.
+/** The output chunks the control plane was sent, in arrival order. */
+func (cp *progressControlPlane) outputSnapshot() []IntegrationJobOutputRequest {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+	return append([]IntegrationJobOutputRequest(nil), cp.outputs...)
+}
+
 func (cp *progressControlPlane) waitForReport(t *testing.T, what string, match func(IntegrationJobProgressRequest) bool) IntegrationJobProgressRequest {
 	t.Helper()
 	deadline := time.Now().Add(15 * time.Second)

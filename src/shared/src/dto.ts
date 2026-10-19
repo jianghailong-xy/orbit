@@ -2823,6 +2823,33 @@ export interface IntegrationJobProgressResponse {
   cancelRequested: boolean;
 }
 
+/** The check a chunk of output belongs to (POST /runner/integration-jobs/:jobId/output, contract
+ *  §2.2 J-T4, §2.9 LS2). `index` is the check's position in the run, from 1. */
+export interface IntegrationJobOutputCheck {
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  index: number;
+}
+
+/** Runner → control plane: one chunk of a running check's combined output, uploaded as it is
+ *  written. Only a v2 claim uploads; a legacy claim keeps the 16 KB tail its result already carries.
+ *
+ *  A chunk is fenced on the claim the same way a progress report is: a 409 STALE_CLAIM / 409
+ *  ALREADY_FINAL or a 404 is a claim that can never be written into again, and the runner stops
+ *  uploading. `seq` numbers the chunks of one check from 0, so a resend is the chunk already stored
+ *  rather than a second copy. `text` is redacted by the runner before it leaves the machine. */
+export interface IntegrationJobOutputRequest {
+  claimGeneration: string;
+  leaseOwner: string;
+  check: IntegrationJobOutputCheck;
+  seq: number;
+  text: string;
+}
+
+/** Control plane → runner: the chunk was taken (or was already stored under its seq). */
+export interface IntegrationJobOutputResponse {
+  accepted: true;
+}
+
 /** Runner → control plane: give a claimed job back to the queue (POST
  *  /runner/integration-jobs/:jobId/release, contract §2.2 J-T11). Sent by a stopping runner for a job
  *  it did not start, or one it stopped before its push: nothing was pushed under this claim. */
