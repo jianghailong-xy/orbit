@@ -2,6 +2,7 @@
 
 **状态**：项目「Cursor CLI 原生接入」（`34gyHIZv301nDWxKP9XkO`）P0a 的产物，P0c（`34h3xGGSqUnA6DTMj1iop`）补测后修订，P0b（macOS）补了 §18。T0、P1–P6 按这份文件实现。
 文档收尾（`34hJAyWIuEl2rXy6q9HlL`，2026-10-19）补上实现任务交付说明里的实测结论和协调会话的裁定：P4b、P5b 跟进、P5c、P6a、P6b、P6b 跟进（§3.3、§3.4、§4、§5、§6、§9、§11–§13、§16、§17）。
+D-P8-2 修复（`34iQUqxC9htJed8AY8vic`，2026-10-19）按 P8 的实测补了 §3.2（Cursor 怎么起标题）、§14.4（P8 录到的署名 trailer）和 §7.2、§16.4、§16.7。
 改这里的任何一条结论，要同时改依赖它的任务。已定的设计（作业指导里的所有者决定）不在这里重新论证。
 
 **实测版本**：**Cursor CLI `2026.10.14-941492e`**，linux/x64，HPC（内核 `6.12.107+deb13-amd64`，24 核，root）。
@@ -255,6 +256,15 @@ tarball 183.9 MB，解包 586 MB。每个账号或会话目录都不需要再拷
   （逐 token 流式，没有 messageId）→ 工具卡更新 → 最后 `session/prompt` 的回复。
 - **`session_info_update` 可能在 prompt 回复之后才到**【实测 `background-shell-and-commit`：回复后 1.2 s；源码 A@10254 不等待】。
   `available_commands_update` 也会在回复后到。它们都不是新的一轮。
+- **标题按对话收到的第一条 prompt 起**【源码 A@5219、A@9859；实测 P5c、P8】：
+  - 每条 prompt，CLI 都把全部 text 块用换行连起来，交给服务端的 `nameAgent({userMessage})` 起名（A@5459）。
+  - 对话已经有名字（会话库 `meta` 的 `name`）就不再起。所以一个对话只起一次名，依据是第一条 prompt 的全文。
+    只有第一次起名失败，或进程在名字回来之前结束，才会按下一条 prompt 再起。
+  - Orbit 新开的对话，第一条 prompt 前面是 Orbit 的指令（§7.2），名字就成了对指令的概括：
+    - P5c 经 Orbit 的 runner 录的 11 个会话，10 个叫 "Orbit Agent Instructions"，1 个叫 "Agent Instructions"（`p5c/accept-edits-stop`）；
+    - P8 不带标题新建的 key 会话，第一轮后被改名为 "Orbit Agent Instructions"（D-P8-2）。
+    - 措辞会变，不能按字面过滤。Orbit 的做法见 §16.4。
+  - load 的对话一般已经有名字，重放里也没有 `session_info_update`（`multi-turn-tools-default/load`、`crash-continue-and-shell-wrapper/continue`）。
 - **轮中再发 prompt**：A 正在跑 `sleep 43`，发出 B。A 在 6 ms 内返回 `{"stopReason":"cancelled"}`，A 的 shell 子进程被杀；
   B 正常执行，1.9 s 后 `end_turn`。CLI 不替客户端排队。**P5b：轮中消息由 Orbit 排队，当前轮结算后再发**（与项目范围「不支持轮中插话」一致）。
 - 第二轮记得第一轮【实测：第二轮正确复述第一轮读到的暗号】。
@@ -636,6 +646,7 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
 - Orbit 的 agent 指令**不能**放在会话目录的用户级 rules 里（`$HOME/.cursor/rules`、`$HOME/AGENTS.md` 都不读），只能走首轮 prompt 前缀（P5c 规则 7）。
   P5c 的实现【约定，`cursor_acp.go`】：新会话的第一轮 prompt 前面加 `<orbit-agent-instructions>…</orbit-agent-instructions>`，load 回来的会话不加
   （回放用例 `TestCursorAgentInstructions`）。
+  副作用：Cursor 按第一条 prompt 起标题，这样的对话会被叫成 "Orbit Agent Instructions" 之类。runner 不上报这种标题（§3.2、§16.4，D-P8-2）。
 
 ---
 
@@ -1068,18 +1079,30 @@ body: {}
 
 ### 14.4 提交署名（D2）
 
+**结论：提交带不带 trailer，因模型而异。** 依据是 P8 的录制：默认设置、同样选 Auto，P0c 那次的提交没有 trailer，
+P8 的两次提交（Auto 路由到 `grok-4.7-high`）都有。
+
 - **【实测 `p0c/background-shell-and-commit`】没有 trailer**：默认设置（`attributeCommitsToAgent` 没改，客户端照常发 `commitAttributionMessage:"enabled"`）下，
   agent 用 `git commit -m "$(cat <<'EOF' … EOF)"` 提交，提交信息只有 `p0 attribution probe`，没有任何 trailer。
   会话库存下的提示里也没有 trailer 的要求：服务端给的 `<user_rules>` 里 `committing-changes-with-git` 一节只要求用 HEREDOC 传提交信息，
-  示例在正文后留了一个空行，全文没有 trailer、Co-authored-by、Made-with 之类的字样。只测了一次（Auto 模型，个人账号）。
+  示例在正文后留了一个空行，全文没有 trailer、Co-authored-by、Made-with 之类的字样。只测了一次（Auto 模型，个人账号），Auto 选了哪个模型没有记录。
+- **【实测 P8（`34h05gNODW63XwtyJ4Lno`），2026-10-19】有 trailer**：
+  - 环境：HPC 真 runner，固定版本 CLI，Orbit 中保存的 Cursor API key，默认设置，Auto。
+  - agent 自己在提交命令里加了 trailer：`git commit --trailer "Co-authored-by: Cursor <cursoragent@cursor.com>" -m "$(cat <<'EOF' … EOF)"`。
+    P8 的两轮录制里都有这条命令。
+  - 两次提交的信息都以 `Co-authored-by: Cursor <cursoragent@cursor.com>` 结尾：
+    - `5c4e79a`：`p8: add key session note`，key 会话里改文件并提交的那一轮；
+    - `030410d`：`Add mul() next to add() so products can be computed.`，钉在 cursor 和 key 上的 EXECUTABLE 任务。
+  - P8 的报告记下这两轮的 Auto 路由到 `grok-4.7-high`。
+  - trailer 是模型写进 shell 命令的参数，不是 CLI 或 git hook 加的，与下面的源码结论一致。
 - **【源码】**：
   - `attribution.attributeCommitsToAgent`（默认 true）只让客户端在请求里带 `commitAttributionMessage:"enabled"`【I@4693233、I@4694065】，
     trailer 文本由服务端提示模型写，打包文件里找不到任何 trailer、git hook 或 GIT_* 变量。
   - 管理员可以关掉；拿团队设置失败时也按关掉处理【I@4773670】。
 - **【文档】**："adds a trailer to agent commits"。
-- **建议**：沿用默认（作业指导 D2）。按这次实测，默认下 ACP 会话的提交不带 Cursor 的 trailer，D2「保留它自己的 trailer」实际上没有东西可保留；
-  界面和文档不要承诺提交里会出现 Cursor 的署名。所有者要求关闭时，在账号 `cli-config.json` 写
-  `"attribution":{"attributeCommitsToAgent":false,"attributePRsToAgent":false}`。P8 冒烟时再看一次，服务端可能按账号或模型改提示。
+- **建议**：沿用默认（作业指导 D2，不变）。署名有没有由模型决定，Orbit 左右不了。
+  界面和文档仍不承诺提交里会出现 Cursor 的署名，也不承诺不出现。所有者要求关闭时，在账号 `cli-config.json` 写
+  `"attribution":{"attributeCommitsToAgent":false,"attributePRsToAgent":false}`。
 
 ---
 
@@ -1184,7 +1207,7 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 | `plan`、`cursor/create_plan` | 计划展示；create_plan 要应答（P5c：计划卡，Don't Ask 下回 `rejected`） |
 | `cursor/update_todos` | 待办列表（请求，回 `{}`） |
 | `subagent_spawned` / `subagent_state_update` + 子会话的更新 | 子代理卡（需要 `_meta.subagents`）；`cursor/task` 回 `{}` |
-| `session_info_update` | 会话自动标题（可能晚于轮次结束） |
+| `session_info_update` | 会话自动标题（可能晚于轮次结束），只在领取带 `naming` 时上报（P5a 跟进）。本进程 `session/new` 开的对话一律不报：它的第一条 prompt 前面是 Orbit 的指令，标题是对指令的概括（§3.2），会话保留从用户第一条消息截取的标题（D-P8-2，`cursor_acp.go`）。`session/load` 的对话照旧上报 |
 | `available_commands_update` | 斜杠命令列表 |
 | `current_mode_update` | 模式变更回显 |
 | `session/request_permission` | 按模式应答（§16.5）：审批卡、Orbit 的规则直接允许，或直接拒绝；按 §5.2 关联工具卡；只应答一次，从不选 `allow-always` |
@@ -1229,7 +1252,7 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 | 待定项 | 事实 | 建议 |
 | --- | --- | --- |
 | D1 索引 | §14.3：只在隐私模式 4 时上传完整文件内容；本账号 0 字节；`--disable-indexing` 不影响功能 | 默认加 `--disable-indexing`（所有者已定，P3 已实现）；worker 的 npx：P5c 的 15 个真实会话都没出现，不加 `--disable-codebase-ref`（§14.3） |
-| D2 署名 | §14.4：客户端只发开关，文本由服务端定；实测默认下 ACP 会话的提交没有 trailer | 沿用默认；不承诺提交里有署名；要关就写账号 cli-config |
+| D2 署名 | §14.4：客户端只发开关，文本由服务端定；实测带不带 trailer 因模型而异（P0c 没有；P8 的 `grok-4.7-high` 自己加了 `Co-authored-by: Cursor <cursoragent@cursor.com>`） | 沿用默认；不承诺提交里有署名；要关就写账号 cli-config |
 | D3 显示名 | CLI 自称 "Cursor Agent" / "Cursor CLI"（`about` 标题 "About Cursor CLI"） | 采用 "Cursor CLI"，内部名 `cursor` |
 | D4 隔离 | §8.4：只有 HOME 能挪走 `~/.cursor`；方案 A（SHELL 包装）在 Linux 实测成立：命令拿回真 HOME，看不到 key 和 token | Linux 用 A；macOS 等 P0b，A 不成立再请所有者在 B 和 D 之间选 |
 | D5 换账号 | §13：同一身份下搬运加续聊实测可行；团队固定在进程上；跨账号没测 | 验证前只允许没说过话的会话换账号（所有者 2026-10-17 定方案 A；P6b 和它的跟进已实现：说过话的会话三个入口拒绝，runner 固定开局身份，§13.3、§13.4） |
