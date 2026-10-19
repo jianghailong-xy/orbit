@@ -39,7 +39,7 @@ import {
 import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
-import { INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND } from './project-integration-job';
+import { INTEGRATION_JOB_CLAIM, INTEGRATION_PROGRESS_V2, PROMOTION_AUTOMATIC_LAND } from './project-integration-job';
 import { readLandingView } from './landing-view';
 import { readProjectIntegrationRead } from './project-integration-line';
 import { configureProjectIntegration } from './project-integration-line';
@@ -360,7 +360,7 @@ function claim(stack: Stack, w: World, lease: string): Promise<IntegrationJobCom
     runnerId: w.runnerId,
     leaseOwner: lease,
     draining: false,
-    capabilities: [INTEGRATION_JOB_CLAIM, PROMOTION_AUTOMATIC_LAND],
+    capabilities: [INTEGRATION_JOB_CLAIM, INTEGRATION_PROGRESS_V2, PROMOTION_AUTOMATIC_LAND],
   });
 }
 
@@ -878,7 +878,7 @@ test('a stolen push records the moved commits: Automatic re-checks, the owner co
       // owner-confirmed landing's ends with the next generation, after the push it was refused.
       assert.deepEqual(
         timeline.sections[1].entries.map((entry) => entry.kind),
-        ['ENQUEUED', 'CLAIMED', 'RESULT', 'RECHECK_ON_MOVED_MAIN'],
+        ['CONFIRMATION', 'AUTOMATIC_ATTEMPT', 'ENQUEUED', 'CLAIMED', 'RESULT', 'RECHECK_ON_MOVED_MAIN'],
       );
       const ownerSection = timeline.sections[3].entries;
       assert.deepEqual(
@@ -890,6 +890,11 @@ test('a stolen push records the moved commits: Automatic re-checks, the owner co
       const ownerConfirmation = timeline.sections[4].entries.find((entry) => entry.kind === 'CONFIRMATION')!;
       assert.equal(ownerConfirmation.actor?.type, 'OWNER');
       assert.equal(ownerConfirmation.actor?.userId, w.ownerId);
+      // That next generation runs and its merge check goes red: the candidate is blocked, and a
+      // blocked candidate is what leaves its round open for the later one below (a candidate still
+      // in flight owns the round; M-F1/M-F4 do not offer a second one beside it).
+      const nextGenerationLanding = await claimLanding(stack, w, 'lease-a-next', 'LAND_PROMOTION');
+      await reportDirect(stack, w, nextGenerationLanding, promotionRed('1'.repeat(40)));
       // The promotion's current state is a subject-level fact about the candidate the newest
       // attempt names, never replayed history.
       const state = timeline.facts.find((fact) => fact.kind === 'PROMOTION_STATE')!;

@@ -1492,7 +1492,7 @@ export async function applyIntegrationJobResult(
       select: {
         id: true, projectId: true, ownerId: true, kind: true, state: true,
         taskId: true, sessionId: true, promotionId: true, targetRef: true, sourceRef: true,
-        upstreamRef: true, round: true,
+        upstreamRef: true,
         // J12: the queue the job belongs to, which is the scope an unknown push is repaired on.
         serialKey: true,
         codebaseId: true, cancelRequestedAt: true,
@@ -2370,8 +2370,10 @@ async function appendResultEvents(
 
   // J-T13 / M-T12: the push was refused because the upstream moved, with the control plane's own
   // reading of each commit (`outsideQueue`, and `landedBy` — ids for this account, only the reason
-  // for another account's).
-  if (input.upstreamMovedCommits) {
+  // for another account's). Only an ERROR is a refused push: a READY that found main moved never
+  // reached the push (the automatic landing hands the candidate back and checks again), and its
+  // moved list belongs to the recheck line alone.
+  if (input.upstreamMovedCommits && input.effectiveState === 'ERROR') {
     await appendIntegrationJobEvent(tx, {
       jobId: job.id,
       key: 'push-refused',
@@ -2381,6 +2383,9 @@ async function appendResultEvents(
       phase,
       data: { upstreamMovedCommits: input.upstreamMovedCommits },
       text: pushRefusedText(input.upstreamMovedCommits),
+      // The push was refused before the runner reported the result; the two facts share this
+      // transaction's instant and are ordered by the ledger's sequence, which is write order.
+      at: input.finishedAt,
     });
   }
 
@@ -2449,6 +2454,8 @@ async function appendResultEvents(
         itemKind: input.handedTo.itemKind,
         targetRef: job.upstreamRef,
       }),
+      // The hand-off follows the answer; same instant, later in write order.
+      at: input.finishedAt,
     });
   }
 
