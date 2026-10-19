@@ -984,14 +984,15 @@ describe('§7.2 V6: the head once the server derives the claim’s liveness', ()
       ...landed('job-t2').integration!.landTask!, startedAt: '2026-09-25T13:52:00Z',
     } } };
     const head = landingHead(landingLine(view6(claimed({ claim: 2 }), [listed({ claim: 2 })], [first]), V6_NOW)!);
-    expect(head.detail).toContain('Taken over 13:57 · first started 13:52');
+    expect(head.detail).toContain(`Taken over ${landingClockTime(V6_STEP)} · `
+      + `first started ${landingClockTime('2026-09-25T13:52:00Z')}`);
     // No task row (a promotion) means no first start to name; the takeover itself is still said.
     const promotion = landingHead(landingLine(view6(
       claimed({ kind: 'CHECK_PROMOTION', taskTitle: null, check: checkFor('CHECK_PROMOTION'), typicalMs: 18 * 60_000, claim: 2 }),
       [listed({ kind: 'CHECK_PROMOTION', taskTitle: null, taskId: null, check: checkFor('CHECK_PROMOTION'),
         typicalMs: 18 * 60_000, claim: 2 })],
     ), V6_NOW)!);
-    expect(promotion.detail).toContain('Taken over 13:57');
+    expect(promotion.detail).toContain(`Taken over ${landingClockTime(V6_STEP)}`);
     expect(promotion.detail).not.toContain('first started');
   });
 
@@ -1012,12 +1013,12 @@ describe('§7.2 V6: the head once the server derives the claim’s liveness', ()
       kind: 'CHECK_PROMOTION', taskId: null, taskTitle: null, phase: 'CHECK', timedOut: true, limitSeconds: 600,
       runnerName: 'wikova', heartbeatAt: '2026-09-25T13:35:20Z', liveness: 'LEASE_EXPIRED',
     })]), V6_NOW);
-    expect(lines[0].detail).toBe('Runner wikova took it at 13:57 · stopped at checking');
+    expect(lines[0].detail).toBe(`Runner wikova took it at ${landingClockTime(V6_STEP)} · stopped at checking`);
     // A landing still says whether it may have pushed.
     const landing = landingJobLines(view6(claimed(), [listed({
       phase: 'PUSH', timedOut: true, limitSeconds: 600, heartbeatAt: '2026-09-25T13:35:20Z', liveness: 'LEASE_EXPIRED',
     })]), V6_NOW);
-    expect(landing[0].detail).toBe('Runner wikova took it at 13:57 · stopped at pushing · may have been pushed');
+    expect(landing[0].detail).toBe(`Runner wikova took it at ${landingClockTime(V6_STEP)} · stopped at pushing · may have been pushed`);
   });
 
   it('does not fall back to the claim-lease silence when the server sends liveness without a job list', () => {
