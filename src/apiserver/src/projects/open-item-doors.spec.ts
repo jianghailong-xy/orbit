@@ -524,7 +524,9 @@ test('a row that names no landing session, and a kind that lands nothing, never 
     const row = sampleFor(cell);
     assert.equal(openItemActionsFromDoors(row).includes('OPEN_LANDING'), false,
       `${where}: projected OPEN_LANDING without a landing session to open`);
-    if (!cell.todoType.startsWith('INTEGRATION_')) {
+    // X-E5's item IS a landing: it is about one attempt's claim, so its cell holds the landing
+    // door. It is the kind's name, not its family, that keeps it out of the integration prefix.
+    if (!cell.todoType.startsWith('INTEGRATION_') && cell.todoType !== 'LANDING_LEASE_EXPIRED') {
       const withSession = withLandingSession(row);
       assert.equal(doorsForOpenItem(withSession).some((door) => door.action === 'OPEN_LANDING'), false,
         `${where}: a kind that lands nothing holds a landing door`);
@@ -532,6 +534,55 @@ test('a row that names no landing session, and a kind that lands nothing, never 
         `${where}: a kind that lands nothing projects a landing press`);
     }
   }
+});
+
+/**
+ * §4.6 X-E5's cell. It is the owner's from birth and its lead press is the abandon door (J-T10) —
+ * the only door that changes anything while the runner is gone, and the cell's one resolving door.
+ * OPEN_LANDING opens what stopped reporting; the hand-close is the cell's ordinary non-resolving
+ * ending. Nothing else is offered: the item is never delivered to a coordinator (X-D7).
+ */
+test('X-E5’s cell leads with ABANDON and appends OPEN_LANDING when the landing session is named', () => {
+  const routes = allRouteMetadata();
+  const names = mcpNames(readFileSync(MCP_SOURCE, 'utf8'));
+  const canExecute = executableByRegistry(routes, names);
+  const cell = OPEN_ITEM_DOOR_TABLE.find((candidate) =>
+    candidate.todoType === 'LANDING_LEASE_EXPIRED')!;
+  assert.ok(cell, 'the census does not register X-E5’s item');
+  assert.equal(cell.assignee, 'OWNER', 'the item is the owner’s from birth');
+  assert.equal(cell.sourceJob, 'DIRECT', 'it is about a claim, not about a kind of job');
+  assert.equal(cell.failureClass, 'ERROR', 'the failure class is the cell’s sentinel');
+
+  const abandon = cell.doors.find((door) => door.action === 'ABANDON');
+  assert.ok(abandon, 'the cell has no ABANDON door');
+  assert.equal(abandon.holder, 'OWNER');
+  assert.equal(abandon.kind, 'ROUTE');
+  assert.equal(abandon.capability, 'CANCEL');
+  assert.deepEqual([...abandon.outcomes], ['JOB_MOVED_ON']);
+  assert.equal(abandon.resolving, true, 'abandon is the cell’s resolving door');
+  assert.equal(abandon.implemented, true);
+  assert.ok(canExecute(abandon), 'no registry dispatches the abandon route the card draws');
+
+  const plain = sampleFor(cell);
+  assert.deepEqual(openItemActionsFromDoors(plain), ['ABANDON'],
+    'the lead press is the abandon, and a row with no landing session offers nothing more');
+  const row = withLandingSession(plain);
+  assert.deepEqual(openItemActionsFromDoors(row), ['ABANDON', 'OPEN_LANDING'],
+    'the landing session is appended after the lead, never before it');
+  const landing = doorsForOpenItem(row).find((door) => door.action === 'OPEN_LANDING');
+  assert.ok(landing);
+  assert.equal(landing.kind, 'ROUTE');
+  assert.equal(landing.route, '/sessions/:id');
+  assert.equal(landing.capability, 'LOOKUP');
+  assert.equal(landing.resolving, false);
+  assert.ok(canExecute(landing));
+
+  // The doors the cell must NOT carry: it is never delivered to a coordinator, so asking one
+  // again and handing it over are not presses it has (the door refuses them, X-D7).
+  assert.equal(cell.doors.some((door) => door.name === 'return-to-coordinator'), false);
+  assert.equal(cell.doors.some((door) => door.name === 'open_item_hand_over'), false);
+  assert.ok(cell.doors.some((door) => door.name === 'open_item_resolve'),
+    'the owner may still close it by hand');
 });
 
 test('an OPEN_LANDING door that is not implemented is not drawn as a press', () => {

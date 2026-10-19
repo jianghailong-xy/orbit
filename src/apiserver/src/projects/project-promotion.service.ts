@@ -26,7 +26,7 @@ import {
 } from './project-integration-job';
 import { type InFlightStop, stopInFlightJob } from './project-integration-line';
 import { settleLandingAfterPromotionDecision } from './landing-session';
-import { openItemOwed } from './project-open-item';
+import { openItemOwed, resolveLeaseExpiredItems } from './project-open-item';
 import {
   AUTOMATIC_MERGE_ATTEMPTS,
   PROMOTION_LAND_ATTEMPTS,
@@ -1031,6 +1031,9 @@ async function supersedeLiveCandidates(
       // past its limit is ended as the ERROR it is, so it cannot hold `#check:<project>` for ever
       // (2026-10-09).
       await stopInFlightJob(tx, { projectId, jobId: row.checkJobId, now: new Date() });
+      // §4.6 X-E5: whatever state that left the check in, the candidate it checked has moved on, so
+      // no owner is being asked to abandon the attempt any more.
+      await resolveLeaseExpiredItems(tx, row.checkJobId);
     }
     if (row.openItemId) {
       await tx.projectOpenItem.updateMany({
@@ -1214,6 +1217,8 @@ export async function retireCandidatesLandedByReceipt(
       // nobody could ever end it and no later check of the project could be claimed (2026-10-09: a
       // candidate superseded this way kept `#check:<project>` and blocked the whole project).
       await stopInFlightJob(tx, { projectId: row.projectId, jobId: row.checkJobId, now });
+      // §4.6 X-E5: the check's candidate moved on, so its silence is nobody's to abandon.
+      await resolveLeaseExpiredItems(tx, row.checkJobId);
     }
     // The owner's card, when the check had already put one in front of them: the merge it asked
     // about has been made, so there is nothing left to approve.

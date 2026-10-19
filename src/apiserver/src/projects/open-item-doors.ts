@@ -20,6 +20,7 @@ export const OPEN_ITEM_DOOR_TODO_TYPES = [
   'START_REQUEST',
   'DONE_REQUEST',
   'DELIVERY_REVIEW',
+  'LANDING_LEASE_EXPIRED',
 ] as const;
 export type OpenItemDoorTodoType = (typeof OPEN_ITEM_DOOR_TODO_TYPES)[number];
 
@@ -118,7 +119,8 @@ export interface OpenItemDirectDoorCell {
 }
 
 const RESOLVING_OUTCOMES = new Set(['LANDED', 'RETRIED', 'TASK_DONE', 'TASK_CLOSED',
-  'SUCCESSOR_FILED', 'PROMOTION_MOVED_ON', 'APPROVED', 'DECLINED', 'ANSWERED', 'RESUMED']);
+  'SUCCESSOR_FILED', 'PROMOTION_MOVED_ON', 'APPROVED', 'DECLINED', 'ANSWERED', 'RESUMED',
+  'JOB_MOVED_ON']);
 
 function door(
   holder: OpenItemDoorAssignee,
@@ -357,6 +359,20 @@ function askAgain(holder: OpenItemDoorAssignee): OpenItemDoor {
   });
 }
 
+/**
+ * §4.7 J-T10's abandon, held by the owner on the X-E5 item: end a RUNNING job whose runner has
+ * stopped reporting. It is the cell's lead press — the one door that changes anything while the
+ * runner is gone — and the one resolving door of that cell. The coordinator's `integration_abandon`
+ * is deliberately not a matrix door: its gate is the expired lease, not any item (§2.9 LS6).
+ */
+function abandon(holder: OpenItemDoorAssignee): OpenItemDoor {
+  return door(holder, 'abandon-integration-job', 'integration_abandon', 'ROUTE', 'CANCEL',
+    ['JOB_MOVED_ON'], {
+      action: 'ABANDON',
+      route: '/projects/:id/integration/jobs/:jobId/abandon',
+    });
+}
+
 function openTaskSession(holder: OpenItemDoorAssignee): OpenItemDoor {
   return door(holder, 'open-task-session', 'task_get', 'MCP', 'LOOKUP', [], {
     action: 'OPEN_TASK_SESSION',
@@ -427,6 +443,10 @@ function normalizeAssignee(assignee: string): OpenItemDoorAssignee {
 }
 
 export function sourceJobForOpenItem(input: OpenItemDoorInput): OpenItemDoorSourceJob | null {
+  // §4.6 X-E5's own cell. Read BEFORE the payload's jobKind and phase: the item is about a claim,
+  // not about the kind of job that claim was running, and letting the payload decide would file it
+  // in an integration-failure cell that has no door it could take.
+  if (input.kind === 'LANDING_LEASE_EXPIRED') return 'DIRECT';
   const phase = input.phase ?? (input.payload && typeof input.payload === 'object'
     ? (input.payload as { phase?: unknown }).phase : null);
   const jobKind = input.jobKind ?? (input.payload && typeof input.payload === 'object'
@@ -514,6 +534,14 @@ export function doorsForCell(cell: Pick<OpenItemDoorCell,
     // the confirm/decline/cancel route is a real resolving door for this row.
     doors.push(review(assignee, true));
     doors.push(handClose(assignee), handOver(assignee));
+    return doors;
+  }
+  if (todoType === 'LANDING_LEASE_EXPIRED') {
+    // §4.6 X-E5's own cell, owner-only: abandon the attempt whose runner stopped reporting (the
+    // lead press and the only resolving door), open the landing session it belongs to, and close
+    // it by hand once somebody else has dealt with it. No hand-over and no ask-again: the item is
+    // never delivered to a coordinator (X-D7), and `return-to-coordinator` refuses it.
+    doors.push(abandon(assignee), openLanding(assignee), handClose(assignee));
     return doors;
   }
   if (todoType === 'TASK_FAILED') {
@@ -616,6 +644,10 @@ function buildTable(): OpenItemDoorCell[] {
     cells.push({ todoType: 'DELIVERY_REVIEW', sourceJob: 'LAND_TASK', failureClass: 'ERROR', assignee,
       doors: doorsForCell({ todoType: 'DELIVERY_REVIEW', sourceJob: 'LAND_TASK', failureClass: 'ERROR', assignee }) });
   }
+  // §4.6 X-E5's item is the owner's from birth, like the two request cards: one row, OWNER only.
+  cells.push({ todoType: 'LANDING_LEASE_EXPIRED', sourceJob: 'DIRECT', failureClass: 'ERROR',
+    assignee: 'OWNER',
+    doors: doorsForCell({ todoType: 'LANDING_LEASE_EXPIRED', sourceJob: 'DIRECT', failureClass: 'ERROR', assignee: 'OWNER' }) });
   return cells;
 }
 
@@ -697,7 +729,18 @@ export function openItemActionsFromDoors(input: OpenItemDoorInput): OpenItemActi
       .filter((candidate) => candidate.action !== undefined)
       .map((candidate) => candidate.action as OpenItemAction);
   }
-
+  if (normalizeTodo(input.kind) === 'LANDING_LEASE_EXPIRED') {
+    // §4.6 X-E5: the two presses this row offers, appended at the end of the projection and never
+    // in `primaryActionPreference` — the lead falls out of "the first projected action", which is
+    // ABANDON. `OPEN_LANDING` needs the landing session the attempt belongs to, exactly as on an
+    // integration row; the kind itself says nothing about whether the job had one.
+    const held = (action: OpenItemAction): boolean => directDoors.some((candidate) =>
+      candidate.implemented && candidate.holder === assignee && candidate.action === action);
+    const actions: OpenItemAction[] = [];
+    if (held('ABANDON')) actions.push('ABANDON');
+    if (hasLandingSession(input) && held('OPEN_LANDING')) actions.push('OPEN_LANDING');
+    return actions;
+  }
   if (input.promotionId) {
     const doors = directDoors.length > 0
       ? directDoors
