@@ -1,6 +1,9 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Wire DTOs — JSON tags mirror @orbit/shared exactly (camelCase). The control
 // plane's ValidationPipe passes these plain objects through unchanged.
@@ -543,11 +546,20 @@ type IntegrationJobCommand struct {
 	Automatic       bool                   `json:"automatic,omitempty"`
 	Checks          []IntegrationCheckSpec `json:"checks"`
 	CancelRequested bool                   `json:"cancelRequested"`
+	// ReportBeforePush is set on a claim made under the v2 progress protocol (§2.2 J-T4): before it
+	// pushes, the runner reports phase = PUSH synchronously and waits for the answer. Absent on a
+	// legacy claim, whose runner reports the phase best-effort and pushes without asking.
+	ReportBeforePush bool `json:"reportBeforePush,omitempty"`
 	// scratchRoot is where this job stages its throwaway worktree; empty means the runner's
 	// worktreesDir. It is never on the wire and no control plane sets it: it exists so a test
 	// that runs in parallel — and so cannot set ORBIT_HOME for the whole process — can give each
 	// case a root of its own.
 	scratchRoot string
+	// progressEvery and pushReportBudget shorten the v2 protocol's two timings for a test; zero
+	// means the package's constants (integrationProgressEvery, integrationPushReportBudget). They
+	// are never on the wire.
+	progressEvery    time.Duration
+	pushReportBudget time.Duration
 }
 
 // IntegrationCheckSpec is one command to run on the combined tree before anything is pushed.
@@ -571,13 +583,47 @@ type IntegrationCheckResult struct {
 }
 
 // IntegrationJobProgressRequest renews the lease and says which step the job reached.
+//
+// Everything past the fence is optional and is what a v2 claim adds (§2.2 J-T4): the named sub-step,
+// the round inside this claim, the check in flight, and how idle and how large that step's output
+// is. A legacy claim sends the first three and is served exactly as it always was.
 type IntegrationJobProgressRequest struct {
 	ClaimGeneration string `json:"claimGeneration"`
 	LeaseOwner      string `json:"leaseOwner"`
 	Phase           string `json:"phase"`
+	// Step is the named sub-step beside Phase: WAITING_LOCAL_LOCK inside FETCH, PREPARE inside CHECK.
+	Step string `json:"step,omitempty"`
+	// Round is which round inside this claim, from 1: a landing may retry its push onto a moved target.
+	Round int `json:"round,omitempty"`
+	// Check is the check in flight, while one is.
+	Check *IntegrationJobCurrentCheck `json:"check,omitempty"`
+	// OutputIdleMs is how long the current step's output has been idle; the control plane writes
+	// output_moved_at as its own receive instant minus this. Absent is "not measured".
+	OutputIdleMs *int64 `json:"outputIdleMs,omitempty"`
+	// OutputBytes is how much output this step has produced so far.
+	OutputBytes *int64 `json:"outputBytes,omitempty"`
 	// The upstream moved under a confirmed promotion, so the merge and the checks are being redone
 	// on the new tip (§3.3 M-T7). Nil on every other report.
 	UpstreamMoved *IntegrationUpstreamMoved `json:"upstreamMoved,omitempty"`
+}
+
+// IntegrationJobCurrentCheck is the check a v2 claim is running, as its progress reports name it
+// (§2.1, §2.2 J-T4). The job row's Checks holds finished results; this is the check in flight.
+type IntegrationJobCurrentCheck struct {
+	Name          string `json:"name"`
+	Index         int    `json:"index"`
+	Count         int    `json:"count"`
+	BudgetSeconds int    `json:"budgetSeconds"`
+	StartedAt     string `json:"startedAt"`
+}
+
+// IntegrationJobProgressResponse is the renewal's answer, and the stop signal in the other
+// direction (§2.2 J-T4): a v2 runner that reads CancelRequested kills the check's process group,
+// pushes nothing and reports CANCELLED. A 409 STALE_CLAIM / ALREADY_FINAL or a 404 is the same
+// signal with no answer left to report into.
+type IntegrationJobProgressResponse struct {
+	Accepted        bool `json:"accepted"`
+	CancelRequested bool `json:"cancelRequested"`
 }
 
 // IntegrationUpstreamMoved is the two tips of that move, for a reader of the timeline.
