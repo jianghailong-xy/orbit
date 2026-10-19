@@ -652,7 +652,7 @@ def probe(reach, blocked, resolve, timeout, attempts):
 
 # ── command line ────────────────────────────────────────────────────────────────────────────────
 
-def main(argv=None):
+def command_line():
     parser = argparse.ArgumentParser(prog="firewall.py", description="Orbit managed runners' host firewall")
     commands = parser.add_subparsers(dest="command", required=True)
     for name in ("serve", "apply", "check", "show"):
@@ -671,7 +671,11 @@ def main(argv=None):
     probe_command.add_argument("--resolve", action="append", default=[], help="a name that must resolve")
     probe_command.add_argument("--timeout", type=float, default=5)
     probe_command.add_argument("--attempts", type=int, default=1, help="tries for each --reach")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv=None):
+    args = command_line().parse_args(argv)
     try:
         if args.command == "serve":
             return serve(args.config, args.status)

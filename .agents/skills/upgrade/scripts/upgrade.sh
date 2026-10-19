@@ -243,7 +243,9 @@ SERVICES="apiserver wiki-worker web"
 # does) runs the Docker channel, which is rebuilt with the rest and recreated after them, and its managed
 # runner image, rebuilt and switched to (the section above). Without that profile, Compose does not list
 # the service and nothing is added. (grep reads to the end, unlike -q: an early exit could stop Compose
-# mid-list with SIGPIPE, which pipefail would read as no channel.)
+# mid-list with SIGPIPE, which pipefail would read as no channel.) The managed runners' firewall
+# (managed-runner-firewall) is never built, started or recreated here: its rules stay as the install or
+# --enable-managed-runner-firewall left them, and a deployment without it gains none.
 CHANNEL=""
 if $DC config --services 2>/dev/null | grep -x docker-channel >/dev/null; then
   CHANNEL=docker-channel

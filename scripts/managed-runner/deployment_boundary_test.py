@@ -6,10 +6,13 @@ docs/managed-runner-design.md, "Optional test deployment boundary", as the accou
 the install path may reference what the Docker backend needs — the restricted Docker channel
 (deploy/managed-runner/docker-channel), the managed runner image (deploy/managed-runner/image), the switch
 and the managed runners' directory — with its services in a Compose profile a fresh install switches on.
+Since the account owner's decision of 2026-10-19 that is also the managed runners' host firewall
+(deploy/managed-runner/firewall), under a profile of its own that a fresh install switches on too.
 They still reference no other part of deploy/managed-runner (the Kubernetes Pod, storage and admission
 templates, the Kubernetes profile), no scripts/managed-runner tooling, the single-machine lab
 (docs/managed-runner-lab.md) or Kubernetes, Rook, Ceph or CSI at all. And /upgrade never writes the switch:
-a deployment keeps managed runners as its own .env has them.
+a deployment keeps managed runners as its own .env has them, and never starts the firewall: its rules stay as
+an install left them.
 
 This reads the tracked files of those entry points with `git grep`; nothing is built, started or sent
 anywhere. What the install and /upgrade scripts do is new_deployment_test.py's.
@@ -44,7 +47,7 @@ ENTRY_POINTS = [
 # are not entry points: they may name its paths and the single-machine lab.
 EXCLUDED = [":(exclude)scripts/managed-runner/"]
 # The parts of deploy/managed-runner the Docker backend is made of, which an entry point may name.
-DOCKER_BACKEND_PARTS = {"docker-channel", "image"}
+DOCKER_BACKEND_PARTS = {"docker-channel", "image", "firewall"}
 # What would wire the rest in: the delivery's tooling and lab, and the admission webhook.
 NEEDLES = [
     "scripts/managed-runner",
@@ -96,6 +99,16 @@ class DeploymentBoundaryTest(unittest.TestCase):
         self.assertEqual(self.git_grep("-E", r"(>>?|tee( -a)?|sed -i.*) *\.?/?\.env\b", paths=UPGRADE), [],
                          "/upgrade writes .env")
 
+    def test_upgrade_never_starts_the_firewall(self):
+        # Where an upgrade names the firewall's service at all, it is to leave it out: in a comment, or in the
+        # exclusion from the one recreate that would otherwise take every service Compose lists.
+        named = self.git_grep("-F", "managed-runner-firewall", paths=UPGRADE)
+        for line in named:
+            with self.subTest(line=line):
+                text = line.split(":", 2)[2].strip()
+                self.assertTrue(text.startswith("#") or "grep -vxE 'docker-channel|managed-runner-firewall'" in text, line)
+        self.assertEqual(self.git_grep("-F", "deploy/managed-runner/firewall", paths=UPGRADE), [])
+
     def test_copying_env_example_alone_switches_nothing_on(self):
         # The switch is written by the install script, not carried by the example: a .env copied by hand is
         # a deliberate choice, and the example's lines only document what the install writes.
@@ -111,6 +124,8 @@ class DeploymentBoundaryTest(unittest.TestCase):
                                 capture_output=True, text=True, check=True).stdout.splitlines()
         for expected in ("docker-compose.yml", ".env.example", "package.json", "scripts/install-server.sh"):
             self.assertIn(expected, listed)
+        self.assertNotEqual(self.git_grep("-F", "deploy/managed-runner/firewall/Dockerfile", paths=["docker-compose.yml"]), [],
+                            "root Compose builds the firewall from its own directory")
         self.assertTrue(any(path.startswith(".github/workflows/") for path in listed))
         self.assertTrue(any(path.startswith(".claude/skills/upgrade/") for path in listed))
         self.assertTrue(any(path.startswith(".agents/skills/upgrade/") for path in listed))
