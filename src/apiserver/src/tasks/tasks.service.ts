@@ -10345,6 +10345,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                   projectId: landing.projectId,
                   jobId: landing.id,
                   now: stoppedAt,
+                  cause: 'TASK_REOPEN',
+                  actor: { type: 'PLATFORM' },
+                  reason: 'the task was reopened, cancelled or failed',
                 });
               }
             }

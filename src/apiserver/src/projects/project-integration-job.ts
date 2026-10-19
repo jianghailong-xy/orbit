@@ -11,6 +11,12 @@ import {
 } from './landing-session';
 import { startOnFirstIntegration } from './project-integration-line';
 import {
+  appendIntegrationJobEvent,
+  enqueuedText,
+  timedOutText,
+  type EnqueueCause,
+} from './project-integration-event';
+import {
   INTEGRATION_ITEM_KINDS,
   markOpenItemsHandling,
   type OpenItemHandlingStart,
@@ -762,6 +768,7 @@ export async function queueLandingBehindTheWork(
       sessionId: ended.sessionId,
       finishedAt: ended.finishedAt,
     }),
+    cause: 'BEHIND_WORK',
   });
 }
 
@@ -859,10 +866,16 @@ export function timedOutErrorCode(job: {
   return 'PUSH_OUTCOME_UNKNOWN';
 }
 
+/** Which door ended a timed-out attempt, for the timeline's `TIMED_OUT` fact (§2.9 LS2). The two
+ *  the job row cannot tell apart from an ordinary J-T9 end are the candidate's recheck gate and
+ *  M-T13's retirement, which today write the same `error_detail` as the retry door. */
+export type TimeoutEndCause = 'RETRY' | 'RECHECK' | 'M13' | 'STOP' | 'SUPERSEDE' | 'TASK_REOPEN';
+
 export async function endTimedOutLanding(
   tx: Prisma.TransactionClient,
   job: { jobId: string; kind: string; phase: string | null; heartbeatAt: Date | null; startedAt: Date;
-         limitSeconds: number | null; runnerName: string | null },
+         limitSeconds: number | null; runnerName: string | null; round?: number | null },
+  cause: TimeoutEndCause = 'STOP',
 ): Promise<'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN' | null> {
   // J12 reads the current claim's protocol and the push fact off the row rather than off a caller:
   // every door that ends a timed-out job (the retry door, the abandon door, M-T13, the stop J-T8
@@ -906,7 +919,29 @@ export async function endTimedOutLanding(
            "finished_at" = now(), "updated_at" = now()
      WHERE "id" = ${job.jobId}::uuid AND "state" = 'RUNNING'
        AND "heartbeat_at" IS NOT DISTINCT FROM ${job.heartbeatAt}::timestamptz`);
-  return ended === 1 ? errorCode : null;
+  if (ended !== 1) return null;
+  // §2.9 LS2: the end is a fact, and which door ended it is the part the row cannot tell apart
+  // afterwards — the recheck gate, M-T13's retirement and J-T9's retry door all leave the same
+  // `error_detail`. Written in the compare-and-set's own transaction; a lost CAS wrote nothing.
+  await appendIntegrationJobEvent(tx, {
+    jobId: job.jobId,
+    key: 'timed-out',
+    kind: 'TIMED_OUT',
+    claim: Number(claim?.claimGeneration ?? 0n),
+    round: job.round ?? null,
+    phase: job.phase,
+    actor: { type: 'PLATFORM' },
+    data: {
+      cause,
+      errorCode,
+      limitSeconds: job.limitSeconds,
+      lastReportAt: (job.heartbeatAt ?? job.startedAt).toISOString(),
+      runnerName: job.runnerName,
+      pushOutcome: detail.pushOutcome,
+    },
+    text: timedOutText({ limitSeconds: job.limitSeconds, heartbeatAt: job.heartbeatAt, at: new Date() }),
+  });
+  return errorCode;
 }
 
 /**
@@ -957,6 +992,7 @@ export async function queueLandingRetry(
     session: { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId },
     retry: input.retry,
     skipMergeCheck: input.skipMergeCheck,
+    cause: 'RETRY',
   });
   if (queued === null) return null;
   const job = await tx.projectIntegrationJob.findUniqueOrThrow({
@@ -1261,6 +1297,8 @@ async function queueLandingForWork(
      * started line's refs cannot change (`INTEGRATION_LINE_LOCKED`).
      */
     idempotencyKey?: string;
+    /** Which door queued it, for the enqueue event's sentence (`enqueuedText`). */
+    cause?: EnqueueCause;
   },
 ): Promise<LandingQueued | null> {
   if (input.line === 'MAIN') {
@@ -1270,6 +1308,7 @@ async function queueLandingForWork(
       taskId: input.taskId,
       codebase: input.codebase,
       session: input.session,
+      cause: input.cause,
     });
     return candidate === null
       ? null
@@ -1282,6 +1321,7 @@ async function queueLandingForWork(
     codebase: input.codebase,
     session: input.session,
     idempotencyKey: input.idempotencyKey,
+    cause: input.cause,
   });
   return queued === null ? null : { kind: 'LAND_TASK', jobId: queued.jobId };
 }
@@ -1309,6 +1349,8 @@ async function queueLandTask(
     retry?: LandingRetryRequest;
     /** Set only for the generation `integration_skip_merge_check` asked for (0393). */
     skipMergeCheck?: LandingSkipMergeCheck;
+    /** Which door queued it, for the enqueue event's sentence. */
+    cause?: EnqueueCause;
   },
 ): Promise<{ jobId: string; landingSessionId: string } | null> {
   const inflight = await tx.projectIntegrationJob.count({
@@ -1399,6 +1441,31 @@ async function queueLandTask(
     await discardOpenedLanding(tx, landing);
     return null;
   }
+  // §2.9 LS2: the enqueue is a fact, recorded in the transaction that queued it. What queued it and
+  // why somebody asked is not copied here — the retry columns and the decision rows keep that, and
+  // the timeline derives it at read time (LS4); this row only says that it was queued, when, and
+  // for which branch.
+  const cause = input.cause ?? 'DONE';
+  await appendIntegrationJobEvent(tx, {
+    jobId: created[0].id,
+    key: 'enqueued',
+    kind: 'ENQUEUED',
+    claim: 0,
+    data: {
+      kind: 'LAND_TASK',
+      generation,
+      targetRef: input.codebase.integrationRef,
+      sourceRef: `refs/heads/${input.session.branch}`,
+      cause,
+      ...(input.skipMergeCheck ? { skippedCheck: true } : {}),
+    },
+    text: enqueuedText({
+      kind: 'LAND_TASK',
+      sourceRef: `refs/heads/${input.session.branch}`,
+      targetRef: input.codebase.integrationRef,
+      cause,
+    }),
+  });
   await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.session.id));
   // §2.9: the subject's session id travels with the row it was queued under, so a caller that
   // answers with "which landing did I queue" (the retry doors) needs no second read.
@@ -1482,6 +1549,7 @@ async function backfillFinishedCodeTasks(
         taskId: candidate.id,
         codebase: input.codebase,
         session,
+        cause: 'BACKFILL',
       });
       if (made) queued.push(candidate.id);
       continue;
@@ -1492,6 +1560,7 @@ async function backfillFinishedCodeTasks(
       taskId: candidate.id,
       codebase: input.codebase,
       session,
+      cause: 'BACKFILL',
     });
     if (job) queued.push(candidate.id);
   }
@@ -1530,6 +1599,8 @@ export async function queueTaskBranchCandidate(
     taskId: string;
     codebase: CodebaseForJob;
     session: { id: string; branch: string; runnerId: string | null };
+    /** Which door offered it, for the enqueue event's sentence. */
+    cause?: EnqueueCause;
   },
 ): Promise<{ promotionId: string; jobId: string } | null> {
   const promotionId = randomUUID();
@@ -1569,6 +1640,7 @@ export async function queueTaskBranchCandidate(
       sessionId: input.session.id,
     },
     canonicalRepoUrl: input.codebase.canonicalRepoUrl,
+    cause: input.cause,
   });
   await tx.projectPromotion.update({ where: { id: promotionId }, data: { checkJobId: jobId } });
   return { promotionId, jobId };
@@ -1612,6 +1684,8 @@ export async function queuePromotionJob(
     confirmedAutomatically?: boolean;
     /** Set only for the check a coordinator asked to run again (§4.7 H1, migration 0368). */
     retry?: LandingRetryRequest;
+    /** Which door queued it, for the enqueue event's sentence (`enqueuedText`). */
+    cause?: EnqueueCause;
   },
 ): Promise<string> {
   // Raw SQL, never `projectIntegrationJob.aggregate`: Prisma compiles an aggregate to a MAX over an
@@ -1740,6 +1814,28 @@ export async function queuePromotionJob(
   }
   // As for a landing: the runner that will run this check (or landing) is woken when this
   // transaction commits, rather than up to 30s from now on its heartbeat.
+  // §2.9 LS2: the enqueue fact, in the transaction that queued it. A promotion job's generation is
+  // its section in the round's timeline (`Merge check · 2`, `Merge to main · 1`).
+  await appendIntegrationJobEvent(tx, {
+    jobId: created.id,
+    key: 'enqueued',
+    kind: 'ENQUEUED',
+    claim: 0,
+    data: {
+      kind: input.kind,
+      generation,
+      targetRef: input.promotion.upstreamRef,
+      sourceRef: input.promotion.sourceRef,
+      ...(input.confirmedAutomatically ? { automatic: true } : {}),
+    },
+    text: enqueuedText({
+      kind: input.kind,
+      sourceRef: input.promotion.sourceRef,
+      targetRef: input.promotion.upstreamRef,
+      cause: input.cause,
+      automatic: input.confirmedAutomatically === true,
+    }),
+  });
   await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.promotion.sessionId));
   return created.id;
 }

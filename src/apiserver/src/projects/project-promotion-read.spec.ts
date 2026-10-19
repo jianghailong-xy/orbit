@@ -104,6 +104,8 @@ function prismaStub(
     // The generation the candidate's next job takes: raw SQL, read under this client
     // (see queuePromotionJob's comment).
     $queryRaw: async () => [{ generation: 0 }],
+    // The enqueue's timeline fact (migration 0438); this read-model spec does not draw the ledger.
+    $executeRaw: async () => 1,
     projectPromotion: {
       findFirst: async () => row(over.promotion),
       updateMany: async () => ({ count: 1 }),

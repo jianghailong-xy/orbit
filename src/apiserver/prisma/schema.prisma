@@ -3094,6 +3094,9 @@ model ProjectIntegrationJob {
   /// The chunks of check output uploaded under this attempt (migration 0437).
   logs ProjectIntegrationJobLog[]
 
+  /// The facts this attempt recorded, which the landing timeline is drawn from (migration 0438).
+  events ProjectIntegrationJobEvent[]
+
   @@index([state, createdAt, id], map: "project_integration_job_queued_idx")
   @@index([projectId, createdAt], map: "project_integration_job_project_idx")
   @@index([sessionId, createdAt], map: "project_integration_job_session_created_idx")
@@ -3136,6 +3139,57 @@ model ProjectIntegrationJobLog {
   @@unique([jobId, claimGeneration, round, checkName, checkIndex, seq], map: "project_integration_job_log_key")
   @@index([jobId, claimGeneration, round, checkIndex, seq], map: "project_integration_job_log_page_idx")
   @@map("project_integration_job_log")
+}
+
+/// One fact an integration attempt recorded (migration 0438, docs/project-integration-line-contract.md
+/// §2.9 LS2/LS4; design docs/landing-session-design.md §2.9).
+///
+/// The landing page's timeline is drawn from these rows. A fact is written by the door that decided
+/// it, in the same transaction as the job-gate write it describes; the claim and the takeover are the
+/// two exceptions, backfilled from the committed claim in an independent transaction right after
+/// `claimOne` returns (LS2). `(jobId, key)` is the identity, so a replayed fact — a resent result, a
+/// repeated progress report, a second stop press — is the row already stored.
+///
+/// `text` is the English sentence a client draws; `data` is the structured fields the same line is
+/// drawn with. Clients lay out and never build a sentence from the fields, which is what keeps the
+/// web, macOS/iOS and Android timelines saying the same thing.
+///
+/// Deliberately not `run_event`: a landing is platform work with no agent transcript, and this
+/// ledger must not feed the hot transcript table.
+model ProjectIntegrationJobEvent {
+  id              String @id @default(uuid(7)) @db.Uuid
+  jobId           String @map("job_id") @db.Uuid
+  job             ProjectIntegrationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  /// The fact's identity within its attempt (`enqueued`, `claim:2`, `result`, …).
+  key             String
+  /// The ledger's own order. `at` is when the fact happened, which is not always when it was
+  /// written and is the same `now()` for every fact one transaction appends; this is what orders
+  /// those, and what the page cursor continues from.
+  seq             BigInt   @default(autoincrement())
+  /// The closed set of facts, spelled in `projects/project-integration-event.ts` and migration 0438.
+  kind            String
+  /// The claim the fact happened under; 0 before the first claim.
+  claimGeneration BigInt   @default(0) @map("claim_generation")
+  round           Int?
+  checkName       String?  @map("check_name")
+  checkIndex      Int?     @map("check_index")
+  phase           String?
+  step            String?
+  /// OWNER | COORDINATOR | PLATFORM | RUNNER | AUTOMATIC, when the fact has a cause worth drawing.
+  actorType       String?  @map("actor_type")
+  actorSessionId  String?  @map("actor_session_id") @db.Uuid
+  actorUserId     String?  @map("actor_user_id") @db.Uuid
+  reason          String?
+  data            Json?
+  /// The sentence a client draws, written once here in English.
+  text            String
+  /// When the fact happened, which is not always when it was written.
+  at              DateTime @default(now()) @db.Timestamptz(3)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([jobId, key], map: "project_integration_job_event_key")
+  @@index([jobId, claimGeneration, round, at, seq], map: "project_integration_job_event_page_idx")
+  @@map("project_integration_job_event")
 }
 
 /// One landing's address, record and state (migration 0436, docs/project-integration-line-contract.md
