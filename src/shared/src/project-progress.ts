@@ -183,6 +183,49 @@ export interface ProjectIntegrationInFlight<Instant = string> {
    * queued, whose whole elapsed time IS the wait.
    */
   waitMs?: number | null;
+  /** The job this line describes. Absent on older servers. */
+  jobId?: string;
+  /** The landing session this job belongs to (§2.9). Absent until a server fills the slot. */
+  landingSessionId?: string | null;
+  /** The task it lands; null for a promotion or a merge check, which land no single task. */
+  taskId?: string | null;
+  /** The candidate a promotion job checks or lands; null for a task landing. */
+  promotionId?: string | null;
+  /** The runner holding the claim, by name; null while queued. Absent on older servers. */
+  runner?: string | null;
+  /** The claim generation the job is on: 0 before its first claim, one more per takeover. */
+  claim?: number;
+  /** The round inside the current claim, from 1, as the v2 reports name it; null before one. */
+  round?: number | null;
+  /** The check in flight under a v2 claim; null between checks and for a legacy claim. */
+  check?: ProjectIntegrationCheck<Instant> | null;
+  /** When the current step began (§7.2 V6's main clock); null on a client that never reported one. */
+  stepStartedAt?: Instant | null;
+  /** When the current step's output last moved; null when no report measured it. */
+  outputMovedAt?: Instant | null;
+  /** The protocol this job's current claim was written with: `'v2'`, or null for legacy. */
+  progressProtocol?: string | null;
+  /** How long this project's successful runs of the current MERGE_CHECK usually take; null for
+   *  every other check, and until there is a successful run to measure. */
+  typicalMs?: number | null;
+  /** §7.2 V6's read-time liveness; null for a job waiting its turn, which has no claim to judge. */
+  liveness?: IntegrationJobLiveness | null;
+  /** Why a queued job is not claimed, or why a claimed one waits on this runner's local lock. */
+  blockingReason?: IntegrationJobBlockingReason | null;
+}
+
+/** §7.2 V6's read-time liveness of an integration claim, derived from the row and never stored. */
+export type IntegrationJobLiveness = 'LIVE' | 'QUIET' | 'SILENT' | 'LEASE_EXPIRED' | 'LEGACY';
+
+/** The check a v2 claim is running, as its progress reports name it (§2.2 J-T4). The job row's
+ *  `checks` holds finished results in a different shape. */
+export interface ProjectIntegrationCheck<Instant = string> {
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  /** Position of this check in the run, from 1, and how many the run has in all. */
+  index: number;
+  count: number;
+  budgetSeconds: number;
+  startedAt: Instant;
 }
 
 /**
@@ -203,6 +246,9 @@ export interface ProjectIntegrationJob<Instant = string> {
   /** The task it lands; null for a promotion or a merge check, which land no single task. */
   taskId: string | null;
   taskTitle: string | null;
+  /** The candidate a promotion job checks or lands; null for a task landing. Absent on servers
+   *  that predate the field. */
+  promotionId?: string | null;
   /** Which landing of its subject this is, counting from 1. */
   generation: number;
   /** What "for how long" counts from, as on `inFlight`: the claim, or the enqueue. */
@@ -222,6 +268,28 @@ export interface ProjectIntegrationJob<Instant = string> {
    *  reports periodically, null for a legacy claim that only reports at step boundaries. Absent
    *  from a server older than the field. */
   progressProtocol?: string | null;
+  /** The claim generation the job is on: 0 before its first claim, one more per takeover. Absent
+   *  from a server older than the field. */
+  claim?: number;
+  /** The round inside the current claim, from 1, as the v2 reports name it; null before one. */
+  round?: number | null;
+  /** The check in flight under a v2 claim; null between checks and for a legacy claim. */
+  check?: ProjectIntegrationCheck<Instant> | null;
+  /** When the current step began (§7.2 V6's main clock); null on a legacy claim, which reports
+   *  only that a step started, and on a server that predates the column. */
+  stepStartedAt?: Instant | null;
+  /** When the current step's output last moved; null when no report measured it. */
+  outputMovedAt?: Instant | null;
+  /** How long this project's successful runs of the current MERGE_CHECK usually take; null for
+   *  every other check, and until there is a successful run to measure (§7.2 V6). */
+  typicalMs?: number | null;
+  /** §7.2 V6's read-time liveness; null for a job waiting its turn, which has no claim to judge.
+   *  `LEASE_EXPIRED` is the same fact as `timedOut`. */
+  liveness?: IntegrationJobLiveness | null;
+  /** Why a queued job is not claimed, or why a claimed one waits on this runner's local lock. */
+  blockingReason?: IntegrationJobBlockingReason | null;
+  /** The landing session this job belongs to (§2.9). Absent until a server fills the slot. */
+  landingSessionId?: string | null;
   /** Whether the owner's Retry (`POST /projects/:id/integration/jobs/:jobId/retry`) takes this job
    *  now. Clients draw the button from this rather than from `timedOut`, so which timed-out jobs a
    *  retry can end is the server's to say. */
@@ -264,21 +332,34 @@ export type TaskIntegrationHandler = 'COORDINATOR' | 'OWNER';
  * the same conditions the claim reads, in the claim's order; a client renders it and never derives
  * one from the task's status or from whether an exception card exists.
  *
+ *  - `CANCELLING`: a historical QUEUED row still carrying a stop request, which no claim takes.
+ *    J-T8 ends a queued job CANCELLED in the transaction that asks, so rows written since then
+ *    never read this way.
  *  - `WAITING_TASK_WORK`: the task's work session has not finished, so its branch can still move.
  *  - `WAITING_MAIN_SYNC`: another task's landing could not absorb upstream into this target, and
  *    its item is still open (M2) — the project line has to be synced first.
- *  - `WAITING_SERIAL_SLOT`: another job is running on the same repository and target branch.
  *  - `WAITING_RUNNER`: the runner of the work's workspace is offline, silent, draining, has no
  *    heartbeat lease or does not take integration jobs.
+ *  - `WAITING_AUTOMATIC_RUNNER`: the merge was confirmed by the Automatic setting, and the runner
+ *    that would claim it does not declare `promotion-automatic-land/v1` (M-T12).
+ *  - `WAITING_SERIAL_SLOT`: another job is running on the same repository and target branch.
  *  - `WAITING_DISPATCH`: nothing holds it; the next heartbeat of that runner claims it.
+ *  - `WAITING_LOCAL_LOCK`: a claimed job is waiting for this runner's own repository lock — a v2
+ *    claim reporting `step = WAITING_LOCAL_LOCK`, or a legacy claim whose runner already has an
+ *    earlier job on the same repository and target branch.
  *  - `CONFLICT` / `CHECK_FAILED` / `ERROR`: where a finished attempt stopped.
  *
  * A stopped attempt is not named here: a QUEUED job somebody cancels is ended CANCELLED in the
  * transaction that asks (J-T8), so no queued row waits on a cancellation.
  */
 export type LandTaskBlockingReasonCode =
-  | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_SERIAL_SLOT'
-  | 'WAITING_RUNNER' | 'WAITING_DISPATCH' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR';
+  | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_RUNNER'
+  | 'WAITING_AUTOMATIC_RUNNER' | 'WAITING_SERIAL_SLOT' | 'WAITING_DISPATCH'
+  | 'WAITING_LOCAL_LOCK' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR';
+
+/** Why any integration job — of any of the three kinds — waits or where it stopped. The shape
+ *  `landTask.blockingReason` has always used, carried on `inFlightJobs` entries as well (§7.2 V6). */
+export type IntegrationJobBlockingReason = LandTaskBlockingReason;
 
 /**
  * A task's newest `LAND_TASK` generation, as its own job row says it (§2.7a). Kept apart from the
