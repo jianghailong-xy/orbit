@@ -35,7 +35,15 @@ import {
   PROMOTION_AUTOMATIC_LAND,
   endTimedOutLanding,
   integrationJobLimitSeconds,
+  type TimeoutEndCause,
 } from './project-integration-job';
+import {
+  appendIntegrationJobEvent,
+  cancelledText,
+  readIntegrationJobTimeline,
+  stopRequestedText,
+  type IntegrationTimelineActorInput,
+} from './project-integration-event';
 import { readProjectIntegrationLog } from './project-integration-log';
 import { medianMs } from './project-promotion';
 import {
@@ -987,7 +995,10 @@ export interface IntegrationReadSelectors {
   claim?: number;
   round?: number;
   check?: number;
+  /** The check log's continuation. */
   cursor?: string;
+  /** The attempt timeline's own continuation; the two pages are paged independently. */
+  timelineCursor?: string;
 }
 
 /** One merge candidate's row, before its newest jobs are attached. */
@@ -1156,7 +1167,7 @@ export async function readProjectIntegrationRead(
   project: { id: string; title: string; exceptionEscalationSeconds: number },
   selectors: IntegrationReadSelectors,
 ): Promise<ProjectIntegrationRead<Date>> {
-  const [settings, queue, landTasks, promotionViews, log] = await Promise.all([
+  const [settings, queue, landTasks, promotionViews, log, timeline] = await Promise.all([
     readProjectCodebase(prisma, project.id).then((row) =>
       projectIntegrationView(row, project.exceptionEscalationSeconds)),
     readInFlightJobs(prisma, project.id),
@@ -1166,6 +1177,17 @@ export async function readProjectIntegrationRead(
     // to page, and a caller that did not ask for one reads the shape it always did.
     selectors.jobId
       ? readProjectIntegrationLog(prisma, project.id, selectors.jobId, selectors)
+      : Promise.resolve(null),
+    // §2.9 LS2: the attempt's own timeline, pageable by job, claim and round. Its cursor is its
+    // own (`timelineCursor`), so a caller may read the log and the timeline of one attempt in the
+    // same request without the two continuations colliding.
+    selectors.jobId
+      ? readIntegrationJobTimeline(prisma, project.id, {
+        jobId: selectors.jobId,
+        ...(selectors.claim !== undefined ? { claim: selectors.claim } : {}),
+        ...(selectors.round !== undefined ? { round: selectors.round } : {}),
+        ...(selectors.timelineCursor ? { cursor: selectors.timelineCursor } : {}),
+      })
       : Promise.resolve(null),
   ]);
   const promotions = attachQueueFacts(promotionViews, queue);
@@ -1183,8 +1205,10 @@ export async function readProjectIntegrationRead(
       round: selectors.round ?? null,
       check: selectors.check ?? null,
       cursor: selectors.cursor ?? null,
+      ...(selectors.timelineCursor ? { timelineCursor: selectors.timelineCursor } : {}),
     },
     ...(log ? { log } : {}),
+    ...(timeline ? { timeline } : {}),
   };
 }
 
@@ -1329,7 +1353,16 @@ export type InFlightStop =
  */
 export async function stopInFlightJob(
   tx: Prisma.TransactionClient,
-  input: { projectId: string; jobId: string; now: Date },
+  input: {
+    projectId: string;
+    jobId: string;
+    now: Date;
+    /** Which door stopped it: the timeline's `TIMED_OUT` cause and the stop line's data. */
+    cause?: TimeoutEndCause;
+    /** Who pressed, when a person or a conversation did; the platform otherwise. */
+    actor?: IntegrationTimelineActorInput;
+    reason?: string | null;
+  },
 ): Promise<InFlightStop> {
   const [job] = await readInFlightJobs(tx, input.projectId, input.jobId);
   if (!job) return { outcome: 'NONE', errorCode: null };
@@ -1339,10 +1372,27 @@ export async function stopInFlightJob(
       where: { id: input.jobId, state: 'QUEUED' },
       data: { state: 'CANCELLED', cancelRequestedAt: input.now, finishedAt: input.now },
     });
-    if (ended.count === 1) return { outcome: 'CANCELLED', errorCode: null };
+    if (ended.count === 1) {
+      // §2.9 LS2: a queued generation stopped here ends CANCELLED in this transaction — nothing
+      // was ever pushed, so the timeline says so and names who pressed.
+      await appendIntegrationJobEvent(tx, {
+        jobId: input.jobId,
+        key: 'cancelled',
+        kind: 'CANCELLED',
+        claim: job.claim ?? 0,
+        round: job.round ?? null,
+        phase: job.phase,
+        actor: input.actor ?? { type: 'PLATFORM' },
+        reason: input.reason ?? null,
+        data: { cause: input.cause ?? 'STOP', state: 'CANCELLED' },
+        text: cancelledText(),
+        at: input.now,
+      });
+      return { outcome: 'CANCELLED', errorCode: null };
+    }
     // It was claimed between the read and the write: fall through and ask that claim to stop.
   } else if (job.timedOut) {
-    const errorCode = await endTimedOutLanding(tx, job);
+    const errorCode = await endTimedOutLanding(tx, job, input.cause ?? 'STOP');
     if (errorCode !== null) {
       return { outcome: 'ENDED', errorCode };
     }
@@ -1354,7 +1404,25 @@ export async function stopInFlightJob(
     where: { id: input.jobId, state: 'RUNNING', cancelRequestedAt: null },
     data: { cancelRequestedAt: input.now },
   });
-  if (asked.count === 1) return { outcome: 'STOP_REQUESTED', errorCode: null };
+  if (asked.count === 1) {
+    // J-T8 / J-T12: a live claim that is still reporting is only ASKED. The runner answers
+    // CANCELLED (or a result that got past the push) and the result transaction writes the outcome;
+    // this line is the ask, with the actor and the reason it was given.
+    await appendIntegrationJobEvent(tx, {
+      jobId: input.jobId,
+      key: 'stop-requested',
+      kind: 'STOP_REQUESTED',
+      claim: job.claim ?? 0,
+      round: job.round ?? null,
+      phase: job.phase,
+      actor: input.actor ?? { type: 'PLATFORM' },
+      reason: input.reason ?? null,
+      data: { cause: input.cause ?? 'STOP' },
+      text: stopRequestedText(job.claim ?? null),
+      at: input.now,
+    });
+    return { outcome: 'STOP_REQUESTED', errorCode: null };
+  }
   // A second stop of the same claim (already asked), or a result that ended it first.
   const [after] = await readInFlightJobs(tx, input.projectId, input.jobId);
   return after?.state === 'RUNNING'

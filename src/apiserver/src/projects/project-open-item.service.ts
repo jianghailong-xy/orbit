@@ -1834,7 +1834,7 @@ export class ProjectOpenItemService {
         ownerBlockers,
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
-      if (decision.endsTimedOutJob && (silent ? await endTimedOutLanding(tx, silent) : null) === null) {
+      if (decision.endsTimedOutJob && (silent ? await endTimedOutLanding(tx, silent, 'RETRY') : null) === null) {
         throw new ConflictException({
           code: INTEGRATION_RETRY_IN_FLIGHT,
           message: 'this landing\'s runner reported again while the retry was being decided, so it has not '
@@ -2030,7 +2030,13 @@ export class ProjectOpenItemService {
          WHERE "project_id" = ${projectId}::uuid AND "slot" = 'primary'
          FOR UPDATE`);
       const stoppedAt = new Date();
-      const stopped = await stopInFlightJob(tx, { projectId, jobId: landing.id, now: stoppedAt });
+      const stopped = await stopInFlightJob(tx, {
+        projectId,
+        jobId: landing.id,
+        now: stoppedAt,
+        cause: 'STOP',
+        actor: { type: 'OWNER', userId: ownerId },
+      });
       if (stopped.outcome === 'NONE') {
         throw new ConflictException({
           code: INTEGRATION_STOP_NOT_APPLICABLE,
@@ -2356,7 +2362,7 @@ export class ProjectOpenItemService {
         openItems,
       });
       if (!decision.ok) throw new HttpException(decision.body, decision.status);
-      if (decision.endsTimedOutJob && (silent ? await endTimedOutLanding(tx, silent) : null) === null) {
+      if (decision.endsTimedOutJob && (silent ? await endTimedOutLanding(tx, silent, 'RECHECK') : null) === null) {
         throw new ConflictException({
           code: INTEGRATION_RETRY_IN_FLIGHT,
           message: 'this check\'s runner reported again while the retry was being decided, so it has not '

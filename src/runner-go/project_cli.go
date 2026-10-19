@@ -35,7 +35,7 @@ const projectHelp = `orbit project — read and write an Orbit project's durable
 
 Usage:
   orbit project get PROJECT_ID [--json]
-  orbit project integration PROJECT_ID [--job-id ID] [--cursor CURSOR] [--json]
+  orbit project integration PROJECT_ID [--job-id ID] [--claim N] [--round N] [--check N] [--cursor CURSOR] [--timeline-cursor CURSOR] [--json]
   orbit project crossings PROJECT_ID [--state STATE] [--json]
   orbit project ensure-coordinator PROJECT_ID [--json]
   orbit project send PROJECT_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--expect-reply [--reply-options JSON] [--reply-within-seconds N]] [--json]
@@ -97,7 +97,7 @@ PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID w
 	"integration": `orbit project integration — read this project's integration line: the queue and what each attempt is doing
 
 Usage:
-  orbit project integration PROJECT_ID [--job-id ID] [--cursor CURSOR] [--json]
+  orbit project integration PROJECT_ID [--job-id ID] [--claim N] [--round N] [--check N] [--cursor CURSOR] [--timeline-cursor CURSOR] [--json]
 
 The line is where the project's finished work lands, and this is the read of what is happening on
 it: every QUEUED and RUNNING job across all three kinds (a task landing, a merge candidate's
@@ -109,13 +109,18 @@ the same facts through the interface that is allowed to serve them.
 Inside a session it is read as that session, which must belong to the project (its coordinator, a
 session of one of its tasks, or a child of one). Logged in as yourself it calls the user route and
 answers the line as the project page shows it. --job-id names one attempt and serves what its
-checks printed under 'log'; --cursor continues that page. Without --job-id the line is served as it
-always was.
+checks printed under 'log' and its attempts' ordered facts under 'timeline'; --claim, --round and
+--check narrow either page, --cursor continues the check page and --timeline-cursor continues the
+timeline page. Without --job-id the line is served as it always was.
 
 Options:
-  --job-id ID              narrow the page to one job
-  --cursor CURSOR          continue a paged read
-  --json                   emit compact JSON
+  --job-id ID                 narrow the page to one job
+  --claim N                   narrow the page to one claim generation, from 0
+  --round N                   narrow the page to one round inside the claim, from 1
+  --check N                   narrow the check log to one check's position, from 1
+  --cursor CURSOR             continue a paged read
+  --timeline-cursor CURSOR    continue the attempt timeline page
+  --json                      emit compact JSON
 `,
 	"ensure-coordinator": `orbit project ensure-coordinator — take the conversation that coordinates this project, opening the next one only when the standing one cannot take a message
 
@@ -493,7 +498,7 @@ PROJECT_ID is the id shown in the web UI URL (e.g. /projects/<id>); a raw UUID w
 
 var projectCLICapabilities = []cliCapabilitySpec{
 	{Tool: "project_get", Argv: []string{"orbit", "project", "get"}, Usage: "orbit project get PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}},
-	{Tool: "project_integration_get", Argv: []string{"orbit", "project", "integration"}, Usage: "orbit project integration PROJECT_ID [--job-id ID] [--cursor CURSOR] [--json]", Arguments: []string{"[project-id] (required)", "--job-id <id> (narrow the read to one job)", "--cursor <cursor> (continue a paged read)", "--json"}, Description: "Read this project's integration line: every QUEUED and RUNNING job across all three kinds (LAND_TASK, CHECK_PROMOTION, LAND_PROMOTION) in the queue's order, why each waits or where it stopped (blockingReason), every current generation with its jobId, generation, state, phase, errorCode, round and the check it is running, each task's newest landing, and each live or last-merged candidate's newest check and merge. Read this instead of querying the production database: these are the same facts, served by the interface that is allowed to serve them. Read only. Inside a session the acting session must belong to the project — its coordinator, a session of one of its tasks, or a child of one; another project's session is refused, as is another account's project. --job-id names one attempt and serves what its checks printed under `log`; --cursor continues that page."},
+	{Tool: "project_integration_get", Argv: []string{"orbit", "project", "integration"}, Usage: "orbit project integration PROJECT_ID [--job-id ID] [--claim N] [--round N] [--check N] [--cursor CURSOR] [--timeline-cursor CURSOR] [--json]", Arguments: []string{"[project-id] (required)", "--job-id <id> (narrow the read to one job)", "--claim <n> (narrow the page to one claim generation, from 0)", "--round <n> (narrow the page to one round inside the claim, from 1)", "--check <n> (narrow the check log to one check's position, from 1)", "--cursor <cursor> (continue the check log page)", "--timeline-cursor <cursor> (continue the attempt timeline page)", "--json"}, Description: "Read this project's integration line: every QUEUED and RUNNING job across all three kinds (LAND_TASK, CHECK_PROMOTION, LAND_PROMOTION) in the queue's order, why each waits or where it stopped (blockingReason), every current generation with its jobId, generation, state, phase, errorCode, round and the check it is running, each task's newest landing, and each live or last-merged candidate's newest check and merge. Read this instead of querying the production database: these are the same facts, served by the interface that is allowed to serve them. Read only. Inside a session the acting session must belong to the project — its coordinator, a session of one of its tasks, or a child of one; another project's session is refused, as is another account's project. --job-id names one attempt and serves what its checks printed under `log` and its timeline under `timeline`; --claim, --round and --check narrow either page, --cursor continues the log page and --timeline-cursor continues the timeline page."},
 	{Tool: "project_crossings", Argv: []string{"orbit", "project", "crossings"}, Usage: "orbit project crossings PROJECT_ID [--state STATE] [--json]", Arguments: []string{"[project-id] (required)", "--state <PENDING|APPROVED|DENIED|APPLIED> (only crossings in that state)", "--json"}, Description: "Read every declared cross-project crossing this project is an end of, in BOTH directions — the ones asking to move work INTO it and the ones asking to move work OUT. Each row names the two ends by title and by id, what the crossing is about, its state, the crossing key that identifies the move itself, and when it was asked, answered and expires. Read it when a write was refused CROSS_PROJECT_APPROVAL_REQUIRED or APPROVAL_PENDING: that refusal is about a row in this list, and this is how you learn whether the question has been asked, is still waiting, was refused, or has already been spent. Read only, and deliberately: the approver of a cross-project crossing is the USER, never the target project's coordinator — one agent accepting work on another goal's behalf is the failure the boundary exists to prevent — so point the account owner at the project page to answer it."},
 	{Tool: "project_ensure_coordinator", Argv: []string{"orbit", "project", "ensure-coordinator"}, Usage: "orbit project ensure-coordinator PROJECT_ID [--json]", Arguments: []string{"[project-id] (required)", "--json"}, Description: "The session that coordinates this project, opening a replacement ONLY when the conversation the project points at can no longer be handed a message — no runner, an offline runner, a run that never started, a row in Trash, or a run that was replaced (§13.6 SU6) — and never displacing a conversation that can still receive one: alive, or ended in a way its runner can still revive, comes back as created:false with that same sessionId and not one row written. So created:false means that session is the one to send to (`orbit session send --resume-if-ended`), and created:true carries replacedSessionId and replaceReason saying what the replacement left behind. The refusal that stays is COORDINATOR_UNAVAILABLE (owner: USER, requiredAction: rebind): the project's coordination workspace is disabled, trashed or no longer recorded, and where a project's coordination lives is the account owner's decision (§8.2) — so that refusal is theirs to act on, and a retry answers the same thing. The acting session is never the one replaced, and a project with no coordinator at all gets its FIRST one, freely landed where its work already runs. This command acts for the session it runs in, and it is advertised only where the orchestration grant it spends exists.", Mutates: true, RequiresOrchestration: true},
 	{Tool: "project_send", Argv: []string{"orbit", "project", "send"}, Usage: "orbit project send PROJECT_ID (--message TEXT | --message-file -) [--client-turn-id ID] [--json]", Arguments: []string{"[project-id] (required)", "--message <text> | --message-file - (required)", "--client-turn-id <id> (idempotency key: repeat it on a retry to get the same turn back)", "--expect-reply", "--reply-options <json array of {label, description}>", "--reply-within-seconds <n> (60-2592000)", "--json"}, Description: "Hand one message to this project's coordinator, addressed by the PROJECT rather than by a session id: the conversation is resolved at the moment the message is DELIVERED, which is the whole of what this adds to project_ensure_coordinator — the id that call answers with is invalidated by a rotation the caller cannot see, and a message sent to it then reaches a reader instead of the project. A conversation that can be handed the message is delivered to and NOT displaced, an ended one whose runner can still revive it included: that case is a REVIVE (what `orbit session send --resume-if-ended` does) rather than a replacement. Only a conversation that cannot take a message at all is replaced — by the same rotation ensure-coordinator performs — and the message goes to the replacement in the same call. The response says what happened rather than what was asked for: created and sessionId name the conversation the message is on, and replacedSessionId/replaceReason are present only when this call rotated to get there. The refusal that stays is COORDINATOR_UNAVAILABLE (409, owner: USER, requiredAction: rebind) — where a project's coordination lives is the account owner's decision, so that one is theirs to act on and a retry answers the same thing — while a write refused after a coordinator WAS found comes back as COORDINATOR_MESSAGE_UNDELIVERED with the sentence that refused it inside. --client-turn-id is the key the message is written under and what makes a retry safe: repeat a call whose answer you never saw with the same key and the same message, and you get that same turn back instead of a second copy; omitted, the server mints one and every call is a new message. The acting session is the authority and there is no headless form: an agent delivers from a session this runner is running, and this command is advertised only where the orchestration grant it spends exists. --expect-reply makes it a request to the coordinator it is delivered to: the call returns at once with requestId and replyBy, and the outcome comes back to this session as a turn.", Mutates: true, RequiresOrchestration: true},
@@ -601,7 +606,11 @@ func cliProjectIntegrationGet(args []string, out io.Writer) error {
 	id, rest := peelLeadingID(args)
 	fs := newCLIFlagSet("orbit project integration")
 	jobID := fs.String("job-id", "", "narrow the read to one job")
-	cursor := fs.String("cursor", "", "continue a paged read")
+	claim := fs.String("claim", "", "narrow the page to one claim generation, from 0")
+	round := fs.String("round", "", "narrow the page to one round inside the claim, from 1")
+	check := fs.String("check", "", "narrow the check log to one check's position, from 1")
+	cursor := fs.String("cursor", "", "continue the check log page")
+	timelineCursor := fs.String("timeline-cursor", "", "continue the attempt timeline page")
 	jsonOut := fs.Bool("json", false, "emit compact JSON")
 	if err := fs.Parse(rest); err != nil {
 		return err
@@ -628,7 +637,7 @@ func cliProjectIntegrationGet(args []string, out io.Writer) error {
 				"it from the session that coordinates the project, or `orbit login` first")
 		}
 	}
-	raw, err := t.getProjectIntegration(sessionID, id, *jobID, *cursor)
+	raw, err := t.getProjectIntegration(sessionID, id, *jobID, *claim, *round, *check, *cursor, *timelineCursor)
 	if err != nil {
 		return fmt.Errorf("read project integration: %w", err)
 	}
