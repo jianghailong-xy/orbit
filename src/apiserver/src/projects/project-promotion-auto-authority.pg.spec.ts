@@ -1017,7 +1017,16 @@ test(`(d) main moving under ${AUTOMATIC_MERGE_ATTEMPTS} automatic landings in a 
           sourceSha: LANDED_ON_LINE,
           targetShaBefore: movedMain(attempt),
           upstreamSha: movedMain(attempt),
+          // J-T13: an automatic landing reports the move like any other, and the row keeps it even
+          // though the answer is READY (the candidate is checked again, not re-queued).
+          upstreamMovedCommits: { total: 1, commits: [{ sha: movedMain(attempt), subject: `moved ${attempt}` }] },
         });
+        const carried = await landingRow(stack.db, land.jobId);
+        assert.equal(
+          (carried.upstreamMovedCommits as unknown as UpstreamMovedCommitsEnriched).commits[0]!.sha,
+          movedMain(attempt),
+          `landing ${attempt}: the row carries the commits the runner measured`,
+        );
         if (attempt === AUTOMATIC_MERGE_ATTEMPTS) {
           assert.ok(cameBack.openItemId, `landing ${attempt} found main moved again: the owner is asked`);
           break;
