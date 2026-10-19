@@ -1,0 +1,18 @@
+head e355523e5f71afdd427421f6215f4eb4c3336de5 status '' 2026-10-19T15:11:04Z
+start 00-overlay 2026-10-19T15:11:04Z
+end 00-overlay exit=0 0 s 2026-10-19T15:11:04Z
+start 01-compose-topology 2026-10-19T15:11:04Z
+end 01-compose-topology exit=0 0 s 2026-10-19T15:11:04Z
+start 02-prisma-generate 2026-10-19T15:11:04Z
+end 02-prisma-generate exit=0 2 s 2026-10-19T15:11:06Z
+start 03-build 2026-10-19T15:11:06Z
+end 03-build exit=0 6 s 2026-10-19T15:11:12Z
+start 04-shared 2026-10-19T15:11:12Z
+end 04-shared exit=0 1 s 2026-10-19T15:11:13Z
+start 05-apiserver 2026-10-19T15:11:13Z
+end 05-apiserver exit=0 33 s 2026-10-19T15:11:46Z
+start 06-web 2026-10-19T15:11:46Z
+end 06-web exit=0 180 s 2026-10-19T15:14:46Z
+start 07-managed-runner-python 2026-10-19T15:14:46Z
+end 07-managed-runner-python exit=0 8 s 2026-10-19T15:14:54Z
+done 2026-10-19T15:14:54Z
