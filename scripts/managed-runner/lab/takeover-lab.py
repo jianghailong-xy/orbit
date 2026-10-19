@@ -26,7 +26,7 @@ fencing gate:
              writer goes on from the first node; then the taint is removed and the node rejoins
   final      consistency, one Pod per volume over the whole timeline, Ceph; ann asleep, the window closed
 
-  takeover-lab.py run --out DIR [--from PHASE] [--to PHASE] [--observe SECONDS]
+  takeover-lab.py run --out DIR [--from PHASE | --from-step PHASE/STEP] [--to PHASE] [--observe SECONDS]
   takeover-lab.py record-loop SECONDS        the recorder unit's loop (started by the run)
   takeover-lab.py secret-scan PATH...        no credential of the run in these files
   takeover-lab.py report OUT                 the steps' times and checks, and the intervals the README quotes
@@ -698,8 +698,10 @@ def duplicate_rwo(ctx, step):
     messages = sorted({f"{e['reason']}: {e['message']}" for e in events})
     step.check('the guard admits Pods on a plain claim: both exist', sorted(p['name'] for p in view['podsOnTheClaim']) == sorted([first, second]),
                view['podsOnTheClaim'])
-    step.check(f'the second Pod, on {NODES[2]}, is not running: the attach/detach controller refuses a second node for an RWO volume (Multi-Attach)',
-               second_view['phase'] == 'Pending' and any('Multi-Attach' in message for message in messages), {'phase': second_view['phase'], 'events': messages})
+    # Kubernetes 1.36 says "Waiting for detach for volume ... Volume is already used by pod(s) ..."; earlier releases "Multi-Attach error ...".
+    step.check(f'the second Pod, on {NODES[2]}, is not running: the attach/detach controller refuses a second node for an RWO volume',
+               second_view['phase'] == 'Pending' and any(m.startswith('FailedAttachVolume') and ('already used by pod' in m or 'Multi-Attach' in m) for m in messages),
+               {'phase': second_view['phase'], 'events': messages})
     step.check(f'one VolumeAttachment, to {NODES[1]}', [a['node'] for a in view['volumeAttachments']] == [NODES[1]], view['volumeAttachments'])
     step.check(f'mapped by {NODES[1]} only', bool(mapped_on(view, 1)) and not mapped_on(view, 2), {n: mapped_on(view, n) for n in (1, 2)})
     # Clean up: the Pods, then the claim, its PV and its image (Retain keeps the PV and the image otherwise).
@@ -1233,6 +1235,12 @@ def cmd_run(args):
     plan = phases()
     names = [name for name, _ in plan]
     first = names.index(args.from_phase) if args.from_phase else 0
+    resume = None
+    if args.from_step:  # PHASE/STEP: a run that stopped there goes on from that step, its context kept
+        phase, _, resume = args.from_step.partition('/')
+        first = names.index(phase)
+        if resume not in [label for label, _ in plan[first][1]]:
+            raise SystemExit(f'no step {args.from_step}')
     last = names.index(args.to_phase) if args.to_phase else len(names) - 1
     ctx = al.load_context()
     ctx.update(out=str(out), observeSeconds=args.observe)
@@ -1240,6 +1248,10 @@ def cmd_run(args):
     run_started = time.monotonic()
     for phase, steps in plan[first:last + 1]:
         for label, function in steps:
+            if resume:
+                if label != resume:
+                    continue
+                resume = None
             number += 1
             step = Step()
             started_at, started = now(), time.monotonic()
@@ -1323,6 +1335,7 @@ def main():
     start = sub.add_parser('run')
     start.add_argument('--out', required=True)
     start.add_argument('--from', dest='from_phase')
+    start.add_argument('--from-step', dest='from_step', help='PHASE/STEP: go on from that step of a run that stopped there')
     start.add_argument('--to', dest='to_phase')
     start.add_argument('--observe', type=int, default=420, help='seconds after the cut with no fencing (default 420)')
     sub.add_parser('record-loop').add_argument('seconds', type=int)
