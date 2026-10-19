@@ -1041,10 +1041,9 @@ export const wikiHealthQuery = (spaceId: string | null) =>
   });
 
 /**
- * The deployment's System model and the executor switch as it stands for this account (`GET /api/wiki/system-model`,
- * contracts `systemModel.read` and `jobs.executor.read`): what the wiki settings page reads to draw the System model
- * instead of the provider. `null` is a control plane from before the read (a 404 that is not the wiki being off),
- * which runs nothing on the server — the page is then what it always was.
+ * The deployment's System model and who executes this account's wiki (`GET /api/wiki/system-model`, contracts
+ * `systemModel.read` and `jobs.executor.read`): what the wiki settings page reads to draw the System model. `null` is
+ * a control plane from before the read (a 404 that is not the wiki being off): the page then draws no System model.
  */
 export const wikiSystemModelQuery = () =>
   queryOptions({

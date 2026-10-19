@@ -127,9 +127,9 @@ describe('Activity’s status line', () => {
     expect(unreachable).toContain('<span class="wk-maint wk-maint--warn"><span class="wk-maint-dot" aria-hidden="true"></span><b>System model unreachable</b></span>');
     const refused = statusRow(paint(shared.cases.find((one) => one.text.includes('System model refused the key'))!.health));
     expect(refused).toContain('<span class="wk-maint wk-maint--error"><span class="wk-maint-dot" aria-hidden="true"></span><b>System model refused the key</b></span>');
-    // Under runner the line says nothing of the server, whatever the runner is doing.
-    const runner = shared.cases.find((one) => one.health.executor && !one.health.executor.serverExecutes)!;
-    expect(statusRow(paint(runner.health))).not.toMatch(/System model|runner to come online|Upgrade the runner/u);
+    // A read that does not say the server executes the account's wiki says no server reason, whatever the runner is doing.
+    const offline = shared.cases.find((one) => one.health.repo?.look === 'runner_offline' && one.health.maintenance.enabled)!;
+    expect(statusRow(paint({ ...offline.health, executor: undefined }))).not.toMatch(/System model|runner to come online|Upgrade the runner/u);
   });
 
   it('leads View run of a run the server\'s job made to its row on Activity, which has no session to open', () => {

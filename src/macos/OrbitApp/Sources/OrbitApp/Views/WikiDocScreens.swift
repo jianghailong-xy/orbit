@@ -7,7 +7,7 @@ import OrbitKit
 // pane shows the top of. The pages themselves know neither.
 
 extension AppModel {
-    /// The workspace the space's maintenance runs in, as this client holds it.
+    /// The workspace the space's maintenance reads the repository from, as this client holds it.
     private var wikiMaintenanceAgent: Agent? { wikiMaintenanceAgent(of: wiki?.currentSpace) }
 
     private func wikiMaintenanceAgent(of space: WikiSpace?) -> Agent? {
@@ -27,15 +27,6 @@ extension AppModel {
         guard let runner = wikiMaintenanceAgent(of: space)?.runnerId, let online = agents?.runnerOnline else { return nil }
         return online.first { PublicID.storageKey($0.key) == PublicID.storageKey(runner) }?.value
     }
-
-    /// Where a draft runs: `orbit · wikova`, the workspace and its runner.
-    var wikiMaintenanceWhere: String? {
-        guard let agent = wikiMaintenanceAgent else { return nil }
-        return WikiModeLogic.workspaceLabel(name: agent.name, runner: agent.runnerId.flatMap { agents?.runnerNames[$0] })
-    }
-
-    /// On what: the provider the space's maintenance is pinned to.
-    var wikiMaintenanceProvider: String? { wiki?.currentSpace?.settings?.maintenance?.provider }
 }
 
 // MARK: - a document
@@ -148,7 +139,6 @@ struct WikiPlanScreen: View {
                 .task {
                     await wiki.loadPlan()
                     await wiki.loadDocsDirectory()
-                    await wiki.loadSystemModel()
                     if let version = address.version { await wiki.loadPlanVersion(version) }
                 }
                 .refreshable { await wiki.loadPlan() }
@@ -214,15 +204,14 @@ struct WikiPlanScreen: View {
         let failed = WikiPlanLogic.failedJob(state)
         let inForce = shown?.status == .confirmed && state.confirmed?.version == shown?.version
         let online = model.wikiMaintenanceRunnerOnline
-        let card = WikiPlanLogic.jobCard(state.job, now: Date(), runnerOnline: online, serverExecutes: wiki.serverExecutes,
+        let card = WikiPlanLogic.jobCard(state.job, now: Date(), runnerOnline: online,
                                          failed: shown?.status == .failed ? failed : nil,
                                          inForce: inForce, directory: wiki.docsDirectory)
         let rows = WikiPlanLogic.versionRows(wiki.planVersions, failed: failed.map { job -> (version: Int, at: String?) in
             (WikiPlanLogic.nextVersion(state), job.endedAt)
         })
         return WikiPlanPage(state: state, shown: shown, base: shown.flatMap { WikiPlanLogic.base(of: $0, in: state) }, versions: rows,
-                            jobCard: card, written: written(wiki), whereItRuns: model.wikiMaintenanceWhere,
-                            provider: model.wikiMaintenanceProvider, serverExecutes: wiki.serverExecutes,
+                            jobCard: card, written: written(wiki),
                             busy: wiki.busy, refused: refused, actions: actions(wiki))
     }
 
@@ -338,11 +327,9 @@ struct WikiPlanScreen: View {
     private func redraftSheet(_ wiki: WikiModel) -> some View {
         let newest = wiki.plan.flatMap(WikiPlanLogic.newest)
         let protected = newest.map { WikiPlanLogic.fromVersion($0).docs.filter(\.protected).map(\.number) } ?? []
-        WikiPlanRedraftSheet(note: WikiPlanCopy.redraftNote(provider: model.wikiMaintenanceProvider,
-                                                            from: newest.map { version -> (version: Int, inForce: Bool) in
+        WikiPlanRedraftSheet(note: WikiPlanCopy.redraftNote(from: newest.map { version -> (version: Int, inForce: Bool) in
                                                                 (version.version, version.status == .confirmed)
-                                                            },
-                                                            serverExecutes: wiki.serverExecutes),
+                                                            }),
                              protectedDocs: protected) { words in await redraft(wiki, words, failure: WikiCopy.planRedraftFailed) }
     }
 

@@ -331,7 +331,10 @@ final class WikiContractTests: XCTestCase {
         let settings = try object(try object(contract()["space"], "space")["settings"], "space.settings")
         let maintenance = try object(settings["maintenance"], "space.settings.maintenance")
         let defaults = try object(maintenance["default"], "space.settings.maintenance.default")
-        XCTAssertEqual(Set(defaults.keys), Set(WikiMaintenanceSettings.CodingKeys.allCases.map(\.rawValue)))
+        // The read's provider and listId are history from before server execution, which this client does not read.
+        let history: Set<String> = ["provider", "listId"]
+        XCTAssertTrue(history.isSubset(of: Set(defaults.keys)), "the read still carries the history keys")
+        XCTAssertEqual(Set(defaults.keys).subtracting(history), Set(WikiMaintenanceSettings.CodingKeys.allCases.map(\.rawValue)))
         let data = try JSONSerialization.data(withJSONObject: defaults)
         XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: data), .default)
         XCTAssertFalse(WikiMaintenanceSettings.default.enabled, "maintenance is off until the owner turns it on")
@@ -366,8 +369,7 @@ final class WikiContractTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: Data("{}".utf8)).lookbackDays, 14,
                        "a look-back left out is the default, not all of history")
         // All of history survives a round trip, and an update sends it as null: a key left out changes nothing.
-        let all = WikiMaintenanceSettings(enabled: true, workspaceId: "w", provider: "local-vllm", dailyRunLimit: 8,
-                                          lookbackDays: nil, listId: "l")
+        let all = WikiMaintenanceSettings(enabled: true, workspaceId: "w", dailyRunLimit: 8, lookbackDays: nil)
         XCTAssertEqual(try JSONDecoder().decode(WikiMaintenanceSettings.self, from: JSONEncoder().encode(all)), all)
         func sent(_ update: WikiMaintenanceUpdate) throws -> [String: Any] {
             try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(update)) as? [String: Any])

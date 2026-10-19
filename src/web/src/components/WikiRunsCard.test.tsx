@@ -6,7 +6,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WikiJobCallView, WikiJobView, WikiSpaceHealth, WikiSystemModelStatus } from '@orbit/shared';
+import { WIKI_EXECUTOR_READ, type WikiJobCallView, type WikiJobView, type WikiSpaceHealth, type WikiSystemModelStatus } from '@orbit/shared';
 import type { WikiSpaceRow } from '../lib/wiki';
 import { WikiRunsCard } from './WikiRunsCard';
 
@@ -54,7 +54,8 @@ function health(serverExecutes: boolean, systemModel: WikiSystemModelStatus | nu
       look: 'off', enabled: false, lastOkAt: null, lastRunAt: null, consecutiveFailures: 0, backlog: 0, oldestPendingAt: null,
       lagSeconds: 0, dailyLimitReached: false, held: null, running: null, lastRun: null, lastFailure: null,
     },
-    executor: { mode: serverExecutes ? 'canary' : 'runner', serverExecutes },
+    // What every server since P11 says, or a read from before the field.
+    executor: serverExecutes ? WIKI_EXECUTOR_READ : undefined,
     systemModel,
   };
 }
@@ -153,23 +154,16 @@ describe('the Runs card', () => {
     expect(container.querySelector('.wk-jobs-card a[href*="/sessions/"], .wk-jobs-card a[href*="/tasks/"]')).toBeNull();
   });
 
-  it('is drawn while the server executes the wiki, with nothing yet — and not under runner', async () => {
+  it('is drawn while the server executes the wiki, with nothing yet — and not while the read does not say so', async () => {
     await mount(health(true), []);
     expect(words(container.querySelector('.wk-jobs-card .wk-empty'))).toBe(shared.runs.none);
-    act(() => root.unmount());
-    root = createRoot(container);
-    await mount(health(false), []);
-    expect(container.querySelector('.wk-jobs-card')).toBeNull();
-    act(() => root.unmount());
-    root = createRoot(container);
-    // A control plane from before the read answers null, and an account the server never ran anything for draws nothing.
-    await mount(health(false), null);
-    expect(container.querySelector('.wk-jobs-card')).toBeNull();
-    act(() => root.unmount());
-    root = createRoot(container);
-    // Runs the server made before the switch went back to runner are still the space's to see.
-    await mount(health(false), [shared.runs.cases[10].job]);
-    expect(container.querySelectorAll('.wk-jobs-card .wk-job-row')).toHaveLength(1);
+    // A read that does not say the server executes the account's wiki draws no card, whatever the jobs read answers.
+    for (const jobs of [[], null, [shared.runs.cases[10].job]]) {
+      act(() => root.unmount());
+      root = createRoot(container);
+      await mount(health(false), jobs);
+      expect(container.querySelector('.wk-jobs-card')).toBeNull();
+    }
   });
 
   it('says the model’s state on its head as the settings page does', async () => {

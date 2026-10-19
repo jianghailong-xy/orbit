@@ -19,7 +19,6 @@ import {
   wikiModelTone,
   wikiRunFootText,
   wikiRunRow,
-  wikiRunsShown,
   wikiSystemModelLabel,
   type WikiCallRow,
 } from './wikiRuns';
@@ -31,12 +30,10 @@ import {
   WIKI_MAINTENANCE_NOTE_SERVER,
   WIKI_MODEL,
   WIKI_MODEL_NOTE,
-  WIKI_MODE_NOTES,
   WIKI_PRIVACY_NOTE,
   WIKI_REPO_FROM,
   WIKI_REPO_FROM_NOTE,
   WIKI_STATUS,
-  wikiModeNote,
 } from './wikiReviewMode';
 
 /**
@@ -52,7 +49,6 @@ interface Fixture {
     form: { fields: Array<{ label: string; note: string }> };
     maintenanceNote: string;
     privacy: string;
-    automaticNote: string;
     systemModel: string;
     models: Array<{ status: { state: WikiSystemModelReadState; model: string | null }; label: string; state: string; tone: string }>;
   };
@@ -97,13 +93,6 @@ describe('a run\'s row says the fixture\'s words', () => {
     expect(WIKI_RUNS).toBe(shared.runs.title);
     expect(WIKI_RUNS_NONE).toBe(shared.runs.none);
   });
-
-  it('is drawn while the server runs the account\'s wiki, or once it ran something for the space', () => {
-    expect(wikiRunsShown(false, [])).toBe(false);
-    expect(wikiRunsShown(false, null)).toBe(false);
-    expect(wikiRunsShown(true, [])).toBe(true);
-    expect(wikiRunsShown(false, [shared.runs.cases[0].job])).toBe(true);
-  });
 });
 
 describe('a call\'s row says the fixture\'s words', () => {
@@ -137,7 +126,7 @@ describe('the System model, as the settings page and the Runs card say it', () =
     expect(WIKI_SYSTEM_MODEL).toBe(shared.settings.systemModel);
   });
 
-  it('says the maintenance card and Set up in the fixture\'s words while the server runs the wiki', () => {
+  it('says the maintenance card and Set up in the fixture\'s words', () => {
     expect([WIKI_STATUS, WIKI_REPO_FROM, WIKI_MODEL, WIKI_DAILY_LIMIT, WIKI_LOOKBACK]).toEqual(shared.settings.rows);
     expect([
       { label: WIKI_REPO_FROM, note: WIKI_REPO_FROM_NOTE },
@@ -147,9 +136,5 @@ describe('the System model, as the settings page and the Runs card say it', () =
     ]).toEqual(shared.settings.form.fields);
     expect(WIKI_MAINTENANCE_NOTE_SERVER).toBe(shared.settings.maintenanceNote);
     expect(WIKI_PRIVACY_NOTE).toBe(shared.settings.privacy);
-    expect(wikiModeNote('automatic', true)).toBe(shared.settings.automaticNote);
-    // Under runner every mode says what it always said; the server changes Automatic's sentence alone.
-    for (const mode of ['manual', 'tiered', 'automatic'] as const) expect(wikiModeNote(mode, false)).toBe(WIKI_MODE_NOTES[mode]);
-    expect(wikiModeNote('tiered', true)).toBe(WIKI_MODE_NOTES.tiered);
   });
 });

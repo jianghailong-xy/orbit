@@ -25,18 +25,14 @@ import {
   WIKI_CHALLENGE_WAITS,
   WIKI_CONFIRM,
   WIKI_CONFIRMED,
-  WIKI_DAILY_LIMIT,
   WIKI_DAILY_LIMIT_NOTE,
   WIKI_DEFAULT_REVIEW_MODE,
   WIKI_FLOORS_LEAD,
   WIKI_FLOORS_NOTE,
-  WIKI_LOOKBACK,
   WIKI_LOOKBACK_CHOICES,
-  WIKI_LOOKBACK_NOTE,
   WIKI_LOOKBACK_UNIT,
   WIKI_MAINTENANCE_EDIT,
   WIKI_MAINTENANCE_NAME,
-  WIKI_MAINTENANCE_NOTE,
   WIKI_MODE_DEFAULT,
   WIKI_MODE_LABELS,
   WIKI_MODE_NOTES,
@@ -45,8 +41,6 @@ import {
   WIKI_OFF,
   WIKI_ON,
   WIKI_OPEN_SESSION,
-  WIKI_PROVIDER,
-  WIKI_PROVIDER_NOTE,
   WIKI_RECONFIRM,
   WIKI_REJECTED,
   WIKI_REJECT_ON_RECORD,
@@ -70,12 +64,9 @@ import {
   WIKI_SET_UP_TITLE,
   WIKI_SPOT_CHECK,
   WIKI_SPOT_CHECK_NOTE,
-  WIKI_STATUS,
   WIKI_TURN_OFF,
   WIKI_TURN_ON,
   WIKI_VIEW_RUN,
-  WIKI_WORKSPACE,
-  WIKI_WORKSPACE_NOTE,
   wikiBrokenAnchors,
   wikiCanConfirm,
   wikiChallengeRef,
@@ -89,7 +80,6 @@ import {
   wikiLookbackLabel,
   wikiMarkBanner,
   wikiModeFallback,
-  wikiProviderLabel,
   wikiRecentRows,
   wikiRevertBody,
   wikiRunCounts,
@@ -121,27 +111,23 @@ interface Fixture {
     floors: { lead: string; note: string };
     maintenance: {
       name: string;
-      note: string;
       off: string;
       on: string;
       setUp: string;
       form: {
         title: string;
-        fields: Array<{ label: string; note: string }>;
         unit: string;
         cancel: string;
         turnOn: string;
         save: string;
-        defaults: { provider: string; dailyRunLimit: number; min: number; max: number };
+        defaults: { dailyRunLimit: number; min: number; max: number };
         lookback: { choices: string[]; says: string[]; unit: string; defaultDays: number; min: number; max: number };
       };
-      rows: string[];
       edit: string;
       turnOff: string;
       runsADay: Array<{ runs: number; says: string }>;
       lookbacks: Array<{ days: number | null; choice: string; offered: number; says: string }>;
       workspaceLabels: Array<{ workspace: Parameters<typeof wikiWorkspaceLabel>[0]; says: string }>;
-      providerLabels: Array<{ provider: string; model: string | null; says: string }>;
     };
     fallbacks: Array<{ settings: Partial<WikiSpaceSettings>; says: string | null }>;
   };
@@ -264,37 +250,26 @@ describe('the Wiki settings page says the fixture’s words, in its order', () =
     expect(WIKI_DAILY_LIMIT_NOTE).toContain(`at most ${WIKI_LIMITS.opsPerChangeset} changes`);
   });
 
-  it('draws maintenance off, its Set up form and its rows once it is on', () => {
+  it('draws maintenance off, its Set up form and its buttons once it is on', () => {
+    // The rows, the form's fields and the sentence under the card are wiki-server-execution.fixture.json's (wikiRuns.test.ts).
     const maintenance = settings.maintenance;
     expect(WIKI_MAINTENANCE_NAME).toBe(maintenance.name);
-    expect(WIKI_MAINTENANCE_NOTE).toBe(maintenance.note);
     expect(WIKI_OFF).toBe(maintenance.off);
     expect(WIKI_ON).toBe(maintenance.on);
     expect(WIKI_SET_UP).toBe(maintenance.setUp);
     expect(WIKI_SET_UP_TITLE).toBe(maintenance.form.title);
-    expect(
-      [
-        [WIKI_WORKSPACE, WIKI_WORKSPACE_NOTE],
-        [WIKI_PROVIDER, WIKI_PROVIDER_NOTE],
-        [WIKI_DAILY_LIMIT, WIKI_DAILY_LIMIT_NOTE],
-        [WIKI_LOOKBACK, WIKI_LOOKBACK_NOTE],
-      ].map(([label, note]) => ({ label, note })),
-    ).toEqual(maintenance.form.fields);
     expect(WIKI_RUNS_A_DAY).toBe(maintenance.form.unit);
     expect([WIKI_CANCEL, WIKI_TURN_ON, WIKI_SAVE]).toEqual([
       maintenance.form.cancel,
       maintenance.form.turnOn,
       maintenance.form.save,
     ]);
-    expect([WIKI_STATUS, WIKI_WORKSPACE, WIKI_PROVIDER, WIKI_DAILY_LIMIT, WIKI_LOOKBACK]).toEqual(maintenance.rows);
     expect([WIKI_MAINTENANCE_EDIT, WIKI_TURN_OFF]).toEqual([maintenance.edit, maintenance.turnOff]);
     // The form opens on the contract's defaults and bounds.
-    expect(WIKI_DEFAULT_MAINTENANCE_SETTINGS.provider).toBe(maintenance.form.defaults.provider);
     expect(WIKI_DEFAULT_MAINTENANCE_SETTINGS.dailyRunLimit).toBe(maintenance.form.defaults.dailyRunLimit);
     expect(WIKI_MAINTENANCE_DAILY_RUN_LIMIT).toEqual({ min: maintenance.form.defaults.min, max: maintenance.form.defaults.max });
     for (const row of maintenance.runsADay) expect(wikiRunsADay(row.runs)).toBe(row.says);
     for (const row of maintenance.workspaceLabels) expect(wikiWorkspaceLabel(row.workspace)).toBe(row.says);
-    for (const row of maintenance.providerLabels) expect(wikiProviderLabel(row.provider, row.model)).toBe(row.says);
   });
 
   it('offers the look-back as the fixture does: from now on, some days, all history — 14 days by default', () => {
