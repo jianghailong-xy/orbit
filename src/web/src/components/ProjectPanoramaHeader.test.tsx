@@ -817,6 +817,7 @@ describe('landingJobLines', () => {
     });
     expect(landingJobLines(listing([running]), NOW, { updatedAt: NOW })).toEqual([{
       jobId: 'job-t2', taskId: 'task-t2', detail: null, retryable: false,
+      landingSessionId: null, mergeJob: false,
       line: { word: 'Landing', what: 'T2', running: true, timedOut: false, state: 'checking', clock: '1m 20s',
         clockLabel: 'Elapsed', updated: 'Updated just now', wait: null },
     }]);
@@ -831,6 +832,8 @@ describe('landingJobLines', () => {
   it('draws a promotion, which lands no task, as its word, state and wait alone', () => {
     expect(landingJobLines(listing([merge()]), NOW, { updatedAt: NOW })).toEqual([{
       jobId: 'job-merge', taskId: null, detail: null, retryable: false,
+      // A round of merging, and a server that names no landing session for it.
+      landingSessionId: null, mergeJob: true,
       line: { word: 'Merge to main', what: null, running: false, timedOut: false, state: 'queued', clock: '41m 8s',
         clockLabel: 'Queued for', updated: 'Updated just now', wait: null },
     }]);
@@ -857,6 +860,9 @@ describe('landingJobLines', () => {
   ] as const)('says where a job that timed out at %s stopped, and whether it may have pushed', (phase, stopped, push) => {
     expect(landingJobLines(listing([job({ phase })]), NOW, { updatedAt: NOW })).toEqual([{
       jobId: 'job-c5', taskId: 'task-c5', retryable: true,
+      // A server that names no landing session for the job: the row draws the sentence instead of
+      // a link, and the job's own word is not a merge's.
+      landingSessionId: null, mergeJob: false,
       line: { word: 'Landing', what: C5, running: false, timedOut: true, state: 'Timed out', clock: '110m',
         clockLabel: 'No report for', updated: 'limit 10m', wait: null },
       detail: `Runner workstation-gpu took it at 20:07 · stopped at ${stopped} · ${push}`,
@@ -1049,7 +1055,8 @@ describe('landingCard', () => {
       running: true,
       timedOut: false,
       what: C5,
-      jobs: [{ jobId: 'job-c5', taskId: 'task-c5', title: C5, state: 'fetching', running: true,
+      jobs: [{ jobId: 'job-c5', taskId: 'task-c5', word: 'Landing', landingSessionId: null,
+        mergeJob: false, title: C5, state: 'fetching', running: true,
         timedOut: false, retryable: false, detail: null }],
       target: `project/${PROJECT}`,
       clock: '110m 26s',
@@ -1065,7 +1072,9 @@ describe('landingCard', () => {
     const card = landingCard(listing([job({ timedOut: false, retryable: false }), merge()]), NOW, { updatedAt: NOW })!;
     expect(card.title).toBe('Landing 2 jobs');
     expect(card.what).toBeNull();
-    expect(card.jobs.map((entry) => [entry.title, entry.state])).toEqual([[C5, 'fetching'], [null, 'queued']]);
+    expect(card.jobs.map((entry) => [entry.title, entry.state])).toEqual([[C5, 'fetching'], ['Merge to main', 'queued']]);
+    // The merge job's own row is a merge's, not a task landing's: its way in is the merge card's.
+    expect(card.jobs.map((entry) => entry.mergeJob)).toEqual([false, true]);
     // The head is the lead's, and a promotion lands no single task.
     expect(card.state).toBe('fetching');
     expect(card.running).toBe(true);
@@ -1159,7 +1168,8 @@ describe('the landing card, from a server that lists its jobs', () => {
     // spins, and the row says it in the same word the head does.
     expect(html).toContain('class="spl-jobs"');
     expect(html).toContain(`<span>${C5}</span><span class="st">Timed out</span>`);
-    expect(html).toContain('<span></span><span class="st">queued</span>');
+    // The merge job lands no single task, so its row is named by its word — never left blank.
+    expect(html).toContain('<span>Merge to main</span><span class="st">queued</span>');
   });
 
   it('makes the card a press that opens the list, and keeps it a card to read from an older server', () => {

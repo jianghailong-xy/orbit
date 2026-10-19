@@ -57,6 +57,7 @@ import {
   coordinatorQuestion,
   deliveryReviewDetailLine,
   landingSessionIdOf,
+  leaseFactsOf,
   markOpenItemsHandling,
   openItemActions,
   openItemChat,
@@ -265,6 +266,15 @@ export interface OpenItemRow {
   /** The integration job an X-E5 item is about (§4.6): `ABANDON` names it in its route, so the
    *  card cannot draw that press without it. Null for every other kind. */
   integrationJobId: string | null;
+  /** That item's claim, as its card words the heading and the Abandon consequence (§4.6 revision
+   *  23, J12): the runner's last report, the claim's protocol and whether it recorded a push. Null
+   *  for every other kind. */
+  lease: {
+    lastReportAt: string | null;
+    jobKind: string | null;
+    progressProtocol: string | null;
+    pushReported: boolean;
+  } | null;
   promotionId: string | null;
   fuseEpisodeId: string | null;
   /** Where this item is on its way to the coordinator, or that it is not owed to one. */
@@ -2998,6 +3008,8 @@ export class ProjectOpenItemService {
         // §4.6 X-E5: only this kind's item is about a job a press (`ABANDON`) names; every other
         // row keeps the field null, so no client sees an id it has no door for.
         integrationJobId: row.kind === LANDING_LEASE_EXPIRED_KIND ? row.integrationJobId : null,
+        // And only that kind's card counts its heading and words its Abandon from a claim.
+        lease: row.kind === LANDING_LEASE_EXPIRED_KIND ? leaseFactsOf(row.payload) : null,
         promotionId: row.promotionId,
         fuseEpisodeId: row.fuseEpisodeId,
         delivery: row.assignee !== 'COORDINATOR'
@@ -3084,6 +3096,7 @@ export class ProjectOpenItemService {
         sessionId: row.sessionId,
         landingSessionId: landingSessionIdOf(row.payload),
         integrationJobId: null,
+        lease: null,
         promotionId: row.promotionId,
         fuseEpisodeId: row.fuseEpisodeId,
         // Nobody is owed anything about a closed item, so nothing is on its way to anybody and

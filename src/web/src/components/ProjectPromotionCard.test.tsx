@@ -30,6 +30,7 @@ import {
   type PromotionProjectView,
 } from './ProjectPromotionCard';
 import { ProjectMergeStrip } from './ProjectMergeStrip';
+import { encodeId } from '../lib/idCodec';
 import { SHORTCUT_HINT } from './CardHotkey';
 import { CHAT_ABOUT_THIS } from '../lib/coordinatorChat';
 import { ON_PASS_ASKS, ON_PASS_MERGES } from '../lib/projectMerge';
@@ -568,6 +569,19 @@ describe('the record a merge leaves', () => {
     expect(html).not.toContain('of 6 met on this branch');
     expect(html).not.toContain('still open');
     expect(html).not.toContain('<button');
+  });
+
+  it('opens the round’s landing at its bottom, and draws nothing there without one', () => {
+    const LANDING = '0195c0de-0000-7000-8000-00000000c001';
+    const withLanding = markup(
+      <ProjectPromotionReceipt promotion={{ ...merged, landingSessionId: LANDING }} now={NOW} />,
+    );
+    // The row that opens the receipt is unchanged; this is the round's own way in, at the end.
+    expect(withLanding).toContain('project-promotion-landing');
+    expect(withLanding).toContain('Open landing ›');
+    expect(withLanding).toContain(`/sessions/${encodeId(LANDING)}`);
+    expect(markup(<ProjectPromotionReceipt promotion={merged} now={NOW} />))
+      .not.toContain('project-promotion-landing');
   });
 
   it('is drawn for nothing that has not merged', () => {

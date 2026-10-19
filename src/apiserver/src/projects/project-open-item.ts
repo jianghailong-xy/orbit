@@ -1668,6 +1668,34 @@ export function landingSessionIdOf(payload: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
+/**
+ * The claim an X-E5 item's payload names (§4.6 X-E5, revision 23), as its card reads it: the
+ * runner's last report — the heading's "<N>m" counts from it — and J12's two facts, the claim's
+ * protocol and whether it ever recorded a push. Null for a payload that names none of them, which
+ * is what an older build wrote; the card then says the cautious half of J12 ("it may have been
+ * pushed") and leaves the heading's number out, rather than claiming a push that never happened.
+ */
+export function leaseFactsOf(
+  payload: unknown,
+): {
+  lastReportAt: string | null;
+  jobKind: string | null;
+  progressProtocol: string | null;
+  pushReported: boolean;
+} | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const row = payload as {
+    lastReportAt?: unknown; jobKind?: unknown; progressProtocol?: unknown; pushReported?: unknown;
+  };
+  const lastReportAt = typeof row.lastReportAt === 'string' && row.lastReportAt !== '' ? row.lastReportAt : null;
+  const jobKind = typeof row.jobKind === 'string' ? row.jobKind : null;
+  const progressProtocol = typeof row.progressProtocol === 'string' ? row.progressProtocol : null;
+  if (lastReportAt === null && jobKind === null && progressProtocol === null && row.pushReported === undefined) {
+    return null;
+  }
+  return { lastReportAt, jobKind, progressProtocol, pushReported: row.pushReported === true };
+}
+
 /** Longest tail of a check's output a turn carries. The payload holds 16 KiB; a turn is not a log. */
 const MAX_CHECK_TAIL_IN_MESSAGE = 1_200;
 
