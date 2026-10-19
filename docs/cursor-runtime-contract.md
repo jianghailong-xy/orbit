@@ -3,6 +3,7 @@
 **状态**：项目「Cursor CLI 原生接入」（`34gyHIZv301nDWxKP9XkO`）P0a 的产物，P0c（`34h3xGGSqUnA6DTMj1iop`）补测后修订，P0b（macOS）补了 §18。T0、P1–P6 按这份文件实现。
 文档收尾（`34hJAyWIuEl2rXy6q9HlL`，2026-10-19）补上实现任务交付说明里的实测结论和协调会话的裁定：P4b、P5b 跟进、P5c、P6a、P6b、P6b 跟进（§3.3、§3.4、§4、§5、§6、§9、§11–§13、§16、§17）。
 D-P8-2 修复（`34iQUqxC9htJed8AY8vic`，2026-10-19）按 P8 的实测补了 §3.2（Cursor 怎么起标题）、§14.4（P8 录到的署名 trailer）和 §7.2、§16.4、§16.7。
+D-P8-1 收尾（`34iSsJHzTeI5uzhcGSmlI`，2026-10-19）按 P8、P5c 的录制改正了 §5.2 被拒调用的形状，写明 Orbit 怎么结算被拒的调用，§4.1、§16.4 同步。
 改这里的任何一条结论，要同时改依赖它的任务。已定的设计（作业指导里的所有者决定）不在这里重新论证。
 
 **实测版本**：**Cursor CLI `2026.10.14-941492e`**，linux/x64，HPC（内核 `6.12.107+deb13-amd64`，24 核，root）。
@@ -366,7 +367,7 @@ tarball 183.9 MB，解包 586 MB。每个账号或会话目录都不需要再拷
 | `agent_thought_chunk` | 同上 | 思考流式；条数通常多于正文 |
 | `user_message_chunk` | 同上 | 只在 `session/load` 重放时出现 |
 | `tool_call` | `toolCallId, title, kind, status:"pending", rawInput, locations?` | 首次出现时 title 可能是笼统的（`Edit File`、`MCP: tool`、`Web Fetch`），rawInput 可能为空 |
-| `tool_call_update` | `toolCallId`，以及 `status`（`in_progress`/`completed`）、`title`、`rawInput`、`rawOutput`、`content`、`locations` 中的若干个 | 先补全 title/rawInput，再 `in_progress`，最后 `completed`。**没有 `failed`**，失败写在 rawOutput 里 |
+| `tool_call_update` | `toolCallId`，以及 `status`（`in_progress`/`completed`）、`title`、`rawInput`、`rawOutput`、`content`、`locations` 中的若干个 | 先补全 title/rawInput，再 `in_progress`，最后 `completed`。**没有 `failed`**，失败写在 rawOutput 里；被拒的 shell 和编辑连 rawOutput 都没有（§5.2） |
 | `plan` | `entries:[{content, priority, status}]` | 只在 plan 模式的 create_plan 流程里出现【实测：`{"content":"Add CONTRIBUTING md","priority":"high","status":"pending"}`】 |
 | `subagent_spawned` | `subagentSessionId, name, task, capabilities, _meta.cursor{toolCallId, agentId, model}` | 需要客户端声明 subagents。子代理自己的更新用 `sessionId=<agentId>` 发来 |
 | `subagent_state_update` | `subagentSessionId, state, _meta.cursor{…}` | 实测 `completed`；源码还有 `failed`/`cancelled`/`disconnected`（A@62640） |
@@ -488,7 +489,20 @@ plan/ask 两列见 [`analysis/plan-and-ask-modes-concurrent.json`](evidence/curs
     P5c 的做法【约定，`src/runner-go/cursor_events.go` 的 `permissionAsk`】：对到这一轮里同一 URL、还没有请求认领的 fetch 卡；
     对不上时用这一轮专属的 id，免得别的轮次或进程的卡答了它。
   - MCP 请求的 content 是参数 JSON 的 markdown 代码块。
-- **拒绝**：选 `reject-once` 后工具卡仍以 `completed` 结束，rawOutput `{rejected:true}`，没有副作用（MCP 副作用日志里没有这一条）【实测】。
+- **拒绝**【实测】：选 `reject-once` 后调用不执行，工具卡仍以 `completed` 结束，形状因工具而异：
+  - MCP：rawOutput `{rejected:true}`，没有副作用，MCP 副作用日志里没有这一条（`multi-turn-tools-default`）。
+  - shell 和编辑：只有 `{status:"completed"}`，没有 rawOutput，也没有 content，单看这条更新和一次成功而没有输出的调用分不出来。
+    夹具：P8 经 Orbit 的 runner 录的 [`src/runner-go/testdata/cursor/p8/key-allow-reject`](../src/runner-go/testdata/cursor/p8/README.md)（被拒的 `date -u > notes-when.txt`），
+    以及 `p5c/accept-edits-allow-deny`（被拒的 `touch cmd-denied.txt` 和工作区外的 `Write`）。
+  - **Orbit 以自己回过的应答为准**【约定：D-P8-1 及其收尾，协调会话 2026-10-19 裁定；`src/runner-go/cursor_permissions.go` 的 `mark`，`cursor_events.go` 的 `refuse`、`cursorToolResult`、`settle`】：
+    - 一轮进行中，runner 对权限请求回了 allow 以外的应答，就先给请求所指的工具卡做标记，再发应答。这包括人在卡上拒绝，Plan、Don't Ask 不问直接拒绝，
+      Orbit 看不懂请求，以及没人能决定或选项不认识时回的 `cancelled`。
+    - 被标记的卡结算为 `isError:true`、"Not run: the tool call was rejected."，不看 rawOutput。
+    - Cursor 的 `completed` 还没到、这一轮就结束了（Stop、断连、进程退出或 EOF），也这样结算：CLI 拿到应答之前一直阻塞（下面「没有超时」），拒绝和 `cancelled` 都不执行。
+    - 不做标记的：被允许的调用；轮次结束、Stop、断连、租约丢失时撤回的卡（这时桥已关闭，回 `cancelled`）。它们没完成时仍按 §3.3 由 Orbit 结算，说明可能已经运行。
+    - 例外：这一轮没在发出它的进程里结算、之后按轮次账本补结算时（租约归了别的 runner，或 runner 中途重启；`cursor_acp.go` 的 `recoverTurn`），
+      标记不进账本，没完成的卡仍说明可能已经运行。租约这一种，协调会话裁定不改（D-P8-1 收尾）。
+    - 回放用例：`src/runner-go/cursor_permissions_test.go` 的 `TestCursorRefusedToolCards`；验收脚本 `scripts/test-cursor-rejected-tools.mjs`、`scripts/test-cursor-refusal-settle.mjs`。
 - **allow-always**：
   - 写进 `<CURSOR_CONFIG_DIR>/cli-config.json` 的 `permissions.allow`。实测 `echo` 被允许后，内容变成 `["Shell(ls)","Shell(echo)"]`。
   - 同一会话下一轮 `echo again > again.txt` 不再问【实测】。
@@ -1203,7 +1217,7 @@ env:  三层，后面的覆盖前面的（见下）：白名单（PATH、LANG、
 | --- | --- |
 | `agent_message_chunk` | 正文增量（按轮累加；先过 §12 的错误句子匹配） |
 | `agent_thought_chunk` | 思考增量 |
-| `tool_call` / `tool_call_update` | 工具开始和进度；`completed` 是终态，rawOutput 带 `rejected`、`exitCode≠0` 或 `error` 时标为失败或被拒；取消、断开、崩溃后 Orbit 自己结算 `in_progress` 的卡 |
+| `tool_call` / `tool_call_update` | 工具开始和进度；`completed` 是终态，rawOutput 带 `exitCode≠0` 或 `error` 时标为失败，带 `rejected`（只有 MCP 被拒时有）时标为被拒。shell 和编辑被拒时 Cursor 只发 `{status:"completed"}`【实测 `src/runner-go/testdata/cursor/p8/key-allow-reject`】，所以被拒以 Orbit 自己回过的应答为准：回过 allow 以外应答的卡结算为 "Not run: the tool call was rejected."（`isError:true`），Cursor 的 `completed` 没到这一轮就结束也一样（§5.2，D-P8-1 及其收尾）；取消、断开、崩溃后 Orbit 自己结算其余 `in_progress` 的卡（§3.3） |
 | `plan`、`cursor/create_plan` | 计划展示；create_plan 要应答（P5c：计划卡，Don't Ask 下回 `rejected`） |
 | `cursor/update_todos` | 待办列表（请求，回 `{}`） |
 | `subagent_spawned` / `subagent_state_update` + 子会话的更新 | 子代理卡（需要 `_meta.subagents`）；`cursor/task` 回 `{}` |
@@ -1469,6 +1483,7 @@ runner 以 launchd 服务运行时（本机 orbit runner 就运行在 `gui/501` 
 | [`p0c/`](evidence/cursor-cli/2026.10.14-941492e/p0c/README.md) | P0c：同样结构的场景结果、录制、`summary.json`、`prompts-ledger.json`（P0c 账本），以及 `analysis/turn-endings.json`、`analysis/usage-before-prompts.json` |
 | [`src/runner-go/testdata/cursor/p0c/`](../src/runner-go/testdata/cursor/p0c/INDEX.md) | P0c 发真实 prompt 的场景的回放样本 |
 | [`src/runner-go/testdata/cursor/p5c/`](../src/runner-go/testdata/cursor/p5c/README.md) | P5c：Orbit 的 runner 在真 CLI 上的 12 个场景（每个一份 `summary.json` 加双向录制）、恶意夹具仓库、手工构造的 `synthetic/` 样本、P5c 账本副本 |
+| [`src/runner-go/testdata/cursor/p8/`](../src/runner-go/testdata/cursor/p8/README.md) | P8：Orbit 的 runner 在真 CLI 上用 strace 截下的线上录制 `key-allow-reject`，被拒的 shell 调用只有 `{status:"completed"}`（§5.2） |
 | [`docs/evidence/cursor-cli/2026.10.16-e3cb207/p0c/`](evidence/cursor-cli/2026.10.16-e3cb207/p0c/README.md) | 新版 `2026.10.16-e3cb207` 的不花 prompt 场景，以及和固定版本的对比 `comparison.json`（§1.3） |
 | [`evidence/cursor-cli/macos-2026.10.14-941492e/`](evidence/cursor-cli/macos-2026.10.14-941492e/) | P0b 的 macOS 证据：自己的 `summary.json`、`scenarios/`、`protocol/`、`prompts-ledger.json`、`login-timing/`、`probe/` |
 
