@@ -786,6 +786,11 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// The one place a turn the engine runs on its own shows up at all. Told before the
 		// event is buffered, so nothing reading the stream is ahead of the pool.
 		pool.engineTurnEvent(live, eventType, payload)
+		// A tool may have written to the volume (a commit, an edit): a managed runner syncs it
+		// behind the tool, in the background, without holding the stream up (volume_durability.go).
+		if eventType == evToolResult {
+			volumeSyncAfterTools.nudge()
+		}
 		if eventType == evError {
 			if msg, ok := payload["message"].(string); ok && strings.TrimSpace(msg) != "" {
 				lastErrMu.Lock()
@@ -1078,6 +1083,9 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 				// response returns; generation matching prevents this old ack from
 				// releasing the new claim's permit.
 				permitGeneration = pool.permitGeneration(live)
+				// What the turn wrote — the engine's transcript, its Git work — is on the volume
+				// before the control plane hears the turn is over.
+				syncManagedVolume("a turn", execDir)
 				return t.turnComplete(turnCompleteCtx, sessionID, req)
 			},
 		)
@@ -1282,6 +1290,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 					markOwnershipLost(flushErr)
 				}
 			} else {
+				syncManagedVolume("a failed turn", execDir)
 				terminalAckStatus, terminalAckErr = t.turnComplete(turnAckCtx, sessionID, ack.request)
 				if isLeaseOwnershipError(terminalAckErr) {
 					markOwnershipLost(terminalAckErr)
@@ -1520,6 +1529,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 		// Candidate merge targets for the ended session's "Merge to…" dropdown.
 		finalizeRequest.MergeTargets = mergeTargetsForWT(job.WT)
 	}
+	// The finalize commit and the engine's last writes are on the volume before the end is reported.
+	syncManagedVolume("the session's end", execDir)
 	err := retryIdempotentWhile(finalizeCtx, func(attemptCtx context.Context) error {
 		_, attemptErr := t.finalizeRun(attemptCtx, job.SessionID, finalizeRequest)
 		return attemptErr
@@ -1609,8 +1620,9 @@ func envWithAgent(agentEnv map[string]string) []string {
 }
 
 func runSessionProcess(ctx context.Context, shutdownCtx context.Context, t *Transport, job *ClaimedSession, leaseGeneration, execDir, scratchDir string, emit emitFn, emitFor emitTurnFn, setTurn func(string), firstSpawn bool, bg *bgTailer, onCodexRateLimits codexRateLimitSink, completeTurn turnCompleter, waitTurnPermit turnPermitWaiter, onLeaseLost leaseLossHandler) (string, bool, bool) {
-	// A pinned run whose checkout setupWorktree refused gets no engine at all. The refusal is this
-	// run's error, reported the way an engine that cannot start is reported just below.
+	// A run whose checkout setupWorktree refused (a pinned commit it cannot stand on, or on a managed
+	// runner a damaged repository) gets no engine at all. The refusal is this run's error, reported
+	// the way an engine that cannot start is reported just below.
 	if r := job.SourceRefusal; r != nil {
 		reason, _ := r.Detail["reason"].(string)
 		emit(evError, map[string]interface{}{"message": r.Code + ": " + reason})

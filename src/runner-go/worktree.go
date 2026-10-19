@@ -710,6 +710,12 @@ func refuseSourceWorktree(job *ClaimedSession, code, reason string) string {
 // sets job.WT and returns the checkout's exec dir. A session whose SOURCE is resolved takes
 // setupSourceWorktree instead, and none of those fallbacks.
 func setupWorktree(job *ClaimedSession, baseDir string) string {
+	// A managed runner does not work in a repository its volume brought back broken from an unclean
+	// stop. The fallbacks below would run the session in the workDir without a checkout, or start a
+	// new repository over the broken one, and say nothing (managed_repo_recovery.go).
+	if reason := managedCheckoutDamage(baseDir, job.SessionID); reason != "" {
+		return refuseSourceWorktree(job, repositoryDamagedRefusal, reason+repositoryDamagedAdvice)
+	}
 	if needsSourcePin(job) {
 		return setupSourceWorktree(job, baseDir)
 	}
