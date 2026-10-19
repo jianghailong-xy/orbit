@@ -29,11 +29,12 @@ import (
 //
 // A Docker local volume is a directory of the Docker host's filesystem, which every other runner's
 // volume, the deployment's Postgres and its logs share, so a syncfs there writes back all of them.
-// With eight runners on one disk the syncs behind tools tripled Postgres's commit p99 and doubled
-// the API's (docs/managed-runner-design.md, "Implementation record: volume syncs on a shared Docker
-// host"). On such a volume the runner syncs before its reports only; what a tool wrote in the middle
-// of a turn reaches the disk with the next sync anyone makes on that filesystem, or the kernel's own
-// writeback, about 30 s later at most.
+// With four and eight runners at work on one disk, these syncs took Postgres's commit p99 and the
+// API's far past the same load without them, and four in five were the ones behind tools
+// (docs/managed-runner-design.md, "Implementation record: volume syncs on a shared Docker host").
+// On such a volume the runner syncs before its reports only: what a tool wrote in the middle of a
+// turn reaches the disk with the next sync anyone makes on that filesystem, or the kernel's own
+// writeback about 30 s later.
 //
 // Not Git's own fsyncs (core.fsync=all): they cover objects, refs and the index but not HEAD,
 // reflogs, config, worktree metadata or checked-out files, leave a command's last rename to the next
