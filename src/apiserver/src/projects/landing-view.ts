@@ -9,6 +9,7 @@ import type {
 
 import { PrismaService } from '../prisma/prisma.service';
 import { readInFlightJobs } from './project-integration-line';
+import { pushBoundaryPassed } from './project-integration-job';
 import { readLandingTimeline } from './landing-timeline';
 
 /**
@@ -72,6 +73,7 @@ export async function readLandingView(
       heartbeatAt: true,
       outputMovedAt: true,
       progressProtocol: true,
+      pushReportedGeneration: true,
       checks: true,
     },
   });
@@ -143,6 +145,11 @@ export async function readLandingView(
         blockingReason: inFlight?.blockingReason ?? null,
         timedOut: inFlight?.timedOut ?? false,
         limitSeconds: inFlight?.limitSeconds ?? null,
+        // The doors' own facts (§2.9 LS6): the queue's Retry applicability, and J-T4's push
+        // boundary computed from the row exactly as the stop and cancel doors compute it. The
+        // page reads these rather than re-deriving either rule.
+        retryable: inFlight?.retryable ?? false,
+        pushBoundaryPassed: pushBoundaryPassed(job),
       }
     : null;
 

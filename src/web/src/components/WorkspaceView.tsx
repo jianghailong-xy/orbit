@@ -339,8 +339,10 @@ import {
 } from './ProjectPromotionCard';
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
+import { isLandingSessionDetail } from '../lib/landingSession';
 import { landingCard } from './ProjectPanoramaHeader';
 import { LandingJobsSheet } from './LandingJobsSheet';
+import { LandingSessionView } from './LandingSessionView';
 import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectStartDialog } from './StartProjectCard';
 import {
@@ -2941,6 +2943,9 @@ export function WorkspaceView({
     // or "commit" is pending, for the runner's outcome (≤1 heartbeat away) to land. Idle else.
     refetchInterval: (q) => {
       const detail = q.state.data;
+      // A landing session polls on its own cadence (§2.7a: RUNNING 4 s, QUEUED 15 s, nothing once
+      // settled), which `LandingSessionView` owns. The conversation's 5 s sweep is not it.
+      if (detail?.id === selectedId && detail.sessionKind === 'LANDING') return false;
       if (
         detail?.id === selectedId &&
         (detail.mergeStatus === 'pending' || detail.commitStatus === 'pending')
@@ -2956,6 +2961,15 @@ export function WorkspaceView({
     },
   });
   const detailForSelected = sessionDetailQ.data?.id === selectedId ? sessionDetailQ.data : null;
+  // The renderer is chosen by the DETAIL's answer, never by `kind` on a list row: a session row is
+  // `kind: 'session'` there, and a landing's own flag is `sessionKind` (§2.9 LS6). A landing whose
+  // row has not been inserted yet answers the same way through its pre-generated id (LS1), so the
+  // page draws in both cases.
+  const landingDetail = isLandingSessionDetail(detailForSelected) ? detailForSelected : null;
+  // A landing is platform work with no transcript: it opens no event stream and reads no event
+  // page (contract §2.9 LS1/LS6). The boolean, not the detail object, is what the stream effect
+  // depends on — the detail is re-read on the page's own cadence, and the stream must not.
+  const landingSession = landingDetail != null;
   const selectedFromDetail = useMemo(() => {
     const d = detailForSelected as any;
     // A freshly-created session primes only id/runner/workspace into this cache; keep the
@@ -4273,7 +4287,7 @@ export function WorkspaceView({
     pendingRecordRef.current = null;
     setDetached(false);
     setLoadingNewer(false);
-    if (!selectedId) {
+    if (!selectedId || landingSession) {
       accRef.current = [];
       setEvents([]);
       seen.current = new Set();
@@ -4951,7 +4965,7 @@ export function WorkspaceView({
       clearTimeout(start);
       stop();
     };
-  }, [selectedId]);
+  }, [selectedId, landingSession]);
 
   // A link to a record of the session already open — a footnote, a link in a message, back and
   // forward through them. The session effect above followed the record the session opened with.
@@ -10217,17 +10231,28 @@ export function WorkspaceView({
 
       <div
         className="workspace-view"
-        onDragEnter={onSessionDragEnter}
-        onDragOver={onSessionDragOver}
-        onDragLeave={onSessionDragLeave}
-        onDrop={onSessionDrop}
+        // A landing takes no files: it has no engine and no composer to attach one to (LS6).
+        onDragEnter={landingDetail ? undefined : onSessionDragEnter}
+        onDragOver={landingDetail ? undefined : onSessionDragOver}
+        onDragLeave={landingDetail ? undefined : onSessionDragLeave}
+        onDrop={landingDetail ? undefined : onSessionDrop}
       >
         {/* Drop-to-upload hint covering the whole session pane while files are dragged over it. */}
-        {dragging && (
+        {dragging && !landingDetail && (
           <div className="workspace-dropzone">
             <PaperClipOutlined /> Drop files to upload
           </div>
         )}
+        {landingDetail ? (
+          <LandingSessionView
+            sessionId={selectedId!}
+            detail={landingDetail}
+            onOpenCoordinator={(id) =>
+              navigateWithPaneSlide('push', () =>
+                navigate(sessionPath(id), { state: stampFromList() }))}
+          />
+        ) : (
+        <>
         <div className="workspace-header">
           {isMobile && (
             <button
@@ -11953,6 +11978,8 @@ export function WorkspaceView({
           </div>
         </div>
       </div>
+        </>
+        )}
       </div>
       {confirmation}
     </div>
