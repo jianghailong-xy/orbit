@@ -24,6 +24,7 @@ import {
   PROMOTION_AUTOMATIC_LAND,
   checkSawTheFinishedBranch,
   checksFor,
+  enqueueForDoneTask,
   integrationDedupeKey,
   integrationItemTitle,
   isTerminalJobState,
@@ -295,8 +296,23 @@ export async function dispatchIntegrationJobs(
  *
  * The two are one statement because they are one decision — "which row becomes this process's" —
  * and because splitting them opens a window in which the takeover and the claim each see the other's
- * slot as free. `FOR UPDATE SKIP LOCKED` over the candidate, so two apiserver processes beating at
- * the same moment do not queue behind each other.
+ * slot as free.
+ *
+ * WHAT IT LOCKS IS THE JOB ROW, AND NOTHING ELSE (`FOR UPDATE OF c`). The candidate joins the job to
+ * its source session and that session's workspace to decide WHAT may be claimed, but those rows are
+ * read for their committed values and are not held: a job gate must not wait on a session lock, and
+ * with SKIP LOCKED it would otherwise SKIP a claimable job merely because that session happened to
+ * be written at that instant. The judgement those rows feed — J-T1e, "the task's work has stopped
+ * moving" — does not become weaker: this is an optimisation that keeps the queue honest, and the
+ * authority is the result gate (`landingJudgedTooEarly`), which re-reads the sessions against the
+ * claim's own instant before any too-early answer is written down. A session written in between
+ * therefore costs a claim that answers too early, not a wrong answer.
+ *
+ * A STOP REQUESTED ON A RUNNING JOB DOES NOT PREVENT THE TAKEOVER: the new claim's command carries
+ * `cancelRequested`, and the runner reports CANCELLED before doing any work. Refusing it would leave
+ * the row held by a dead runner with nobody able to end it (J-T3, J-T12). The QUEUED branch is the
+ * only one that filters on `cancel_requested_at`, because J-T8 ends such rows in the transaction
+ * that asks; any left are rows written before that rule, which the migration backfills.
  */
 async function claimOne(
   prisma: PrismaService,
@@ -313,7 +329,6 @@ async function claimOne(
         JOIN "session" s ON s."id" = c."session_id"
         JOIN "workspace" w ON w."id" = s."workspace_id"
        WHERE w."runner_id" = ${runnerId}::uuid
-         AND c."cancel_requested_at" IS NULL
          AND NOT (c."serial_key" = ANY(${alreadyTaken}::text[]))
          -- J-T1a / §2.6 / §3.4: a job whose subject is work is not judged while that work can still
          -- move. The runner commits a worktree when it FINISHES the session (SR13), so a branch
@@ -370,17 +385,22 @@ async function claimOne(
               AND i."state" = 'OPEN'
               AND f."task_id" IS DISTINCT FROM c."task_id")
          AND (
-           -- A queued job whose repository and target ref nobody holds.
-           (c."state" = 'QUEUED' AND NOT EXISTS (
+           -- A queued job whose repository and target ref nobody holds. A QUEUED row somebody asked
+           -- to stop is never claimed: J-T8 ends those in the transaction that asks, so one that is
+           -- still here is a row written before that rule existed (the migration backfills it).
+           (c."state" = 'QUEUED' AND c."cancel_requested_at" IS NULL AND NOT EXISTS (
               SELECT 1 FROM "project_integration_job" r
                WHERE r."serial_key" = c."serial_key" AND r."state" = 'RUNNING'))
            -- Or one this process may take over: claimed, and silent for longer than the lease.
+           -- A stop requested while it ran does NOT keep it from being taken over (J-T3): the new
+           -- process reads cancelRequested from the command and reports CANCELLED at once. To
+           -- refuse the takeover would leave the row with nobody able to end it.
            OR (c."state" = 'RUNNING'
                AND (c."heartbeat_at" IS NULL OR c."heartbeat_at" < ${staleBefore})
                AND c."claim_lease_owner" IS DISTINCT FROM ${leaseOwner})
          )
        ORDER BY c."created_at", c."id"
-       FOR UPDATE SKIP LOCKED
+       FOR UPDATE OF c SKIP LOCKED
        LIMIT 1
     )
     UPDATE "project_integration_job" j
@@ -725,6 +745,7 @@ export async function applyIntegrationJobResult(
       select: {
         id: true, projectId: true, ownerId: true, kind: true, state: true,
         taskId: true, sessionId: true, promotionId: true, targetRef: true, sourceRef: true,
+        codebaseId: true, cancelRequestedAt: true,
         claimLeaseOwner: true, claimGeneration: true, runnerId: true, claimedAt: true,
         generation: true, retryOfJobId: true, retryFailureClass: true, retryReason: true,
         retryRequestedBySessionId: true,
@@ -751,6 +772,62 @@ export async function applyIntegrationJobResult(
     ) {
       throw new IntegrationJobRefused('STALE_CLAIM');
     }
+
+    // J-T8: a stop was asked of this claim. What that changes below — a result that came back
+    // "too early", a branch the work did not end on, a failure nobody asked to hear about — is
+    // read from here rather than inferred from the state.
+    const cancelRequested = job.cancelRequestedAt !== null;
+    // J-T8: a stopped LAND_TASK is serialized with the DONE transaction that may be queueing at the
+    // same moment. That transaction takes the project binding (rank 55) and then counts this
+    // generation as in flight; this one takes the SAME row, BEFORE it reads the marker or the task
+    // and before any rank-60 write, and it takes it for every stopped LAND_TASK rather than only
+    // when the marker is already visible. The two orders then have exactly two outcomes:
+    //   * the DONE commits first — this read sees DONE and the marker, and queues the generation;
+    //   * this transaction wins — the DONE waits for it, then counts this generation as terminal
+    //     and queues its own generation with no loss.
+    // A lock taken only on what a plain pre-read saw would close neither: the DONE transaction
+    // never waits for a reader, so the result could commit after a DONE that found this generation
+    // still in flight, and both would decide the other was queueing.
+    const stoppedLanding = job.kind === 'LAND_TASK' && job.taskId != null && cancelRequested;
+    if (stoppedLanding) {
+      await tx.$queryRaw(Prisma.sql`
+        SELECT "id" FROM "project_codebase"
+         WHERE "project_id" = ${job.projectId}::uuid AND "slot" = 'primary'
+         FOR UPDATE`);
+    }
+    // A stopped LAND_TASK whose task was reopened and written DONE again is owed the next
+    // generation, queued in THIS transaction once the row below stops being the live one (J-T8).
+    // WHATEVER RESULT the stopped generation reports: today's runner reads `cancelRequested` once,
+    // when it starts, so a stop asked mid-job is almost always followed by the real answer —
+    // LANDED, ALREADY_LANDED, NOTHING_TO_LAND, CHECK_FAILED, CONFLICT, ERROR — and the commits of
+    // the DONE that came after the reopen are on a branch no generation of that DONE was ever
+    // queued for. The marker is what says that DONE is waiting, and it is consumed by the enqueue.
+    const queuesReopenedDone = stoppedLanding
+      && (await tx.taskReopenIntent.findFirst({
+        where: { taskId: job.taskId! }, select: { taskId: true },
+      })) !== null
+      && (await tx.task.findFirst({
+        where: { id: job.taskId! }, select: { status: true },
+      }))?.status === 'DONE';
+    /**
+     * Queue the generation the DONE written after the reopen is owed, once this one is terminal —
+     * whatever it ended as. The marker and the task's status are asked again here, after the
+     * terminal write: the binding lock above orders this transaction against the DONE, and this
+     * second read keeps a task somebody took away again in between from being queued. A task that
+     * is still being reworked queues nothing, and its marker lives until a DONE comes.
+     */
+    const queueReopenedDone = async (): Promise<void> => {
+      if (!queuesReopenedDone || job.taskId == null) return;
+      const intent = await tx.taskReopenIntent.findFirst({
+        where: { taskId: job.taskId }, select: { taskId: true },
+      });
+      if (!intent) return;
+      const nowDone = await tx.task.findFirst({
+        where: { id: job.taskId }, select: { status: true },
+      });
+      if (nowDone?.status !== 'DONE') return;
+      await enqueueForDoneTask(tx, job.ownerId, job.taskId);
+    };
 
     // The task this job is about, read BESIDE the job rather than below it: `task_id` is a history
     // reference with no foreign key (0423), so it may name a task that is no longer there — the
@@ -797,18 +874,33 @@ export async function applyIntegrationJobResult(
       // from this result (no receipt, no item resolution, nothing for the caller to deliver): it is
       // not an answer, it is the same question asked too early, and the runner is told so rather
       // than told an error, because nothing about its work was wrong.
+      //
+      // A STOP WAS ASKED, though, and a QUEUED row is never left carrying one (J-T8, and the CHECK
+      // the migration adds): the row ends CANCELLED here rather than becoming a row nothing would
+      // ever claim. The answer it was asked for is not written down either — same reason as above.
       await tx.projectIntegrationJob.update({
         where: { id: job.id },
-        data: {
-          state: 'QUEUED',
-          phase: null,
-          claimLeaseOwner: null,
-          claimedAt: null,
-          heartbeatAt: null,
-        },
+        data: cancelRequested
+          ? { state: 'CANCELLED', phase: null, finishedAt: new Date() }
+          : {
+            state: 'QUEUED',
+            phase: null,
+            claimLeaseOwner: null,
+            claimedAt: null,
+            heartbeatAt: null,
+          },
       });
+      // A stopped generation that answered too early still ends here, so the DONE written after
+      // the reopen has room for its own generation (J-T8) — the same requeue every other terminal
+      // result takes below.
+      await queueReopenedDone();
       return {
-        answer: { accepted: true, state: 'QUEUED' as never, receiptIds: [], openItemId: null },
+        answer: {
+          accepted: true,
+          state: (cancelRequested ? 'CANCELLED' : 'QUEUED') as never,
+          receiptIds: [],
+          openItemId: null,
+        },
         after: null,
       };
     }
@@ -877,18 +969,26 @@ export async function applyIntegrationJobResult(
           // is the same question asked too early. The row goes back to the queue, where the claim
           // guard above holds it until the task's work has stopped moving; the check then resolves
           // the branch as it stands by then — carrying the commit this one could not have seen.
+          // A stop asked of it ends it CANCELLED instead: a QUEUED row never keeps one (J-T8).
           await tx.projectIntegrationJob.update({
             where: { id: job.id },
-            data: {
-              state: 'QUEUED',
-              phase: null,
-              claimLeaseOwner: null,
-              claimedAt: null,
-              heartbeatAt: null,
-            },
+            data: cancelRequested
+              ? { state: 'CANCELLED', phase: null, finishedAt: new Date() }
+              : {
+                state: 'QUEUED',
+                phase: null,
+                claimLeaseOwner: null,
+                claimedAt: null,
+                heartbeatAt: null,
+              },
           });
           return {
-            answer: { accepted: true, state: 'QUEUED' as never, receiptIds: [], openItemId: null },
+            answer: {
+              accepted: true,
+              state: (cancelRequested ? 'CANCELLED' : 'QUEUED') as never,
+              receiptIds: [],
+              openItemId: null,
+            },
             after: null,
           };
         }
@@ -986,6 +1086,8 @@ export async function applyIntegrationJobResult(
         filesChanged: body.filesChanged ?? null,
         checks,
         conflicts: body.conflicts ?? [],
+        // J-T8: the result settles a cancellation that was asked of this claim — unless it landed.
+        cancelRequested,
       })
       : null;
     const promotionReceiptIds = promotion?.receiptIds ?? [];
@@ -1028,7 +1130,12 @@ export async function applyIntegrationJobResult(
     // branch the work ended on, and it is written here, after that state (J3's one-inflight-landing
     // index only has room for it once this row has stopped being the live one) and in the same
     // transaction (a landing owed and not recorded is the bug this whole rule is about).
-    if (leftWorkBehind && job.taskId) {
+    //
+    // EXCEPT WHEN SOMEBODY ASKED IT TO STOP (J-T8): a generation being cancelled does not queue the
+    // next one. The stop is the answer — the task was reopened or taken away — and a landing queued
+    // here would be work nobody asked for. (A reopened task written DONE again gets its generation
+    // from the marker below, not from this rule.)
+    if (leftWorkBehind && job.taskId && !cancelRequested) {
       await queueLandingBehindTheWork(tx, {
         ownerId: job.ownerId,
         projectId: job.projectId,
@@ -1036,6 +1143,15 @@ export async function applyIntegrationJobResult(
         sessions: work,
       });
     }
+
+    // §2.2 J-T8: the generation was stopped, and the task was reopened and written DONE again while
+    // it was still in flight — that DONE could not queue (J3's index still named this row), and its
+    // marker was kept for this moment. The row above is now terminal, whatever it ended as (a
+    // legacy runner never reads the stop, so LANDED / CHECK_FAILED / CONFLICT / ERROR are all
+    // ordinary answers here), so the next generation has room. `enqueueForDoneTask` is the DONE's
+    // own route (it consumes the marker), so the new generation is exactly the one that DONE would
+    // have queued.
+    await queueReopenedDone();
 
     // §2.6: a failed job is somebody's to look at, and the platform does not retry it by itself.
     let openItemId: string | null = null;
@@ -1083,7 +1199,11 @@ export async function applyIntegrationJobResult(
         where: { id: job.promotionId },
         select: { state: true },
       }))?.state as PromotionState);
-    if (itemKind && !candidateMovedOn) {
+    // J-T8: a job somebody asked to stop does not open a card for the work it is stopping. A
+    // failure it reports before it gets the stop is a fact about work nobody is waiting for any
+    // more — the task was reopened or taken away, the candidate was superseded or retired — and an
+    // item about it would be a todo with no door its owner would take.
+    if (itemKind && !candidateMovedOn && !cancelRequested) {
       // A promotion's item is named after the merge it is about: into the project's main branch.
       const mainBranch = job.kind === 'LAND_TASK'
         ? null

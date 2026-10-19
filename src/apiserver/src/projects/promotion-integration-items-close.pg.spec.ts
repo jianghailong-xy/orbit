@@ -434,6 +434,7 @@ test('a merge that lands closes the exception an earlier generation of the candi
       filesChanged: 1,
       checks: [],
       conflicts: [],
+      cancelRequested: false,
     }));
     assert.equal(outcome?.state, 'MERGED');
 

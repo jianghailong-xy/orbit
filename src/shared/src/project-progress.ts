@@ -260,7 +260,6 @@ export type TaskIntegrationHandler = 'COORDINATOR' | 'OWNER';
  * the same conditions the claim reads, in the claim's order; a client renders it and never derives
  * one from the task's status or from whether an exception card exists.
  *
- *  - `CANCELLING`: a cancel was asked for; the claim skips it.
  *  - `WAITING_TASK_WORK`: the task's work session has not finished, so its branch can still move.
  *  - `WAITING_MAIN_SYNC`: another task's landing could not absorb upstream into this target, and
  *    its item is still open (M2) — the project line has to be synced first.
@@ -269,9 +268,12 @@ export type TaskIntegrationHandler = 'COORDINATOR' | 'OWNER';
  *    heartbeat lease or does not take integration jobs.
  *  - `WAITING_DISPATCH`: nothing holds it; the next heartbeat of that runner claims it.
  *  - `CONFLICT` / `CHECK_FAILED` / `ERROR`: where a finished attempt stopped.
+ *
+ * A stopped attempt is not named here: a QUEUED job somebody cancels is ended CANCELLED in the
+ * transaction that asks (J-T8), so no queued row waits on a cancellation.
  */
 export type LandTaskBlockingReasonCode =
-  | 'CANCELLING' | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_SERIAL_SLOT'
+  | 'WAITING_TASK_WORK' | 'WAITING_MAIN_SYNC' | 'WAITING_SERIAL_SLOT'
   | 'WAITING_RUNNER' | 'WAITING_DISPATCH' | 'CONFLICT' | 'CHECK_FAILED' | 'ERROR';
 
 /**
