@@ -44,10 +44,18 @@ const promotionAutomaticLandCapabilityV1 = "promotion-automatic-land/v1"
 // by sweepIntegrationScratch instead, which knows which jobs are in flight.
 const integrateScratchPrefix = "_integrate-"
 
-// How many times a job goes back to FETCH when the push is refused because somebody else advanced
-// the target first (§2.5 J5, appendix A-Q5). Two, and then the job stops: a queue that retries a
-// race forever is a queue that never reports anything.
+// How many times a LAND_TASK goes back to FETCH when the push is refused because somebody else
+// advanced the target first (§2.5 J5, appendix A-Q5). Two, and then the job stops: a queue that
+// retries a race forever is a queue that never reports anything.
 const integrationRefetchRounds = 2
+
+// A LAND_PROMOTION does not go back at all (J-T13, owner decision 2026-10-19). The first refused
+// push ends this claim: an automatic landing hands the candidate back to be checked again on the new
+// main (M-T12), and an owner-confirmed one is re-queued as the next generation under the same
+// confirmation by the control plane. Whether a second attempt exists at all, and whether this is the
+// third that turns the candidate BLOCKED, is the control plane's count to keep — it is the party
+// holding the confirmation — so the runner reports the move and stops rather than deciding it.
+const promotionRefetchRounds = 0
 
 // How many times one fetch is tried again when git refused to take a ref's lock because another
 // process was updating the same ref at that moment, and how long the wait before each further try
@@ -144,6 +152,12 @@ type integrationResult struct {
 	Conflicts          []string
 	ErrorCode          string
 	ErrorDetail        map[string]any
+	// UpstreamMovedCommits is set when a LAND_PROMOTION ended because the upstream moved under it
+	// (J-T13, M-T12): the commits the upstream gained, first-parent and newest first.
+	UpstreamMovedCommits *IntegrationUpstreamMovedCommits
+	// UnknownPushes is what the fetch found about the earlier unknown pushes the command named (J12):
+	// only the entries git could answer for.
+	UnknownPushes []IntegrationUnknownPushCheck
 	// Interrupted is a job this runner stopped because the runner itself is stopping
 	// (runIntegrationJobUntil): it pushed nothing, so it is handed back rather than answered, and
 	// Phase says where it was. Never part of a report.
@@ -255,8 +269,12 @@ func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJob
 	if progress != nil {
 		reached = progress.phaseReached
 	}
+	rounds := integrationRefetchRounds
+	if cmd.Kind == "LAND_PROMOTION" {
+		rounds = promotionRefetchRounds
+	}
 	var last integrationResult
-	for round := 0; round <= integrationRefetchRounds; round++ {
+	for round := 0; round <= rounds; round++ {
 		if jobCtx.Err() != nil {
 			return integrationStoppedResult(jobCtx, "FETCH")
 		}
@@ -267,8 +285,9 @@ func runIntegrationJobUntilWithProgress(stop context.Context, cmd IntegrationJob
 		last = one(jobCtx, cmd, repoRoot, scratch, reached, progress)
 		// The one thing worth doing again inside a single job: the target moved between the check
 		// and the push, so the tree that was tested is no longer the tree that would land. Re-read
-		// the refs and re-run the checks on the new combination (§2.5 J5).
-		if last.State == "ERROR" && last.ErrorCode == "TARGET_MOVED" && round < integrationRefetchRounds {
+		// the refs and re-run the checks on the new combination (§2.5 J5). A LAND_TASK only: a
+		// promotion ends its claim on the first refusal (J-T13).
+		if last.State == "ERROR" && last.ErrorCode == "TARGET_MOVED" && round < rounds {
 			continue
 		}
 		return last
@@ -322,6 +341,9 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 	result := integrationResult{
 		SourceSha: sourceSha, TargetShaBefore: targetSha, UpstreamSha: upstreamSha,
 	}
+	// J12's receipt repair: earlier landings on this serial key whose push outcome the control plane
+	// could not know, checked against the target this fetch just read.
+	result.UnknownPushes = checkUnknownPushes(repoRoot, targetSha, cmd.UnknownPushes)
 
 	// A worktree detached at the target tip: everything below happens there, and nothing below
 	// touches the checkout the agents work in.
@@ -539,7 +561,10 @@ func integrateOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, sc
 		// §2.2 J-T4's push boundary: a v2 claim asks before it pushes and pushes only on a clear
 		// answer. Nothing about the tree changes between here and the push — the check that would
 		// refuse it (J-S6a) already ran above.
-		switch progress.reportPush(stop) {
+		switch progress.reportPush(stop, integrationPushFacts{
+			TestedSha: tested, TestedTreeSha: treeSha,
+			SourceSha: result.SourceSha, TargetShaBefore: targetSha,
+		}) {
 		case integrationPushReportCancelled:
 			return integrationResult{State: "CANCELLED", Phase: "PUSH"}
 		case integrationPushReportStopped:
@@ -713,6 +738,9 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 	result := integrationResult{
 		SourceSha: sourceSha, TargetShaBefore: upstreamSha, UpstreamSha: upstreamSha,
 	}
+	// J12's receipt repair, against the upstream this fetch just read (a promotion's target IS its
+	// upstream).
+	result.UnknownPushes = checkUnknownPushes(repoRoot, upstreamSha, cmd.UnknownPushes)
 
 	if _, err := git(repoRoot, "worktree", "add", "--detach", scratch, upstreamSha); err != nil {
 		return errorResult("FETCH", "FETCH_FAILED", map[string]any{
@@ -735,6 +763,11 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 	// the Automatic rule again over that check — or asks the owner, once main has kept moving. A
 	// landing that names no checked tip has nothing to be held to, and lands nothing either.
 	if landing && cmd.Automatic && (cmd.UpstreamShaChecked == "" || cmd.UpstreamShaChecked != upstreamSha) {
+		// What the upstream gained, for the job row and the item a third move opens (J-T13). No
+		// checked tip means nothing to measure from, and the list stays absent rather than empty.
+		if cmd.UpstreamShaChecked != "" {
+			result.UpstreamMovedCommits = movedCommits(repoRoot, cmd.UpstreamShaChecked, upstreamSha)
+		}
 		result.State, result.Phase = "READY", "MERGE"
 		return result
 	}
@@ -854,7 +887,10 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 	if progress != nil {
 		// M-S4's synchronous report, the same rule as J-S6's (§2.2 J-T4): a v2 claim asks before it
 		// pushes and pushes only on a clear answer.
-		switch progress.reportPush(stop) {
+		switch progress.reportPush(stop, integrationPushFacts{
+			TestedSha: tested, TestedTreeSha: treeSha,
+			SourceSha: result.SourceSha, TargetShaBefore: upstreamSha,
+		}) {
 		case integrationPushReportCancelled:
 			return integrationResult{State: "CANCELLED", Phase: "PUSH"}
 		case integrationPushReportStopped:
@@ -880,6 +916,21 @@ func promoteOnce(stop context.Context, cmd IntegrationJobCommand, repoRoot, scra
 		result.State, result.Phase = "ERROR", "PUSH"
 		if isNonFastForward(gitStderr(pushErr)) {
 			result.ErrorCode = "TARGET_MOVED"
+			// J-T13: the first refused push ends this claim. Read the upstream as it is now, so the
+			// result can say what moved it — the commits are here and nowhere the control plane can
+			// read them. A fetch that fails changes nothing about the answer, only how much the
+			// list can say.
+			if movedTo := refreshedUpstreamTip(repoRoot, remote, cmd.UpstreamRef, local); movedTo != "" && movedTo != upstreamSha {
+				result.UpstreamMovedCommits = movedCommits(repoRoot, upstreamSha, movedTo)
+			}
+			if cmd.Automatic {
+				// M-T12: an automatic landing is authorized onto the checked tip only, so a moved
+				// main takes nothing from the owner's press. It answers READY with nothing landed,
+				// and the control plane checks the candidate again on the new main.
+				result.State = "READY"
+				result.ErrorCode = ""
+				return result
+			}
 		} else {
 			result.ErrorCode = "PUSH_REJECTED"
 		}
@@ -1567,17 +1618,32 @@ func (p *integrationProgress) cancelWith(cause error) {
 	p.cancel(cause)
 }
 
+// integrationPushFacts is what the synchronous PUSH report says about the commit about to be pushed,
+// so the control plane can write them down while the claim still holds the row (J12): a job whose
+// push outcome becomes unknown leaves the next landing on its serial key what it needs to check.
+type integrationPushFacts struct {
+	TestedSha       string
+	TestedTreeSha   string
+	SourceSha       string
+	TargetShaBefore string
+}
+
 // reportPush is J-S6 / M-S4's synchronous report: phase = PUSH, then wait for the control plane's
 // answer before anything is pushed. It retries only what can clear on its own (a network failure,
 // a 5xx, a timeout); the lease window is its budget, and past it the job ends without pushing.
-func (p *integrationProgress) reportPush(ctx context.Context) integrationPushReport {
+func (p *integrationProgress) reportPush(ctx context.Context, facts integrationPushFacts) integrationPushReport {
 	p.mu.Lock()
 	p.phase, p.step, p.check, p.output = "PUSH", "", nil, nil
 	p.stepAt = time.Now()
 	p.mu.Unlock()
 	started := time.Now()
 	for attempt := 1; ; attempt++ {
-		resp, err := p.send(ctx, p.request())
+		request := p.request()
+		request.TestedSha = facts.TestedSha
+		request.TestedTreeSha = facts.TestedTreeSha
+		request.SourceSha = facts.SourceSha
+		request.TargetShaBefore = facts.TargetShaBefore
+		resp, err := p.send(ctx, request)
 		switch {
 		case err == nil && resp != nil && !resp.CancelRequested:
 			p.mu.Lock()
@@ -1773,6 +1839,82 @@ func isAncestor(dir, ancestor, descendant string) bool {
 	return err == nil
 }
 
+// checkUnknownPushes answers J12's repair question for each earlier landing the command named: is
+// the commit it tested already an ancestor of the target this job just fetched? Only the entries git
+// answered for are reported — exit 1 is "no", everything else (a sha this repository does not have,
+// a broken object) is "cannot tell", and an answer that cannot be told apart is not one to give.
+func checkUnknownPushes(dir, targetSha string, entries []IntegrationUnknownPush) []IntegrationUnknownPushCheck {
+	if len(entries) == 0 || targetSha == "" {
+		return nil
+	}
+	var checks []IntegrationUnknownPushCheck
+	for _, entry := range entries {
+		if entry.JobID == "" || entry.TestedSha == "" {
+			continue
+		}
+		err := exec.Command("git", "-C", dir, "merge-base", "--is-ancestor", entry.TestedSha, targetSha).Run()
+		var exit *exec.ExitError
+		switch {
+		case err == nil:
+			checks = append(checks, IntegrationUnknownPushCheck{JobID: entry.JobID, Landed: true})
+		case errors.As(err, &exit) && exit.ExitCode() == 1:
+			checks = append(checks, IntegrationUnknownPushCheck{JobID: entry.JobID, Landed: false})
+		}
+	}
+	return checks
+}
+
+// movedCommits is what the upstream gained between two tips, as J-T4's UpstreamMovedCommits carries
+// it: first-parent, newest first, at most twenty commits, with the true total beside them. Nil when
+// git cannot answer, so a reader sees "no list" rather than an empty one that reads as "nothing
+// moved".
+func movedCommits(dir, from, to string) *IntegrationUpstreamMovedCommits {
+	if from == "" || to == "" || from == to {
+		return nil
+	}
+	out, err := git(dir, "log", "--first-parent", "--format=%H%x09%s", from+".."+to)
+	if err != nil {
+		return nil
+	}
+	var commits []IntegrationMovedCommit
+	total := 0
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		total++
+		if len(commits) >= 20 {
+			continue
+		}
+		sha, subject, _ := strings.Cut(line, "\t")
+		commits = append(commits, IntegrationMovedCommit{Sha: sha, Subject: clipSubject(subject)})
+	}
+	if total == 0 {
+		return nil
+	}
+	return &IntegrationUpstreamMovedCommits{Total: total, Commits: commits}
+}
+
+// clipSubject cuts a commit subject to the 200 characters the contract carries (J-T4).
+func clipSubject(subject string) string {
+	runes := []rune(strings.TrimSpace(subject))
+	if len(runes) > 200 {
+		return string(runes[:200])
+	}
+	return string(runes)
+}
+
+// refreshedUpstreamTip reads the target ref again after a refused push, so the result can name what
+// moved it. Best effort: an empty answer means git could not tell, and the result carries no list.
+func refreshedUpstreamTip(repoRoot, remote, ref string, local bool) string {
+	if !local {
+		_ = integrationFetch(repoRoot, remote, ref)
+	}
+	tip, _ := integrationTip(repoRoot, remote, ref, local)
+	return tip
+}
+
 // countCommits is how many commits the upstream gained between two tips: the number the owner reads
 // as "main moved 1 commit since the check" (M-T7). Zero when git cannot answer — an object this
 // machine does not have is not a claim that nothing moved, and the report leaves the count out.
@@ -1866,26 +2008,28 @@ func runIntegrationJobAndReport(stop, handBack context.Context, t *Transport, jo
 		return
 	}
 	body := IntegrationJobResultRequest{
-		ClaimGeneration:    job.ClaimGeneration,
-		LeaseOwner:         job.LeaseOwner,
-		State:              result.State,
-		Phase:              result.Phase,
-		SourceSha:          result.SourceSha,
-		TargetShaBefore:    result.TargetShaBefore,
-		UpstreamSha:        result.UpstreamSha,
-		MainSyncSha:        result.MainSyncSha,
-		TestedSha:          result.TestedSha,
-		TestedTreeSha:      result.TestedTreeSha,
-		LandedSha:          result.LandedSha,
-		LandedTreeSha:      result.LandedTreeSha,
-		AheadOfUpstream:    result.AheadOfUpstream,
-		SourceOnUpstream:   result.SourceOnUpstream,
-		SourceFullyApplied: result.SourceFullyApplied,
-		FilesChanged:       result.FilesChanged,
-		Checks:             result.Checks,
-		Conflicts:          result.Conflicts,
-		ErrorCode:          result.ErrorCode,
-		ErrorDetail:        result.ErrorDetail,
+		ClaimGeneration:      job.ClaimGeneration,
+		LeaseOwner:           job.LeaseOwner,
+		State:                result.State,
+		Phase:                result.Phase,
+		SourceSha:            result.SourceSha,
+		TargetShaBefore:      result.TargetShaBefore,
+		UpstreamSha:          result.UpstreamSha,
+		MainSyncSha:          result.MainSyncSha,
+		TestedSha:            result.TestedSha,
+		TestedTreeSha:        result.TestedTreeSha,
+		LandedSha:            result.LandedSha,
+		LandedTreeSha:        result.LandedTreeSha,
+		AheadOfUpstream:      result.AheadOfUpstream,
+		SourceOnUpstream:     result.SourceOnUpstream,
+		SourceFullyApplied:   result.SourceFullyApplied,
+		FilesChanged:         result.FilesChanged,
+		Checks:               result.Checks,
+		Conflicts:            result.Conflicts,
+		ErrorCode:            result.ErrorCode,
+		ErrorDetail:          result.ErrorDetail,
+		UpstreamMovedCommits: result.UpstreamMovedCommits,
+		UnknownPushes:        result.UnknownPushes,
 	}
 	deliverIntegrationResult(stop, t, job.JobID, body)
 }

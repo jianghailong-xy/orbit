@@ -2354,7 +2354,19 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers/functions, and no function, trigger or type is created, replaced or dropped, so it is
       // not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored row reads NULL
       // in the new columns, which is exactly "a legacy claim".
-      '0434_integration_job_progress_protocol'],
+      '0434_integration_job_progress_protocol',
+      // The commits that moved the upstream under a LAND_PROMOTION (0435, docs/project-integration-line-contract.md
+      // §2.1's `upstream_moved_commits`, J-T4's UpstreamMovedCommits interface, J-T13 / M-T12): one
+      // nullable jsonb column on `project_integration_job`, no default — catalog-only — and one
+      // partial index over the rows J12's next landing asks for (`state = 'ERROR' AND
+      // error_code = 'PUSH_OUTCOME_UNKNOWN'`, keyed by owner, serial key and tested sha), which
+      // builds over whatever stored rows already have that rare shape and nothing else. Only
+      // `project_integration_job` is named (rank 60): no `task`,
+      // `session`, `project` or `project_acceptance_*` object and none of the six preserved
+      // triggers/functions, and no function, trigger or type is created, replaced or dropped, so it
+      // is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored row reads
+      // NULL in the new column, which is "this job did not move the upstream" — the ordinary case.
+      '0435_integration_job_upstream_moved_commits'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
