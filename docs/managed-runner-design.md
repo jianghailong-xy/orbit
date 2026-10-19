@@ -1761,3 +1761,124 @@ payload dropped the refusal. `5928c0e0a` carries it over (`sessionPool.activateP
   Docker host.
 - No real model, one physical machine, the lab's slow storage. A real cluster's latencies differ, and so do the costs
   above.
+
+## Implementation record: volume syncs on a shared Docker host
+
+Recorded 2026-10-20 for the second phase's task D10, part of criterion 12. T02c ([above](#implementation-record-git-work-and-engine-sessions-through-a-power-cut))
+has a managed runner `syncfs` its volume before every report and, in the background, behind every tool an engine runs.
+A Kubernetes volume on RBD is an ext4 of its own, so there the sync writes back the runner's own data. A Docker local
+volume is a directory of the Docker host's filesystem: the sync writes back everything dirty on it, the other runners'
+volumes and the deployment's Postgres (`./data/postgres`) among it. New deployments run the Docker backend and give
+every account a runner, so the cost was measured with up to eight runners at work on one Docker host
+([evidence](evidence/managed-runner-docker-volume-sync/2026-10-20/README.md)). The operator's side is in
+[the Docker runbook](managed-runner-docker-operations.md#volume-syncs-and-the-hosts-disk).
+
+**How it was measured.**
+
+- **Host.** An isolated Docker host on the HPC machine (`docker:29.8.2-dind`, capped, outside the runner's cgroup). Its
+  Docker data root and its deployment's checkout share one spinning disk, as on a default host whose `/var/lib/docker`
+  and checkout share its disk. A default install (`scripts/install-server.sh`), with runners of 1 CPU and 1 GiB so that
+  eight fit.
+- **Load.** 1, 4 and 8 runners, each running fake-model.py's tool loop turn after turn: three cycles of an edit, a
+  `git commit` and a build that writes 400 files (about 4 MB), then one more edit, which the runner itself commits once
+  the turn is answered. Each round's 120 s window had:
+  - every `syncfs` traced (an ftrace instance on the HPC host);
+  - the disk, IO pressure and the containers' cgroups sampled every second;
+  - the API probed as an account (8 requests a second through the gateway: three reads and a rename);
+  - Postgres probed by pgbench (one-row commits and reads).
+- **Control.** The same load on the runner from just before T02c (`326f43dc0`): an image that differs from T02c's only in
+  the runner binary.
+- **Patterns.** First with every runner in step: all start at once and every model step takes 2 s, so their syncs come
+  in bursts. Then staggered: random starts and steps of 1 to 3 s, as different people's sessions are. The staggered
+  rounds are the comparison; the rounds in step are the worst case of bursts. The rounds of a kind are pooled.
+
+**The bound.** For the Docker backend, against the same load without volume syncs, at each runner count measured:
+
+| What | At most | Why |
+| --- | --- | --- |
+| The API's p99 as an account sees it (its runner's status, a session, the session list, a rename) | 25% over, or 10 ms | Every account's clients and runners share the apiserver, while a runner's syncs make only that runner's work durable. What one account's durability costs the others has to stay small. |
+| Postgres's commit p99 (a one-row `INSERT`) | 50% over, or 10 ms | Every API write waits for a commit, and a commit waits for the WAL's flush on the shared disk: the first thing a sync on that disk slows. A request's own work dilutes it, so it may move more than the API's p99. |
+| Postgres's IO pressure (the share of time its tasks wait on IO) | 5 points over | The database's own stall, whatever the probes happen to ask. |
+| The runner's own commit, from asking to done (p50) | 1 s over | Its owner pays this for the durability of what the runner reports to them. |
+
+The bound was set after the first comparison of T02c with the control and before the change below was measured. It is
+relative to the control: a spinning disk's absolute latencies say little of an SSD host's.
+
+**The conclusion.** Pooled over the rounds of a kind. The rounds ran beside other sessions' work on the HPC host, and in
+a third of them outside memory pressure made the test host read back more than 100 MB of evicted page cache from the
+disk, which slowed every build alike; "undisturbed" leaves those rounds out. Both views are in the evidence.
+
+- **T02c's syncs exceed the bound at 8 runners in every view.**
+  - Staggered: Postgres's commit p99 759 ms against 400 with all rounds, 224 against 59 undisturbed; the API's p99 225
+    against 137, and 127 against 52.
+  - In step: 676 against 172 and 273 against 107, and the runner's own commit took 4.0 s at the median against 0.86.
+  - At 4 runners they exceed it with all rounds (341 against 115 ms in step, 431 against 156 staggered), though not in
+    the one staggered round without outside pressure. With one runner they stay within it.
+- **So on the Docker backend the runner now syncs before its reports only** (below).
+- **With that change, 1 and 4 runners are within the bound in every view.** At 4 runners staggered: the API's p99 54 ms
+  against 49, Postgres's commit p99 93 against 156, its IO pressure 2.5% against 2.7%, the runner's commit 773 ms
+  against 679.
+- **At 8 runners at work at once on one spinning disk, the syncs before reports still exceed it in every view but
+  one.**
+  - Staggered and undisturbed: Postgres's commit p99 184 ms against 59, the API's p99 95 against 52.
+  - Without the runner's commits, one sync per turn: 237 against 55, and 129 against 46.
+  - With all rounds the change looks within (314 against 400). That is the control's own round under memory pressure,
+    with 904 MiB left on the HPC host, lifting the control's tail.
+  - Every Postgres commit over 100 ms in the undisturbed rounds ran while one of those syncs did (51 of 51, and 64 of 68
+    without runner commits). In the control's undisturbed rounds one commit in all took that long.
+  - That is the guarantee's own cost. Each sync before a report writes back every runner's unwritten data on the disk,
+    and it is what keeps a reported commit and an answered turn through a power cut.
+- **The Docker backend's syncs are acceptable where at most four runners at work share a spinning disk with
+  Postgres.**
+  - The default profile (2 CPUs and 4 GiB a runner, a quarter of the host kept back) admits four runners on a host of
+    about 11 CPUs and 22 GiB, eight on one of about 22 CPUs and 43 GiB.
+  - A host that admits more runners than that, on spinning disks, wants Postgres on another disk than Docker's data
+    root, an SSD, or a lower `limits.maxContainers` ([the runbook](managed-runner-docker-operations.md#volume-syncs-and-the-hosts-disk)).
+
+**What changed, on the Docker backend only** (`src/runner-go/volume_durability.go`, `volume_shared_linux.go`):
+
+| Where | What |
+| --- | --- |
+| Which volume | At start the runner reads, from `/proc/self/mountinfo`, the mount that holds `ORBIT_HOME`. Its fourth field, the mount's root inside its filesystem, is `/` for a volume that is a filesystem of its own (an RBD volume's ext4), and the volume's directory for a Docker local volume (`/var/lib/docker/volumes/mr-data-…/_data`). A volume whose mount cannot be read counts as one of its own, so T02c's syncs stay. The start logs which: `volume syncs: before reports only; the volume is a directory of /dev/sdb (ext4), which it shares, …` or `… before reports and behind every tool; the volume is /dev/rbd0 (ext4), a filesystem of its own`. |
+| Before a report | Unchanged on both backends: a turn's end, a session's end, a checkout, a commit, a merge, a landing, a cleanup and the volume check each wait for a `syncfs` first. |
+| Behind every tool | Only on a volume that is a filesystem of its own. On a shared one the nudge does nothing. |
+| Kubernetes | Unchanged: an RBD volume is the root of its own ext4, so the runner keeps every one of T02c's syncs. T02c's power cut after-run, done again on the lab's two nodes with this change ([evidence](evidence/managed-runner-docker-volume-sync/2026-10-20/README.md#kubernetes-unchanged-t02cs-power-cut-after-the-fix-on-this-change)): the runner logged `volume syncs: before reports and behind every tool; the volume is /dev/rbd0 (ext4), a filesystem of its own`. After the cut, every repository read and passed `fsck`, every returned commit and the mid-turn one (3.4 s before the cut) were on their branches, and the session resumed with its last turn: 15 steps, 90 checks, as T02c's after-run did. |
+| Self-managed runners | Unchanged: they sync nothing. |
+
+Why these syncs: the ones behind tools were four in five of T02c's (186 a minute at 8 runners in step, the reports'
+32), and every report already waits for a sync of its own. Dropping them is what brings 4 runners within the bound. At
+8, the syncs before reports exceed it on their own, so no rate limit on the others could have brought 8 within it. A
+sync merged across the host's runners would need a channel from every runner container to something on the host,
+which the Docker backend's isolation does not give them.
+
+**What it does to durability.**
+
+- **Unchanged:** a commit, merge or checkout the runner has reported and a turn that has been answered are on the disk
+  before the control plane hears of them, as T02c made them.
+- **Wider:** what a tool writes in the middle of a turn reaches the disk at the next sync on that filesystem, whichever
+  runner makes it: this turn's end, a report, or another runner's report. Failing those, the kernel's own writeback
+  takes it, data dirty for 30 s (`vm.dirty_expire_centisecs`) at the flusher's next pass and its metadata at ext4's next
+  journal commit. Measured from each tool result to the end of the first sync that started after it (staggered):
+
+  | Runners | T02c | This change |
+  | --- | --- | --- |
+  | 1 | p50 0.04 s, p99 0.14–0.15 s | p50 9.6–11.5 s, p99 26–30 s |
+  | 4 | p50 0.04–0.07 s, p99 0.2–0.8 s | p50 3.2–5.4 s, p99 13–22 s |
+  | 8 | p50 0.09–0.11 s, p99 0.4–0.8 s | p50 1.5–1.8 s, p99 8–15 s |
+
+- **What a power cut in that window leaves:** a turn still running at the cut can lose its mid-turn work, as T02 found
+  before T02c (a commit's files empty). The turn had not been answered. The runner's next start finds it with T02c's
+  check: stale locks removed, a broken branch restored from its reflog, anything else refused with its reason. Its
+  session is not run in a broken repository.
+
+**Left to later work, or not shown here.**
+
+- Per-runner filesystems on Docker (a volume driver that gives each volume a filesystem of its own) would make a sync
+  the runner's own again. The runner would see it from its mount and keep T02c's syncs behind tools by itself.
+- Postgres on another disk than Docker's data root, an SSD Docker host, and the kernel's writeback settings were not
+  measured.
+- No power was cut on Docker: a test host inside the HPC host shares its kernel, and so its page cache. The window above
+  is computed from the traced syncs, not observed through a cut.
+- fake-model.py stands in for a model: its steps are regular and fast. The rounds ran beside other sessions' work on the
+  HPC host, whose memory pressure made some rounds re-read their page cache from the disk; each round records that, and
+  the comparison pools the rounds of a kind.

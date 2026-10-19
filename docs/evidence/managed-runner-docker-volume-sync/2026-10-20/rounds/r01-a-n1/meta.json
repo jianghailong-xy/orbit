@@ -1,0 +1,94 @@
+{
+  "label": "r01-a-n1",
+  "variant": "t02c",
+  "image": "sha256:442830588a088c0df15aca2972a211a9b7ad9cb234f5d668cc1fe5602cd7e8f5",
+  "runners": 1,
+  "loaded": [
+    "u1"
+  ],
+  "loadSeconds": 120,
+  "cycles": 3,
+  "files": 400,
+  "thinkMs": 2000,
+  "tag": "r01an1",
+  "quietBefore": {
+    "seconds": 15,
+    "utilPercent": 11.76,
+    "writeMBps": 0.074,
+    "readMBps": 0.781,
+    "testHostWriteMBps": 0.055,
+    "testHostReadMBps": 0.581,
+    "journalWriteMBps": 0.005,
+    "othersWriteMBps": 0.014,
+    "othersReadMBps": 0.201,
+    "load": [
+      "11.56",
+      "12.75",
+      "11.89"
+    ],
+    "qemu": "0"
+  },
+  "states": {
+    "u1": {
+      "managementState": "READY",
+      "desiredState": "RUNNING",
+      "heartbeatStatus": "ONLINE",
+      "usable": true,
+      "revision": 27,
+      "reason": null,
+      "httpStatus": null
+    }
+  },
+  "containers": {
+    "u1": "mr-01a155a1-d3c3-76fe-b73f-dfb5b6cd3305",
+    "u2": "mr-01a155a1-d3eb-740d-ba20-9075fe0731d3",
+    "u3": "mr-01a155a1-d422-715e-9e9d-d483a4a84850",
+    "u4": "mr-01a155a1-d45b-7075-bba3-f28d00e4ddbb",
+    "u5": "mr-01a155a1-d48f-70eb-8a15-ad6b40f090d9",
+    "u6": "mr-01a155a1-d4e5-7614-805f-c860e3d77741",
+    "u7": "mr-01a155a1-d52f-702a-a700-f59884b28a25",
+    "u8": "mr-01a155a1-d568-71f0-a360-0b6cd5ef8397"
+  },
+  "cgroups": {
+    "mr-01a155a1-d45b-7075-bba3-f28d00e4ddbb": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/5ffe43c91d66a56d6c3005e554070d78545f949e46902e634fdbfe7e090653cd",
+    "mr-01a155a1-d3c3-76fe-b73f-dfb5b6cd3305": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/6139c133db9e9695481ef09b44b31120f67d3105d5880fd1d6410a1481289d74",
+    "mr-01a155a1-d422-715e-9e9d-d483a4a84850": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/c5899b50e0ddfe613111f4dffc4c3b1e13cf7e3694c1afebd89073b78c72f78a",
+    "mr-01a155a1-d3eb-740d-ba20-9075fe0731d3": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/ce60bb454725de83a138a2cb4be1f33465dbb64d664e219ae5de28369e0ab934",
+    "mr-01a155a1-d568-71f0-a360-0b6cd5ef8397": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/6fd4f3e390099b76914a6b000ede14a7d3d6de369690202f13321123c5e0685a",
+    "mr-01a155a1-d52f-702a-a700-f59884b28a25": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/d719ce23350f8fab03cb77b0744cfc17f09c2f35e7fe9712687eb227aa004d7b",
+    "mr-01a155a1-d4e5-7614-805f-c860e3d77741": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/dfe14186d9e79b30d89491948085c589a71162495118fdc25fb1b1f05d1d6622",
+    "mr-01a155a1-d48f-70eb-8a15-ad6b40f090d9": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/5b1fdb448b36a2dfb4b947d6cb1e67b18ef5f0e8e9a3371d9820394010e46d0b",
+    "orbit-apiserver": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/0cc4e07672401432d9158483e549f9a77164b5868b0c488e97bfb503db580c86",
+    "orbit-gateway": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/edcd9d8cbc77c15adbfca8c29848b30fc13a0f6547428319fa928af80a1800ea",
+    "orbit-postgres": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/2bdb3a05b796cc13a30af2561361ddeea158630b6303331bc434d0d835a07f76"
+  },
+  "started": "2026-10-19T19:47:34Z",
+  "wall": 1792439254.258,
+  "mono": 1485108.388,
+  "phases": {
+    "probesStarted": {
+      "wall": 1792439254.669,
+      "mono": 1485108.799
+    },
+    "loadStarted": {
+      "wall": 1792439269.669,
+      "mono": 1485123.799
+    },
+    "loadEnded": {
+      "wall": 1792439389.669,
+      "mono": 1485243.799
+    },
+    "drained": {
+      "wall": 1792439406.598,
+      "mono": 1485260.728
+    },
+    "probesStopped": {
+      "wall": 1792439416.598,
+      "mono": 1485270.728
+    }
+  },
+  "ended": "2026-10-19T19:50:18Z",
+  "workerErrors": {},
+  "workersStillRunning": [],
+  "tracedThreads": 16
+}

@@ -1,0 +1,59 @@
+{
+ "steps": 15,
+ "checks": 90,
+ "failedSteps": [],
+ "from": "2026-10-19T23:07:07.915+00:00",
+ "to": "2026-10-19T23:13:44.624+00:00",
+ "phaseSeconds": {
+  "again": 396.7
+ },
+ "measures": {
+  "before": "unavailable: KeyError 'secondsBeforeTheCut'",
+  "after": "unavailable: KeyError 'secondsBeforeTheCut'",
+  "again": {
+   "secondsBeforeTheCut": {
+    "s1LastAnswered": 0.0,
+    "s1LastSent": 1.8,
+    "s2CommitAsked": 3.4,
+    "s2CommitReported": 1.8,
+    "s2MergeAsked": 1.8,
+    "s2MergeReturned": 0.0,
+    "s3EngineCommitSeen": 3.4,
+    "s3Sent": 4.7,
+    "settleSyncEnded": 4.9,
+    "settleSyncStarted": 5.3
+   },
+   "left": {
+    "emptyGitFiles": {},
+    "fsckErrors": [],
+    "lastTurnInTheTranscript": {
+     "answer": 1,
+     "message": 1
+    },
+    "locks": {},
+    "returnedCommitsMissing": [],
+    "s3": {
+     "s3 engine commit (its turn still running)": {
+      "branchCheck": "",
+      "object": "commit",
+      "onTheBranch": true,
+      "ref": "HEAD",
+      "sha": "2e59526917fa42b83071277ca28feaf6c594fbe2"
+     }
+    },
+    "unreadable": []
+   },
+   "lastTurnResumed": true,
+   "runnerLog": [
+    "[orbit-runner 2026-10-19T23:11:29.414Z] volume check: 4 checkouts in 1 repositories after start; 0 stale lock files removed, 0 branches restored, 0 checkouts damaged",
+    "[orbit-runner 2026-10-19T23:11:29.415Z] volume syncs: before reports and behind every tool; the volume is /dev/rbd1 (ext4), a filesystem of its own"
+   ],
+   "failover": {
+    "cutToReady": 80.2,
+    "cutToReceipt": 52.6,
+    "finalizerOffToReady": 16.0,
+    "taintToFencing": 11.4
+   }
+  }
+ }
+}

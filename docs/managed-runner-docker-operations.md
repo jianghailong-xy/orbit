@@ -14,7 +14,9 @@ disk the storage budget measures and the executable `/tmp` were checked later th
 whose checkout and Docker data root are on different filesystems
 ([evidence](evidence/managed-runner-docker-hardening/2026-10-17/README.md)). The managed runners' host firewall was
 checked on 2026-10-19 in an isolated Docker host
-([evidence](evidence/managed-runner-docker-firewall/2026-10-19/README.md)).
+([evidence](evidence/managed-runner-docker-firewall/2026-10-19/README.md)). What the runners' volume syncs cost the
+host's disk was measured on 2026-10-20 in an isolated Docker host on one spinning disk
+([evidence](evidence/managed-runner-docker-volume-sync/2026-10-20/README.md)).
 
 ## What there is to keep
 
@@ -447,6 +449,65 @@ one is gone.
    or it is refused field by field. Write it whole, and check that it is valid JSON first: an unreadable receipt
    fails the runner.
 3. The next generation then starts by itself. Delete the receipt afterwards.
+
+## Volume syncs and the host's disk
+
+A managed runner keeps what it reports through a power loss. Before it tells the server that a turn was answered or a
+session ended, or that it made a checkout, a commit, a merge, a landing or a cleanup, it syncs its volume (`syncfs`),
+and the report waits for the sync. On this backend a runner's volume is a directory of this host's filesystem, so the
+sync writes back everything not yet written on that filesystem: every runner's volume, Postgres's data in
+`data/postgres` when the checkout is on the same filesystem, Docker's logs. (A runner on Kubernetes also syncs behind
+every tool its engine runs, in the background; on Docker it does not, because those syncs cost the others too much.)
+Each runner says which at start:
+
+```bash
+docker logs mr-<runner uuid> 2>&1 | grep 'volume syncs:'
+```
+
+```text
+volume syncs: before reports only; the volume is a directory of /dev/sdb (ext4), which it shares, so a sync behind every tool would write back the whole filesystem
+```
+
+What it costs, measured on one spinning disk holding Docker's data root and the checkout. Runners of 1 CPU and 1 GiB
+each ran an engine's tool loop of edits, commits and builds at once, out of step with one another, and committed after
+every turn. Each cell is with the syncs / without them (the same load on a runner that syncs nothing), from the rounds
+that outside memory pressure on the test host left alone:
+
+| Runners at work at once | 1 | 4 | 8 |
+| --- | --- | --- | --- |
+| Syncs a minute | 4 | 20 | 37 |
+| The API's p99, as an account sees it | 33 / 34 ms | 54 / 49 ms | 95 / 52 ms |
+| Postgres's commit p99 | 27 / 39 ms | 93 / 156 ms | 184 / 59 ms |
+| Postgres commits over 100 ms, a minute | 0 / 0.5 | 2.7 / 3.5 | 12.8 / 0.2 |
+| The runner's own commit, asked to done, p50 | 731 / 623 ms | 773 / 679 ms | 846 / 671 ms |
+
+Up to four runners at work, the cost is within the bound the
+[design record](managed-runner-design.md#implementation-record-volume-syncs-on-a-shared-docker-host) sets. With eight
+at work on one spinning disk, Postgres's commits wait noticeably longer while those syncs run: every commit over 100 ms
+in those rounds ran during one.
+
+What a sync keeps: a commit, merge or checkout a runner reported, and a turn that was answered, survive this host's
+power loss. What a tool writes in the middle of a turn waits for the next sync on the disk, this turn's end or any
+runner's report, or for the kernel's own writeback about 30 s later. Measured: half of it was on the disk within
+2 to 12 s, and nearly all within 9 to 30 s, the sooner the more runners are at work.
+
+What an operator can change:
+
+- **Postgres and the runners' volumes on different disks.** Docker's data root (`data-root` in
+  `/etc/docker/daemon.json`, `/var/lib/docker` by default) holds the volumes, and the checkout's `data/postgres` holds
+  Postgres. On separate disks a runner's sync writes back only runners' data, and Postgres's commits do not queue
+  behind it. Decide it before the first runner exists: moving Docker's data root later moves every volume with it. Not
+  measured.
+- **An SSD.** A sync on a spinning disk pays its seeks. T02c timed a 200-file commit followed by a sync at 129 ms on the
+  HPC host's spinning disk and 26 ms on its NVMe.
+- **Fewer runners at work on one disk.** The runner's resources in `profile.json` decide how many runners the budget
+  admits: with the default 2 CPUs and 4 GiB a runner, four need a host of about 11 CPUs and 22 GiB. `limits.maxContainers`
+  in `channel.json` caps them whatever the budget ([Runners wait though the host has room](#runners-wait-though-the-host-has-room)).
+- **The kernel's writeback.** `vm.dirty_expire_centisecs` (3000, 30 s, by default) is the longest a tool's work waits
+  for the kernel. Lowering it shortens that window and writes more often. A setting of the whole host; not measured.
+- **Not a setting: the syncs before reports.** They are what keeps reported work through a power loss, and nothing
+  turns them off. A runner whose volume is a filesystem of its own, as a volume driver that gives each volume one would
+  make it, syncs behind its tools again by itself, as on Kubernetes.
 
 ## Plain HTTP to the server: only on this host's container network
 

@@ -1,0 +1,420 @@
+{
+ "checks": [
+  {
+   "check": "the copy was read from the snapshot, on the first node",
+   "ok": true,
+   "value": {
+    "fstype": "ext4",
+    "options": "rw,relatime",
+    "source": "/dev/rbd1",
+    "superOptions": "rw,stripe=1024"
+   }
+  },
+  {
+   "check": "the copy, its claim, PV and image, and the snapshot are gone",
+   "ok": true,
+   "value": "[]\n"
+  },
+  {
+   "check": "cyd: every repository reads: HEAD and its branch valid",
+   "ok": true,
+   "value": {}
+  },
+  {
+   "check": "cyd: git fsck finds no error in any of them",
+   "ok": true,
+   "value": {}
+  },
+  {
+   "check": "cyd: every commit that had returned is there, on its branch",
+   "ok": true,
+   "value": {}
+  },
+  {
+   "check": "cyd: the last turn, its message and its final answer, is in the engine's transcript",
+   "ok": true,
+   "value": {
+    "T02C-CYD-LAST": 1,
+    "T02C-CYD-S1": 4,
+    "T08-WROTE-CYDLAST": 3,
+    "tool result received: T08-WROTE-CYDLAST": 1
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T23:11:11.891+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "again",
+ "result": {
+  "asked": {
+   "commits": [
+    {
+     "label": "s1 first engine commit",
+     "ref": "HEAD",
+     "repo": "01a1566d-f340-74cb-b88b-96e0926ed9cf",
+     "sha": "955739be67e6fe66d4fd36216df6b39f1de61727"
+    },
+    {
+     "label": "s1 last engine commit (returned: the turn ended)",
+     "ref": "HEAD",
+     "repo": "01a1566d-f340-74cb-b88b-96e0926ed9cf",
+     "sha": "5155c1897c135be4d1121a44335b1312cea14d39"
+    },
+    {
+     "label": "s2 engine commit",
+     "ref": "HEAD",
+     "repo": "01a1566d-fd56-7467-991b-a02e28aa38f2",
+     "sha": "609b50cf99fc422924b0e855da4d985dbaea73de"
+    },
+    {
+     "label": "s2 runner commit (returned: the merge took it)",
+     "ref": "HEAD",
+     "repo": "01a1566d-fd56-7467-991b-a02e28aa38f2",
+     "sha": "1c0005a149f237c7a5e0eab0b5fad78f7abeb070"
+    },
+    {
+     "label": "runner merge into the workspace (returned)",
+     "ref": "HEAD",
+     "repo": "workspace",
+     "sha": "1c0005a149f237c7a5e0eab0b5fad78f7abeb070"
+    },
+    {
+     "label": "s3 engine commit (its turn still running)",
+     "ref": "HEAD",
+     "repo": "01a1566e-0b1c-727f-9a1a-5fd65ce7bed5",
+     "sha": "2e59526917fa42b83071277ca28feaf6c594fbe2"
+    }
+   ],
+   "markers": [
+    "T02C-CYD-S1",
+    "T02C-CYD-LAST",
+    "T08-WROTE-CYDLAST",
+    "tool result received: T08-WROTE-CYDLAST"
+   ],
+   "sessions": [
+    "01a1566d-f340-74cb-b88b-96e0926ed9cf",
+    "01a1566d-fd56-7467-991b-a02e28aa38f2",
+    "01a1566e-0b1c-727f-9a1a-5fd65ce7bed5"
+   ],
+   "transcript": "653a6f80-69eb-4bb5-9d0b-52b5a50a1b08"
+  },
+  "copy": {
+   "claim": "t02c-after-cut-231049",
+   "image": "orbit-mr-rbd/csi-vol-c18b5b50-3c51-47f5-9226-ac887b89ec85",
+   "info": "{\"name\":\"csi-vol-c18b5b50-3c51-47f5-9226-ac887b89ec85\",\"id\":\"4cb4b9730c410\",\"size\":2147483648,\"objects\":512,\"order\":22,\"object_size\":4194304,\"snapshot_count\":1,\"block_name_prefix\":\"rbd_data.4cb4b9730c410\",\"format\":2,\"features\":[\"layering\"],\"op_features\":[],\"flags\":[],\"create_timestamp\":\"Mon Oct 19 23:10:50 2026\",\"access_timestamp\":\"Mon Oct 19 23:10:50 2026\",\"modify_timestamp\":\"Mon Oct 19 23:10:50 2026\"}\n"
+  },
+  "cutAt": "2026-10-19T23:10:19.519+00:00",
+  "snapshot": {
+   "createdAt": "Mon Oct 19 23:10:48 2026",
+   "listed": [
+    {
+     "id": 8,
+     "name": "t02c-after-cut",
+     "protected": "false",
+     "size": 2147483648,
+     "timestamp": "Mon Oct 19 23:10:48 2026"
+    }
+   ],
+   "name": "orbit-mr-rbd/csi-vol-a14632b2-debb-4799-b5b8-a6e0651323c0@t02c-after-cut"
+  },
+  "summary": {
+   "emptyGitFiles": {},
+   "fsckErrors": [],
+   "lastTurnInTheTranscript": {
+    "answer": 1,
+    "message": 1
+   },
+   "locks": {},
+   "returnedCommitsMissing": [],
+   "s3": {
+    "s3 engine commit (its turn still running)": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "2e59526917fa42b83071277ca28feaf6c594fbe2"
+    }
+   },
+   "unreadable": []
+  },
+  "view": {
+   "commits": {
+    "runner merge into the workspace (returned)": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "1c0005a149f237c7a5e0eab0b5fad78f7abeb070"
+    },
+    "s1 first engine commit": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "955739be67e6fe66d4fd36216df6b39f1de61727"
+    },
+    "s1 last engine commit (returned: the turn ended)": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "5155c1897c135be4d1121a44335b1312cea14d39"
+    },
+    "s2 engine commit": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "609b50cf99fc422924b0e855da4d985dbaea73de"
+    },
+    "s2 runner commit (returned: the merge took it)": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "1c0005a149f237c7a5e0eab0b5fad78f7abeb070"
+    },
+    "s3 engine commit (its turn still running)": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "2e59526917fa42b83071277ca28feaf6c594fbe2"
+    }
+   },
+   "ext4Options": [
+    "rw",
+    "bsddf",
+    "nogrpid",
+    "block_validity",
+    "dioread_nolock",
+    "nodiscard",
+    "delalloc",
+    "nowarn_on_error",
+    "journal_checksum",
+    "barrier",
+    "auto_da_alloc",
+    "user_xattr",
+    "acl",
+    "noquota",
+    "resuid=0",
+    "resgid=0",
+    "errors=continue",
+    "commit=5",
+    "min_batch_time=0",
+    "max_batch_time=15000",
+    "i_version",
+    "stripe=1024",
+    "data=ordered",
+    "inode_readahead_blks=32",
+    "init_itable=10",
+    "max_dir_size_kb=0",
+    "prefetch_block_bitmaps"
+   ],
+   "git": "git version 2.47.3",
+   "kernel": "7.0.0-34-generic",
+   "mount": {
+    "fstype": "ext4",
+    "options": "rw,relatime",
+    "source": "/dev/rbd1",
+    "superOptions": "rw,stripe=1024"
+   },
+   "repos": {
+    "01a1566d-f340-74cb-b88b-96e0926ed9cf": {
+     "branch": {
+      "loose": "5155c1897c135be4d1121a44335b1312cea14d39",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-cyd-s1-a-session-t03-secret-cyds1-f-860601"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a1566d-f340-74cb-b88b-96e0926ed9cf",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a1566d-f340-74cb-b88b-96e0926ed9cf",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-cyd-s1-a-session-t03-secret-cyds1-f-860601"
+     },
+     "indexBytes": 305,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "5155c1897c135be4d1121a44335b1312cea14d39 T08 cydlast\n955739be67e6fe66d4fd36216df6b39f1de61727 T08 cyds1\n2dca16af2af5dbe0415b23a9321d7bda82541e70 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "f2b6a039481f6356edd7b90c3c37aa334c785dec"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    },
+    "01a1566d-fd56-7467-991b-a02e28aa38f2": {
+     "branch": {
+      "loose": "1c0005a149f237c7a5e0eab0b5fad78f7abeb070",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-cyd-s2-a-session-t03-secret-cyds2-f-cbaa91"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a1566d-fd56-7467-991b-a02e28aa38f2",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a1566d-fd56-7467-991b-a02e28aa38f2",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-cyd-s2-a-session-t03-secret-cyds2-f-cbaa91"
+     },
+     "indexBytes": 313,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "1c0005a149f237c7a5e0eab0b5fad78f7abeb070 Update t02c-runner-cyd.txt\n609b50cf99fc422924b0e855da4d985dbaea73de T08 cyds2\n2dca16af2af5dbe0415b23a9321d7bda82541e70 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "c24bdd54fa04e807198870ae66f5af16e2bb0bb2"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    },
+    "01a1566e-0b1c-727f-9a1a-5fd65ce7bed5": {
+     "branch": {
+      "loose": "2e59526917fa42b83071277ca28feaf6c594fbe2",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-cyd-hold-a-turn-still-running-at-th-122b4a"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a1566e-0b1c-727f-9a1a-5fd65ce7bed5",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a1566e-0b1c-727f-9a1a-5fd65ce7bed5",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-cyd-hold-a-turn-still-running-at-th-122b4a"
+     },
+     "indexBytes": 225,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "2e59526917fa42b83071277ca28feaf6c594fbe2 T08 cydheld\n2dca16af2af5dbe0415b23a9321d7bda82541e70 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "45db71a5aae5b0c3d4dee9d3505b3d29cc3ae77c"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    },
+    "workspace": {
+     "branch": {
+      "loose": "1c0005a149f237c7a5e0eab0b5fad78f7abeb070",
+      "looseBytes": 41,
+      "ref": "refs/heads/master"
+     },
+     "checkout": "/var/lib/orbit/home/orbit-repos/default",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+     "headFile": {
+      "bytes": 23,
+      "content": "ref: refs/heads/master"
+     },
+     "indexBytes": 313,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "1c0005a149f237c7a5e0eab0b5fad78f7abeb070 Update t02c-runner-cyd.txt\n609b50cf99fc422924b0e855da4d985dbaea73de T08 cyds2\n2dca16af2af5dbe0415b23a9321d7bda82541e70 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "c24bdd54fa04e807198870ae66f5af16e2bb0bb2"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    }
+   },
+   "transcripts": {
+    ".claude/projects/-tmp-orbit-cmsg-93242003/19b0e74b-7242-439c-96f2-9a9b6bd8448a.jsonl": {
+     "bytes": 80204,
+     "lines": 22,
+     "markers": {
+      "T02C-CYD-LAST": 0,
+      "T02C-CYD-S1": 0,
+      "T08-WROTE-CYDLAST": 0,
+      "tool result received: T08-WROTE-CYDLAST": 0
+     }
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1566d-f340-74cb-b88b-96e0926ed9cf/653a6f80-69eb-4bb5-9d0b-52b5a50a1b08.jsonl": {
+     "bytes": 742030,
+     "lines": 41,
+     "markers": {
+      "T02C-CYD-LAST": 1,
+      "T02C-CYD-S1": 4,
+      "T08-WROTE-CYDLAST": 3,
+      "tool result received: T08-WROTE-CYDLAST": 1
+     }
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1566d-fd56-7467-991b-a02e28aa38f2/f74e60c3-96c8-461d-abdc-109d1febed78.jsonl": {
+     "bytes": 731889,
+     "lines": 29,
+     "markers": {
+      "T02C-CYD-LAST": 0,
+      "T02C-CYD-S1": 0,
+      "T08-WROTE-CYDLAST": 0,
+      "tool result received: T08-WROTE-CYDLAST": 0
+     }
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1566e-0b1c-727f-9a1a-5fd65ce7bed5/f4ee7965-eaf3-423c-bdd4-dcf46be3f1cf.jsonl": {
+     "bytes": 730695,
+     "lines": 28,
+     "markers": {
+      "T02C-CYD-LAST": 0,
+      "T02C-CYD-S1": 0,
+      "T08-WROTE-CYDLAST": 0,
+      "tool result received: T08-WROTE-CYDLAST": 0
+     }
+    }
+   },
+   "uid": 10001
+  }
+ },
+ "seconds": 51.2,
+ "startedAt": "2026-10-19T23:10:20.723+00:00",
+ "step": "left"
+}

@@ -204,7 +204,7 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `switch-lab.py` | Task T08b's run ([below](#a-restored-volume-back-under-its-runner-t08b)), on acceptance-lab.py's helpers: one account provisioned, data on its volume, an independent backup, the volume lost, the runbook's restore into a new claim under the runner's name, the administrator's volume switch and the wake on the restored claim, in one command that stops at the first failed check; `report` condenses a run. |
 | `takeover-lab.py` | Task T02's run on the two nodes ([below](#cross-node-migration-and-takeover-t02)), on acceptance-lab.py's helpers: one account's runner moved to the other node through sleep and wake, Pods on its claim pinned to the other node, what RWO and RBD do alone, the second node's power cut while the runner writes there, the runbook's failover (receipt, out-of-service taint, finalizer) and the old node's return; it stops at the first failed check and goes on from a step (`--from-step`); `report` condenses a run, `secret-scan` checks its records. |
 | `cross-node-lab.py` | Task T08x's run on the two nodes ([below](#two-accounts-across-two-nodes-t08x)), on takeover-lab.py's helpers: two accounts' runners moved to the other node (a message, a task run now), second Pods on each claim and Pods mixing the accounts, the second node's power cut with both runners on it (no Git work in the last minute, a last message to each session, one volume synced and one not), the runbook's failover for both with the runbook's own query and commands, the old node's return, and `kubectl drain` both ways; `--from-step`, `report` and `secret-scan` as above. |
-| `durability-lab.py` | Task T02c's run on the two nodes ([below](#git-work-and-engine-sessions-through-a-power-cut-t02c)), on takeover-lab.py's and cross-node-lab.py's helpers: T07's leftover Pod released by the runbook's patch after its owner is confirmed, Git's commit costs on the runner class's storage, then one account's runner on the project line's image and one on this branch's: the runner's and the engine's Git work and a last turn in the last seconds, the second node's power cut, a copy of the volume's snapshot read before anything mounts it, the runbook's failover, the session resumed, the second node back; and a damaged volume woken on the fixed image. `--from-step`, `report` and `secret-scan` as above. |
+| `durability-lab.py` | Task T02c's run on the two nodes ([below](#git-work-and-engine-sessions-through-a-power-cut-t02c)), on takeover-lab.py's and cross-node-lab.py's helpers: T07's leftover Pod released by the runbook's patch after its owner is confirmed, Git's commit costs on the runner class's storage, then one account's runner on the project line's image and one on this branch's: the runner's and the engine's Git work and a last turn in the last seconds, the second node's power cut, a copy of the volume's snapshot read before anything mounts it, the runbook's failover, the session resumed, the second node back; and a damaged volume woken on the fixed image. Its last phase, `again` (task D10), does the after run once more for a later runner change, with a new account. `--from-step`, `report` and `secret-scan` as above. |
 
 A test window:
 
@@ -1000,6 +1000,37 @@ How the run went:
 - The first wake of the damaged volume, on `0e894464e`, found the refusal lost on a claim: the runner logged the damage,
   refused the reclaimed session, then answered its next message anyway. The fix is `5928c0e0a`, and the wake was run
   again on its build.
+
+### The after run again for a later runner change (D10)
+
+Task D10 changed the runner's syncs for volumes that share their filesystem (Docker's), so the run after T02c's fix
+was done again on 2026-10-19 with that change, through the phase `again`
+([the evidence](evidence/managed-runner-docker-volume-sync/2026-10-20/README.md#kubernetes-unchanged-t02cs-power-cut-after-the-fix-on-this-change)).
+Both VMs were on from 22:58 to 23:14 UTC.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t02c
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh --nodes 2
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+bash docs/evidence/managed-runner-power-cut-durability/2026-10-19/kit/build-image.sh /mnt/data/tmp/<task>/lab-image
+OUT=/mnt/data/tmp/<task>/lab-run && mkdir -p $OUT/logs
+sudo systemd-run --unit=orbit-mr-lab-d10-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR \
+  -p Environment=LAB_T02C_AFTER_IMAGE=/mnt/data/tmp/<task>/lab-image/lab.oci.tar \
+  -p Environment=LAB_T02C_AFTER_OWNER=cyd -p Environment=LAB_T02C_BEFORE_OWNER=amy \
+  -p WorkingDirectory=$PWD -p StandardOutput=append:$OUT/logs/run.txt -p StandardError=append:$OUT/logs/run.txt \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/durability-lab.py run --out $OUT --from again
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+- It restarts what the last teardown stopped with the image pinned, then does the after run with a new account (a run
+  done again takes one). The final checks read `LAB_T02C_BEFORE_OWNER`'s claim too.
+- Its own checks: the runner's start line says it syncs behind every tool with its volume the root of an RBD ext4, and
+  s3's mid-turn commit is on its branch in what the cut left.
+- 15 steps and 90 checks, none failed. The runner on `/dev/rbd0` logged `volume syncs: before reports and behind every
+  tool; the volume is /dev/rbd0 (ext4), a filesystem of its own`. What the cut left was as after T02c's fix, s3's commit
+  3.4 s before the cut included.
+- `test-server-t02c` now has `cyd` asleep on its claim beside ann, amy and bob.
 
 ### T07's leftover Pod
 
