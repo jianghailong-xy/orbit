@@ -27,6 +27,7 @@ import {
 } from '../lib/coordinatorChat';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { encodeId } from '../lib/idCodec';
+import { abandonJob } from '../lib/projectMerge';
 import { projectIntegrationQuery, projectOpenItemsQuery, projectPromotionQuery } from '../lib/queries';
 import { newRunRequestToken, runRequestResend } from '../lib/runRequestToken';
 import {
@@ -150,6 +151,15 @@ const WHO = { OWNER: 'You', COORDINATOR: 'Coordinator' } as const;
  * a merge approval, a pause — is not an escalation and says so in its own title.
  */
 function escalationHeading(row: ProjectOpenItemRow, now: number): string | null {
+  // §4.6 X-E5 (revision 23): the item is escalated at birth, so `waitedBeforeEscalation` would only
+  // ever say "1s". Its heading is the fact it is about — how long the claim has been silent,
+  // counted from the last report the runner made and the moment the clock opened the item.
+  if (row.kind === 'LANDING_LEASE_EXPIRED') {
+    const silent = leaseSilentMinutes(row);
+    return silent === null
+      ? 'Now yours — no report from the runner'
+      : `Now yours — no report from the runner for ${silent}m`;
+  }
   switch (row.assigneeReason) {
     case 'ESCALATED':
       return `Now yours — no one acted on this for ${waitedBeforeEscalation(row)}`;
@@ -168,6 +178,16 @@ function escalationHeading(row: ProjectOpenItemRow, now: number): string | null 
 
 function waitedMs(row: Pick<ProjectOpenItemRow, 'waitingSince'>, now: number): number {
   return now - Date.parse(row.waitingSince);
+}
+
+/** The minutes the claim had been silent when the item was opened — the server's own count, off
+ *  the two instants the row carries (`owner-item-alert.ts#silentMinutes` is its other half). Null
+ *  when the row predates the facts. */
+function leaseSilentMinutes(row: Pick<ProjectOpenItemRow, 'lease' | 'escalatedAt' | 'waitingSince'>): number | null {
+  const reported = Date.parse(row.lease?.lastReportAt ?? '');
+  const opened = Date.parse(row.escalatedAt ?? row.waitingSince);
+  if (!Number.isFinite(reported) || !Number.isFinite(opened)) return null;
+  return Math.max(1, Math.floor((opened - reported) / 60_000));
 }
 
 /** How long the coordinator had it before the clock took it away — the window the project set, read
@@ -225,6 +245,8 @@ export const ACTION_LABEL: Partial<Record<OpenItemAction, string>> = {
   RETRY: 'Retry',
   CANCEL_TASK: 'Cancel task',
   ASK_COORDINATOR_AGAIN: 'Ask the coordinator again',
+  OPEN_LANDING: 'Open landing',
+  ABANDON: 'Abandon',
 };
 
 /** Exported names keep the web/native copy contract readable while ACTION_LABEL stays literal for
@@ -253,8 +275,16 @@ export const ACTION_CONSEQUENCES: Readonly<Record<string, string>> = {
   RETRY: 'A new integration attempt is queued with your reason.',
   CANCEL_TASK: 'The task is cancelled and its open item closes.',
   ASK_COORDINATOR_AGAIN: 'It goes back to the coordinator with a fresh escalation clock.',
+  OPEN_LANDING: 'Open the landing: every attempt, step by step.',
+  ABANDON: 'Ends this attempt. Nothing was pushed, and nothing is queued again.',
   MARK_HANDLED: 'Only if you dealt with it yourself. Your reason goes on the record.',
 };
+
+/** J12's other half, for a claim Orbit cannot prove never pushed (a legacy claim, a v2 one that
+ *  recorded a push, or a row that predates the facts). Never the softer sentence: the owner is
+ *  deciding whether work may already be on the branch. */
+export const ABANDON_MAY_HAVE_PUSHED =
+  'Ends this attempt. It may have been pushed, and nothing is queued again.';
 // Descriptive aliases keep the mapping discoverable to native-parity tooling and callers.
 export const OPEN_ITEM_ACTION_CONSEQUENCES = ACTION_CONSEQUENCES;
 export const ACTION_CONSEQUENCE = ACTION_CONSEQUENCES;
@@ -266,7 +296,7 @@ function actionLabel(row: Pick<ProjectOpenItemRow, 'promotionId'>, action: OpenI
 }
 
 function actionConsequence(
-  row: Pick<ProjectOpenItemRow, 'promotionId' | 'kind'>,
+  row: Pick<ProjectOpenItemRow, 'promotionId' | 'kind' | 'lease'>,
   action: OpenItemAction,
 ): string {
   if (action === 'RETRY') {
@@ -276,7 +306,21 @@ function actionConsequence(
     if (row.promotionId != null) return PROMOTION_RETRY_CONSEQUENCE;
     if (row.kind === 'TASK_FAILED') return TASK_RUN_AGAIN_CONSEQUENCE;
   }
+  // J12 decides the push half of the sentence, from the claim's own two facts — a check never
+  // pushes, and a v2 claim that recorded no push proves nothing was pushed. Everything else may
+  // have been, and the card says so rather than the softer sentence.
+  if (action === 'ABANDON') {
+    return pushIsImpossible(row.lease) ? ACTION_CONSEQUENCES.ABANDON : ABANDON_MAY_HAVE_PUSHED;
+  }
   return ACTION_CONSEQUENCES[action] ?? '';
+}
+
+/** J12's rule, read off the claim's own record (§4.6 revision 23 E1): a `CHECK_PROMOTION` never
+ *  pushes, and a v2 claim that never recorded a PUSH proves none happened. A legacy claim reports
+ *  only between steps, so its silence proves nothing — and so does a row without the facts. */
+function pushIsImpossible(lease: ProjectOpenItemRow['lease']): boolean {
+  if (lease?.jobKind === 'CHECK_PROMOTION') return true;
+  return lease?.progressProtocol === 'v2' && lease.pushReported === false;
 }
 
 /** The presses that WRITE, and the only ones. Two things turn on the same answer: that a card draws
@@ -289,6 +333,7 @@ const WRITE_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([
   'RETRY',
   'CANCEL_TASK',
   'ASK_COORDINATOR_AGAIN',
+  'ABANDON',
 ]);
 
 /** Whether this row carries what a writing press would need, in the same shape `actionHref` answers
@@ -300,6 +345,8 @@ const WRITE_ACTIONS: ReadonlySet<OpenItemAction> = new Set<OpenItemAction>([
 function writeTarget(row: ProjectOpenItemRow, action: OpenItemAction): string | null {
   if (action === 'ASK_COORDINATOR_AGAIN') return row.itemId;
   if (action === 'RETRY') return row.taskId ?? row.promotionId ?? null;
+  // The one job this item is about; a row that names none draws no Abandon.
+  if (action === 'ABANDON') return row.integrationJobId ?? null;
   return row.taskId;
 }
 
@@ -331,6 +378,12 @@ function actionHref(
         : row.taskId
           ? `/tasks/${encodeURIComponent(encodeId(row.taskId))}`
           : null;
+    case 'OPEN_LANDING':
+      // The landing this item is about (§2.9 LS6). Rows an older build opened carry none, and the
+      // door is then not drawn at all rather than pointed at nothing.
+      return row.landingSessionId
+        ? `/sessions/${encodeURIComponent(encodeId(row.landingSessionId))}`
+        : null;
     default:
       return null;
   }
@@ -396,6 +449,12 @@ function leadingDoors(
   actions: OpenItemAction[],
 ): OpenItemAction[] {
   const leading = actions.filter((action) => LEADING_ACTIONS.has(action));
+  // §4.6 X-E5 is escalated at birth with ABANDON as its lead: a server that sends no primaryAction
+  // (an older build) still leads with the one press that ends the attempt, and with nothing else.
+  if (row.kind === 'LANDING_LEASE_EXPIRED') {
+    const ending = actions.filter((action) => action === 'ABANDON');
+    if (ending.length) return [...ending, ...actions.filter((action) => action !== 'ABANDON')];
+  }
   // T9's primaryAction is the server's decision about the first door. Keep the old kind fallback
   // only for rows from an older server that did not send it.
   if (row.primaryAction && actions.includes(row.primaryAction)) {
@@ -1027,10 +1086,51 @@ function ItemPress({
       return <CancelTaskPress row={row} projectId={projectId} />;
     case 'ASK_COORDINATOR_AGAIN':
       return <AskCoordinatorAgainPress row={row} projectId={projectId} tier={tier} />;
+    case 'ABANDON':
+      return <AbandonPress row={row} projectId={projectId} tier={tier} />;
     default:
       return null;
   }
 }
+
+/**
+ * Abandon: the owner's one press that ends a running job whose runner stopped reporting (§4.7,
+ * J-T10; X-E5's lead door). It ends and re-queues nothing — the candidate goes back to its owner
+ * where the round was a merge — and the sentence beside it says whether a push can be ruled out
+ * (J12). No second confirmation: the consequence line above the press IS the question, and the
+ * server's own gate (the claim's expired lease) is what makes the door exist at all.
+ */
+function AbandonPress({
+  row,
+  projectId,
+  tier,
+}: {
+  row: ProjectOpenItemRow;
+  projectId: string;
+  tier: PressTier;
+}): JSX.Element {
+  const qc = useQueryClient();
+  const abandon = useMutation({
+    mutationFn: (jobId: string) => abandonJob(projectId, jobId),
+    onSuccess: () => refreshItemWriteViews(qc, projectId, row.taskId ?? undefined),
+  });
+  const error = abandon.error instanceof Error ? abandon.error : null;
+  return (
+    <>
+      <PressButton
+        label={ACTION_LABEL.ABANDON!}
+        tier={tier}
+        danger
+        pending={abandon.isPending}
+        onClick={() => { if (row.integrationJobId) abandon.mutate(row.integrationJobId); }}
+      />
+      {error ? <PressError headline={ABANDON_FAILED} error={error} /> : null}
+    </>
+  );
+}
+
+/** What a refused Abandon says above the server's own words. */
+export const ABANDON_FAILED = 'The attempt was not ended';
 
 /**
  * An exception the coordinator is handling: a conflict, a failed combined-tree check, an

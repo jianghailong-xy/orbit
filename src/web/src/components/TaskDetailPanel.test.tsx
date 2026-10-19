@@ -209,6 +209,24 @@ describe('the landing of a DONE task, apart from its status (§2.7a)', () => {
     if (state !== 'QUEUED' && state !== 'RUNNING') expect(block).toContain(`dateTime="${FINISHED_AT}"`);
   });
 
+  it('offers the way into the segment’s landing session from the task read, and nothing else', () => {
+    const LANDING = '0195c0de-0000-7000-8000-00000000d001';
+    const base = integration('CHECK_FAILED');
+    const withLanding: TaskIntegrationView = {
+      ...base, landTask: { ...base.landTask!, landingSessionId: LANDING },
+    };
+    const block = section(renderPanel(task({ status: 'DONE', integration: withLanding })))!;
+    // The task's read gives the newest generation, and a segment's attempts share one session
+    // (§2.9 LS6): one link, at the end of the section, and the facts above it stay read-only.
+    const links = block.match(/<a [^>]*href="([^"]+)"[^>]*>([^<]*)<\/a>/g) ?? [];
+    expect(links).toHaveLength(1);
+    expect(links[0]).toContain(`href="/sessions/${encodeId(LANDING)}"`);
+    expect(links[0]).toContain('Open landing ›');
+    expect(block).not.toContain('<button');
+    // A server that names no session draws no link at all.
+    expect(section(renderPanel(task({ status: 'DONE', integration: base })))).not.toMatch(/<button|<a /);
+  });
+
   it('a newer attempt after a receipt keeps saying where the work already is', () => {
     const view = integration('QUEUED');
     view.state = 'ON_UPSTREAM';
