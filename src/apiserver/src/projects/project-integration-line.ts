@@ -7,15 +7,33 @@ import {
   type ProjectIntegrationView as SharedProjectIntegrationView,
   type ProjectLastMainBranch,
   type ProjectListIntegration,
+  type ProjectIntegrationInFlight,
   type ProjectIntegrationJob,
+  type ProjectIntegrationCheck,
+  type IntegrationJobBlockingReason,
   type IntegrationJobKind,
+  type IntegrationJobLiveness,
   type IntegrationJobPhase,
 } from '@orbit/shared';
 
 import type { PrismaService } from '../prisma/prisma.service';
+import { SESSION_RUNNER_OFFLINE_AFTER_MS } from '../sessions/session-state';
 import { branchName } from './project-criterion-landing';
-import { IntegrationCheckSource, endTimedOutLanding, integrationJobLimitSeconds } from './project-integration-job';
-import { readProjectLandTaskViews } from './project-task-integration';
+import {
+  INTEGRATION_JOB_CLAIM,
+  INTEGRATION_PROGRESS_V2_PROTOCOL,
+  IntegrationCheckSource,
+  PROMOTION_AUTOMATIC_LAND,
+  endTimedOutLanding,
+  integrationJobLimitSeconds,
+} from './project-integration-job';
+import { medianMs } from './project-promotion';
+import {
+  queueBlockingSummary,
+  type QueueBlockingFacts,
+  type RunnerWait,
+  readProjectLandTaskViews,
+} from './project-task-integration';
 
 /**
  * A code project's integration line: the branch the platform lands its finished tasks on
@@ -152,7 +170,7 @@ export function readProjectCodebase(
  * that has not decided is not one that decided main (§7.1 V1).
  */
 export async function readProjectIntegrationLines(
-  prisma: Pick<PrismaService, 'projectCodebase' | 'task'>,
+  prisma: Pick<PrismaService, 'projectCodebase' | '$queryRaw'>,
   projectIds: readonly string[],
 ): Promise<Map<string, ProjectListIntegration<Date>>> {
   const lines = new Map<string, ProjectListIntegration<Date>>();
@@ -175,7 +193,7 @@ export interface ProjectListBinding {
  * binding is absent: it has no repository, and its row's words say main.
  */
 export async function readProjectListBindings(
-  prisma: Pick<PrismaService, 'projectCodebase' | 'task'>,
+  prisma: Pick<PrismaService, 'projectCodebase' | '$queryRaw'>,
   projectIds: readonly string[],
 ): Promise<Map<string, ProjectListBinding>> {
   if (projectIds.length === 0) return new Map();
@@ -185,64 +203,28 @@ export async function readProjectListBindings(
       ...LINE_COLUMNS,
       projectId: true,
       _count: { select: { integrationJobs: { where: { state: { in: ['QUEUED', 'RUNNING'] } } } } },
-      integrationJobs: {
-        where: { state: { in: ['QUEUED', 'RUNNING'] } },
-        select: {
-          id: true, state: true, kind: true, phase: true, createdAt: true, claimedAt: true, heartbeatAt: true,
-          taskId: true,
-        },
-      },
     },
   });
-  // The title the line names, read beside the jobs rather than joined to them: `task_id` is a
+  // The line's job is the one the integration view describes, read through that view's own function
+  // so the two rows cannot state one job differently. The title travels with it: `task_id` is a
   // history reference with no foreign key (0423), so a job still in flight may name a task that was
   // deleted under it — and its line then says "a landing" rather than refusing to be drawn.
-  const taskIds = [...new Set(rows.flatMap((row) => (row.integrationJobs ?? [])
-    .map((job) => job.taskId).filter((id): id is string => !!id)))];
-  const titles = new Map((taskIds.length === 0 ? [] : await prisma.task.findMany({
-    where: { id: { in: taskIds } },
-    select: { id: true, title: true },
-  })).map((task) => [task.id, task.title]));
+  const inFlight = await readInFlightJobsForProjects(prisma, rows.map((row) => row.projectId));
   const bindings = new Map<string, ProjectListBinding>();
   for (const row of rows) {
     const binding: ProjectListBinding = { integration: null, mainBranch: branchName(row.upstreamRef) };
     bindings.set(row.projectId, binding);
     const line = decidedLine(row);
     if (!line) continue;
-    const lead = oldestInFlight(row.integrationJobs ?? []);
+    const lead = inFlight.get(row.projectId)?.[0];
     binding.integration = {
       line,
       ref: branchName(row.integrationRef),
       activeJobCount: row._count.integrationJobs,
-      ...(lead ? {
-        inFlight: {
-          taskTitle: (lead.taskId && titles.get(lead.taskId)) || null,
-          kind: lead.kind as IntegrationJobKind,
-          phase: lead.phase as IntegrationJobPhase | null,
-          state: lead.state === 'RUNNING' ? 'RUNNING' : 'QUEUED',
-          startedAt: lead.claimedAt ?? lead.createdAt,
-          heartbeatAt: lead.heartbeatAt,
-          waitMs: claimedWaitMs({
-            state: lead.state,
-            startedAt: lead.claimedAt ?? lead.createdAt,
-            queuedAt: lead.createdAt,
-          }),
-        },
-      } : {}),
+      ...(lead ? { inFlight: inFlightOf(lead) } : {}),
     };
   }
   return bindings;
-}
-
-/** `readProjectIntegrationView`'s ORDER BY over a project's active jobs, in memory: running first,
- *  then the oldest by claim-or-enqueue, `id` breaking a tie. */
-function oldestInFlight<J extends { id: string; state: string; createdAt: Date; claimedAt: Date | null }>(
-  jobs: readonly J[],
-): J | null {
-  const startedAt = (job: J) => (job.claimedAt ?? job.createdAt).getTime();
-  return [...jobs].sort((a, b) =>
-    Number(b.state === 'RUNNING') - Number(a.state === 'RUNNING')
-    || startedAt(a) - startedAt(b) || a.id.localeCompare(b.id))[0] ?? null;
 }
 
 /** How long this project's exception items wait on its coordinator before they are the owner's. */
@@ -372,17 +354,7 @@ export async function readProjectIntegrationView(
     queuedCount: jobs.filter((job) => job.state === 'QUEUED').length,
     mergeCheckOnTip: lastLandingCheck(newest?.checks),
     landTasks,
-    inFlight: lead
-      ? {
-        taskTitle: lead.taskTitle,
-        kind: lead.kind,
-        phase: lead.phase,
-        state: lead.state,
-        startedAt: lead.startedAt,
-        heartbeatAt: lead.heartbeatAt,
-        waitMs: claimedWaitMs(lead),
-      }
-      : null,
+    inFlight: lead ? inFlightOf(lead) : null,
     inFlightJobs: jobs,
   };
 }
@@ -537,8 +509,21 @@ function claimedWaitMs(job: { state: string; startedAt: Date; queuedAt: Date }):
   return Math.max(0, job.startedAt.getTime() - job.queuedAt.getTime());
 }
 
-/** One RUNNING or QUEUED job as `readInFlightJobs` reads it, before the limit is decided. */
+/** §7.2 V6: a v2 claim is due a report inside 30 s, and "no word" starts after 90 s of silence. */
+const LIVENESS_SILENT_AFTER_SECONDS = 90;
+
+/** §7.2 V6: output quiet for this long while the heartbeat is fresh reads as `QUIET`. */
+const LIVENESS_OUTPUT_QUIET_AFTER_SECONDS = 10 * 60;
+
+/** How many successful runs of one check `typicalMs` is the middle of — the same "lately, not
+ *  ever" sample §3.6's re-check estimate takes. */
+const TYPICAL_MERGE_CHECK_SAMPLE = 5;
+
+/** One RUNNING or QUEUED job as `readInFlightJobsForProjects` reads it, before the read-time
+ *  conclusions (`timedOut`, liveness, typical duration, blocking reason). */
 interface InFlightJobRow extends IntegrationCheckSource {
+  projectId: string;
+  ownerId: string;
   id: string;
   state: string;
   kind: IntegrationJobKind;
@@ -546,6 +531,16 @@ interface InFlightJobRow extends IntegrationCheckSource {
   generation: number;
   taskId: string | null;
   taskTitle: string | null;
+  promotionId: string | null;
+  claimGeneration: bigint;
+  round: number | null;
+  step: string | null;
+  stepStartedAt: Date | null;
+  outputMovedAt: Date | null;
+  currentCheck: unknown;
+  cancelRequestedAt: Date | null;
+  confirmedAutomatically: boolean;
+  upstreamRef: string;
   createdAt: Date;
   claimedAt: Date | null;
   heartbeatAt: Date | null;
@@ -554,14 +549,257 @@ interface InFlightJobRow extends IntegrationCheckSource {
   retryRequestedByUserId: string | null;
   /** Seconds since the runner last said anything about it, by the database's clock. */
   silentSeconds: number | null;
+  /** Seconds since the current step's output last moved; null when no report measured it. */
+  outputIdleSeconds: number | null;
   /** The protocol the current claim was made under (§2.2 J-T4): `'v2'`, or null for a legacy claim. */
   progressProtocol: string | null;
   /** Another job on the same runner, repository and target ref was claimed first and still runs. */
   behindAnotherOnRunner: boolean;
+  /** A LAND_TASK or CHECK_PROMOTION whose subject's work session has not finished (J-T1a). */
+  workHeld: boolean;
+  /** Why the runner of the work's workspace would not claim a QUEUED job, as claimOne reads it. */
+  runnerWait: RunnerWait | null;
+  runnerWaitName: string | null;
+  /** Whether that runner declares `promotion-automatic-land/v1` (M-T12). */
+  runnerLandsAutomatically: boolean | null;
+  /** The OPEN MAIN_SYNC item holding every later landing on this serial key (M2). */
+  syncBlockJobId: string | null;
+  syncBlockOwnerId: string | null;
+  syncBlockOpenItemId: string | null;
+  syncBlockTaskTitle: string | null;
+  syncHandlingGeneration: number | null;
+  /** The RUNNING job holding a QUEUED job's serial key (J1). */
+  serialBlockJobId: string | null;
+  serialBlockOwnerId: string | null;
+  serialBlockKind: string | null;
+  serialBlockTaskTitle: string | null;
+}
+
+/** The current check as the row stores it (`{ name, index, count, budgetSeconds, startedAt }`),
+ *  or null when no v2 report named one. */
+function currentCheckOf(raw: unknown): ProjectIntegrationCheck<Date> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const check = raw as Record<string, unknown>;
+  if ((check.name !== 'TASK_ACCEPTANCE' && check.name !== 'MERGE_CHECK')
+    || typeof check.index !== 'number' || typeof check.count !== 'number'
+    || typeof check.budgetSeconds !== 'number' || typeof check.startedAt !== 'string') return null;
+  const startedAt = new Date(check.startedAt);
+  if (Number.isNaN(startedAt.getTime())) return null;
+  return {
+    name: check.name,
+    index: check.index,
+    count: check.count,
+    budgetSeconds: check.budgetSeconds,
+    startedAt,
+  };
+}
+
+/** §7.2 V6's liveness, read off the claim and never stored. `LEASE_EXPIRED` is `timedOut`. */
+function livenessOf(row: InFlightJobRow, timedOut: boolean): IntegrationJobLiveness | null {
+  if (row.state !== 'RUNNING') return null;
+  if (row.progressProtocol !== INTEGRATION_PROGRESS_V2_PROTOCOL) {
+    return timedOut ? 'LEASE_EXPIRED' : 'LEGACY';
+  }
+  if (timedOut) return 'LEASE_EXPIRED';
+  if ((row.silentSeconds ?? 0) > LIVENESS_SILENT_AFTER_SECONDS) return 'SILENT';
+  if ((row.outputIdleSeconds ?? 0) > LIVENESS_OUTPUT_QUIET_AFTER_SECONDS) return 'QUIET';
+  return 'LIVE';
 }
 
 /**
- * Every job this project has RUNNING and QUEUED, in `inFlight`'s order (§1.6 `inFlightJobs`).
+ * Why a job waits: the claim's own conditions, in the order §2.7a prints them, for a QUEUED one;
+ * and the runner's local lock for a claimed one that is waiting its turn inside its own process.
+ *
+ * A blocking job of another account is named by neither id nor title — a serial key is a
+ * repository and a ref, and another account's project may land on the same one — so the sentence
+ * is the reason alone.
+ */
+function blockingReasonOf(row: InFlightJobRow): IntegrationJobBlockingReason | null {
+  const mine = (ownerId: string | null) => ownerId === row.ownerId;
+  if (row.state === 'RUNNING') {
+    const localLock = row.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL
+      ? row.step === 'WAITING_LOCAL_LOCK'
+      : !!row.behindAnotherOnRunner;
+    return localLock
+      ? { code: 'WAITING_LOCAL_LOCK', summary: queueBlockingSummary('WAITING_LOCAL_LOCK', queueFacts(row)) }
+      : null;
+  }
+  if (row.cancelRequestedAt) {
+    return { code: 'CANCELLING', summary: queueBlockingSummary('CANCELLING', queueFacts(row)) };
+  }
+  if (row.workHeld) {
+    return { code: 'WAITING_TASK_WORK', summary: queueBlockingSummary('WAITING_TASK_WORK', queueFacts(row)) };
+  }
+  if (row.syncBlockJobId) {
+    const mineSync = row.syncBlockOwnerId === row.ownerId;
+    const reason: IntegrationJobBlockingReason = {
+      code: 'WAITING_MAIN_SYNC',
+      summary: queueBlockingSummary('WAITING_MAIN_SYNC', queueFacts(row, {
+        blockingTaskTitle: mineSync ? row.syncBlockTaskTitle : null,
+        syncHandlingGeneration: mineSync ? row.syncHandlingGeneration : null,
+      })),
+    };
+    if (mine(row.syncBlockOwnerId)) {
+      reason.jobId = row.syncBlockJobId;
+      if (row.syncBlockOpenItemId) reason.openItemId = row.syncBlockOpenItemId;
+    }
+    return reason;
+  }
+  if (row.runnerWait) {
+    return { code: 'WAITING_RUNNER', summary: queueBlockingSummary('WAITING_RUNNER', queueFacts(row)) };
+  }
+  if (row.confirmedAutomatically && row.runnerLandsAutomatically === false) {
+    return {
+      code: 'WAITING_AUTOMATIC_RUNNER',
+      summary: queueBlockingSummary('WAITING_AUTOMATIC_RUNNER', queueFacts(row)),
+    };
+  }
+  if (row.serialBlockJobId) {
+    const mineSerial = row.serialBlockOwnerId === row.ownerId;
+    const reason: IntegrationJobBlockingReason = {
+      code: 'WAITING_SERIAL_SLOT',
+      summary: queueBlockingSummary('WAITING_SERIAL_SLOT', queueFacts(row, {
+        blockingTaskTitle: mineSerial ? row.serialBlockTaskTitle : null,
+        blockingJobKind: mineSerial ? row.serialBlockKind : null,
+      })),
+    };
+    if (mineSerial) reason.jobId = row.serialBlockJobId;
+    return reason;
+  }
+  return { code: 'WAITING_DISPATCH', summary: queueBlockingSummary('WAITING_DISPATCH', queueFacts(row)) };
+}
+
+/** What a queued job's sentence is built from. Only this owner's blocker names its task or kind. */
+function queueFacts(row: InFlightJobRow, blocker: Partial<QueueBlockingFacts> = {}): QueueBlockingFacts {
+  return {
+    runnerName: row.runnerWaitName,
+    runnerWait: row.runnerWait,
+    mainBranch: branchName(row.upstreamRef),
+    blockingTaskTitle: null,
+    blockingJobKind: null,
+    syncHandlingGeneration: null,
+    ...blocker,
+  };
+}
+
+/** One row as both the view's `inFlight` and its `inFlightJobs` entry state it. */
+function inFlightJobOf(row: InFlightJobRow, typicalMs: Map<string, number>): ProjectIntegrationJob<Date> {
+  const running = row.state === 'RUNNING';
+  const limitSeconds = integrationJobLimitSeconds(row);
+  const timedOut = limitSeconds !== null && !row.behindAnotherOnRunner
+    && (row.silentSeconds ?? 0) > limitSeconds;
+  // What the job is doing INSIDE its current claim: a requeued row keeps the columns of the claim it
+  // gave back until the next claim resets them, and a step it is not on is not news.
+  const check = running ? currentCheckOf(row.currentCheck) : null;
+  return {
+    jobId: row.id,
+    kind: row.kind,
+    state: running ? 'RUNNING' : 'QUEUED',
+    phase: row.phase,
+    taskId: row.taskId,
+    taskTitle: row.taskTitle,
+    promotionId: row.promotionId,
+    generation: row.generation,
+    startedAt: row.claimedAt ?? row.createdAt,
+    queuedAt: row.createdAt,
+    heartbeatAt: row.heartbeatAt,
+    runnerName: running ? row.runnerName : null,
+    retriedBy: row.retryRequestedByUserId ? 'OWNER' : row.retryRequestedBySessionId ? 'COORDINATOR' : null,
+    timedOut,
+    limitSeconds,
+    progressProtocol: row.progressProtocol,
+    claim: Number(row.claimGeneration),
+    round: running ? row.round : null,
+    check,
+    stepStartedAt: running ? row.stepStartedAt : null,
+    outputMovedAt: running ? row.outputMovedAt : null,
+    typicalMs: check?.name === 'MERGE_CHECK' ? typicalMs.get(row.projectId) ?? null : null,
+    liveness: livenessOf(row, timedOut),
+    blockingReason: blockingReasonOf(row),
+    retryable: timedOut && row.kind === 'LAND_TASK',
+  };
+}
+
+/** The oldest job of a project, as the project's line states it — the same fields the view's
+ *  `inFlight` carries, so a list row and the page cannot describe one job differently. */
+function inFlightOf(job: ProjectIntegrationJob<Date>): ProjectIntegrationInFlight<Date> {
+  const blockingReason = job.blockingReason ?? null;
+  return {
+    taskTitle: job.taskTitle,
+    kind: job.kind,
+    phase: job.phase,
+    state: job.state,
+    startedAt: job.startedAt,
+    heartbeatAt: job.heartbeatAt,
+    waitMs: claimedWaitMs(job),
+    jobId: job.jobId,
+    taskId: job.taskId,
+    promotionId: job.promotionId ?? null,
+    runner: job.runnerName,
+    claim: job.claim,
+    round: job.round ?? null,
+    check: job.check ?? null,
+    stepStartedAt: job.stepStartedAt ?? null,
+    outputMovedAt: job.outputMovedAt ?? null,
+    progressProtocol: job.progressProtocol ?? null,
+    typicalMs: job.typicalMs ?? null,
+    liveness: job.liveness ?? null,
+    blockingReason,
+  };
+}
+
+/**
+ * How long this project's successful runs of each check usually take, in ms (§7.2 V6): the median
+ * of its last few finished jobs whose `MERGE_CHECK` PASSED, each measured from its last claim
+ * (`claimed_at`) to its end.
+ *
+ * Not §3.6's `recentCheckDurations`: that one takes every finished run, failed checks included, and
+ * measures from the first `started_at` — which J-T1e's requeue and J-T11's hand-back both keep, so a
+ * job that queued twice reads as one long run. Only checks that passed are samples, and only the
+ * claim that finished the job is the start of the work being measured.
+ */
+async function readTypicalCheckMs(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  projectIds: readonly string[],
+): Promise<Map<string, number>> {
+  if (projectIds.length === 0) return new Map();
+  const ids = Prisma.join(projectIds.map((id) => Prisma.sql`${id}::uuid`));
+  const rows = await prisma.$queryRaw<Array<{ projectId: string; ms: number }>>(Prisma.sql`
+    WITH passed AS (
+      SELECT j."project_id" AS "projectId",
+             (EXTRACT(EPOCH FROM (j."finished_at" - j."claimed_at")) * 1000)::float8 AS "ms",
+             row_number() OVER (
+               PARTITION BY j."project_id" ORDER BY j."finished_at" DESC, j."id" DESC) AS "rn"
+        FROM "project_integration_job" j
+       WHERE j."project_id" IN (${ids})
+         AND j."finished_at" IS NOT NULL AND j."claimed_at" IS NOT NULL
+         AND j."finished_at" > j."claimed_at"
+         AND EXISTS (
+           SELECT 1
+             FROM jsonb_array_elements(
+                    CASE WHEN jsonb_typeof(j."checks") = 'array' THEN j."checks" ELSE '[]'::jsonb END) c
+            WHERE c->>'name' = 'MERGE_CHECK'
+              AND c->>'timedOut' = 'false'
+              AND (c->>'exitCode') ~ '^[0-9]+$'
+              AND (c->>'expectedExitCode') ~ '^[0-9]+$'
+              AND (c->>'exitCode')::int = (c->>'expectedExitCode')::int)
+    )
+    SELECT "projectId", "ms" FROM passed WHERE "rn" <= ${TYPICAL_MERGE_CHECK_SAMPLE}`);
+  const durations = new Map<string, number[]>();
+  for (const row of rows) {
+    durations.set(row.projectId, [...(durations.get(row.projectId) ?? []), Number(row.ms)]);
+  }
+  const medians = new Map<string, number>();
+  for (const [projectId, values] of durations) {
+    const median = medianMs(values);
+    if (median !== null) medians.set(projectId, median);
+  }
+  return medians;
+}
+
+/**
+ * Every job these projects have RUNNING and QUEUED, per project, in `inFlight`'s order (§1.6
+ * `inFlightJobs`). One statement for a page of projects, so a list row costs no query of its own.
  *
  * Running work takes precedence over queued work: an older queued job must not hide the work the
  * runner is doing. Within either state, the oldest job first. Its clock starts at the claim for a
@@ -577,16 +815,32 @@ interface InFlightJobRow extends IntegrationCheckSource {
  * serial key does not keep a landing on the same ref from being claimed beside it. While a job of any
  * project on the same runner, repository and ref was claimed first and still runs, this one is not
  * timed out — offering a retry of it would run the same work twice.
+ *
+ * The blocking conditions are claimOne's own (`runner-api/integration-job-relay.ts`), read in the
+ * same order, so a reason never promises a claim the next heartbeat will not make; each blocker's
+ * owner is read so that another account's job is named as the reason alone.
  */
-export async function readInFlightJobs(
+async function readInFlightJobsForProjects(
   prisma: Pick<PrismaService, '$queryRaw'>,
-  projectId: string,
+  projectIds: readonly string[],
   /** Read just this job — how the retry door judges a timeout by the rule the page shows. */
   jobId?: string,
-): Promise<ProjectIntegrationJob<Date>[]> {
+): Promise<Map<string, ProjectIntegrationJob<Date>[]>> {
+  if (projectIds.length === 0) return new Map();
+  const ids = Prisma.join(projectIds.map((id) => Prisma.sql`${id}::uuid`));
   const rows = await prisma.$queryRaw<InFlightJobRow[]>(Prisma.sql`
-    SELECT j."id", j."state", j."kind", j."phase", j."generation",
+    SELECT j."project_id" AS "projectId", j."owner_id" AS "ownerId",
+           j."id", j."state", j."kind", j."phase", j."generation",
            j."task_id" AS "taskId", t."title" AS "taskTitle",
+           j."promotion_id" AS "promotionId",
+           j."claim_generation" AS "claimGeneration",
+           j."round", j."step",
+           j."step_started_at" AS "stepStartedAt",
+           j."output_moved_at" AS "outputMovedAt",
+           j."current_check" AS "currentCheck",
+           j."cancel_requested_at" AS "cancelRequestedAt",
+           j."confirmed_automatically" AS "confirmedAutomatically",
+           j."upstream_ref" AS "upstreamRef",
            j."created_at" AS "createdAt", j."claimed_at" AS "claimedAt",
            j."heartbeat_at" AS "heartbeatAt",
            r."name" AS "runnerName",
@@ -601,6 +855,7 @@ export async function readInFlightJobs(
            j."skip_merge_check" AS "skipMergeCheck",
            j."progress_protocol" AS "progressProtocol",
            EXTRACT(EPOCH FROM now() - COALESCE(j."heartbeat_at", j."claimed_at"))::float8 AS "silentSeconds",
+           EXTRACT(EPOCH FROM now() - j."output_moved_at")::float8 AS "outputIdleSeconds",
            (j."state" = 'RUNNING' AND j."heartbeat_at" <= j."claimed_at" AND EXISTS (
               SELECT 1
                 FROM "project_integration_job" o
@@ -610,7 +865,20 @@ export async function readInFlightJobs(
                  AND o."target_ref" = j."target_ref"
                  AND ocb."canonical_repo_url" = cb."canonical_repo_url"
                  AND o."claimed_at" < j."claimed_at"
-                 AND o."id" <> j."id")) AS "behindAnotherOnRunner"
+                 AND o."id" <> j."id")) AS "behindAnotherOnRunner",
+           (j."state" = 'QUEUED' AND j."kind" IN ('LAND_TASK', 'CHECK_PROMOTION') AND EXISTS (
+              SELECT 1 FROM "session" work
+                JOIN "session" job_session ON job_session."id" = j."session_id"
+               WHERE work."task_id" = COALESCE(j."task_id", job_session."task_id")
+                 AND work."starts_task_work" = true
+                 AND work."deleted_at" IS NULL AND work."finished_at" IS NULL)) AS "workHeld",
+           runner_wait."wait" AS "runnerWait", runner_wait."name" AS "runnerWaitName",
+           runner_wait."landsAutomatically" AS "runnerLandsAutomatically",
+           sync_block."jobId" AS "syncBlockJobId", sync_block."ownerId" AS "syncBlockOwnerId",
+           sync_block."openItemId" AS "syncBlockOpenItemId", sync_block."taskTitle" AS "syncBlockTaskTitle",
+           sync_block."handlingGeneration" AS "syncHandlingGeneration",
+           running_block."jobId" AS "serialBlockJobId", running_block."ownerId" AS "serialBlockOwnerId",
+           running_block."kind" AS "serialBlockKind", running_block."taskTitle" AS "serialBlockTaskTitle"
       FROM "project_integration_job" j
       JOIN "project_codebase" cb ON cb."id" = j."codebase_id"
       LEFT JOIN "task" t ON t."id" = j."task_id"
@@ -618,35 +886,81 @@ export async function readInFlightJobs(
       LEFT JOIN "task" st ON st."id" = s."task_id"
       LEFT JOIN "project_promotion" p ON p."id" = j."promotion_id"
       LEFT JOIN "runner" r ON r."id" = j."runner_id"
-     WHERE j."project_id" = ${projectId}::uuid
+      -- The runner the work's workspace names is the only one the claim can hand this job to (J-T2);
+      -- read for a QUEUED job so WAITING_RUNNER and M-T12's capability speak about that one.
+      LEFT JOIN LATERAL (
+        SELECT CASE
+                 WHEN runner."id" IS NULL THEN 'NO_RUNNER'
+                 WHEN runner."status" = 'OFFLINE' OR runner."last_heartbeat_at" IS NULL
+                   OR runner."last_heartbeat_at"
+                      < now() - (${SESSION_RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond')
+                   THEN 'OFFLINE'
+                 WHEN runner."status" = 'DRAINING' OR runner."heartbeat_draining" = true THEN 'DRAINING'
+                 WHEN runner."heartbeat_lease_owner" IS NULL
+                   OR NOT (${INTEGRATION_JOB_CLAIM} = ANY(runner."capabilities")) THEN 'OUTDATED'
+               END AS "wait",
+               runner."name" AS "name",
+               (${PROMOTION_AUTOMATIC_LAND} = ANY(runner."capabilities")) AS "landsAutomatically"
+          FROM (SELECT 1) queued
+          LEFT JOIN "session" source_session ON source_session."id" = j."session_id"
+          LEFT JOIN "workspace" source_workspace ON source_workspace."id" = source_session."workspace_id"
+          LEFT JOIN "runner" runner ON runner."id" = source_workspace."runner_id"
+         WHERE j."state" = 'QUEUED'
+      ) runner_wait ON true
+      -- M2: an OPEN item about another landing's failed absorb of upstream into the same target
+      -- holds every later landing on it; the conflicted job's own later generations are exempt (M3).
+      -- The claim reads the item, not a handling generation (T17), so this does too.
+      LEFT JOIN LATERAL (
+        SELECT f."id" AS "jobId", i."id" AS "openItemId", i."owner_id" AS "ownerId",
+               ft."title" AS "taskTitle",
+               CASE WHEN handling."id" IS NOT NULL AND handling."state" IN ('QUEUED', 'RUNNING')
+                    THEN handling."generation" END AS "handlingGeneration"
+          FROM "project_open_item" i
+          JOIN "project_integration_job" f ON f."id" = i."integration_job_id"
+          LEFT JOIN "task" ft ON ft."id" = f."task_id"
+          LEFT JOIN "project_integration_job" handling ON handling."id" = i."handling_job_id"
+         WHERE j."state" = 'QUEUED'
+           AND f."serial_key" = j."serial_key" AND f."phase" = 'MAIN_SYNC'
+           AND i."kind" = 'INTEGRATION_CONFLICT' AND i."state" = 'OPEN'
+           AND f."task_id" IS DISTINCT FROM j."task_id"
+         ORDER BY i."created_at", i."id" LIMIT 1
+      ) sync_block ON true
+      -- J1: one RUNNING job per repository and target ref, whichever project queued it.
+      LEFT JOIN LATERAL (
+        SELECT r."id" AS "jobId", r."owner_id" AS "ownerId", r."kind" AS "kind", rt."title" AS "taskTitle"
+          FROM "project_integration_job" r
+          LEFT JOIN "task" rt ON rt."id" = r."task_id"
+         WHERE j."state" = 'QUEUED'
+           AND r."serial_key" = j."serial_key" AND r."state" = 'RUNNING'
+         ORDER BY COALESCE(r."claimed_at", r."created_at"), r."id" LIMIT 1
+      ) running_block ON true
+     WHERE j."project_id" IN (${ids})
        AND j."state" IN ('RUNNING', 'QUEUED')
        ${jobId ? Prisma.sql`AND j."id" = ${jobId}::uuid` : Prisma.empty}
-     ORDER BY (j."state" = 'RUNNING') DESC,
+     ORDER BY j."project_id" ASC,
+              (j."state" = 'RUNNING') DESC,
               COALESCE(j."claimed_at", j."created_at") ASC, j."id" ASC`);
-  return rows.map((row) => {
-    const running = row.state === 'RUNNING';
-    const limitSeconds = integrationJobLimitSeconds(row);
-    const timedOut = limitSeconds !== null && !row.behindAnotherOnRunner
-      && (row.silentSeconds ?? 0) > limitSeconds;
-    return {
-      jobId: row.id,
-      kind: row.kind,
-      state: running ? 'RUNNING' : 'QUEUED',
-      phase: row.phase,
-      taskId: row.taskId,
-      taskTitle: row.taskTitle,
-      generation: row.generation,
-      startedAt: row.claimedAt ?? row.createdAt,
-      queuedAt: row.createdAt,
-      heartbeatAt: row.heartbeatAt,
-      runnerName: running ? row.runnerName : null,
-      retriedBy: row.retryRequestedByUserId ? 'OWNER' : row.retryRequestedBySessionId ? 'COORDINATOR' : null,
-      timedOut,
-      limitSeconds,
-      progressProtocol: row.progressProtocol,
-      retryable: timedOut && row.kind === 'LAND_TASK',
-    };
-  });
+  const typical = await readTypicalCheckMs(prisma, [...new Set(rows
+    .filter((row) => row.state === 'RUNNING'
+      && currentCheckOf(row.currentCheck)?.name === 'MERGE_CHECK')
+    .map((row) => row.projectId))]);
+  const byProject = new Map<string, ProjectIntegrationJob<Date>[]>();
+  for (const row of rows) {
+    const list = byProject.get(row.projectId) ?? [];
+    list.push(inFlightJobOf(row, typical));
+    byProject.set(row.projectId, list);
+  }
+  return byProject;
+}
+
+/** Every job this project has RUNNING and QUEUED, in `inFlight`'s order (§1.6 `inFlightJobs`). */
+export async function readInFlightJobs(
+  prisma: Pick<PrismaService, '$queryRaw'>,
+  projectId: string,
+  /** Read just this job — how the retry door judges a timeout by the rule the page shows. */
+  jobId?: string,
+): Promise<ProjectIntegrationJob<Date>[]> {
+  return (await readInFlightJobsForProjects(prisma, [projectId], jobId)).get(projectId) ?? [];
 }
 
 /** The last attempt's check evidence, not the success of its push or the state of the current tip.
