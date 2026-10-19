@@ -591,6 +591,46 @@ class FakeModelTest(unittest.TestCase):
         self.assertEqual(call["input"]["delaySeconds"], 240)
         self.assertTrue(call["input"]["prompt"].startswith("T06-WOKE-AMY1: "))
 
+    def test_a_tool_loop_edits_commits_and_builds_then_leaves_an_edit_for_the_runner(self):
+        import subprocess
+        import time
+        prompt = self.user("D10-AMY-T1 a turn of work. FAKE-LOOP 2 30 200 amyt1")
+        messages, calls = [prompt], []
+        with tempfile.TemporaryDirectory() as checkout:
+            subprocess.run(["git", "init", "-q", checkout], check=True)
+            for name, value in (("user.name", "D10"), ("user.email", "d10@lab.invalid")):
+                subprocess.run(["git", "-C", checkout, "config", name, value], check=True)
+            while True:
+                started = time.monotonic()
+                [answer] = self.ask(messages)
+                self.assertGreaterEqual(time.monotonic() - started, 0.2)  # the think time
+                if answer["type"] == "text":
+                    break
+                calls.append(answer["input"]["description"])
+                ran = subprocess.run(["bash", "-c", answer["input"]["command"]], cwd=checkout, capture_output=True, text=True)
+                self.assertEqual(ran.returncode, 0, ran.stderr)
+                messages += [{"role": "assistant", "content": [answer]},
+                             {"role": "user", "content": [{"type": "tool_result", "tool_use_id": answer["id"],
+                                                           "content": [{"type": "text", "text": ran.stdout}]}]}]
+            self.assertEqual(calls, ["D10 amyt1 edit 0", "D10 amyt1 commit 0", "D10 amyt1 build 0",
+                                     "D10 amyt1 edit 1", "D10 amyt1 commit 1", "D10 amyt1 build 1", "D10 amyt1 edit 2"])
+            self.assertTrue(answer["text"].endswith("loop amyt1 done after 7 tool calls. Answering: D10-AMY-T1"), answer["text"])
+            log = subprocess.run(["git", "-C", checkout, "log", "--format=%s"], capture_output=True, text=True).stdout.split("\n")
+            self.assertEqual(log[:2], ["D10 amyt1 1", "D10 amyt1 0"])
+            # The build's 30 files, ignored by Git; the last edit is the runner's to commit.
+            self.assertEqual(len(list(Path(checkout, "build/obj").iterdir())), 30)
+            status = subprocess.run(["git", "-C", checkout, "status", "--porcelain"], capture_output=True, text=True).stdout
+            self.assertEqual(status.split(), ["M", "src/log-amyt1.txt", "M", "src/version.txt"])
+        results = [m["content"][0]["content"][0]["text"] for m in messages if m["role"] == "user" and m is not prompt]
+        self.assertRegex(results[1], r"^D10-COMMIT amyt1 0 rc=0 us=\d+$")
+        self.assertRegex(results[2], r"^D10-BUILD amyt1 0 files=30 rc=0 us=\d+$")
+        logged = [json.loads(line) for line in Path(self.log).read_text().splitlines()]
+        self.assertEqual([entry["kind"] for entry in logged], ["loop_tool_use"] * 7 + ["loop_done"])
+        self.assertEqual([entry["loop"]["made"] for entry in logged], list(range(8)))
+        # The next turn of the same session is not a loop.
+        [next_answer] = self.ask(messages + [{"role": "assistant", "content": [answer]}, self.user("D10-AMY-T2 hello")])
+        self.assertTrue(next_answer["text"].endswith("Answering: D10-AMY-T2"), next_answer["text"])
+
     def test_an_overloaded_provider_fails_the_first_n_requests_then_answers(self):
         message = [self.user("T06-RT FAKE-APIERR 2 rt1 a question")]
         texts = [self.ask(message)[0]["text"] for _ in range(3)]
