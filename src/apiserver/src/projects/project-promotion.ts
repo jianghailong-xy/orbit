@@ -364,6 +364,10 @@ export interface PromotionFacts {
   /** The re-check in flight (state B), or null when none is. */
   recheck: { upstreamMovedBy: number | null; startedAt: Date; typicalMs: number | null } | null;
   execution?: ProjectPromotionView['execution'];
+  /** The landing has been asked to stop and has not ended (M-T10): the card draws "cancelling". */
+  cancelRequested?: boolean;
+  /** That landing's current claim is past the push boundary (J-T4): Cancel is no longer accepted. */
+  pushBoundaryPassed?: boolean;
   /** What the check in flight leads to (`promotionOnPass`), or null when none is. */
   onPass?: ProjectPromotionView['onPass'];
 }
@@ -394,6 +398,8 @@ export function promotionView(row: PromotionRow, facts: PromotionFacts): Project
     recheck: facts.recheck,
     onPass: facts.onPass ?? null,
     execution: facts.execution ?? null,
+    cancelRequested: facts.cancelRequested ?? false,
+    pushBoundaryPassed: facts.pushBoundaryPassed ?? false,
     decidedAt: row.decidedAt,
     merged: row.mergedSha && row.mergedAt
       ? {

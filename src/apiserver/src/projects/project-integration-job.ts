@@ -88,8 +88,16 @@ export const INTEGRATION_ERROR_CODES = [
   // The same end, for a landing whose push outcome the server cannot know (§2.6 J12): a legacy
   // claim reports PUSH on a best-effort basis, so "no push recorded" is not "nothing was pushed".
   'PUSH_OUTCOME_UNKNOWN',
+  // A v2 claim's synchronous PUSH report — the one that must be answered before anything is pushed
+  // (§2.2 J-T4) — never got its answer inside the lease window. The runner does not push in that
+  // case, so the job ends here with the target untouched.
+  'PUSH_REPORT_UNREACHABLE',
 ] as const;
 export type IntegrationErrorCode = (typeof INTEGRATION_ERROR_CODES)[number];
+
+/** The sub-steps a v2 claim names beside `phase` (§2.2 J-T4). */
+export const INTEGRATION_JOB_STEPS = ['WAITING_LOCAL_LOCK', 'PREPARE'] as const;
+export type IntegrationJobStep = (typeof INTEGRATION_JOB_STEPS)[number];
 
 /** A job the runner is not going to touch again. */
 const TERMINAL_STATES: ReadonlySet<string> = new Set<IntegrationJobState>([
@@ -264,15 +272,23 @@ export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
  * How long a running job's current step may go without a report before the integration view says
  * it timed out (§1.6 `inFlightJobs`, §2.2 J-T9); null for a job that is not running.
  *
- * The runner reports when a step STARTS and says nothing during it, so a healthy check is silent for
- * as long as it runs: while checking, the limit is every check's budget plus the lease. Every other
- * step is git work, and the lease is what J-T3 already treats as a lost claim.
+ * This is §7.2 V6's one definition: `inFlightJobs.timedOut`, the retry doors, the abandon door and
+ * the stop J-T8 makes all read it here.
+ *
+ * A v2 claim (§2.2 J-T4) reports every 30 seconds whatever it is doing, so ten minutes of silence is
+ * a lost runner in every phase: the limit is the lease, checking included. A LEGACY claim reports
+ * only when a step STARTS and says nothing during it, so a healthy check is silent for as long as it
+ * runs: while checking, the limit is every check's budget plus the lease. Every other legacy step is
+ * git work, and the lease is what J-T3 already treats as a lost claim.
  */
 export function integrationJobLimitSeconds(
-  job: IntegrationCheckSource & { state: string; phase: string | null },
+  job: IntegrationCheckSource & {
+    state: string; phase: string | null; progressProtocol?: string | null;
+  },
 ): number | null {
   if (job.state !== 'RUNNING') return null;
   const lease = INTEGRATION_CLAIM_STALE_MS / 1_000;
+  if (job.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL) return lease;
   if (job.phase !== 'CHECK') return lease;
   return checksFor(job).reduce((total, check) => total + check.timeoutSeconds, lease);
 }
@@ -282,6 +298,42 @@ export const INTEGRATION_JOBS_PER_HEARTBEAT = 2;
 
 /** The capability a runner declares before it is handed any of this (J-T2). */
 export const INTEGRATION_JOB_CLAIM = 'integration-job/v1';
+
+/**
+ * The capability a runner declares when it speaks the periodic progress protocol (§2.2 J-T4): a
+ * report inside every 30 seconds, a synchronous `phase = PUSH` report before it pushes, and a stop
+ * read off every answer. A claim made by a runner that declared it records `progress_protocol = 'v2'`;
+ * every other claim (and every claim made before this existed) is legacy.
+ */
+export const INTEGRATION_PROGRESS_V2 = 'integration-progress/v2';
+
+/** What `progress_protocol` holds for a v2 claim. NULL is legacy; the column's CHECK admits only
+ *  this value, so a typo cannot quietly turn a v2 claim into a legacy one. */
+export const INTEGRATION_PROGRESS_V2_PROTOCOL = 'v2';
+
+/**
+ * §2.2 J-T4's push boundary, for one job's CURRENT claim: has this claim got as far as pushing?
+ *
+ * A v2 claim answers from the row fact the synchronous PUSH report writes —
+ * `push_reported_generation = claim_generation` — and never from `phase`. A legacy claim has only
+ * `phase`, and both `PUSH` and `VERIFY` count: the runner reports VERIFY after it pushed, so a
+ * cancel accepted at VERIFY would record a merge that happened as CANCELLED.
+ *
+ * Not RUNNING is not past the boundary: there is no push in flight.
+ */
+export function pushBoundaryPassed(job: {
+  state: string;
+  phase: string | null;
+  progressProtocol: string | null;
+  pushReportedGeneration: bigint | null;
+  claimGeneration: bigint;
+}): boolean {
+  if (job.state !== 'RUNNING') return false;
+  if (job.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL) {
+    return job.pushReportedGeneration != null && job.pushReportedGeneration === job.claimGeneration;
+  }
+  return job.phase === 'PUSH' || job.phase === 'VERIFY';
+}
 
 /**
  * The capability a runner declares when it honours an automatic landing's one extra rule (§3.3
@@ -775,22 +827,29 @@ export interface LandingRetryRequest {
  * pushes — `promoteOnce` answers READY before M-S4 is reached (`integrate.go:716-720`) — so a check
  * whose runner is gone is `RUNNER_LOST` whatever its claim was. `LAND_TASK` and `LAND_PROMOTION` do
  * push, and can only be called `RUNNER_LOST` when the server KNOWS nothing was pushed: the current
- * claim is a v2 one and `push_reported_generation IS NULL`. Every claim today is a legacy one, whose
- * PUSH report is best-effort on the way out and which cannot prove the negative, so those two kinds
- * are `PUSH_OUTCOME_UNKNOWN` here. The v2 half of the rule arrives with the progress protocol
- * (`34a1400z5T8WzXuLEQfWM`), in this one function; the retry door (J-T9), the abandon door (J-T10)
- * and M-T13 all take their answer from it.
+ * claim is a v2 one and `push_reported_generation IS NULL`. A v2 claim reports PUSH synchronously and
+ * waits for the answer, so its silence without that report proves it never pushed. Everything else
+ * is `PUSH_OUTCOME_UNKNOWN`: a legacy claim's PUSH report is best-effort on the way out and cannot
+ * prove the negative, and a `push_reported_generation` left by an earlier claim (a takeover of a
+ * legacy one) says a push may have happened under it.
  *
  * A compare-and-set on what the timeout was judged from: still RUNNING, and the heartbeat the read
  * saw. A report, a takeover claim or a result that arrived since moved one of them, and the caller is
  * told so rather than ending a job that is talking again. The claim generation moves with it, so a
- * runner that was alive after all is refused when it reports.
+ * runner that was alive after all is refused when it reports. The answer is the error code written,
+ * or null when the compare-and-set lost.
  */
-export function timedOutErrorCode(kind: string): 'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN' {
+export function timedOutErrorCode(job: {
+  kind: string;
+  progressProtocol: string | null;
+  pushReportedGeneration: bigint | null;
+}): 'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN' {
   // A check answers READY before the push step exists for it, so nothing about it can have pushed.
-  if (kind === 'CHECK_PROMOTION') return 'RUNNER_LOST';
-  // LAND_TASK / LAND_PROMOTION. Every claim written before `progress_protocol` exists is legacy —
-  // the column is NULL — and a legacy PUSH report is best-effort, so the negative cannot be proven.
+  if (job.kind === 'CHECK_PROMOTION') return 'RUNNER_LOST';
+  // LAND_TASK / LAND_PROMOTION: only a v2 claim that never recorded a PUSH can prove the negative.
+  if (job.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL && job.pushReportedGeneration == null) {
+    return 'RUNNER_LOST';
+  }
   return 'PUSH_OUTCOME_UNKNOWN';
 }
 
@@ -798,8 +857,29 @@ export async function endTimedOutLanding(
   tx: Prisma.TransactionClient,
   job: { jobId: string; kind: string; phase: string | null; heartbeatAt: Date | null; startedAt: Date;
          limitSeconds: number | null; runnerName: string | null },
-): Promise<boolean> {
-  const errorCode = timedOutErrorCode(job.kind);
+): Promise<'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN' | null> {
+  // J12 reads the current claim's protocol and the push fact off the row rather than off a caller:
+  // every door that ends a timed-out job (the retry door, the abandon door, M-T13, the stop J-T8
+  // makes) takes its answer from this one function, and each of them sees the row as it is now.
+  const [claim] = await tx.$queryRaw<Array<{
+    progressProtocol: string | null; pushReportedGeneration: bigint | null; claimGeneration: bigint;
+  }>>(Prisma.sql`
+    SELECT "progress_protocol" AS "progressProtocol",
+           "push_reported_generation" AS "pushReportedGeneration",
+           "claim_generation" AS "claimGeneration"
+      FROM "project_integration_job"
+     WHERE "id" = ${job.jobId}::uuid`);
+  const errorCode = timedOutErrorCode({
+    kind: job.kind,
+    progressProtocol: claim?.progressProtocol ?? null,
+    pushReportedGeneration: claim?.pushReportedGeneration ?? null,
+  });
+  // §2.2 J-T4's push boundary, as the row states it: a v2 claim is past it when the server recorded
+  // a PUSH under this very generation; a legacy claim only has `phase` to say so, where VERIFY is
+  // reported after the push and counts with PUSH.
+  const pushRecorded = claim?.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL
+    ? claim.pushReportedGeneration != null && claim.pushReportedGeneration === claim.claimGeneration
+    : job.phase === 'PUSH' || job.phase === 'VERIFY';
   const detail = {
     detail: `no report from ${job.runnerName ? `runner ${job.runnerName}` : 'its runner'} within `
       + `${Math.round((job.limitSeconds ?? 0) / 60)} minutes`,
@@ -807,7 +887,7 @@ export async function endTimedOutLanding(
     lastReportAt: (job.heartbeatAt ?? job.startedAt).toISOString(),
     limitSeconds: job.limitSeconds,
     runnerName: job.runnerName,
-    pushRecorded: job.phase === 'PUSH' || job.phase === 'VERIFY',
+    pushRecorded,
     // What J12 lets this row say about the push, so a reader does not have to re-derive it from the
     // kind and the protocol of a claim the row no longer names.
     pushOutcome: errorCode === 'RUNNER_LOST' ? 'NOT_PUSHED' : 'UNKNOWN',
@@ -820,7 +900,7 @@ export async function endTimedOutLanding(
            "finished_at" = now(), "updated_at" = now()
      WHERE "id" = ${job.jobId}::uuid AND "state" = 'RUNNING'
        AND "heartbeat_at" IS NOT DISTINCT FROM ${job.heartbeatAt}::timestamptz`);
-  return ended === 1;
+  return ended === 1 ? errorCode : null;
 }
 
 /**
