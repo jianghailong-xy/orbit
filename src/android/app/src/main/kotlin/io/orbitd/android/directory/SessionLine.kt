@@ -38,6 +38,8 @@ data class SessionLine(val text: String, val tone: Tone, val label: String? = nu
         WATCHING,
         /** Its report is with its reviewer: drawn, not counted, never amber. */
         REVIEW,
+        /** Amber words for a fact that asks nothing: a landing the server judged timed out. */
+        WARNING,
     }
 
     companion object {
