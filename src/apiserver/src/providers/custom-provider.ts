@@ -24,6 +24,7 @@ import { ACCOUNT_CHOICE, accountEnvVar, accountOnRunner } from './account';
 import { catalogModels } from './model-catalog';
 import { ANTHROPIC_HOST } from './plan-usage';
 import { decryptSecret } from './provider-crypto';
+import { LANDING_PROVIDER_SLUG } from './provider-slug';
 import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
 import {
   firstRuntimeCatalogModel,
@@ -216,6 +217,9 @@ export async function adminOnlyProviderRefusal(
   ownerId: string,
   slug: string,
 ): Promise<string | null> {
+  // The LANDING provider's shared row is the migration's compatibility fence, not a provider any
+  // account may be told about (0436).
+  if (slug === LANDING_PROVIDER_SLUG) return null;
   const shared = await db.modelProvider.findFirst({ where: { slug, ownerId: null }, select: { id: true } });
   if (!shared || (await isAdmin(db, ownerId))) return null;
   return `provider "${slug}" is available to admins only; ask an admin to add you to a shared pool`;

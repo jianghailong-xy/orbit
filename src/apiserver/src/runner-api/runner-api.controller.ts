@@ -213,6 +213,7 @@ import {
   returnQueuedTurns,
 } from '../projects/project-open-item';
 import { enqueueForDoneTask } from '../projects/project-integration-job';
+import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
@@ -7352,6 +7353,10 @@ export class RunnerApiController {
     // (§2.5 J10). A Map rather than a Set for the same reason it was a Set: re-adding the same
     // project on a retried attempt overwrites rather than accumulates.
     const receiptProjects = new Map<string, string | null>();
+    // The landed receipts this request recorded, for the landing subject they settle after the
+    // commit (§2.9 LS3 / errata E5). Keyed by project and task so a retried closure overwrites
+    // rather than accumulates.
+    const landedReceipts = new Map<string, { projectId: string; taskId: string; result: 'MERGED' | 'ALREADY_MERGED' }>();
     // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
     // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
     // two outcomes a first attempt has.
@@ -7511,19 +7516,20 @@ export class RunnerApiController {
             })
           : null;
         if (task?.projectId) receiptProjects.set(task.projectId, current.taskId ?? null);
+        // `[K6]` §7 / §13.7 MR2: a merge that moved nothing is `ALREADY_MERGED`, not `MERGED`.
+        // Both are landed, so every projection below treats them alike; what the distinction
+        // keeps is the one fact a reader cannot re-derive later — whether this request advanced
+        // the target or found the work already there. Older runners never set the flag and keep
+        // producing `MERGED`, which is what they always meant.
+        const receiptResult = merged
+          ? (dto.alreadyMerged ? 'ALREADY_MERGED' as const : 'MERGED' as const)
+          : dto.status === 'conflict' ? 'CONFLICT' as const : 'ERROR' as const;
         await MergeReceiptService.fromRunnerMergeResult(tx, {
           ownerId: current.ownerId,
           sessionId,
           taskId: current.taskId,
           projectId: task?.projectId ?? null,
-          // `[K6]` §7 / §13.7 MR2: a merge that moved nothing is `ALREADY_MERGED`, not `MERGED`.
-          // Both are landed, so every projection below treats them alike; what the distinction
-          // keeps is the one fact a reader cannot re-derive later — whether this request advanced
-          // the target or found the work already there. Older runners never set the flag and keep
-          // producing `MERGED`, which is what they always meant.
-          result: merged
-            ? (dto.alreadyMerged ? 'ALREADY_MERGED' : 'MERGED')
-            : dto.status === 'conflict' ? 'CONFLICT' : 'ERROR',
+          result: receiptResult,
           sourceBranch,
           sourceSha,
           targetBranch,
@@ -7548,6 +7554,14 @@ export class RunnerApiController {
               commitSha: sourceSha,
             })),
         });
+        if (task?.projectId && current.taskId
+            && (receiptResult === 'MERGED' || receiptResult === 'ALREADY_MERGED')) {
+          landedReceipts.set(`${task.projectId}:${current.taskId}`, {
+            projectId: task.projectId,
+            taskId: current.taskId,
+            result: receiptResult,
+          });
+        }
       }
     }, loggedRetry(this.logger, 'runnerApi.mergeResult'));
     // The third receipt writer's own post-commit edge, and the reason it is written out here rather
@@ -7559,6 +7573,13 @@ export class RunnerApiController {
     // un-record them.
     for (const [projectId, landedTaskId] of receiptProjects) {
       await this.mergeReceipts?.deliverProjectFactsAfterCommit(projectId, landedTaskId);
+    }
+    // §2.9 LS3 / errata E5: the merge also landed a task segment whose candidate this request
+    // retired (M-T13). Its own transaction, after the receipt committed.
+    for (const landed of landedReceipts.values()) {
+      await settleTaskSegmentAfterReceipt(this.prisma, landed)
+        .catch((error) => this.logger.warn(
+          `landing settlement after merge-result failed: ${(error as Error)?.message ?? error}`));
     }
     // The checkout is free again. A message the user sent while this merge executed is
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it

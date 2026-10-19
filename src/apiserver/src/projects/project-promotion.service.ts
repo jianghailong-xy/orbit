@@ -25,6 +25,7 @@ import {
   workBranchEndedOn,
 } from './project-integration-job';
 import { type InFlightStop, stopInFlightJob } from './project-integration-line';
+import { settleLandingAfterPromotionDecision } from './landing-session';
 import { openItemOwed } from './project-open-item';
 import {
   AUTOMATIC_MERGE_ATTEMPTS,
@@ -342,6 +343,12 @@ export class ProjectPromotionService {
       if (!row) throw new NotFoundException('promotion not found');
       await act(tx, row);
     }, loggedRetry(this.logger, 'projectPromotion.decide'));
+
+    // §2.9 LS3: a DECLINED or CANCELLED round is a settlement fact, committed above. Its subject
+    // closes in its own transaction, after the fact; a confirmation settles nothing.
+    await settleLandingAfterPromotionDecision(this.prisma, promotionId)
+      .catch((error) => this.logger.warn(
+        `landing settlement after promotion ${promotionId} moved failed: ${(error as Error)?.message ?? error}`));
 
     const after = await readPromotion(this.prisma, projectId, promotionId);
     if (!after) throw new NotFoundException('promotion not found');

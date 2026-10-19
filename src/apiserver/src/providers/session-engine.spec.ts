@@ -12,6 +12,7 @@ import { AgentProvider } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 import { builtinSessionEngine, resolveProviderExec, type ModelProviderRow } from './custom-provider';
 import { encryptSecret } from './provider-crypto';
+import { LANDING_PROVIDER_SLUG } from './provider-slug';
 import { legacySessionEngine, sessionEngine } from './session-engine';
 import { ReaperService } from '../realtime/reaper.service';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
@@ -49,6 +50,18 @@ const key = (over: Partial<ModelProviderRow> = {}): ModelProviderRow => ({
 });
 const deepSeek = (over: Partial<ModelProviderRow> = {}) =>
   key({ slug: 'deepseek', presetSlug: 'deepseek', baseUrl: 'https://api.deepseek.com/anthropic', apiKeyEnc: encryptSecret('sk-ds'), ...over });
+
+test('a LANDING session has no engine, and the reserved slug is not read as a key', async () => {
+  const landing = { provider: LANDING_PROVIDER_SLUG, providerBuiltin: true, ownerId: OWNER };
+  // Neither derivation asks a database: the platform provider is not a credential.
+  assert.equal(await legacySessionEngine(unasked, landing), null);
+  assert.equal(await sessionEngine(unasked, { ...landing, engine: null }), null);
+  // A row on the name (the migration's guard, runtime claude) still answers null — a LANDING row
+  // must not be dispatched, reclaimed or reaped as a Claude Code conversation.
+  const { db } = rows({ runtime: 'claude' });
+  assert.equal(await legacySessionEngine(db as never, landing), null);
+  assert.equal(await sessionEngine(db as never, { ...landing, engine: null }), null);
+});
 
 test('T2 legacy derivation: built-in slugs name themselves, kimi and dsh only when built-in', async () => {
   for (const provider of [AgentProvider.CLAUDE, AgentProvider.CODEX, AgentProvider.OPENCODE, AgentProvider.ANTIGRAVITY]) {

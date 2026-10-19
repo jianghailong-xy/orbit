@@ -68,6 +68,8 @@ function serviceFor(row: ReturnType<typeof sessionRow>) {
         return row;
       },
     },
+    // The derived landing label (0436): this row produced no landing work.
+    projectIntegrationJob: { findFirst: async () => null },
   } as never;
   return { service: new SessionsService(prisma, {} as never, {} as never), calls };
 }

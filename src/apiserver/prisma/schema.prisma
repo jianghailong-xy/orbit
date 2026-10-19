@@ -1534,6 +1534,14 @@ model Session {
   // Legacy internal provenance. Current clients use one Active list rather than splitting
   // out System; task-linked runs are always "user" for compatibility with older clients.
   source               String    @default("user")
+  /// Who drives this Session (migration 0436, docs/project-integration-line-contract.md §2.9):
+  /// CONVERSATION for every session an engine may run, LANDING for the platform-driven container a
+  /// landing subject opens. Held to that closed set by `session_kind_check`.
+  ///
+  /// The FIELD is named `sessionKind` rather than `kind` on purpose: web list rows spread the row
+  /// and add their own `kind: 'session'`, so a field called `kind` would be overwritten in the
+  /// payload. The column keeps the short name.
+  sessionKind          String    @default("CONVERSATION") @map("kind")
   // PENDING = created, claimable by its assigned runner.
   status               RunStatus @default(PENDING)
   // billing, accrued per turn
@@ -3077,9 +3085,59 @@ model ProjectIntegrationJob {
   finishedAt DateTime? @map("finished_at") @db.Timestamptz(3)
   updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
+  /// The landing subject this attempt belongs to (migration 0436, contract §2.9). Written at INSERT
+  /// only, never updated — so J4's terminal guard has nothing to refuse. A HISTORY REFERENCE WITH NO
+  /// RELATION, for 0423/0424's reason: a landing row is never deleted while its attempts outlive it,
+  /// and a foreign key would turn that into a cascade or a refused delete.
+  landingId String? @map("landing_id") @db.Uuid
+
   @@index([state, createdAt, id], map: "project_integration_job_queued_idx")
   @@index([projectId, createdAt], map: "project_integration_job_project_idx")
+  @@index([sessionId, createdAt], map: "project_integration_job_session_created_idx")
+  @@index([landingId, createdAt], map: "project_integration_job_landing_idx")
   @@map("project_integration_job")
+}
+
+/// One landing's address, record and state (migration 0436, docs/project-integration-line-contract.md
+/// §2.9 LS1–LS3): the subject every attempt of one piece of landing work hangs off, and the session
+/// that represents it.
+///
+/// A TASK subject is one task's segment — from its DONE to the work reaching the line — and every
+/// generation of that work (the DONE, `integration_retry`, the owner's rerun, a requeue, a landing
+/// after a reopen) belongs to it. A PROMOTION subject is one round of merging the project branch into
+/// the upstream: the first candidate after the previous round settled and every candidate, check and
+/// landing after it until the next MERGED / DECLINED / CANCELLED.
+///
+/// `session_id` is generated when the subject opens, so a link is addressable before the session row
+/// exists (LS1: the row is inserted by `ensure` after a claim commits). The partial unique indexes
+/// that keep one subject per work are in the migration: one unsettled TASK per task, one unsettled
+/// PROMOTION round per project and codebase. `task_id`, `promotion_id` and `session_id` are history
+/// references without foreign keys (0423/0424's reason).
+model ProjectLanding {
+  id          String    @id @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  ownerId     String    @map("owner_id") @db.Uuid
+  codebaseId  String    @map("codebase_id") @db.Uuid
+  /// TASK | PROMOTION (`project_landing_subject_check`).
+  subject     String
+  taskId      String?   @map("task_id") @db.Uuid
+  promotionId String?   @map("promotion_id") @db.Uuid
+  /// 1 for the first segment/round of its key, +1 for every one after it. The session title carries
+  /// `(#2)` from the second on.
+  episode     Int       @default(1)
+  /// Pre-generated when the subject opens; the LANDING session row is inserted under this id.
+  sessionId   String    @map("session_id") @db.Uuid
+  openedAt    DateTime  @default(now()) @map("opened_at") @db.Timestamptz(3)
+  settledAt   DateTime? @map("settled_at") @db.Timestamptz(3)
+  /// LANDED | ALREADY_LANDED | NOTHING_TO_LAND | MERGED | HANDLED | DECLINED | CANCELLED | DELETED
+  /// (`project_landing_settled_as_check`); NULL exactly while `settledAt` is NULL.
+  settledAs   String?   @map("settled_as")
+
+  @@unique([sessionId], map: "project_landing_session_key")
+  @@index([taskId], map: "project_landing_task_idx")
+  @@index([promotionId], map: "project_landing_promotion_idx")
+  @@index([projectId, openedAt], map: "project_landing_project_idx")
+  @@map("project_landing")
 }
 
 /// One candidate for merging into a project's upstream, and what its owner did with it
