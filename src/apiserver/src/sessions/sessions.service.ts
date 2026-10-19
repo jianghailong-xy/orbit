@@ -146,6 +146,7 @@ import {
 } from '../projects/owner-decision-signal';
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
 import { branchName } from '../projects/project-criterion-landing';
+import { INTEGRATION_ITEM_KINDS, openItemOwed } from '../projects/project-open-item';
 import { readSourceLanding } from '../projects/landing-session';
 import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
@@ -163,6 +164,7 @@ import {
   SessionConfigDto,
   AUTOMATIC_ACCOUNT,
   SessionInterruptDto,
+  SessionLandingSummary,
   SessionResumeDto,
   SessionTurnDto,
 } from './dto';
@@ -2915,9 +2917,10 @@ export class SessionsService {
     return [...counts.values()];
   }
 
-  /** The Open list's data version; see open-list-version.ts. */
-  openListVersion(ownerId: string): Promise<string> {
-    return readOpenListVersion(this.prisma, ownerId);
+  /** The Open list's data version; see open-list-version.ts. `includeLanding` widens it to the
+   *  landing source, which only a project-scoped read that asks for landings can see. */
+  openListVersion(ownerId: string, includeLanding = false): Promise<string> {
+    return readOpenListVersion(this.prisma, ownerId, Date.now(), includeLanding);
   }
 
   async list(
@@ -2927,6 +2930,9 @@ export class SessionsService {
       workspaceId?: string;
       tagId?: string;
       projectId?: string;
+      /** Return the project's LANDING sessions too (contract §2.9 LS6). Only the `projectId`
+       *  read honours it; every flat list stays conversations. */
+      includeLanding?: boolean;
       /** The workspaces a token confined to them may see (`workspaceConfinement`). */
       confinedTo?: readonly string[];
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
@@ -2945,14 +2951,22 @@ export class SessionsService {
           : filters.view === 'deleted'
             ? 'trash'
             : (filters.view ?? 'open');
+    // LS6: a landing container is in no flat list. It is listed only by the project grouping's
+    // read — the one that names a project and asks for it — so the page can draw its Landings
+    // group without every other list (and every older client) growing a row it cannot place.
+    // Trash never takes one: a LANDING row cannot be trashed.
+    const includeLanding = filters.includeLanding === true && filters.projectId !== undefined;
+    const kindAllowed = includeLanding && view !== 'trash' && view !== 'system'
+      ? Prisma.sql`(s.kind = 'CONVERSATION' OR s.kind = 'LANDING')`
+      : Prisma.sql`s.kind = 'CONVERSATION'`;
     const visibility: Prisma.Sql =
       view === 'trash'
         ? Prisma.sql`s.deleted_at IS NOT NULL AND s.kind = 'CONVERSATION'`
         : view === 'system'
           ? Prisma.sql`FALSE`
           : view === 'completed'
-            ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NOT NULL AND s.deleted_at IS NULL AND s.kind = 'CONVERSATION'`
-            : Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NULL AND s.deleted_at IS NULL AND s.kind = 'CONVERSATION'`;
+            ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NOT NULL AND s.deleted_at IS NULL AND ${kindAllowed}`
+            : Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NULL AND s.deleted_at IS NULL AND ${kindAllowed}`;
     const runnerFilter = filters.runnerId
       ? Prisma.sql`AND s.assigned_runner_id = ${filters.runnerId}::uuid`
       : Prisma.empty;
@@ -3020,14 +3034,17 @@ export class SessionsService {
       workspaceId?: string;
       tagId?: string;
       projectId?: string;
+      includeLanding?: boolean;
       confinedTo?: readonly string[];
     },
     since: string | undefined,
   ) {
     const rows = await this.list(ownerId, { ...filters, view: 'open' });
+    // A cursor is only valid for the list that produced it: the same filters with and without
+    // landings are two different lists, and one's cursor must not be read as the other's.
     const scope = JSON.stringify([
       filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null, filters.projectId ?? null,
-      filters.confinedTo ?? null,
+      filters.includeLanding === true, filters.confinedTo ?? null,
     ]);
     // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
     // alone would resend most of the list on most polls. The clients that read this delta draw
@@ -3149,6 +3166,8 @@ export class SessionsService {
       projectId: string | null;
       projectTitle: string | null;
       projectMembership: SessionProjectMembership | null;
+      /** The subject summary of a LANDING row; null on every conversation. */
+      landing: SessionLandingSummary | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
       retryAt: Date | null;
@@ -3269,6 +3288,49 @@ export class SessionsService {
         cp.id     AS "projectId",
         cp.title  AS "projectTitle",
         ${sessionProjectMembershipSql('s')} AS "projectMembership",
+        -- What a LANDING row says about its subject (contract §2.9 LS6): the kind of landing work
+        -- and where it stands, so the project sessions page can keep an in-flight one out of the
+        -- ordinary rows, list an awaiting one, and fold a settled one into "Earlier · n landed".
+        -- AWAITING_DECISION is an OPEN integration item about this segment or a BLOCKED candidate.
+        -- An item counts only while it is still OWED (openItemOwed — the one definition every
+        -- reader asks, where a closed edge or a candidate that left the live states is not owed)
+        -- and only inside the segment's project, so an item about the same task filed under
+        -- another project cannot mark this row. The segment's candidates are not only the first
+        -- one l.promotion_id names: every later candidate of the round joins through a job whose
+        -- landing_id is this row (openPromotionRound). Only a LANDING row runs the subquery;
+        -- every conversation answers NULL without reading anything.
+        CASE WHEN s.kind = 'LANDING' THEN (
+          SELECT jsonb_build_object(
+            'subject', l.subject,
+            'state', CASE
+              WHEN l.settled_at IS NOT NULL THEN 'SETTLED'
+              WHEN EXISTS (
+                SELECT 1 FROM project_open_item oi
+                 WHERE oi.state = 'OPEN'
+                   AND oi.project_id = l.project_id
+                   AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+                   AND ${openItemOwed('oi')}
+                   AND (oi.task_id = l.task_id
+                        OR oi.promotion_id = l.promotion_id
+                        OR EXISTS (
+                          SELECT 1 FROM project_integration_job j
+                           WHERE j.id = oi.integration_job_id AND j.landing_id = l.id))
+              ) OR EXISTS (
+                SELECT 1 FROM project_promotion pr
+                 WHERE pr.state = 'BLOCKED'
+                   AND (pr.id = l.promotion_id
+                        OR pr.id IN (
+                          SELECT j.promotion_id FROM project_integration_job j
+                           WHERE j.landing_id = l.id AND j.promotion_id IS NOT NULL))
+              ) THEN 'AWAITING_DECISION'
+              ELSE 'IN_FLIGHT'
+            END,
+            'settledAs', l.settled_as,
+            'settledAt', l.settled_at
+          )
+          FROM project_landing l
+          WHERE l.session_id = s.id
+        ) END AS "landing",
         q.reason  AS "queuedReason",
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit"
@@ -3415,6 +3477,9 @@ export class SessionsService {
         projectId: r.projectId,
         projectTitle: r.projectTitle,
         projectMembership: r.projectMembership,
+        // Present only on a LANDING row: a client folding a summary into a row it holds reads an
+        // absent key as "nothing to clear", and no conversation ever had one.
+        ...(r.landing ? { landing: r.landing } : {}),
         // Null unless the row is queued behind a cap — "waiting its turn" is not a gate.
         queuedReason: r.queuedReason,
         queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
