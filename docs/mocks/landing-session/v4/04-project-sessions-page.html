@@ -1,0 +1,296 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<link rel="stylesheet" href="web.css">
+<script src="kit.js"></script>
+<script src="web.js"></script>
+<body>
+<h1>④ 项目 sessions 页上的落地（v4 · 2026-10-18 · 按 main 1c1c78d72 重画）</h1>
+<p class="lede lede4">v3（10-08）之后 main 把落地在这一页上的样子改了三次，都是 owner 定的：<b>Landing 卡</b>（749d995c5，owner 10-11）——在途的落地是进度卡下面自己的一张卡，排在合入卡前面，灰色在途、服务端判 runner 沉默后变琥珀并带 Retry；<b>同一个头</b>（3b23aa163 / 22124bb0a）——合入检查行、Landing 卡、作业清单的每一行都穿「Merged into main」那一行的头：30pt 圆里的标记、词、右边活的时钟、下面一行，没有 chevron，整行就是按压；<b>Automatic 重查</b>（d321b88ee，owner 10-15）——main 动了就回到 CHECKING，检查行下面一句说通过后会怎样。<br>
+本图把落地会话的入口放到今天的这些卡上。<b>owner 10-08 的决定照旧</b>：保留作业清单，清单每行加 <b>Open landing ›</b>；页上的 <b>Landings</b> 组只列等决定的与最近结案的，从不列在途的。<b>要 owner 定的一件事</b>：Open landing 在 Landing 卡和合入检查行上放在哪——<b>方案 A（推荐）</b>保留 main 的按压，另加明写的 Open landing ›；<b>方案 B</b> 让只有一个作业的 Landing 卡整张点进落地会话。下面 A 画全，B 画一帧，都标 <span class="tbd-i">待定</span>。改后列里的计时与推送用词照契约修订 12 的 V6 与 J12。</p>
+<div id="board" class="board4"></div>
+<script>
+// ── 现在（main 1c1c78d72）───────────────────────────────────────────────────
+const H_A_RUN = head4({ tone: 'run', title: 'Landing 2 jobs', right: '1m 6s', detail: 'checking · updated just now' });
+const CARD_2JOBS_NOW = lcard4(H_A_RUN + lcJobs([lcJob({ t: TA, s: 'checking', cls: 'run' }), lcJob({ t: TB, s: 'queued' })]) + lcOnto() + lcMeta(NOTHING));
+const a1 = page4({ at: '9:07', cards: mk4(CARD_2JOBS_NOW, 1, 'margin:0') });
+
+const sheetNow = js4({ title: '2 jobs in flight', top: 318, rows: [
+  mk(jr4({ h: head4({ tone: 'run', title: 'Landing', right: '1m 6s', detail: 'checking · updated just now' }), what: TA }), 1, 'border-radius:12px;outline-offset:-2px'),
+  jr4({ h: head4({ tone: 'idle', title: 'Landing', right: '0m 35s', detail: 'queued · updated just now' }), what: TB }),
+] });
+const a2 = page4({ at: '9:07', cards: CARD_2JOBS_NOW, extra: sheetNow });
+
+const MERGED_0852 = mergedRow4({ tm: '25m ago', detail: '3f1c2a9 · 1 task · automatically' });
+const a3 = page4({ at: '9:17', cards: `<div class="mc4 chk">${mkx(head4({ tone: 'run', title: 'Merge check', right: '2m 40s', detail: 'checking · updated just now' }), 1, 't l')}${mkx(s11('Merges on its own when it passes.'), 2, 't l')}</div>`,
+  rows: [R4.a, R4.c, R4.b, mkx(MERGED_0852, 3, 'in'), R4.d] });
+
+const CARD_TIMED_NOW = lcard4(head4({ tone: 'warn', title: 'Landing', right: 'Timed out', detail: 'No report for 11m · limit 10m' }) + lcWhat(TA) + lcOnto()
+  + mkx(lcMeta('Runner workstation-gpu took it at 10:39 · stopped at checking · no push recorded'), 3, 't l')
+  + lcFoot(mkx(cap4('Retry'), 2, 't r', 'border-radius:999px') + '<span class="sp"></span>' + allJobs()), true);
+const CARD_TIMED_PLAIN = lcard4(head4({ tone: 'warn', title: 'Landing', right: 'Timed out', detail: 'No report for 11m · limit 10m' }) + lcWhat(TA) + lcOnto()
+  + lcMeta('Runner workstation-gpu took it at 10:39 · stopped at checking · no push recorded') + lcFoot(cap4('Retry') + '<span class="sp"></span>' + allJobs()), true);
+const a4 = page4({ at: '10:52', cards: mkx(CARD_TIMED_NOW, 1, 'in', 'border-radius:14px'), rows: [R4.a, R4.c, R4.b, R4.d] });
+
+// ── 改后 · 方案 A ───────────────────────────────────────────────────────────
+const H_LIVE = (title, clock, extra = '') => head4({ tone: 'run', title, right: clock, detail: `checking · output 2s ago${extra}` });
+const CARD_1JOB_A = lcard4(H_LIVE('Landing', '1m 6s') + lcWhat(TA) + lcOnto() + lcMeta(NOTHING)
+  + lcFoot('<span class="sp"></span>' + mkx(openLk(), 1, 't l')));
+const b1 = page4({ at: '9:05', cards: mkx(CARD_1JOB_A, 2, 'in', 'border-radius:14px') });
+
+const CARD_2JOBS_A = lcard4(H_LIVE('Landing 2 jobs', '1m 6s') + mkx(lcJobs([lcJob({ t: TA, s: 'checking', cls: 'run', open: jobOpen() }), lcJob({ t: TB, s: 'queued', open: jobOpen() })]), 1, 't l')
+  + lcOnto() + lcMeta(NOTHING));
+const b2 = page4({ at: '9:07', cards: mkx(CARD_2JOBS_A, 2, 'in', 'border-radius:14px') });
+
+const sheetA = js4({ title: '3 jobs in flight', top: 224, rows: [
+  jr4({ h: head4({ tone: 'warn', title: 'Landing', right: 'Timed out', detail: 'No report for 11m · limit 10m' }), what: TA,
+    det: mkx('Runner workstation-gpu took it at 10:39 · stopped at checking · <b>nothing was pushed</b>', 3, 't l'),
+    under: cap4('Retry', 'bord') + mkx(openLk(), 1, 't r') }),
+  jr4({ h: head4({ tone: 'idle', title: 'Landing', right: '12m 02s', detail: 'queued · updated just now' }), what: TB,
+    det: 'Generation 2 · retried by the coordinator at 10:40', under: openLk() }),
+  jr4({ h: head4({ tone: 'idle', title: 'Merge check', right: '6m 02s', detail: 'queued · updated just now' }), chev: false,
+    under: mkx(openLk(), 2, 't r') }),
+] });
+const b3 = page4({ at: '10:52', cards: CARD_TIMED_PLAIN, extra: sheetA });
+
+const H_CHK_A = head4({ tone: 'run', title: 'Merge check', right: '2m 40s', detail: 'checking · output 1s ago' });
+const b4 = page4({ at: '9:17', cards: `<div class="mc4 chk">${mkx(H_CHK_A, 1, 't l')}${s11('Merges on its own when it passes.')}${mcFoot(`<span class="s11">+1 job queued</span><span class="sp"></span>` + mkx(`<span class="lk4 sm">All jobs ${ic('chevr', 9, 'var(--tint)', 3)}</span>`, 2, 't l'))}</div>`,
+  rows: [R4.a, R4.c, R4.b, MERGED_0852, R4.d] });
+
+// ── 方案 B（一帧）─────────────────────────────────────────────────────────────
+const CARD_1JOB_B = lcard4(H_LIVE('Landing', '1m 6s') + lcWhat(TA) + lcOnto() + lcMeta(NOTHING));
+const b5 = page4({ at: '9:05', cards: mkx(CARD_1JOB_B, 1, 'in', 'border-radius:14px') });
+
+// ── 改后 · Landings 组与合入卡的形态 ──────────────────────────────────────────
+const LG_ROWS = (extra = []) => [
+  tr4(head4({ tone: 'fail', title: `Land · ${TC}`, right: '13m', rcls: 'tm', detail: 'Checks failed · with the coordinator' })),
+  ...extra,
+  tr4(head4({ tone: 'ok', mark: MARK.merged(), title: 'Merge project/34bmz…N2yLPrnsCk → main · #8', right: '1h', rcls: 'tm', detail: 'Merged · 3f1c2a9 · 1 task · automatically' })),
+  tr4(head4({ tone: 'ok', mark: MARK.landed(), title: `Land · ${TA}`, right: '1h', rcls: 'tm', detail: `Landed on ${BR4S}` })),
+  `<div class="lgx">${ic('check', 13, 'var(--green-ink)', 2.6)}Earlier · 31 landed · 3 nothing to land<span class="sp">${chev()}</span></div>`,
+];
+const CARD_TB = lcard4(head4({ tone: 'run', title: 'Landing', right: '3m 12s', detail: 'checking · output 1s ago' }) + lcWhat(TB) + lcOnto() + lcMeta(NOTHING)
+  + lcFoot('<span class="sp"></span>' + openLk()));
+const c1 = page4({ at: '10:20', cards: mkx(CARD_TB, 1, 'in', 'border-radius:14px'), mid: mkx(sh('Landings') + LG_ROWS().join(''), 2, 'in', 'border-radius:12px'),
+  rows: [{ t: `执行任务：${TB}`, tm: '9m ago', sub: 'Recap · 10:11 AM 跨页的 dossier 只发一次了' }] });
+
+const CARD_Q = lcard4(head4({ tone: 'run', title: 'Landing 2 jobs', right: '3m 12s', detail: 'checking · output 1s ago' })
+  + lcJobs([lcJob({ t: TB, s: 'checking', cls: 'run', open: jobOpen() }), mkx(lcJob({ t: '<span style="color:var(--l2)">Merge to main</span>', s: 'queued', open: `<span class="ph">${jobOpen()}</span>` }), 2, 't l')]) + lcOnto() + lcMeta(NOTHING));
+const MC_Q = `<div class="mc4 run">${mcHead4('Merge into main queued')}${s13('confirmed — queued to merge into main')}${s11(PAGE_NOTE4)}${mcFoot(mkx(openLk(), 1, 't r') + '<span class="sp"></span>' + btn4('Cancel'))}</div>`;
+const c2 = page4({ at: '10:24', cards: CARD_Q + MC_Q, rows: [R4.b, R4.a, R4.c] });
+
+const MC_CXL = `<div class="mc4 cxl">${mcHead4('Cancelling the merge…', 'cxl')}${mkx(s13('Stops at the runner’s next report, within 30 s · nothing has been pushed'), 1, 't l')}
+${head4({ tone: 'run', title: 'Merge to main', right: '4m 10s', detail: 'checking · stop requested' })}
+${s11('If the push starts before it stops, the merge goes through and this card says so.')}${mcFoot(openLk() + '<span class="sp"></span>' + mkx(btn4('Cancel requested', 'off'), 2, 't l'))}</div>`;
+const c3 = page4({ at: '11:41', cards: MC_CXL, rows: [R4.b, R4.a, R4.c] });
+
+const MC_BLK = `<div class="mc4 blk">${mcHead4('Can’t merge into main yet', 'warn')}${s13('the checks on the combined tree did not pass')}
+<div class="s11"><span>Blocked by: </span><b style="font-weight:400;color:var(--label)">“${TB.slice(0, 16)}…” is landing on the project line · checking</b></div>
+<div class="press">${spinner('rgba(60,60,67,.6)', 12)}Coordinator is resolving it · 4m</div>
+${mcFoot(`<span class="lk4 sm">Details ${ic('chevr', 9, 'var(--tint)', 3)}</span><span class="sp"></span><span class="lk4 sm">Open coordinator ${ic('chevr', 9, 'var(--tint)', 3)}</span>`)}</div>`;
+const LG_BLK = tr4(head4({ tone: 'fail', title: MR, right: '4m', rcls: 'tm', detail: 'Checks failed · with the coordinator' }));
+const c4 = page4({ at: '11:56', cards: mkx(MC_BLK, 1, 'in', 'border-radius:14px'), mid: sh('Landings') + mkx(LG_BLK, 2, 'in') + LG_ROWS().slice(0, 1).join(''),
+  rows: [R4.b, R4.a] });
+
+const MC_TO_CHECK = `<div class="mc4 warn">${mkx(head4({ tone: 'warn', title: 'Merge check', right: 'Timed out', detail: 'No report for 110m · limit 10m' }), 4, 't l')}
+${mkx(s11('Runner workstation-gpu took it at 13:02 · stopped at checking · a check pushes nothing'), 3, 't l')}
+${mcFoot(mkx(cap4('Re-run the check'), 1, 't l', 'border-radius:999px') + mkx(cap4('Abandon', 'red'), 2, 't r', 'border-radius:999px'))}</div>`;
+const c5 = page4({ at: '14:52', cards: MC_TO_CHECK, rows: [R4.b, R4.a, R4.c] });
+
+const MC_TO_MERGE = `<div class="mc4 warn">${mcHead4('Merging into main…', 'warn')}${s13('confirmed — publishing the tested tree to main')}
+${head4({ tone: 'warn', title: 'Merge to main', right: 'Timed out', detail: 'No report for 23m · limit 10m' })}
+${mkx(s11('Runner workstation-gpu took it at 15:38 · stopped at pushing · <b>may have been pushed</b>'), 2, 't l')}
+${mcFoot(mkx(cap4('Abandon', 'red'), 1, 't r', 'border-radius:999px') + '<span class="sp"></span>' + btn4('Cancel', 'off'))}</div>`;
+const c6 = page4({ at: '16:05', cards: MC_TO_MERGE, rows: [R4.b, R4.a, R4.c] });
+
+const receipt = `<div class="dimbg"></div><div class="js4" style="top:250px"><div class="grab"></div>
+<div class="sn" style="font-size:15.5px;padding:0 50px">✓ Merged into main automatically<span class="x"><i>${ic('x', 11, '#fff', 3.2)}</i></span></div>
+<div style="padding:4px 18px 0;font-size:13px;line-height:1.45">
+<div style="color:var(--l2)">FROM ORBIT</div>
+${kv('Commit', '8ed0ea7 · merge of project/34bmz…N2yLPrnsCk · under your Automatic setting · 11m')}
+${kv('Now on main', `2 tasks<ul class="tk"><li>${TA.slice(0, 26)}…</li><li>${TB.slice(0, 26)}…</li></ul>`)}
+${kv('Checks', '✓ Passed on the combined tree · npm run build &amp;&amp; npm test … · 17m 41s', 'g')}
+${kv('Landed', 'exactly the tested tree 5e5bfca · as a merge commit')}
+${kv('Undo', '<code>git revert -m 1 8ed0ea7</code>')}
+<div style="margin-top:8px;display:inline-block">${mkx(openLk(), 2, 't r')}</div></div></div>`;
+const c7 = page4({ at: '10:03', rows: [R4.a, mkx(mergedRow4({ tm: '11m ago' }), 1, 'in'), R4.c, R4.b], extra: receipt });
+
+const cap = (title, items, dd = '') => `<b>${title}</b><ol>${items.map((i) => `<li>${i}</li>`).join('')}</ol>${dd ? `<div class="capdd">${dd}</div>` : ''}`;
+
+document.getElementById('board').innerHTML = `
+${band('现在', 'now', 'main 1c1c78d72 · iOS（web 在下面，Android 见 ⑦）· 真实组件的样子，不是提案')}
+<div class="rowv4">
+${fig4('now', '现在 · 9:07 · Landing 卡（两个作业）', a1, cap('一张卡，一个按压', [
+  `${n(1)}整张卡是一个按压：服务端列作业时打开「2 jobs in flight」，旧服务端打开项目页（<code>onOpenJobs</code> / <code>onOpenProject</code>）。卡上没有哪一处指向这次尝试本身。`,
+  '头是「已合入」那一行的样子：30pt 圆里的环（在跑转、排队静止）、<i>Landing 2 jobs</i>、右边活的时钟、下面一行状态与新鲜度，没有 chevron。',
+  '字号照代码：头 17 / 15 / 15，标题与作业行 13（footnote），onto 与那句话 11（caption2）。']))}
+${fig4('now', '现在 · 9:07 · 作业清单', a2, cap('清单：每行同一个头 + 任务', [
+  `${n(1)}整行（带 chevron）打开任务；合入作业的行没有任务，不是按压，也就没有 chevron。`,
+  '今天没有落地会话，清单里也就没有去这次尝试本身的地方：检查输出、领取与重取要靠任务页和协调会话拼起来。']))}
+${fig4('now', '现在 · 9:17 · 合入检查行', a3, cap('合入检查行：整行一个按压', [
+  `${n(1)}合入作业的头（3b23aa163）：整行打开作业清单。清单里这一行没有任务、不是按压——点进去看到的是同一个头。`,
+  `${n(2)}d321b88ee（owner 10-15）：Automatic 下 main 动了就回到 CHECKING 重查；这一句说通过以后会怎样（<i>Asks you when it passes.</i> 是另一种）。`,
+  `${n(3)}已合入的行整行打开回执。`,
+  '合入作业领头时 Landing 卡不画（<code>isMergeJob</code>）：排在它后面的落地任务只在清单里看得到；检查行的头也不说「2 jobs」。']))}
+${fig4('now', '现在 · 10:52 · 超时（琥珀）', a4, cap('服务端判 runner 沉默：卡变琥珀', [
+  `${n(1)}三角替换环，右边写 <i>Timed out</i>，下面一行 <i>No report for 11m · limit 10m</i>（从上次回报算，limit 是这一步的时限）。`,
+  `${n(2)}Retry 只在服务端说 <code>retryable</code> 时出现（J-T9；今天只有 LAND_TASK）。<i>All jobs ›</i> 打开清单。`,
+  `${n(3)}推送那一句按阶段猜：停在 PUSH / VERIFY 写 <i>may have been pushed</i>，其余 <i>no push recorded</i>。`]))}
+</div>
+
+${band('改后 · 方案 A', 'a', '推荐 · iOS · 保留 main 的每一个按压，Open landing › 明写出来；合入检查行的整行改去这一轮合入的落地会话')}
+<div class="rowv4">
+${fig4('a', '改后 A · 一个作业', b1, cap('Landing 卡：底下一个 Open landing ›', [
+  `${n(1)}新增 <b>Open landing ›</b>：进这次尝试所属的落地会话（<i>Land · &lt;task&gt;</i>）。它与卡的按压是兄弟，不套在里面（web 的按钮里不能再放链接）。`,
+  `${n(2)}卡的整张按压不变：照 main 打开作业清单（1 job in flight）。`,
+  '头下面那一行加活性（V6）：<i>output 2s ago</i>；时钟是当前这一步的。旧服务端没有 <code>landingSessionId</code> 时这一格写灰色的 <i>No landing page on this server yet</i>，不可点。']))}
+${fig4('a', '改后 A · 两个作业', b2, cap('每个作业一行，各一个 Open landing ›', [
+  `${n(1)}每行尾一个 <b>Open landing ›</b>，各进各的落地会话。标题让位，约 11 个字后省略，全名在清单里。`,
+  `${n(2)}卡的整张按压照 main 打开清单。`,
+  '合入作业（Merge check / Merge to main）的行不放 Open landing ›：它的入口在下面的合入卡上（见 c2）。']))}
+${fig4('a', '改后 A · 作业清单（10:52）', b3, cap('清单的每一行加 Open landing ›', [
+  `${n(1)}owner 10-08：每行一个 <b>Open landing ›</b>，和 Retry 并排；行本身照 main 打开任务。`,
+  `${n(2)}合入作业的行今天不是按压，Open landing › 是它唯一的去处。`,
+  `${n(3)}推送那一句照 J12：v2 领取且服务端没记下 PUSH 回报才写 <i>nothing was pushed</i>；legacy 领取一律 <i>may have been pushed</i>（它的 PUSH 回报是尽力而为）。`,
+  '清单与 Landing 卡上不放 Abandon：LS6 把在途尝试的 owner 门（叫停、Cancel、Abandon）限在落地会话页头、合入卡与 X-E5 待办三处。Retry 是 main 的 J-T9 门，照旧。']))}
+${fig4('a', '改后 A · 合入检查行', b4, cap('整行改去这一轮合入的落地会话', [
+  `${n(1)}合入作业的头整行打开<b>这一轮合入</b>的落地会话（<i>${MR}</i>）。理由：契约 LS6 要合入卡在 CHECKING / CONFIRMED / RECHECKING 时链到这一轮；main 已把这一行定为一个按压，放不下第二个 Watch ›；清单里这一行本来就不是按压。`,
+  `${n(2)}只在作业 ≥ 2 个时出现 <i>+N job queued · All jobs ›</i>，作业清单从这里进——main 的 <i>All jobs</i> 一词。只有一个作业时清单只有这一行，不给入口。`,
+  '旧服务端没有 <code>landingSessionId</code>：整行照 main 打开清单。'],
+  '<b>本图的读法</b>：任务里写「只在 main 没有别的去处时才替换回执 / 清单这个目标」。这里读成：清单与回执都不能因此到不了——清单另有 All jobs ›（≥2 个作业时），回执仍是「已合入」行自己的按压（见 c7）。<span class="tbd-i">待定</span>'))}
+${fig4('b', '方案 B · 一个作业时整张卡进落地会话', b5, cap('B：按作业个数换按压的去处', [
+  `${n(1)}只有一个作业时，整张卡直接打开它的落地会话，卡上不加链接；≥ 2 个作业时整张卡打开清单，清单每行有 Open landing ›。`,
+  '好处：少一行字，单个作业时少点一次。代价：同一张卡按作业个数去两个地方；单个作业时清单从卡上消失（超时那张的 All jobs › 还在）。'],
+  '<b>方案 A 还是 B</b>：本组推荐 A——按压的去处不随个数变，main 的行为一个不改。<span class="tbd-i">待定</span>'))}
+</div>
+
+${band('改后 · Landings 组与合入卡', 'a', 'iOS · 合入卡照 main 的四种形态，加上修订 12 的「取消中」与两种超时；BLOCKED 不加入口（LS6）')}
+<div class="rowv4">
+${fig4('a', '改后 · 10:20 · Landings 组', c1, cap('Landings 组：只列等决定的与 24 小时内结案的', [
+  `${n(1)}在途的那一次只在 Landing 卡上（和它的清单里），<b>不进</b> Landings 组。`,
+  `${n(2)}组在 Coordinator 下面、Today 上面。行穿同一个头：标记说结局（✕ 没过、⇢ 合入、✓ 落地、◌ 没东西可落），右边是结案或等待的时长，下面一行说结局和谁拿着。更早的折成一行。`,
+  '组里没有行时整组不画。点一行进那个落地会话。']))}
+${fig4('a', '改后 · 10:24 · 排队（Merge into main queued）', c2, cap('合入卡在 CONFIRMED：底下加 Open landing ›', [
+  `${n(1)}排在落地任务后面时卡里没有合入作业的头，所以入口明写在卡底，和 Cancel 一行（web 在 Details › 旁边）。`,
+  `${n(2)}main 的 Landing 卡把排着的合入作业也列一行，但 <code>taskTitle</code> 是空的，只剩 <i>queued</i>；改后写它的词 <i>Merge to main</i>，不放 Open landing ›（入口在合入卡上）。`]))}
+${fig4('a', '改后 · 11:41 · 取消中', c3, cap('Cancel 之后：取消中，以事实为准（M-T10）', [
+  `${n(1)}服务端给 <code>cancelRequested</code> 与 <code>pushBoundaryPassed</code>，卡据此画「取消中」，不再自己看 <code>execution.phase</code>。`,
+  `${n(2)}Cancel 变成不可再按的 <i>Cancel requested</i>；runner 下一次回报（≤30 s）收到就停，回报 CANCELLED，卡消失、时间线记一行。`,
+  '已过推送界线：标题改为 <i>Too late to cancel — the push has started</i>，结果以事实为准。']))}
+${fig4('a', '改后 · 11:56 · 交回（BLOCKED）', c4, cap('BLOCKED：照 main，不加入口', [
+  `${n(1)}main 的样子不动：原因、<i>Blocked by</i>、谁在处理、Details › / Open coordinator ›。契约 LS6 只要求 CHECKING / CONFIRMED / RECHECKING 时链落地会话。`,
+  `${n(2)}交回之后这一轮在等决定，列在下面的 Landings 组里，从那一行进；卡上不再加第二个入口。`]))}
+</div>
+<div class="rowv4">
+${fig4('a', '改后 · 14:52 · 合入检查超时（10-09 那一次）', c5, cap('检查作业超时：Re-run the check 与 Abandon', [
+  `${n(1)}<b>Re-run the check</b>：修订 16 起候选重检门对超时的 CHECK_PROMOTION 开放（J-T9），先结束这一代、再排下一代；词照 main 晋升行的 RETRY。`,
+  `${n(2)}<b>Abandon</b>：租约过期（V6 的唯一定义）后才有，只结束、不重排（J-T10）。合入卡是 owner 门出现的三处之一。`,
+  `${n(3)}检查作业从不推送，推送那一句写 <i>a check pushes nothing</i>（J12 的规则见待定）。`,
+  `${n(4)}卡照 Landing 卡的规则变琥珀；整行仍去这一轮的落地会话。`]))}
+${fig4('a', '改后 · 16:05 · 合入作业超时（Merge to main）', c6, cap('合入作业超时：只有 Abandon', [
+  `${n(1)}J-T9 不适用于 LAND_PROMOTION（它答的是已确认的合入），只有 Abandon；Cancel 已过推送界线，不可按。`,
+  `${n(2)}停在 pushing：<i>may have been pushed</i>。Abandon 写 PUSH_OUTCOME_UNKNOWN，候选回 BLOCKED；同一 serial_key 的下一个作业发现 tested_sha 已在 main 上就补写回执。`]))}
+${fig4('a', '改后 · 10:03 · 已合入', c7, cap('已合入：行照 main 打开回执，回执里加 Open landing ›', [
+  `${n(1)}「Merged into main」行的按压不换：回执是这一行自己的记录（协调会话那一行也打开它）。`,
+  `${n(2)}回执底部加 <b>Open landing ›</b>，进这一轮合入的落地会话（每次检查、main 动了重查、推送）。这一轮结案 24 小时内也在 Landings 组里。`]))}
+<div id="tbdslot"></div>
+</div>
+<div id="web"></div>
+<div id="panels"></div>`;
+
+// ── web ──────────────────────────────────────────────────────────────────────
+const W_CARD_NOW = wlc4(wh4({ tone: 'run', title: 'Landing 2 jobs', right: '1m 6s', detail: 'checking · updated just now' })
+  + wJobs([{ t: TA, st: 'checking', cls: 'run' }, { t: TB, st: 'queued' }]) + wRef() + wNote());
+const wColNow = `${wcolHead4()}<div class="body">${wpc4()}${mkx(W_CARD_NOW, 1, 'in', 'border-radius:10px')}${wsec5('Coordinator')}${W_COORD}${wsec5('Today')}${W_ROWS.join('')}</div>`;
+const wDlgNow = wJobsDlg({ title: '2 jobs in flight', top: 120, left: 600, rows: [
+  mkx(wJr({ h: wh4({ tone: 'run', title: 'Landing', right: '1m 6s', detail: 'checking · updated just now' }), what: TA }), 2, 'in'),
+  wJr({ h: wh4({ tone: 'idle', title: 'Landing', right: '0m 35s', detail: 'queued · updated just now' }), what: TB }),
+] });
+const w1 = webFrame4({ col: wColNow, overlay: wDlgNow, h: 920 });
+
+const W_CARD_A = wlc4(wh4({ tone: 'run', title: 'Landing 2 jobs', right: '3m 12s', detail: 'checking · output 1s ago' })
+  + mkx(wJobs([{ t: TB, st: 'checking', cls: 'run', ol: wOpenL() }, { t: '<span style="color:var(--text-2)">Merge to main</span>', st: 'queued', ol: `<span class="ph">${wOpenL()}</span>` }]), 1, 't l')
+  + wRef() + wNote());
+const W_MC_Q = wmc4('merging', wmHead('Merge into main queued') + '<span class="st">confirmed — queued to merge into main</span>'
+  + `<span class="note">${PAGE_NOTE4}</span>` + `<div class="foot"><span class="gap"><span class="wlk">Details ›</span>${mkx(wOpenL(), 2, 't r')}</span><span class="wsec4">Cancel</span></div>`);
+const W_LG = mkx(wsec5('Landings')
+  + wtr4(wh4({ tone: 'fail', title: `Land · ${TC}`, right: '13m', rcls: 'tm', detail: 'Checks failed · with the coordinator' }))
+  + wtr4(wh4({ tone: 'ok', title: 'Merge project/34bmz…N2yLPrnsCk → main · #8', right: '1h', rcls: 'tm', detail: 'Merged · 3f1c2a9 · 1 task · automatically' }))
+  + wtr4(wh4({ tone: 'landed', title: `Land · ${TA}`, right: '1h', rcls: 'tm', detail: `Landed on ${BR4S}` }))
+  + `<div class="wfold4">${ic('check', 13, '#1a7f37', 2.4)}Earlier · 31 landed · 3 nothing to land<span class="rr">›</span></div>`, 3, 'in', 'border-radius:10px');
+const wColA = `${wcolHead4()}<div class="body">${wpc4()}${W_CARD_A}${W_MC_Q}${wsec5('Coordinator')}${W_COORD}${W_LG}${wsec5('Today')}${W_ROWS.slice(2).join('')}</div>`;
+const w2 = webFrame4({ col: wColA, h: 920 });
+
+const wDlgA = `<div class="webf" style="width:560px;height:720px;background:rgba(31,35,41,.42)"><div class="wdlg4" style="top:40px;left:40px">
+<div class="dh">3 jobs in flight<span class="x">${ic('x', 16, '#8f959e', 2.2)}</span></div><div class="ljobs4">
+${wJr({ h: wh4({ tone: 'warn', title: 'Landing', right: 'Timed out', detail: 'No report for 11m · limit 10m' }), what: TA,
+  det: 'Runner workstation-gpu took it at 10:39 · stopped at checking · <b>nothing was pushed</b>',
+  un: `<span class="retry">Retry</span><div class="un">${mkx(wOpenL(), 1, 't r')}</div>` })}
+${wJr({ h: wh4({ tone: 'idle', title: 'Landing', right: '12m 02s', detail: 'queued · updated just now' }), what: TB, det: 'Generation 2 · retried by the coordinator at 10:40', un: `<div class="un">${wOpenL()}</div>` })}
+${wJr({ h: wh4({ tone: 'idle', title: 'Merge check', right: '6m 02s', detail: 'queued · updated just now' }), chev: false, un: `<div class="un">${mkx(wOpenL(), 2, 't r')}</div>` })}
+</div></div></div>`;
+
+const wcap = (title, items) => `<figcaption style="max-width:1200px"><b>${title}</b><ol>${items.map((i) => `<li>${i}</li>`).join('')}</ol></figcaption>`;
+document.getElementById('web').innerHTML = `
+${band('web', 'web', '同一页的 web（项目会话栏，宽屏时清单是对话框，窄屏是底部抽屉）')}
+<div class="rowv4">
+<figure style="width:1240px"><span class="tag now">现在 · web · 9:07</span>${w1}${wcap('现在（web）', [
+  `${n(1)}Landing 卡（<code>.session-project-landing</code>）在进度卡下面、合入卡前面；整张卡是一个按钮，打开「2 jobs in flight」。`,
+  `${n(2)}对话框每行是同一个头 + 任务名，整行是去任务的链接；合入作业的行不是链接。`])}</figure>
+<figure style="width:1240px"><span class="tag after">改后 A · web · 10:24</span>${w2}${wcap('改后 A（web）', [
+  `${n(1)}每个作业一行 Open landing ›；合入作业这一行写 <i>Merge to main</i>，不放入口。web 的卡是一个 <code>&lt;button&gt;</code>，作业行要移到按钮外面，和它做兄弟。`,
+  `${n(2)}合入卡在 CONFIRMED：Details › 旁边加 Open landing ›，Cancel 照旧。`,
+  `${n(3)}Landings 组在 Coordinator 下面、Today 上面，行穿同一个头；在途的（这里是 dossier 那一项和排着的合入）不进组。`])}</figure>
+</div>
+<div class="rowv4">
+<figure style="width:560px"><span class="tag after">改后 A · web · 对话框</span>${wDlgA}${wcap('改后 A：对话框每行加 Open landing ›', [
+  `${n(1)}和 Retry 分开一行（web 的 Retry 是整宽的胶囊按钮），行本身照旧去任务。`,
+  `${n(2)}合入作业的行没有任务，Open landing › 是它唯一的去处。推送那一句照 J12。`])}</figure>
+<div id="side4" style="display:flex;gap:28px;align-items:flex-start"></div>
+</div>`;
+
+// ── 说明块：A 与 B、待定、入口表 ─────────────────────────────────────────────
+const ab = `<div class="panel4" style="width:900px"><h2>方案 A 与方案 B（Landing 卡上 Open landing 放在哪）</h2>
+<p class="hint">两个方案只在 Landing 卡上不同；清单每行的 Open landing ›（owner 10-08）和合入检查行的去处两边一样。</p>
+<table class="map4"><thead><tr><th></th><th>方案 A（推荐）</th><th>方案 B</th></tr></thead><tbody>
+<tr><td class="k">Landing 卡的整张按压</td><td>作业清单，照 main（旧服务端：项目页）</td><td class="new">一个作业 → 它的落地会话；≥ 2 个 → 清单</td></tr>
+<tr><td class="k">卡上的 Open landing ›</td><td class="new">一个作业一个（卡底）；几个作业每行一个；合入作业那一行不加</td><td>不加</td></tr>
+<tr><td class="k">清单每行</td><td class="new" colspan="2">Open landing ›，与 Retry 并排；行本身照旧去任务</td></tr>
+<tr><td class="k">合入检查行（两方案相同）</td><td class="new" colspan="2">整行 → 这一轮合入的落地会话；作业 ≥ 2 个时卡底 <i>+N job queued · All jobs ›</i></td></tr>
+<tr><td class="k">一个作业时怎么到清单</td><td>点卡</td><td>只剩超时那张卡的 All jobs ›</td></tr>
+<tr><td class="k">要改的</td><td>加链接，不动任何按压</td><td>同一张卡的去处随作业个数变</td></tr>
+</tbody></table>
+<p class="hint" style="margin:12px 0 0">推荐 A：卡的去处不随作业个数变；main 刚定下的「整张卡是一个按压」原样保留，入口是另写出来的字，读者看得见、读屏也念得出。</p></div>`;
+
+const tbd = `<div class="panel4 tbd" style="width:780px"><h2>待定（请 owner 定）</h2><ol>
+<li><b>Open landing 放在哪：方案 A 还是 B</b>（比较表在下方 web 一行的右边；本组推荐 A）。A 里几个作业时每行一个 Open landing ›，标题约 11 个字后省略。</li>
+<li><b>合入检查行的整行去这一轮合入的落地会话</b>，作业清单只在 ≥ 2 个作业时由 <i>All jobs ›</i> 进（b4）。任务写的是「只在 main 没有别的去处时才替换回执 / 清单」，本图读成「清单与回执都不能因此到不了」：已合入的行仍打开回执，回执里加 Open landing ›（c7）。若 owner 要的是「检查行照旧开清单」，入口就只剩清单里那一行（多点一次）。</li>
+<li><b>「最近结案」的窗口</b>：本组取 24 小时（v3 第 3 条，仍未定）。</li>
+<li><b>Landings 组收不收已合入的合入轮</b>：时间线已有「Merged into main」行，组里再列一次是同一轮出现两处（c1 列了 #8）。</li>
+<li><b>旧服务端时 Open landing 那一格</b>：灰色 <i>No landing page on this server yet</i>，不可点（v3 第 4 条）。</li>
+<li><b>合入卡超时时整张变琥珀</b>（c5、c6）：main 的合入卡在 checking 形态只有头变色；改后照 Landing 卡的规则整张变。</li>
+</ol>
+<p class="hint" style="margin:10px 0 0"><b>v3 的待定里 main 已经定了的</b>：① 合入卡 checking 时两个按压目标——3b23aa163 把检查行定成一个整行按压，不再有 Watch ›，只剩「这一个按压去哪」（上面第 2 条）；② 进度卡下面放哪张卡——749d995c5 定为在途的 Landing 卡，停下的落地不画卡，v4 放进 Landings 组；Android 的两条见 ⑦。</p></div>`;
+
+const entr = `<div class="panel4" style="width:2560px;margin-top:6px"><h2>入口表：一次落地在哪里出现、点了去哪</h2>
+<p class="hint">规则：<b>一次在途的落地在这一页上只出现在「Landing 卡（合入作业领头时是合入卡）+ 它打开的清单」</b>；Landings 组从不列在途的；会话列表、任务页、写代码的会话、协调会话是别的页面。蓝底是改后新加或改了的。</p>
+<table class="map4"><thead><tr><th>位置</th><th>端</th><th>显示什么</th><th>在途的落地</th><th>现在点了去哪（main 1c1c78d72）</th><th>改后（方案 A）</th></tr></thead><tbody>
+<tr><td class="k">sessions 页 · Landing 卡</td><td>web · iOS · Android</td><td>在途的 LAND_TASK；合入作业领头时不画</td><td><span class="ok">✓</span> 领头的，或 N jobs</td><td>整张卡 → 作业清单（旧服务端 → 项目页）；超时带 Retry · All jobs ›</td><td class="new">不变；加 Open landing ›（一个作业一个，几个作业每行一个，合入作业行不加）</td></tr>
+<tr><td class="k">作业清单（卡 / 检查行 / Work overview 打开）</td><td>web · iOS · Android</td><td>每个在途作业一行</td><td><span class="ok">✓</span> 全部</td><td>行 → 任务；合入作业的行不是按压；超时的 LAND_TASK 带 Retry</td><td class="new">行不变；每行加 Open landing ›</td></tr>
+<tr><td class="k">合入卡 · 检查中</td><td>web · iOS · Android</td><td>合入作业的头 + 通过以后怎样</td><td><span class="ok">✓</span></td><td>整行 → 作业清单（旧服务端：只读）</td><td class="new">整行 → 这一轮合入的落地会话；≥ 2 个作业时 All jobs ›；超时加 Re-run the check · Abandon</td></tr>
+<tr><td class="k">合入卡 · 排队 / 重查 / 合并中</td><td>web · iOS · Android</td><td>标题、状态、合入作业的头（领头时）</td><td><span class="ok">✓</span></td><td>头 → 清单；Cancel；web 有 Details ›</td><td class="new">头 → 落地会话；卡底加 Open landing ›；超时只有 Abandon</td></tr>
+<tr><td class="k">合入卡 · 取消中</td><td>web · iOS · Android</td><td>Cancelling the merge…（修订 12 的 M-T10）</td><td><span class="ok">✓</span></td><td><span class="m">（今天没有这一态）</span></td><td class="new">同上一行；Cancel 变 Cancel requested</td></tr>
+<tr><td class="k">合入卡 · 交回（BLOCKED）</td><td>web · iOS · Android</td><td>原因、Blocked by、谁在处理</td><td><span class="no">✗</span></td><td>Details › · Open coordinator ›</td><td>不变；这一轮在等决定，入口在 Landings 组（LS6 只要求 CHECKING / CONFIRMED / RECHECKING 时链）</td></tr>
+<tr><td class="k">时间线 · Merged into main</td><td>web · iOS · Android</td><td>一轮合入的结局</td><td><span class="no">✗</span></td><td>整行 → 回执</td><td class="new">行不变；回执底部加 Open landing ›</td></tr>
+<tr><td class="k">sessions 页 · Landings 组</td><td>web · iOS · Android</td><td>等决定的、24 小时内结案的；更早的折成一行</td><td><span class="no">✗</span> 从不</td><td><span class="m">（今天没有）</span></td><td class="new">行 → 那个落地会话</td></tr>
+<tr><td class="k">项目页 · Work overview</td><td>web · iOS · Android</td><td>同一张 Landing 卡（含合入作业）</td><td><span class="ok">✓</span>（另一页）</td><td>卡 → 清单；没有清单时只读</td><td class="new">同 Landing 卡</td></tr>
+<tr><td class="k">会话列表 · 项目行第二行</td><td>web · iOS · Android</td><td>Landing · checking · 4m · &lt;task&gt;</td><td><span class="ok">✓</span>（另一页）</td><td>行 → 项目 sessions 页</td><td>不变；读法照 V6（⑥）</td></tr>
+<tr><td class="k">任务页 · Landing 段</td><td>web（iOS、Android 新加）</td><td>最新一代的状态与事实</td><td><span class="ok">✓</span>（另一页）</td><td>只读</td><td class="new">加 Open landing ›（⑥ ⑦）</td></tr>
+<tr><td class="k">写代码的会话 · 落地标签</td><td>web · iOS · Android</td><td>Landing · checking › 等</td><td><span class="ok">✓</span>（另一页）</td><td><span class="m">（今天没有）</span></td><td class="new">标签 → 落地会话（⑥）</td></tr>
+<tr><td class="k">协调会话 · 转录卡 / 待办卡</td><td>web · iOS · Android</td><td>INTEGRATION_* 的投递；X-E5</td><td>只有 X-E5 说在途的</td><td>Open the task ↗ · Open the failed session ↗；待办卡的门</td><td class="new">加 Open the landing ↗ / OPEN_LANDING；X-E5 带 Abandon（⑥ ⑦）</td></tr>
+</tbody></table></div>`;
+
+document.getElementById('side4').innerHTML = ab;
+document.getElementById('tbdslot').innerHTML = tbd;
+document.getElementById('panels').innerHTML = entr;
+</script>
+</body></html>
