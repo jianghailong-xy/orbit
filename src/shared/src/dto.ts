@@ -911,6 +911,28 @@ export interface RunnerRepoCleanupResult {
   message?: string;
 }
 
+/**
+ * The landing this conversation produced work for (contract §2.9 LS1, migration 0436): the newest
+ * generation of integration work whose source session this is, and the subject it belongs to.
+ *
+ * Optional everywhere it appears. A conversation that produced no landing work answers null; a
+ * client that does not know the field ignores it. `state` is the newest attempt's own job state
+ * (QUEUED, RUNNING, READY, …) and `settledAs` is how the subject ended, so a label can say
+ * "Landing · checking" while it moves and "On project/<id> ✓" once it landed.
+ */
+export interface SessionSourceLanding {
+  /** The LANDING session's id (available before its row exists: it is pre-generated). */
+  landingSessionId: string;
+  subject: 'TASK' | 'PROMOTION';
+  /** The newest attempt's job state. */
+  state: string;
+  /** LANDED | ALREADY_LANDED | NOTHING_TO_LAND | MERGED | HANDLED | DECLINED | CANCELLED |
+   *  DELETED, or null while the subject is open. */
+  settledAs: string | null;
+  /** The branch the attempt writes, as the job froze it. */
+  targetRef: string;
+}
+
 /** One supervised session's live worktree diff (cf. TurnCompleteRequest, which carries
  *  the same snapshot at turn boundaries). */
 export interface SessionLiveState {

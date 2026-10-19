@@ -44,7 +44,7 @@ import { openCodeKeyModel } from '@orbit/shared';
 import { storedCredential } from './engine-provider';
 import { geminiApiModel, isInternalHost } from './held-key';
 import { keyFingerprint } from './provider-engine-resolution';
-import { pickFreeSlug, slugBase } from './provider-slug';
+import { LANDING_PROVIDER_SLUG, pickFreeSlug, slugBase } from './provider-slug';
 
 /**
  * The slugs whose `model_provider` row is a compatibility guard, not a provider: migrations 0080, 0367
@@ -57,6 +57,8 @@ export const COMPATIBILITY_GUARD_SLUGS: string[] = [
   AgentProvider.OPENCODE,
   AgentProvider.ANTIGRAVITY,
   AgentProvider.CURSOR,
+  // 0436: the LANDING session's provider, reserved like a built-in engine's name.
+  LANDING_PROVIDER_SLUG,
 ];
 
 /** The DeepSeek preset, and the retired one an older client still connects DeepSeek Harness with. */

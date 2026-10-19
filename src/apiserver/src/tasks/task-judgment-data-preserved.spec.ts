@@ -2366,7 +2366,28 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers/functions, and no function, trigger or type is created, replaced or dropped, so it
       // is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored row reads
       // NULL in the new column, which is "this job did not move the upstream" — the ordinary case.
-      '0435_integration_job_upstream_moved_commits'],
+      '0435_integration_job_upstream_moved_commits',
+      // Landing sessions (0436, docs/project-integration-line-contract.md §2.9 LS1–LS3, revision 12,
+      // design docs/landing-session-design.md §0.1): the `session.kind` discriminator
+      // (CONVERSATION | LANDING, added with a constant default and its CHECK added NOT VALID then
+      // VALIDATEd), the `project_landing` subject table with its partial unique indexes, and
+      // `project_integration_job.landing_id` plus two indexes. It also reserves the `orbit` provider
+      // slug exactly as 0426 reserved `cursor`: whatever held it moves to `orbit-N`, every stored
+      // dispatch reference follows (session/task `provider`, an OpenCode `model`, task_route_decision,
+      // BOUND task_run_request targets, workspace/agent fallback chains and routing lists, user
+      // defaultModels, wiki_space maintenance provider), then a built-in `model_provider` guard row
+      // with its own CHECK and delete/rename triggers holds the name. The `session` UPDATEs write
+      // `provider` and `model` only, which no row trigger of `session` lists, and `task` writes the
+      // same two columns, which the DONE writer fence does not list; the statement-level AFTER
+      // triggers act on `status`, `run_at`, `project_id` or `list_id`, which neither changes. Tables
+      // named: `session`, `task`, `model_provider`, `provider_pool`, `provider_slug_alias`,
+      // `task_route_decision`, `task_run_request`, `workspace`, `agent`, `user`, `wiki_space`,
+      // `project_landing` and `project_integration_job` (the last two rank 60 children). No
+      // `project_acceptance_*` object and none of the six preserved triggers/functions is named or
+      // replaced, and neither half of the 0177 pair is touched, so it is not another writer of the
+      // DONE fence. `session.kind` is backfilled by its constant default; the provider move rewrites
+      // only rows that held the name `orbit`, and every statement can run twice against the result.
+      '0436_landing_sessions'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

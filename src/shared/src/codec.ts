@@ -112,6 +112,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'includedTaskIds',
   'checkJobId',
   'landJobId',
+  // The landing subject an attempt belongs to (migration 0436): an address a reader follows from
+  // the attempt to the session and its record. Not a fence — a job's own claim is fenced by
+  // `claimGeneration` and `claimLeaseOwner`.
+  'landingId',
   'confirmedByUserId',
   'openItemId',
   'receiptIds',
