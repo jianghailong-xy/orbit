@@ -2,9 +2,10 @@
 // runner answered with anything but an allow settles as "Not run: the tool call was rejected." (isError:true)
 // even when the turn ends before Cursor CLI completes it — stopped, the CLI killed, or its connection closed
 // (EOF). Cursor CLI waits on the answer before it runs a call and runs none it was refused (docs/
-// cursor-runtime-contract.md §5.2), so "it may have run" was never true of such a card. A card the runner did
-// not mark — allowed, or withdrawn unanswered when the turn ended — still settles as P5c settles it, and a
-// refused call Cursor did complete (D-P8-1) settles as before. The runner side runs on the pinned CLI's
+// cursor-runtime-contract.md §5.2), so "it may have run" was never true of such a card. An allowed card still
+// settles as P5c settles it — one withdrawn unanswered when the turn ended now settles as not run as well
+// (scripts/test-cursor-withdrawn-approval.mjs) — and a refused call Cursor did complete (D-P8-1) settles as
+// before. The runner side runs on the pinned CLI's
 // recordings — P8's (src/runner-go/testdata/cursor/p8/key-allow-reject) and P5c's — replayed by the fake in
 // src/runner-go/fake_cursor_acp_test.go, held right after the runner's answer reached it. The contract's §5.2
 // 「拒绝」 entry and its §16.4 tool_call / tool_call_update row are read last: both cite P8's recording. Run from
@@ -43,8 +44,8 @@ export const mandatoryGoCases = {
     'TestCursorRefusedToolCards/p8-refused-then-disconnect',
     'TestCursorRefusedToolCards/p8-refused-then-eof',
     'TestCursorRefusedToolCards/turn-end-rules',
-    // In a turn that refused a command earlier, a write allowed and then stopped, and one withdrawn from the card
-    // unanswered by the stop, settle as P5c settles them: they may have run.
+    // In a turn that refused a command earlier, a write allowed and then stopped settles as P5c settles it: it may
+    // have run. The same write withdrawn from the card unanswered by the stop settles as not run.
     'TestCursorRefusedToolCards/p5c-allowed-then-stop',
     'TestCursorRefusedToolCards/p5c-withdrawn-then-stop',
     // D-P8-1 unchanged: a refused call Cursor CLI completed with nothing at all is not run, an allowed one keeps its
@@ -56,7 +57,8 @@ export const mandatoryGoCases = {
     'TestCursorRefusedToolCards/mcp-rejected-unchanged',
     'TestCursorRefusedToolCards/rules',
     // P5c's rule for a card still waiting on a request when the turn is stopped or the CLI is lost, in every
-    // declared mode: answered cancelled, withdrawn, settled once, and its call settled as one the turn cut short.
+    // declared mode: answered cancelled, withdrawn, settled once, and a withdrawn permission card's call settled
+    // as not run.
     'TestCursorApprovalInterrupted',
     ...modes.flatMap((mode) => [`TestCursorApprovalInterrupted/${mode}/stop`, `TestCursorApprovalInterrupted/${mode}/disconnect`]),
     'TestCursorApprovalInterrupted/control-plane-lost',
