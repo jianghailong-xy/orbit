@@ -1367,7 +1367,7 @@ test('a task of another project is refused, as is one that is not DONE, one that
   });
 
 test('timed out: the owner retries a landing whose runner never answered its claim — the lost generation '
-  + 'ends ERROR · RUNNER_LOST and the next one is queued as theirs (§2.2 J-T9)',
+  + 'ends ERROR · PUSH_OUTCOME_UNKNOWN and the next one is queued as theirs (§2.2 J-T9, J12)',
   { skip, timeout: 180_000 }, async () => {
     const stack = await connect();
     try {
@@ -1396,8 +1396,10 @@ test('timed out: the owner retries a landing whose runner never answered its cla
         where: { id: lost.jobId },
         select: { errorCode: true, errorDetail: true, finishedAt: true },
       });
-      assert.equal(ended.errorCode, 'RUNNER_LOST');
+      assert.equal(ended.errorCode, 'PUSH_OUTCOME_UNKNOWN',
+        'a legacy claim cannot prove that nothing was pushed (J12)');
       assert.equal((ended.errorDetail as { pushRecorded?: boolean; phase?: string }).pushRecorded, false);
+      assert.equal((ended.errorDetail as { pushOutcome?: string }).pushOutcome, 'UNKNOWN');
       assert.equal((ended.errorDetail as { phase?: string }).phase, 'FETCH');
       assert.ok(ended.finishedAt, 'the lost generation is finished');
       const next = rows[1]!;

@@ -3777,7 +3777,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"another owner-only choice is required, use ask_owner with options. This tool never hands " +
 				"an item to the owner and never answers that choice. Refused with the reason when the task's landing or the " +
 				"candidate is already queued or running (a task's landing whose runner stopped reporting " +
-				"past its limit is the exception: it is ended as ERROR RUNNER_LOST and run again), when " +
+				"past its limit is the exception: it is ended as ERROR first — RUNNER_LOST, or " +
+				"PUSH_OUTCOME_UNKNOWN for a landing whose legacy claim cannot prove nothing was pushed — " +
+				"and run again), when " +
 				"the failure's item is the account owner's " +
 				"(escalated, or a project that is not Automatic), when the owner has an open blocker on " +
 				"the task, or when the task or candidate is not this project's. Only the conversation the " +

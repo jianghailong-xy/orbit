@@ -2332,7 +2332,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // nor any of the six preserved triggers/functions, and no index, function, trigger or type is
       // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE: every stored mapping reads 'kubernetes'.
-      '0430_managed_runner_backend'],
+      '0430_managed_runner_backend',
+      // A QUEUED integration job never carries a stop request (0433, docs/project-integration-line-contract.md
+      // §2.2 J-T8): the stored QUEUED rows with `cancel_requested_at` are backfilled to CANCELLED with
+      // `finished_at` set, the CONFIRMED / RECHECKING promotions they were landing are settled the way
+      // M-T10 settles them (CANCELLED, their OPEN INTEGRATION_* items RESOLVED PROMOTION_MOVED_ON), and
+      // `project_integration_job_queued_cancel_chk` is added NOT VALID then VALIDATEd. Only
+      // `project_integration_job`, `project_promotion` and `project_open_item` are named (all rank 60):
+      // no `task`, `session`, `project` or `project_acceptance_*` object and none of the six preserved
+      // triggers/functions, and no function, trigger or type is created, replaced or dropped, so it is
+      // not another writer of the DONE fence. The two UPDATEs only move rows out of QUEUED / out of the
+      // live promotion states, and every statement can run twice.
+      '0433_integration_job_queued_cancel'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -117,8 +117,6 @@ function runningElsewhere(main: string): Record<string, string> {
 function reasonSummary(code: LandTaskBlockingReasonCode, row: TaskIntegrationRow): string {
   const runner = row.runnerName ? `runner ${row.runnerName}` : 'the runner';
   switch (code) {
-    case 'CANCELLING':
-      return 'Not started: a cancel was asked for, so the queue will not run it';
     case 'WAITING_TASK_WORK':
       return 'Waiting to land: the task’s work session is still running, and its branch can still move';
     case 'WAITING_MAIN_SYNC': {
@@ -318,7 +316,7 @@ export async function readTaskIntegrationViews(
     newest_job AS (
       SELECT DISTINCT ON (j."task_id")
              j."task_id", j."id", j."state", j."phase", j."generation", j."target_ref",
-             j."serial_key", j."session_id", j."cancel_requested_at", j."error_code",
+             j."serial_key", j."session_id", j."error_code",
              cardinality(j."conflicts") AS "conflict_count", j."checks",
              j."created_at", j."started_at", j."claimed_at", j."heartbeat_at", j."finished_at"
         FROM "project_integration_job" j
@@ -358,10 +356,11 @@ export async function readTaskIntegrationViews(
            newest_job."error_code" AS "jobErrorCode", newest_job."conflict_count" AS "jobConflictCount",
            failed_check."check" AS "jobFailedCheck",
            -- The claim's own conditions (integration-job-relay.ts claimOne), in its order, for the
-           -- one state they decide: why a QUEUED attempt has not been claimed yet.
+           -- one state they decide: why a QUEUED attempt has not been claimed yet. A QUEUED row
+           -- never carries a stop request (J-T8 ends those in the transaction that asks), so no
+           -- reason here is about a cancelled one.
            CASE WHEN newest_job."state" = 'QUEUED' THEN
              CASE
-               WHEN newest_job."cancel_requested_at" IS NOT NULL THEN 'CANCELLING'
                WHEN EXISTS (
                  SELECT 1 FROM "session" work
                   WHERE work."task_id" = scoped."taskId"
