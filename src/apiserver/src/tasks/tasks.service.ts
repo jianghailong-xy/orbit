@@ -180,6 +180,7 @@ import {
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/live-session-status';
 import { readCurrentVerifier, readTaskWorkState } from '../projects/project-task-work-state';
 import { readTaskIntegrationViews } from '../projects/project-task-integration';
+import { stopInFlightJob } from '../projects/project-integration-line';
 import {
   admitProjectScopeWrite,
   type ScopeAdmission,
@@ -10302,6 +10303,39 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 create: { taskId: id },
                 update: { createdAt: new Date() },
               });
+            }
+            // J-T8: a task put back to work, or one written CANCELLED / FAILED, stops its landing.
+            // The landing rows are children of this transaction's rank-50 task lock (rank 60), so
+            // the task and the stop are one fact: either both commit or neither does. A QUEUED
+            // landing ends CANCELLED on the spot and a RUNNING one is asked to stop — or ended,
+            // when it is already silent past its limit — by the one rule every stop door shares
+            // (`stopInFlightJob`). An ordinary status edit (DONE → IN_PROGRESS) is work continuing
+            // and stops nothing: the claim guard already waits for the work that is running.
+            const stopsTheLanding =
+              ((task.status === TaskStatus.CANCELLED || task.status === TaskStatus.FAILED)
+                && before.status !== task.status)
+              || (isTaskReopenDoor
+                && reopenStatusBefore != null
+                && ['DONE', 'CANCELLED', 'FAILED'].includes(reopenStatusBefore)
+                && task.status === TaskStatus.OPEN);
+            if (stopsTheLanding) {
+              const landings = await tx.projectIntegrationJob.findMany({
+                where: {
+                  ownerId,
+                  taskId: id,
+                  kind: 'LAND_TASK',
+                  state: { in: ['QUEUED', 'RUNNING'] },
+                },
+                select: { id: true, projectId: true },
+              });
+              const stoppedAt = new Date();
+              for (const landing of landings) {
+                await stopInFlightJob(tx, {
+                  projectId: landing.projectId,
+                  jobId: landing.id,
+                  now: stoppedAt,
+                });
+              }
             }
             if (dto.fixesOpenItemId) {
               await this.assertFixesOpenItem(

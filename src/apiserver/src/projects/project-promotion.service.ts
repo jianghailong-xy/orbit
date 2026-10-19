@@ -17,14 +17,13 @@ import {
   LandingRetryRequest,
   LandingWorkSessionFacts,
   PROMOTION_AUTOMATIC_LAND,
-  endTimedOutLanding,
   integrationSerialKey,
   queuePromotionJob,
   queueTaskBranchCandidate,
   shortBranchName,
   workBranchEndedOn,
 } from './project-integration-job';
-import { readInFlightJobs } from './project-integration-line';
+import { type InFlightStop, stopInFlightJob } from './project-integration-line';
 import { openItemOwed } from './project-open-item';
 import {
   AUTOMATIC_MERGE_ATTEMPTS,
@@ -293,10 +292,12 @@ export class ProjectPromotionService {
   /**
    * The owner stopping a confirmed merge before it is pushed (M-T10).
    *
-   * The job is asked to stop rather than told it has: it may be mid-check on another machine, and
-   * the one thing this must not do is claim a landing did not happen while a push is in flight. The
-   * runner reads `cancelRequested` at each phase boundary, and a job already past PUSH reports its
-   * landing regardless — which is why the promotion is only moved when its job has not finished.
+   * A QUEUED landing is ended on the spot and the merge with it. A RUNNING one is only asked to
+   * stop — the runner reads `cancelRequested` when it next reports, or when the claim is taken over
+   * — because the one thing this must not do is claim a landing did not happen while a push may be
+   * in flight; its own result settles the merge (J-T12), and one that already pushed is the fact
+   * (M-T8). A RUNNING landing that stopped reporting past its limit is ended here instead, so the
+   * ask cannot leave it holding the serial slot for ever.
    */
   async cancel(
     principal: { userId: string; actingSessionId?: string | null },
@@ -607,10 +608,24 @@ async function applyDecline(
 /**
  * M-T10: calling back a confirmed merge before it is pushed.
  *
- * The job is ASKED to stop rather than told it has: it may be mid-check on another machine, and the
- * one thing this must not do is record that a landing did not happen while a push is in flight. The
- * runner reads `cancelRequested` at each phase boundary, and a job already at PUSH reports its
- * landing regardless — which is why a job that has got that far refuses the cancellation instead.
+ * The job is the fact and the promotion follows it (J-T8):
+ *
+ *  - A QUEUED landing was never claimed, so nothing can have pushed: it is ended CANCELLED here and
+ *    now, and the merge with it — there is nothing left to wait for.
+ *  - A RUNNING landing still reporting is only ASKED to stop. The promotion stays CONFIRMED /
+ *    RECHECKING and reads as cancelling; the runner's own result decides the rest (J-T12): CANCELLED
+ *    ends the merge as CANCELLED, and a LANDED that got past the push anyway is the fact and becomes
+ *    MERGED (M-T8). Writing CANCELLED here would be the platform claiming a landing did not happen
+ *    while a push could be in flight.
+ *  - A RUNNING landing already silent past its limit (§7.2 V6) is ended on the spot by the J-T9
+ *    compare-and-set, with J12's code for its kind. `RUNNER_LOST` proves nothing was pushed, so the
+ *    merge is CANCELLED; `PUSH_OUTCOME_UNKNOWN` cannot make that claim, so the candidate goes
+ *    BLOCKED — the same ending an abandoned landing gets. Asking such a row to stop would leave it
+ *    holding the main serial slot with nobody able to end it.
+ *
+ * The push boundary is read off a legacy claim's `phase`: PUSH and VERIFY both mean the runner may
+ * have pushed (it reports VERIFY after the push), so the door refuses there. A v2 claim is decided
+ * by `push_reported_generation` when the progress protocol lands (`34a1400z5T8WzXuLEQfWM`).
  */
 async function applyCancel(tx: Prisma.TransactionClient, row: PromotionRow): Promise<void> {
   if (row.state !== 'CONFIRMED' && row.state !== 'RECHECKING') {
@@ -619,24 +634,39 @@ async function applyCancel(tx: Prisma.TransactionClient, row: PromotionRow): Pro
       message: `a promotion that is ${row.state.toLowerCase()} is not being merged`,
     });
   }
+  const now = new Date();
+  let stopped: InFlightStop = { outcome: 'NONE', errorCode: null };
   if (row.landJobId) {
-    const asked = await tx.projectIntegrationJob.updateMany({
-      where: {
-        id: row.landJobId, state: { in: ['QUEUED', 'RUNNING'] },
-        OR: [{ phase: null }, { phase: { not: 'PUSH' } }],
-      },
-      data: { cancelRequestedAt: new Date() },
+    const job = await tx.projectIntegrationJob.findFirst({
+      where: { id: row.landJobId, projectId: row.projectId },
+      select: { state: true, phase: true },
     });
-    if (asked.count === 0) {
+    if (job?.state === 'RUNNING' && (job.phase === 'PUSH' || job.phase === 'VERIFY')) {
       throw new ConflictException({
         code: PROMOTION_NOT_READY,
         message: 'this merge is already being pushed and cannot be called back',
       });
     }
+    stopped = await stopInFlightJob(tx, { projectId: row.projectId, jobId: row.landJobId, now });
   }
+
+  if (stopped.outcome === 'STOP_REQUESTED') {
+    // A live claim that is talking: it has been asked, and `cancelRequested` in its view says so.
+    return;
+  }
+  if (stopped.outcome === 'ENDED' && stopped.errorCode === 'PUSH_OUTCOME_UNKNOWN') {
+    // It may have pushed, so the merge cannot be recorded as cancelled. BLOCKED is what an
+    // abandoned landing of an unknown push outcome leaves, and it is the one state that asks
+    // somebody to look rather than asserting an outcome.
+    await blockPromotion(tx, row.id, [], [], now, null, 'ERROR');
+    return;
+  }
+  // CANCELLED (a queued job, ended here) or RUNNER_LOST (a silent one, which cannot have pushed):
+  // the merge is called off. NONE means the job moved on under the press; the CAS below then loses
+  // to whatever wrote it, and the result transaction owns the promotion.
   const moved = await tx.projectPromotion.updateMany({
     where: { id: row.id, state: row.state },
-    data: { state: 'CANCELLED' satisfies PromotionState, decidedAt: new Date() },
+    data: { state: 'CANCELLED' satisfies PromotionState, decidedAt: now },
   });
   if (moved.count > 0) await closePromotionItems(tx, row.projectId, row.id, 'RESOLVED');
 }
@@ -891,10 +921,11 @@ async function supersedeLiveCandidates(
       data: { state: 'SUPERSEDED' satisfies PromotionState, decidedAt: new Date() },
     });
     if (row.checkJobId && !keepJobIds.includes(row.checkJobId)) {
-      await tx.projectIntegrationJob.updateMany({
-        where: { id: row.checkJobId, state: { in: ['QUEUED', 'RUNNING'] } },
-        data: { state: 'CANCELLED', finishedAt: new Date() },
-      });
+      // J-T8, one shared rule for every door that stops a generation: a QUEUED one is ended
+      // CANCELLED here and now; a RUNNING one still reporting is asked to stop; one already silent
+      // past its limit is ended as the ERROR it is, so it cannot hold `#check:<project>` for ever
+      // (2026-10-09).
+      await stopInFlightJob(tx, { projectId, jobId: row.checkJobId, now: new Date() });
     }
     if (row.openItemId) {
       await tx.projectOpenItem.updateMany({
@@ -1071,27 +1102,13 @@ export async function retireCandidatesLandedByReceipt(
     });
     if (moved.count === 0) continue;
     if (row.checkJobId) {
-      await tx.projectIntegrationJob.updateMany({
-        where: { id: row.checkJobId, state: 'QUEUED' },
-        data: { state: 'CANCELLED', finishedAt: now },
-      });
-      // A RUNNING check is asked to stop — unless it already stopped reporting past its limit, in
-      // which case asking is how a job holds its serial key forever: `claimOne` never re-hands a
-      // cancel-requested row, so nobody would ever end it and no later check of the project could be
-      // claimed (2026-10-09: a candidate superseded this way kept `#check:<project>` and blocked the
-      // whole project). A job the read already judges timed out is ended here, in this transaction,
-      // as the ERROR it is — the same J-T9 compare-and-set the retry door uses.
-      const [silent] = await readInFlightJobs(tx, row.projectId, row.checkJobId);
-      if (silent?.state === 'RUNNING' && silent.timedOut === true) {
-        const ended = await endTimedOutLanding(tx, silent);
-        if (ended) continue;
-        // The compare-and-set lost: the job reported again between the read and the write, so it is
-        // talking after all — it gets the ordinary ask-to-stop below.
-      }
-      await tx.projectIntegrationJob.updateMany({
-        where: { id: row.checkJobId, state: 'RUNNING', cancelRequestedAt: null },
-        data: { cancelRequestedAt: now },
-      });
+      // J-T8's one rule, shared with the other doors that stop a generation: a QUEUED check is
+      // ended CANCELLED here and now; a RUNNING one still reporting is asked to stop; one already
+      // silent past its limit is ended as the ERROR it is — asking a dead runner to stop is how a
+      // job holds its serial key forever, and `claimOne` never re-hands a cancel-requested row, so
+      // nobody could ever end it and no later check of the project could be claimed (2026-10-09: a
+      // candidate superseded this way kept `#check:<project>` and blocked the whole project).
+      await stopInFlightJob(tx, { projectId: row.projectId, jobId: row.checkJobId, now });
     }
     // The owner's card, when the check had already put one in front of them: the merge it asked
     // about has been made, so there is nothing left to approve.
@@ -1143,6 +1160,9 @@ export async function applyPromotionJobResult(
     filesChanged: number | null;
     checks: IntegrationCheckResult[];
     conflicts: string[];
+    /** Somebody asked this claim to stop before this result arrived (J-T8). The promotion follows
+     *  the result: a landing still wins (M-T8), everything else settles the cancellation. */
+    cancelRequested: boolean;
   },
 ): Promise<PromotionJobOutcome | null> {
   const promotion = await tx.projectPromotion.findUnique({
@@ -1156,6 +1176,20 @@ export async function applyPromotionJobResult(
 
   const now = new Date();
   const checks = input.checks as unknown as Prisma.InputJsonValue;
+
+  // J-T12 / M-T10: the job was asked to stop. Only a LANDED result overrides that ask — the push
+  // already happened, and the fact is the fact (M-T8). Everything else settles the cancellation:
+  // CANCELLED, not BLOCKED, because there is no failure for anybody to fix — the owner (or the
+  // supersession that asked) has already taken the question away.
+  if ((input.cancelRequested || input.state === 'CANCELLED')
+      && input.state !== 'LANDED' && input.state !== 'ALREADY_LANDED') {
+    await tx.projectPromotion.update({
+      where: { id: promotion.id },
+      data: { state: 'CANCELLED' satisfies PromotionState, decidedAt: now },
+    });
+    await closePromotionItems(tx, promotion.projectId, promotion.id, 'RESOLVED');
+    return { promotionId: promotion.id, state: 'CANCELLED', receiptIds: [], openApproval: null };
+  }
 
   if (input.jobKind === 'CHECK_PROMOTION') {
     if (input.state === 'READY') {
