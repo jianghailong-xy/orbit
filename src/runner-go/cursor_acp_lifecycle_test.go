@@ -196,14 +196,25 @@ func TestCursorACPMidTurnMessages(t *testing.T) {
 }
 
 // A stop is a session/cancel, which Cursor answers `cancelled` (§3.3): the turn settles interrupted, and
-// the card it left in progress — Cursor never completes a cancelled one — is closed as an error.
+// the card it left in progress — Cursor never completes a cancelled one — is closed as an error. The command
+// is allowed as P0a allowed it, and the stop comes once that answer has reached the CLI: a stop before it would
+// find the request unanswered, and its call not run (TestCursorWithdrawnApprovals).
 func TestCursorACPInterrupt(t *testing.T) {
 	t.Run("cancel-settles-interrupted", func(t *testing.T) {
 		const recording, card = "cancel-mid-tool/cancel", "call-<UUID_1>-0\nfc_p5V65cF-3LYxF7-95870d84-aws_ue1_0"
 		run := runCursorSession(t, cursorRunOptions{recording: recording,
 			first:   []RunInboxResponse{cursorMessage("turn-1", "run the sleep")},
-			onEvent: cursorOnce(cursorToolStarted("turn-1", "Bash"), RunInboxResponse{TurnID: "stop-1", Kind: "interrupt"}),
-			then:    cursorEndAfter(1)})
+			approve: func(cursorTestCard) cursorTestDecision { return cursorTestDecision{Status: "ALLOWED"} },
+			onAnswer: func(id string) []RunInboxResponse {
+				if id == "0" {
+					return []RunInboxResponse{{TurnID: "stop-1", Kind: "interrupt"}}
+				}
+				return nil
+			},
+			then: cursorEndAfter(1)})
+		if answers := cursorAnswersByRequest(t, run.fake); !cursorJSONEqual(t, answers, map[string][]string{"0": {cursorAllowOnce}}) {
+			t.Fatalf("requests answered %q, want the command allowed once", answers)
+		}
 		var cancels []fakeCursorReceived
 		for _, line := range run.fake.received(t) {
 			if line.Message["method"] == "session/cancel" {

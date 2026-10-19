@@ -1160,7 +1160,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	}
 	// The rules the session was dispatched with do not change while it runs; the mode can (reload).
 	preApproved := AgentExecConfig{AllowedTools: append([]string(nil), p.job.Agent.AllowedTools...)}
-	bridge := newCursorPermissionBridge(policy, mapper.permissionAsk, mapper.refuse, func(ask cursorPermissionAsk) bool {
+	bridge := newCursorPermissionBridge(policy, mapper.permissionAsk, mapper.refuse, mapper.withdraw, func(ask cursorPermissionAsk) bool {
 		return cursorPreApproved(preApproved, ask)
 	}, bridgeCursorCard(p.t, p.job.SessionID), p.emitFor, launch.Cwd)
 	app, err := startCursorACP(p.ctx, *launch, mapper, bridge, p.emit)

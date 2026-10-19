@@ -39,8 +39,11 @@ package main
 // cancelled because nobody could decide it, refused because Orbit could not tell what was asked — marks the
 // card it is about before the answer goes out: Cursor CLI completes a command or an edit it was refused with
 // no output at all (P8's and P5c's recordings), which would read as a success with nothing to show, so the
-// card settles as not run (cursor_events.go). A card withdrawn because the turn ended is not marked: the
-// turn's settlement closes it.
+// card settles as not run (cursor_events.go). A card withdrawn unanswered because the turn ended is marked
+// too, as withdrawn, when it is withdrawn: its request is answered cancelled whatever a person still says,
+// which Cursor CLI takes as a refusal — P5c's accept-edits-stop and accept-edits-disconnect: the command never
+// ran — and the turn's settlement, which can come before that answer goes out, settles it as not run. So is
+// the card of a permission request that comes once the turn is ending, answered cancelled with nobody asked.
 
 import (
 	"context"
@@ -153,13 +156,20 @@ type cursorPermissionAsk struct {
 // cursorApprovalCard files one card and waits for its answer (bridgeCursorCard).
 type cursorApprovalCard func(ctx context.Context, toolName string, input interface{}, toolUseID string) (*ApprovalDecisionResponse, error)
 
+// cursorPendingAnswer is a request whose answer waits on a person's card: how to withdraw the card, and the
+// tool card the request is about ("" for a question or a plan).
+type cursorPendingAnswer struct {
+	cancel context.CancelFunc
+	card   string
+}
+
 // cursorPermissionBridge answers what Cursor CLI asks the client while a turn runs.
 type cursorPermissionBridge struct {
 	mu      sync.Mutex
 	open    bool
 	turnID  string
 	next    int
-	pending map[int]context.CancelFunc
+	pending map[int]cursorPendingAnswer
 	wg      sync.WaitGroup
 	// bypassNoted: the notice that Bypass is asking anyway went out in this process.
 	bypassNoted bool
@@ -168,9 +178,11 @@ type cursorPermissionBridge struct {
 	mode cursorPermissionPolicy
 
 	// ask is what a request's tool call is, from the card the turn already shows (cursorEventMapper);
-	// refused marks a card of the turn as a call that was not allowed (cursorEventMapper.refuse).
+	// refused marks a card of the turn as a call that was not allowed (cursorEventMapper.refuse), withdrawn
+	// as one whose approval card the turn's end withdrew unanswered (cursorEventMapper.withdraw).
 	ask         func(toolCall map[string]interface{}) (cursorPermissionAsk, bool)
 	refused     func(turnID, toolUseID string)
+	withdrawn   func(turnID, toolUseID string)
 	preApproved func(ask cursorPermissionAsk) bool
 	card        cursorApprovalCard
 	reply       func(id interface{}, result map[string]interface{})
@@ -180,10 +192,10 @@ type cursorPermissionBridge struct {
 }
 
 func newCursorPermissionBridge(policy cursorPermissionPolicy, ask func(map[string]interface{}) (cursorPermissionAsk, bool),
-	refused func(turnID, toolUseID string), preApproved func(cursorPermissionAsk) bool, card cursorApprovalCard, emit emitTurnFn,
-	workspace string) *cursorPermissionBridge {
-	return &cursorPermissionBridge{pending: map[int]context.CancelFunc{}, mode: policy, ask: ask, refused: refused,
-		preApproved: preApproved, card: card, emit: emit, workspace: workspace}
+	refused, withdrawn func(turnID, toolUseID string), preApproved func(cursorPermissionAsk) bool, card cursorApprovalCard,
+	emit emitTurnFn, workspace string) *cursorPermissionBridge {
+	return &cursorPermissionBridge{pending: map[int]cursorPendingAnswer{}, mode: policy, ask: ask, refused: refused,
+		withdrawn: withdrawn, preApproved: preApproved, card: card, emit: emit, workspace: workspace}
 }
 
 // policy is the policy requests are answered for now.
@@ -208,12 +220,16 @@ func (b *cursorPermissionBridge) begin(turnID string) {
 }
 
 // close answers nothing but cancelled from here on, and withdraws every card still open: the turn was
-// stopped, its process is gone, or it settled.
+// stopped, its process is gone, or it settled. The tool card a withdrawn permission request is about is
+// marked here, before the turn's settlement can read it, rather than when the cancelled answer goes out.
 func (b *cursorPermissionBridge) close() {
 	b.mu.Lock()
 	b.open = false
-	for key, cancel := range b.pending {
-		cancel()
+	for key, waiting := range b.pending {
+		waiting.cancel()
+		if waiting.card != "" {
+			b.withdrawn(b.turnID, waiting.card)
+		}
 		delete(b.pending, key)
 	}
 	b.mu.Unlock()
@@ -234,12 +250,22 @@ func (b *cursorPermissionBridge) now(id interface{}, card string, result map[str
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if !b.open {
-		b.reply(id, cursorCancelled())
+		b.answerClosed(id, card)
 		return false
 	}
 	b.mark(card, result)
 	b.reply(id, result)
 	return true
+}
+
+// answerClosed answers a request that came once the bridge had closed: cancelled, nobody asked. The tool card
+// a permission request is about is marked as withdrawn, as close marks one still open: the turn is ending, and
+// the call will not run. Under the lock.
+func (b *cursorPermissionBridge) answerClosed(id interface{}, card string) {
+	if card != "" {
+		b.withdrawn(b.turnID, card)
+	}
+	b.reply(id, cursorCancelled())
 }
 
 // later answers once decide has, on a goroutine of its own, so the reader never waits on a person; with
@@ -248,14 +274,14 @@ func (b *cursorPermissionBridge) later(id interface{}, card string, decide func(
 	ctx, cancel := context.WithCancel(context.Background())
 	b.mu.Lock()
 	if !b.open {
+		b.answerClosed(id, card)
 		b.mu.Unlock()
 		cancel()
-		b.reply(id, cursorCancelled())
 		return
 	}
 	b.next++
 	key := b.next
-	b.pending[key] = cancel
+	b.pending[key] = cursorPendingAnswer{cancel: cancel, card: card}
 	b.wg.Add(1)
 	b.mu.Unlock()
 	go func() {
@@ -267,7 +293,7 @@ func (b *cursorPermissionBridge) later(id interface{}, card string, decide func(
 		if result == nil || withdrawn {
 			result = cursorCancelled()
 		}
-		if !withdrawn {
+		if !withdrawn { // a withdrawn card was marked when close withdrew it
 			b.mark(card, result)
 		}
 		delete(b.pending, key)
@@ -292,12 +318,16 @@ func (b *cursorPermissionBridge) note(turnID, subtype, toolUseID, name, reason s
 // permission answers a session/request_permission: from the rule that pre-approves it, from the mode, or
 // from a person on Orbit's card.
 func (b *cursorPermissionBridge) permission(id interface{}, params map[string]interface{}) {
+	toolCall := mapValue(params["toolCall"])
 	open, turnID := b.current()
 	if !open {
-		b.reply(id, cursorCancelled())
+		// Nobody is asked once the turn is ending, and the card the request is about is the turn's all the same.
+		ask, _ := b.ask(toolCall)
+		b.mu.Lock()
+		b.answerClosed(id, ask.ToolUseID)
+		b.mu.Unlock()
 		return
 	}
-	toolCall := mapValue(params["toolCall"])
 	if !cursorKnownOptions(params["options"]) {
 		b.note(turnID, "permission_denied", firstString(toolCall, "toolCallId"), firstString(toolCall, "title"),
 			"Cursor CLI offered approval options Orbit does not know")

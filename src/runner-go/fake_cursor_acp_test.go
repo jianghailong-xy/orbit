@@ -356,6 +356,14 @@ func runFakeCursorACP(dir string) int {
 		}
 		os.Exit(143)
 	}()
+	// SIGUSR1 closes the connection while the CLI runs on, whatever it is waiting on — a request of its own the
+	// runner has not answered among them, where Exit never ends it (cursorSignalReplay).
+	hangUp := make(chan os.Signal, 1)
+	signal.Notify(hangUp, syscall.SIGUSR1)
+	go func() {
+		<-hangUp
+		_ = os.Stdout.Close()
+	}()
 	var requests []fakeCursorRequest
 	var lines []fakeCursorLine
 	if err == nil {

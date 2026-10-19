@@ -806,6 +806,12 @@ func TestCursorRealP5c(t *testing.T) {
 		report.check("card-withdrawn", len(run.cards) == 1 && run.cards[0].released(), "cards %+v", run.cards)
 		report.check("command-did-not-run", !exists(filepath.Join(run.work, "stopped.txt")), "stopped.txt absent")
 		report.check("turn-interrupted", len(run.completions) >= 1 && run.completions[0].Status == stInterrupted, "completions %+v", run.completions)
+		var result map[string]interface{}
+		if len(run.cards) == 1 {
+			result = cursorCardResult(run.cursorRun, "turn-1", run.cards[0])
+		}
+		report.check("withdrawn-card-not-run", result["content"] == cursorStoppedBeforeApproval && result["isError"] == true,
+			"the card's call settled %v", result)
 		cancels := 0
 		for _, msg := range realCursorLines(t, run.raw, "stdin.jsonl") {
 			if msg["method"] == "session/cancel" {
@@ -831,6 +837,12 @@ func TestCursorRealP5c(t *testing.T) {
 			strings.Contains(run.completions[0].Error, "exited during this turn"), "completions %+v", run.completions)
 		asked := realRequestsMatching(t, run.raw, "touch disconnected.txt")
 		report.check("no-allow-reached-the-cli", len(asked) == 1 && (len(asked[0]) == 1 || asked[0][1] == "cancelled"), "requests %q", asked)
+		var result map[string]interface{}
+		if len(run.cards) == 1 {
+			result = cursorCardResult(run.cursorRun, "turn-1", run.cards[0])
+		}
+		report.check("withdrawn-card-not-run", result["content"] == cursorEndedBeforeApproval && result["isError"] == true,
+			"the card's call settled %v", result)
 		realNoRealCursorHome(report)
 		r.save(t, "accept-edits-disconnect", "session", run, report)
 	})
