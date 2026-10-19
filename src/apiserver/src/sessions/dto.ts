@@ -15,6 +15,25 @@ export interface SessionLandingFields {
   landing?: SessionLandingView | null;
 }
 
+/**
+ * What a list row says about a LANDING session (contract §2.9 LS6; docs/session-list-projects-
+ * design.md §2/§3.2): the subject it represents and where it stands, so the project sessions page
+ * can keep an in-flight landing out of the ordinary rows, list an awaiting one, and fold a settled
+ * one into "Earlier · n landed". AWAITING_DECISION is the segment having an OPEN integration item
+ * or a BLOCKED candidate; the row does not carry the item itself — its own card is where that is
+ * answered. Grouping and the 24-hour window are the client's; the server says only these facts.
+ *
+ * Carried on a list row only (`GET /sessions?projectId=&includeLanding=1`), absent from every
+ * other row, and a client that does not know the field ignores it.
+ */
+export interface SessionLandingSummary {
+  subject: 'TASK' | 'PROMOTION';
+  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED';
+  /** How a SETTLED segment ended; null while it is open. */
+  settledAs: string | null;
+  settledAt: string | Date | null;
+}
+
 export interface CreateSessionDto {
   /** Optional display title; defaults to a slice of the prompt. */
   title?: string;
