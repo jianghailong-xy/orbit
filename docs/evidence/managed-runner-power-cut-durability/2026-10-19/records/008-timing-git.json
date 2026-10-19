@@ -1,0 +1,160 @@
+{
+ "checks": [
+  {
+   "check": "the timings ran to the end",
+   "ok": true,
+   "value": ""
+  },
+  {
+   "check": "the scratch claim, its PV and image are gone",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T17:02:30.373+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "timing",
+ "result": {
+  "mount": "625 617 251:0 / /data rw,relatime - ext4 /dev/rbd0 rw,stripe=1024\nrw bsddf nogrpid block_validity dioread_nolock nodiscard delalloc nowarn_on_error journal_checksum barrier auto_da_alloc user_xattr acl noquota resuid=0 resgid=0 errors=continue commit=5 min_batch_time=0 max_batch_time=15000 i_version stripe=1024 data=ordered inode_readahead_blks=32 init_itable=10 max_dir_size_kb=0 prefetch_block_bitmaps",
+  "node": "orbit-mr-lab-2",
+  "printed": [
+   "git version 2.47.3 7.0.0-34-generic /dev/rbd0 ext4 rw,relatime,rw,stripe=1024 on /data",
+   "  commit 1 file, default                        median     48.56 ms  p90     70.32  min     23.42  max     75.04  n 20",
+   "  commit 1 file, default, then syncfs           median    298.64 ms  p90    373.16  min    198.59  max    411.93  n 20",
+   "  commit 1 file, fsync=all                      median    893.28 ms  p90    960.63  min    681.56  max   1103.32  n 20",
+   "  commit 1 file, fsync=all, then syncfs         median   1418.84 ms  p90   1784.69  min   1016.62  max   1795.60  n 20",
+   "  commit 1 file, fsync=all,batch                median   1102.78 ms  p90   1546.77  min    789.86  max   2082.54  n 20",
+   "  commit 1 file, fsync=all,batch, then syncfs   median   1900.09 ms  p90   2608.50  min   1538.00  max   2621.61  n 20",
+   "  commit 200 files, default                     median    162.16 ms  p90    244.06  min     78.89  max    244.06  n 5",
+   "  commit 200 files, default, then syncfs        median   1039.31 ms  p90   1272.86  min    760.48  max   1272.86  n 5",
+   "  commit 200 files, fsync=all                   median  59230.27 ms  p90  64712.13  min  33265.71  max  64712.13  n 5",
+   "  commit 200 files, fsync=all, then syncfs      median  55269.29 ms  p90  60489.50  min  48702.91  max  60489.50  n 5",
+   "  commit 200 files, fsync=all,batch             median  19119.32 ms  p90  22756.62  min  18293.33  max  22756.62  n 5",
+   "  commit 200 files, fsync=all,batch, then syncfs median  26553.15 ms  p90  28134.41  min  20354.75  max  28134.41  n 5",
+   "  syncfs, nothing dirty                         median      0.07 ms  p90      0.16  min      0.06  max      0.26  n 20",
+   "  syncfs after 1 MiB written                    median    783.76 ms  p90   1165.97  min    408.74  max   1165.97  n 10",
+   "  syncfs after 64 MiB written                   median   5335.19 ms  p90   5754.58  min   3009.00  max   5754.58  n 5"
+  ],
+  "record": {
+   "cases": {
+    "commit 1 file, default": {
+     "maxMs": 75.04,
+     "medianMs": 48.56,
+     "minMs": 23.42,
+     "n": 20,
+     "p90Ms": 70.32
+    },
+    "commit 1 file, default, then syncfs": {
+     "maxMs": 411.93,
+     "medianMs": 298.64,
+     "minMs": 198.59,
+     "n": 20,
+     "p90Ms": 373.16
+    },
+    "commit 1 file, fsync=all": {
+     "maxMs": 1103.32,
+     "medianMs": 893.28,
+     "minMs": 681.56,
+     "n": 20,
+     "p90Ms": 960.63
+    },
+    "commit 1 file, fsync=all, then syncfs": {
+     "maxMs": 1795.6,
+     "medianMs": 1418.84,
+     "minMs": 1016.62,
+     "n": 20,
+     "p90Ms": 1784.69
+    },
+    "commit 1 file, fsync=all,batch": {
+     "maxMs": 2082.54,
+     "medianMs": 1102.78,
+     "minMs": 789.86,
+     "n": 20,
+     "p90Ms": 1546.77
+    },
+    "commit 1 file, fsync=all,batch, then syncfs": {
+     "maxMs": 2621.61,
+     "medianMs": 1900.09,
+     "minMs": 1538.0,
+     "n": 20,
+     "p90Ms": 2608.5
+    },
+    "commit 200 files, default": {
+     "maxMs": 244.06,
+     "medianMs": 162.16,
+     "minMs": 78.89,
+     "n": 5,
+     "p90Ms": 244.06
+    },
+    "commit 200 files, default, then syncfs": {
+     "maxMs": 1272.86,
+     "medianMs": 1039.31,
+     "minMs": 760.48,
+     "n": 5,
+     "p90Ms": 1272.86
+    },
+    "commit 200 files, fsync=all": {
+     "maxMs": 64712.13,
+     "medianMs": 59230.27,
+     "minMs": 33265.71,
+     "n": 5,
+     "p90Ms": 64712.13
+    },
+    "commit 200 files, fsync=all, then syncfs": {
+     "maxMs": 60489.5,
+     "medianMs": 55269.29,
+     "minMs": 48702.91,
+     "n": 5,
+     "p90Ms": 60489.5
+    },
+    "commit 200 files, fsync=all,batch": {
+     "maxMs": 22756.62,
+     "medianMs": 19119.32,
+     "minMs": 18293.33,
+     "n": 5,
+     "p90Ms": 22756.62
+    },
+    "commit 200 files, fsync=all,batch, then syncfs": {
+     "maxMs": 28134.41,
+     "medianMs": 26553.15,
+     "minMs": 20354.75,
+     "n": 5,
+     "p90Ms": 28134.41
+    },
+    "syncfs after 1 MiB written": {
+     "maxMs": 1165.97,
+     "medianMs": 783.76,
+     "minMs": 408.74,
+     "n": 10,
+     "p90Ms": 1165.97
+    },
+    "syncfs after 64 MiB written": {
+     "maxMs": 5754.58,
+     "medianMs": 5335.19,
+     "minMs": 3009.0,
+     "n": 5,
+     "p90Ms": 5754.58
+    },
+    "syncfs, nothing dirty": {
+     "maxMs": 0.26,
+     "medianMs": 0.07,
+     "minMs": 0.06,
+     "n": 20,
+     "p90Ms": 0.16
+    }
+   },
+   "cpus": 2,
+   "dir": "/data/timing",
+   "endedAt": "2026-10-19T17:02:03Z",
+   "filesystem": "/dev/rbd0 ext4 rw,relatime,rw,stripe=1024 on /data",
+   "git": "git version 2.47.3",
+   "kernel": "7.0.0-34-generic",
+   "rounds": 20,
+   "startedAt": "2026-10-19T16:45:19Z"
+  },
+  "seconds": 1031.7
+ },
+ "seconds": 1051.1,
+ "startedAt": "2026-10-19T16:44:59.292+00:00",
+ "step": "git"
+}

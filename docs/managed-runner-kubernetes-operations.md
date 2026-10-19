@@ -566,8 +566,22 @@ ext4 allocates delayed blocks only at writeback.
   turn was not in the conversation the engine resumed. Orbit's server kept the turn's events. The other account, whose
   volume was synced (`sync -f /var/lib/orbit` in the runner container) just before the cut, kept its last turn.
 
-After a failover, check the account's repositories (`git fsck`) before relying on the last minute of work, and expect
-the engine's own record of that minute to be missing.
+Since T02c (2026-10-19, [evidence](evidence/managed-runner-power-cut-durability/2026-10-19/README.md)) a managed runner
+syncs its volume (`syncfs`) before it reports work that lives there, and behind every tool an engine runs. A turn the
+control plane has heard is over, a commit, a merge or a checkout the runner made is then on the disk. Only the work of a
+tool in the last fraction of a second can still be lost. In the lab, the same Git work in the last 2 s before a cut came
+back intact, and the session resumed with its last turn.
+
+After a failover, read the next generation's start in its log:
+
+- `volume check: <n> checkouts in <m> repositories after start; <k> stale lock files removed, <b> branches restored,
+  <d> checkouts damaged`, with a line for each lock, branch or checkout it names.
+- A lock no process held is removed. A branch left empty or missing is put back at the newest commit of its own reflog
+  that reads.
+- A repository that still cannot be read is not worked in. Its sessions fail with `REPOSITORY_DAMAGED` and the reason,
+  and the runner starts no new repository over it.
+- To go on, repair it: point the branch at a reflog entry that reads (`git update-ref`) and remove the empty object
+  files, or restore it [from a backup](#restore-to-a-new-pvc). Or move it aside, and the next session starts a new one.
 
 **Not verified here:**
 - a node that keeps running but is cut off, a partition;

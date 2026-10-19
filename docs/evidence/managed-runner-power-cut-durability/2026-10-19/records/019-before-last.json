@@ -1,0 +1,440 @@
+{
+ "checks": [
+  {
+   "check": "the volume was synced before the last seconds",
+   "ok": true
+  },
+  {
+   "check": "s2: the runner was asked to commit",
+   "ok": true,
+   "value": [
+    201,
+    {
+     "ok": true
+    }
+   ]
+  },
+  {
+   "check": "s2: the runner committed",
+   "ok": true,
+   "value": {
+    "commit_result_message": null,
+    "commit_status": "committed"
+   }
+  },
+  {
+   "check": "stop.sh killed the second VM's qemu with SIGKILL",
+   "ok": true,
+   "value": "unit orbit-mr-lab-2: memory.current 1068 MiB, memory.peak 2615 MiB, swap 987 MiB, memory.max 3758096384\nhost: MemAvailable 7213 MiB\n17:13:54Z orbit-mr-lab-2: qemu (pid 2232751) killed with SIGKILL at 2026-10-19T17:13:54.395Z; the guest got no shutdown"
+  },
+  {
+   "check": "the second VM is off: its unit inactive, no qemu process, SSH and QMP refused, the link down",
+   "ok": true,
+   "value": {
+    "activeState": "inactive",
+    "at": "2026-10-19T17:13:55.435+00:00",
+    "linkConnections": [],
+    "mainPid": "0",
+    "qemuProcesses": [],
+    "qmpRefused": true,
+    "sshRefused": true,
+    "subState": "dead",
+    "unit": "orbit-mr-lab-2.service"
+   }
+  },
+  {
+   "check": "s2: the runner merged",
+   "ok": true,
+   "value": [
+    201,
+    {
+     "mergeStatus": "merged",
+     "nextStep": null,
+     "operationId": "fb32d0a7-f8da-47d6-b41e-9851e71edefb",
+     "outcome": "SETTLED",
+     "receipt": {
+      "checkpointId": null,
+      "checkpointPublicId": null,
+      "conflicts": [],
+      "createdAt": "2026-10-19T17:13:53.203Z",
+      "detail": {
+       "operationId": "fb32d0a7-f8da-47d6-b41e-9851e71edefb",
+       "source": "merge-result"
+      },
+      "id": "34ijdH8QG5WaeH00BQGJE",
+      "idempotencyKey": "3d38ff3527603f1631a89922c4832ae2c16952ae3a3e92f00a307c12a4a81208",
+      "landed": true,
+      "projectId": null,
+      "projectPublicId": null,
+      "publicId": "34ijdH8QG5WaeH00BQGJE",
+      "rebaseBaseSha": "d2b2e66211d1f17102d85d671b66eeb1034a2d94",
+      "rebaseBaseShaAbsentReason": null,
+      "recordedBy": "RUNNER",
+      "result": "MERGED",
+      "sessionId": "34ijd8aoQTrlvGz8pP3cw",
+      "sessionPublicId": "34ijd8aoQTrlvGz8pP3cw",
+      "sourceBranch": "orbit/t02c-amy-s2-a-session-t03-secret-amys2-f-3dfc91",
+      "sourceSha": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "targetBranch": "master",
+      "targetShaAfter": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "targetShaBefore": "d2b2e66211d1f17102d85d671b66eeb1034a2d94",
+      "taskId": null,
+      "taskPublicId": null
+     },
+     "receiptAbsentReason": null
+    }
+   ]
+  }
+ ],
+ "endedAt": "2026-10-19T17:13:55.597+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "before",
+ "result": {
+  "killedAt": "2026-10-19T17:13:54.395+00:00",
+  "power": {
+   "activeState": "inactive",
+   "at": "2026-10-19T17:13:55.435+00:00",
+   "linkConnections": [],
+   "mainPid": "0",
+   "qemuProcesses": [],
+   "qmpRefused": true,
+   "sshRefused": true,
+   "subState": "dead",
+   "unit": "orbit-mr-lab-2.service"
+  },
+  "s1": {
+   "answered": {
+    "answered_at": "2026-10-19T17:13:54.12",
+    "status": "ANSWERED"
+   },
+   "turn": {
+    "answer": {
+     "code": null,
+     "id": null,
+     "message": null,
+     "seq": 2,
+     "status": null
+    },
+    "at": "2026-10-19T17:13:52.859+00:00",
+    "kind": "turn",
+    "session": "34ijd4vUOpVCPPXsUr1pa",
+    "status": 201
+   },
+   "wrote": {
+    "commit": "8b58c463928ab1a27f892bb6fd0527321e588198",
+    "file": "t08-amylast.txt",
+    "fileSha256Prefix": "1ed11b275c22e518",
+    "ingestedAt": "2026-10-19T17:13:54.00122+00:00"
+   }
+  },
+  "s2": {
+   "commit": {
+    "commit_result_message": null,
+    "commit_status": "committed"
+   },
+   "merge": {
+    "answer": {
+     "mergeStatus": "merged",
+     "nextStep": null,
+     "operationId": "fb32d0a7-f8da-47d6-b41e-9851e71edefb",
+     "outcome": "SETTLED",
+     "receipt": {
+      "checkpointId": null,
+      "checkpointPublicId": null,
+      "conflicts": [],
+      "createdAt": "2026-10-19T17:13:53.203Z",
+      "detail": {
+       "operationId": "fb32d0a7-f8da-47d6-b41e-9851e71edefb",
+       "source": "merge-result"
+      },
+      "id": "34ijdH8QG5WaeH00BQGJE",
+      "idempotencyKey": "3d38ff3527603f1631a89922c4832ae2c16952ae3a3e92f00a307c12a4a81208",
+      "landed": true,
+      "projectId": null,
+      "projectPublicId": null,
+      "publicId": "34ijdH8QG5WaeH00BQGJE",
+      "rebaseBaseSha": "d2b2e66211d1f17102d85d671b66eeb1034a2d94",
+      "rebaseBaseShaAbsentReason": null,
+      "recordedBy": "RUNNER",
+      "result": "MERGED",
+      "sessionId": "34ijd8aoQTrlvGz8pP3cw",
+      "sessionPublicId": "34ijd8aoQTrlvGz8pP3cw",
+      "sourceBranch": "orbit/t02c-amy-s2-a-session-t03-secret-amys2-f-3dfc91",
+      "sourceSha": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "targetBranch": "master",
+      "targetShaAfter": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "targetShaBefore": "d2b2e66211d1f17102d85d671b66eeb1034a2d94",
+      "taskId": null,
+      "taskPublicId": null
+     },
+     "receiptAbsentReason": null
+    },
+    "status": 201
+   },
+   "sourceSha": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+   "targetShaAfter": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e"
+  },
+  "s3": {
+   "commit": "a5def714b843e09fcbd492df0f71cec8cdabc5ff",
+   "fakeModel": {
+    "apiErrors": null,
+    "at": "2026-10-19T17:13:51Z",
+    "hold": 60,
+    "kind": "tool_result_reply",
+    "lastUser": "T02C-AMY-HOLD a turn still running at the cut. FAKE-WRITE amyheld FAKE-HOLD 60",
+    "messages": 5,
+    "model": "deepseek-v4-pro",
+    "n": 18,
+    "offered": [
+     "mcp__orbit__bg_run",
+     "mcp__orbit__schedule_wakeup"
+    ],
+    "path": "/anthropic/v1/messages?beta=true",
+    "secrets": [],
+    "shape": [
+     [
+      "assistant",
+      [
+       "tool_use"
+      ]
+     ],
+     [
+      "user",
+      [
+       "tool_result"
+      ]
+     ],
+     [
+      "system",
+      [
+       "text"
+      ]
+     ]
+    ],
+    "slow": 0,
+    "stream": true,
+    "tool": null,
+    "toolResult": "T08-WROTE-AMYHELD a5def714b843e09fcbd492df0f71cec8cdabc5ff cc0e4acf468e5ed5"
+   },
+   "id": "34ijdD4X4Qvgz0bOBXXl3",
+   "uuid": "01a15527-bf1b-72da-9733-60e06f0238d1"
+  },
+  "secondsBeforeTheCut": {
+   "s1LastAnswered": 0.0,
+   "s1LastSent": 1.5,
+   "s2CommitAsked": 2.3,
+   "s2CommitReported": 1.5,
+   "s2MergeAsked": 1.5,
+   "s2MergeReturned": 0.0,
+   "s3EngineCommitSeen": 2.3,
+   "s3Sent": 3.8,
+   "settleSyncEnded": 4.0,
+   "settleSyncStarted": 4.7
+  },
+  "secondsOfEachBeforeTheCut": {
+   "s1 engine commit (its result ingested)": 0.4,
+   "s1 last turn answered": 0.0,
+   "s2 runner commit reported": 1.5,
+   "s2 runner merge returned": 0.0,
+   "s3 engine commit seen (turn still running)": 2.3
+  },
+  "stopSh": [
+   "unit orbit-mr-lab-2: memory.current 1068 MiB, memory.peak 2615 MiB, swap 987 MiB, memory.max 3758096384",
+   "host: MemAvailable 7213 MiB",
+   "17:13:54Z orbit-mr-lab-2: qemu (pid 2232751) killed with SIGKILL at 2026-10-19T17:13:54.395Z; the guest got no shutdown"
+  ],
+  "times": {
+   "s1LastAnswered": "2026-10-19T17:13:54.372+00:00",
+   "s1LastSent": "2026-10-19T17:13:52.859+00:00",
+   "s2CommitAsked": "2026-10-19T17:13:52.079+00:00",
+   "s2CommitReported": "2026-10-19T17:13:52.857+00:00",
+   "s2MergeAsked": "2026-10-19T17:13:52.859+00:00",
+   "s2MergeReturned": "2026-10-19T17:13:54.372+00:00",
+   "s3EngineCommitSeen": "2026-10-19T17:13:52.079+00:00",
+   "s3Sent": "2026-10-19T17:13:50.611+00:00",
+   "settleSyncEnded": "2026-10-19T17:13:50.396+00:00",
+   "settleSyncStarted": "2026-10-19T17:13:49.710+00:00"
+  },
+  "volumeBeforeTheLastSeconds": {
+   "commits": {},
+   "ext4Options": [
+    "rw",
+    "bsddf",
+    "nogrpid",
+    "block_validity",
+    "dioread_nolock",
+    "nodiscard",
+    "delalloc",
+    "nowarn_on_error",
+    "journal_checksum",
+    "barrier",
+    "auto_da_alloc",
+    "user_xattr",
+    "acl",
+    "noquota",
+    "resuid=0",
+    "resgid=0",
+    "errors=continue",
+    "commit=5",
+    "min_batch_time=0",
+    "max_batch_time=15000",
+    "i_version",
+    "stripe=1024",
+    "data=ordered",
+    "inode_readahead_blks=32",
+    "init_itable=10",
+    "max_dir_size_kb=0",
+    "prefetch_block_bitmaps"
+   ],
+   "git": "git version 2.47.3",
+   "kernel": "7.0.0-34-generic",
+   "mount": {
+    "fstype": "ext4",
+    "options": "rw,relatime",
+    "source": "/dev/rbd0",
+    "superOptions": "rw,stripe=1024"
+   },
+   "repos": {
+    "01a15527-aade-766a-b161-b52aff12bcba": {
+     "branch": {
+      "loose": "db45ce2f391830dcc62928337be43ce5f4522898",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-amy-s1-a-session-t03-secret-amys1-f-08a072"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a15527-aade-766a-b161-b52aff12bcba",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-aade-766a-b161-b52aff12bcba",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-amy-s1-a-session-t03-secret-amys1-f-08a072"
+     },
+     "indexBytes": 225,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "db45ce2f391830dcc62928337be43ce5f4522898 T08 amys1\nd2b2e66211d1f17102d85d671b66eeb1034a2d94 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "3f44b6899781ca5a80e2c2e48c4d4c8fc1d380a9"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    },
+    "01a15527-b3fa-74d6-b522-8cd7dcf92922": {
+     "branch": {
+      "loose": "b7ea9b9cc674816d83c68be2ba51a6835b5da2e7",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-amy-s2-a-session-t03-secret-amys2-f-3dfc91"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-amy-s2-a-session-t03-secret-amys2-f-3dfc91"
+     },
+     "indexBytes": 225,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "b7ea9b9cc674816d83c68be2ba51a6835b5da2e7 T08 amys2\nd2b2e66211d1f17102d85d671b66eeb1034a2d94 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "c602b378413e1c8cbee7960a9de2d2c4b4f2b4a2"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": "?? t02c-runner-amy.txt"
+     }
+    },
+    "workspace": {
+     "branch": {
+      "loose": "d2b2e66211d1f17102d85d671b66eeb1034a2d94",
+      "looseBytes": 41,
+      "ref": "refs/heads/master"
+     },
+     "checkout": "/var/lib/orbit/home/orbit-repos/default",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+     "headFile": {
+      "bytes": 23,
+      "content": "ref: refs/heads/master"
+     },
+     "indexBytes": 145,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "d2b2e66211d1f17102d85d671b66eeb1034a2d94 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "a965ff0f24070efbb07853cbd2e2c5e22a9b6ffa"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    }
+   },
+   "transcripts": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15527-aade-766a-b161-b52aff12bcba/c1682585-7d95-425e-9a6d-8fe34c5c5b25.jsonl": {
+     "bytes": 731895,
+     "lines": 29,
+     "markers": {
+      "T02C-AMY-LAST": 0
+     }
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15527-b3fa-74d6-b522-8cd7dcf92922/14c264b6-ac91-45af-8c2f-bbb9b458f4c4.jsonl": {
+     "bytes": 731895,
+     "lines": 29,
+     "markers": {
+      "T02C-AMY-LAST": 0
+     }
+    }
+   },
+   "uid": 10001
+  },
+  "withinTwoSecondsOfTheCut": {
+   "s1 engine commit (its result ingested)": true,
+   "s1 last turn answered": true,
+   "s2 runner commit reported": true,
+   "s2 runner merge returned": true,
+   "s3 engine commit seen (turn still running)": false
+  }
+ },
+ "seconds": 6.0,
+ "startedAt": "2026-10-19T17:13:49.609+00:00",
+ "step": "last"
+}

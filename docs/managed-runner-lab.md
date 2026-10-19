@@ -199,11 +199,12 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `lab-ca-image.Dockerfile` | One layer on the product image: the lab CA in the system trust store, for the manager's Pod, which mounts no CA bundle. |
 | `runner-image.py` | Runs the optional runner image in the lab: imports an image archive into the guest's containerd, enrolls once, starts, stops and recreates the runner Pod on one PVC, drives sessions and a landing on the test server, and hashes the persistent state; see [Runner image](#runner-image-t03). |
 | `wake-lab.py` | Wake, sleep and capacity on real k3s ([below](#wake-sleep-and-capacity-t06)), through manager-lab.py's gate, replica, views and `kill-runner`: a profile with a budget of one runner and a 60 s idle interval, accounts with a fake-model key, a self-managed runner and its dispatch, every kind of demand (a turn, a session, a task's Run Now or run time, all at once), waits on a mapping or on an answer quoting a marker, data on the runner's volume, the administrator's disable, a ResourceQuota of zero Pods, the switch-off check for demand, and a recorder with its timeline. |
-| `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. `FAKE-SLOW`, `FAKE-BG` (a call of the runner's `bg_run`), `FAKE-WAKEUP` (`schedule_wakeup`), `FAKE-WRITE` (a call of Claude Code's own Bash tool that commits a file in the session's worktree) and `FAKE-APIERR` (an overloaded provider) in a message shape the answer; see its header. |
+| `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. `FAKE-SLOW`, `FAKE-BG` (a call of the runner's `bg_run`), `FAKE-WAKEUP` (`schedule_wakeup`), `FAKE-WRITE` (a call of Claude Code's own Bash tool that commits a file in the session's worktree), `FAKE-HOLD` (the answer to that tool's result held open, so the turn is still running) and `FAKE-APIERR` (an overloaded provider) in a message shape the answer; see its header. |
 | `acceptance-lab.py` | The end-to-end run of task T08 ([below](#end-to-end-acceptance-t08)): two accounts through the switch unset, `false` and on, provisioning, capacity, sessions, busy and idle, wakes, Pod rebuilds, a controller restart, an image rollback, an independent RBD backup restored to a new PVC, and the switch off again, in one command that stops at the first failed check; `report` condenses a run, `secret-scan` checks its records. |
 | `switch-lab.py` | Task T08b's run ([below](#a-restored-volume-back-under-its-runner-t08b)), on acceptance-lab.py's helpers: one account provisioned, data on its volume, an independent backup, the volume lost, the runbook's restore into a new claim under the runner's name, the administrator's volume switch and the wake on the restored claim, in one command that stops at the first failed check; `report` condenses a run. |
 | `takeover-lab.py` | Task T02's run on the two nodes ([below](#cross-node-migration-and-takeover-t02)), on acceptance-lab.py's helpers: one account's runner moved to the other node through sleep and wake, Pods on its claim pinned to the other node, what RWO and RBD do alone, the second node's power cut while the runner writes there, the runbook's failover (receipt, out-of-service taint, finalizer) and the old node's return; it stops at the first failed check and goes on from a step (`--from-step`); `report` condenses a run, `secret-scan` checks its records. |
 | `cross-node-lab.py` | Task T08x's run on the two nodes ([below](#two-accounts-across-two-nodes-t08x)), on takeover-lab.py's helpers: two accounts' runners moved to the other node (a message, a task run now), second Pods on each claim and Pods mixing the accounts, the second node's power cut with both runners on it (no Git work in the last minute, a last message to each session, one volume synced and one not), the runbook's failover for both with the runbook's own query and commands, the old node's return, and `kubectl drain` both ways; `--from-step`, `report` and `secret-scan` as above. |
+| `durability-lab.py` | Task T02c's run on the two nodes ([below](#git-work-and-engine-sessions-through-a-power-cut-t02c)), on takeover-lab.py's and cross-node-lab.py's helpers: T07's leftover Pod released by the runbook's patch after its owner is confirmed, Git's commit costs on the runner class's storage, then one account's runner on the project line's image and one on this branch's: the runner's and the engine's Git work and a last turn in the last seconds, the second node's power cut, a copy of the volume's snapshot read before anything mounts it, the runbook's failover, the session resumed, the second node back; and a damaged volume woken on the fixed image. `--from-step`, `report` and `secret-scan` as above. |
 
 A test window:
 
@@ -949,7 +950,77 @@ Left in the lab: `test-server-t08x` (ann and bob SLEEPING on their claims); thei
 receipt ConfigMaps `mr-fence-01a1548e-0f66-…` and `mr-fence-01a1548e-0fc4-…`. T07's Pod `mr-01a14db1-…`, `Failed` before
 the run, is now also `Terminating`, marked by the first drain. It has no VolumeAttachment, and T07's manager takes its
 finalizer off when T07's server runs with the switch on. The webhook is removed, the test server and gate are stopped,
-and both VMs are off.
+and both VMs are off. (T02c released T07's Pod on 2026-10-19 with the runbook's patch, [below](#t07s-leftover-pod).)
+
+## Git work and engine sessions through a power cut (T02c)
+
+Recorded 2026-10-19 by task T02c, part of criterion 2, on the two nodes of [L1](#two-nodes-l1). It measured what a node's
+power cut leaves of a managed runner's last seconds, before and after the runner syncs its volume
+([the design record](managed-runner-design.md#implementation-record-git-work-and-engine-sessions-through-a-power-cut)).
+The records are in [the evidence](evidence/managed-runner-power-cut-durability/2026-10-19/README.md). One run of
+`durability-lab.py`: 41 steps, 204 checks. Four steps failed and were fixed or run again (below).
+
+- **Model.** fake-model.py stood in as a DeepSeek-preset key, which is not a model.
+- **Images.** The project line's runner: T02's build from `8055bb568`, in both VMs' containerd. This branch's runner:
+  `0e894464e` for the run after the fix, and `5928c0e0a` for the damaged volume woken at the end. Each was built with
+  the evidence's `kit/build-image.sh` and imported into both VMs; nothing was pushed.
+- **Lab window.** Both VMs were on from 16:38 to 17:52 UTC, after another session's pg-spec matrix had ended.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t02c   # earlier tasks' databases untouched
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh --nodes 2
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+E=docs/evidence/managed-runner-power-cut-durability/2026-10-19
+bash $E/kit/build-image.sh /mnt/data/tmp/t02c/image          # this branch's image (LAB_T02C_AFTER_IMAGE)
+OUT=/mnt/data/tmp/t02c/run && mkdir -p $OUT
+sudo systemd-run --unit=orbit-mr-lab-t02c-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR -p WorkingDirectory=$PWD \
+  -p StandardOutput=append:$OUT/run.txt -p StandardError=append:$OUT/run.txt \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/durability-lab.py run --out $OUT    # --from-step PHASE/STEP goes on
+python3 scripts/managed-runner/lab/durability-lab.py report $OUT
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+| Check | Result |
+| --- | --- |
+| Before (amy, the project line's runner) | The cut came 0.0 s after the runner's merge returned and the last turn was answered, 0.4 s after the engine's commit, 1.5 s after the runner's commit and 2.3 s after an engine commit in a turn still running. Read from a copy of the snapshot: every repository unreadable, `git fsck` exit 11. `master` and both session branches point at commits whose object files are empty; a new worktree's `HEAD`, `gitdir` and `commondir` are empty. The last turn is missing from the engine's transcript. After the failover the session resumed without it, in the same broken repositories |
+| After (bob, this branch's runner) | The cut came 0.0, 0.9, 2.3 and 4.3 s after the same five kinds of Git work. Every repository read, `git fsck` was clean, and there was no empty file or lock. Every returned commit was on its branch, the mid-turn one too, and the last turn was in the transcript. The session resumed with it. The next start said `0 stale lock files removed, 0 branches restored, 0 checkouts damaged` |
+| A damaged volume on the fixed runner | amy's volume woken on `5928c0e0a`: the start logged each unreadable repository with its reason and refused the reclaimed sessions. The next message's session ended `FAILED` with `REPOSITORY_DAMAGED` and the reason; no engine saw it, and nothing was started over the broken repository |
+| Git's commit costs | On a claim of the runner class on the second node, medians: a one-file commit 49 ms with Git's defaults, 299 ms followed by `syncfs`, 893 ms with `core.fsync=all`. A 200-file commit 0.16 s, 1.04 s and 59.2 s |
+| Failover | Both runs went through the runbook's failover as in T02 (receipt, out-of-service taint, finalizer): `FENCING` 7.0 s and 11.4 s after the taint, READY on the first node 26 s after the finalizer came off |
+| At the end | Never more than one Pod on either claim nor one attachment of either PV in the timeline; Ceph `HEALTH_OK`; every account asleep |
+
+How the run went:
+
+- A first attempt at the before run (ann) stopped before its cut: the driver read the last turn by an id the turn's
+  answer does not carry. Its last turn and merge had already run, so ann was put to sleep and the before run was done
+  again with a new account (amy).
+- The read of what amy's cut left failed once in its cleanup (the copy keeps the snapshot `import-diff` writes), and was
+  read again from the same snapshot.
+- The first wake of the damaged volume, on `0e894464e`, found the refusal lost on a claim: the runner logged the damage,
+  refused the reclaimed session, then answered its next message anyway. The fix is `5928c0e0a`, and the wake was run
+  again on its build.
+
+### T07's leftover Pod
+
+`mr-01a14db1-…` (UID `52ed1c8a-…`) was a managed Pod of task T07's test server. It had been held by the stop-report
+finalizer since T07's manager stopped running, and was `Terminating` since T08x's drain. Before it was released:
+
+- T07's database, read in a copy, names the runner `01a14db1-e2b6-…` (owner `t06-root@lab.invalid`) and this Pod's UID
+  as its own.
+- Its kubelet had reported the stop: `Failed`, every container terminated. Its node was `Ready`.
+- Its `DisruptionTarget` was the eviction API's (the drain), not PodGC's or the taint manager's.
+- It had no VolumeAttachment, and no manager was running.
+
+The runbook's patch, the UID-tested one in "The stop-report finalizer", released it, and the Pod was gone within a second.
+
+Left in the lab:
+
+- `test-server-t02c`: ann, amy and bob SLEEPING on their claims, with their claims, PVs and images (`Retain`).
+- The receipt ConfigMaps of amy's and bob's failovers.
+- amy's volume still holds the damage the before run's cut left, as test data.
+- The snapshot copies, their claims and images, and both snapshots were removed.
+- The webhook was removed; the test server, its replica, the gate and the recorder were stopped; both VMs are off.
 
 ## Known limits
 

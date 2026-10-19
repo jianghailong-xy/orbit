@@ -1,0 +1,41 @@
+{"n": 1, "phase": "facts", "step": "git", "startedAt": "2026-10-19T16:42:47.583+00:00", "seconds": 3.4, "ok": true, "error": null, "checks": 1, "failed": []}
+{"n": 2, "phase": "facts", "step": "host", "startedAt": "2026-10-19T16:42:50.992+00:00", "seconds": 6.1, "ok": true, "error": null, "checks": 3, "failed": []}
+{"n": 3, "phase": "facts", "step": "cluster", "startedAt": "2026-10-19T16:42:57.137+00:00", "seconds": 0.3, "ok": true, "error": null, "checks": 3, "failed": []}
+{"n": 4, "phase": "facts", "step": "ceph", "startedAt": "2026-10-19T16:42:57.415+00:00", "seconds": 7.6, "ok": true, "error": null, "checks": 1, "failed": []}
+{"n": 5, "phase": "facts", "step": "images", "startedAt": "2026-10-19T16:43:05.022+00:00", "seconds": 113.4, "ok": true, "error": null, "checks": 5, "failed": []}
+{"n": 6, "phase": "facts", "step": "model", "startedAt": "2026-10-19T16:44:58.425+00:00", "seconds": 0.0, "ok": true, "error": null, "checks": 0, "failed": []}
+{"n": 7, "phase": "stuck", "step": "t07", "startedAt": "2026-10-19T16:44:58.426+00:00", "seconds": 0.9, "ok": true, "error": null, "checks": 8, "failed": []}
+{"n": 8, "phase": "timing", "step": "git", "startedAt": "2026-10-19T16:44:59.292+00:00", "seconds": 1051.1, "ok": true, "error": null, "checks": 2, "failed": []}
+{"n": 9, "phase": "setup", "step": "server-dir", "startedAt": "2026-10-19T17:02:30.409+00:00", "seconds": 1.4, "ok": true, "error": null, "checks": 2, "failed": []}
+{"n": 10, "phase": "setup", "step": "admin", "startedAt": "2026-10-19T17:02:31.811+00:00", "seconds": 104.2, "ok": true, "error": null, "checks": 3, "failed": []}
+{"n": 11, "phase": "on", "step": "prepare", "startedAt": "2026-10-19T17:04:16.044+00:00", "seconds": 2.5, "ok": true, "error": null, "checks": 2, "failed": []}
+{"n": 12, "phase": "on", "step": "start", "startedAt": "2026-10-19T17:04:18.531+00:00", "seconds": 4.0, "ok": true, "error": null, "checks": 1, "failed": []}
+{"n": 13, "phase": "on", "step": "admission", "startedAt": "2026-10-19T17:04:22.505+00:00", "seconds": 11.9, "ok": true, "error": null, "checks": 1, "failed": []}
+{"n": 14, "phase": "before", "step": "ready", "startedAt": "2026-10-19T17:04:34.387+00:00", "seconds": 42.5, "ok": true, "error": null, "checks": 7, "failed": []}
+{"n": 15, "phase": "before", "step": "sessions", "startedAt": "2026-10-19T17:10:46.328+00:00", "seconds": 8.2, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 16, "phase": "before", "step": "last", "startedAt": "2026-10-19T17:10:54.583+00:00", "seconds": 3.8, "ok": false, "error": "TypeError: expected string or bytes-like object, got 'NoneType'", "checks": 4, "failed": []}
+{"n": 17, "phase": "before", "step": "ready", "startedAt": "2026-10-19T17:13:11.022+00:00", "seconds": 34.3, "ok": true, "error": null, "checks": 7, "failed": []}
+{"n": 18, "phase": "before", "step": "sessions", "startedAt": "2026-10-19T17:13:45.393+00:00", "seconds": 4.2, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 19, "phase": "before", "step": "last", "startedAt": "2026-10-19T17:13:49.609+00:00", "seconds": 6.0, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 20, "phase": "before", "step": "left", "startedAt": "2026-10-19T17:13:55.599+00:00", "seconds": 56.0, "ok": false, "error": "Failed: guest command exited 39: Inferring fsid 12b3f1b2-c9ec-11f1-80c0-525400123456\nInferring config /var/lib/ceph/12b3f1b2-c9ec-11f1-80c0-525400123456/mon.orbit-mr-lab/config\nrbd: image has snapshots - these must be deleted with 'rbd snap purge' before the image can be removed.", "checks": 0, "failed": []}
+{"n": 21, "phase": "before", "step": "left", "startedAt": "2026-10-19T17:16:29.477+00:00", "seconds": 32.8, "ok": true, "error": null, "checks": 3, "failed": []}
+{"n": 22, "phase": "before", "step": "fence", "startedAt": "2026-10-19T17:17:02.361+00:00", "seconds": 35.5, "ok": true, "error": null, "checks": 17, "failed": []}
+{"n": 23, "phase": "before", "step": "resume", "startedAt": "2026-10-19T17:17:37.851+00:00", "seconds": 2.8, "ok": true, "error": null, "checks": 2, "failed": []}
+{"n": 24, "phase": "before", "step": "rejoin", "startedAt": "2026-10-19T17:17:40.703+00:00", "seconds": 122.5, "ok": true, "error": null, "checks": 16, "failed": []}
+{"n": 25, "phase": "switch", "step": "image", "startedAt": "2026-10-19T17:19:43.273+00:00", "seconds": 127.4, "ok": true, "error": null, "checks": 4, "failed": []}
+{"n": 26, "phase": "after", "step": "ready", "startedAt": "2026-10-19T17:21:50.662+00:00", "seconds": 39.3, "ok": true, "error": null, "checks": 8, "failed": []}
+{"n": 27, "phase": "after", "step": "sessions", "startedAt": "2026-10-19T17:22:29.979+00:00", "seconds": 8.9, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 28, "phase": "after", "step": "last", "startedAt": "2026-10-19T17:22:38.834+00:00", "seconds": 9.1, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 29, "phase": "after", "step": "left", "startedAt": "2026-10-19T17:22:47.915+00:00", "seconds": 48.1, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 30, "phase": "after", "step": "fence", "startedAt": "2026-10-19T17:23:35.966+00:00", "seconds": 39.6, "ok": true, "error": null, "checks": 17, "failed": []}
+{"n": 31, "phase": "after", "step": "resume", "startedAt": "2026-10-19T17:24:15.581+00:00", "seconds": 1.6, "ok": true, "error": null, "checks": 8, "failed": []}
+{"n": 32, "phase": "after", "step": "rejoin", "startedAt": "2026-10-19T17:24:17.162+00:00", "seconds": 122.2, "ok": true, "error": null, "checks": 16, "failed": []}
+{"n": 33, "phase": "final", "step": "checks", "startedAt": "2026-10-19T17:26:19.432+00:00", "seconds": 3.0, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 34, "phase": "final", "step": "teardown", "startedAt": "2026-10-19T17:26:22.425+00:00", "seconds": 0.8, "ok": true, "error": null, "checks": 1, "failed": []}
+{"n": 35, "phase": "damaged", "step": "start", "startedAt": "2026-10-19T17:27:28.163+00:00", "seconds": 20.9, "ok": true, "error": null, "checks": 3, "failed": []}
+{"n": 36, "phase": "damaged", "step": "wake", "startedAt": "2026-10-19T17:27:49.093+00:00", "seconds": 420.8, "ok": false, "error": "Failed: amy not READY/None within 420 s: [{'at': '2026-10-19T17:34:37.342+00:00', 'line': {'management_state': 'PROVISIONING', 'generation': 3, 'attempt': 0, 'revision': 116, 'reason': 'TRANSIENT', 'pod': None, 'drain': None}}, {'at': '2026-10-19T17:34:42.769+00:00', 'line': {'management_state': 'PROVISIONING', 'generation': 3, 'attempt': 0, 'revision': 117, 'reason': 'TRANSIENT', 'pod': None, 'drain': None}}, {'at': '2026-10-19T17:34:47.658+00:00', 'line': {'management_state': 'PROVISIONING', 'generation': 3, 'attempt': 0, 'revision': 118, 'reason': 'TRANSIENT', 'pod': None, 'drain': None}}]", "checks": 0, "failed": []}
+{"n": 37, "phase": "damaged", "step": "start", "startedAt": "2026-10-19T17:35:18.520+00:00", "seconds": 19.8, "ok": true, "error": null, "checks": 4, "failed": []}
+{"n": 38, "phase": "damaged", "step": "wake", "startedAt": "2026-10-19T17:35:38.353+00:00", "seconds": 257.8, "ok": false, "error": "Failed: no run event carrying REPOSITORY_DAMAGED within 240 s", "checks": 1, "failed": []}
+{"n": 39, "phase": "damaged", "step": "start", "startedAt": "2026-10-19T17:47:36.168+00:00", "seconds": 121.8, "ok": true, "error": null, "checks": 5, "failed": []}
+{"n": 40, "phase": "damaged", "step": "wake", "startedAt": "2026-10-19T17:49:37.997+00:00", "seconds": 86.5, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 41, "phase": "damaged", "step": "teardown", "startedAt": "2026-10-19T17:51:04.546+00:00", "seconds": 1.2, "ok": true, "error": null, "checks": 1, "failed": []}

@@ -1,0 +1,57 @@
+== 2026-10-19T17:51:27Z status.sh
+host kernel modules rbd/nbd/ceph/libceph loaded: none
+VM 1: running, qemu pid 2232725, cgroup /system.slice/orbit-mr-lab.service
+VM 1 qemu listens on: 127.0.0.1:16222 127.0.0.1:16230 127.0.0.1:16443
+VM 2: running, qemu pid 2750163, cgroup /system.slice/orbit-mr-lab-2.service
+VM 2 qemu listens on: 127.0.0.1:16223
+link 127.0.0.1:16230: 127.0.0.1:16230 <- 127.0.0.1:42226
+unit orbit-mr-lab: memory.current 1504 MiB, memory.peak 4372 MiB, swap 2701 MiB, memory.max 6979321856
+unit orbit-mr-lab-2: memory.current 1278 MiB, memory.peak 2435 MiB, swap 539 MiB, memory.max 3758096384
+host: MemAvailable 6244 MiB, SwapFree 30051 MiB
+guest 1 (virtio-balloon): {"guestMiB": {"stat-available-memory": 3169, "stat-free-memory": 2309, "stat-total-memory": 5920, "stat-disk-caches": 1002}, "lastUpdate": 1792432290}
+guest 2 (virtio-balloon): {"guestMiB": {"stat-available-memory": 2336, "stat-free-memory": 1398, "stat-total-memory": 2903, "stat-disk-caches": 1107}, "lastUpdate": 1792432291}
+guest 1: {"cephHealth":"HEALTH_OK","osdsUp":3,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"cephListens":"10.77.0.1","problems":[]}
+guest 2: {"linkRttMs":"0.320","rbdMapped":0,"problems":[]}
+k3s v1.36.5+k3s1
+node orbit-mr-lab Ready: True, internal IP 10.77.0.1
+node orbit-mr-lab-2 Ready: True, internal IP 10.77.0.2
+deployment/ceph-csi-operator-controller-manager: 1/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab: ready
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab-2: ready
+healthy, two nodes: orbit-mr-lab and orbit-mr-lab-2 Ready over the link 10.77.0.0/24; Ceph (3 OSDs, HEALTH_OK) at 10.77.0.1; Ceph-CSI on both nodes; StorageClass runner-data, namespace orbit-mr-test
+status exit=0
+== nodes
+NAME             STATUS   ROLES           AGE     VERSION        INTERNAL-IP   EXTERNAL-IP   OS-IMAGE             KERNEL-VERSION             CONTAINER-RUNTIME
+orbit-mr-lab     Ready    control-plane   2d12h   v1.36.5+k3s1   10.77.0.1     <none>        Ubuntu 26.04.1 LTS   7.0.0-34-generic (amd64)   containerd://2.3.4-k3s1.36
+orbit-mr-lab-2   Ready    <none>          6h48m   v1.36.5+k3s1   10.77.0.2     <none>        Ubuntu 26.04.1 LTS   7.0.0-34-generic (amd64)   containerd://2.3.4-k3s1.36
+== taints
+orbit-mr-lab  unschedulable= 
+orbit-mr-lab-2  unschedulable= 
+== pods in orbit-mr-test
+NAME                   READY   STATUS    RESTARTS      AGE     IP          NODE           NOMINATED NODE   READINESS GATES
+lab-20261017061552-b   1/1     Running   7 (71m ago)   7h56m   10.42.0.5   orbit-mr-lab   <none>           <none>
+== claims of this task (t02c accounts) and the lab's
+NAME                                           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE     VOLUMEMODE
+mr-data-01a1551f-435b-74a3-90ac-4c6149ebc2a5   Bound    pvc-35b7d596-aea8-4008-8b5e-409dab4e916f   2Gi        RWO            runner-data    <unset>                 47m     Filesystem
+mr-data-01a15527-25d2-71d3-aa77-728a7ef56711   Bound    pvc-933a44a5-08f7-4df3-b743-3f972e4d1674   2Gi        RWO            runner-data    <unset>                 38m     Filesystem
+mr-data-01a1552f-13b7-73b9-a20c-0969f285e52a   Bound    pvc-3f3ad134-4e8e-44b6-a838-c470bed09a74   2Gi        RWO            runner-data    <unset>                 29m     Filesystem
+== volumeattachments
+NAME                                                                   ATTACHER           PV                                         NODE           ATTACHED   AGE
+csi-1603ccb7471b09ba2c720a4ef62f32ac595d065c6d54d1e368c2248305b198ce   rbd.csi.ceph.com   pvc-c869968e-0f44-4365-800c-0448f74f8892   orbit-mr-lab   true       7h56m
+== fencing receipts
+NAME                                            DATA   AGE
+mr-fence-01a15431-f1f1-773e-b7cd-c25915447151   1      4h51m
+mr-fence-01a1548e-0f66-719f-aa98-e3ed285e4e91   1      3h7m
+mr-fence-01a1548e-0fc4-702f-a800-04fd55cdd1b9   1      3h7m
+mr-fence-01a15527-25d2-71d3-aa77-728a7ef56711   1      34m
+mr-fence-01a1552f-13b7-73b9-a20c-0969f285e52a   1      28m
+== webhook
+No resources found
+== units
+orbit-mr-lab-api inactive
+orbit-mr-lab-api-b active
+orbit-mr-lab-api-gate inactive
+orbit-mr-lab-t02c-recorder inactive
+orbit-mr-lab-t02c-run inactive
+orbit-mr-lab-api-b (the replica) stopped by hand after the inventory above: inactive

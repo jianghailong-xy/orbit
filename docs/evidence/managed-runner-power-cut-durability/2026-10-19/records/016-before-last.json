@@ -1,0 +1,51 @@
+{
+ "checks": [
+  {
+   "check": "the volume was synced before the last seconds",
+   "ok": true
+  },
+  {
+   "check": "s2: the runner was asked to commit",
+   "ok": true,
+   "value": [
+    201,
+    {
+     "ok": true
+    }
+   ]
+  },
+  {
+   "check": "s2: the runner committed",
+   "ok": true,
+   "value": {
+    "commit_result_message": null,
+    "commit_status": "committed"
+   }
+  },
+  {
+   "check": "s1: the last turn was accepted",
+   "ok": true,
+   "value": {
+    "answer": {
+     "code": null,
+     "id": null,
+     "message": null,
+     "seq": 2,
+     "status": null
+    },
+    "at": "2026-10-19T17:10:57.853+00:00",
+    "kind": "turn",
+    "session": "34ijYXRuwkY21a1Ho5OTb",
+    "status": 201
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T17:10:58.407+00:00",
+ "error": "TypeError: expected string or bytes-like object, got 'NoneType'",
+ "ok": false,
+ "phase": "before",
+ "result": null,
+ "seconds": 3.8,
+ "startedAt": "2026-10-19T17:10:54.583+00:00",
+ "step": "last"
+}

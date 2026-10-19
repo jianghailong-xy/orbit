@@ -1,0 +1,117 @@
+{
+ "startedAt": "2026-10-19T17:54:28Z",
+ "dir": "/var/tmp/t02c-timing-nvme2",
+ "git": "git version 2.47.3",
+ "kernel": "6.12.107+deb13-amd64",
+ "cpus": 24,
+ "filesystem": "/dev/nvme0n1p3 ext4 rw,noatime,rw,errors=remount-ro,stripe=4 on /",
+ "rounds": 20,
+ "cases": {
+  "commit 1 file, default": {
+   "n": 20,
+   "medianMs": 3.94,
+   "p90Ms": 7.33,
+   "minMs": 2.74,
+   "maxMs": 7.88
+  },
+  "commit 1 file, default, then syncfs": {
+   "n": 20,
+   "medianMs": 14.71,
+   "p90Ms": 15.73,
+   "minMs": 8.28,
+   "maxMs": 20.16
+  },
+  "commit 1 file, fsync=all": {
+   "n": 20,
+   "medianMs": 25.0,
+   "p90Ms": 27.08,
+   "minMs": 18.58,
+   "maxMs": 27.21
+  },
+  "commit 1 file, fsync=all, then syncfs": {
+   "n": 20,
+   "medianMs": 31.21,
+   "p90Ms": 33.45,
+   "minMs": 25.51,
+   "maxMs": 34.84
+  },
+  "commit 1 file, fsync=all,batch": {
+   "n": 20,
+   "medianMs": 26.07,
+   "p90Ms": 27.45,
+   "minMs": 20.62,
+   "maxMs": 27.83
+  },
+  "commit 1 file, fsync=all,batch, then syncfs": {
+   "n": 20,
+   "medianMs": 30.3,
+   "p90Ms": 31.78,
+   "minMs": 22.99,
+   "maxMs": 32.19
+  },
+  "commit 200 files, default": {
+   "n": 5,
+   "medianMs": 19.37,
+   "p90Ms": 20.12,
+   "minMs": 17.87,
+   "maxMs": 20.12
+  },
+  "commit 200 files, default, then syncfs": {
+   "n": 5,
+   "medianMs": 26.09,
+   "p90Ms": 28.3,
+   "minMs": 21.65,
+   "maxMs": 28.3
+  },
+  "commit 200 files, fsync=all": {
+   "n": 5,
+   "medianMs": 560.25,
+   "p90Ms": 652.72,
+   "minMs": 552.01,
+   "maxMs": 652.72
+  },
+  "commit 200 files, fsync=all, then syncfs": {
+   "n": 5,
+   "medianMs": 598.85,
+   "p90Ms": 604.44,
+   "minMs": 572.75,
+   "maxMs": 604.44
+  },
+  "commit 200 files, fsync=all,batch": {
+   "n": 5,
+   "medianMs": 44.88,
+   "p90Ms": 48.64,
+   "minMs": 39.63,
+   "maxMs": 48.64
+  },
+  "commit 200 files, fsync=all,batch, then syncfs": {
+   "n": 5,
+   "medianMs": 47.31,
+   "p90Ms": 49.85,
+   "minMs": 44.37,
+   "maxMs": 49.85
+  },
+  "syncfs, nothing dirty": {
+   "n": 20,
+   "medianMs": 2.53,
+   "p90Ms": 5.08,
+   "minMs": 0.15,
+   "maxMs": 5.11
+  },
+  "syncfs after 1 MiB written": {
+   "n": 10,
+   "medianMs": 5.15,
+   "p90Ms": 5.41,
+   "minMs": 5.09,
+   "maxMs": 5.41
+  },
+  "syncfs after 64 MiB written": {
+   "n": 5,
+   "medianMs": 47.53,
+   "p90Ms": 49.5,
+   "minMs": 39.21,
+   "maxMs": 49.5
+  }
+ },
+ "endedAt": "2026-10-19T17:54:47Z"
+}

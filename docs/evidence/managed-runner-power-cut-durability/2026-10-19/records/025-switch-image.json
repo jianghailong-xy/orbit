@@ -1,0 +1,124 @@
+{
+ "checks": [
+  {
+   "check": "the after image's runner and image sources are this checkout's",
+   "ok": true,
+   "value": "(no difference)"
+  },
+  {
+   "check": "the after image is in both VMs' containerd under one ID",
+   "ok": true,
+   "value": {
+    "orbit-mr-lab": {
+     "alreadyThere": false,
+     "id": "sha256:46ce2c44946ebc8d212d2df3dc18a866996cc4f1bf6fda1bcb0453c934d7669e",
+     "importSeconds": 49.3,
+     "size": "499729398"
+    },
+    "orbit-mr-lab-2": {
+     "alreadyThere": false,
+     "id": "sha256:46ce2c44946ebc8d212d2df3dc18a866996cc4f1bf6fda1bcb0453c934d7669e",
+     "importSeconds": 41.1,
+     "size": "499729398"
+    }
+   }
+  },
+  {
+   "check": "the profile pins the after image",
+   "ok": true,
+   "value": "docker.io/library/orbit-managed-runner-lab@sha256:76635be14a5d535d874944f046f0277053e56a4eba01faeafd9cd8b625365e40"
+  },
+  {
+   "check": "the switch is on with the lab profile",
+   "ok": true,
+   "value": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t02c/managed-runner-profile.json"
+   ]
+  }
+ ],
+ "endedAt": "2026-10-19T17:21:50.625+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "switch",
+ "result": {
+  "image": {
+   "archive": "/mnt/data/tmp/t02c/image/lab.oci.tar",
+   "archiveSha256": "3bc7ee328487d0a94893de2b8fe761318018cbe9245b507c1db20c36cdbfec36",
+   "labManifest": "sha256:7bdc8e9f3b0dbf6e93dd113e30aad7c82631ce3b38e8b75610e4353595cc6fee",
+   "nodes": {
+    "orbit-mr-lab": {
+     "alreadyThere": false,
+     "id": "sha256:46ce2c44946ebc8d212d2df3dc18a866996cc4f1bf6fda1bcb0453c934d7669e",
+     "importSeconds": 49.3,
+     "size": "499729398"
+    },
+    "orbit-mr-lab-2": {
+     "alreadyThere": false,
+     "id": "sha256:46ce2c44946ebc8d212d2df3dc18a866996cc4f1bf6fda1bcb0453c934d7669e",
+     "importSeconds": 41.1,
+     "size": "499729398"
+    }
+   },
+   "pushed": false,
+   "reference": "docker.io/library/orbit-managed-runner-lab@sha256:76635be14a5d535d874944f046f0277053e56a4eba01faeafd9cd8b625365e40",
+   "source": "0e894464e9164348ab398a789db9ab96e82036c9"
+  },
+  "pinned": "docker.io/library/orbit-managed-runner-lab@sha256:76635be14a5d535d874944f046f0277053e56a4eba01faeafd9cd8b625365e40",
+  "pinnedBefore": "docker.io/library/orbit-managed-runner-lab@sha256:6483cb7504e34fe140333f519eb68db6aba3699d22b1ac5db61d212885d3f3d9",
+  "restarted": {
+   "apiEnvironmentNames": [
+    "CORS_ORIGINS",
+    "DATABASE_URL",
+    "HOME",
+    "INVOCATION_ID",
+    "JWT_SECRET",
+    "LANG",
+    "MEMORY_PRESSURE_WATCH",
+    "MEMORY_PRESSURE_WRITE",
+    "MODEL_CATALOG_URL",
+    "NODE_ENV",
+    "ORBIT_MANAGED_RUNNERS_ENABLED",
+    "ORBIT_MANAGED_RUNNERS_PROFILE",
+    "ORBIT_RECAP_ENABLED",
+    "PATH",
+    "PORT",
+    "PROVIDER_SECRET_KEY",
+    "PUBLIC_ORIGIN",
+    "SYSTEMD_EXEC_PID",
+    "USER"
+   ],
+   "clusterSettingsInTheEnvironment": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED",
+    "ORBIT_MANAGED_RUNNERS_PROFILE"
+   ],
+   "kubeconfigInTheServerHome": false,
+   "mode": "on",
+   "replica": {
+    "managedSwitch": [
+     "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+     "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t02c/managed-runner-profile.json"
+    ],
+    "port": 13720,
+    "unit": "active"
+   },
+   "seconds": 7.2,
+   "switch": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t02c/managed-runner-profile.json"
+   ],
+   "testServer": [
+    "TLS front (orbit-mr-lab-tls): active",
+    "fake model (orbit-mr-lab-fake-model): active",
+    "PostgreSQL (orbit-mr-lab-pg): running",
+    "listening: 127.0.0.1:13710 127.0.0.1:13711 127.0.0.1:13712 127.0.0.1:15433",
+    "Pods use: https://10.0.2.2:13711 (CA /mnt/data/managed-runner-lab/test-server-t02c/tls/ca.crt); host API http://127.0.0.1:13710/api",
+    "state: /mnt/data/managed-runner-lab/test-server-t02c; managed runners: true",
+    "17:21:43Z applying migrations"
+   ]
+  }
+ },
+ "seconds": 127.4,
+ "startedAt": "2026-10-19T17:19:43.273+00:00",
+ "step": "image"
+}

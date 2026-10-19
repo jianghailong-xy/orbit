@@ -1,0 +1,292 @@
+{
+ "checks": [
+  {
+   "check": "ann s1: the engine committed a file in the session's worktree",
+   "ok": true,
+   "value": {
+    "commit": "ed234f4864fcd7c1f563fab775560e7f04743a0b",
+    "file": "t08-anns1.txt",
+    "fileSha256Prefix": "b84e7df67151f3ed",
+    "ingestedAt": "2026-10-19T17:10:49.026808+00:00"
+   }
+  },
+  {
+   "check": "ann s2: the engine committed a file in the session's worktree",
+   "ok": true,
+   "value": {
+    "commit": "507481c75ae0bffaf68761047c7d0205aa9a0acf",
+    "file": "t08-anns2.txt",
+    "fileSha256Prefix": "50845f1e4980a5cb",
+    "ingestedAt": "2026-10-19T17:10:51.036667+00:00"
+   }
+  },
+  {
+   "check": "ann: the saved credential is this generation's",
+   "ok": true,
+   "value": {
+    "generation": 1,
+    "podUid": "32becfaf-a4fa-43eb-a4cd-20dc4e883629"
+   }
+  },
+  {
+   "check": "ann 01a15524-ef8b-74df-9928-11ed7acd56a3: the repository reads and git fsck is clean before the last seconds",
+   "ok": true,
+   "value": {
+    "fsck": {
+     "err": "",
+     "exit": 0,
+     "out": ""
+    },
+    "revParseHead": {
+     "err": "",
+     "exit": 0,
+     "out": "366f60dd77b664dc9681f5dc06ec89a73f799b32"
+    }
+   }
+  },
+  {
+   "check": "ann 01a15524-fc9f-7169-a348-6cd361d01800: the repository reads and git fsck is clean before the last seconds",
+   "ok": true,
+   "value": {
+    "fsck": {
+     "err": "",
+     "exit": 0,
+     "out": ""
+    },
+    "revParseHead": {
+     "err": "",
+     "exit": 0,
+     "out": "b110b176e14afa4c7d2a8ce7f386bad5a59aaa1b"
+    }
+   }
+  },
+  {
+   "check": "ann workspace: the repository reads and git fsck is clean before the last seconds",
+   "ok": true,
+   "value": {
+    "fsck": {
+     "err": "",
+     "exit": 0,
+     "out": ""
+    },
+    "revParseHead": {
+     "err": "",
+     "exit": 0,
+     "out": "a965ff0f24070efbb07853cbd2e2c5e22a9b6ffa"
+    }
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T17:10:54.557+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "before",
+ "result": {
+  "credential": {
+   "generation": 1,
+   "podUid": "32becfaf-a4fa-43eb-a4cd-20dc4e883629",
+   "tokenSha256Prefix": "017d97a476dc"
+  },
+  "sessions": {
+   "s1": {
+    "createdAt": "2026-10-19T17:10:46.405+00:00",
+    "id": "34ijYXRuwkY21a1Ho5OTb",
+    "runtimeSessionId": "3eedde85-3b6b-40c6-b9e7-a5c38ee245d3",
+    "uuid": "01a15524-ef8b-74df-9928-11ed7acd56a3",
+    "wrote": {
+     "commit": "ed234f4864fcd7c1f563fab775560e7f04743a0b",
+     "file": "t08-anns1.txt",
+     "fileSha256Prefix": "b84e7df67151f3ed",
+     "ingestedAt": "2026-10-19T17:10:49.026808+00:00"
+    }
+   },
+   "s2": {
+    "createdAt": "2026-10-19T17:10:49.755+00:00",
+    "id": "34ijYciHOaychCswieDGi",
+    "runtimeSessionId": "8b488204-eab7-4557-a070-77285282f98f",
+    "uncommitted": "/var/lib/orbit/home/.orbit/worktrees/01a15524-fc9f-7169-a348-6cd361d01800/t02c-runner-ann.txt",
+    "uuid": "01a15524-fc9f-7169-a348-6cd361d01800",
+    "wrote": {
+     "commit": "507481c75ae0bffaf68761047c7d0205aa9a0acf",
+     "file": "t08-anns2.txt",
+     "fileSha256Prefix": "50845f1e4980a5cb",
+     "ingestedAt": "2026-10-19T17:10:51.036667+00:00"
+    }
+   }
+  },
+  "volume": {
+   "commits": {},
+   "ext4Options": [
+    "rw",
+    "bsddf",
+    "nogrpid",
+    "block_validity",
+    "dioread_nolock",
+    "nodiscard",
+    "delalloc",
+    "nowarn_on_error",
+    "journal_checksum",
+    "barrier",
+    "auto_da_alloc",
+    "user_xattr",
+    "acl",
+    "noquota",
+    "resuid=0",
+    "resgid=0",
+    "errors=continue",
+    "commit=5",
+    "min_batch_time=0",
+    "max_batch_time=15000",
+    "i_version",
+    "stripe=1024",
+    "data=ordered",
+    "inode_readahead_blks=32",
+    "init_itable=10",
+    "max_dir_size_kb=0",
+    "prefetch_block_bitmaps"
+   ],
+   "git": "git version 2.47.3",
+   "kernel": "7.0.0-34-generic",
+   "mount": {
+    "fstype": "ext4",
+    "options": "rw,relatime",
+    "source": "/dev/rbd0",
+    "superOptions": "rw,stripe=1024"
+   },
+   "repos": {
+    "01a15524-ef8b-74df-9928-11ed7acd56a3": {
+     "branch": {
+      "loose": "ed234f4864fcd7c1f563fab775560e7f04743a0b",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-ann-s1-a-session-t03-secret-anns1-f-0cbd80"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a15524-ef8b-74df-9928-11ed7acd56a3",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15524-ef8b-74df-9928-11ed7acd56a3",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-ann-s1-a-session-t03-secret-anns1-f-0cbd80"
+     },
+     "indexBytes": 225,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "ed234f4864fcd7c1f563fab775560e7f04743a0b T08 anns1\nbeb0e362ca69547f242329c32f0fff125829a978 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "366f60dd77b664dc9681f5dc06ec89a73f799b32"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    },
+    "01a15524-fc9f-7169-a348-6cd361d01800": {
+     "branch": {
+      "loose": "507481c75ae0bffaf68761047c7d0205aa9a0acf",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-ann-s2-a-session-t03-secret-anns2-f-826df1"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a15524-fc9f-7169-a348-6cd361d01800",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15524-fc9f-7169-a348-6cd361d01800",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-ann-s2-a-session-t03-secret-anns2-f-826df1"
+     },
+     "indexBytes": 225,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "507481c75ae0bffaf68761047c7d0205aa9a0acf T08 anns2\nbeb0e362ca69547f242329c32f0fff125829a978 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "b110b176e14afa4c7d2a8ce7f386bad5a59aaa1b"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": "?? t02c-runner-ann.txt"
+     }
+    },
+    "workspace": {
+     "branch": {
+      "loose": "beb0e362ca69547f242329c32f0fff125829a978",
+      "looseBytes": 41,
+      "ref": "refs/heads/master"
+     },
+     "checkout": "/var/lib/orbit/home/orbit-repos/default",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+     "headFile": {
+      "bytes": 23,
+      "content": "ref: refs/heads/master"
+     },
+     "indexBytes": 145,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "beb0e362ca69547f242329c32f0fff125829a978 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "a965ff0f24070efbb07853cbd2e2c5e22a9b6ffa"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    }
+   },
+   "transcripts": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1551f-e8bb-733b-9dcb-ed6b5cd049fa/e8462fbe-6b44-49c8-8a29-9bc6780e9f41.jsonl": {
+     "bytes": 731888,
+     "lines": 29,
+     "markers": {}
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15524-ef8b-74df-9928-11ed7acd56a3/3eedde85-3b6b-40c6-b9e7-a5c38ee245d3.jsonl": {
+     "bytes": 731889,
+     "lines": 29,
+     "markers": {}
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15524-fc9f-7169-a348-6cd361d01800/8b488204-eab7-4557-a070-77285282f98f.jsonl": {
+     "bytes": 731889,
+     "lines": 29,
+     "markers": {}
+    }
+   },
+   "uid": 10001
+  }
+ },
+ "seconds": 8.2,
+ "startedAt": "2026-10-19T17:10:46.328+00:00",
+ "step": "sessions"
+}

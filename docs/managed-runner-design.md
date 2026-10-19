@@ -1617,6 +1617,9 @@ Found, and left to later work (reported to the coordinator):
   - With `core.fsync=committed,index`, a commit 1.5 s before a cut kept its objects but lost `HEAD` and its branch ref.
   - The runner's workspace and worktrees are such repositories. Making the Git work that must survive durable (for
     example syncing the volume after it), or repairing a repository at the next start, is the image's and the runner's.
+  - **Handled by T02c** (2026-10-19): a managed runner syncs its volume before it reports work and behind every tool an
+    engine runs, and looks at its repositories when it starts. The approach, what it covers and what it costs:
+    [Git work and engine sessions through a power cut](#implementation-record-git-work-and-engine-sessions-through-a-power-cut).
 - Not established: a partition that keeps the old node running, a storage fence as the receipt's method, two managers,
   failover across physical machines, a real model.
 
@@ -1643,8 +1646,118 @@ Found (reported to the coordinator):
     Orbit's server kept its events.
   - A volume synced in the runner container just before the cut kept its last turn.
   - Like Git work (T02's finding), this is data the image or the runner would have to make durable. It belongs with T02c.
+  - **Handled by T02c** (2026-10-19): the volume is synced before the runner reports a turn's end, so a turn the control
+    plane has heard is over is in the transcript the next generation resumes
+    ([the record](#implementation-record-git-work-and-engine-sessions-through-a-power-cut)).
 - **The planned move needs `kubectl drain --delete-emptydir-data --force`**, for a bare Pod with an emptyDir. A drain
   ends only when a manager records each evicted runner's stop. A managed Pod no running manager records holds the drain
   until its timeout: here, an earlier task's Pod, which the drain marked for deletion. The runbook now says so.
 - Not established: a real model, a partition, a storage fence, the failure of the node that runs the control plane, two
   managers, failover across physical machines.
+
+## Implementation record: Git work and engine sessions through a power cut
+
+Recorded 2026-10-19 for task T02c, part of criterion 2. It handles T02's finding 2 and T08x's finding about the engine's
+transcript ([above](#implementation-record-one-runner-across-two-nodes)). The lab runs were on the lab's two nodes
+(task L1: two VMs on one physical machine, one failure domain, Ceph a single-host cluster in the first)
+([evidence](evidence/managed-runner-power-cut-durability/2026-10-19/README.md),
+[the lab page](managed-runner-lab.md#git-work-and-engine-sessions-through-a-power-cut-t02c)).
+
+**What a managed runner does.** The code is in `src/runner-go/volume_durability.go` and `managed_repo_recovery.go`.
+
+| Where | What |
+| --- | --- |
+| Before a report | The runner syncs the volume (`syncfs`, its filesystem only) before it reports work that lives on it. That covers a turn's end (a failed turn's too), a session's end (after its finalize commit), the session's checkout (before its engine starts), a commit, a merge, a checkout cleanup and an integration job's result (after its spooled copy). A report waits at most 30 s for the sync, then goes on and logs it. |
+| Behind every tool | After every tool result an engine reports, a sync runs in the background, one at a time; a result during one runs one more after it. The engine is not held up. Claude Code, Codex, Kimi, OpenCode, Antigravity, Cursor and DeepSeek Harness all report tool results through the session's one emitter. |
+| At start | Before anything runs Git, the runner looks at the checkouts under `reposRoot` and the sessions' worktrees. Lock files no process holds are removed, and a branch left empty or missing is restored from its own reflog. Anything else that cannot be read is logged, and every session that would work there is refused: `REPOSITORY_DAMAGED` with the reason, its session `FAILED`. setupWorktree's fallbacks used to run such a session in the workDir without a checkout, or start a new repository over the broken one. |
+| Who | A managed instance only: `ORBIT_MANAGED_RUNNER_GENERATION` and `ORBIT_MANAGED_RUNNER_POD_UID` set. A self-managed runner does none of this. |
+
+**Which Git writes are covered.** A `syncfs` writes back everything dirty on the volume and commits its journal. At
+each point above, that covers all of these:
+
+- loose objects, packs and their indexes;
+- refs and `packed-refs`, `HEAD` (as `git init`, `git worktree add` and a checkout write it) and the index;
+- reflogs, config and worktree metadata (`gitdir`, `commondir`, the worktree's `.git` file);
+- the checked-out files, the engine's transcripts and session files, and the runner's own records.
+
+Git's own setting covers much less. Traced with strace for Git 2.47.3, the image's
+([kit/git-fsync-coverage.py](evidence/managed-runner-power-cut-durability/2026-10-19/kit/git-fsync-coverage.py)):
+
+- `core.fsync=all` fsyncs loose objects, refs, `packed-refs` and the index before they are put in place.
+- It never fsyncs `HEAD`, a worktree's `HEAD` or metadata, reflogs, config or checked-out files.
+- It leaves a command's last rename (its ref, often its index) to the next journal commit. In the trace, 10 of 15 ref
+  writes and 4 of 11 index writes were not durable when the command returned.
+- `git init` made no fsync at all.
+
+**Why not Git's own fsyncs.** On top of those gaps, they cost one device round trip per file. These are medians of
+`git add` and `git commit` in a fresh repository
+([kit/git-commit-timing.py](evidence/managed-runner-power-cut-durability/2026-10-19/kit/git-commit-timing.py)):
+
+| Storage | Commit | Git's defaults | defaults, then `syncfs` | `core.fsync=all` | `core.fsync=all`, `fsyncMethod=batch` |
+| --- | --- | --- | --- | --- | --- |
+| Lab: the runner class's ext4 on RBD, second node | 1 file | 49 ms | 299 ms | 893 ms | 1103 ms |
+| | 200 files | 162 ms | 1.04 s | 59.2 s | 19.1 s |
+| HPC host: ext4 on HDD | 1 file | 7 ms | 71 ms | 109 ms | 228 ms |
+| | 200 files | 22 ms | 129 ms | 4.71 s | 192 ms |
+| HPC host: ext4 on NVMe | 1 file | 4 ms | 15 ms | 25 ms | 26 ms |
+| | 200 files | 19 ms | 26 ms | 560 ms | 45 ms |
+
+- On the lab's volume (`data=ordered`, `commit=5`, three OSDs on one HDD), Git's fsyncs made a one-file commit 18 times
+  slower and a 200-file commit 365 times slower. The same commit followed by one `syncfs` took a third of that time for
+  one file and a fiftieth for 200, and also covers what Git leaves out.
+- `batch` writes each object through and waits for it, so on high-latency storage it gains little. Git does not document
+  it as safe on Linux.
+- A `syncfs` with nothing dirty took 0.1 ms on the lab's volume. After 1 MiB written it took 0.78 s, after 64 MiB 5.3 s.
+
+**Commit time before and after.**
+
+| What | Before (project line) | After |
+| --- | --- | --- |
+| An engine's own `git commit` | 49 ms / 162 ms (1 / 200 files, lab) | Unchanged: nothing is added to the engine's commands. A sync runs beside the engine after the tool's result, about 0.25 s / 0.9 s of background writeback on the lab's volume, 0.1 ms when the tool wrote nothing. |
+| The runner's own commit, merge, checkout | The commit alone | The commit, then one `syncfs` before the report: 299 ms / 1.04 s on the lab's volume (lab kit). End to end in the lab runs, from asking to the report: commit 0.78 → 2.03 s, merge 1.51 → 2.26 s, a new session's first engine commit 1.47 → 2.27 s (one sample each). |
+| A turn's end | No sync | One `syncfs` before `/turn-complete`: mostly already written by the syncs behind the tools. In the lab runs, a FAKE-WRITE turn from send to answered took 1.51 → 2.26 s. |
+
+**Self-managed runners.** They are unchanged. Their filesystem is their owner's, shared with everything else they run,
+where a `syncfs` writes back all of it. The HDD host above took 350 ms for one after 64 MiB written, and a build's output
+can be much more. Whether to pay that is the owner's call, not the runner's.
+
+**What the lab showed** ([evidence](evidence/managed-runner-power-cut-durability/2026-10-19/README.md)). The setup:
+
+- One account's runner on the second node, with three sessions.
+- In the last seconds, each run made five Git writes:
+  - a new session's checkout and an engine commit in a turn still running (s3, `FAKE-HOLD`);
+  - a runner commit and a runner merge into the workspace's `master` (s2);
+  - an engine commit (`FAKE-WRITE`) in a last turn that then ended (s1).
+- Then the second node's power was cut, and a copy of the volume's snapshot was read before anything mounted the volume
+  again. The runbook's failover followed, and the session was resumed.
+
+| | Before: the project line's runner (`8055bb568`, amy) | After: this change (`0e894464e`, bob) |
+| --- | --- | --- |
+| Seconds before the cut | Runner merge and last answer 0.0; engine commit 0.4; runner commit 1.5; s3's engine commit 2.3 | 0.0; 0.9; 2.3; 4.3 |
+| The repositories | All four unreadable. `master` and both session branches point at commits whose object files are empty (9 empty loose objects); s3's new worktree has an empty `HEAD`, `gitdir` and `commondir`; `git fsck` exit 11 | All four read; `git fsck` clean; no empty file, no lock |
+| Commits that had returned | The engine's last commit, the runner's commit and its merge: unreadable | All on their branches; s3's mid-turn commit too |
+| The engine's transcript | The last turn gone (0 of its lines); s3's transcript 0 bytes | The last turn there, its message and its final answer |
+| The resumed session | Resumed without the last turn (8 messages, the first turn's secret only), in repositories that still failed `fsck` | Resumed with it (14 messages, both secrets) |
+| The next start | (no check) | `volume check: 4 checkouts in 1 repositories after start; 0 stale lock files removed, 0 branches restored, 0 checkouts damaged` |
+
+The before run's damaged volume was then woken on this change's final build (`5928c0e0a`):
+
+- The runner's start logged each of the four repositories with its reason.
+- It refused the reclaimed sessions. The next message's session ended `FAILED` with
+  `REPOSITORY_DAMAGED: the Git repository at …/orbit-repos/default cannot be read: commit 22957bc…, where its branch
+  master points, cannot be read. The runner does not work in a damaged repository or start a new one over it: …`.
+- No engine was asked about that message, and nothing was started over the broken repository.
+
+The first wake, on `0e894464e`, refused the reclaimed session and then answered its next message anyway: the claim's
+payload dropped the refusal. `5928c0e0a` carries it over (`sessionPool.activatePrepared`), and a unit test covers it.
+
+**Limits.**
+
+- Work a tool did is durable a sync's time after the tool returns: 0.3–1 s on the lab's volume. A cut inside that
+  window can still leave what T02 found, and the next start then restores a broken branch or refuses the repository with
+  its reason. Here s3's commit, 4.3 s before the cut, was kept.
+- The Docker backend's volume is a directory of the host's filesystem, so a `syncfs` there writes back everything dirty
+  on that filesystem, other runners' data included. This was measured on the host's own disks above, not on a busy
+  Docker host.
+- No real model, one physical machine, the lab's slow storage. A real cluster's latencies differ, and so do the costs
+  above.

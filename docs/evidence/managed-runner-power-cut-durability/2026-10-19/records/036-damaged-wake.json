@@ -1,0 +1,11 @@
+{
+ "checks": [],
+ "endedAt": "2026-10-19T17:34:49.865+00:00",
+ "error": "Failed: amy not READY/None within 420 s: [{'at': '2026-10-19T17:34:37.342+00:00', 'line': {'management_state': 'PROVISIONING', 'generation': 3, 'attempt': 0, 'revision': 116, 'reason': 'TRANSIENT', 'pod': None, 'drain': None}}, {'at': '2026-10-19T17:34:42.769+00:00', 'line': {'management_state': 'PROVISIONING', 'generation': 3, 'attempt': 0, 'revision': 117, 'reason': 'TRANSIENT', 'pod': None, 'drain': None}}, {'at': '2026-10-19T17:34:47.658+00:00', 'line': {'management_state': 'PROVISIONING', 'generation': 3, 'attempt': 0, 'revision': 118, 'reason': 'TRANSIENT', 'pod': None, 'drain': None}}]",
+ "ok": false,
+ "phase": "damaged",
+ "result": null,
+ "seconds": 420.8,
+ "startedAt": "2026-10-19T17:27:49.093+00:00",
+ "step": "wake"
+}

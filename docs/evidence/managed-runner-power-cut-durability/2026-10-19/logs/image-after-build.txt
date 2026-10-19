@@ -1,0 +1,7 @@
+product build: 108 s
+product manifest: sha256:c9dafbdf4aa53b3bccf8923da1163a817f7d5a6e69e960d156648970e63add51
+lab CA build: 6 s
+lab manifest: sha256:7bdc8e9f3b0dbf6e93dd113e30aad7c82631ce3b38e8b75610e4353595cc6fee
+-rw-r--r-- 1 root root 499746816 Oct 20 01:09 /mnt/data/tmp/t02c/image/lab.oci.tar
+-rw-r--r-- 1 root root 499613184 Oct 20 01:09 /mnt/data/tmp/t02c/image/product.oci.tar
+3bc7ee328487d0a94893de2b8fe761318018cbe9245b507c1db20c36cdbfec36  /mnt/data/tmp/t02c/image/lab.oci.tar

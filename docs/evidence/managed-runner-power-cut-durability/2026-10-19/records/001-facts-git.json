@@ -1,0 +1,30 @@
+{
+ "checks": [
+  {
+   "check": "the apiserver is built in this checkout",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T16:42:50.941+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "facts",
+ "result": {
+  "apiserverBuiltAt": "2026-10-19T16:20:28+00:00",
+  "branch": "orbit/task-t02c-runner-git-f40cfe",
+  "head": "af37b52854ee07f9b9304a39ef18ce14ba209610",
+  "originMain": "e7168b246175a18b4af1928aa2c5b2bf4a656297",
+  "projectLine": "326f43dc0ac22b91d894b706630a7f4d9c5666c7",
+  "projectLineIsAncestor": true,
+  "subject": "fix(runner): a managed runner's Git work and engine sessions survive a power cut",
+  "uncommitted": [
+   "M scripts/managed-runner/lab/fake-model.py",
+   " M scripts/managed-runner/lab_test.py",
+   "?? docs/evidence/managed-runner-power-cut-durability/",
+   "?? scripts/managed-runner/lab/durability-lab.py"
+  ]
+ },
+ "seconds": 3.4,
+ "startedAt": "2026-10-19T16:42:47.583+00:00",
+ "step": "git"
+}

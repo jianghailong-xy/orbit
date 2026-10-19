@@ -1,0 +1,39 @@
+{
+ "checks": [
+  {
+   "check": "the gate runs",
+   "ok": true,
+   "value": "active"
+  },
+  {
+   "check": "no admission webhook yet (a provisioning must fail without it)",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T17:02:31.793+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "setup",
+ "result": {
+  "copiedFromT02a": [
+   "tls",
+   "secrets/admission-webhook-token"
+  ],
+  "gate": {
+   "connections": 0,
+   "listen": "127.0.0.1:16444",
+   "unit": "active"
+  },
+  "serverDir": "/mnt/data/managed-runner-lab/test-server-t02c",
+  "unitsStoppedFirst": {
+   "orbit-mr-lab-api-b": "inactive",
+   "orbit-mr-lab-api-gate": "inactive",
+   "orbit-mr-lab-t02c-recorder": "inactive",
+   "orbit-mr-lab-t08-selfhost": "inactive"
+  },
+  "webhookRemovedFirst": false
+ },
+ "seconds": 1.4,
+ "startedAt": "2026-10-19T17:02:30.409+00:00",
+ "step": "server-dir"
+}
