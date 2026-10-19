@@ -22,9 +22,13 @@ so a resumed engine visibly sends the history it reloaded from the persistent vo
   - "FAKE-WRITE <word>" in the last user message: a call (once per word and conversation) of Claude Code's
     own Bash tool, run in the session's working directory (its Git worktree): it writes t08-<word>.txt,
     commits it and prints "T08-WROTE-<WORD> <commit> <file SHA-256 prefix>" (task T08).
+  - "FAKE-HOLD <seconds>" in the last user message: the answer to a tool's result is held open that long
+    (pings meanwhile), so the turn is still in flight after its tool ran (task T02c: a power cut in a turn
+    whose engine has just committed).
   - A request whose last message carries a tool result is answered with text that quotes it.
-  - Every "T06-<WORD>" (or T02's "T02-<WORD>", T07's "T07-<WORD>", T08's "T08-<WORD>", T08x's "T08X-<WORD>") marker in
-    the last user message is quoted after "Answering:", so a driver can tell which message an answer belongs to.
+  - Every "T06-<WORD>" (or T02's "T02-<WORD>", T02c's "T02C-<WORD>", T07's "T07-<WORD>", T08's "T08-<WORD>", T08x's
+    "T08X-<WORD>") marker in the last user message is quoted after "Answering:", so a driver can tell which message an
+    answer belongs to.
 Usage: fake-model.py PORT LOG
 """
 
@@ -134,6 +138,7 @@ class Handler(BaseHTTPRequestHandler):
             call = None
         shape = [[m.get('role'), [p.get('type') for p in parts(m)]] for m in messages[-3:]]
         slow = None if results else re.search(r'FAKE-SLOW (\d+)', last)
+        hold = re.search(r'FAKE-HOLD (\d+)', ' '.join(users)) if results else None
         apierr = None if results else re.search(r'FAKE-APIERR (\d+) (\w+)', conversation)
         with lock:
             counter[0] += 1
@@ -147,7 +152,7 @@ class Handler(BaseHTTPRequestHandler):
                 log.write(json.dumps({'n': number, 'at': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
                                       'path': self.path, 'model': body.get('model'), 'stream': body.get('stream'),
                                       'messages': len(messages), 'lastUser': last[-300:], 'secrets': secrets,
-                                      'slow': int(slow[1]) if slow else 0, 'kind': kind, 'tool': call[0] if call else None,
+                                      'slow': int(slow[1]) if slow else 0, 'hold': int(hold[1]) if hold else 0, 'kind': kind, 'tool': call[0] if call else None,
                                       'offered': offered, 'toolResult': results[0][:300] if results else None, 'shape': shape,
                                       'apiErrors': {apierr[2]: failures.get(apierr[2], 0)} if apierr else None}) + '\n')
         if results:
@@ -159,7 +164,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             text = (f'FAKE MODEL reply #{number}: this conversation has {len(messages)} message(s); '
                     f'secrets seen: {", ".join(secrets) or "none"}.')
-            markers = re.findall(r'T0(?:[2678]|8X)-[A-Z0-9-]+', last)
+            markers = re.findall(r'T0(?:2C|[2678]|8X)-[A-Z0-9-]+', last)
             if markers:
                 text += f' Answering: {" ".join(markers)}'
         usage = {'input_tokens': 10, 'output_tokens': 20}
@@ -197,7 +202,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             event('content_block_start', {'type': 'content_block_start', 'index': 0,
                                           'content_block': {'type': 'text', 'text': ''}})
-            deadline = time.monotonic() + (int(slow[1]) if slow else 0)
+            deadline = time.monotonic() + (int(slow[1]) if slow else int(hold[1]) if hold else 0)
             while time.monotonic() < deadline:
                 time.sleep(min(5, max(0, deadline - time.monotonic())))
                 event('ping', {'type': 'ping'})

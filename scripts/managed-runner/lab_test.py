@@ -340,6 +340,94 @@ class CrossNodeLabTest(unittest.TestCase):
                          {"a": "kept", "b": "shorter", "c": "missing", "d": "changed"})
 
 
+class DurabilityLabTest(unittest.TestCase):
+    """lab/durability-lab.py (T02c), offline: its own names, and how it reads and judges what a power cut left of a volume."""
+
+    @classmethod
+    def setUpClass(cls):
+        spec = importlib.util.spec_from_file_location("lab_durability", LAB / "durability-lab.py")
+        cls.durability = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.durability)
+
+    def test_it_reads_only_the_lab_context_and_its_own_server_directory_and_names(self):
+        source = (LAB / "durability-lab.py").read_text()
+        self.assertIsNone(re.search(r"(?<!ADMIN_)KUBECONFIG=", source))
+        self.assertEqual(self.durability.OWN_SERVER_DIRS, ("test-server-t02c", "test-server-t02c-dev"))
+        self.assertEqual((self.durability.wl.EMAIL, self.durability.ml.EMAIL), ("t02c-{}@lab.invalid", "t02c-{}@lab.invalid"))
+        self.assertEqual(self.durability.wl.name_of("t02c-bob@lab.invalid"), "bob")
+        self.assertEqual(self.durability.al.CONTEXT.name, "t02c-context.json")
+        self.assertEqual(self.durability.RUNS, {"before": "ann", "after": "bob"})
+        self.assertTrue(self.durability.marker("ann", "LAST").startswith("T02C-"))
+
+    def volume(self, folder):
+        """A managed runner's volume in miniature, as a power cut would find it: the workspace repository, a session's
+        worktree with the engine's commit, and its transcript with the last turn."""
+        import subprocess
+        root = Path(folder)
+        env = {"GIT_CONFIG_NOSYSTEM": "1", "GIT_CONFIG_GLOBAL": "/dev/null", "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@x",
+               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@x", "PATH": "/usr/bin:/bin"}
+        git = lambda d, *a: subprocess.run(["git", "-C", str(d), *a], check=True, capture_output=True, text=True, env=env).stdout.strip()
+        workspace = root / "home/orbit-repos/default"
+        workspace.mkdir(parents=True)
+        git(workspace, "init", "-q", "-b", "master")
+        git(workspace, "commit", "-q", "--allow-empty", "-m", "orbit: baseline")
+        worktree = root / "home/.orbit/worktrees/s1"
+        git(workspace, "worktree", "add", "-q", "-b", "orbit/s1", str(worktree))
+        (worktree / "t08-annlast.txt").write_text("T08 annlast\n")
+        git(worktree, "add", "t08-annlast.txt")
+        git(worktree, "commit", "-q", "-m", "T08 annlast")
+        transcript = root / "home/.claude/projects/p/11111111-2222-4333-8444-555555555555.jsonl"
+        transcript.parent.mkdir(parents=True)
+        transcript.write_text('{"user": "T02C-ANN-S1 first"}\n{"user": "T02C-ANN-LAST last T03-SECRET annlast"}\n'
+                              '{"assistant": "FAKE MODEL reply #3: tool result received: T08-WROTE-ANNLAST abc"}\n')
+        return workspace, worktree, git(worktree, "rev-parse", "HEAD")
+
+    def read(self, folder, commit):
+        import os
+        import subprocess
+        import sys
+        want = {"sessions": ["s1"], "commits": [{"label": "s1 last engine commit (returned: the turn ended)", "sha": commit, "repo": "s1", "ref": "HEAD"}],
+                "markers": ["T02C-ANN-S1", "T02C-ANN-LAST", "tool result received: T08-WROTE-ANNLAST"]}
+        result = subprocess.run([sys.executable, "-c", self.durability.READ, json.dumps(want)], capture_output=True, text=True,
+                                env={**os.environ, "T02C_VOLUME_ROOT": folder})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_an_intact_volume_passes_every_check_of_the_run_after_the_fix(self):
+        with tempfile.TemporaryDirectory() as folder:
+            _, _, commit = self.volume(folder)
+            view = self.read(folder, commit)
+        step = self.durability.Step()
+        summary = self.durability.judge_left(step, "after", "ann", view, "11111111-2222-4333-8444-555555555555")
+        self.assertTrue(all(c["ok"] for c in step.checks), [c for c in step.checks if not c["ok"]])
+        self.assertEqual((summary["unreadable"], summary["fsckErrors"], summary["returnedCommitsMissing"]), ([], [], []))
+        self.assertEqual(summary["lastTurnInTheTranscript"], {"message": 1, "answer": 1})
+        self.assertEqual(view["commits"]["s1 last engine commit (returned: the turn ended)"]["object"], "commit")
+
+    def test_what_t02_found_is_damage_before_and_a_failure_after(self):
+        with tempfile.TemporaryDirectory() as folder:
+            workspace, worktree, commit = self.volume(folder)
+            # What T02's cut left: an empty HEAD, an empty branch, an empty object, and the transcript without the answer.
+            (workspace / ".git/HEAD").write_text("")
+            (workspace / ".git/refs/heads/orbit/s1").write_text("")
+            obj = workspace / ".git/objects" / commit[:2] / commit[2:]
+            obj.chmod(0o644)
+            obj.write_bytes(b"")
+            transcript = Path(folder) / "home/.claude/projects/p/11111111-2222-4333-8444-555555555555.jsonl"
+            transcript.write_text("\n".join(transcript.read_text().splitlines()[:2]) + "\n")
+            view = self.read(folder, commit)
+        before, after = self.durability.Step(), self.durability.Step()
+        summary = self.durability.judge_left(before, "before", "ann", view, "11111111-2222-4333-8444-555555555555")
+        self.assertTrue(all(c["ok"] for c in before.checks), before.checks)
+        self.assertEqual(summary["unreadable"], ["s1", "workspace"])
+        self.assertEqual(summary["lastTurnInTheTranscript"], {"message": 1, "answer": 0})
+        self.assertIn("HEAD", summary["emptyGitFiles"]["workspace"])
+        self.durability.judge_left(after, "after", "ann", view, "11111111-2222-4333-8444-555555555555")
+        self.assertEqual(sorted(c["check"].split(": ", 1)[1] for c in after.checks if not c["ok"]),
+                         ["every commit that had returned is there, on its branch", "every repository reads: HEAD and its branch valid",
+                          "git fsck finds no error in any of them", "the last turn, its message and its final answer, is in the engine's transcript"])
+
+
 class ApiGateTest(unittest.TestCase):
     """lab/api-gate.py (T04) on loopback sockets: a stand-in upstream answers every chunk it receives."""
 
@@ -460,6 +548,26 @@ class FakeModelTest(unittest.TestCase):
     def test_t08x_markers_are_quoted_too(self):
         [answer] = self.ask([self.user("T08X-BOB-LAST a message, T08Y-NOT-A-MARKER")])
         self.assertTrue(answer["text"].endswith("Answering: T08X-BOB-LAST"), answer["text"])
+
+    def test_t02c_markers_are_quoted_too(self):
+        [answer] = self.ask([self.user("T02C-ANN-LAST a message, T02D-NOT-A-MARKER")])
+        self.assertTrue(answer["text"].endswith("Answering: T02C-ANN-LAST"), answer["text"])
+
+    def test_a_held_turn_answers_its_tool_result_only_after_the_hold(self):
+        import time
+        first = self.user("T02C-ANN-HOLD FAKE-WRITE held FAKE-HOLD 2")
+        [call] = self.ask([first])
+        self.assertEqual((call["type"], call["name"]), ("tool_use", "Bash"))
+        self.assertIn("git commit -q -m 'T08 held'", call["input"]["command"])
+        called = {"role": "assistant", "content": [{"type": "tool_use", "id": call["id"], "name": call["name"], "input": call["input"]}]}
+        result = {"role": "user", "content": [{"type": "tool_result", "tool_use_id": call["id"],
+                                               "content": [{"type": "text", "text": "T08-WROTE-HELD abc 123"}]}]}
+        started = time.monotonic()
+        [answer] = self.ask([first, called, result])
+        self.assertGreaterEqual(time.monotonic() - started, 2)
+        self.assertIn("tool result received: T08-WROTE-HELD", answer["text"])
+        logged = [json.loads(line) for line in Path(self.log).read_text().splitlines()]
+        self.assertEqual([(entry["kind"], entry["hold"]) for entry in logged], [("tool_use", 0), ("tool_result_reply", 2)])
 
     def test_a_background_job_is_one_bg_run_call_and_its_result_is_answered(self):
         first = self.user("T06-X FAKE-BG 7 start a job")
