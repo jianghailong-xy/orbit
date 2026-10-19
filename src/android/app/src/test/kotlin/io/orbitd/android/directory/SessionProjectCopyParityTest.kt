@@ -31,9 +31,11 @@ class SessionProjectCopyParityTest {
             "openProject" to SessionProjectCopy.openProject, "pin" to SessionProjectCopy.pin, "unpin" to SessionProjectCopy.unpin, "move" to SessionProjectCopy.move,
             "pageSubtitleLoading" to SessionProjectCopy.pageSubtitleLoading, "coordinatorSection" to SessionProjectCopy.coordinatorSection,
             "startReview" to SessionProjectCopy.startReview, "startNotAsked" to SessionProjectCopy.startNotAsked, "startHint" to SessionProjectCopy.startHint,
+            "landingTimedOut" to SessionProjectCopy.landingTimedOut,
+            "landingNoWordFromRunner" to SessionProjectCopy.landingNoWordFromRunner,
         ).forEach { (name, value) -> assertDeclares(name, value) }
         val declared = SessionProjectCopy::class.java.declaredFields.filter { it.type == String::class.java }.map { it.isAccessible = true; it.get(null) as String }
-        assertEquals("a SessionProjectCopy word is not held above", 12, declared.size)
+        assertEquals("a SessionProjectCopy word is not held above", 14, declared.size)
     }
 
     @Test fun everyBuiltSentenceIsOneSwiftLiteral() {
@@ -62,6 +64,27 @@ class SessionProjectCopyParityTest {
         assertEquals("Integration $count jobs · queued · 4m", several)
         assertSentence(copy, "Integration $count jobs", "Integration" to "\\(word)", "$count" to "\\(count)")
         listOf("Integration", "queued", "running").forEach { assertTrue("SessionProjectCopy.swift no longer says \"$it\"", copy.contains("\"$it\"")) }
+    }
+
+    /** §7.2 V6: the row's timeout and its SILENT claim, composed from the two new fixed words. */
+    @Test fun theLivenessLinesAreTheSwifts() {
+        val now = Instant.parse("2026-10-05T11:24:00Z")
+        fun line(liveness: String, heartbeat: String?) = SessionProjectCopy.landingLine(buildJsonObject {
+            put("activeJobCount", 1)
+            putJsonObject("inFlight") {
+                put("state", "RUNNING"); put("kind", "LAND_PROMOTION"); put("phase", "CHECK")
+                put("startedAt", "2026-10-05T10:53:00Z"); heartbeat?.let { put("heartbeatAt", it) }; put("liveness", liveness)
+            }
+        }, now)!!
+        val timedOut = line("LEASE_EXPIRED", "2026-10-05T11:01:00Z")
+        assertEquals("Merge to main · timed out · no report for 23m", timedOut.text)
+        assertEquals(SessionLine.Tone.WARNING, timedOut.tone)
+        assertEquals("Merge to main · no word from runner · 4m", line("SILENT", "2026-10-05T11:20:00Z").text)
+        // The same two sentences, composed in the Swift from the same two literals.
+        assertTrue("SessionProjectCopy.swift no longer composes the timeout line",
+            copy.contains("landingTimedOut, landingSilentWord(minutes: minutes)]"))
+        assertTrue("SessionProjectCopy.swift no longer composes the silent line",
+            copy.contains("landingNoWordFromRunner) · \\(minutes)m"))
     }
 
     @Test fun theCoordinatorLeadsAreTheSwifts() {
