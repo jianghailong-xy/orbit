@@ -130,4 +130,31 @@ final class SessionProjectLandingLineTests: XCTestCase {
                            project(ProjectListIntegration(line: .main, ref: "main", activeJobCount: 0)))?.line.text,
                        "Last reply")
     }
+
+    // MARK: - §7.2 V6
+
+    /// The server's liveness replaces this row's own claim-lease reading: a timeout is amber words
+    /// with no needs-you dot, SILENT is not a timeout, and a legacy check stays checking.
+    func testTheServersLivenessReplacesTheRowsOwnReading() {
+        func v6(_ liveness: String, heartbeat: Double = 0, started: Double = 12) -> ProjectListIntegration {
+            ProjectListIntegration(line: .main, ref: "main", activeJobCount: 1, inFlight:
+                ProjectIntegrationInFlight(taskTitle: nil, state: "RUNNING", startedAt: ago(started),
+                                           kind: "CHECK_PROMOTION", phase: "CHECK",
+                                           heartbeatAt: ago(heartbeat), liveness: liveness))
+        }
+        XCTAssertEqual(SessionProjectCopy.landingLine(v6("LEASE_EXPIRED", heartbeat: 23), now: now),
+                       SessionLine(text: "Merge check · timed out · no report for 23m", tone: .warning))
+        XCTAssertEqual(SessionProjectCopy.landingLine(v6("SILENT", heartbeat: 4), now: now),
+                       SessionLine(text: "Merge check · no word from runner · 4m", tone: .queued))
+        for liveness in ["LIVE", "QUIET", "LEGACY"] {
+            XCTAssertEqual(SessionProjectCopy.landingLine(v6(liveness, heartbeat: liveness == "LEGACY" ? 12 : 0), now: now),
+                           SessionLine(text: "Merge check · checking · 12m", tone: .running), liveness)
+        }
+        // The row says the amber words and lights no needs-you dot: a stopped landing is a fact,
+        // not a question for the reader.
+        let landed = row([session("coordinator", role: .coordinator)], project(v6("LEASE_EXPIRED", heartbeat: 23)))
+        XCTAssertEqual(landed?.line, SessionLine(text: "Merge check · timed out · no report for 23m", tone: .warning))
+        XCTAssertNil(landed?.indicator)
+        XCTAssertEqual(landed?.needsYou, false)
+    }
 }

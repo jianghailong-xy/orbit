@@ -46,10 +46,14 @@ import kotlinx.serialization.json.JsonObject
 internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeCard.Shape, landing: LandingLine?, blockedBy: String?, now: Instant,
     onLanding: (() -> Unit)?, onDetails: (String) -> Unit, onCoordinator: (() -> Unit)?) {
     val view = merge.current
-    val tint = when (shape) {
-        ProjectMergeCard.Shape.CHECKING -> MaterialTheme.colorScheme.onSurfaceVariant
-        ProjectMergeCard.Shape.ASKING, ProjectMergeCard.Shape.BLOCKED -> LocalOrbitColors.current.needsYou
-        ProjectMergeCard.Shape.MERGING -> MaterialTheme.colorScheme.primary
+    // A merge job the server judged timed out turns the WHOLE card amber, as the landing card does (owner 2026-10-19),
+    // whichever moment it is in.
+    val timedOut = landing?.timedOut == true
+    val tint = when {
+        timedOut -> LocalOrbitColors.current.needsYou
+        shape == ProjectMergeCard.Shape.CHECKING -> MaterialTheme.colorScheme.onSurfaceVariant
+        shape == ProjectMergeCard.Shape.ASKING || shape == ProjectMergeCard.Shape.BLOCKED -> LocalOrbitColors.current.needsYou
+        else -> MaterialTheme.colorScheme.primary
     }
     val scope = rememberCoroutineScope()
     var acting by remember { mutableStateOf(false) }
@@ -60,8 +64,13 @@ internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeC
         acting = true; actionError = null
         scope.launch { try { actionError = press(candidate) } finally { acting = false } }
     }
-    val shapeModifier = if (shape == ProjectMergeCard.Shape.CHECKING) Modifier.background(tint.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
-        else Modifier.background(tint.copy(alpha = 0.08f), RoundedCornerShape(14.dp)).border(1.dp, tint.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+    val shapeModifier = when {
+        timedOut -> Modifier.background(tint.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+            .border(1.dp, tint.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+        shape == ProjectMergeCard.Shape.CHECKING -> Modifier.background(tint.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
+        else -> Modifier.background(tint.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+            .border(1.dp, tint.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+    }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).then(shapeModifier).padding(12.dp)
         .testTag("project-merge-card:${shape.name.lowercase()}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (shape) {
