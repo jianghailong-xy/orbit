@@ -1034,10 +1034,13 @@ func (p *sessionPool) activatePrepared(job *ClaimedSession, prepare func()) (*li
 		prepare()
 	}
 	// Runner-local worktree state is not present in a claim payload. Carry it
-	// across so heartbeats and the cold-resume process keep using the same checkout.
+	// across so heartbeats and the cold-resume process keep using the same checkout,
+	// and a checkout setupWorktree refused stays refused: its supervisor has no dir
+	// to run an engine in, and a claim's fresh payload must not start one anyway.
 	if s.job != nil {
 		job.WT = s.job.WT
 		job.IsolationStatus = s.job.IsolationStatus
+		job.SourceRefusal = s.job.SourceRefusal
 	}
 	s.job = job
 	s.active = true
