@@ -45,6 +45,8 @@ const attempt = (over: Partial<SessionLandingAttempt> = {}): SessionLandingAttem
   blockingReason: null,
   timedOut: false,
   limitSeconds: 600,
+  retryable: false,
+  pushBoundaryPassed: false,
   ...over,
 });
 
@@ -273,6 +275,13 @@ describe('the landing session page', () => {
     expect(page().textContent).toContain('Land · Ledger migration order');
     expect(page().textContent).toContain('Run by Orbit · runner wikova');
     expect(page().textContent).toContain('Landing');
+    // The board's chip carries the little refresh mark; the live row carries its green dot; the
+    // budget bar marks where the check USUALLY finishes.
+    expect(page().querySelector('.landing-page-chip-glyph')?.textContent).toBe('↻');
+    expect(page().querySelector('.landing-live-dot')).toBeTruthy();
+    expect(page().querySelector('.landing-card-meter-tick')).toBeTruthy();
+    // The check in hand says its name and how long it has been live.
+    expect(page().textContent).toContain('Merge check · live 1m 50s');
     expect(page().textContent).toContain('checking');
     expect(page().textContent).toContain('Output 6s ago · Updated just now');
     // The timeline: every generation, every claim, round, takeover and hand-back.
@@ -285,6 +294,14 @@ describe('the landing session page', () => {
     expect(page().textContent).toContain('Taken over by a new process on runner wikova · claim 2');
     expect(page().textContent).toContain('Handed back by runner wikova · claim 2');
     expect(page().textContent).toContain('Merge check passed · 17m 02s');
+    // The marks carry the status (05 a/e/i): queued ≡, in hand ↻, done ✓, failed ✗, takeover ↗,
+    // hand-back ↩ — not a neutral dot/ring/triangle.
+    const marks = [...page().querySelectorAll<HTMLElement>('.landing-timeline-glyph')]
+      .map((mark) => `${mark.textContent}:${mark.className.replace('landing-timeline-glyph ', '')}`);
+    expect(marks).toEqual([
+      '≡:is-queued', '✗:is-failed',
+      '↻:is-running', '↻:is-running', '↗:is-takeover', '↩:is-queued', '✓:is-ok',
+    ]);
     expect(page().textContent).toContain('Orbit runs this landing — nothing to type here.');
     expect(page().textContent).toContain('Decisions: the coordinator');
     // No conversation anatomy: no composer, no model, no rename, no share.
@@ -296,6 +313,7 @@ describe('the landing session page', () => {
 
   it('opens a check’s output from its line', async () => {
     view = landing({
+      currentAttempt: attempt({ state: 'CHECK_FAILED' }),
       timeline: {
         sections: [{
           title: 'Generation 1',
@@ -321,11 +339,52 @@ describe('the landing session page', () => {
       nextCursor: null,
     });
     await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    // A failed check shows the tail it died on inline (05 g), and its Log › still opens the page.
+    expect(page().querySelector('.landing-live-output')?.textContent)
+      .toContain('FAIL  server-execution > runs on the server');
     await click(button('Log ›'), 'the log press');
     expect(opened).toContain(`/sessions/${SESSION}/landing/log?jobId=job-1&claim=1&round=1&check=1`);
     expect(page().textContent).toContain('FAIL  server-execution > runs on the server');
     await click(button('Log ›'), 'the log press again');
-    expect(page().textContent).not.toContain('FAIL  server-execution > runs on the server');
+    expect(page().querySelector('.landing-log')).toBeNull();
+  });
+});
+
+describe('the check in hand', () => {
+  it('streams the running check’s tail inline, and its Log still opens a finished one', async () => {
+    view = landing({
+      timeline: {
+        sections: [{
+          title: 'Generation 2', jobId: 'job-1', kind: 'LAND_TASK', generation: 2, state: 'RUNNING',
+          entries: [{
+            id: 'c1', seq: 1, kind: 'CLAIMED', at: at(14, 56), claim: 1, round: 1,
+            check: null, phase: 'FETCH', step: null, actor: { type: 'RUNNER' }, reason: null,
+            data: null, text: 'Claimed by runner wikova · claim 1',
+          }, {
+            id: 'c2', seq: 2, kind: 'CHECK_STARTED', at: at(14, 56, 40), claim: 1, round: 1,
+            check: { name: 'MERGE_CHECK', index: 1 }, phase: 'CHECK', step: null,
+            actor: { type: 'RUNNER' }, reason: null, data: null,
+            text: 'Merge check started · claim 1 · wikova',
+          }],
+        }],
+        facts: [], truncated: false,
+      },
+    });
+    logAnswer = () => Promise.resolve({
+      jobId: 'job-1',
+      entries: [
+        { jobId: 'job-1', claim: 1, round: 1, check: { name: 'MERGE_CHECK', index: 1 }, seq: 0,
+          text: '$ npm run build && npm test -w @orbit/apiserver\n ✔ wiki-daily-limit.spec.ts\n', truncatedBytes: 0, at: at(14, 58) },
+        { jobId: 'job-1', claim: 1, round: 1, check: { name: 'MERGE_CHECK', index: 1 }, seq: 1,
+          text: ' ✔ wiki-dossier-pages.spec.ts\n ▶ project-integration-line.spec.ts\n', truncatedBytes: 0, at: at(14, 58, 10) },
+      ],
+      nextCursor: null,
+    });
+    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    expect(page().textContent).toContain('Merge check · live 1m 50s');
+    const block = page().querySelector('.landing-live-output');
+    expect(block?.textContent).toContain('$ npm run build && npm test -w @orbit/apiserver');
+    expect(block?.textContent).toContain('▶ project-integration-line.spec.ts');
   });
 });
 
@@ -333,8 +392,24 @@ describe('a timed-out landing', () => {
   it('draws the server’s Timed out head, the claim line and J12’s nothing-pushed sentence', async () => {
     view = landing({
       currentAttempt: attempt({
-        phase: 'REBASE', liveness: 'LEASE_EXPIRED', timedOut: true, heartbeatAt: at(14, 35, 30),
+        phase: 'REBASE', liveness: 'LEASE_EXPIRED', timedOut: true, retryable: true,
+        heartbeatAt: at(14, 35, 30),
       }),
+      timeline: {
+        sections: [{
+          title: 'Generation 2', jobId: 'job-1', kind: 'LAND_TASK', generation: 2, state: 'RUNNING',
+          entries: [{
+            id: 't1', seq: 1, kind: 'STEP', at: at(14, 34), claim: 1, round: 1,
+            check: null, phase: 'FETCH', step: null, actor: { type: 'RUNNER' }, reason: null,
+            data: null, text: 'Fetched · synced main',
+          }, {
+            id: 't2', seq: 2, kind: 'STEP', at: at(14, 35), claim: 1, round: 1,
+            check: null, phase: 'REBASE', step: null, actor: { type: 'RUNNER' }, reason: null,
+            data: null, text: 'Rebasing onto project/p1',
+          }],
+        }],
+        facts: [], truncated: false,
+      },
     });
     await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
     expect(page().textContent).toContain('Timed out');
@@ -372,7 +447,7 @@ describe('a timed-out landing', () => {
 describe('a read this device cannot make', () => {
   it('freezes the card at Update unavailable and opens no door', async () => {
     view = landing({
-      currentAttempt: attempt({ liveness: 'LEASE_EXPIRED', timedOut: true }),
+      currentAttempt: attempt({ liveness: 'LEASE_EXPIRED', timedOut: true, retryable: true }),
     });
     sessionAnswer = () => Promise.reject(new Error('network down'));
     await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
@@ -438,7 +513,9 @@ describe('the merge round’s sections and its gates', () => {
 
   it('a lease-expired task landing gives only Abandon and the server’s Retry', async () => {
     view = landing({
-      currentAttempt: attempt({ liveness: 'LEASE_EXPIRED', timedOut: true, phase: 'REBASE' }),
+      currentAttempt: attempt({
+        liveness: 'LEASE_EXPIRED', timedOut: true, retryable: true, phase: 'REBASE',
+      }),
     });
     await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
     await click(page().querySelector('button[aria-label="More actions"]'), 'the ⋯ menu');
@@ -449,7 +526,7 @@ describe('the merge round’s sections and its gates', () => {
   });
 
   it('drops Stop Landing once the attempt is past the push boundary', async () => {
-    view = landing({ currentAttempt: attempt({ phase: 'PUSH' }) });
+    view = landing({ currentAttempt: attempt({ phase: 'PUSH', pushBoundaryPassed: true }) });
     await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
     await click(page().querySelector('button[aria-label="More actions"]'), 'the ⋯ menu');
     expect(document.body.textContent).not.toContain('Stop Landing');
@@ -473,6 +550,10 @@ describe('a settled merge round', () => {
       promotionId: 'promo-1',
       settledAt: at(9, 51),
       settledAs: 'MERGED',
+      timeline: {
+        sections: [], facts: [{ kind: 'PROMOTION_STATE', text: 'Merge round · merged', data: null }],
+        truncated: false,
+      },
       checks: [{ name: 'MERGE_CHECK', exitCode: 0, expectedExitCode: 0, timedOut: false, durationMs: 17 * 60_000 + 41_000 }],
     });
     mergedRows = [promo()];
@@ -484,6 +565,8 @@ describe('a settled merge round', () => {
     expect(page().textContent).toContain('✓ Passed on the combined tree · 17m 41s');
     expect(page().textContent).toContain('Landed exactly the tested tree 5e5bfca · as a merge commit');
     expect(page().textContent).toContain('This landing is complete — nothing to type here.');
+    // The status card says the round; the board does not repeat it as a timeline fact (05 c).
+    expect(page().textContent).not.toContain('Merge round · merged');
     expect(page().textContent).toContain('The next merge into main opens a new landing (#2).');
     expect(page().textContent).toContain(`Run by Orbit · settled ${landingClockTime(at(9, 51))}`);
   });

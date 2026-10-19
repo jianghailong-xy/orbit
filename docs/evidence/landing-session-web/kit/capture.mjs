@@ -58,7 +58,8 @@ const attempt = (o = {}) => ({
   claim: 1, runnerName: RUNNER, sourceSessionId: SESSION.id, targetRef: `refs/heads/${BRANCH}`,
   startedAt: ago(2 * MIN + 40 * SEC), heartbeatAt: ago(2 * SEC), outputMovedAt: ago(3 * SEC),
   progressProtocol: 'v2', check: { name: 'MERGE_CHECK', index: 1, count: 3, budgetSeconds: 3_600, startedAt: ago(2 * MIN + 40 * SEC) },
-  liveness: 'LIVE', blockingReason: null, timedOut: false, limitSeconds: 600, ...o,
+  liveness: 'LIVE', blockingReason: null, timedOut: false, limitSeconds: 600,
+  retryable: false, pushBoundaryPassed: false, ...o,
 });
 const landing = (o = {}) => ({
   sessionId: LANDING_ID, projectId: PROJECT, subject: 'TASK', taskId: 'task-landing', promotionId: null,
@@ -130,7 +131,7 @@ const FRAMES = {
     title: `Land · ${TASK}`,
     landing: landing({
       currentAttempt: attempt({ state: 'RUNNING', phase: 'REBASE', liveness: 'LEASE_EXPIRED', timedOut: true,
-        startedAt: '2026-09-25T06:33:00Z', heartbeatAt: '2026-09-25T06:35:00Z' }),
+        retryable: true, startedAt: '2026-09-25T06:33:00Z', heartbeatAt: '2026-09-25T06:35:00Z' }),
       timeline: timeoutTimeline,
     }),
     integration: { upstreamRef: 'refs/heads/main', inFlightJobs: [], landTasks: [] },
@@ -167,7 +168,7 @@ const FRAMES = {
   'c-merged': {
     title: `Merge ${BRANCH} → main · #9`,
     landing: landing({
-      subject: 'PROMOTION', taskId: null, promotionId: 'promo-1',
+      subject: 'PROMOTION', taskId: null, promotionId: 'promo-1', episode: 9,
       settledAt: '2026-09-25T01:51:00Z', settledAs: 'MERGED', liveness: null,
       currentAttempt: attempt({ kind: 'LAND_PROMOTION', state: 'MERGED', phase: 'PUSH', liveness: null,
         startedAt: '2026-09-25T01:50:00Z', heartbeatAt: '2026-09-25T01:51:00Z' }),
@@ -235,6 +236,7 @@ for (const theme of ['light', 'dark']) {
       sections: [...document.querySelectorAll('.landing-timeline-heading')].map((n) => n.textContent),
       footer: document.querySelector('.landing-page-foot')?.textContent,
       menu: [...document.querySelectorAll('[role="menuitem"]')].map((n) => n.textContent),
+      menuHtml: [...document.querySelectorAll('[role="menuitem"]')].map((n) => n.innerHTML),
       composer: !!document.querySelector('.workspace-composer textarea'),
     }));
     report.push({ theme, frame: name, ...drawn, unhandled: fixtures.unhandled });

@@ -336,6 +336,15 @@ export interface SessionLandingAttempt<Instant = string> {
   blockingReason: IntegrationJobBlockingReason | null;
   timedOut: boolean;
   limitSeconds: number | null;
+  /** Whether the owner's Retry (`POST /projects/:id/integration/jobs/:jobId/retry`) takes this
+   *  attempt now — the server's answer, never inferred from `timedOut` (§7.2 V6). False for a job
+   *  that is not in flight and for every kind but `LAND_TASK`, which is the only kind that door
+   *  reruns. */
+  retryable?: boolean;
+  /** Whether the current claim is past the push boundary (§2.2 J-T4): a v2 claim's
+   *  `push_reported_generation = claim_generation`, or a legacy claim whose phase is PUSH/VERIFY.
+   *  A stop or cancel is refused past it; the landing page hides those doors on this fact. */
+  pushBoundaryPassed?: boolean;
 }
 
 /** One entry of the landing's todo list: an OPEN integration item of its project. The item's own

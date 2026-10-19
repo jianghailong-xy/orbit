@@ -93,6 +93,8 @@ export const LANDING_PAGE_COPY = {
   THE_RUNNER: 'The runner',
   RUNNER: 'Runner',
   NO_REPORT_FOR: 'No report for',
+  NO_REPORT_FROM: 'No report from',
+  SINCE: 'since',
   LIMIT: 'limit',
   NOTHING_WAS_PUSHED: 'Nothing was pushed',
   MAY_HAVE_BEEN_PUSHED: 'May have been pushed',
@@ -275,15 +277,6 @@ function pushReport(
   return { reported: entry != null, at: entry?.at ?? null };
 }
 
-/** Whether the attempt is past the push boundary (J-T4): the server's `phase`, never a clock. */
-function pastPushBoundary(
-  landing: SessionLandingView,
-  attempt: NonNullable<SessionLandingView['currentAttempt']>,
-): boolean {
-  if (attempt.phase === 'PUSH' || attempt.phase === 'VERIFY') return true;
-  return pushReport(landing, attempt.jobId).reported;
-}
-
 /**
  * Whether a stop or cancel has been ASKED for and the runner has not answered yet (J-T8/M-T10).
  * The ask is a committed fact in the landing's timeline; the attempt stays RUNNING until the
@@ -314,6 +307,10 @@ export interface LandingAttemptCard {
   progress: number | null;
   /** `Output 3s ago · Updated just now` — the two server facts, in §7.2 V6's words. */
   live: string | null;
+  /** The heartbeat is fresh (LIVE or QUIET): the card draws the green freshness dot. */
+  fresh: boolean;
+  /** Where the check's USUAL duration sits on its budget bar, for the board's little tick. */
+  usualProgress: number | null;
   /** What stopped it, in a sentence under the head (a failed check, a conflict, an error). */
   failure: string | null;
   running: boolean;
@@ -365,6 +362,8 @@ export function landingAttemptCard(
         : null,
       progress: null,
       live: updated === null ? null : `Updated ${updated}m ago`,
+      fresh: false,
+      usualProgress: null,
       failure: null,
       running: false,
       timedOut: false,
@@ -386,6 +385,8 @@ export function landingAttemptCard(
       budget: null,
       progress: null,
       live: null,
+      fresh: false,
+      usualProgress: null,
       failure: null,
       running: false,
       timedOut: true,
@@ -405,6 +406,8 @@ export function landingAttemptCard(
       budget: null,
       progress: null,
       live: null,
+      fresh: false,
+      usualProgress: null,
       failure: null,
       running: false,
       timedOut: false,
@@ -512,6 +515,10 @@ export function landingAttemptCard(
       ? Math.max(0, Math.min(1, (elapsedAt - stepStart) / (attempt.check.budgetSeconds * 1_000)))
       : null,
     live,
+    fresh: liveness === 'LIVE' || liveness === 'QUIET',
+    usualProgress: attempt.check && facts.typicalMs != null
+      ? Math.max(0, Math.min(1, facts.typicalMs / (attempt.check.budgetSeconds * 1_000)))
+      : null,
     failure: null,
     running: true,
     timedOut: false,
@@ -520,6 +527,11 @@ export function landingAttemptCard(
 
 function checkLabel(name: string): string {
   return name === 'MERGE_CHECK' ? LANDING_PAGE_COPY.MERGE_CHECK : LANDING_PAGE_COPY.TASK_ACCEPTANCE;
+}
+
+/** `Merge check` / `Task acceptance`, the names the check rows use. */
+export function landingCheckLabel(name: string): string {
+  return checkLabel(name);
 }
 
 /** The card for an attempt that has ended but whose subject has not: what stopped it. */
@@ -566,6 +578,8 @@ function terminalCard(
     budget: null,
     progress: null,
     live: null,
+    fresh: false,
+    usualProgress: null,
     failure: unavailable ? null : failure,
     running: false,
     timedOut: false,
@@ -719,14 +733,18 @@ export function landingGates(
   const expired = attempt.timedOut || attempt.liveness === 'LEASE_EXPIRED';
   const inFlight = attempt.state === 'RUNNING' || attempt.state === 'QUEUED';
   if (!inFlight) return NO_LANDING_GATES;
-  const pastPush = pastPushBoundary(landing, attempt);
+  // The two facts the server publishes for exactly this decision (§2.9 LS6): `retryable` is the
+  // queue's own answer to whether the owner's Retry takes this attempt, and `pushBoundaryPassed`
+  // is J-T4's boundary computed from the claim. Neither rule is re-derived here.
+  const pastPush = attempt.pushBoundaryPassed === true;
   const cancelling = landingCancelling(landing);
   return {
     stop: attempt.kind === 'LAND_TASK' && !expired && !pastPush && !cancelling,
     cancel: attempt.kind === 'LAND_PROMOTION' && !expired && !pastPush && !cancelling,
     abandon: attempt.state === 'RUNNING' && expired,
-    retry: expired && attempt.kind === 'LAND_TASK',
-    recheck: expired && attempt.kind === 'CHECK_PROMOTION' && landing.promotionId != null,
+    retry: attempt.retryable === true,
+    recheck: attempt.timedOut === true && attempt.kind === 'CHECK_PROMOTION'
+      && landing.promotionId != null,
   };
 }
 
@@ -859,6 +877,24 @@ export function landingTimeoutLine(
     parts.push(`round ${attempt.round}${attempt.check ? ` of ${attempt.check.count}` : ''}`);
   }
   return parts.join(' · ');
+}
+
+/**
+ * The grey band a timed-out attempt's section ends with (mockups 05 e, f, i): the runner's last
+ * word that never came. Null for an attempt the server has not judged timed out.
+ */
+export function landingNoReportBand(
+  landing: SessionLandingView,
+): { text: string; at: string } | null {
+  const attempt = landing.currentAttempt;
+  if (!attempt?.timedOut) return null;
+  const at = attempt.heartbeatAt ?? attempt.startedAt;
+  const runner = attempt.runnerName;
+  const who = runner ? `${LANDING_PAGE_COPY.NO_REPORT_FROM} ${runner}` : `${LANDING_PAGE_COPY.NO_REPORT_FROM} the runner`;
+  return {
+    text: `${who} ${LANDING_PAGE_COPY.SINCE} ${landingClockTime(at)}`,
+    at,
+  };
 }
 
 /** The footer: what this page is, and the one way out of it that matters. */

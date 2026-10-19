@@ -6,6 +6,7 @@ import {
   FileTextOutlined,
   MoreOutlined,
   MessageOutlined,
+  ReloadOutlined,
   SafetyCertificateOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -18,11 +19,13 @@ import { api, type SessionDetail } from '../api';
 import {
   LANDING_PAGE_COPY,
   landingAttemptCard,
+  landingCheckLabel,
   landingFooter,
   landingGates,
   landingHeaderSub,
   landingHeaderTitle,
   landingMenuItemList,
+  landingNoReportBand,
   landingOutcomeCard,
   landingPushSentence,
   landingRefetchMs,
@@ -44,7 +47,7 @@ import { encodeId } from '../lib/idCodec';
 import { projectTaskPath } from '../lib/projectTaskRoute';
 import { promotionOnPassLine } from '../lib/projectMerge';
 import { mainBranchName } from '../lib/projectStart';
-import { LandingHead } from './ProjectPanoramaHeader';
+import { LandingHead, landingClock } from './ProjectPanoramaHeader';
 import {
   ProjectPromotion,
   ProjectPromotionReceipt,
@@ -291,7 +294,10 @@ export function LandingSessionView({
           <span className="landing-page-title">
             {landingHeaderTitle(landing, row.title, taskTitle.data?.title ?? null)}
           </span>
-          <span className="landing-page-chip">{LANDING_PAGE_COPY.CHIP}</span>
+          <span className="landing-page-chip">
+            <span className="landing-page-chip-glyph" aria-hidden="true">↻</span>
+            {LANDING_PAGE_COPY.CHIP}
+          </span>
           {items.length > 0 ? (
             <Menu
               side="bottom"
@@ -351,11 +357,20 @@ export function LandingSessionView({
                   {card.progress != null ? (
                     <div className="landing-card-meter" aria-hidden="true">
                       <i style={{ width: `${Math.round(card.progress * 100)}%` }} />
+                      {card.usualProgress != null ? (
+                        <b className="landing-card-meter-tick"
+                          style={{ left: `${Math.round(card.usualProgress * 100)}%` }} />
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
               ) : null}
-              {card.live ? <div className="landing-card-live">{card.live}</div> : null}
+              {card.live ? (
+                <div className="landing-card-live">
+                  {card.fresh ? <span className="landing-live-dot" aria-hidden="true" /> : null}
+                  {card.live}
+                </div>
+              ) : null}
               {timeoutLine ? <div className="landing-card-line">{timeoutLine}</div> : null}
               {pushSentence ? (
                 pushSentence === LANDING_PAGE_COPY.CHECK_PUSHES_NOTHING_SENTENCE
@@ -406,6 +421,7 @@ export function LandingSessionView({
         <LandingTimeline
           landing={landing}
           main={main}
+          now={now}
           openLog={log}
           onOpenLog={setLog}
           sessionId={sessionId}
@@ -488,6 +504,8 @@ function menuIcon(action: LandingMenuAction): ReactNode {
     case 'STOP':
     case 'CANCEL':
     case 'ABANDON': return <CloseOutlined />;
+    case 'RETRY':
+    case 'RERUN_THE_CHECK': return <ReloadOutlined />;
     default: return undefined;
   }
 }
@@ -512,12 +530,14 @@ function LandingTimeline({
   landing,
   main,
   sessionId,
+  now,
   openLog,
   onOpenLog,
 }: {
   landing: SessionLandingView;
   main: string;
   sessionId: string;
+  now: number;
   openLog: LandingLogSelectors | null;
   onOpenLog: (log: LandingLogSelectors | null) => void;
 }): JSX.Element | null {
@@ -525,70 +545,104 @@ function LandingTimeline({
   if (!timeline || (timeline.sections.length === 0 && timeline.facts.length === 0)) {
     return null;
   }
-  const currentJobId = landing.currentAttempt?.jobId ?? null;
+  const attempt = landing.currentAttempt;
+  const currentJobId = attempt?.jobId ?? null;
+  const noReport = landingNoReportBand(landing);
+  // The current round's state is the status card's to say; the board's timeline does not repeat it
+  // as a fact above the sections (05 c).
+  const facts = timeline.facts.filter((fact) => fact.kind !== 'PROMOTION_STATE');
   return (
     <div className="landing-timeline">
-      {timeline.facts.map((fact, index) => (
+      {facts.map((fact, index) => (
         <div className="landing-timeline-fact" key={`fact-${fact.kind}-${index}`}>{fact.text}</div>
       ))}
-      {timeline.sections.map((section) => (
-        <section
-          key={section.jobId}
-          className={`landing-timeline-section${section.jobId === currentJobId ? ' is-current' : ''}`}
-          data-job={section.jobId}
-        >
-          <div className="landing-timeline-heading">
-            <span>{section.title}</span>
-            {landingSectionState(section.state) ? (
-              <span className="landing-timeline-state">{landingSectionState(section.state)}</span>
-            ) : null}
-          </div>
-          {section.entries.map((entry, index) => (
-            <div className="landing-timeline-entry" key={entry.id ?? `${entry.kind}-${index}`}>
-              <span className="landing-timeline-time">{clockTime(entry.at)}</span>
-              <span className={`landing-timeline-glyph is-${entry.kind.toLowerCase()}`} aria-hidden="true">
-                {entryGlyph(entry)}
-              </span>
-              <span className="landing-timeline-body">
-                <span className="landing-timeline-text">{entry.text}</span>
-                {entry.reason && !entry.text.includes(entry.reason)
-                  ? <span className="landing-timeline-sub">{entry.reason}</span>
-                  : null}
-                {entry.kind === 'CHECK_FINISHED' && entry.check && section.jobId ? (
-                  <button
-                    type="button"
-                    className="landing-timeline-log"
-                    onClick={() => onOpenLog(openLog?.jobId === section.jobId
-                      && openLog.claim === entry.claim
-                      && openLog.round === (entry.round ?? undefined)
-                      && openLog.check === entry.check!.index
-                      ? null
-                      : {
-                        jobId: section.jobId,
-                        claim: entry.claim,
-                        round: entry.round ?? undefined,
-                        check: entry.check!.index,
-                      })}
-                  >
-                    {`${LANDING_PAGE_COPY.LOG} ›`}
-                  </button>
-                ) : null}
-                {openLog && openLog.jobId === section.jobId
-                  && entry.kind === 'CHECK_FINISHED' && entry.check
-                  && openLog.check === entry.check.index
-                  && openLog.claim === entry.claim
-                  && openLog.round === (entry.round ?? undefined) ? (
-                    <LandingCheckLog
-                      key={`${openLog.jobId}-${openLog.claim ?? 0}-${openLog.round ?? 0}-${openLog.check ?? 0}`}
-                      sessionId={sessionId}
-                      selectors={openLog}
-                    />
-                  ) : null}
-              </span>
+      {timeline.sections.map((section) => {
+        const current = section.jobId === currentJobId;
+        return (
+          <section
+            key={section.jobId}
+            className={`landing-timeline-section${current ? ' is-current' : ''}`}
+            data-job={section.jobId}
+          >
+            <div className="landing-timeline-heading">
+              <span>{section.title}</span>
+              {landingSectionState(section.state) ? (
+                <span className="landing-timeline-state">{landingSectionState(section.state)}</span>
+              ) : null}
             </div>
-          ))}
-        </section>
-      ))}
+            {section.entries.map((entry, index) => {
+              const mark = entryGlyph(entry, section.entries, index);
+              return (
+                <div className="landing-timeline-entry" key={entry.id ?? `${entry.kind}-${index}`}>
+                  <span className="landing-timeline-time">{clockTime(entry.at)}</span>
+                  <span className={`landing-timeline-glyph is-${mark.tone}`} aria-hidden="true">
+                    {mark.glyph}
+                  </span>
+                  <span className="landing-timeline-body">
+                    <span className="landing-timeline-text">{entry.text}</span>
+                    {entry.reason && !entry.text.includes(entry.reason)
+                      ? <span className="landing-timeline-sub">{entry.reason}</span>
+                      : null}
+                    {entry.kind === 'CHECK_FINISHED' && entry.check && section.jobId ? (
+                      <button
+                        type="button"
+                        className="landing-timeline-log"
+                        onClick={() => onOpenLog(openLog?.jobId === section.jobId
+                          && openLog.claim === entry.claim
+                          && openLog.round === (entry.round ?? undefined)
+                          && openLog.check === entry.check!.index
+                          ? null
+                          : {
+                            jobId: section.jobId,
+                            claim: entry.claim,
+                            round: entry.round ?? undefined,
+                            check: entry.check!.index,
+                          })}
+                      >
+                        {`${LANDING_PAGE_COPY.LOG} ›`}
+                      </button>
+                    ) : null}
+                    {openLog && openLog.jobId === section.jobId
+                      && entry.kind === 'CHECK_FINISHED' && entry.check
+                      && openLog.check === entry.check.index
+                      && openLog.claim === entry.claim
+                      && openLog.round === (entry.round ?? undefined) ? (
+                        <LandingCheckLog
+                          key={`${openLog.jobId}-${openLog.claim ?? 0}-${openLog.round ?? 0}-${openLog.check ?? 0}`}
+                          sessionId={sessionId}
+                          selectors={openLog}
+                        />
+                      ) : null}
+                    {/* A check that failed shows the tail it died on, inline (05 g); a passed one
+                        keeps its Log › and stays one line. */}
+                    {entry.kind === 'CHECK_FINISHED' && entry.check && section.jobId
+                      && !entry.text.includes('passed') ? (
+                        <LandingInlineOutput
+                          key={`inline-${section.jobId}-${entry.claim}-${entry.round ?? 0}-${entry.check.index}`}
+                          sessionId={sessionId}
+                          selectors={{
+                            jobId: section.jobId,
+                            claim: entry.claim,
+                            round: entry.round ?? undefined,
+                            check: entry.check.index,
+                          }}
+                        />
+                      ) : null}
+                  </span>
+                </div>
+              );
+            })}
+            {/* The check in hand, as the runner streams it: the live row and its tail (05 a, b). */}
+            {current && attempt?.state === 'RUNNING' && !attempt.timedOut && attempt.check ? (
+              <LandingLiveCheck sessionId={sessionId} attempt={attempt} now={now} />
+            ) : null}
+            {/* The last word that never came, where the attempt stopped (05 e, f, i). */}
+            {current && noReport ? (
+              <div className="landing-timeline-noreport">{noReport.text}</div>
+            ) : null}
+          </section>
+        );
+      })}
       {timeline.truncated ? (
         <div className="landing-timeline-fact">{LANDING_PAGE_COPY.OLDER_ATTEMPTS_HIDDEN}</div>
       ) : null}
@@ -596,28 +650,120 @@ function LandingTimeline({
   );
 }
 
-function entryGlyph(entry: IntegrationTimelineEntry): string {
+/** What a timeline mark says, and the ink it says it in (mockups 05 a/e/i). */
+type TimelineTone = 'queued' | 'running' | 'ok' | 'failed' | 'takeover';
+
+function entryGlyph(
+  entry: IntegrationTimelineEntry,
+  entries: readonly IntegrationTimelineEntry[],
+  index: number,
+): { glyph: string; tone: TimelineTone } {
   switch (entry.kind) {
+    case 'TAKEN_OVER':
+      return { glyph: '↗', tone: 'takeover' };
     case 'CHECK_FINISHED':
-      return entry.text.includes('passed') ? '✓' : '✕';
     case 'RESULT':
     case 'RESULT_FALLBACK':
-      return entry.text.startsWith('Landed') || entry.text.startsWith('Merged') ? '✓' : '◆';
-    case 'CLAIMED':
-    case 'TAKEN_OVER':
-    case 'RELEASED':
-      return '●';
-    case 'STEP':
-    case 'CHECK_STARTED':
-      return '▸';
+      return entry.text.includes('passed') || /^(Landed|Already|Nothing to push|Merged)/.test(entry.text)
+        ? { glyph: '✓', tone: 'ok' }
+        : { glyph: '✗', tone: 'failed' };
     case 'STOP_REQUESTED':
     case 'CANCELLED':
     case 'ABANDONED':
     case 'TIMED_OUT':
-      return '⊘';
+    case 'PUSH_REFUSED':
+      return { glyph: '✗', tone: 'failed' };
+    case 'ENQUEUED':
+    case 'REQUEUED':
+    case 'NEXT_GENERATION':
+    case 'SKIPPED_CHECK':
+    case 'FIX_TASK':
+      return { glyph: '≡', tone: 'queued' };
+    case 'RELEASED':
+      return { glyph: '↩', tone: 'queued' };
+    case 'STEP': {
+      // A step line marks a step's START; once the attempt has moved on to another step, the one
+      // before it is done — the board's green check on "Fetched · synced main" (05 i).
+      const later = entries.slice(index + 1).some((next) =>
+        next.kind === 'STEP' || next.kind === 'CHECK_STARTED' || next.kind === 'TAKEN_OVER'
+        || next.kind === 'RESULT' || next.kind === 'CHECK_FINISHED'
+        || next.kind === 'CANCELLED' || next.kind === 'TIMED_OUT');
+      return later ? { glyph: '✓', tone: 'ok' } : { glyph: '↻', tone: 'running' };
+    }
+    case 'CLAIMED':
+    case 'ROUND':
+    case 'CHECK_STARTED':
+    case 'RECHECK_ON_MOVED_MAIN':
+    case 'RETRY':
+    case 'HANDLING':
+    case 'HANDED_TO':
+    case 'AUTOMATIC_ATTEMPT':
+    case 'CONFIRMATION':
+      return { glyph: '↻', tone: 'running' };
     default:
-      return '·';
+      return { glyph: '≡', tone: 'queued' };
   }
+}
+
+/**
+ * The check running now, inline (mockups 05 a, b, g, j): its name, how long it has been live, and
+ * the tail of what it has printed. The output is the same landing-log read `Log ›` opens, polled
+ * with the page while the check runs; nothing is composed from it but its last lines.
+ */
+function LandingLiveCheck({
+  sessionId,
+  attempt,
+  now,
+}: {
+  sessionId: string;
+  attempt: NonNullable<SessionLandingView['currentAttempt']>;
+  now: number;
+}): JSX.Element | null {
+  const check = attempt.check;
+  if (!check) return null;
+  const page = useQuery({
+    ...landingLogQuery(sessionId, {
+      jobId: attempt.jobId,
+      claim: attempt.claim,
+      round: attempt.round ?? undefined,
+      check: check.index,
+    }),
+    refetchInterval: 4_000,
+  });
+  const started = Date.parse(check.startedAt);
+  const elapsed = Number.isFinite(started) ? landingClock(Math.max(0, now - started)) : '0m 0s';
+  const lines = tailLines((page.data?.entries ?? []).map((entry) => entry.text).join(''));
+  return (
+    <div className="landing-timeline-live">
+      <div className="landing-timeline-live-label">
+        {`${landingCheckLabel(check.name)} · live ${elapsed}`}
+      </div>
+      {lines.length > 0 ? <pre className="landing-live-output">{lines.join('\n')}</pre> : null}
+    </div>
+  );
+}
+
+/** A finished check's last lines, inline: the failure's own words (05 g). */
+function LandingInlineOutput({
+  sessionId,
+  selectors,
+}: {
+  sessionId: string;
+  selectors: LandingLogSelectors;
+}): JSX.Element | null {
+  const page = useQuery(landingLogQuery(sessionId, selectors));
+  const lines = tailLines((page.data?.entries ?? []).map((entry) => entry.text).join(''));
+  if (lines.length === 0) return null;
+  return <pre className="landing-live-output">{lines.join('\n')}</pre>;
+}
+
+/** The last few non-empty lines of a check's output, for the live block. */
+function tailLines(text: string): string[] {
+  return text
+    .replace(/\r/g, '')
+    .split('\n')
+    .filter((line) => line.trim().length > 0)
+    .slice(-6);
 }
 
 function clockTime(instant: string): string {

@@ -14,6 +14,7 @@ import {
   landingGates,
   landingHeaderSub,
   landingHeaderTitle,
+  landingNoReportBand,
   landingMenuItemList,
   landingOutcomeCard,
   landingPushSentence,
@@ -52,6 +53,8 @@ const attempt = (over: Partial<SessionLandingAttempt> = {}): SessionLandingAttem
   blockingReason: null,
   timedOut: false,
   limitSeconds: 600,
+  retryable: false,
+  pushBoundaryPassed: false,
   ...over,
 });
 
@@ -326,6 +329,15 @@ describe('J12: what a timed-out attempt can say about the push', () => {
       .toBe(LANDING_PAGE_COPY.CHECK_PUSHES_NOTHING_SENTENCE);
   });
 
+  it('ends the section with the runner’s silence as the band words it', () => {
+    const timed = attempt({ liveness: 'LEASE_EXPIRED', timedOut: true, heartbeatAt: at(14, 35, 30) });
+    expect(landingNoReportBand(landing({ currentAttempt: timed }))).toEqual({
+      text: `No report from wikova since ${landingClockTime(at(14, 35, 30))}`,
+      at: at(14, 35, 30),
+    });
+    expect(landingNoReportBand(landing())).toBeNull();
+  });
+
   it('names who took the attempt, when, where it stopped and the claim', () => {
     const view = landing({ currentAttempt: timed });
     expect(landingTimeoutLine(view, timed))
@@ -343,15 +355,12 @@ describe('the owner doors the landing view’s facts open (LS6)', () => {
     });
   });
 
-  it('past the push boundary, Stop disappears', () => {
-    expect(gates(landing({ currentAttempt: attempt({ phase: 'PUSH' }) })).stop).toBe(false);
-    expect(gates(landing({ currentAttempt: attempt({ phase: 'VERIFY' }) })).stop).toBe(false);
-    const pushedTimeline = {
-      sections: [section({ entries: [entry({ kind: 'STEP', phase: 'PUSH' })] })],
-      facts: [], truncated: false,
-    };
-    expect(gates(landing({ currentAttempt: attempt({ phase: 'CHECK' }), timeline: pushedTimeline })).stop)
-      .toBe(false);
+  it('past the push boundary, Stop disappears — on the server’s fact alone', () => {
+    // `pushBoundaryPassed` is J-T4's boundary as the server computed it. The page does not read a
+    // phase or a timeline line to decide this: a phase of PUSH with the server saying the claim has
+    // not passed keeps the door open, and the server's true closes it whatever the phase says.
+    expect(gates(landing({ currentAttempt: attempt({ pushBoundaryPassed: true }) })).stop).toBe(false);
+    expect(gates(landing({ currentAttempt: attempt({ phase: 'PUSH' }) })).stop).toBe(true);
   });
 
   it('a merge round offers Cancel while its merge job is before the push', () => {
@@ -363,21 +372,21 @@ describe('the owner doors the landing view’s facts open (LS6)', () => {
   });
 
   it('a lease-expired LAND_TASK offers only Abandon and the server’s Retry', () => {
-    const timed = attempt({ liveness: 'LEASE_EXPIRED', timedOut: true });
+    const timed = attempt({ liveness: 'LEASE_EXPIRED', timedOut: true, retryable: true });
     expect(gates(landing({ currentAttempt: timed }))).toEqual({
       stop: false, cancel: false, abandon: true, retry: true, recheck: false,
     });
   });
 
   it('a lease-expired CHECK_PROMOTION offers Abandon and Re-run the check', () => {
-    const timed = attempt({ kind: 'CHECK_PROMOTION', liveness: 'LEASE_EXPIRED', timedOut: true });
+    const timed = attempt({ kind: 'CHECK_PROMOTION', liveness: 'LEASE_EXPIRED', timedOut: true, retryable: false });
     expect(gates(landing({ subject: 'PROMOTION', promotionId: 'promo-1', currentAttempt: timed }))).toEqual({
       stop: false, cancel: false, abandon: true, retry: false, recheck: true,
     });
   });
 
   it('a lease-expired LAND_PROMOTION has no Retry and no Cancel — only Abandon', () => {
-    const timed = attempt({ kind: 'LAND_PROMOTION', liveness: 'LEASE_EXPIRED', timedOut: true });
+    const timed = attempt({ kind: 'LAND_PROMOTION', liveness: 'LEASE_EXPIRED', timedOut: true, retryable: false });
     expect(gates(landing({ subject: 'PROMOTION', promotionId: 'promo-1', currentAttempt: timed }))).toEqual({
       stop: false, cancel: false, abandon: true, retry: false, recheck: false,
     });
@@ -429,7 +438,7 @@ describe('the ⋯ menu', () => {
 
   it('a lease-expired task landing gives Abandon and Retry, never a Copy Link', () => {
     const timed = landing({
-      currentAttempt: attempt({ liveness: 'LEASE_EXPIRED', timedOut: true }),
+      currentAttempt: attempt({ liveness: 'LEASE_EXPIRED', timedOut: true, retryable: true }),
     });
     const items = labels(timed);
     const actions = items.map((item) => item.action);
