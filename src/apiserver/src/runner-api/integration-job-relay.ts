@@ -1572,8 +1572,12 @@ export async function applyIntegrationJobResult(
     // J-T8: a job somebody asked to stop does not open a card for the work it is stopping. A
     // failure it reports before it gets the stop is a fact about work nobody is waiting for any
     // more — the task was reopened or taken away, the candidate was superseded or retired — and an
-    // item about it would be a todo with no door its owner would take.
-    if (itemKind && !candidateMovedOn && !cancelRequested) {
+    // item about it would be a todo with no door its owner would take. The same holds for an
+    // ABANDONED generation (J-T8's exception, revision 24): stop and abandon both mean this
+    // generation is not wanted, and an item about it would ask somebody to fix work that was
+    // deliberately given up. The promotion is still blocked below, and the job row keeps the code
+    // and detail a reader needs.
+    if (itemKind && !candidateMovedOn && !cancelRequested && !platformEnd) {
       // A promotion's item is named after the merge it is about: into the project's main branch.
       const mainBranch = job.kind === 'LAND_TASK'
         ? null
@@ -1683,10 +1687,16 @@ export interface AbandonedIntegrationJob {
  * `ERROR`, through the SAME result transaction every runner-reported end goes through.
  *
  * WHY IT SHARES THAT TRANSACTION. Everything a result implies has to be written with it or not at
- * all, and an abandoned job implies the same things: its exception item (`INTEGRATION_ERROR`, the
- * same item a runner's `ERROR` opens, assigned by the project's routing), its promotion's
- * `BLOCKED` state, and the J-T8 deferred DONE an abandoned `LAND_TASK` was holding. Writing them
- * anywhere else would let a reader see a terminal job with an item still owed, or the reverse.
+ * all, and an abandoned job implies the same things: its promotion's `BLOCKED` state (an error the
+ * candidate's owner has to look at) and the J-T8 deferred DONE an abandoned `LAND_TASK` was
+ * holding. Writing them anywhere else would let a reader see a terminal job with a transition
+ * still owed, or the reverse.
+ *
+ * NO FAILURE ITEM (J-T8's exception, revision 24). A stopped generation opens no card — the
+ * exception the X table's `INTEGRATION_ERROR` entry makes — and an abandoned generation is one of
+ * those: stop and abandon both say "this generation is not wanted", and a todo asking somebody to
+ * fix work that was deliberately given up is a todo with no door its owner would take. The job row
+ * keeps the code and the detail, and a promotion is still blocked.
  *
  * WHAT IT DOES NOT DO. It does not queue the next generation (J-T1b): abandonment is "only end,
  * never re-queue", for all three kinds. The one exception is J-T8's deferred DONE — the enqueue a

@@ -45,9 +45,10 @@ import { ProjectPromotionService } from './project-promotion.service';
  *   * its answer is J12's: a v2 claim that recorded no PUSH — and every CHECK_PROMOTION — is
  *     RUNNER_LOST ("nothing was pushed"); a v2 claim that recorded PUSH, and every legacy landing
  *     claim, is PUSH_OUTCOME_UNKNOWN ("may have been pushed");
- *   * it ends the job as ERROR, opens the same exception item a runner-reported ERROR opens, moves
- *     a promotion to BLOCKED, queues no next generation, closes the claim to late reports and
- *     results, and releases the serial slot so the next job is claimed on the next beat;
+ *   * it ends the job as ERROR, opens NO failure item (J-T8's exception, revision 24: stop and
+ *     abandon both mean the generation is not wanted), moves a promotion to BLOCKED, queues no
+ *     next generation, closes the claim to late reports and results, and releases the serial slot
+ *     so the next job is claimed on the next beat;
  *   * stop ends a QUEUED landing CANCELLED on the spot, asks a live RUNNING claim
  *     (`cancel_requested_at`, settled by its result), ends one already past its lease as ERROR, and
  *     is refused past the push boundary and when nothing is in flight.
@@ -434,19 +435,14 @@ test('abandon: the lease gate, J12\'s code, and only-end-never-re-queue', {
       await stack.db.projectIntegrationJob.count({ where: { taskId: first.taskId, kind: 'LAND_TASK' } }),
       1,
     );
-    if (!abandoned.abandoned.openItemId) {
-      // The relay answers the item as part of the aftermath; both spellings name the same row.
-      const item = await stack.db.projectOpenItem.findFirstOrThrow({
-        where: { integrationJobId: firstJob.jobId },
-      });
-      assert.equal(item.kind, 'INTEGRATION_ERROR');
-    } else {
-      const item = await stack.db.projectOpenItem.findUniqueOrThrow({
-        where: { id: abandoned.abandoned.openItemId },
-      });
-      assert.equal(item.kind, 'INTEGRATION_ERROR');
-      assert.equal(item.state, 'OPEN');
-    }
+    // J-T8's exception (revision 24): an abandoned generation opens no failure card — the work was
+    // deliberately given up, and nobody is being asked to fix it. The row keeps the code.
+    assert.equal(abandoned.abandoned.openItemId, null);
+    assert.equal(
+      await stack.db.projectOpenItem.count({ where: { integrationJobId: firstJob.jobId } }),
+      0,
+      'no exception item is opened for an abandoned generation',
+    );
 
     // The next job on the same serial key is claimed on the very next beat.
     const [next] = await beat(stack, w);
