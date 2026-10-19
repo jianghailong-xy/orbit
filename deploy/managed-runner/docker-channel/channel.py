@@ -31,6 +31,12 @@ The rules it keeps, whoever asks:
     per GiB of the host's memory, whichever is fewer), so the token's holder cannot multiply them.
   - A data volume is removed only where an operator turned removal on (`allowVolumeRemoval`): the
     manager never removes one, so by default nobody can through this channel.
+  - Where the managed runners' host firewall is configured (a `firewall/config.json` beside this
+    configuration file, which scripts/install-server.sh writes), no runner container is created or
+    started unless the firewall service's status (`firewall/status.json`) says its rules are in force
+    now, since this host last started, for the configured network's bridge: 503 FIREWALL_NOT_ENFORCED,
+    which the manager retries. Neither a boot nor a firewall that stopped checking lets one start
+    unprotected.
   - The runner credential, and the generation and instance UID the runner presents, reach the
     container as read-only files in its bootstrap volume (root-owned, mode 0444), written before it
     starts. The credential is never in an environment, a label or a log line, and the runner is
@@ -104,6 +110,8 @@ RUNNER_ENV_KEYS = (
 )
 # Docker container states in which processes of the container may exist.
 LIVE_STATES = ("running", "paused", "restarting")
+# The managed runners' host firewall (deploy/managed-runner/firewall): its directory, beside the configuration file.
+FIREWALL_DIR = "firewall"
 ZERO_TIME = "0001-01-01T00:00:00Z"
 
 
@@ -238,6 +246,39 @@ def default_max_containers(info):
     That holds every runner of a profile giving each at least one CPU and 1 GiB, which is more than the manager's
     budget (the host less a reserve) can ever start; it reads this cap in /v1/info and plans for no more."""
     return max(1, min(int(info.get("NCPU") or 0), int(info.get("MemTotal") or 0) // GiB))
+
+
+def network_bridge(network):
+    """The Linux bridge of a Docker bridge network: the name its options give, or Docker's br-<first 12 of its ID>."""
+    named = (network.get("Options") or {}).get("com.docker.network.bridge.name")
+    return named or (f"br-{network['Id'][:12]}" if network.get("Id") else None)
+
+
+def boot_id(path="/proc/sys/kernel/random/boot_id"):
+    try:
+        return Path(path).read_text().strip()
+    except OSError:
+        return ""
+
+
+def firewall_status(path, now, current_boot=None):
+    """(True, status) if the firewall service's status file says its rules are in force now, or (False, why not): the
+    same reading as the firewall's own health check (deploy/managed-runner/firewall/firewall.py, read_status)."""
+    try:
+        status = json.loads(Path(path).read_text())
+    except (OSError, ValueError) as error:
+        return False, f"no status from the firewall service ({error.__class__.__name__})"
+    if not isinstance(status, dict) or status.get("schemaVersion") != 1:
+        return False, "the firewall's status file is not one this channel reads"
+    current_boot = boot_id() if current_boot is None else current_boot
+    if status.get("state") != "enforced":
+        return False, f"the firewall service reports {status.get('state')!r}: {status.get('reason', 'no reason given')}"
+    if current_boot and status.get("bootId") != current_boot:
+        return False, "the firewall's status is from before this host last started"
+    valid_until = status.get("validUntil")
+    if not isinstance(valid_until, int) or now > valid_until:
+        return False, f"the firewall service has not confirmed its rules since {status.get('checkedAt')}"
+    return True, status
 
 
 def read_token(path):
@@ -665,7 +706,7 @@ def server_url_field(value):
 # ── the channel ─────────────────────────────────────────────────────────────────────────────────
 
 class Channel:
-    def __init__(self, config, docker, token, clock=time.time):
+    def __init__(self, config, docker, token, clock=time.time, firewall_dir=None):
         self.config = config
         self.docker = docker
         self.token = token
@@ -690,6 +731,7 @@ class Channel:
         self.host_name = None
         self.network_facts = None
         self.image_env = ()
+        self.firewall_dir = Path(firewall_dir) if firewall_dir else None
 
     # ── start-up ────────────────────────────────────────────────────────────────────────────────
 
@@ -752,8 +794,38 @@ class Channel:
                     log(f"container {name} breaks the template ({'; '.join(problems)}): removed before it ever ran")
                     self.docker.remove_container(name)
                     continue
+                refusal = self.firewall_refusal()
+                if refusal:
+                    log(f"container {name} was created and never started: left for the manager, the firewall not being in force ({refusal})")
+                    continue
                 self.populate_and_start(name, credential, int(labels[GENERATION_LABEL]), runner_id, labels[UID_LABEL])
                 log(f"container {name}: an interrupted create was finished and started")
+
+    # ── the managed runners' host firewall ──────────────────────────────────────────────────────
+
+    def firewall_refusal(self):
+        """Why no runner container may start now, or None. Only where the firewall is configured (the install writes
+        firewall/config.json beside this configuration file): then its service's status must say the rules are in
+        force, fresh and from this boot, for the bridge the configured network has now."""
+        if self.firewall_dir is None or not (self.firewall_dir / "config.json").exists():
+            return None
+        ok, status = firewall_status(self.firewall_dir / "status.json", self.clock())
+        if not ok:
+            return status
+        network = self.docker.network(self.config["network"]) or {}
+        bridge = network_bridge(network)
+        if status.get("bridge") != bridge:
+            return (f"its rules are for the bridge {status.get('bridge')}, and network {self.config['network']} has "
+                    f"{bridge or 'no bridge'} now")
+        if status.get("gateway") not in {entry.get("Gateway") for entry in (network.get("IPAM") or {}).get("Config") or []}:
+            return f"its rules are for the gateway {status.get('gateway')}, which network {self.config['network']} does not have"
+        return None
+
+    def require_firewall(self):
+        refusal = self.firewall_refusal()
+        if refusal:
+            log(f"no runner container is started: the managed runners' host firewall is not in force ({refusal})")
+            raise Refused(503, "FIREWALL_NOT_ENFORCED", f"the managed runners' host firewall is not in force: {refusal}")
 
     # ── helpers ─────────────────────────────────────────────────────────────────────────────────
 
@@ -1064,6 +1136,7 @@ class Channel:
                     stale = never_started and unsafe_container(self.config, found, self.image_env)
                     if self.same_identity(labels, body) and not stale:
                         if status == "created":
+                            self.require_firewall()
                             credential = self.matching_credential(body)
                             self.populate_and_start(name, credential, body["generation"], runner_id, labels[UID_LABEL])
                             return 200, self.container_view(self.docker.container(name))
@@ -1075,6 +1148,7 @@ class Channel:
                         continue
                     raise Refused(409, "CONTAINER_CONFLICT",
                                   f"an earlier {name} is still there; it is removed only once its stop is proven")
+                self.require_firewall()
                 created = self.create_new(name, runner_id, body)
                 if created is not None:
                     return 201, created
@@ -1468,7 +1542,10 @@ def serve_config(config_path, disk_probe_path=None):
 def serve(config_path, disk_probe_path=None):
     config = serve_config(config_path, disk_probe_path)
     token = read_token(config["tokenFile"])
-    channel = Channel(config, Docker(config["dockerSocket"]), token)
+    firewall_dir = Path(config_path).resolve().parent / FIREWALL_DIR
+    channel = Channel(config, Docker(config["dockerSocket"]), token, firewall_dir=firewall_dir)
+    if (firewall_dir / "config.json").exists():
+        log(f"runner containers start only while the managed runners' host firewall is in force ({firewall_dir}/status.json)")
     channel.prepare()
     server = make_server(config, channel)
     stop = threading.Event()
