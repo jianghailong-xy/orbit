@@ -16,6 +16,7 @@ import { ProjectAttributionModule } from './project-attribution.module';
 import { ProjectHandoffModule } from './project-handoff.module';
 import { TaskCheckpointService } from './task-checkpoint.service';
 import { ProjectsService } from './projects.service';
+import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
 
 // PrismaModule is @Global. SessionsModule is imported for Project reads that join Sessions and is
 // never re-provided: SessionsService is a singleton with its own state, and a second instance from
@@ -52,6 +53,10 @@ import { ProjectsService } from './projects.service';
     // Merging a project branch into main (§3). Provided here and exported, so the runner door that
     // notices a landing and the owner door that answers the card are the same instance.
     ProjectPromotionService,
+    // The owner's abandon door (J-T10) writes through the same result transaction the runner's
+    // result route does. The relay is stateless (a logger and Prisma), so the instance here and the
+    // runner module's own are interchangeable; providing it here avoids a module cycle.
+    IntegrationJobRelay,
   ],
   exports: [
     ProjectHandoffModule,

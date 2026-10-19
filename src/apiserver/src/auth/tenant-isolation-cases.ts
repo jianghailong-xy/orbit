@@ -352,6 +352,18 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.projectId, jobId: of.integrationJobId } }),
     nested: ['jobId'],
   },
+  // The owner's abandon (J-T10) and stop (J-T8) doors. Another account's project is a 404; on the
+  // owner's own project the abandon names a QUEUED job (answered "not running") and the stop names
+  // the task whose queued landing that job is (answered by the stop itself), so neither is refused
+  // as an id that names nothing.
+  'POST /projects/:id/integration/jobs/:jobId/abandon': {
+    request: (of) => ({ params: { id: of.projectId, jobId: of.integrationJobId } }),
+    nested: ['jobId'],
+  },
+  'POST /projects/:id/tasks/:taskId/integration/stop': {
+    request: (of) => ({ params: { id: of.projectId, taskId: of.projectTaskId } }),
+    nested: ['taskId'],
+  },
   'POST /projects/:id/promotions/:promotionId/integration/retry': {
     request: (of) => ({ params: { id: of.projectId, promotionId: of.promotionId }, body: { reason: 'the census' } }),
     nested: ['promotionId'],

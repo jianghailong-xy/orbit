@@ -850,6 +850,30 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			"like any landing; if it fails, a new item reaches you on its own and these are marked "+
 			"superseded.\n"+prettyJSON(raw), false)
 
+	case "integration_abandon":
+		id := getString(args, "projectId")
+		jobID := getString(args, "jobId")
+		if id == "" || jobID == "" {
+			return toolResult("projectId and jobId are required: the job to abandon is one the project's "+
+				"runner has stopped reporting on", true)
+		}
+		reason := strings.TrimSpace(getString(args, "reason"))
+		if reason == "" {
+			return toolResult("reason is required: say why this job's runner is not coming back. It stays "+
+				"on the job as the record of why the work was given up", true)
+		}
+		// The acting session IS the authority, as it is for integration_retry: the server checks it
+		// against the project's own coordinator pointer, and refuses a job that is still reporting
+		// (its lease has not expired) or one that is not running at all.
+		raw, err := s.t.abandonIntegrationJob(s.sessionID, id, jobID, reason)
+		if err != nil {
+			return toolResult("integration abandon failed: "+err.Error(), true)
+		}
+		return toolResult("The job is ended as an error with your reason on it, and nothing is queued "+
+			"in its place. If its runner may have pushed, the record says so and the merge may already "+
+			"have happened; the next job on this repository and branch can be claimed now.\n"+
+			prettyJSON(raw), false)
+
 	case "integration_skip_merge_check":
 		id := getString(args, "projectId")
 		taskID := getString(args, "taskId")
@@ -3804,6 +3828,40 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"one. Up to 2000 characters; it stays on the new job and on every item it handles.",
 				},
 			}, "projectId", "reason"),
+		},
+		{
+			"name": "integration_abandon",
+			"description": "End a running integration job whose runner has stopped reporting, as the " +
+				"conversation that coordinates this project. This is the door for a job no result will " +
+				"ever reach: a runner that crashed, was fenced, or belongs to a disabled account never " +
+				"takes its claim over, and the job holds its repository-and-branch slot for ever. The " +
+				"server's gate is the claim's lease: it must have expired (ten minutes without a report, " +
+				"or — for a legacy claim in a check — the check's budget plus the lease), and the job must " +
+				"still be RUNNING; no item ownership, Automatic switch or owner blocker is consulted. The " +
+				"job ends as ERROR, and the record says whether it is known that nothing was pushed " +
+				"(RUNNER_LOST: a merge-check job, which never pushes, or a landing whose current claim " +
+				"is v2 and recorded no PUSH) or that it may have been pushed (PUSH_OUTCOME_UNKNOWN: every " +
+				"legacy landing claim). Nothing is queued in its place: abandonment only ends. The " +
+				"exception item a failure opens says the same, and the project branch or main is left " +
+				"exactly as it was. Refused when the job is not running (INTEGRATION_ABANDON_NOT_RUNNING), " +
+				"when its runner is still reporting (INTEGRATION_ABANDON_LEASE_LIVE), and for a job or " +
+				"project of another account; only the project's current coordinator conversation may call " +
+				"it.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"jobId": map[string]interface{}{
+					"type":        "string",
+					"description": "The running job to abandon, as the integration view or the job list names it.",
+				},
+				"reason": map[string]interface{}{
+					"type": "string",
+					"description": "Why this job's runner is not coming back. Required, up to 2000 " +
+						"characters, and kept on the job as the record of why the work was given up.",
+				},
+			}, "projectId", "jobId", "reason"),
 		},
 		{
 			"name": "integration_skip_merge_check",

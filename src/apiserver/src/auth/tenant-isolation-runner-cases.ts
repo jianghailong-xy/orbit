@@ -522,6 +522,18 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     }),
     nested: ['promotionId'],
   },
+  // The coordinator's abandon (J-T10). The acting session is the project's current coordinator, as
+  // on the retry doors above; the machine's own job is RUNNING and inside its lease, so the owner's
+  // own press reaches the gate and is answered "lease live" rather than an id that names nothing.
+  'POST /runner/projects/:id/integration/jobs/:jobId/abandon': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId, jobId: of.runner.integrationJobId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      body: { reason: 'the census' },
+    }),
+    nested: ['jobId'],
+  },
   'DELETE /runner/projects/:id': { as: RUNNER, request: (of) => ({ params: { id: of.spare.projectId } }) },
 
   // ── watches, service tokens, workspaces, providers ───────────────────────────────────────────────
@@ -681,6 +693,10 @@ const coordinatorRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenan
   }),
   'POST /runner/projects/:id/promotions/:promotionId/integration/retry': (mine) => ({
     params: { id: mine.projectId, promotionId: mine.promotionId },
+    body: { reason: 'the census' },
+  }),
+  'POST /runner/projects/:id/integration/jobs/:jobId/abandon': (mine) => ({
+    params: { id: mine.projectId, jobId: mine.runner.integrationJobId },
     body: { reason: 'the census' },
   }),
 };
