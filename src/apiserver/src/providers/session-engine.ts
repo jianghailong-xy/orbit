@@ -14,6 +14,7 @@
 import { AgentProvider, isEngine } from '@orbit/shared';
 import { Prisma } from '@prisma/client';
 import { accountPoolRuntime, builtinSessionEngine, keyRowEngine } from './custom-provider';
+import { LANDING_PROVIDER_SLUG } from './provider-slug';
 
 /** The fields the derivation reads off a session row. */
 export interface SessionEngineFacts {
@@ -38,6 +39,10 @@ export async function legacySessionEngine(
   db: Prisma.TransactionClient,
   session: SessionEngineFacts,
 ): Promise<AgentProvider | null> {
+  // A LANDING session is platform-driven and has no engine (0436). Its provider is a reserved value,
+  // never a key, so the row the migration parks on it must not be read as one (and a LANDING row has
+  // no engine by design: the boot backfill asks only about CONVERSATION rows).
+  if (session.provider === LANDING_PROVIDER_SLUG) return null;
   const builtin = builtinSessionEngine(session.provider, session.providerBuiltin);
   if (builtin) return builtin;
   const slug = session.provider!;

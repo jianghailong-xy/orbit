@@ -10,6 +10,7 @@ import {
   SessionDispatchOrigin,
   TaskStatus,
 } from '@prisma/client';
+import { BadRequestException } from '@nestjs/common';
 import { Client } from 'pg';
 
 import {
@@ -1005,6 +1006,49 @@ test('M-T13 receipts settle LANDED / ALREADY_LANDED; MOVE_TASK settles CANCELLED
       await stack.db.$disconnect();
     }
   });
+
+/** The sentence an HttpException answers with, whichever shape its body has. */
+function messageOf(error: BadRequestException): string {
+  const body = error.getResponse() as string | { message?: unknown };
+  return typeof body === 'string' ? body : String(body?.message ?? '');
+}
+
+test('a session or a task cannot be created on the reserved orbit provider', { skip, timeout: 120_000 }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'orbit-reserved');
+    for (const role of ['USER', 'ADMIN']) {
+      // An admin's provider scope includes shared (owner_id NULL) rows, which is exactly the row the
+      // migration parks on this slug; the refusal must come from the reserved value, not the row.
+      await stack.db.user.update({ where: { id: w.ownerId }, data: { role: role as never } });
+      await assert.rejects(
+        stack.sessions.create(w.ownerId, {
+          prompt: 'hello', title: `on orbit ${role}`, workspaceId: w.workspaceId, provider: 'orbit',
+        }),
+        (error: unknown) => error instanceof BadRequestException
+          && messageOf(error).includes('provider not available: "orbit"'),
+        `a ${role} must not create a session on the platform provider`,
+      );
+      await assert.rejects(
+        stack.tasks.create(w.ownerId, {
+          title: `pinned to orbit ${role}`,
+          assigneeId: w.workspaceId,
+          projectId: w.projectId,
+          acceptanceCommand: 'exit 0',
+          acceptanceExpectedExitCode: 0,
+          provider: 'orbit',
+        } as never),
+        (error: unknown) => error instanceof BadRequestException
+          && messageOf(error).includes('provider not available'),
+        `a ${role} must not pin a task to the platform provider`,
+      );
+      assert.equal(await stack.db.session.count({ where: { title: `on orbit ${role}` } }), 0);
+      assert.equal(await stack.db.task.count({ where: { title: `pinned to orbit ${role}` } }), 0);
+    }
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
 
 // ── the derived label ───────────────────────────────────────────────────────────────────────────
 

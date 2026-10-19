@@ -13,10 +13,12 @@
 -- ============
 --   1. `session.kind` — the closed set CONVERSATION | LANDING, default CONVERSATION. The column is
 --      added with a constant default (catalog-only on PostgreSQL 11+), and its CHECK is added
---      NOT VALID and then VALIDATEd in a second statement: a direct CHECK would scan the hottest
---      table in the schema while holding ACCESS EXCLUSIVE. VALIDATE holds SHARE UPDATE EXCLUSIVE
---      and does not block reads or writes. The FIELD is spelled `sessionKind` everywhere (Prisma
---      included) because web list rows already spread a `kind: 'session'` into their payload.
+--      NOT VALID inside this migration's transaction; the VALIDATE runs AFTER this file's COMMIT, as
+--      a statement of its own. That placement is the point: ADD COLUMN takes ACCESS EXCLUSIVE and
+--      holds it until the transaction ends, so a VALIDATE inside it would scan the hottest table in
+--      the schema under that lock; standing alone, its scan holds SHARE UPDATE EXCLUSIVE and blocks
+--      no reads or writes. The FIELD is spelled `sessionKind` everywhere (Prisma included) because
+--      web list rows already spread a `kind: 'session'` into their payload.
 --   2. `project_landing` — the landing subject: project / owner / codebase, subject (TASK |
 --      PROMOTION), the task or promotion it is keyed by, its episode, the pre-generated session id,
 --      and how/when it settled. One unsettled TASK segment per task, one unsettled PROMOTION round
@@ -253,13 +255,12 @@ EXECUTE FUNCTION protect_builtin_orbit_provider_guard();
 -- ---------------------------------------------------------------------------------------------
 -- 2. The session discriminator.
 -- ---------------------------------------------------------------------------------------------
--- A constant default is catalog-only: no rewrite, no scan. The CHECK is added NOT VALID first so
--- the ACCESS EXCLUSIVE lock is held only for the catalog change, and VALIDATEd separately under
--- SHARE UPDATE EXCLUSIVE.
+-- A constant default is catalog-only: no rewrite, no scan. The CHECK is added NOT VALID here, so
+-- this transaction's ACCESS EXCLUSIVE lock (held from ADD COLUMN to COMMIT) covers only catalog
+-- changes; the VALIDATE is the statement after this file's COMMIT, in its own transaction.
 ALTER TABLE "session" ADD COLUMN "kind" TEXT NOT NULL DEFAULT 'CONVERSATION';
 ALTER TABLE "session" ADD CONSTRAINT "session_kind_check"
   CHECK ("kind" IN ('CONVERSATION', 'LANDING')) NOT VALID;
-ALTER TABLE "session" VALIDATE CONSTRAINT "session_kind_check";
 
 -- ---------------------------------------------------------------------------------------------
 -- 3. The landing subject.
@@ -321,3 +322,9 @@ CREATE INDEX "project_integration_job_landing_idx"
     ON "project_integration_job" ("landing_id", "created_at");
 
 COMMIT;
+
+-- The discriminator's scan, deliberately OUTSIDE the transaction above: ADD COLUMN's ACCESS
+-- EXCLUSIVE lock ended at the COMMIT, so this VALIDATE takes only its own SHARE UPDATE EXCLUSIVE
+-- and blocks no reads or writes. Running it inside the transaction would have scanned the hottest
+-- table in the schema while still holding ACCESS EXCLUSIVE.
+ALTER TABLE "session" VALIDATE CONSTRAINT "session_kind_check";

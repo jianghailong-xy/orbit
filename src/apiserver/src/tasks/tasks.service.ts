@@ -181,6 +181,7 @@ import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/live-session-status
 import { readCurrentVerifier, readTaskWorkState } from '../projects/project-task-work-state';
 import { readTaskIntegrationViews } from '../projects/project-task-integration';
 import { stopInFlightJob } from '../projects/project-integration-line';
+import { LANDING_PROVIDER_SLUG } from '../providers/provider-slug';
 import {
   settleTaskSegmentAfterCancel,
   settleTaskSegmentAfterMove,
@@ -12019,6 +12020,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * decrypted only for a key on Anthropic's protocol, the one protocol a subscription token runs on.
    */
   private async keyQuota(ownerId: string, slug: string): Promise<{ subscription: boolean } | null> {
+    // The LANDING provider's row is a compatibility fence, not a key (0436): it must never be
+    // decrypted or read as an account's credential by the quota gate.
+    if (slug === LANDING_PROVIDER_SLUG) return null;
     const row = await this.prisma.modelProvider.findFirst({
       where: { slug, OR: [{ ownerId }, { ownerId: null }] },
       select: { runtime: true, baseUrl: true, apiKeyEnc: true, presetSlug: true },
