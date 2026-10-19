@@ -59,6 +59,16 @@ const CHECK_TYPICAL_SAMPLE = 5;
 const MERGED_RECORD_LIMIT = 20;
 
 /**
+ * The states whose round has a landing session the card opens (§2.9 LS1, §3.6): the check in
+ * flight, the landing the owner confirmed, the re-check after main moved, and a merge already made
+ * — the receipt's "Open landing ›". A candidate asking its owner, a blocked one and one that ended
+ * are waiting on no landing to open.
+ */
+const LANDING_SESSION_STATES: ReadonlySet<string> = new Set([
+  'CHECKING', 'CONFIRMED', 'RECHECKING', 'MERGED',
+]);
+
+/**
  * Merging a project's finished work into its upstream (`docs/project-integration-line-contract.md`
  * §3): making the candidate, offering it to the owner, and doing what they decide.
  *
@@ -404,13 +414,16 @@ export class ProjectPromotionService {
     if (rows.length === 0) return [];
     // One read for every title the whole history names, and one for when the branch last took the
     // upstream in — rather than two per row: the same question asked of twenty rows is one query.
-    const [titles, upstreamSyncedAt] = await Promise.all([
+    const [titles, upstreamSyncedAt, landingSessions] = await Promise.all([
       this.titlesIn(rows.flatMap((row) => row.includedTaskIds), userId),
       this.lastUpstreamSync(projectId),
+      // A merged row's receipt opens the landing its round made (§3.6's "Open landing ›").
+      this.landingSessionsOf(rows),
     ]);
     return rows.map((row) => promotionView(row, {
       tasks: tasksOfTitles(row.includedTaskIds, titles),
       upstreamSyncedAt,
+      landingSessionId: landingSessions.get(row.id) ?? null,
       // A merged row is not re-checking anything: the re-check is a state a landing is IN, and this
       // one has come out the other side.
       recheck: null,
@@ -426,7 +439,7 @@ export class ProjectPromotionService {
    * merge differently, and the card the owner pressed has to be the card they get back.
    */
   private async view(row: PromotionRow): Promise<ProjectPromotionView> {
-    const [tasks, upstreamSyncedAt, merge, onPass] = await Promise.all([
+    const [tasks, upstreamSyncedAt, merge, onPass, landingSessionId] = await Promise.all([
       this.tasksOf(row),
       this.lastUpstreamSync(row.projectId),
       this.mergeExecution(row),
@@ -435,6 +448,8 @@ export class ProjectPromotionService {
         ? readAutomaticProjectFacts(this.prisma, row).then((facts) =>
           promotionOnPass({ sourceKind: row.sourceKind, ...facts }))
         : null,
+      // The landing this round belongs to, on the states the card opens it from.
+      this.landingSessionOf(row),
     ]);
     // Only a re-check in flight is measured, which keeps the poll of a card nobody is acting on to
     // the two reads above.
@@ -446,11 +461,57 @@ export class ProjectPromotionService {
       }
       : null;
     return promotionView(row, {
-      tasks, upstreamSyncedAt, recheck, onPass,
+      tasks, upstreamSyncedAt, recheck, onPass, landingSessionId,
       execution: merge.execution,
       cancelRequested: merge.cancelRequested,
       pushBoundaryPassed: merge.pushBoundaryPassed,
     });
+  }
+
+  /**
+   * The landing session of one candidate's round (§2.9 LS1), null on a state that is not waiting
+   * on a landing and when the round recorded none.
+   */
+  private async landingSessionOf(row: PromotionRow): Promise<string | null> {
+    if (!LANDING_SESSION_STATES.has(row.state)) return null;
+    const sessions = await this.landingSessionsOf([row]);
+    return sessions.get(row.id) ?? null;
+  }
+
+  /**
+   * The same answer for several candidates in one read — the merged history's receipts — and read
+   * through each candidate's own jobs.
+   *
+   * Never through `project_landing.promotion_id`: that column names the FIRST candidate of a round,
+   * and every later candidate that joined it (a supersession, a resubmission) would then read as
+   * having no landing at all. A job of the candidate carries the landing it actually belongs to.
+   */
+  private async landingSessionsOf(rows: readonly PromotionRow[]): Promise<Map<string, string>> {
+    if (rows.length === 0) return new Map();
+    const jobs = await this.prisma.projectIntegrationJob.findMany({
+      where: { promotionId: { in: rows.map((row) => row.id) }, landingId: { not: null } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: { promotionId: true, landingId: true },
+    });
+    // The newest attempt of each candidate names its round; a later one never moves it.
+    const landingOf = new Map<string, string>();
+    for (const job of jobs) {
+      if (job.promotionId && job.landingId && !landingOf.has(job.promotionId)) {
+        landingOf.set(job.promotionId, job.landingId);
+      }
+    }
+    if (landingOf.size === 0) return new Map();
+    const landings = await this.prisma.projectLanding.findMany({
+      where: { id: { in: [...new Set(landingOf.values())] } },
+      select: { id: true, sessionId: true },
+    });
+    const sessionOf = new Map(landings.map((landing) => [landing.id, landing.sessionId]));
+    const sessions = new Map<string, string>();
+    for (const [promotionId, landingId] of landingOf) {
+      const sessionId = sessionOf.get(landingId);
+      if (sessionId) sessions.set(promotionId, sessionId);
+    }
+    return sessions;
   }
 
   /**

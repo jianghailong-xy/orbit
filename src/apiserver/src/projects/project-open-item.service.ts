@@ -55,6 +55,7 @@ import {
   conversationIsOver,
   coordinatorQuestion,
   deliveryReviewDetailLine,
+  landingSessionIdOf,
   markOpenItemsHandling,
   openItemActions,
   openItemChat,
@@ -250,6 +251,10 @@ export interface OpenItemRow {
   /** The attempt this item is about, when one is recorded: the run whose failure opened it. It is
    *  what the card's "Open task session" reaches, and a task can have had several. */
   sessionId: string | null;
+  /** The landing session of the attempt this item is about (§2.9 LS1), recorded on its payload when
+   *  the failure opened it; null for a payload an older build wrote and for the kinds that land
+   *  nothing. `OPEN_LANDING` opens it. */
+  landingSessionId: string | null;
   promotionId: string | null;
   fuseEpisodeId: string | null;
   /** Where this item is on its way to the coordinator, or that it is not owed to one. */
@@ -268,6 +273,7 @@ export interface OpenItemRow {
     | 'ASK_COORDINATOR_AGAIN'
     | 'RESUME'
     | 'ANSWER'
+    | 'OPEN_LANDING'
   >;
   /** The server's one-sentence next step, optional for rolling-version readers. */
   requiredAction?: string;
@@ -280,7 +286,8 @@ export interface OpenItemRow {
     | 'CANCEL_TASK'
     | 'ASK_COORDINATOR_AGAIN'
     | 'RESUME'
-    | 'ANSWER';
+    | 'ANSWER'
+    | 'OPEN_LANDING';
   /** What was asked, for a `COORDINATOR_QUESTION`; null for every other kind (§5.2, §4.8). */
   question: CoordinatorQuestion | null;
   /** What a `START_REQUEST` asks — the "Start this project?" card's source; null for every other
@@ -2960,6 +2967,7 @@ export class ProjectOpenItemService {
         taskId: row.taskId,
         handledBy: handledBy.get(row.id) ?? [],
         sessionId: row.sessionId,
+        landingSessionId: landingSessionIdOf(row.payload),
         promotionId: row.promotionId,
         fuseEpisodeId: row.fuseEpisodeId,
         delivery: row.assignee !== 'COORDINATOR'
@@ -3044,6 +3052,7 @@ export class ProjectOpenItemService {
         taskId: row.taskId,
         handledBy: handledBy.get(row.id) ?? [],
         sessionId: row.sessionId,
+        landingSessionId: landingSessionIdOf(row.payload),
         promotionId: row.promotionId,
         fuseEpisodeId: row.fuseEpisodeId,
         // Nobody is owed anything about a closed item, so nothing is on its way to anybody and

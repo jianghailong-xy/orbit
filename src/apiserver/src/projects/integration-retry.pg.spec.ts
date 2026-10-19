@@ -554,6 +554,11 @@ interface ItemRow {
   payload: {
     failureClass?: string;
     generation?: number;
+    /** §2.9 LS1: the landing session the attempt belongs to; null when the job had no subject. */
+    landingSessionId?: string | null;
+    /** The round the failed claim last reported; null when no report measured one. */
+    round?: number | null;
+    errorDetail?: Record<string, unknown> | null;
     retry?: { retryOfJobId?: string; failureClass?: string; reason?: string; requestedBySessionId?: string; requestedByUserId?: string };
     check?: { name: string; timedOut?: boolean };
   };
@@ -893,6 +898,22 @@ test('CHECK_TIMED_OUT and ERROR are rerun, a CONFLICT is not',
       const clash = await failedLanding(stack, conflicted, 'retry-conflict', CONFLICTED);
       const [conflictItem] = await itemsOf(stack.db, clash.task.taskId);
       assert.equal(conflictItem?.payload.failureClass, 'CONFLICT');
+      // §4.2 / §2.9 LS1: a conflict's payload names the landing it belongs to at its top level —
+      // never inside the runner's `errorDetail` — and states the round it failed in only when a
+      // report measured one (a result carries no round report, so this one is null).
+      const conflictJob = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: conflictItem!.integrationJobId! },
+        select: { landingId: true },
+      });
+      const conflictLanding = await stack.db.projectLanding.findUniqueOrThrow({
+        where: { id: conflictJob.landingId! },
+        select: { sessionId: true },
+      });
+      assert.equal(conflictItem?.payload.landingSessionId, conflictLanding.sessionId,
+        'the conflict names the landing its attempt belongs to');
+      assert.equal(conflictItem?.payload.round, null, 'a result reports no round');
+      assert.equal('landingSessionId' in (conflictItem?.payload.errorDetail ?? {}), false,
+        'the landing is not hidden inside the quoted error detail');
       const refused = await denied(() => retry(stack, conflicted, clash.task.taskId, 'try again'));
       assert.equal(refused.status, 409);
       assert.equal(refused.code, 'INTEGRATION_RETRY_NOT_APPLICABLE');

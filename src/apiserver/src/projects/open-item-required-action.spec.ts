@@ -109,3 +109,21 @@ test('the primary action never escapes the resolved door list', () => {
     assert.ok(doorsForOpenItem(row).some((door) => door.implemented && door.action === action));
   }
 });
+
+/**
+ * The landing door is appended, not inserted: a row that names the landing session its failure came
+ * from still leads with the press it always led with, and says the same next step. Both are
+ * byte-for-byte what the card approved (G6's sibling rule for the card's own fields).
+ */
+test('a landing session on the row changes neither the primary action nor the required sentence', () => {
+  const landingSessionId = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5a74';
+  for (const cell of OPEN_ITEM_DOOR_TABLE) {
+    const row = rowFor(cell);
+    const withSession = { ...row, payload: { ...row.payload, landingSessionId } };
+    const where = `${cell.todoType}/${cell.sourceJob}/${cell.failureClass}/${cell.assignee}`;
+    assert.equal(primaryAction(withSession), primaryAction(row),
+      `${where}: the lead press moved when the landing session was named`);
+    assert.equal(openItemRequiredAction(withSession), openItemRequiredAction(row),
+      `${where}: the required sentence moved when the landing session was named`);
+  }
+});

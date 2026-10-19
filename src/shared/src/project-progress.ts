@@ -921,7 +921,8 @@ export type OpenItemAction =
   | 'CANCEL_TASK'
   | 'ASK_COORDINATOR_AGAIN'
   | 'RESUME'
-  | 'ANSWER';
+  | 'ANSWER'
+  | 'OPEN_LANDING';
 
 /** What a coordinator asked its owner to decide (§5.2 R7). */
 export interface CoordinatorQuestion {
@@ -1099,6 +1100,13 @@ export interface ProjectOpenItemRow<Instant = string> {
   handledBy?: Array<{ taskId: string; title: string; state: string }>;
   /** The attempt this item is about, when there is one: the run whose failure opened it. */
   sessionId: string | null;
+  /**
+   * The landing session of the attempt this item is about (§2.9 LS1), when the row recorded one:
+   * the conversation that owns the landing whose failure opened it. `OPEN_LANDING` opens it, and
+   * the transcript card links to it. Null for a row an older build opened, and for a kind that
+   * lands nothing (a question, a pause, a start request).
+   */
+  landingSessionId?: string | null;
   promotionId: string | null;
   fuseEpisodeId: string | null;
   delivery: { state: OpenItemDeliveryState; sessionId: string | null; at: Instant | null };
@@ -1261,6 +1269,12 @@ export interface OpenItemDeliveryCard {
     upstream: string;
     integration: string;
   } | null;
+  /**
+   * The landing session of the attempt this item is about (§2.9 LS1), or null for a delivery whose
+   * item recorded none (a promotion's item, a kind that lands nothing, a row an older build
+   * opened). The card's "Open the landing ↗" is drawn from it.
+   */
+  landingSessionId: string | null;
 }
 
 /**
@@ -1449,6 +1463,14 @@ export interface ProjectPromotionView<Instant = string> {
    * able to say "2m so far" when the platform has neither rather than print a zero it made up.
    */
   recheck: { upstreamMovedBy: number | null; startedAt: Instant; typicalMs: number | null } | null;
+  /**
+   * The landing session of this round of merging into main (§2.9 LS1), while there is one to open:
+   * `CHECKING`, `CONFIRMED` and `RECHECKING` (the check line opens it), and `MERGED` (the receipt's
+   * "Open landing ›"). Null on every other state — a candidate asking its owner, a blocked one, one
+   * that was declined or retracted — and on a candidate whose round recorded no session. Absent
+   * from a server that predates the field.
+   */
+  landingSessionId?: string | null;
   /**
    * What the check in flight leads to when it passes (§3.6): `MERGE` when the project's Automatic
    * setting will merge it into main by itself (§3.3 M-T11), `ASK` when the owner will get the card.

@@ -117,12 +117,16 @@ public struct OpenItemDelivery: Sendable, Equatable, Codable {
     /// kept and simply has no label to draw (`OpenItemDeliveryCard.actionLabels`).
     public let actions: [String]
     public let landing: OpenItemDeliveryLandingFacts?
+    /// The landing session this failure came from (§2.9 LS1), if the network recorded one: the
+    /// card's "Open the landing ↗". Nil for a payload an older server recorded.
+    public let landingSessionId: String?
 
     public init(itemId: String, kind: ProjectOpenItemKind, title: String,
                 task: OpenItemDeliveryTask? = nil, files: [String] = [], targetRef: String? = nil,
                 check: OpenItemDeliveryCheck? = nil, errorCode: String? = nil,
                 failure: OpenItemDeliveryFailure? = nil, actions: [String] = [],
-                landing: OpenItemDeliveryLandingFacts? = nil) {
+                landing: OpenItemDeliveryLandingFacts? = nil,
+                landingSessionId: String? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
@@ -134,6 +138,7 @@ public struct OpenItemDelivery: Sendable, Equatable, Codable {
         self.failure = failure
         self.actions = actions
         self.landing = landing
+        self.landingSessionId = landingSessionId
     }
 
     /// The card a `user` event's payload carries, or nil for the ordinary case: a turn that is
@@ -170,7 +175,8 @@ public struct OpenItemDelivery: Sendable, Equatable, Codable {
             errorCode: nonEmptyString(card["errorCode"]),
             failure: failure(card["failure"]),
             actions: strings(card["actions"]),
-            landing: landing(card["landing"]))
+            landing: landing(card["landing"]),
+            landingSessionId: nonEmptyString(card["landingSessionId"]))
     }
 
     private static func nonEmptyString(_ value: JSONValue?) -> String? {
