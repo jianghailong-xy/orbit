@@ -54,8 +54,8 @@ type mcpServer struct {
 	allowOrchestration    bool   // L3: expose session_* tools (the account's orchestration switch)
 	watchesOff            bool   // spawned with ORBIT_WATCHES=off: no watch tools (watch_rollout.go)
 	wikiOff               bool   // spawned with ORBIT_WIKI=off: no wiki tools (wiki_tools.go)
-	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (a Wiki maintenance
-	// run, wiki_maintenance_session.go). Nil serves every tool.
+	// Spawned with ORBIT_MCP_TOOLS: these tools and no others, listed or called (the runner-hosted job an
+	// owner's wait is handed to, handOffOwnerWait). Nil serves every tool.
 	onlyTools map[string]bool
 	// How long the engine lets one tool call run before it reports the call failed (ORBIT_MCP_CALL_TIMEOUT_SECONDS);
 	// 0 when it waits for as long as the call takes. See handOffOwnerWait.
@@ -81,6 +81,36 @@ func mcpCallTimeoutFromEnv() time.Duration {
 // engine's deadline, leaving the rest for the round-trips around the wait. 0 means no cap.
 func longestInlineWait(callTimeout time.Duration) time.Duration {
 	return callTimeout / 2
+}
+
+// envMCPTools names the only tools `orbit mcp` serves, comma-separated, when it is set: the job an owner's
+// wait is handed to sets it to the one tool that job waits in (handOffOwnerWait).
+const envMCPTools = "ORBIT_MCP_TOOLS"
+
+// mcpToolsFromEnv is ORBIT_MCP_TOOLS as a set, or nil when it is not set: every tool.
+func mcpToolsFromEnv() map[string]bool {
+	raw, ok := os.LookupEnv(envMCPTools)
+	if !ok {
+		return nil
+	}
+	only := map[string]bool{}
+	for _, name := range strings.Split(raw, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			only[name] = true
+		}
+	}
+	return only
+}
+
+// onlyMCPTools keeps the tools `only` names, in the order they are listed.
+func onlyMCPTools(tools []map[string]interface{}, only map[string]bool) []map[string]interface{} {
+	kept := make([]map[string]interface{}, 0, len(only))
+	for _, tool := range tools {
+		if name, _ := tool["name"].(string); only[name] {
+			kept = append(kept, tool)
+		}
+	}
+	return kept
 }
 
 func mcpPermissionPromptEnabled() bool {

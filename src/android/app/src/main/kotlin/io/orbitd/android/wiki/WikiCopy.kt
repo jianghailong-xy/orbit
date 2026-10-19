@@ -213,7 +213,7 @@ internal object WikiModeCopy {
     fun modeNote(mode: String?) = when (mode) {
         "manual" -> "Every change from sessions, maintenance and imports waits for you in Review."
         "tiered" -> "Your own words and machine-checked entries apply at once; the rest show as Unreviewed and are not sent to agents."
-        "automatic" -> "local-vllm checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason."
+        "automatic" -> "The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason."
         else -> ""
     }
     const val spotCheck = "Spot-check Automatic"
@@ -222,17 +222,11 @@ internal object WikiModeCopy {
     const val floorsNote = "principles, anything a session proposed after reading the web, and changes to entries you wrote or confirmed. A run that would change more than 10% of the wiki stops."
     const val maintenance = "Maintenance"
     const val maintenanceName = WikiCopy.historyMaintenance
-    const val maintenanceNote = "Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the workspace you pick, with the provider pinned."
     const val off = "Off"
     const val on = "On"
     const val setUp = "Set up…"
     const val setUpTitle = "Set up maintenance"
     const val status = "Status"
-    const val workspace = "Workspace"
-    const val workspaceNote = "The runner that checks out this codebase; maintenance runs there."
-    const val provider = "Provider"
-    const val providerNote = "Pinned: a run never falls back to another provider."
-    const val pinnedNoFallback = "pinned, no fallback"
     const val dailyLimit = "Daily limit"
     const val runsADayUnit = "runs a day"
     const val dailyLimitNote = "A run starts when 20 sessions have settled, or when the oldest waits a day. Each run writes at most 30 changes."
@@ -255,20 +249,15 @@ internal object WikiModeCopy {
         else -> "Last $days $lookbackUnit"
     }
 
-    // MARK: maintenance while the server executes the account's wiki (mock 35 ①②, P9)
+    // MARK: maintenance as the server executes the wiki (mock 35 ①②, P9)
 
-    /** The workspace row's name while the server reads the repository there (`WIKI_REPO_FROM`). */
+    /** The workspace row's name: where the server reads the repository (`WIKI_REPO_FROM`). */
     const val repoFrom = "Reads the repository from"
     const val repoFromNote = "The runner that checks out this codebase; the server reads the repository there."
     const val model = "Model"
     const val modelNote = "Set by this deployment, the same for every space."
     const val maintenanceNoteServer = "Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the server with this deployment’s System model."
     const val privacyNote = "The wiki sends its material — session summaries, entries and repository excerpts — to this deployment’s System model."
-    /** Automatic's sentence when the server's System model does the checking (`WIKI_MODE_NOTE_AUTOMATIC_SERVER`). */
-    const val modeNoteAutomaticServer = "The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason."
-
-    /** A mode's sentence as the server's execution has it said (`wikiModeNote`): Automatic's alone changes. */
-    fun modeNote(mode: String?, server: Boolean) = if (server && mode == "automatic") modeNoteAutomaticServer else modeNote(mode)
 
     const val confirm = "Confirm"
     const val confirmed = "Confirmed"

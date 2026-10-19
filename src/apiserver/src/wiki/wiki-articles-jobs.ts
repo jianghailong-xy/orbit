@@ -2,23 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { Logger } from '@nestjs/common';
 import { WIKI_ARTICLES_JOB } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
-import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 
 /**
  * When a space's articles become a server job (contracts/wiki.contract.json `articles.regeneration`,
  * `jobs.kindRuns.articles`; the owner's decision of 2026-10-08).
  *
- * TWO PATHS, TWO RULES. Under the default executor (`runner`) nothing here runs: since criterion 3's
- * revision 3 a maintenance run no longer rewrites the topic articles, and nothing else does on its own. For
- * an account the switch gives the server (`server`, or `canary` for a listed account), a maintenance run of a
- * space that SUCCEEDED, RECORDED OPS and was NOT MADE WHILE THE SPACE WAS BEHIND (its catch-up neither active
- * nor paused, as the documents' step reads it) is the fact that makes one `articles` job for the space. The
- * job rewrites only the topics whose fingerprint changed, so a run whose ops changed no topic's entries costs
- * a plan and no model call.
+ * THE RULE. Since criterion 3's revision 3 a maintenance run no longer rewrites the topic articles itself: a
+ * maintenance run of a space that SUCCEEDED, RECORDED OPS and was NOT MADE WHILE THE SPACE WAS BEHIND (its
+ * catch-up neither active nor paused, as the documents' step reads it) is the fact that makes one `articles`
+ * job for the space. The job rewrites only the topics whose fingerprint changed, so a run whose ops changed no
+ * topic's entries costs a plan and no model call.
  *
- * ONE ENTRY. `enqueueWikiArticlesJob` is the one way an articles job is made: the runner path's run end calls
- * it through `queueWikiArticlesAfterSessionRun` (the finish route, `finishWikiMaintenanceRun`), and P8's server
- * maintenance job is to call `queueWikiArticlesAfterRun` with its own run's facts.
+ * ONE ENTRY. `enqueueWikiArticlesJob` is the one way an articles job is made: the server's maintenance job's
+ * end calls it through `queueWikiArticlesAfterRun` with its own run's facts (`finishWikiMaintenanceJob`).
  *
  * ONE QUEUED JOB PER SPACE. A queued job has not read the plan yet, and a job parked on its snapshot
  * (`waiting`) reads it again when it is replayed — either one covers every run that ends before it does, so a
@@ -68,53 +64,16 @@ export async function enqueueWikiArticlesJob(prisma: PrismaService, input: { own
 }
 
 /**
- * The articles job a maintenance run's end owes, when the switch gives this account to the server and the
- * run is one the rule names. Never throws: what it could not queue it logs.
+ * The articles job a maintenance run's end owes, when the run is one the rule names. Never throws: what it
+ * could not queue it logs.
  */
 export async function queueWikiArticlesAfterRun(
   prisma: PrismaService,
   input: { ownerId: string; spaceId: string } & WikiRunEndFacts,
 ): Promise<boolean> {
-  if (!wikiExecutorServes(currentWikiExecutorSwitch(), input.ownerId)) return false;
   if (!wikiArticlesDueAfterRun(input)) return false;
   try {
     return await enqueueWikiArticlesJob(prisma, input);
-  } catch (error) {
-    log.warn(`the articles of space ${input.spaceId} could not be queued after its maintenance run: ${(error as Error)?.message ?? String(error)}`);
-    return false;
-  }
-}
-
-/**
- * The same, for a run of the runner path: its end as the finish route recorded it on the run row of the
- * session's task, and its ops the changesets of origin `maintenance` the session recorded in the space.
- * Nothing is read under an executor that does not give this account to the server.
- */
-export async function queueWikiArticlesAfterSessionRun(
-  prisma: PrismaService,
-  input: { ownerId: string; spaceId: string; sessionId: string },
-): Promise<boolean> {
-  if (!wikiExecutorServes(currentWikiExecutorSwitch(), input.ownerId)) return false;
-  try {
-    const session = await prisma.session.findFirst({ where: { id: input.sessionId, ownerId: input.ownerId }, select: { taskId: true } });
-    const run = session?.taskId
-      ? await prisma.wikiMaintenanceRun.findFirst({
-        where: { taskId: session.taskId, ownerId: input.ownerId, spaceId: input.spaceId },
-        select: { outcome: true, catchUp: true },
-      })
-      : null;
-    if (!run) return false;
-    const recorded = await prisma.wikiChangeset.findFirst({
-      where: { ownerId: input.ownerId, spaceId: input.spaceId, sessionId: input.sessionId, origin: 'maintenance' },
-      select: { id: true },
-    });
-    return await queueWikiArticlesAfterRun(prisma, {
-      ownerId: input.ownerId,
-      spaceId: input.spaceId,
-      outcome: run.outcome,
-      catchUp: run.catchUp,
-      recordedOps: recorded !== null,
-    });
   } catch (error) {
     log.warn(`the articles of space ${input.spaceId} could not be queued after its maintenance run: ${(error as Error)?.message ?? String(error)}`);
     return false;

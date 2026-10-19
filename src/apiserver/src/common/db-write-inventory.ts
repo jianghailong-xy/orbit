@@ -1593,16 +1593,16 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503 from the global boundary; the caller calls again, and what already moved is not found a second time.',
   },
   // The Wiki maintenance run (contracts/wiki.contract.json `maintenance`, migration 0315): the owner's
-  // maintenance settings with the hidden list they make, and what a dossier page records it handed out.
+  // maintenance settings, and what a dossier page records it handed out.
   {
     at: 'wiki/wiki-maintenance-settings.ts#setWikiMaintenance',
     shape: 'TX_RETRIED',
-    locks: 'When maintenance is being turned on and the space has no list yet: the task_list INSERT first, whose owner foreign key takes the user row FOR KEY SHARE (rank 10) and which creates the list row (rank 20); then the wiki_space row FOR UPDATE (rank 60), read again under that lock; then, only for the loser of two first enables, the DELETE of the list it just made (the same rank-20 row, its own); then one UPDATE of that wiki_space row, merging the maintenance key alone; then, only when this write turns maintenance on and the look-back is a number of days, one INSERT … ON CONFLICT (space_id, source) DO UPDATE … WHERE position_at IS NULL of the space\'s wiki_cursor row (rank 60, a child of the space row this transaction already holds, whose foreign key re-check therefore waits on nothing). Ascending throughout: the list is written before the space row is locked, never after, and the cursor after the space.',
-    identity: 'The space and its owner. The list is recorded in the settings only when the locked row has none, so two first enables leave one list: the second finds the first one\'s and deletes its own. The cursor starts only where it has no position — the upsert\'s WHERE — and only for the write whose locked row read maintenance off, so of two enables racing one starts it and the other finds maintenance on; a cursor that has a position is never moved by it.',
+    locks: 'The wiki_space row FOR UPDATE (rank 60), read again under that lock; then one UPDATE of that row, merging the maintenance key alone; then, only when this write turns maintenance on and the look-back is a number of days, one INSERT … ON CONFLICT (space_id, source) DO UPDATE … WHERE position_at IS NULL of the space\'s wiki_cursor row (rank 60, a child of the space row this transaction already holds, whose foreign key re-check therefore waits on nothing). Ascending throughout: the cursor after the space.',
+    identity: 'The space and its owner. The cursor starts only where it has no position — the upsert\'s WHERE — and only for the write whose locked row read maintenance off, so of two enables racing one starts it and the other finds maintenance on; a cursor that has a position is never moved by it.',
     isolation: '',
     attempts: 4,
-    replay: 'The settings are re-read under the row lock inside the closure, and the merge, the list decision and whether this write turns maintenance on are re-derived from them, so a re-run after a conflict reaches what the committed row says. A rolled-back attempt takes the list it made, and the cursor start it wrote, with it; the start\'s moment is the request\'s, taken before the closure, so a re-run writes the same start.',
-    effects: 'None inside, and none after: the list is hidden, so no list-index event is owed.',
+    replay: 'The settings are re-read under the row lock inside the closure, and the merge and whether this write turns maintenance on are re-derived from them, so a re-run after a conflict reaches what the committed row says. A rolled-back attempt takes the cursor start it wrote with it; the start\'s moment is the request\'s, taken before the closure, so a re-run writes the same start.',
+    effects: 'None inside, and none after.',
     answer: 'Typed 503 from the global boundary; the owner saves the setting again.',
   },
   {
@@ -1616,74 +1616,25 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. The page is returned to the maintenance run after the commit.',
     answer: 'Typed 503 from the global boundary; the maintenance run asks for the page again, and what it is handed is recorded then.',
   },
-  // The maintenance job (contracts/wiki.contract.json `maintenance.job`, migration 0320): the task a
-  // committed fact makes for a due space, made under its list's lock.
-  {
-    at: 'wiki/wiki-maintenance-run.ts#makeTask',
-    shape: 'TX_RETRIED',
-    locks: 'The space\'s maintenance task_list row (rank 20) by SELECT … FOR NO KEY UPDATE — the one maker of a maintenance task at a time — before any task of it is read or written; then the list\'s unended tasks, the space\'s queued plan jobs (wiki_plan_job, read, not locked) and today\'s count are read under it; then one task INSERT (its foreign keys take the user, the list this transaction already holds and the workspace FOR KEY SHARE), one wiki_maintenance_run INSERT (rank 60, reaching wiki_space through (space_id, owner_id) FOR KEY SHARE), and one UPDATE of the space\'s wiki_cursor row by id (60). Ascending throughout: the list before the task, the task before the wiki rows.',
-    identity: 'The space\'s maintenance list. Under its lock a task of the list that has not ended, a plan job of the space that waits for the list (contract `plan.jobs.staggered`), or a day whose runs are used up — unless the run is made in active catch-up on a local endpoint, which the day does not count (contract `maintenance.job.catchUp.dailyLimit`) — makes the closure write nothing and answer why, so of two facts arriving together one makes the task and the other finds it, and a job queued meanwhile goes first.',
-    isolation: '',
-    attempts: 4,
-    replay: 'The unended task, the queued plan job and the day\'s count are re-read under the list lock inside the closure, and the rows written are built before it from reads that do not change with a retry, so a re-run either finds its own committed task (and writes nothing) or writes the same task, run row and cursor update.',
-    effects: 'None inside. After the commit and outside the closure: one `task.changed` for the task made (nothing depends on it; the dispatcher reads runAt).',
-    answer: 'Typed 503 from the global boundary is never reached: the trigger runs off the request path, logs the failure, and the next fact of the space asks again.',
-  },
+  // The maintenance job (contracts/wiki.contract.json `maintenance.job`, migration 0320): the run a
+  // committed fact makes for a due space, made under the space's lock.
   {
     at: 'wiki/wiki-maintenance-run.ts#makeJob',
     shape: 'TX_RETRIED',
-    locks: 'The space row (rank 60) by SELECT … FOR NO KEY UPDATE — one maker of a server-executed maintenance run at a time — before anything is read under it; then the space\'s unfinished `maintain` jobs, its queued plan jobs (wiki_plan_job, read, not locked) and today\'s count; then one wiki_maintenance_run INSERT (60, reaching wiki_space through (space_id, owner_id) FOR KEY SHARE), one wiki_job INSERT (60), and one UPDATE of the space\'s wiki_cursor row by id (60). Ascending throughout: the space before the run and the job, the job after the run row that names it.',
-    identity: 'The space, and the run it may be given: under its lock an unfinished `maintain` job — other than the one whose own end asks (`WikiMaintenanceHint.runEnd`, the owner\'s decision of 2026-10-10: the end of a server run that queued its space\'s articles job asks for the next round, and is still running as it ends) — a plan job of the space that waits (contract `plan.jobs.staggered`), or a day whose runs are used up — unless the run is made in active catch-up on a local endpoint, which the day does not count (contract `maintenance.job.catchUp.dailyLimit`) — makes the closure write nothing and answer why, so of two facts arriving together one makes the job and the other finds it. Both ids are minted before the closure, so the run row names its maker from the moment it exists (`wiki_maintenance_run_maker_chk`).',
+    locks: 'The space row (rank 60) by SELECT … FOR NO KEY UPDATE — one maker of a maintenance run at a time — before anything is read under it; then the space\'s unfinished `maintain` jobs and today\'s count; then one wiki_maintenance_run INSERT (60, reaching wiki_space through (space_id, owner_id) FOR KEY SHARE), one wiki_job INSERT (60), and one UPDATE of the space\'s wiki_cursor row by id (60). Ascending throughout: the space before the run and the job, the job after the run row that names it.',
+    identity: 'The space, and the run it may be given: under its lock an unfinished `maintain` job — other than the one whose own end asks (`WikiMaintenanceHint.runEnd`, the owner\'s decision of 2026-10-10: the end of a server run that queued its space\'s articles job asks for the next round, and is still running as it ends) — or a day whose runs are used up makes the closure write nothing and answer why, so of two facts arriving together one makes the job and the other finds it. Both ids are minted before the closure, so the run row names its maker from the moment it exists (`wiki_maintenance_run_maker_chk`).',
     isolation: '',
     attempts: 4,
-    replay: 'The unfinished job, the queued plan job and the day\'s count are read inside the closure under the space lock, so a re-run either finds its own committed run and job (and writes nothing) or writes the same two rows and the same cursor update. The ids are fixed before the closure, so a retry cannot mint a second pair.',
+    replay: 'The unfinished job and the day\'s count are read inside the closure under the space lock, so a re-run either finds its own committed run and job (and writes nothing) or writes the same two rows and the same cursor update. The ids are fixed before the closure, so a retry cannot mint a second pair.',
     effects: 'None inside. After the commit and outside the closure: one `wiki.changed` for the space when a fact made it (WikiMaintenanceTrigger.evaluate), so Activity\'s Runs card refreshes (nothing depends on it); a run\'s end that asks publishes none, as the articles job it queued publishes none.',
     answer: 'Typed 503 from the global boundary is never reached: the trigger runs off the request path, logs the failure, and the next fact of the space asks again.',
   },
-  // A maintenance task that died (contracts/wiki.contract.json `maintenance.job.recovery`, migration
-  // 0356): started again once by a runAt the dispatcher keeps, or closed FAILED, under the list's lock.
-  {
-    at: 'wiki/wiki-maintenance-run.ts#settle',
-    shape: 'TX_RETRIED',
-    locks: 'The space\'s maintenance task_list row (rank 20) by SELECT … FOR NO KEY UPDATE — the lock `makeTask` takes, so a dead task is settled and a task made one at a time — then the task (read), its sessions (read, not locked) and its wiki_maintenance_run row (read) under it; then one conditional UPDATE of the task row (rank 50: its runAt, or its status to FAILED), whose AFTER triggers move its dispatch epoch and the list\'s counts as any task write does, and at most one UPDATE of the run row by id (rank 60). Ascending throughout: the list before the task, the task before the wiki row.',
-    identity: 'The task, and the state it must still be in: OPEN or IN_PROGRESS with no runAt and nothing able to work it, re-read under the list lock and asserted again by both conditional UPDATEs. A second settling of the same death finds the runAt set (a rerun waits) or the task FAILED, and writes nothing.',
-    isolation: '',
-    attempts: 4,
-    replay: 'Everything the decision reads — the task, its sessions, its run row — is read inside the closure under the list lock, so a re-run decides against the committed world: a task started, ended or settled meanwhile is left as it now is, and otherwise the same runAt or the same FAILED and run end are written.',
-    effects: 'None inside. After the commit and outside the closure: one `task.changed` for the tasks settled, published by the trigger (the dispatcher reads runAt; a plan job reads its task\'s end from it).',
-    answer: 'Typed 503 from the global boundary is never reached: the trigger runs off the request path, logs the failure, and the next hint settles the task again.',
-  },
-  // The plan's jobs (contracts/wiki.contract.json `plan.jobs`, migration 0338): the space's hidden
-  // maintenance list a job needs, made when maintenance was never turned on, and the job's task, made
-  // under that list's lock like a maintenance task.
-  {
-    at: 'wiki/wiki-maintenance-settings.ts#ensureList',
-    shape: 'TX_RETRIED',
-    locks: 'The task_list INSERT first, whose owner foreign key takes the user row FOR KEY SHARE (rank 10) and which creates the list row (rank 20); then the wiki_space row FOR UPDATE (rank 60), read again under that lock; then either the DELETE of the list it just made (the same rank-20 row, its own) when the locked row names one already, or one UPDATE of that wiki_space row merging the maintenance key alone. Ascending throughout, as `setWikiMaintenance`: the list is written before the space row is locked, never after.',
-    identity: 'The space and its owner. The list is recorded only when the locked row names none, so two first asks leave one list: the second finds the first one\'s and deletes its own.',
-    isolation: '',
-    attempts: 4,
-    replay: 'The settings are re-read under the row lock inside the closure and the decision is re-derived from them, so a re-run reaches what the committed row says. A rolled-back attempt takes the list it made with it.',
-    effects: 'None inside, and none after: the list is hidden, so no list-index event is owed.',
-    answer: 'Typed 503 from the global boundary; the plan job stays queued or held, and the owner\'s next request or settings change asks again.',
-  },
-  {
-    at: 'wiki/wiki-plan-job.ts#make',
-    shape: 'TX_RETRIED',
-    locks: 'The space\'s maintenance task_list row (rank 20) by SELECT … FOR NO KEY UPDATE — the lock the maintenance trigger takes, so a job and a maintenance run make their tasks one at a time — before any task of it is read or written; then the job (read, not locked) and the list\'s unended tasks are read under it; then one task INSERT (its foreign keys take the user, the list this transaction already holds and the workspace FOR KEY SHARE) and one UPDATE of the wiki_plan_job row by id (rank 60, reaching wiki_space through (space_id, owner_id) FOR KEY SHARE). Ascending throughout: the list before the task, the task before the wiki row.',
-    identity: 'The job and the space\'s maintenance list. Under the list lock a job no longer queued or held, or a task of the list that has not ended, makes the closure write nothing and answer why, so of two facts asking together one makes the task and the other finds it.',
-    isolation: '',
-    attempts: 4,
-    replay: 'The job\'s state and the unended task are re-read under the list lock inside the closure, and the task written is built before it from reads that do not change with a retry, so a re-run either finds its own committed task (and writes nothing) or writes the same task and job update.',
-    effects: 'None inside. After the commit and outside the closure: one `task.changed` for the task made, published by the caller (nothing depends on it; the dispatcher reads runAt).',
-    answer: 'Typed 503 from the global boundary; the job stays queued or held and the next fact asks again.',
-  },
-  // A plan job the server runs (contracts/wiki.contract.json `plan.jobs.server`, migration 0404): its wiki_job
-  // made with it, and no task.
+  // The plan's jobs (contracts/wiki.contract.json `plan.jobs`, `plan.jobs.server`, migrations 0338 and 0404): a job's
+  // wiki_job made with it, and no task.
   {
     at: 'wiki/wiki-plan-job.ts#makeOnServer',
     shape: 'TX_RETRIED',
-    locks: 'One UPDATE of the wiki_plan_job row by id and owner while it is queued or held (rank 60, reaching wiki_space through (space_id, owner_id) FOR KEY SHARE), then one INSERT of the wiki_job row (60; its composite foreign key takes FOR KEY SHARE on the same space row). No task_list row is read or locked: a server-made job does not wait for the hidden list. Ascending throughout.',
+    locks: 'One UPDATE of the wiki_plan_job row by id and owner while it is queued or held (rank 60, reaching wiki_space through (space_id, owner_id) FOR KEY SHARE), then one INSERT of the wiki_job row (60; its composite foreign key takes FOR KEY SHARE on the same space row). No task_list row is read or locked. Ascending throughout.',
     identity: 'The plan job and its state. The UPDATE matches only a job still queued or held, so of two facts asking together one makes it — the other matches no row and the closure writes nothing and answers null.',
     isolation: '',
     attempts: 4,
@@ -1704,25 +1655,12 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside. After the commit and outside the closure: the build is asked to be made (advanceWikiPlanJob — the server\'s maker, makeOnServer, in a transaction of its own), and one `wiki.changed` for the space (nothing depends on it).',
     answer: 'Typed 503 from the global boundary with nothing written; the owner or the administrator asks again, and a build recorded meanwhile answers them.',
   },
-  // The rollback sweep's per-job settle (contracts/wiki.contract.json `jobs.executor.rollback`, the
-  // 2026-10-08 incident): one job's whole cancellation, with every row that waits on its conclusion.
-  {
-    at: 'wiki/wiki-executor-sweep.ts#settle',
-    shape: 'TX_RETRIED',
-    locks: 'The wiki_job row by id while still queued, running or waiting (the job table\'s rank), then the wiki_model_request and wiki_repo_op rows of that job still in flight (same rank; their foreign keys to the job take FOR KEY SHARE on the row this transaction already holds), then the one companion row the kind names — the wiki_maintenance_run by id while outcome IS NULL, or the wiki_plan_job by id while still made (rank 60, reaching wiki_space FOR KEY SHARE). Ascending throughout; nothing else is read or locked inside.',
-    identity: 'The job and its state. The first UPDATE matches only a job still in flight, so a worker that settled the job while the sweep read matches no row and the closure writes nothing; a sweep that runs twice finds the first run\'s cancelled row already settled and matches nothing on the second pass.',
-    isolation: '',
-    attempts: 4,
-    replay: 'Every statement re-decides its rows by the same predicates inside the closure — in flight still, no outcome yet, still made — and the reason string is computed before it, so a re-run either settles the same rows the same way or matches none of them. A failure rolls back whole: the job is left entirely in flight, and the next sweep settles it then.',
-    effects: 'None inside. The sweep\'s caller publishes one `wiki.changed` per space a job was cancelled in, after the commit and outside the closure.',
-    answer: 'Typed 503 from the global boundary; the job stays in flight and the next sweep settles it.',
-  },
   // The retry limit (contracts/wiki.contract.json `jobs.retry.limit`, 2026-10-09): a job whose infra or unexpected
   // failures reached the limit ends failed, with every row that waits on its conclusion.
   {
     at: 'wiki-worker/wiki-jobs.ts#endAtRetryLimit',
     shape: 'TX_RETRIED',
-    locks: 'The wiki_job row by id — running under the claim\'s generation, or queued with attempts at the limit — then, through settleWikiJobRows, the wiki_model_request and wiki_repo_op rows of that job still in flight, then the one companion row the kind names: the wiki_maintenance_run by id while outcome IS NULL, or the wiki_plan_job by id while still made. The rollback sweep\'s order (wiki/wiki-executor-sweep.ts#settle), ascending throughout; nothing else is read or locked inside.',
+    locks: 'The wiki_job row by id — running under the claim\'s generation, or queued with attempts at the limit — then, through settleWikiJobRows, the wiki_model_request and wiki_repo_op rows of that job still in flight, then the one companion row the kind names: the wiki_maintenance_run by id while outcome IS NULL, or the wiki_plan_job by id while still made (rank 60, reaching wiki_space FOR KEY SHARE). Ascending throughout; nothing else is read or locked inside.',
     identity: 'The job and the state the caller expects it in. The UPDATE matches only a job still running under the generation that failed, or still queued at the limit, so a takeover, a requeue another path already settled, or a second end of the same job matches no row and the closure writes nothing.',
     isolation: '',
     attempts: 4,
@@ -1901,8 +1839,8 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   { at: 'wiki-worker/wiki-repo-ops.ts#settleRead', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult' },
   { at: 'wiki-worker/wiki-repo-ops.ts#notifyRepoOpSettled', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult and #failWikiRepoOp' },
   // What waits on a job that ended for good — its calls, its repository operations, its run or plan job — settled
-  // in the transaction that ended it: the rollback sweep's cancellation and the retry limit's failure.
-  { at: 'wiki-worker/wiki-jobs.ts#settleWikiJobRows', under: 'wiki/wiki-executor-sweep.ts#settle and wiki-worker/wiki-jobs.ts#endAtRetryLimit' },
+  // in the transaction that ended it: the retry limit's failure.
+  { at: 'wiki-worker/wiki-jobs.ts#settleWikiJobRows', under: 'wiki-worker/wiki-jobs.ts#endAtRetryLimit' },
   { at: 'common/lock-order.ts#lockCreatorSessions', under: 'every rank-30 caller (I2)' },
   { at: 'common/lock-order.ts#lockTaskLists', under: 'every rank-20 caller (I2)' },
   { at: 'common/session-inbox-fence.ts#retireSessionInboxGeneration', under: 'runner-api takeover/activate/release leases' },
@@ -2524,24 +2462,15 @@ export const STATEMENT_UNITS: readonly StatementUnit[] = [
   { at: 'wiki/wiki-maintenance.ts#advanceCursor', class: 'ONE_ROW_CAS', statements: 2, note: 'At most two statements on the space\'s cursor row. A run that did not succeed: one UPDATE … RETURNING by id that counts the failure and reads the count back — the report that reads exactly `maintenance.health.notify.afterFailures` sends the owner\'s one push for the streak, after the statement and outside any transaction (`WikiMaintenance.announceFailing`), so it is never sent twice for one count. One that succeeded: the move itself is one UPDATE whose WHERE is the compare-and-set — the watermark still behind the token and the furthest issued position not behind it — so of two runs the later position wins; a token at the watermark, or a move another run made first, is one UPDATE by id that records the success. Refusals write nothing.' },
   { at: 'wiki/wiki-maintenance.ts#advanceRecorded', class: 'ONE_ROW_CAS', statements: 1, note: 'A maintenance run recorded its ops and moves the cursor past their sessions (contract `maintenance.job.run.steps`, advance; criterion 3 revision 4): one UPDATE of the space\'s cursor row whose WHERE is the compare-and-set `advanceCursor` moves by — the watermark still behind the token and the furthest issued position not behind it — writing the position alone, never the run\'s health. A token at or behind the watermark, or one another writer passed first, writes nothing; refusals write nothing.' },
   { at: 'wiki/wiki-maintenance-run.ts#cursorOf', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The space\'s cursor row, made the first time a fact asks about the space: one upsert keyed by (space_id, source) whose empty update writes nothing to a row that exists — the same statement `wiki-maintenance.ts#cursorRow` makes. Two first facts racing: the loser\'s unique violation reads the winner\'s row.' },
-  { at: 'wiki/wiki-maintenance-run.ts#hold', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'Why a due space made no task (contract `maintenance.job.held`), written onto its cursor row by id, and only when the reason is not already the one it holds. The next task made clears it.' },
-  { at: 'wiki/wiki-maintenance-run.ts#runOfSession', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'A maintenance session\'s run row: one upsert keyed by its task id (unique), whose empty update writes nothing to the row the trigger made; a task somebody else put in the list gets its row the first time its run asks.' },
-  { at: 'wiki/wiki-maintenance-run.ts#wikiMaintenanceRunContext', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The run started: the calling session, the first start kept and the latest written, one more attempt counted, and what the attempt before it said of its end cleared (contract `maintenance.job.recovery.attempts`) — written onto the run row by id. A retried session or a platform rerun is one more start.' },
-  { at: 'wiki/wiki-maintenance-run.ts#noteWikiMaintenanceRunEnd', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'How the run ended — outcome, whose a failure was, error, report and the ops the server refused — written onto the run row by id after the cursor was advanced or refused. A later end of the same run overwrites it; `orbit wiki check` reads what is there.' },
+  { at: 'wiki/wiki-maintenance-run.ts#hold', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'Why a due space made no run (contract `maintenance.job.held`), written onto its cursor row by id, and only when the reason is not already the one it holds. The next run made clears it.' },
   { at: 'wiki/wiki-maintenance-run.ts#noteWikiMaintenanceJobEnd', class: 'ONE_ROW_BY_KEY', statements: 1, note: 'The same end for a run the server\'s wiki job ran (P8): the row is found by (space_id, job_id) and written by id — the outcome, whose a failure was, the error, the report and the ops the server refused. A later end of the same run overwrites it; `orbit wiki check` and the health line read what is there.' },
-  { at: 'wiki/wiki-maintenance-run.ts#closeOrphanRuns', class: 'MANY_ROWS', statements: 1, note: 'The space\'s run rows with no outcome whose tasks have ended, given outcome failed, failure kind infra and `WIKI_RUN_NOT_REPORTED` (contract `maintenance.job.recovery.orphan`): one UPDATE … FROM task over one space\'s rows, matching none at almost every hint. The trigger is its only caller, off the request path, and the next hint asks again.' },
   { at: 'wiki/wiki-articles.ts#plan', class: 'INSERT', statements: 1, note: 'A space with no topic is given the default ones (contracts/wiki.contract.json `articles.seeding`): one INSERT of the batch, ON CONFLICT DO NOTHING on (space_id, slug), so two first plans leave one set. Only when a count found none; a space that has topics is never written. Outside a transaction on purpose: the rows are names and path prefixes, nothing reads them as a fact about anything else, and a plan that loses the race simply reads the winner\'s.' },
   { at: 'wiki/wiki-plan-job.ts#requestWikiPlanJob', class: 'INSERT', statements: 1, note: 'A plan job a fact asked for (contracts/wiki.contract.json `plan.jobs`): one INSERT, queued, when the space has no draft or revision that has not ended. Outside a transaction on purpose: the partial unique index on the space\'s open drafts is the fence, and the loser of two requests at once reads the winner\'s job and answers with it.' },
   { at: 'wiki/wiki-plan-job.ts#requestWikiPlanBuild', class: 'INSERT', statements: 3, note: 'The build of a confirmed version\'s documents (contracts/wiki.contract.json `plan.jobs`, kind build, migration 0340): one INSERT, queued, when the space has no build that waits — or, when it has one, one UPDATE of that row by id, only while it still waits, pointing it at the newer version (a second statement of the same UPDATE when two confirmations raced and the loser reads the winner\'s row). Outside a transaction on purpose: the partial unique index on the space\'s waiting builds is the fence, and the loser of two requests at once reads the winner\'s job and answers with it.' },
   { at: 'wiki/wiki-plan-job.ts#holdJob', class: 'ONE_ROW_CAS', statements: 1, note: 'Why a job was not made (contract `plan.jobs.held`), written onto its row by id and only while it is still queued or held, and only when the reason is not the one it already holds, so the time it first held for that reason is kept. The task made clears it.' },
-  { at: 'wiki/wiki-plan-job.ts#queueJob', class: 'ONE_ROW_CAS', statements: 1, note: 'A job that waits behind an unended task of its list: its row by id, only while it is still queued or held, its held reason cleared.' },
-  { at: 'wiki/wiki-plan-job.ts#endJobWhoseTaskIsOver', class: 'ONE_ROW_CAS', statements: 1, note: 'A made job whose task ended or is gone before its run said how it went: its row by id, only while it is still made, ended failed with why. A job its run ended already is not matched and keeps what the run said.' },
-  { at: 'wiki/wiki-plan-job.ts#startWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'A job\'s run started (contract `plan.jobs.context`): the calling session, and the first time it said so (coalesce), on its row by id while it is made. A retried session of the same task overwrites the session and keeps the time.' },
-  { at: 'wiki/wiki-plan-job.ts#progressWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'The gate round a job\'s run is on (contract `plan.jobs.progress`), on its row by id while it is made; a later round overwrites it. A job ended meanwhile is not matched, and the door answers WIKI_PLAN_NO_JOB.' },
-  { at: 'wiki/wiki-plan-job.ts#progressWikiPlanBuild', class: 'ONE_ROW_CAS', statements: 1, note: 'How far a build\'s run has got (contract `plan.jobs.progress`): the documents it went through and the one it writes now, on its row by id while it is made and a build; a later report overwrites it. A job ended meanwhile is not matched, and the door answers WIKI_PLAN_NO_JOB.' },
   { at: 'wiki/wiki-plan-job.ts#progressWikiPlanBuildOfJob', class: 'ONE_ROW_CAS', statements: 1, note: 'How far a build the wiki worker runs has got (contract `plan.jobs.progress`, `docs.build.server.progress`): its plan job by id, only while it is made, a build and still made by that wiki job, its progress and the first time it said so. The run has no session, so none is written; a plan job ended or made by another job is not touched.' },
   { at: 'wiki/wiki-plan-job.ts#finishWikiPlanJob', class: 'ONE_ROW_CAS', statements: 1, note: 'How a job\'s run ended (contract `plan.jobs.finish`): its row by id while it is made, ended with the outcome, the version or the gate\'s errors, the report and the last draft. A job ended already is not matched, so a second end keeps the first.' },
-  { at: 'wiki/wiki-plan-job.ts#endJobWhoseServerJobIsOver', class: 'ONE_ROW_CAS', statements: 2, note: 'A made plan job of the server\'s whose wiki_job ended, or is gone, before the run said how it went: its row by id, only while it is still made, ended failed with why. When the switch no longer gives the account to the server and its wiki_job never started, that wiki_job is cancelled first — by id, only while it is still queued with no start — and only a cancellation that matched ends the plan job. Two independent rows, each its own compare-and-set: a worker that took the job meanwhile leaves the cancel matching nothing, and the plan job made.' },
+  { at: 'wiki/wiki-plan-job.ts#endJobWhoseServerJobIsOver', class: 'ONE_ROW_CAS', statements: 1, note: 'A made plan job whose wiki_job ended, or is gone, before the run said how it went — or one a maintenance task made before the server ran plan jobs, which nothing runs any more: its row by id, only while it is still made, ended failed with why. A worker that ends the job meanwhile finds it ended and writes nothing.' },
   { at: 'wiki/wiki-plan-job.ts#progressWikiPlanJobOfJob', class: 'ONE_ROW_CAS', statements: 1, note: 'A server-run plan job\'s start and its gate round (contract `plan.jobs.server.progress`): started_at the first time (coalesce), attempt when given, on its row by id while it is made by this wiki_job. A job ended meanwhile, or made by another, is not matched.' },
   { at: 'wiki/wiki-plan-job.ts#saveWikiPlanJobMaterials', class: 'ONE_ROW_CAS', statements: 1, note: 'What a server-run plan job drafts from, kept at its first run (contract `plan.jobs.server.materials`, migration 0404): its row by id while it is made by this wiki_job, the frame written whole. A replay reads it back; a rebuilt frame (the snapshot moved) overwrites it the same way.' },
   { at: 'wiki/wiki-plan.ts#storeProposal', class: 'INSERT', statements: 1, note: 'A maintenance run\'s proposed change to the plan (contracts/wiki.contract.json `plan.proposals`): one INSERT, pending, after the gate passed it against the confirmed version. Outside a transaction on purpose: it changes no version, and the owner\'s acceptance gates it again against the plan as it stands then.' },

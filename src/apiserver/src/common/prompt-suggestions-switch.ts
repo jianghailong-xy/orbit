@@ -21,8 +21,7 @@ const CONVERSED_RUN_SOURCES: ReadonlySet<string> = new Set(['MANUAL', 'PROJECT_C
 
 /**
  * Whether a claim (or reclaim) asks for a next-message guess after each turn (design §3.1): the
- * owner wants them, a person converses in the session, and it is not a Wiki maintenance run. What
- * the flag means depends on the engine. Claude Code is spawned with `--prompt-suggestions`, and
+ * owner wants them, and a person converses in the session. What the flag means depends on the engine. Claude Code is spawned with `--prompt-suggestions`, and
  * the suggestion is one more request on the session's own account or key, so only an endpoint the
  * suggestion was measured on qualifies — any other configured provider's endpoint (the
  * ANTHROPIC_BASE_URL its env injects) leaves it off. Every other engine has no such flag
@@ -36,14 +35,11 @@ export function claimPromptSuggestions(claim: {
   runSource: string;
   /** How many sessions sit above this one; 0 for a session a person opened. */
   spawnDepth: number;
-  /** The session's Wiki maintenance run, null for every other session. */
-  maintenance: unknown;
   env: Record<string, string> | null | undefined;
 }): boolean {
   if (
     !CONVERSED_RUN_SOURCES.has(claim.runSource) ||
     claim.spawnDepth > 0 ||
-    claim.maintenance != null ||
     !promptSuggestionsEnabled({ preferences: claim.owner?.preferences })
   ) {
     return false;

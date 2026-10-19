@@ -71,7 +71,6 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
             let form: Form
             let maintenanceNote: String
             let privacy: String
-            let automaticNote: String
             let systemModel: String
             let models: [Model]
         }
@@ -171,9 +170,6 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
         XCTAssertEqual(Set(shared.runs.kinds.keys), Set(WikiJobKind.contractOrder.map(\.rawValue)))
         XCTAssertEqual(WikiRunsCopy.runs, shared.runs.title)
         XCTAssertEqual(WikiRunsCopy.none, shared.runs.none)
-        XCTAssertFalse(WikiRunsLogic.shown(serverExecutes: false, jobs: []))
-        XCTAssertTrue(WikiRunsLogic.shown(serverExecutes: true, jobs: []))
-        XCTAssertTrue(WikiRunsLogic.shown(serverExecutes: false, jobs: [shared.runs.cases[0].job]))
     }
 
     /// Each call's row of a run's log, as `WikiRunsLogic.callRow` says it.
@@ -221,59 +217,40 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
                        settings.form.fields.map(\.note))
         XCTAssertEqual(WikiModeCopy.maintenanceNoteServer, settings.maintenanceNote)
         XCTAssertEqual(WikiModeCopy.privacyNote, settings.privacy)
-        XCTAssertEqual(WikiModeCopy.modeNote(.automatic, server: true), settings.automaticNote)
-        // Under runner every mode says what it always said; the server changes Automatic's sentence alone.
-        for mode in WikiModeLogic.modes {
-            XCTAssertEqual(WikiModeCopy.modeNote(mode, server: false), WikiModeCopy.modeNote(mode))
-        }
-        XCTAssertEqual(WikiModeCopy.modeNote(.tiered, server: true), WikiModeCopy.modeNote(.tiered))
     }
 
-    /// The plan's words that name a drafter: the System model's while the server drafts it, and the runner's own
-    /// word for word when it does not — the same words the web's Plan card, empty plan and Redraft… dialog draw.
+    /// The plan's words that name a drafter: the System model's — the same words the web's Plan card, empty plan
+    /// and Redraft… dialog draw.
     func testThePlanSaysTheFixturesWordsUnderDraftPlan() throws {
         let shared = try fixture()
         XCTAssertEqual(WikiPlanCopy.drafterServer, shared.plan.drafter)
         // Activity's Plan card: the short line beside Draft plan.
         XCTAssertEqual(WikiPlanCopy.noteServer, shared.plan.note)
-        // The plan's empty page: the note keeps the half that still holds, and the body names the System model.
+        // The plan's empty page: its note, and the body that names the System model.
         XCTAssertEqual(WikiPlanCopy.emptyNoteServer, shared.plan.emptyNote)
-        XCTAssertEqual(WikiPlanCopy.emptyNote(where: "orbit · wikova", provider: "local-vllm", serverExecutes: true), shared.plan.emptyNote)
-        XCTAssertEqual(WikiPlanCopy.emptyNote(where: nil, provider: nil, serverExecutes: true), shared.plan.emptyNote)
-        XCTAssertEqual(WikiPlanCopy.emptyText(provider: "local-vllm", serverExecutes: true), shared.plan.emptyText)
-        XCTAssertEqual(WikiPlanCopy.emptyText(provider: nil, serverExecutes: true), shared.plan.emptyText)
+        XCTAssertEqual(WikiPlanCopy.emptyText, shared.plan.emptyText)
+        XCTAssertEqual(shared.plan.redraftNotes.count, 3, "a fresh draft, one from the plan in force, one from a draft")
         for row in shared.plan.redraftNotes {
             let from = row.from.map { (version: $0.version, inForce: $0.inForce) }
-            XCTAssertEqual(WikiPlanCopy.redraftNote(provider: "local-vllm", from: from, serverExecutes: true), row.says)
+            XCTAssertEqual(WikiPlanCopy.redraftNote(from: from), row.says)
         }
         // What is drafting: the job's card names the System model too.
-        let drafting = try JSONDecoder().decode(WikiPlanJob.self, from: Data(#"{"id":"job-drafting","kind":"draft","state":"running","provider":"local-vllm","attempt":1,"attemptsMax":3}"#.utf8))
-        let card = try XCTUnwrap(WikiPlanLogic.jobCard(drafting, now: Date(), runnerOnline: true, serverExecutes: true,
+        let drafting = try JSONDecoder().decode(WikiPlanJob.self, from: Data(#"{"id":"job-drafting","kind":"draft","state":"running","provider":null,"attempt":1,"attemptsMax":3}"#.utf8))
+        let card = try XCTUnwrap(WikiPlanLogic.jobCard(drafting, now: Date(), runnerOnline: true,
                                                        failed: nil, inForce: false, directory: nil))
         XCTAssertTrue(card.text.hasPrefix("\(shared.plan.drafter) · "), "the drafting card names the System model: \(card.text)")
-        // Under runner nothing moved: the provider, the place and the usual hours, as `wiki-docs.fixture.json` holds.
-        XCTAssertEqual(WikiPlanCopy.emptyNote(where: "orbit · wikova", provider: "local-vllm", serverExecutes: false),
-                       "Runs as a task in the Wiki maintenance list, on orbit · wikova with local-vllm — usually 1–2 hours."
-                           + " Until you confirm a plan, the Wiki shows its topic articles.")
-        XCTAssertEqual(WikiPlanCopy.emptyText(provider: "local-vllm", serverExecutes: false),
-                       "A plan lays out this wiki’s documents: the categories, the documents in each, who each one is for and what it covers,"
-                           + " and where each section’s material comes from. local-vllm drafts it; nothing is written until you confirm it.")
-        XCTAssertEqual(WikiPlanCopy.redraftNote(provider: "local-vllm", from: nil, serverExecutes: false),
-                       "local-vllm drafts it again with what you write here. A draft that doesn’t pass the plan check is"
-                           + " redrafted with its errors, up to 3 times.")
         // The web says the same words, from the same fixture: the constants and every reader of the drafter.
         let lib = try web(Self.planLib)
         assertDeclared(lib, Self.planLib, [("WIKI_PLAN_DRAFTER_SERVER", WikiPlanCopy.drafterServer),
                                            ("WIKI_PLAN_NOTE_SERVER", WikiPlanCopy.noteServer),
                                            ("WIKI_PLAN_EMPTY_NOTE_SERVER", WikiPlanCopy.emptyNoteServer)])
-        XCTAssertTrue(lib.contains("context.serverExecutes ? WIKI_PLAN_NOTE_SERVER : `${context.provider ?? WIKI_HISTORY_MAINTENANCE} · about 1–2 hours`"),
-                      "the web's Plan card no longer takes the server's line under server execution")
-        XCTAssertTrue(lib.contains("if (serverExecutes) return WIKI_PLAN_EMPTY_NOTE_SERVER;"),
-                      "the web's empty plan no longer keeps the sentence that holds under server execution")
-        XCTAssertTrue(lib.contains("serverExecutes ? `The ${WIKI_PLAN_DRAFTER_SERVER}` : provider ?? WIKI_HISTORY_MAINTENANCE"),
+        XCTAssertTrue(lib.contains("note: WIKI_PLAN_NOTE_SERVER,"), "the web's Plan card no longer says the System model's line")
+        XCTAssertTrue(lib.contains("and where each section’s material comes from. The ${WIKI_PLAN_DRAFTER_SERVER} drafts it; nothing is written until you confirm it."),
                       "the web's empty plan body no longer names the System model as the drafter")
-        XCTAssertTrue(lib.contains("context.serverExecutes ? WIKI_PLAN_DRAFTER_SERVER : draft.provider ?? WIKI_HISTORY_MAINTENANCE"),
+        XCTAssertTrue(lib.contains("`${WIKI_PLAN_DRAFTER_SERVER} · attempt ${draft.attempt ?? 1} of ${draft.attemptsMax}"),
                       "the web's job card no longer names the System model as the drafter")
+        XCTAssertTrue(lib.contains("`The ${WIKI_PLAN_DRAFTER_SERVER} drafts it again${base} with what you write here."),
+                      "the web's Redraft… dialog no longer names the System model as the drafter")
     }
 
     // MARK: the web's declarations
@@ -378,12 +355,9 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
             ("WIKI_MODEL_NOTE", WikiModeCopy.modelNote),
         ])
         for (name, value) in [("WIKI_MAINTENANCE_NOTE_SERVER", WikiModeCopy.maintenanceNoteServer),
-                              ("WIKI_PRIVACY_NOTE", WikiModeCopy.privacyNote),
-                              ("WIKI_MODE_NOTE_AUTOMATIC_SERVER", WikiModeCopy.modeNoteAutomaticServer)] {
+                              ("WIKI_PRIVACY_NOTE", WikiModeCopy.privacyNote)] {
             XCTAssertTrue(mode.contains("export const \(name) = '\(value)';"), "\(name) drifted in \(Self.modeLib)")
         }
-        XCTAssertTrue(mode.contains("server && mode === 'automatic' ? WIKI_MODE_NOTE_AUTOMATIC_SERVER : WIKI_MODE_NOTES[mode]"),
-                      "wikiModeNote changes Automatic's sentence alone")
         let health = try web(Self.healthLib)
         assertDeclared(health, Self.healthLib, [
             ("WIKI_REASON_WORKER", WikiHealthCopy.reasonWorker),
@@ -436,7 +410,7 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(WikiJob.self, from: JSONEncoder().encode(job)), job)
         // The executor's read: the mode and whether the server runs this account's wiki.
         let executor = try XCTUnwrap((jobs["executor"] as? [String: Any])?["read"] as? [String: Any])
-        let view = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(WikiExecutorView(mode: .canary, serverExecutes: true))) as? [String: Any])
+        let view = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(WikiExecutorView(mode: .server, serverExecutes: true))) as? [String: Any])
         XCTAssertEqual(Set(view.keys), Set(try XCTUnwrap(executor["fields"] as? [String])))
         XCTAssertEqual(WikiExecutorMode.allCases.filter { $0 != .unknown }.map(\.rawValue), (jobs["executor"] as? [String: Any])?["modes"] as? [String])
         // The System model's read: its states, and its fields with the executor beside them.
@@ -446,7 +420,7 @@ final class WikiServerExecutionCopyParityTests: XCTestCase {
                                            executor: WikiExecutorView(mode: .server, serverExecutes: true))
         let fields = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(status)) as? [String: Any])
         XCTAssertEqual(Set(fields.keys), Set(try XCTUnwrap(model["fields"] as? [String])))
-        // A read one release apart: an older control plane sends no executor and no new fields, which read as runner.
+        // A read one release apart: an older control plane sends no executor and no new fields — nothing of the server's.
         let older = try JSONDecoder().decode(WikiSpaceHealth.self, from: Data(#"{"spaceId":"s","entries":3,"maintenance":{"look":"ok","enabled":true}}"#.utf8))
         XCTAssertFalse(older.serverExecutes)
         XCTAssertNil(older.systemModel)

@@ -3,9 +3,8 @@
  * against a real PostgreSQL and a System model played by a local Node http server:
  *
  *   1. the trigger: an op an Automatic space records `verifying` queues one `verify` job for the session
- *      that proposed it — at the waiting priority — where the executor switch says the server runs for the
- *      account; under the default `runner` mode nothing is queued at all, and so is nothing for a
- *      maintenance run, which verifies its own ops;
+ *      that proposed it — at the waiting priority — and nothing is queued for the server's own maintenance
+ *      run, which verifies its own ops in its own job;
  *   2. the job end to end: claimed by the executor, one request per op through the queue, the verdict
  *      recorded through the server's own writer — the entry live, the op applied by the mode, the report
  *      saying what the pass did;
@@ -50,6 +49,7 @@ import { claimWikiJobs, reclaimExpiredWikiJobs, WIKI_JOB_HANDED_BACK } from './w
 import { WikiModelRequestQueue } from './wiki-model-queue.service';
 import { WikiModelStatusProbe } from './wiki-model-status';
 import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-model';
+import { wikiMaintainJobPrincipal } from './wiki-maintain-job';
 import { wikiVerifyJobRunner } from './wiki-verify-job';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
@@ -185,8 +185,6 @@ function boot(): Promise<Harness> {
 after(async () => {
   if (!harness) return;
   const { prisma, sql, model, ownerId } = await harness;
-  delete process.env.ORBIT_WIKI_EXECUTOR;
-  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
   await prisma.wikiSpace.deleteMany({ where: { ownerId } }).catch(() => undefined);
   await prisma.user.deleteMany({ where: { id: ownerId } }).catch(() => undefined);
   await prisma.session.deleteMany({ where: { ownerId } }).catch(() => undefined);
@@ -381,19 +379,13 @@ async function settle(h: Harness, id: string): Promise<JobRow> {
   return jobRow(h, id);
 }
 
-test('the trigger: an Automatic space\'s waiting op queues its session\'s verification, and runner mode queues nothing', { skip, timeout: 60_000 }, async () => {
+test('the trigger: an Automatic space\'s waiting op queues its session\'s verification, and the server\'s maintenance run queues nothing', { skip, timeout: 60_000 }, async () => {
   const h = await boot();
   await clearWork(h);
   const fx = await fixture(h);
-  // The path every deployment has had: nothing is queued, and the op waits for the session's own verifier.
-  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
-  const waiting = await propose(h, fx, 'A clock is no verdict');
-  assert.deepEqual(await jobs(h, fx.sessionId), [], 'runner mode queued a job');
+  // The op that entered verifying made one job, for this session: the server verifies what every session proposes.
+  const waiting = await propose(h, fx, 'A verdict comes from the records');
   assert.equal((await opRow(h, waiting)).decision, 'verifying');
-  // The server runs for this account: the op that entered verifying made one job, for this session.
-  process.env.ORBIT_WIKI_EXECUTOR = 'canary';
-  process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS = h.ownerId;
-  await propose(h, fx, 'A verdict comes from the records');
   const queued = await jobs(h, fx.sessionId);
   assert.equal(queued.length, 1, `want one job, got ${JSON.stringify(queued)}`);
   assert.equal(queued[0].kind, 'verify');
@@ -404,21 +396,19 @@ test('the trigger: an Automatic space\'s waiting op queues its session\'s verifi
   // waits when it runs, so this one rides it — one job, not two.
   await propose(h, fx, 'The second op rides the first job');
   assert.equal((await jobs(h, fx.sessionId)).length, 1, 'a second queued job was made for one waiting session');
-  // A maintenance run verifies its own ops in its own process: nothing is queued for it.
+  // The server's maintenance run verifies its own ops in its own job: nothing is queued for it.
   await h.service.submitChangeset(
-    agent(h, fx, { origin: 'maintenance', sessionId: randomUUID() }),
+    wikiMaintainJobPrincipal(h.ownerId, randomUUID()),
     fx.spaceId,
     { ops: [{ op: 'add', entry: pitfall('A run verifies its own'), sources: [{ kind: 'tool_call', ref: fx.cite }] }], rationale: 'a run' },
   );
   assert.equal((await jobs(h)).length, 1, 'a maintenance run\'s op queued a job');
-  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
 });
 
 test('the job verifies end to end: the verdict applies the op, the entry goes live, and the report says what happened', { skip, timeout: 60_000 }, async () => {
   const h = await boot();
   await clearWork(h);
   const fx = await fixture(h);
-  process.env.ORBIT_WIKI_EXECUTOR = 'server';
   const opId = await propose(h, fx, 'The worker reads the records');
   const [job] = await jobs(h, fx.sessionId);
   assert.ok(job);
@@ -451,14 +441,12 @@ test('the job verifies end to end: the verdict applies the op, the entry goes li
   assert.equal(settled.report?.stopped, null);
   assert.deepEqual(settled.report?.failures, []);
   assert.ok(((settled.report?.usage as { inputTokens: number }).inputTokens ?? 0) > 0, 'the call\'s tokens are in the report');
-  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
 });
 
 test('a duplicate names the entry its number stands for, and an answer that is not a verdict applies nothing', { skip, timeout: 60_000 }, async () => {
   const h = await boot();
   await clearWork(h);
   const fx = await fixture(h);
-  process.env.ORBIT_WIKI_EXECUTOR = 'server';
   // A live entry of the space, which the next op turns out to repeat.
   const first = await propose(h, fx, 'Closed sets are CHECK constraints');
   const [firstJob] = await jobs(h, fx.sessionId);
@@ -497,14 +485,12 @@ test('a duplicate names the entry its number stands for, and an answer that is n
   const refusedWhy = failures[0].refused;
   assert.equal(refusedWhy, 'a duplicate must name one of the listed entries by its number (E1), and '
     + `"${liveEntryId.slice(0, -1)}" is not one`);
-  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
 });
 
 test('one queued job covers its session\'s later ops: two submissions queue one job, and it verifies both', { skip, timeout: 60_000 }, async () => {
   const h = await boot();
   await clearWork(h);
   const fx = await fixture(h);
-  process.env.ORBIT_WIKI_EXECUTOR = 'server';
   const first = await propose(h, fx, 'The first waiting op');
   const second = await propose(h, fx, 'The second waiting op');
   assert.equal((await jobs(h, fx.sessionId)).length, 1);
@@ -515,14 +501,12 @@ test('one queued job covers its session\'s later ops: two submissions queue one 
   assert.equal(settled.report?.verified, 2);
   assert.equal((await opRow(h, first)).decision, 'auto_applied');
   assert.equal((await opRow(h, second)).decision, 'auto_applied');
-  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
 });
 
 test('a NUL in the answer: as \\u0000 the verdict is recorded without it; raw, its JSON does not read, as Go\'s decoder says', { skip, timeout: 60_000 }, async () => {
   const h = await boot();
   await clearWork(h);
   const fx = await fixture(h);
-  process.env.ORBIT_WIKI_EXECUTOR = 'server';
   // Built rather than written: a raw NUL in this source is the hazard itself (runner-api/strip-nul.ts).
   const NUL = String.fromCharCode(0);
   try {
@@ -558,7 +542,6 @@ test('a NUL in the answer: as \\u0000 the verdict is recorded without it; raw, i
     assert.match(failures[0].refused, /JSON/u);
   } finally {
     h.model.answer = () => '{"verdict": "supported", "reason": "The record says exactly this."}';
-    process.env.ORBIT_WIKI_EXECUTOR = 'runner';
   }
 });
 
@@ -566,7 +549,6 @@ test('the lease this harness claims under outlives a two-second stall: the sweep
   const h = await boot();
   await clearWork(h);
   const fx = await fixture(h);
-  process.env.ORBIT_WIKI_EXECUTOR = 'server';
   await propose(h, fx, 'The job the stall is spent on');
   const [job] = await jobs(h, fx.sessionId);
   assert.ok(job);
@@ -588,7 +570,6 @@ test('the lease this harness claims under outlives a two-second stall: the sweep
     'SELECT "state", "attempts", "failure_kind" FROM "wiki_job" WHERE "id" = $1', [job.id],
   );
   assert.deepEqual(row, { state: 'running', attempts: 0, failure_kind: null }, 'the stall cost the job its attempt');
-  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
 });
 
 
@@ -605,7 +586,6 @@ async function verdicts(h: Harness, sessionId: string): Promise<number> {
 test('a worker stopped after two verdicts hands the job back, and the report the replay ends with is the whole job\'s', { skip, timeout: 90_000 }, async () => {
   const h = await boot();
   await clearWork(h);
-  process.env.ORBIT_WIKI_EXECUTOR = 'server';
   const titles = ['The first op is verified', 'The second op is verified', 'The third op is held', 'The fourth op is left'];
 
   // What the job reports when nothing stops it: a session of four ops, verified straight through.
@@ -662,5 +642,4 @@ test('a worker stopped after two verdicts hands the job back, and the report the
     inputTokens: requests.reduce((total, request) => total + (request.inputTokens ?? 0), 0),
     outputTokens: requests.reduce((total, request) => total + (request.outputTokens ?? 0), 0),
   });
-  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
 });

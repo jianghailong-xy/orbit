@@ -16,12 +16,12 @@ import {
 } from './wiki-import-extract';
 
 /**
- * One input, one deterministic answer on both paths (project criterion: "the deterministic results — parsing,
- * gate checks — agree on the old path and the new"): `src/shared/src/wiki-import.fixture.json` holds what the
- * runner's Go code (src/runner-go/wiki_import.go) makes of a set of notes and answers — the prompt, a note's
- * language, the reading of an answer, the quote, the verify command, the ops an answer becomes, the retry
- * that names what did not hold up, a path anchor — and this holds the server's port to the same bytes. The Go
- * side holds itself to the same file (wiki_import_fixture_test.go), and writes it.
+ * One input, one deterministic answer (project criterion: "the deterministic results — parsing, gate checks —
+ * agree on the old path and the new"): `src/shared/src/wiki-import.fixture.json` holds what the runner's Go code
+ * (src/runner-go/wiki_import.go) made of a set of notes and answers — the prompt, a note's language, the reading
+ * of an answer, the quote, the verify command, the ops an answer becomes, the retry that names what did not hold
+ * up, a path anchor — and this holds the server's port to the same bytes. The Go side's test
+ * (wiki_import_fixture_test.go) wrote the file until P11 deleted it, and the file is frozen since.
  */
 
 // From build/wiki-worker back to src/shared.

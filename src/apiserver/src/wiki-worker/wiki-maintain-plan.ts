@@ -29,16 +29,16 @@ import { wikiPlanTopicsBrief } from './wiki-plan-materials';
  * for — entries, and design documents new on origin/main that no section cites — put to the model, whose
  * answer is checked here on origin/main and again by the server's gate. Ported from
  * `src/runner-go/wiki_maintain_docs.go` (proposePlanChange, wikiProposalPrompt, parseWikiProposal,
- * assembleWikiProposal, wikiProposalSection), which does the same on the runner until P10 removes it.
+ * assembleWikiProposal, wikiProposalSection), which did the same on the runner until P11 removed it.
  *
- * The repository is read as the runner reads it: the files the answer names, at the snapshot's commit, through
+ * The repository is read as the runner read it: the files the answer names, at the snapshot's commit, through
  * the reader the documents step writes from (`WikiDocRepo`; the job's is wiki-docs-build-job.ts
  * `WikiDocsSnapshotRepo`), and a document's section, a file's symbols and a contract are found by the same ports
  * of the runner's `wikiDocRepo` that step uses (`wikiDocDocSection`, `wikiDocCodePieces`, `wikiDocContract`).
  * Not by the snapshot's index: its headings and symbols are the plan gate's reading (`WikiPlanRepo`), which takes a
  * heading named as the prompt lists it, `##` and all, for none (2026-10-09, run 28ea4f5c: refused three rounds
- * for two sections its document has). src/shared/src/wiki-maintain-proposal.fixture.json holds both paths to the
- * same answers.
+ * for two sections its document has). src/shared/src/wiki-maintain-proposal.fixture.json, frozen since P11, holds
+ * the server to the answers the runner's Go code gave.
  *
  * Nothing here touches the database or the model: the job asks, and this reads.
  */
@@ -379,7 +379,7 @@ export function assembleWikiMaintainProposal(
 }
 
 /**
- * One new section as the model wrote it, checked on origin/main as the runner checks it (`wikiProposalSection`): its
+ * One new section as the model wrote it, checked on origin/main as the runner checked it (`wikiProposalSection`): its
  * kind, its length, every file, document section, symbol and contract it names — read in the files at the commit —
  * its session condition, its topics among the space's, and its lines.
  */

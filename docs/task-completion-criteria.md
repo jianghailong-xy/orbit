@@ -281,7 +281,7 @@ A person's access token, `ORBIT_USER_TOKEN`, is removed from both sources the sa
 (`docs/personal-access-token-design.md` §8). The runner then sets `ORBIT_RUNNER_CHILD=1`, whatever
 either source said about it, as it does on every process it starts for a session. The `orbit` CLI
 in the command therefore acts as the machine, never as a login saved in the runner's `ORBIT_HOME`
-(§7.2 of the same document), so `orbit wiki check` and `orbit wiki plan check` run with the runner
+(§7.2 of the same document), so a command such as `orbit token list` runs with the runner
 credential.
 No extra criterion-specific env is injected.
 

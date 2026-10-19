@@ -33,7 +33,7 @@ import {
  * the reasons the first answer was refused, the batches a run proposes in, and the circuit breaker's
  * hold-back over them.
  *
- * The runner does the same in Go (`src/runner-go/wiki_maintain_test.go`); these are its cases, ported.
+ * The runner did the same in Go until P11 (`src/runner-go/wiki_maintain_test.go`); these are its cases, ported.
  */
 
 /** A dossier of three lines, the tool call of the port case with its two spans. */
@@ -112,12 +112,13 @@ function pitfall(title: string, over: Record<string, unknown> = {}): Record<stri
 }
 
 
-// ── The ported table: each row is one case of `src/runner-go/wiki_maintain_test.go` ───────────────
+// ── The ported table: each row is one case of the deleted `src/runner-go/wiki_maintain_test.go` ───
 
 /**
  * The runner's own cases, one row each, on one dossier: the same input, the same deterministic answer the Go
- * function gives it. Every row names the Go test it is the port of, so a reviewer can read the two side by side;
- * the checks, the quota (the batch size by mode) and the breaker are the same arithmetic in both.
+ * function gave it. Every row names the Go test it is the port of, so a reviewer can read the two side by side in
+ * the history from before P11; the checks, the quota (the batch size by mode) and the breaker are the same
+ * arithmetic in both.
  */
 test('the ported table: each row answers what the Go case it ports answers', () => {
   const dossier = portDossier();
@@ -203,11 +204,11 @@ test('the ported table: each row answers what the Go case it ports answers', () 
     }
   }
   // The quota: the batch size by mode is the contract's `limits.opsPerChangeset` / `opsPerTurn`, as the Go
-  // `wikiMaintainBatchSize` reads them.
+  // `wikiMaintainBatchSize` read them.
   assert.equal(wikiMaintainBatchSize('automatic'), 30);
   assert.equal(wikiMaintainBatchSize('tiered'), 30);
   assert.equal(wikiMaintainBatchSize('manual'), 5);
-  // The breaker: the same page arithmetic the Go `breaker` makes, and the same arithmetic the pg spec drives
+  // The breaker: the same page arithmetic the Go `breaker` made, and the same arithmetic the pg spec drives
   // end to end (a hundred live entries, the second page held back, the cursor stopped where it starts).
   const batch = (session: string): WikiMaintainBatch => ({ topic: 'testing', ops: [{ body: {}, topic: 'testing', session, title: session }], changes: [true] });
   assert.deepEqual(
@@ -238,7 +239,7 @@ test('the prompt names the repository, what it is, the topics and the dossier, a
 test('the off-topic answer is read bare and fenced, and nothing else is', () => {
   assert.equal(wikiMaintainOffTopic('{"offTopic": true}'), true);
   assert.equal(wikiMaintainOffTopic('```json\n{"offTopic": true}\n```'), true);
-  // P10's probe (zz_p10_parity_test.go): Go decodes into a struct, so the key reads in any case.
+  // P10's probe (zz_p10_parity_test.go, which P11 deleted): Go decodes into a struct, so the key reads in any case.
   assert.equal(wikiMaintainOffTopic('{"OffTopic": true}'), true);
   assert.equal(wikiMaintainOffTopic('{"offTopic": false}'), false);
   assert.equal(wikiMaintainOffTopic('[]'), false);

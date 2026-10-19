@@ -27,10 +27,11 @@
    - 不再有隐藏的「Wiki maintenance」任务和会话；每次运行的进度、排队位置和逐次调用日志显示在 Wiki 的 Activity 里。
    - 不花任何用户的 key、订阅或账号池，也不占 runner 槽位。
 6. **流水线移植成 TypeScript，在 worker 里运行。** worker 和 apiserver 共用代码，直接使用服务端已有的数据和写入口。要移植的是 Go 流水线里的模型部分：约 1.4 万行代码，另有 1.1 万行测试。
-7. **分阶段上线。**
-   - 执行器开关 `ORBIT_WIKI_EXECUTOR=runner|canary|server`。
-   - 按"核实 → 文章 → 导入 → plan → 文档 → 维护"的顺序逐条移植。每条先只对 canary 账号生效，与旧路径对照后再全量切换。
-   - 全部切完后，删除维护会话机制和 runner 侧的模型代码。
+7. **分阶段上线，已完成（P11，2026-10-19）。**
+   - P1b 到 P10 用执行器开关 `ORBIT_WIKI_EXECUTOR=runner|canary|server`，按"核实 → 文章 → 导入 → plan → 文档 → 维护"的顺序逐条移植。每条先只对
+     canary 账号生效，与旧路径对照后再全量切换。
+   - P11 删除了维护会话机制、runner 侧的模型代码，连同执行器开关本身：服务端执行每个账号的 wiki，**没有回退**。要暂停 wiki 的模型工作，就停掉
+     `wiki-worker` 容器（作业和模型请求留在队列里等），或者用 `ORBIT_WIKI=off`（宿主上是 `ORBIT_WIKI_MODE=off`）关掉 wiki（§10）。
 
 ## 1. 为什么改
 
@@ -74,10 +75,11 @@
 | `ORBIT_WIKI_MODEL_API_KEY` | wiki-worker | 启用时必填 | 以 Bearer 方式发送 |
 | `ORBIT_WIKI_MODEL` | wiki-worker | 启用时必填 | 模型名 |
 | `ORBIT_WIKI_MODEL_CONCURRENCY` | wiki-worker | 默认 4 | 所有空间合计同时在途的模型请求数，由队列在数据库层面保证 |
-| `ORBIT_WIKI_EXECUTOR` | apiserver、wiki-worker | 默认 `runner` | `runner`、`canary` 或 `server` |
-| `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS` | apiserver、wiki-worker | 默认空 | `canary` 模式下走服务端的账号，逗号分隔 |
 
-- 改完执行 `docker compose up -d wiki-worker`（开关类的变量还要重建 apiserver）即生效，不需要数据迁移，也不需要给 runner 发版。
+- P1b 到 P10 还有执行器开关的两个变量：`ORBIT_WIKI_EXECUTOR`（给 apiserver 和 wiki-worker，默认 `runner`，可选 `runner`、`canary`、`server`）和
+  `ORBIT_WIKI_EXECUTOR_CANARY_OWNERS`（`canary` 模式下走服务端的账号，逗号分隔）。P11 删除了开关（§10）：两个变量没有代码再读，compose、
+  `.env.example` 和 `docs/configuration.md` 都不再有它们；生产的 `.env` 里还留着也无妨，删不删由部署决定。
+- 改完执行 `docker compose up -d wiki-worker` 即生效，不需要数据迁移，也不需要给 runner 发版。
 - apiserver 不需要 key。模型名和状态由 worker 写进状态表（§5.3），API 从那里读出来给界面。
 - **地址**：容器跑在 compose 的默认网桥里，容器内的 `127.0.0.1` 是容器自己，`host.docker.internal` 也没有映射。vLLM 在宿主机或 GPU 机器上时，有两种填法：
   - 填局域网地址或隧道地址；
@@ -186,7 +188,7 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 
 ### 4.4 v1 只用 System model
 
-- 部署没配 System model 时，执行器保持 `runner` 模式。如果开了 `server` 模式却没配，作业会挂起，健康行写明原因。
+- 部署没配 System model 时，作业会挂起，健康行写明原因（P11 之前，没配时执行器保持 `runner` 模式；P11 删除了开关，§10）。
 - "服务端拿用户自己的 provider 调用"放到以后，有需要再加。
 
 ### 4.5 Node.js 实现要点（owner 2026-10-07 定：worker 用 Node.js）
@@ -299,11 +301,18 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 
 | 失败 | 处理 |
 | --- | --- |
-| infra：端点不可达、5xx、429、runner 离线、worker 崩溃（租约自然过期） | 退避重试（`attempts + 1`，0 / 10 / 30 秒），不计入连续失败；健康行显示在等什么 |
-| worker 停机（部署、重启时的 SIGTERM） | 不算失败：作业交还，立即重新排队，不计次、不退避，不计入连续失败（§5.4，owner 2026-10-09 定） |
+| infra：端点不可达、5xx、429、runner 离线、worker 崩溃（租约自然过期） | 退避重试（`attempts + 1`，0 / 10 / 30 秒），不计入连续失败；健康行显示在等什么；到重试上限以失败结束（见下） |
+| worker 停机（部署、重启时的 SIGTERM） | 不算失败：作业交还，立即重新排队，不计次、不退避，不计入连续失败，也不向重试上限靠近（§5.4，owner 2026-10-09 定） |
+| 意外错误：程序断言不成立、类型错误这类，既不是平台的，也不是内容的 | 先按 infra 重试，以防只是偶发；到它自己的上限就以失败结束（见下） |
 | 401 | 队列暂停（§5.3），健康行写明 key 被拒 |
 | content：模型给不出可解析的结果、服务端拒绝 | 结束作业，计入连续失败；连续 3 次通知 owner（与现在一致） |
 | owner 关闭维护或删除空间 | 作业和它排队中的请求改为 cancelled |
+
+- **重试上限**（owner 2026-10-09 03:35Z 确认）：一个作业最多试 10 次（`WIKI_JOB.maxAttempts`），意外错误最多 3 次（`unexpectedMaxAttempts`）。
+  到上限的作业不再回队，以失败结束（`failed` / `infra`），错误写在作业上（「Ended after <n> attempts: …」），Activity 的 Runs 卡显示它。
+  等着它的行在同一个事务里收尾：名下的模型请求和仓库操作取消；`maintain` 作业的运行记为 `failed` / `infra`，是平台原因结束的，照旧
+  不计入连续失败；plan 作业以失败结束，owner 可以再要一次。停机交还不计次，所以部署再多也不会把作业推到上限。2026-10-09 之前没有上限：
+  docs_build 作业 79620f23 的写入器断言不成立，空间每空出来一次就再失败一次。合同见 `jobs.retry`（`docs/wiki-contract.md` §24.4）。
 
 ### 5.6 再要一次文档生成（owner 2026-10-17 定）
 
@@ -324,7 +333,8 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 - **额度**：生成不是维护运行，不计入 `dailyRunLimit`，也不被它挡（与 §2.3、与确认要的生成相同：每日上限保护的是审阅队列，生成不提议 op）。
   对 GPU 的压力仍然由全局并发上限和每作业的在途上限控制。
 - **失败**：照 §5.5。infra 退避重试，次数用完以失败结束；有节没写成是 content 失败。两种都不碰维护游标和连续失败，结束以后可以再按。
-- **只在服务端执行时有**：runner 路径（P11 之前）没有这个入口，两条路由都答 `WIKI_RUNNER_EXECUTES`，客户端不画按钮。
+- **对每个账号都有**（P11 起）：P11 之前只在服务端执行时有，runner 路径上没有这个入口，两条路由答 `WIKI_RUNNER_EXECUTES`、客户端不画按钮；
+  这个拒绝码随 runner 路径在 P11 删除。
 - **客户端**：只做 web（Plan 页的按钮、管理区的对话框）；macOS/iOS 和 Android 不变，文案和共享夹具不动。
 - 合同见 `docs/wiki-contract.md` §21.11（`plan.jobs.rebuild`）。
 
@@ -370,7 +380,7 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 
 ## 8. 各流水线怎么搬
 
-| 流水线 | 现在的 Go 代码 | 服务端已有的输入 | 需要的仓库操作 | 阶段 |
+| 流水线 | 移植前的 Go 代码（P11 删除） | 服务端已有的输入 | 需要的仓库操作 | 阶段 |
 | --- | --- | --- | --- | --- |
 | 核实 verify | 937 行 | 核实证据 | 无 | P3 |
 | 文章 articles | 1,363 行 | 文章输入；聚类要移植 | 快照的 sha（作为 ref） | P4 |
@@ -380,12 +390,12 @@ apiserver（API 进程）                  wiki-worker（新服务，同一镜�
 | 维护 maintain | 3,252 行（含文档步骤） | 案卷 | 快照、diff、anchors | P8 |
 
 - **文章的触发（owner 2026-10-08 定）**：
-  - runner 模式下不变：维护运行自判据 3 第 3 版起不再重写主题文章，也没有别的东西自动重写。
-  - 服务端执行的账号（`server`，或 `canary` 名单内）：一次维护运行成功结束、记下了 op、且不在追赶期（追赶进行中或暂停时都不建）时，服务端给这个空间排一个 `articles` 作业。runner 跑的维护运行也算，触发点在服务端记录运行结束的地方（finish 路由）；P8 的服务端维护作业结束时调用同一个入口。
+  - 维护运行自判据 3 第 3 版起不再自己重写主题文章；P11 之前，开关把账号留在 runner 上时也没有别的东西自动重写。
+  - 每个账号（P11 起；P4 到 P10 之间只对服务端执行的账号）：一次维护运行成功结束、记下了 op、且不在追赶期（追赶进行中或暂停时都不建）时，服务端给这个空间排一个 `articles` 作业，触发点在服务端记录运行结束的地方（`finishWikiMaintenanceJob`）。P8 到 P10 之间 runner 跑的维护运行也算，触发点是它的 finish 路由。
   - 每个空间最多排一个，后台优先级 0，排在 owner 主动发起的请求之后；作业只重写指纹变了的主题。
   - 它第一次被领取之前，先等这个空间的下一轮维护走完，只让这一轮（owner 2026-10-10 定，§5.1）。
   - 文章的 ref 取该空间最近一份仓库快照的 sha；还没有快照时先请求一次，作业挂起等它。
-  - 对这样的账号，runner 门的文章三条路由回 `WIKI_SERVER_EXECUTES`，会话不再拿自己的 provider 写文章。
+  - runner 门的文章三条路由在 P11 删除（P4 到 P10 之间，它们对服务端执行的账号回 `WIKI_SERVER_EXECUTES`），没有会话再拿自己的 provider 写文章。
 
 agent 会话用的 wiki 工具（`wiki_search` / `wiki_get` / `wiki_propose`，见 `src/runner-go/wiki_tools.go`）不在本次范围内，保持不变。
 
@@ -400,8 +410,10 @@ agent 会话用的 wiki 工具（`wiki_search` / `wiki_get` / `wiki_propose`，�
 
 ## 10. 迁移与上线
 
-- **开关 `ORBIT_WIKI_EXECUTOR`**：
-  - `runner`：默认值，行为和今天完全一样；
+P11（2026-10-19）收尾以后，前四条是上线的经过：现在没有执行器开关，也没有回退，要暂停就停 worker，见后三条。
+
+- **开关 `ORBIT_WIKI_EXECUTOR`**（P1b 到 P10，P11 删除）：
+  - `runner`：默认值，行为和当时完全一样；
   - `canary`：名单内的账号走服务端；
   - `server`：全部走服务端。
 - **worker 先上线**：worker 可以先部署。开关还是 `runner` 时它没有作业，只负责探测模型、写状态，所以可以提前验证地址和 key。
@@ -409,17 +421,26 @@ agent 会话用的 wiki 工具（`wiki_search` / `wiki_get` / `wiki_propose`，�
 - **canary 对照**：
   - 确定性部分（解析、门检查、配额、熔断）：对同一份输入逐字比较；
   - 生成部分：看门检查通过率、核实结论的分布、排队和执行耗时、token。
-- **回退**：把开关改回 `runner` 即可。服务端在途的作业和请求会被取消，游标的语义保证下一次会重新读取这些内容。
-  取消由 apiserver 启动时的一次清扫完成（`wiki-executor-sweep.ts`，合同 `jobs.executor.rollback`）：改执行器要重建 apiserver 和
-  wiki-worker，而 apiserver 正是被在途作业堵住触发器的那一方。逐种收尾：作业、它的模型请求（按 0401 约束清错和租约列）和仓库操作
-  置为 `cancelled`；`maintain` 作业的运行记为 `failed` / `infra`，不计连续失败；plan 作业以失败结束并保留来源；`verify` 留下的
-  `verifying` op 由下一场维护运行收养。双保险：触发器只在服务端执行该账号时才查 `unfinishedMaintainJob`，清扫未跑完时 runner
-  路径也不被在途作业堵住（2026-10-08 回退事故：一个没人收尾的 `maintain` 作业让空间两条路径都没有维护，直到人工取消）。
-- **收尾（P10）**：
+- **回退**：P11 起没有回退——runner 的维护会话和它的流水线都已删除，没有可以退回的路径（合同 `jobs.executor.noWayBack`）。P1b 到 P10 之间，
+  回退是把开关改回 `runner`：服务端在途的作业和请求被取消，游标的语义保证下一次会重新读取这些内容。取消由 apiserver 启动时的一次清扫完成
+  （`wiki-executor-sweep.ts`，合同 `jobs.executor.rollback`），起因是 2026-10-08 的回退事故：一个没人收尾的 `maintain` 作业让空间两条路径都没有
+  维护，直到人工取消。清扫随开关在 P11 删除；它用的收尾函数 `settleWikiJobRows` 留着，作业到了重试上限时仍由它收尾（§5.5）。
+- **暂停**（P11 起）：要暂停 wiki 的模型工作，停掉 `wiki-worker` 容器（`docker compose stop wiki-worker`）：它的作业和模型请求留在队列里等，
+  什么都不丢，worker 的心跳过期后界面显示 wiki worker 未运行；`docker compose up -d wiki-worker` 以后接着跑。要整个关掉 wiki，用
+  `ORBIT_WIKI=off`（宿主 `.env` 里写 `ORBIT_WIKI_MODE=off`）。
+- **收尾（计划在 P10，做成了 P11，2026-10-19）**：
   - 删除维护会话机制：claim 拒绝、干净启动、`wiki-maintenance-run/v1`，以及隐藏列表里任务的这种用法；
-  - 删除 runner 侧的模型代码；
+  - 删除 runner 侧的模型代码和它的 CLI 动词（`orbit wiki maintain`、`orbit wiki check`、`orbit wiki plan draft|revise|check`、`orbit wiki docs build`、
+    `orbit wiki articles`），以及它们用的 runner 门路由；
   - 重写合同的相应章节；
-  - 把默认值改为 `server`。
+  - 删除执行器开关，而不是把默认值改为 `server`（owner 2026-10-18 的决定 A，卡片 34iAuONJEvJY2LIpuSMu4，记在任务评论 34iCx6t7LyCg80FJEoFeg）：
+    服务端执行每个账号；
+  - runner 上留下的是仓库操作（`wiki-repo-op/v1`）、三个 MCP 工具和 `orbit wiki search|get|propose|import|verify`，其中 `import` 与 `verify` 只请求
+    服务端、等它做完；
+  - 客户端（web、macOS/iOS、Android）本期不改：读接口照旧回 `executor: { mode: 'server', serverExecutes: true }`，它们画 runner 的那部分由之后的
+    任务清理——2026-10-19 由任务 34iFf4zifQFM8anHrjpFW 完成：三端只按 `serverExecutes` 画服务端那部分，runner 的画法、文案和共享夹具里 runner 的行
+    都已删除，读接口形状不变；
+  - runner 的发版不在这次改动里，由协调方升版本、上线。
 
 ## 11. 合同与文档
 
@@ -427,7 +448,7 @@ agent 会话用的 wiki 工具（`wiki_search` / `wiki_get` / `wiki_propose`，�
   - 新增 `systemModel`、`jobs`、`modelQueue`、`repoOps`；
   - 改写 `maintenance.run` / `session` / `list`、`plan.jobs.task` / `run`、`agentSurface.verify`、`articles.cleanClaudeCode`、`import.cli.model`；
   - 新增 `plan.jobs.rebuild`（§5.6，2026-10-17）；
-  - 删除 `space.settings.maintenance.provider`。
+  - 不再读 `space.settings.maintenance.provider`（P11 实际做法：写入时丢弃，读出时照旧给客户端，不报错）。
 - **文档**：`docs/wiki-contract.md`、`docs/wiki-design.md` 的 §0 和 §8、`docs/configuration.md`、`docs/self-hosting.md`、upgrade skill 的说明。
 
 ## 12. 分阶段与判据
@@ -445,6 +466,8 @@ agent 会话用的 wiki 工具（`wiki_search` / `wiki_get` / `wiki_propose`，�
 | P8 | 维护运行 | canary 空间连续 N 次维护运行成功，游标推进 |
 | P9 | 客户端（Web 和 macOS/iOS）：设置、Activity 里的运行详情和排队状态、健康原因、文案对照 | 三端的对照测试通过 |
 | P10 | 本部署切到 `server`；观察一周后删除旧路径、清理合同 | 删除旧路径后全量测试通过 |
+
+实际进度：删除旧路径与合同清理单独做成了 P11（2026-10-19），连执行器开关一起删掉，没有回退（§10 的「回退」「收尾」）。
 
 - 依赖关系：
   - P3–P7 等 P1、P2 完成后可以并行；

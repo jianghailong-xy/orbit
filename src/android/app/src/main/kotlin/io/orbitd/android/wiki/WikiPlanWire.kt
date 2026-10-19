@@ -181,12 +181,10 @@ data class WikiPlanGateError(val check: String, val path: String, val message: S
 
 /** A space's plan job (contract `plan.jobs.read`). The report and the kept draft are read leniently. */
 data class WikiPlanJob(val id: String, val spaceId: String?, val kind: String, val trigger: String?, val state: String,
-    val instructions: String?, val requestedAt: String?, val held: Held?, val waitingFor: WaitingFor?, val taskId: String?,
-    val provider: String?, val sessionId: String?, val madeAt: String?, val startedAt: String?, val endedAt: String?,
-    val attempt: Int?, val attemptsMax: Int?, val progress: Progress?, val version: Int?, val errors: List<WikiPlanGateError>?,
-    val error: String?, val report: Report?, val draft: WikiPlanDraftInput?) {
+    val instructions: String?, val requestedAt: String?, val held: Held?, val sessionId: String?, val madeAt: String?,
+    val startedAt: String?, val endedAt: String?, val attempt: Int?, val attemptsMax: Int?, val progress: Progress?, val version: Int?,
+    val errors: List<WikiPlanGateError>?, val error: String?, val report: Report?, val draft: WikiPlanDraftInput?) {
     @Serializable data class Held(val reason: String, val at: String? = null)
-    @Serializable data class WaitingFor(val taskId: String, val title: String? = null, val sessionId: String? = null, val startedAt: String? = null)
     @Serializable data class Progress(val docs: Docs, val current: Current? = null) {
         @Serializable data class Docs(val done: Int, val total: Int)
         @Serializable data class Current(val slug: String, val title: String)
@@ -213,8 +211,7 @@ data class WikiPlanJob(val id: String, val spaceId: String?, val kind: String, v
             val c = element as? JsonObject ?: return null
             val id = c["id"].text() ?: return null
             return WikiPlanJob(id, c["spaceId"].text(), c["kind"].text() ?: "unknown", c["trigger"].text(), c["state"].text() ?: "unknown",
-                c["instructions"].text(), c["requestedAt"].text(), c["held"].lenient(Held.serializer()),
-                c["waitingFor"].lenient(WaitingFor.serializer()), c["taskId"].text(), c["provider"].text(), c["sessionId"].text(),
+                c["instructions"].text(), c["requestedAt"].text(), c["held"].lenient(Held.serializer()), c["sessionId"].text(),
                 c["madeAt"].text(), c["startedAt"].text(), c["endedAt"].text(), c["attempt"].integer(), c["attemptsMax"].integer(),
                 c["progress"].lenient(Progress.serializer()), c["version"].integer(),
                 c["errors"].lenient(kotlinx.serialization.builtins.ListSerializer(WikiPlanGateError.serializer())),

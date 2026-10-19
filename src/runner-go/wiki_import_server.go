@@ -6,25 +6,24 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
-// `orbit wiki import` when the server reads (contracts/wiki.contract.json `import.server`,
+// `orbit wiki import`, read by the server (contracts/wiki.contract.json `import.server`,
 // docs/wiki-server-execution-design.md §2.2 and §8, P5).
 //
-// THE FILES ARE STILL THIS MACHINE'S. When the executor switch gives the account to the server
-// (ORBIT_WIKI_EXECUTOR), the command lists the files, reads their frontmatter and registers each as a
-// note exactly as it does on its own; what changes is who reads them. It hands the notes — in the order
-// it would have read them, each to be read or carrying the ops an earlier run found in it and did not
-// propose — to one `import` job of the space, and the server's wiki-worker reads them with the
-// deployment's System model, checks what it answers, and proposes it with origin import. The command
-// waits for the job and prints its report: the numbers it prints are the report's.
+// THE FILES ARE THIS MACHINE'S. The command lists the files, reads their frontmatter and registers each
+// as a note; the server reads them. It hands the notes — in order, each to be read or carrying the ops an
+// earlier run found in it and did not propose — to one `import` job of the space, and the server's
+// wiki-worker reads them with the deployment's System model, checks what it answers, and proposes it with
+// origin import. The command waits for the job and prints its report: the numbers it prints are the
+// report's.
 //
-// THE MEMORY IS STILL THIS MACHINE'S TOO. The job's report says, note by note, what was read and what
-// became of each op, and the run writes that into the same state file a run on this machine writes —
-// so a run picks up where the last one stopped whichever path ran it, and the switch can move either
-// way between two runs. The job's id is written down before the run waits for it: a run that stops
-// waiting (or is killed) leaves the job to the server, and the next run collects it first.
+// THE MEMORY IS THIS MACHINE'S TOO. The job's report says, note by note, what was read and what became of
+// each op, and the run writes that into the state file, so a run picks up where the last one stopped. The
+// job's id is written down before the run waits for it: a run that stops waiting (or is killed) leaves the
+// job to the server, and the next run collects it first.
 //
 // Nothing here needs a model of this machine's: no ANTHROPIC_* variable, no Claude Code.
 
@@ -113,23 +112,39 @@ type wikiImportJobReport struct {
 	} `json:"notes"`
 }
 
-// wikiImportOnServer asks which path this space's import takes: true only when the server says it reads
-// the notes itself. Every other answer — runner, a server that has no such route, one that has no space or
-// wiki for this call, a refusal, no answer at all — is the runner's own path, which then meets whatever the
-// server has to say exactly as it always has. Nothing is lost by asking wrong: a server that reads for this
-// account refuses a registration that does not say so (WIKI_SERVER_EXECUTES) before any model is asked.
-func wikiImportOnServer(t *Transport, sessionID, spaceID string) (wikiImportExecutorAnswer, bool) {
+// wikiImportOnServer asks which path this space's import takes, before anything is registered: the server's
+// own import job is the only one this build has. A server that answers another executor — one that would
+// leave the reading to the session's own model — or that has no such route is one from before the server
+// read imports itself, and too old for this command: nothing is registered, and the command says so. Any
+// other refusal is the server's answer, said as it is.
+func wikiImportOnServer(t *Transport, sessionID, spaceID string) (wikiImportExecutorAnswer, error) {
 	var out wikiImportExecutorAnswer
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/import"
 	if _, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true); err != nil {
-		return out, false
+		var httpErr *transportHTTPError
+		if errors.As(err, &httpErr) && httpErr.statusCode == http.StatusNotFound && httpErr.code() == "" &&
+			!strings.Contains(httpErr.body, "no such wiki space") {
+			// A 404 that names no wiki refusal and no space: the route itself is missing.
+			return out, wikiImportServerTooOld(spaceID, "it has no GET /api"+path)
+		}
+		return out, wikiCallError("orbit wiki import", err)
 	}
-	return out, out.Executor == "server"
+	if out.Executor != "server" {
+		return out, wikiImportServerTooOld(spaceID, fmt.Sprintf("it answered executor %q", out.Executor))
+	}
+	return out, nil
 }
 
-// runWikiImportOnServer is one run when the server reads: the files registered as a run on this
-// machine registers them, the notes handed to the server's job, and its report written into this
-// machine's memory.
+// wikiImportServerTooOld is the refusal for a server that does not read imported files itself; why is what
+// showed it.
+func wikiImportServerTooOld(spaceID, why string) error {
+	return fmt.Errorf("orbit wiki import: this Orbit server does not extract entries from imported files itself (%s): it "+
+		"is too old for this orbit, which no longer reads them with a model of its own. Nothing was registered or "+
+		"proposed in space %s. Upgrade the Orbit server, then run the import again", why, spaceID)
+}
+
+// runWikiImportOnServer is one run: the files registered, the notes handed to the server's job, and its
+// report written into this machine's memory.
 func runWikiImportOnServer(t *Transport, sessionID string, opts wikiImportOptions, executor wikiImportExecutorAnswer, progress io.Writer) (wikiImportSummary, error) {
 	started := time.Now()
 	summary := wikiImportSummary{SpaceID: opts.spaceID, From: opts.from, Model: executor.Model, State: opts.statePath, Refusals: []wikiImportRefusal{}}
@@ -141,7 +156,7 @@ func runWikiImportOnServer(t *Transport, sessionID string, opts wikiImportOption
 	if err != nil {
 		return summary, err
 	}
-	im := &wikiImporter{t: t, sessionID: sessionID, opts: opts, state: state, summary: &summary, progress: progress, texts: map[string]string{}, readBy: "server"}
+	im := &wikiImporter{t: t, sessionID: sessionID, opts: opts, state: state, summary: &summary, progress: progress}
 	runErr := im.onServer(sources)
 	state.Calls += summary.Calls
 	state.InputTokens += summary.InputTokens

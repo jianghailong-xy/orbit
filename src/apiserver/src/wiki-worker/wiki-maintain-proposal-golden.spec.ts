@@ -15,15 +15,15 @@ import {
 } from './wiki-maintain-plan';
 
 /**
- * One input, one deterministic answer on both paths (project criterion: "the deterministic results — parsing, gate
- * checks — agree on the old path and the new"): `src/shared/src/wiki-maintain-proposal.fixture.json` holds what the
- * runner's check of a maintenance run's plan proposal (src/runner-go/wiki_maintain_docs.go: parseWikiProposal,
- * assembleWikiProposal, wikiProposalSection) makes of a set of answers on a checkout of the fixture's files — the
- * problems it hands back to the model, and the session conditions of the sections it would send — and this holds the
- * server's check to the same answers, the files read through the reader the maintenance job reads them with
- * (`WikiDocsSnapshotRepo`), and a section's topics held to the space's (the fixture's `topics`, as the affected read
- * hands them over). The Go side holds itself to the same file (wiki_maintain_proposal_fixture_test.go), and writes it.
- * Word for word: every problem is English on both paths (AGENTS.md section 5).
+ * One input, one deterministic answer (project criterion: "the deterministic results — parsing, gate checks — agree
+ * on the old path and the new"): `src/shared/src/wiki-maintain-proposal.fixture.json` holds what the runner's check of
+ * a maintenance run's plan proposal (src/runner-go/wiki_maintain_docs.go: parseWikiProposal, assembleWikiProposal,
+ * wikiProposalSection) made of a set of answers on a checkout of the fixture's files — the problems it handed back to
+ * the model, and the session conditions of the sections it would have sent — and this holds the server's check to the
+ * same answers, the files read through the reader the maintenance job reads them with (`WikiDocsSnapshotRepo`), and a
+ * section's topics held to the space's (the fixture's `topics`, as the affected read hands them over). The Go side's
+ * test (wiki_maintain_proposal_fixture_test.go) wrote the file; P11 deleted it with the Go code, and the file is
+ * frozen since. Word for word: every problem is English (AGENTS.md section 5).
  */
 
 // From build/wiki-worker back to src/shared.

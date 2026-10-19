@@ -1,7 +1,7 @@
 /**
  * The server's `articles` job end to end (contracts/wiki.contract.json `articles.serverExecution`, `jobs.kindRuns.articles`,
  * P4), against a real PostgreSQL and a System model played by a local Node http server: the executor, the request queue,
- * the snapshot cache and the real write path, for an account on the canary list (ORBIT_WIKI_EXECUTOR=canary).
+ * the snapshot cache and the real write path.
  *
  *   1. the job writes the topics whose entries changed — one article for a small topic, an overview and subtopic articles
  *      for a big one — at the commit of the space's snapshot and with the System model's name, and the footnote check
@@ -16,11 +16,8 @@
  *   4. entries that change while the articles are written: WIKI_ARTICLE_STALE leaves the topic unwritten, and the job fails
  *      as content with its report on the row;
  *   5. the trigger (owner, 2026-10-08): a maintenance run's end makes one articles job when it succeeded, recorded ops and
- *      was not made while the space was behind, and only for an account the server runs — one per space while queued or
- *      parked;
- *   6. the runner door in both modes: under the default runner a maintenance session reads and writes the articles as it
- *      always has; for a canary account it is refused WIKI_SERVER_EXECUTES on all three routes, and the job is not;
- *   7. a worker stopped once the job's first topic is written hands the job back, and the next one finishes it: the report
+ *      was not made while the space was behind — one per space while queued or parked;
+ *   6. a worker stopped once the job's first topic is written hands the job back, and the next one finishes it: the report
  *      the replay ends with is the whole job's (contract `jobs.carry`) — the topics the space was seeded with, the topic
  *      written before the stop as written, every topic once, every call the job made once — exactly what the same job
  *      reports when nothing stops it.
@@ -45,9 +42,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
-import { sumStats, WikiArticles, wikiArticlesJobPrincipal } from '../wiki/wiki-articles';
-import { enqueueWikiArticlesJob, queueWikiArticlesAfterRun, queueWikiArticlesAfterSessionRun } from '../wiki/wiki-articles-jobs';
-import { WikiRefusalError, WikiService, type WikiPrincipal } from '../wiki/wiki.service';
+import { sumStats, WikiArticles } from '../wiki/wiki-articles';
+import { enqueueWikiArticlesJob, queueWikiArticlesAfterRun } from '../wiki/wiki-articles-jobs';
+import { WikiService, type WikiPrincipal } from '../wiki/wiki.service';
 import { wikiArticlesJobRunner } from './wiki-articles-job';
 import { WikiJobExecutor } from './wiki-job-executor';
 import { WIKI_JOB_HANDED_BACK } from './wiki-jobs';
@@ -162,7 +159,6 @@ interface Owner {
   spaceId: string;
   workspaceId: string;
   runnerId: string;
-  listId: string;
 }
 
 interface Harness {
@@ -204,16 +200,11 @@ after(async () => {
   const { prisma, sql, model, owners } = await harness;
   for (const id of owners) {
     await prisma.wikiSpace.deleteMany({ where: { ownerId: id } }).catch(() => undefined);
-    await prisma.session.deleteMany({ where: { ownerId: id } }).catch(() => undefined);
-    await prisma.task.deleteMany({ where: { ownerId: id } }).catch(() => undefined);
-    await prisma.taskList.deleteMany({ where: { ownerId: id } }).catch(() => undefined);
     await prisma.workspace.deleteMany({ where: { ownerId: id } }).catch(() => undefined);
     await prisma.runner.deleteMany({ where: { ownerId: id } }).catch(() => undefined);
     await prisma.user.deleteMany({ where: { id } }).catch(() => undefined);
   }
   await prisma.wikiModelStatus.deleteMany({ where: { id: 1 } }).catch(() => undefined);
-  delete process.env.ORBIT_WIKI_EXECUTOR;
-  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
   await prisma.$disconnect().catch(() => undefined);
   await sql.end().catch(() => undefined);
   await model.close().catch(() => undefined);
@@ -233,17 +224,15 @@ async function owner(h: Harness): Promise<Owner> {
   });
   const workspaceId = randomUUID();
   await h.prisma.workspace.create({ data: { id: workspaceId, ownerId: id, name: 'articles checkout', runnerId, workDir: '/tmp/articles-spec' } });
-  const listId = randomUUID();
-  await h.prisma.taskList.create({ data: { id: listId, ownerId: id, title: 'Wiki maintenance' } });
   const spaceId = randomUUID();
   await h.prisma.wikiSpace.create({
     data: {
       id: spaceId, ownerId: id, slug: `articles-${spaceId.slice(0, 8)}`, title: 'Articles job spec',
       repoUrlNorm: 'github.com/example/orbit', rootCommitSha: 'a'.repeat(40),
-      settings: { maintenance: { workspaceId, listId } },
+      settings: { maintenance: { workspaceId } },
     },
   });
-  return { id, spaceId, workspaceId, runnerId, listId };
+  return { id, spaceId, workspaceId, runnerId };
 }
 
 const ownerPrincipal = (o: Owner): WikiPrincipal => ({ origin: 'owner', ownerId: o.id, userId: o.id, sessionId: null, toolCallId: null });
@@ -324,9 +313,7 @@ function worker(h: Harness, extra: { snapshotWaitMs?: number } = {}): { queue: W
   return { queue, executor };
 }
 
-async function canary(h: Harness, ...ids: string[]): Promise<void> {
-  process.env.ORBIT_WIKI_EXECUTOR = 'canary';
-  process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS = ids.join(',');
+async function modelUp(h: Harness): Promise<void> {
   await h.sql.query('DELETE FROM "wiki_model_status"');
   await new WikiModelStatusProbe(h.prisma as unknown as PrismaService, config(h)).check();
 }
@@ -393,12 +380,12 @@ async function footnotesHold(h: Harness, o: Owner, slug: string, entries: readon
 
 // ── 1. the articles, written by the server ──────────────────────────────────────────────────────
 
-test('canary: the server writes the changed topics\' articles, and the footnote check keeps only what names the topic\'s entries', { skip, timeout: 120_000 }, async () => {
+test('the server writes the changed topics\' articles, and the footnote check keeps only what names the topic\'s entries', { skip, timeout: 120_000 }, async () => {
   const h = await boot();
   const o = await owner(h);
   const made = await topics(h, o);
   await snapshot(h, o);
-  await canary(h, o.id);
+  await modelUp(h);
   h.model.hits.length = 0;
   h.model.status = () => 200;
   h.model.before = async () => undefined;
@@ -458,7 +445,7 @@ test('no snapshot yet: the job asks the space\'s runner for one, parks without a
   const o = await owner(h);
   await adds(h, o, Array.from({ length: 3 }, (_, i) =>
     pitfall(`迁移编号先扫描再取 ${i}`, `取迁移号之前先扫描，第 ${i} 条。`, `src/apiserver/prisma/migrations/05${i}0_x/migration.sql`)));
-  await canary(h, o.id);
+  await modelUp(h);
   h.model.hits.length = 0;
   h.model.status = () => 200;
   h.model.before = async () => undefined;
@@ -494,7 +481,7 @@ test('no snapshot yet: the job asks the space\'s runner for one, parks without a
   // A snapshot that fails: asked for once, and the articles are written without a ref.
   const failing = await owner(h);
   await adds(h, failing, [pitfall('迁移先 generate', '改了 schema 先 prisma generate。', 'src/apiserver/prisma/schema.prisma')]);
-  await canary(h, o.id, failing.id);
+  await modelUp(h);
   const w2 = worker(h);
   await enqueueWikiArticlesJob(h.prisma as unknown as PrismaService, { ownerId: failing.id, spaceId: failing.spaceId });
   await until('the second space\'s job to park', w2, async () => (await jobs(h, failing))[0]?.state === 'waiting', 20);
@@ -521,7 +508,7 @@ test('the System model refuses the key: the queue stops at the first 401, nothin
   const o = await owner(h);
   await adds(h, o, Array.from({ length: 3 }, (_, i) => pitfall(`迁移 ${i}`, `迁移说明 ${i}。`, `src/apiserver/prisma/migrations/06${i}0_x/migration.sql`)));
   await snapshot(h, o);
-  await canary(h, o.id);
+  await modelUp(h);
   h.model.hits.length = 0;
   h.model.status = () => 401;
   h.model.before = async () => undefined;
@@ -555,7 +542,7 @@ test('a 500 is tried again by the queue, and the article is written from the ans
   const o = await owner(h);
   await adds(h, o, Array.from({ length: 3 }, (_, i) => pitfall(`迁移 ${i}`, `迁移说明 ${i}。`, `src/apiserver/prisma/migrations/07${i}0_x/migration.sql`)));
   await snapshot(h, o);
-  await canary(h, o.id);
+  await modelUp(h);
   h.model.hits.length = 0;
   h.model.status = (n) => (n === 1 ? 500 : 200);
   h.model.before = async () => undefined;
@@ -580,7 +567,7 @@ test('entries that change while the articles are written: WIKI_ARTICLE_STALE lea
   const [first] = await adds(h, o, Array.from({ length: 3 }, (_, i) =>
     pitfall(`迁移 ${i}`, `迁移说明 ${i}。`, `src/apiserver/prisma/migrations/08${i}0_x/migration.sql`)));
   await snapshot(h, o);
-  await canary(h, o.id);
+  await modelUp(h);
   h.model.hits.length = 0;
   h.model.status = () => 200;
   h.model.answer = writer();
@@ -611,126 +598,52 @@ test('entries that change while the articles are written: WIKI_ARTICLE_STALE lea
 
 // ── 5. the trigger ──────────────────────────────────────────────────────────────────────────────
 
-/** A maintenance run of the space that ended: its task and session, the run row, and — when it recorded ops — its changeset. */
-async function runEnd(h: Harness, o: Owner, end: { outcome: string; catchUp?: string | null; ops?: boolean }): Promise<string> {
-  const taskId = randomUUID();
-  await h.prisma.task.create({ data: { id: taskId, title: 'Wiki maintenance run', ownerId: o.id, creatorType: 'USER', creatorId: o.id, listId: o.listId, completionCriterion: 'OWNER_CONFIRMED' } });
-  const sessionId = randomUUID();
-  await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","task_id","status","dispatch_origin","updated_at")
-     VALUES ($1,'a maintenance run','p',$2,$2,$3,$4,$5,'SUCCEEDED'::run_status,'USER',now())`,
-    [sessionId, o.id, o.workspaceId, o.runnerId, taskId],
-  );
-  await h.prisma.wikiMaintenanceRun.create({
-    data: {
-      spaceId: o.spaceId, ownerId: o.id, taskId, sessionId, startedAt: new Date(), endedAt: new Date(),
-      outcome: end.outcome, failureKind: end.outcome === 'succeeded' ? null : 'content', catchUp: end.catchUp ?? null,
-    },
+/**
+ * How a maintenance run of the space ended, as its job's end hands it on (`finishWikiMaintenanceJob`): the outcome, how
+ * the run was made — `catchUp`, off its run row — and whether its report recorded an op.
+ */
+function runEnd(h: Harness, o: Owner, end: { outcome: 'succeeded' | 'failed' | 'truncated'; catchUp?: 'active' | 'paused' | null; ops?: boolean }): Promise<boolean> {
+  return queueWikiArticlesAfterRun(h.prisma as unknown as PrismaService, {
+    ownerId: o.id,
+    spaceId: o.spaceId,
+    outcome: end.outcome,
+    catchUp: end.catchUp ?? null,
+    recordedOps: end.ops !== false,
   });
-  if (end.ops !== false) {
-    await h.prisma.wikiChangeset.create({ data: { ownerId: o.id, spaceId: o.spaceId, origin: 'maintenance', sessionId, status: 'settled', decidedAt: new Date() } });
-  }
-  return sessionId;
 }
 
-test('a maintenance run\'s end makes one articles job: succeeded, ops recorded, not behind — and only for an account the server runs', { skip, timeout: 60_000 }, async () => {
+test('a maintenance run\'s end makes one articles job: succeeded, ops recorded, not behind — one per space while it waits', { skip, timeout: 60_000 }, async () => {
   const h = await boot();
   const o = await owner(h);
-  const service = h.prisma as unknown as PrismaService;
-  const after_ = (sessionId: string) => queueWikiArticlesAfterSessionRun(service, { ownerId: o.id, spaceId: o.spaceId, sessionId });
 
-  // The default runner: nothing, whatever the run.
-  delete process.env.ORBIT_WIKI_EXECUTOR;
-  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
-  assert.equal(await after_(await runEnd(h, o, { outcome: 'succeeded' })), false);
-  // Canary, with another account listed: nothing.
-  await canary(h, randomUUID());
-  assert.equal(await after_(await runEnd(h, o, { outcome: 'succeeded' })), false);
-  assert.equal((await jobs(h, o)).length, 0);
-
-  await canary(h, o.id);
   // Runs the rule does not name: failed, truncated, behind (active or paused), no ops.
-  assert.equal(await after_(await runEnd(h, o, { outcome: 'failed' })), false);
-  assert.equal(await after_(await runEnd(h, o, { outcome: 'truncated' })), false);
-  assert.equal(await after_(await runEnd(h, o, { outcome: 'succeeded', catchUp: 'active' })), false);
-  assert.equal(await after_(await runEnd(h, o, { outcome: 'succeeded', catchUp: 'paused' })), false);
-  assert.equal(await after_(await runEnd(h, o, { outcome: 'succeeded', ops: false })), false);
+  assert.equal(await runEnd(h, o, { outcome: 'failed' }), false);
+  assert.equal(await runEnd(h, o, { outcome: 'truncated' }), false);
+  assert.equal(await runEnd(h, o, { outcome: 'succeeded', catchUp: 'active' }), false);
+  assert.equal(await runEnd(h, o, { outcome: 'succeeded', catchUp: 'paused' }), false);
+  assert.equal(await runEnd(h, o, { outcome: 'succeeded', ops: false }), false);
   assert.equal((await jobs(h, o)).length, 0);
 
   // The run it names: one articles job, background, with nothing in its input.
-  assert.equal(await after_(await runEnd(h, o, { outcome: 'succeeded' })), true);
+  assert.equal(await runEnd(h, o, { outcome: 'succeeded' }), true);
   let made = await jobs(h, o);
   assert.equal(made.length, 1);
   assert.deepEqual([made[0].state, made[0].priority, made[0].input], ['queued', WIKI_ARTICLES_JOB.priority, {}]);
   // Another run ends while it is queued, or parked: it covers that one too.
-  assert.equal(await after_(await runEnd(h, o, { outcome: 'succeeded' })), false);
+  assert.equal(await runEnd(h, o, { outcome: 'succeeded' }), false);
   await h.sql.query(`UPDATE "wiki_job" SET "state" = 'waiting', "waiting_for" = 'repo' WHERE "id" = $1`, [made[0].id]);
-  assert.equal(await after_(await runEnd(h, o, { outcome: 'succeeded' })), false);
+  assert.equal(await runEnd(h, o, { outcome: 'succeeded' }), false);
   // Once it runs it may have read the plan: the next run's end queues one behind it.
   await h.sql.query(`UPDATE "wiki_job" SET "state" = 'running', "waiting_for" = NULL, "lease_owner" = gen_random_uuid(),
     "lease_generation" = gen_random_uuid(), "lease_deadline_at" = now() + interval '1 minute' WHERE "id" = $1`, [made[0].id]);
-  assert.equal(await after_(await runEnd(h, o, { outcome: 'succeeded' })), true);
+  assert.equal(await runEnd(h, o, { outcome: 'succeeded' }), true);
   made = await jobs(h, o);
   assert.deepEqual(made.map((row) => row.state), ['running', 'queued']);
-  // P8's entry, with its own run's facts, reads the same rule.
-  assert.equal(await queueWikiArticlesAfterRun(service, { ownerId: o.id, spaceId: o.spaceId, outcome: 'succeeded', catchUp: 'active', recordedOps: true }), false);
-  assert.equal(await queueWikiArticlesAfterRun(service, { ownerId: o.id, spaceId: o.spaceId, outcome: 'succeeded', catchUp: null, recordedOps: true }), false, 'one is queued already');
+  assert.equal(await runEnd(h, o, { outcome: 'succeeded' }), false, 'one is queued already');
   await h.sql.query(`DELETE FROM "wiki_job" WHERE "space_id" = $1`, [o.spaceId]);
 });
 
-// ── 6. the runner door, in both modes ───────────────────────────────────────────────────────────
-
-test('the runner door: a maintenance session writes as ever under runner, and is refused WIKI_SERVER_EXECUTES for a canary account', { skip, timeout: 60_000 }, async () => {
-  const h = await boot();
-  const o = await owner(h);
-  await adds(h, o, [pitfall('迁移先 generate', '改了 schema 先 prisma generate。', 'src/apiserver/prisma/schema.prisma')]);
-  // A maintenance run of the space: a session whose task is in the space's maintenance list.
-  const taskId = randomUUID();
-  await h.prisma.task.create({ data: { id: taskId, title: 'Wiki maintenance run', ownerId: o.id, creatorType: 'USER', creatorId: o.id, listId: o.listId, completionCriterion: 'OWNER_CONFIRMED' } });
-  const sessionId = randomUUID();
-  await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","task_id","status","dispatch_origin","updated_at")
-     VALUES ($1,'a maintenance run','p',$2,$2,$3,$4,$5,'RUNNING'::run_status,'USER',now())`,
-    [sessionId, o.id, o.workspaceId, o.runnerId, taskId],
-  );
-  const session: WikiPrincipal = { origin: 'maintenance', ownerId: o.id, userId: null, sessionId, toolCallId: null };
-
-  // The default runner: the plan, the input and the write, as they have always been.
-  delete process.env.ORBIT_WIKI_EXECUTOR;
-  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
-  const plan = await h.articles.plan(session, o.spaceId);
-  const topic = plan.topics.find((one) => one.changed)!;
-  const input = await h.articles.input(session, o.spaceId, topic.slug);
-  const body = {
-    entrySetSha256: input.entrySetSha256, ref: SHA, model: 'qwen3.8-27b-fp8',
-    articles: [{ part: 0, kind: 'article', title: '迁移', markdown: '改了 schema 先 prisma generate[1]。', notes: [input.entries[0].id] }],
-  };
-  assert.equal((await h.articles.write(session, o.spaceId, topic.slug, body)).written, true);
-
-  // A canary account: refused on all three, and nothing is read or written.
-  await canary(h, o.id);
-  const refused = async (call: () => Promise<unknown>, what: string) => {
-    await assert.rejects(call, (error: unknown) => {
-      assert.ok(error instanceof WikiRefusalError, `${what}: ${String(error)}`);
-      assert.equal(error.refusal.code, 'WIKI_SERVER_EXECUTES', what);
-      assert.equal(error.getStatus(), 409, what);
-      assert.match(error.refusal.message, /ORBIT_WIKI_EXECUTOR=canary/u);
-      return true;
-    });
-  };
-  await refused(() => h.articles.plan(session, o.spaceId), 'the plan');
-  await refused(() => h.articles.input(session, o.spaceId, topic.slug), 'the input');
-  await refused(() => h.articles.write(session, o.spaceId, topic.slug, { ...body, entrySetSha256: 'f'.repeat(64) }), 'the write');
-  // Another account's session is refused as it always was; the server's own job is not refused at all.
-  await assert.rejects(h.articles.plan({ ...session, sessionId: randomUUID() }, o.spaceId), (error: unknown) =>
-    error instanceof WikiRefusalError && error.refusal.code === 'WIKI_NOT_MAINTENANCE_SESSION');
-  const asJob = await h.articles.plan(wikiArticlesJobPrincipal(o.id), o.spaceId);
-  assert.equal(asJob.spaceId, o.spaceId);
-  delete process.env.ORBIT_WIKI_EXECUTOR;
-  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
-});
-
-// ── 7. a worker stopped mid-job: the report is the whole job's ───────────────────────────────────
+// ── 6. a worker stopped mid-job: the report is the whole job's ───────────────────────────────────
 
 /**
  * What a model writes for this case, the same whoever asks and however often: a group named by what its entries say
@@ -782,7 +695,7 @@ test('a worker stopped once the first topic is written hands the job back, and t
   const stopped = await owner(h);
   const made = await topics(h, stopped);
   await snapshot(h, stopped);
-  await canary(h, straight.id, stopped.id);
+  await modelUp(h);
   h.model.hits.length = 0;
   h.model.status = () => 200;
   h.model.before = async () => undefined;

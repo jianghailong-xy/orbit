@@ -2,27 +2,25 @@
  * The wiki job queue and its executor (contracts/wiki.contract.json `jobs`, migration 0401), against a real PostgreSQL
  * and a System model played by a local Node http server:
  *
- *   1. the executor switch: under the default `runner` nothing is claimed at all, `canary` claims only the accounts it
- *      lists, `server` claims every account's — the default behavior is the one the deployment has always had;
- *   2. the claim takes the highest priority first, and a space never has two jobs running at once (the partial unique
+ *   1. the claim takes the highest priority first, and a space never has two jobs running at once (the partial unique
  *      index is the same rule in the database);
- *   3. a job whose worker died is reclaimed by the next one, which finishes it — reusing the answer its job had
+ *   2. a job whose worker died is reclaimed by the next one, which finishes it — reusing the answer its job had
  *      already obtained instead of calling the model again;
- *   4. the smoke job runs end to end: a job claimed, one request enqueued, the call made, the answer written into the
+ *   3. the smoke job runs end to end: a job claimed, one request enqueued, the call made, the answer written into the
  *      job's report — and the wake-up that ends the job's wait comes over pg_notify, with the poll as the fallback;
- *   5. a request that waited past its step's limit fails, and the job that made it fails as infra: back to queued with
+ *   4. a request that waited past its step's limit fails, and the job that made it fails as infra: back to queued with
  *      the lost attempt counted, not the space's failure to carry;
- *   6. a job of a kind this build runs no pipeline for stays queued;
- *   7. the retry limit (`jobs.retry.limit`, 2026-10-09): an error the build did not expect ends the job at its third
+ *   5. a job of a kind this build runs no pipeline for stays queued;
+ *   6. the retry limit (`jobs.retry.limit`, 2026-10-09): an error the build did not expect ends the job at its third
  *      attempt and its plan job with it; an infra failure ends it at its tenth, and its maintenance run with it; and a
  *      job the lease sweep puts back at the limit is ended by the next pass, never run again, its calls cancelled;
- *   8. the stop (design §5.4): a job its worker stops is handed back whatever its pipeline ends with once stopped —
+ *   7. the stop (design §5.4): a job its worker stops is handed back whatever its pipeline ends with once stopped —
  *      queued again at once, never settled, nothing counted (the owner's decision of 2026-10-09) — and asks the model
  *      nothing new; a claim the stop overtakes hands back what it took instead of starting it;
- *   9. a stop against a crash, in one space: the build a stop handed back is the next worker's first claim, ahead of a
+ *   8. a stop against a crash, in one space: the build a stop handed back is the next worker's first claim, ahead of a
  *      lower-priority job of its space, its attempts as they were; the build whose worker crashed — its lease ran out,
  *      nobody handed it back — is counted and backed off 0, 10, then 30 s, as before;
- *  10. maintenance first, an articles job yields one round at most (the owner's decision of 2026-10-10): the round
+ *   9. maintenance first, an articles job yields one round at most (the owner's decision of 2026-10-10): the round
  *      queued behind its space's articles job is claimed first, every attempt of it, even while it backs off, and the
  *      round after finds the articles job ahead; the owner's own work still goes first; another space keeps its place
  *      in the line; an articles job that has run before yields to nothing; and Activity reads each where the claim
@@ -176,7 +174,6 @@ interface Harness {
 let harness: Promise<Harness> | undefined;
 
 function boot(): Promise<Harness> {
-  process.env.ORBIT_WIKI_EXECUTOR = 'server';
   harness ??= (async () => {
     assertCoordinatorPgUrlIsIsolated(URL_);
     const sql = new Client({ connectionString: URL_, connectionTimeoutMillis: 5_000 });
@@ -192,7 +189,6 @@ function boot(): Promise<Harness> {
 after(async () => {
   if (!harness) return;
   const { prisma, sql, model, owner } = await harness;
-  delete process.env.ORBIT_WIKI_EXECUTOR;
   await prisma.wikiSpace.deleteMany({ where: { ownerId: owner.id } }).catch(() => undefined);
   await prisma.user.deleteMany({ where: { id: owner.id } }).catch(() => undefined);
   await prisma.wikiModelStatus.deleteMany({ where: { id: 1 } }).catch(() => undefined);
@@ -318,38 +314,6 @@ async function pass(executor: WikiJobExecutor, queue: WikiModelRequestQueue, rou
     await delay(30);
   }
 }
-
-test('the executor switch: runner claims nothing at all, canary only the listed accounts, server every account', { skip, timeout: 60_000 }, async () => {
-  const h = await boot();
-  await reset(h);
-  await modelUp(h);
-  const { queue, executor } = worker(h);
-  const id = await job(h);
-  // The default: the path that has always run. No claim, whatever is queued.
-  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
-  assert.equal(await executor.runOnce(), 0);
-  assert.equal((await jobRow(h, id)).state, 'queued');
-  // Canary, with nobody listed: the same.
-  process.env.ORBIT_WIKI_EXECUTOR = 'canary';
-  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
-  assert.equal(await executor.runOnce(), 0);
-  assert.equal((await jobRow(h, id)).state, 'queued');
-  // Canary, with somebody else listed: still nothing of this account's.
-  process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS = randomUUID();
-  assert.equal(await executor.runOnce(), 0);
-  assert.equal((await jobRow(h, id)).state, 'queued');
-  // This account listed: claimed.
-  process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS = h.owner.id;
-  assert.equal(await executor.runOnce(), 1);
-  await queue.runOnce();
-  await queue.whenIdle();
-  await executor.whenIdle();
-  assert.equal((await jobRow(h, id)).state, 'succeeded');
-  await queue.onModuleDestroy();
-  await executor.onModuleDestroy();
-  process.env.ORBIT_WIKI_EXECUTOR = 'server';
-  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
-});
 
 test('the claim takes the highest priority first, and one space never runs two jobs at once', { skip, timeout: 60_000 }, async () => {
   const h = await boot();
@@ -878,10 +842,6 @@ test('the round of maintenance queued behind its space\'s articles job is claime
   const articles = await madeAgo(h, 'articles', 60);
   const round = await madeAgo(h, 'maintain', 30);
   const names = { [articles]: 'articles', [round]: 'round' };
-  // Under the default executor nothing is claimed at all, whatever is queued: the runner path is what it was.
-  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
-  assert.equal(await worker(h).executor.runOnce(), 0);
-  process.env.ORBIT_WIKI_EXECUTOR = 'server';
   const activity = await aheadIn(h, h.owner.spaceId, names);
   const first = (await claimed(h)).map((one) => names[one.id]);
   assert.deepEqual(
