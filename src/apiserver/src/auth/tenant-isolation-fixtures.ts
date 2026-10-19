@@ -353,6 +353,26 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         integrationRefSource: 'DEFAULT_RULE', integrationStartedAt: new Date(),
       },
     });
+    // A LANDING session and its landing subject (§2.9 LS1): the address the landing page and its
+    // check log are read through. It is the shape `ensureLandingSession` writes — no engine, no
+    // runner, the platform's reserved provider, and the subject pointing back at this session.
+    const landingSessionId = randomUUID();
+    await db.session.create({
+      data: {
+        id: landingSessionId, title: `${name} landing`, ownerId, creatorId: ownerId, workspaceId,
+        prompt: 'Orbit runs this landing. This conversation is a record, not an engine.',
+        status: 'AWAITING_INPUT', sessionKind: 'LANDING', startsTaskWork: false,
+        provider: 'orbit', providerBuiltin: true, titleManagedByProject: true,
+        dispatchOrigin: 'USER', runSource: 'MANUAL',
+      },
+    });
+    const landingId = randomUUID();
+    await db.projectLanding.create({
+      data: {
+        id: landingId, projectId, ownerId, codebaseId: codebase.id, subject: 'TASK',
+        taskId: projectTaskId, episode: 1, sessionId: landingSessionId,
+      },
+    });
     const promotionId = (await db.projectPromotion.create({
       data: {
         projectId, ownerId, codebaseId: codebase.id, sourceKind: 'PROJECT_BRANCH', sourceRef: `refs/heads/project/${projectId}`,
@@ -369,6 +389,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         serialKey: `https://census.invalid/${name}#refs/heads/project/${projectId}`,
         targetRef: `refs/heads/project/${projectId}`, upstreamRef: 'refs/heads/main',
         sourceRef: 'refs/heads/orbit/census', idempotencyKey: `ij:v1:census:${projectId}`,
+        // The attempt belongs to the landing subject above, so the landing's log read can name it.
+        landingId,
       },
     })).id;
     const contract = await db.projectCompletionContract.findUniqueOrThrow({ where: { projectId } });
@@ -589,6 +611,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       listRevision,
       projectId,
       projectTaskId,
+      landingSessionId,
       attemptId,
       projectCriterionId: toUuid(projectRead.acceptanceCriteriaItems[0].id),
       openItemId,

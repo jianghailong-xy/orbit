@@ -5,6 +5,9 @@ import {
   IntegrationCheckSpec,
   IntegrationJobCommand,
   IntegrationJobCurrentCheck,
+  IntegrationJobOutputCheck,
+  IntegrationJobOutputRequest,
+  IntegrationJobOutputResponse,
   IntegrationJobPhase,
   IntegrationJobProgressRequest,
   IntegrationJobProgressResponse,
@@ -69,6 +72,11 @@ import { settleLandingAfterJobResult } from '../projects/landing-session';
 import { mainBranchOf } from '../projects/project-criterion-landing';
 import { readInFlightJobs, readProjectCodebase } from '../projects/project-integration-line';
 import {
+  INTEGRATION_LOG_HEAD_BYTES,
+  INTEGRATION_LOG_MAX_CHUNK_BYTES,
+  INTEGRATION_LOG_TAIL_BYTES,
+} from '../projects/project-integration-log';
+import {
   LIVE_PROMOTION_STATES,
   PromotionState,
   promotionDedupeKey,
@@ -128,6 +136,16 @@ export class IntegrationJobRelay {
     ownerId?: string,
   ): Promise<IntegrationJobProgressResponse> {
     return receiveIntegrationJobProgress(this.prisma, runnerId, jobId, body, ownerId);
+  }
+
+  /** §2.2 J-T4's output route, §2.9 LS2 — see `receiveIntegrationJobOutput`. */
+  output(
+    jobId: string,
+    runnerId: string,
+    body: IntegrationJobOutputRequest,
+    ownerId?: string,
+  ): Promise<IntegrationJobOutputResponse> {
+    return receiveIntegrationJobOutput(this.prisma, { jobId, runnerId, ownerId, body });
   }
 
   /**
@@ -937,7 +955,7 @@ function reportSha(value: unknown, field: string): string | null {
  * that was taken over, released or abandoned (STALE_CLAIM).
  */
 async function progressRefusal(
-  prisma: PrismaService,
+  prisma: Pick<PrismaService, 'projectIntegrationJob'>,
   input: { jobId: string; ownerId?: string },
 ): Promise<IntegrationJobRefused> {
   const job = await prisma.projectIntegrationJob.findFirst({
@@ -947,6 +965,163 @@ async function progressRefusal(
   if (!job) return new IntegrationJobRefused('NOT_FOUND');
   if (isTerminalJobState(job.state)) return new IntegrationJobRefused('ALREADY_FINAL');
   return new IntegrationJobRefused('STALE_CLAIM');
+}
+
+/**
+ * One chunk of a running check's output (POST /runner/integration-jobs/:jobId/output, contract
+ * §2.2 J-T4, §2.9 LS2), written to `project_integration_job_log` under the claim it names.
+ *
+ * THE FENCE IS THE PROGRESS REPORT'S. The job row is taken FOR UPDATE in the transaction, matched on
+ * this runner, `RUNNING`, the exact (leaseOwner, claimGeneration), so a chunk from a claim that was
+ * taken over, released or abandoned writes nothing and is told STALE_CLAIM; a terminal job is
+ * ALREADY_FINAL; another account's job is 404. A takeover therefore cannot receive output from the
+ * process it replaced, which is the same property a result has.
+ *
+ * THE CAP IS APPLIED IN THE SAME TRANSACTION, after the insert: the check's chunks are read in seq
+ * order, the first bytes up to the head cap and the last bytes up to the tail cap are kept, and every
+ * chunk between them is deleted with its byte count (and any bytes it already marked) added to the
+ * first retained tail row's `truncatedBytes`. Holding the job row while it trims serialises two
+ * chunks of one check, so two writers cannot each compute a cap the other then exceeds.
+ *
+ * NOTHING ELSE IS WRITTEN: no job row column, no run_event (this is not a transcript event), no
+ * session. The route is a job gate and never waits on a session lock (§2.9 LS2).
+ *
+ * A chunk whose seq is already stored is the chunk already stored: the insert is ON CONFLICT DO
+ * NOTHING and the answer is still accepted, so a runner that resends after a lost answer does not
+ * create a second copy or a failure.
+ */
+export async function receiveIntegrationJobOutput(
+  prisma: PrismaService,
+  input: { jobId: string; runnerId: string; ownerId?: string; body: IntegrationJobOutputRequest },
+): Promise<IntegrationJobOutputResponse> {
+  const chunk = outputChunk(input.body);
+  await withTransactionRetry(
+    prisma,
+    async (tx) => {
+      const [job] = await tx.$queryRaw<Array<{ round: number }>>(Prisma.sql`
+        SELECT COALESCE("round", 1)::int AS "round"
+          FROM "project_integration_job"
+         WHERE "id" = ${input.jobId}::uuid
+           AND "runner_id" = ${input.runnerId}::uuid
+           ${input.ownerId != null ? Prisma.sql`AND "owner_id" = ${input.ownerId}::uuid` : Prisma.empty}
+           AND "state" = 'RUNNING'
+           AND "claim_lease_owner" = ${chunk.leaseOwner}
+           AND "claim_generation" = ${BigInt(chunk.claimGeneration)}
+         FOR UPDATE`);
+      if (!job) throw await progressRefusal(tx, input);
+      // The claim is ours: the chunk row. A resent seq inserts nothing, which is the idempotency
+      // the key names; either way the trim below runs against the committed set.
+      await tx.$executeRaw(Prisma.sql`
+        INSERT INTO "project_integration_job_log"
+               ("id", "job_id", "claim_generation", "round", "check_name", "check_index", "seq", "text")
+        VALUES (gen_random_uuid(), ${input.jobId}::uuid, ${BigInt(chunk.claimGeneration)}, ${job.round},
+                ${chunk.check.name}, ${chunk.check.index}, ${chunk.seq}, ${chunk.text})
+        ON CONFLICT ("job_id", "claim_generation", "round", "check_name", "check_index", "seq")
+        DO NOTHING`);
+      await trimIntegrationJobLog(tx, {
+        jobId: input.jobId,
+        claimGeneration: chunk.claimGeneration,
+        round: job.round,
+        check: chunk.check,
+      });
+    },
+    loggedRetry(logger, 'integrationJob.output'),
+  );
+  return { accepted: true };
+}
+
+/** What one upload's body must be, validated once, in the shape the row is written with. */
+function outputChunk(body: IntegrationJobOutputRequest): {
+  claimGeneration: string;
+  leaseOwner: string;
+  check: IntegrationJobOutputCheck;
+  seq: number;
+  text: string;
+} {
+  if (typeof body?.leaseOwner !== 'string' || body.leaseOwner === ''
+      || typeof body?.claimGeneration !== 'string' || !/^\d{1,19}$/.test(body.claimGeneration)) {
+    throw new IntegrationJobRefused(
+      'INVALID_RESULT', 'an output chunk names the claim it belongs to: claimGeneration and leaseOwner',
+    );
+  }
+  const name = body.check?.name;
+  if (name !== 'TASK_ACCEPTANCE' && name !== 'MERGE_CHECK') {
+    throw new IntegrationJobRefused('INVALID_RESULT', `unknown check name ${String(name)}`);
+  }
+  const index = body.check.index;
+  if (!Number.isSafeInteger(index) || index < 1) {
+    throw new IntegrationJobRefused('INVALID_RESULT', `check.index must be an integer from 1, not ${String(index)}`);
+  }
+  if (!Number.isSafeInteger(body.seq) || body.seq < 0) {
+    throw new IntegrationJobRefused('INVALID_RESULT', `seq must be a non-negative integer, not ${String(body.seq)}`);
+  }
+  if (typeof body.text !== 'string') {
+    throw new IntegrationJobRefused('INVALID_RESULT', 'text is the chunk itself');
+  }
+  if (Buffer.byteLength(body.text, 'utf8') > INTEGRATION_LOG_MAX_CHUNK_BYTES) {
+    throw new IntegrationJobRefused(
+      'INVALID_RESULT',
+      `one chunk carries at most ${INTEGRATION_LOG_MAX_CHUNK_BYTES} bytes`,
+    );
+  }
+  return {
+    claimGeneration: body.claimGeneration,
+    leaseOwner: body.leaseOwner,
+    check: { name, index },
+    seq: body.seq,
+    text: body.text,
+  };
+}
+
+/**
+ * Keep one check's output within its cap: the head and the tail stay, the middle goes, and the bytes
+ * it held are recorded where a reader meets the gap.
+ *
+ * Chunks are the unit, not bytes, so a row that straddles the head (or tail) boundary is kept whole
+ * and the retained total can exceed the cap by at most one chunk per side. The gap belongs on the
+ * FIRST retained tail row, because that is where the head stops and the tail starts; a marker row
+ * that itself later falls out of the tail takes its accumulated count with it into the new gap.
+ */
+async function trimIntegrationJobLog(
+  tx: Prisma.TransactionClient,
+  key: { jobId: string; claimGeneration: string; round: number; check: IntegrationJobOutputCheck },
+): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ id: string; seq: number; bytes: number; truncatedBytes: number }>>(Prisma.sql`
+    SELECT "id", "seq", octet_length("text")::int AS "bytes", "truncated_bytes" AS "truncatedBytes"
+      FROM "project_integration_job_log"
+     WHERE "job_id" = ${key.jobId}::uuid
+       AND "claim_generation" = ${BigInt(key.claimGeneration)}
+       AND "round" = ${key.round}
+       AND "check_name" = ${key.check.name}
+       AND "check_index" = ${key.check.index}
+     ORDER BY "seq" ASC`);
+  const total = rows.reduce((sum, row) => sum + row.bytes, 0);
+  if (total <= INTEGRATION_LOG_HEAD_BYTES + INTEGRATION_LOG_TAIL_BYTES) return;
+  const head = new Set<string>();
+  let headBytes = 0;
+  for (const row of rows) {
+    if (headBytes >= INTEGRATION_LOG_HEAD_BYTES) break;
+    head.add(row.id);
+    headBytes += row.bytes;
+  }
+  const tail = new Set<string>();
+  let tailBytes = 0;
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    if (tailBytes >= INTEGRATION_LOG_TAIL_BYTES) break;
+    tail.add(rows[i].id);
+    tailBytes += rows[i].bytes;
+  }
+  // With both caps kept and the total above them, the tail always holds at least one row, so there is
+  // always somewhere to record the gap.
+  const marker = rows.find((row) => tail.has(row.id));
+  const middle = rows.filter((row) => !head.has(row.id) && !tail.has(row.id));
+  if (!marker || middle.length === 0) return;
+  const gap = middle.reduce((sum, row) => sum + row.bytes + row.truncatedBytes, 0);
+  await tx.projectIntegrationJobLog.deleteMany({ where: { id: { in: middle.map((row) => row.id) } } });
+  await tx.projectIntegrationJobLog.update({
+    where: { id: marker.id },
+    data: { truncatedBytes: { increment: gap } },
+  });
 }
 
 /** What a release came to when nothing was refused: back in the queue, or owed a CANCELLED end. */

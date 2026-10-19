@@ -36,6 +36,7 @@ import {
   endTimedOutLanding,
   integrationJobLimitSeconds,
 } from './project-integration-job';
+import { readProjectIntegrationLog } from './project-integration-log';
 import { medianMs } from './project-promotion';
 import {
   queueBlockingSummary,
@@ -1139,16 +1140,21 @@ function promotionGenerationOf(row: PromotionJobRow): IntegrationJobGeneration<D
  * one, each task's newest landing is one, and each candidate's newest check and merge are one.
  */
 export async function readProjectIntegrationRead(
-  prisma: Pick<PrismaService, '$queryRaw' | 'projectCodebase'>,
+  prisma: Pick<PrismaService, '$queryRaw' | 'projectCodebase' | 'projectIntegrationJob'>,
   project: { id: string; title: string; exceptionEscalationSeconds: number },
   selectors: IntegrationReadSelectors,
 ): Promise<ProjectIntegrationRead<Date>> {
-  const [settings, queue, landTasks, promotionViews] = await Promise.all([
+  const [settings, queue, landTasks, promotionViews, log] = await Promise.all([
     readProjectCodebase(prisma, project.id).then((row) =>
       projectIntegrationView(row, project.exceptionEscalationSeconds)),
     readInFlightJobs(prisma, project.id),
     readProjectLandTaskViews(prisma, project.id),
     readProjectPromotionIntegrationViews(prisma, project.id),
+    // The check log is served only when the caller named an attempt: the line itself has no output
+    // to page, and a caller that did not ask for one reads the shape it always did.
+    selectors.jobId
+      ? readProjectIntegrationLog(prisma, project.id, selectors.jobId, selectors)
+      : Promise.resolve(null),
   ]);
   const promotions = attachQueueFacts(promotionViews, queue);
   return {
@@ -1166,6 +1172,7 @@ export async function readProjectIntegrationRead(
       check: selectors.check ?? null,
       cursor: selectors.cursor ?? null,
     },
+    ...(log ? { log } : {}),
   };
 }
 

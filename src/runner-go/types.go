@@ -566,6 +566,15 @@ type IntegrationJobCommand struct {
 	// are never on the wire.
 	progressEvery    time.Duration
 	pushReportBudget time.Duration
+	// outputSender uploads one chunk of a check's output (contract §2.2 J-T4's output route). It is
+	// set for a v2 claim only, so a legacy claim uploads nothing and keeps the 16 KB result tail it
+	// always had. outputEvery and outputChunkBytes shorten the uploader's two timings for a test;
+	// zero means the package's constants. outputRedactor is the machine's own secrets, applied to
+	// every chunk before it leaves the runner. None of them is on the wire.
+	outputSender     integrationOutputSender
+	outputEvery      time.Duration
+	outputChunkBytes int
+	outputRedactor   *integrationOutputRedactor
 }
 
 // IntegrationUnknownPush is one earlier landing the control plane could not read the push outcome
@@ -635,6 +644,29 @@ type IntegrationJobProgressRequest struct {
 	TestedTreeSha   string `json:"testedTreeSha,omitempty"`
 	SourceSha       string `json:"sourceSha,omitempty"`
 	TargetShaBefore string `json:"targetShaBefore,omitempty"`
+}
+
+// IntegrationJobOutputCheck is the check a chunk of output belongs to (contract §2.2 J-T4's output
+// route): its name and its position in the run, from 1.
+type IntegrationJobOutputCheck struct {
+	Name  string `json:"name"`
+	Index int    `json:"index"`
+}
+
+// IntegrationJobOutputRequest is one chunk of a running check's combined output, uploaded as it is
+// written. Only a v2 claim uploads; seq numbers the chunks of one check from 0, so a chunk sent
+// twice is the chunk already stored. Text is redacted before it leaves the machine.
+type IntegrationJobOutputRequest struct {
+	ClaimGeneration string                    `json:"claimGeneration"`
+	LeaseOwner      string                    `json:"leaseOwner"`
+	Check           IntegrationJobOutputCheck `json:"check"`
+	Seq             int                       `json:"seq"`
+	Text            string                    `json:"text"`
+}
+
+// IntegrationJobOutputResponse says the chunk was taken (or was already stored under its seq).
+type IntegrationJobOutputResponse struct {
+	Accepted bool `json:"accepted"`
 }
 
 // IntegrationJobCurrentCheck is the check a v2 claim is running, as its progress reports name it

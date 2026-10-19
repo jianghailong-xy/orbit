@@ -492,6 +492,43 @@ export class SessionsController {
     return this.sessions.getForOrchestration(user.userId, id);
   }
 
+  /**
+   * One page of a landing session's check output (contract §2.9 LS2): the landing page's read of
+   * what a check printed while the landing ran. The user gate is the session's owner, and another
+   * account's session — or one that is not a landing session — is 404.
+   *
+   * `jobId` names an attempt from the landing view's generations (the newest when absent); `claim`,
+   * `round` and `check` narrow within it, and `cursor` continues the page a previous answer named.
+   */
+  @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
+  @Get(':id/landing/log')
+  landingLog(
+    @CurrentUser() user: AuthUser,
+    @Param('id', PublicIdPipe) id: string,
+    @Query('jobId', PublicIdPipe) jobId?: string,
+    @Query('claim') claim?: string,
+    @Query('round') round?: string,
+    @Query('check') check?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.sessions.landingLog(user.userId, id, {
+      ...(jobId ? { jobId } : {}),
+      ...(claim !== undefined ? { claim: SessionsController.landingPageNumber('claim', claim) } : {}),
+      ...(round !== undefined ? { round: SessionsController.landingPageNumber('round', round) } : {}),
+      ...(check !== undefined ? { check: SessionsController.landingPageNumber('check', check) } : {}),
+      ...(cursor?.trim() ? { cursor: cursor.trim() } : {}),
+    });
+  }
+
+  /** One paging selector a landing-log read may omit but not send malformed. */
+  private static landingPageNumber(field: string, raw: string): number {
+    const value = raw.trim();
+    if (!/^\d+$/.test(value)) {
+      throw new BadRequestException(`${field} must be a non-negative integer`);
+    }
+    return Number(value);
+  }
+
   @PatScope('sessions:read', { workspaceConfinable: { params: { id: 'session' } } })
   @Get(':id/artifacts')
   async artifact(

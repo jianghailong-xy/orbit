@@ -688,6 +688,14 @@ func (t *Transport) integrationJobProgress(ctx context.Context, jobID string, b 
 	return &out, nil
 }
 
+// integrationJobOutput uploads one chunk of a running check's output (contract §2.2 J-T4's output
+// route, §2.9 LS2). The answer matters only when it is a refusal: a 409 STALE_CLAIM / ALREADY_FINAL
+// or a 404 says the claim can never be written into again, and the uploader stops sending.
+func (t *Transport) integrationJobOutput(ctx context.Context, jobID string, b IntegrationJobOutputRequest) error {
+	var out IntegrationJobOutputResponse
+	return t.do(ctx, "POST", "/runner/integration-jobs/"+jobID+"/output", b, &out, 15*time.Second)
+}
+
 // integrationJobRelease hands a claimed job back (contract §2.2 J-T11): released, it is queued for the
 // next heartbeat that asks for work. A 409 is a claim that had already moved on or a job already
 // written down; a 200 that did not release says what the job ended as instead.
@@ -1324,8 +1332,8 @@ func (t *Transport) getProject(id string) (json.RawMessage, error) {
 // §2.2 J-T4, §2.9 LS6): the queue, the three job kinds, why each waits, each task's newest landing
 // and each merge candidate's newest check and merge. READ ONLY.
 //
-// The session header is the authority the server checks against project membership; jobId and
-// cursor are the page selectors the timeline and check-log reads will use, reserved by revision 12.
+// The session header is the authority the server checks against project membership; jobId names one
+// attempt and serves its check output under `log`, and cursor continues that page (§2.9 LS2).
 // This is the door that replaces a coordinator querying the production database: the alternative to
 // calling it is not a smaller answer, it is an ungoverned one.
 func (t *Transport) getProjectIntegration(sessionID, id, jobID, cursor string) (json.RawMessage, error) {
