@@ -139,7 +139,7 @@ class WikiTalkBackWordsTest {
         val route = OrbitRoute(Destination.WIKI_PLAN)
         val state = WikiPlanFixture.state("draftReady")
         val shown = WikiPlanLogic.defaultShown(state)
-        show(route) { WikiPlanPage(route, state, shown, shown?.let { WikiPlanLogic.base(it, state) }, emptyList(), null, null, null, null, WikiPlanFixture.now) }
+        show(route) { WikiPlanPage(route, state, shown, shown?.let { WikiPlanLogic.base(it, state) }, emptyList(), null, null, WikiPlanFixture.now) }
         compose.onNodeWithTag("wiki-plan-version-menu").assert(hasContentDescription(shown!!.status.label))
         assertTalkBackReadsWords("plan")
     }

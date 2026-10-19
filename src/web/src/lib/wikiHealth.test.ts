@@ -70,6 +70,10 @@ describe('the status line says the fixture’s words for every look', () => {
       const link = parts.findIndex((part) => part.link !== 'none');
       if (at >= 0 && link >= 0) expect(at).toBe(link - 1);
     }
+    // A read that does not say the server executes the account's wiki says none, whatever the runner is doing.
+    const offline = shared.cases.find((one) => one.health.repo?.look === 'runner_offline' && one.health.maintenance.enabled)!;
+    expect(wikiServerReason(offline.health)?.text).toBe('Waiting for the runner to come online');
+    expect(wikiServerReason({ ...offline.health, executor: undefined })).toBeNull();
   });
 });
 

@@ -573,7 +573,7 @@ function wikiSpaceState(space: WikiSupportSpace): string {
  * its spaces, each with its version in force and how far its documents are written, one of them picked, and why —
  * recorded with the request as this administrator's. The server writes the version in force just as the owner's
  * Update documents on the plan page does; a space with no plan in force, or a build already on its way, cannot be
- * picked, and an account whose wiki runs on its runners has nothing to ask for here.
+ * picked, and nothing can while the read does not say the server executes the account's wiki.
  */
 function UserWikiDocs({ user, onClose }: { user: AdminUser; onClose: () => void }) {
   const message = useToast();
@@ -628,12 +628,6 @@ function UserWikiDocs({ user, onClose }: { user: AdminUser; onClose: () => void 
           <div>This account has no wiki spaces.</div>
         ) : (
           <>
-            {!read.serverExecutes && (
-              <div role="note">
-                This account’s wiki runs on its runners: its documents are written when a plan is confirmed and by
-                maintenance, and can’t be asked for again here.
-              </div>
-            )}
             {/* The sign-in policy's choices, one under another with their hint (Administration's own look). */}
             <RadioGroup<string> aria-label="Space" className="admin-signin-policy" value={spaceId} onValueChange={setSpaceId}>
               {read.spaces.map((space) => (

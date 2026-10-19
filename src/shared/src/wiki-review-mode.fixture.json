@@ -8,7 +8,9 @@
     "",
     "`settings`: the page's sections top to bottom, the three modes in the order both list them (the",
     "default one tagged), the Automatic spot check, the floors, and maintenance off / its Set up form /",
-    "on. `lookbacks`: a look-back setting → the choice its picker shows, the days `Last … days` starts on,",
+    "on — the rows it shows once on, the form's fields and the sentence under the card are",
+    "`wiki-server-execution.fixture.json`'s `settings`. `lookbacks`: a look-back setting → the choice its",
+    "picker shows, the days `Last … days` starts on,",
     "and the words its row and its picker say. `fallbacks`: a space's settings → the sentence the page",
     "leads Review mode with, or null.",
     "`marks`: one entry → the answers it offers, the bar under its head, and the line Where it's used",
@@ -45,7 +47,7 @@
       {
         "mode": "automatic",
         "label": "Automatic",
-        "note": "local-vllm checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason.",
+        "note": "The System model checks each change against its sources first: supported ones apply, partly supported ones show as Unreviewed, the rest are rejected with a reason.",
         "default": false
       }
     ],
@@ -59,36 +61,16 @@
     },
     "maintenance": {
       "name": "Wiki maintenance",
-      "note": "Keeps the wiki up to date from sessions, tasks and receipts as they settle. Runs on the workspace you pick, with the provider pinned.",
       "off": "Off",
       "on": "On",
       "setUp": "Set up…",
       "form": {
         "title": "Set up maintenance",
-        "fields": [
-          {
-            "label": "Workspace",
-            "note": "The runner that checks out this codebase; maintenance runs there."
-          },
-          {
-            "label": "Provider",
-            "note": "Pinned: a run never falls back to another provider."
-          },
-          {
-            "label": "Daily limit",
-            "note": "A run starts when 20 sessions have settled, or when the oldest waits a day. Each run writes at most 30 changes."
-          },
-          {
-            "label": "Look back",
-            "note": "How far back maintenance starts reading when you turn it on. Changing it later never moves maintenance back."
-          }
-        ],
         "unit": "runs a day",
         "cancel": "Cancel",
         "turnOn": "Turn on",
         "save": "Save",
         "defaults": {
-          "provider": "local-vllm",
           "dailyRunLimit": 8,
           "min": 1,
           "max": 48
@@ -102,13 +84,6 @@
           "max": 365
         }
       },
-      "rows": [
-        "Status",
-        "Workspace",
-        "Provider",
-        "Daily limit",
-        "Look back"
-      ],
       "edit": "Edit",
       "turnOff": "Turn off",
       "runsADay": [
@@ -155,18 +130,6 @@
             "runner": null
           },
           "says": "orbit"
-        }
-      ],
-      "providerLabels": [
-        {
-          "provider": "local-vllm",
-          "model": "qwen3.8-27b-fp8",
-          "says": "local-vllm · qwen3.8-27b-fp8"
-        },
-        {
-          "provider": "local-vllm",
-          "model": null,
-          "says": "local-vllm"
         }
       ]
     },

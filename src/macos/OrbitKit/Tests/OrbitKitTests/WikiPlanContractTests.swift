@@ -144,8 +144,9 @@ final class WikiPlanContractTests: XCTestCase {
         XCTAssertTrue(user.contains(try XCTUnwrap(routes["redraft"])), "the redraft is not a route of the user door")
     }
 
-    /// The job on the plan's read, as each card of the plan page draws it: queued behind a run, held with
-    /// why, running on a round, and failed with the gate's errors; a value a later server adds is `.unknown`.
+    /// The job on the plan's read, as each card of the plan page draws it: queued, held with why, running on a
+    /// round, and failed with the gate's errors; a value a later server adds is `.unknown`. The read's `waitingFor`,
+    /// `taskId` and `provider` are the runner path's (contract `plan.jobs.read`): a job decodes whatever they hold.
     func testTheJobDecodes() throws {
         let running = #"""
         {"spaceId":"34WSpace","confirmed":null,"draft":null,"proposals":[],
@@ -158,7 +159,7 @@ final class WikiPlanContractTests: XCTestCase {
         XCTAssertEqual(job.kind, .draft)
         XCTAssertEqual(job.trigger, .spaceCreated)
         XCTAssertEqual(job.state, .running)
-        XCTAssertEqual(job.provider, "local-vllm")
+        XCTAssertEqual(job.sessionId, "34WSession", "a job a task made before server execution keeps its session")
         XCTAssertEqual(job.attempt, 1)
         XCTAssertEqual(job.attemptsMax, 3)
 
@@ -170,7 +171,7 @@ final class WikiPlanContractTests: XCTestCase {
         XCTAssertEqual(waiting.state, .queued)
         XCTAssertEqual(waiting.kind, .revise)
         XCTAssertEqual(waiting.instructions, "合并到 30 篇左右")
-        XCTAssertEqual(waiting.waitingFor?.sessionId, "34WRun")
+        XCTAssertNil(waiting.sessionId)
 
         let held = #"{"id":"34WJob","kind":"draft","state":"held","held":{"reason":"no_maintenance_workspace","at":"2026-09-29T00:41:00.000Z"}}"#
         XCTAssertEqual(try JSONDecoder().decode(WikiPlanJob.self, from: Data(held.utf8)).held?.reason, .noMaintenanceWorkspace)

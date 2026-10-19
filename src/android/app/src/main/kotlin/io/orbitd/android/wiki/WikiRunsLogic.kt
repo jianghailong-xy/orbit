@@ -219,7 +219,4 @@ internal object WikiRunsLogic {
         return WikiCallRow("${call.step} · ${unit(call.unit)}", state, if (call.attempts > 0) WikiRunsCopy.retries(call.attempts) else null,
             tone, waited, ran, tokens, line, if (call.state == "succeeded" || call.state == "cancelled") null else firstLine(call.error))
     }
-
-    /** Whether the Runs band is drawn: the server runs this account's wiki, or ran something for the space. */
-    fun shown(serverExecutes: Boolean, jobs: List<WikiJob>?) = serverExecutes || !jobs.isNullOrEmpty()
 }

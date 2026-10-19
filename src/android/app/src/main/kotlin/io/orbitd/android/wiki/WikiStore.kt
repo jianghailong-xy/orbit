@@ -70,8 +70,8 @@ internal data class WikiState(
     val failedDocs: Set<String> = emptySet(), val docIndex: WikiDocsIndex? = null,
     val plan: WikiPlanState? = null, val planState: LoadState = LoadState(), val planMissing: Boolean = false,
     val planVersions: List<WikiPlanVersionSummary> = emptyList(), val planVersionReads: Map<Int, WikiPlanVersion> = emptyMap(),
-    /** The deployment's System model and the executor switch for this account (P9): what the settings page and the
-     * plan's copy read while the server executes the account's wiki. */
+    /** The deployment's System model and the executor switch for this account (P9): what the settings page reads
+     * while the server executes the account's wiki. */
     val systemModel: WikiSystemModelStatus? = null,
     /** The space on screen's server runs, and the space they were read for (P9). */
     val jobs: WikiJobsRead? = null,
@@ -98,7 +98,7 @@ internal data class WikiState(
     fun loadFailed(id: String) = wikiKey(id) in failed
     fun run(id: String): WikiChangesetView? = runs[wikiKey(id)] ?: activity?.run(id)
     fun isMissingRun(id: String) = wikiKey(id) in missingRuns
-    /** Whether the server runs this account's wiki (contract `jobs.executor.read`): nil/absent reads as runner. */
+    /** Whether the server runs this account's wiki (contract `jobs.executor.read`): nil/absent draws no server-only part. */
     val serverExecutes: Boolean get() = systemModel?.executor?.serverExecutes == true
     /** The space on screen's server runs, when the read in hand is that space's. */
     val currentJobs: List<WikiJob>? get() = jobs?.takeIf { sameWikiId(it.spaceId, currentSpace?.id) }?.jobs
@@ -333,7 +333,7 @@ internal class WikiStore(private val auth: AuthSession, val handle: SessionHandl
     }
 
     /** The deployment's System model and the executor switch as it stands for this account (contract `systemModel.read`,
-     * P9). A server older than the read answers 404, which reads as none — the pages then draw what they always did. */
+     * P9). A server older than the read answers 404, which reads as none — the server-only parts are then not drawn. */
     suspend fun loadSystemModel() {
         try {
             val read = client.systemModel()
