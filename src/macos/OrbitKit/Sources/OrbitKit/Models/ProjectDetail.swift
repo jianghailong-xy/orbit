@@ -471,14 +471,19 @@ public struct LandTaskIntegrationView: Codable, Equatable, Sendable {
     /// The full ref the job froze at enqueue, e.g. `refs/heads/project/<id>`.
     public let targetRef: String
     public let blockingReason: LandTaskBlockingReason?
+    /// When the attempt FIRST started: the column a claim leaves alone across a takeover, which
+    /// is what "Taken over 17:31 · first started 17:03" reads. Absent from a server that predates
+    /// it (tolerant decode: the older `TaskIntegrationView` sent none).
+    public let startedAt: String?
 
     public init(jobId: String, state: String, phase: String? = nil, targetRef: String,
-                blockingReason: LandTaskBlockingReason? = nil) {
+                blockingReason: LandTaskBlockingReason? = nil, startedAt: String? = nil) {
         self.jobId = jobId
         self.state = state
         self.phase = phase
         self.targetRef = targetRef
         self.blockingReason = blockingReason
+        self.startedAt = startedAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -488,6 +493,7 @@ public struct LandTaskIntegrationView: Codable, Equatable, Sendable {
         phase = try c.decodeIfPresent(String.self, forKey: .phase)
         targetRef = try c.decodeIfPresent(String.self, forKey: .targetRef) ?? ""
         blockingReason = try c.decodeIfPresent(LandTaskBlockingReason.self, forKey: .blockingReason)
+        startedAt = try? c.decodeIfPresent(String.self, forKey: .startedAt)
     }
 }
 

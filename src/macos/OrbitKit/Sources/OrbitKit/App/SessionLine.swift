@@ -15,6 +15,7 @@ public struct SessionLine: Equatable, Sendable {
         case background  // a process the agent left up — outlives the turn, but isn't work
         case watching    // parked on a watch that will resume it — not a process, not waiting on you
         case review      // its report is with its reviewer — drawn, not counted, never amber
+        case warning     // amber words for a fact that asks nothing: a landing the server judged timed out
     }
     public let text: String
     public let tone: Tone
