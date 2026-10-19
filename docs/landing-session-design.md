@@ -104,7 +104,7 @@
     - 第 1 期起就从作业行的一列读出（例如 push_reported_generation，由 PUSH 同步回报在租约围栏内写入），不依赖第 3 期才有的事件表。
     - 只能看 phase 的地方，PUSH 与 VERIFY 都算已过界。runner 推送成功后报 VERIFY（integrate.go:394、:687），而今天 applyCancel 只排除 PUSH（project-promotion.service.ts:610）：VERIFY 期间取消，会把已推送的合入记成 CANCELLED。这是 §9 第 1 条之外的新缺陷，由 t1srv-a 修。
 13. **legacy 领取**（progress_protocol 不是 v2）：PUSH 回报是尽力而为，应答被丢弃（integrate.go:1034），所以「没记下 PUSH」不能证明没有推送。
-    - 放弃一律写 PUSH_OUTCOME_UNKNOWN，不写 RUNNER_LOST，也不写「nothing was pushed」。
+    - 放弃一个 legacy 领取的 LAND_TASK / LAND_PROMOTION 一律写 PUSH_OUTCOME_UNKNOWN，不写 RUNNER_LOST，也不写「nothing was pushed」（CHECK_PROMOTION 从不推送，仍按 J12 一律 RUNNER_LOST）。
     - 检查期间不判 LEASE_EXPIRED，或以预算加余量为界；X-E5 用同一条界线。
 14. **锁序**（改 §7 S3 的前提与 §0 第 17 条）：claimOne（integration-job-relay.ts:311-387）JOIN session、workspace 后 FOR UPDATE SKIP LOCKED（:385），没有 OF c，三张表都上行锁，但从不等待。
     - lock-order.ts 如实写现状。
