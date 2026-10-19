@@ -701,7 +701,10 @@ export class WatchesService {
     });
     const sessions = await tx.session.findMany({
       where: { id: { in: ids('SESSION') }, ownerId },
-      select: { id: true, status: true, endReason: true, completedAt: true, archivedAt: true, deletedAt: true },
+      select: {
+        id: true, sessionKind: true, status: true, endReason: true,
+        completedAt: true, archivedAt: true, deletedAt: true,
+      },
     });
     const unreadable = request.targets.length - tasks.length - sessions.length;
     if (unreadable > 0) {
@@ -749,6 +752,7 @@ export class WatchesService {
         ...target,
         fact: {
           kind: 'SESSION',
+          sessionKind: session.sessionKind,
           status: session.status,
           endReason: session.endReason,
           completedAt: session.completedAt,

@@ -34,6 +34,7 @@ import { SessionsService } from '../sessions/sessions.service';
 import { SessionTagsService } from '../session-tags/session-tags.service';
 import { ShareLinksService } from '../share-links/share-links.service';
 import { WatchesService } from '../watches/watches.service';
+import { WatchEvaluatorService } from '../watches/watch-evaluator.service';
 import { ProvidersService } from '../providers/providers.service';
 import { agentProviderSeed, lastProviderByWorkspace } from '../workspaces/workspace-provider';
 import { taskRouteReads } from '../tasks/task-route-decision';
@@ -306,50 +307,50 @@ const USER_DRIVERS: Readonly<Record<string, Drive>> = {
 /** The runner door's per-route drivers, keyed exactly as the route census keys them. */
 const RUNNER_DRIVERS: Readonly<Record<string, Drive>> = {
   'POST /runner/sessions/:id/source/pin': (s, w, id) =>
-    s.api.pinSessionSource({ id: w.runnerId } as never, id, { baseSha: 'a'.repeat(40) } as never),
+    s.api.pinSessionSource({ id: w.runnerId, ownerId: w.ownerId } as never, id, { baseSha: 'a'.repeat(40) } as never),
   'POST /runner/sessions/:id/takeover-leases': (s, w, id) =>
-    s.api.takeoverLeases({ id: w.runnerId } as never, id, { leaseOwner: 'lease' } as never),
+    s.api.takeoverLeases({ id: w.runnerId, ownerId: w.ownerId } as never, id, { leaseOwner: 'lease' } as never),
   'POST /runner/sessions/:id/activate-leases': (s, w, id) =>
-    s.api.activateLeases({ id: w.runnerId } as never, id, { leaseOwner: 'lease', leaseGeneration: '1' } as never),
+    s.api.activateLeases({ id: w.runnerId, ownerId: w.ownerId } as never, id, { leaseOwner: 'lease', leaseGeneration: '1' } as never),
   'POST /runner/sessions/:id/release-leases': (s, w, id) =>
-    s.api.releaseLeases({ id: w.runnerId } as never, id, {} as never),
+    s.api.releaseLeases({ id: w.runnerId, ownerId: w.ownerId } as never, id, {} as never),
   'POST /runner/sessions/:id/orchestration-credential': (s, w, id) =>
     s.api.refreshOrchestrationCredential({ id: w.runnerId, ownerId: w.ownerId } as never, id),
   'POST /runner/sessions/:id/attachments': (s, w, id) =>
-    s.api.uploadAttachment({ id: w.runnerId } as never, id, undefined),
+    s.api.uploadAttachment({ id: w.runnerId, ownerId: w.ownerId } as never, id, undefined),
   'POST /runner/sessions/:id/artifacts/result': (s, w, id) =>
-    s.api.artifactResult({ id: w.runnerId } as never, id, { requestId: randomUUID() } as never),
+    s.api.artifactResult({ id: w.runnerId, ownerId: w.ownerId } as never, id, { requestId: randomUUID() } as never),
   'POST /runner/sessions/:id/approvals': (s, w, id) =>
-    s.api.createApproval({ id: w.runnerId } as never, id, { toolName: 'Bash', input: { command: 'ls' } } as never),
+    s.api.createApproval({ id: w.runnerId, ownerId: w.ownerId } as never, id, { toolName: 'Bash', input: { command: 'ls' } } as never),
   'POST /runner/sessions/:id/background-wake': (s, w, id) =>
     s.api.backgroundWake({ id: w.runnerId, ownerId: w.ownerId } as never, id, {
       wakeId: 'w', jobId: 'j', trigger: 'exit', kind: 'shell', command: 'make', status: 'completed',
       exitCode: 0, outputPath: '/tmp/x', outputOffset: 0, outputSize: 0, outputExcerpt: '',
     } as never),
   'POST /runner/sessions/:id/scheduled-wakeup': (s, w, id) =>
-    s.api.scheduledWakeup({ id: w.runnerId } as never, id, { delaySeconds: 120, reason: 'x' } as never),
+    s.api.scheduledWakeup({ id: w.runnerId, ownerId: w.ownerId } as never, id, { delaySeconds: 120, reason: 'x' } as never),
   'POST /runner/sessions/:id/naming': (s, w, id) =>
-    s.api.sessionNaming({ id: w.runnerId } as never, id, { replaces: 'x', title: 'y' } as never),
+    s.api.sessionNaming({ id: w.runnerId, ownerId: w.ownerId } as never, id, { replaces: 'x', title: 'y' } as never),
   'POST /runner/sessions/:id/cursor-key-check': (s, w, id) =>
-    s.providers.recordCursorKeyCheck(w.runnerId, id, { state: 'INVALID', keyFingerprint: '0123456789abcdef' }),
+    s.providers.recordCursorKeyCheck(w.runnerId, id, { state: 'INVALID', keyFingerprint: '0123456789abcdef' }, w.ownerId),
   'POST /runner/sessions/:id/turns/:turnId/suggestion': (s, w, id) =>
-    s.api.turnSuggestion({ id: w.runnerId } as never, id, randomUUID()),
+    s.api.turnSuggestion({ id: w.runnerId, ownerId: w.ownerId } as never, id, randomUUID()),
   'POST /runner/sessions/:id/turn-complete': (s, w, id) =>
-    s.api.turnComplete({ id: w.runnerId } as never, id, { turnId: randomUUID(), status: 'SUCCEEDED' } as never),
+    s.api.turnComplete({ id: w.runnerId, ownerId: w.ownerId } as never, id, { turnId: randomUUID(), status: 'SUCCEEDED' } as never),
   'POST /runner/sessions/:id/events': (s, w, id) =>
-    s.api.events({ id: w.runnerId } as never, id, { events: [] } as never),
+    s.api.events({ id: w.runnerId, ownerId: w.ownerId } as never, id, { events: [] } as never),
   'POST /runner/sessions/:id/finalize': (s, w, id) =>
-    s.api.finalize({ id: w.runnerId } as never, id, { status: 'CANCELLED' } as never),
+    s.api.finalize({ id: w.runnerId, ownerId: w.ownerId } as never, id, { status: 'CANCELLED' } as never),
   'POST /runner/sessions/:id/complete': (s, w, id) =>
-    s.api.complete({ id: w.runnerId } as never, id, { status: 'CANCELLED' } as never),
+    s.api.complete({ id: w.runnerId, ownerId: w.ownerId } as never, id, { status: 'CANCELLED' } as never),
   'POST /runner/sessions/:id/import-result': (s, w, id) =>
-    s.api.importResult({ id: w.runnerId } as never, id, { ok: true }),
+    s.api.importResult({ id: w.runnerId, ownerId: w.ownerId } as never, id, { ok: true }),
   'POST /runner/sessions/:id/merge-result': (s, w, id) =>
-    s.api.mergeResult({ id: w.runnerId } as never, id, { status: 'error', message: 'x' } as never),
+    s.api.mergeResult({ id: w.runnerId, ownerId: w.ownerId } as never, id, { status: 'error', message: 'x' } as never),
   'POST /runner/sessions/:id/commit-result': (s, w, id) =>
-    s.api.commitResult({ id: w.runnerId } as never, id, { status: 'nochange' } as never),
+    s.api.commitResult({ id: w.runnerId, ownerId: w.ownerId } as never, id, { status: 'nochange' } as never),
   'POST /runner/sessions/:id/diff': (s, w, id) =>
-    s.api.diffResult({ id: w.runnerId } as never, id, { worktreeDirty: false } as never),
+    s.api.diffResult({ id: w.runnerId, ownerId: w.ownerId } as never, id, { worktreeDirty: false } as never),
   'POST /runner/sessions/:id/turns': (s, w, id) =>
     s.runnerSessions.sendMessage(
       { id: w.runnerId, ownerId: w.ownerId } as never, undefined, randomUUID(), undefined, id,
@@ -447,15 +448,15 @@ test('the body and query field cases refuse a LANDING session too', { skip }, as
             clientTurnId: randomUUID(), content: 'hi', stopSessionId: landing,
           }),
         'POST /runner/heartbeat body supervisedSessionIds[]': () =>
-          stack.api.heartbeat({ id: w.runnerId, version: null } as never, {
+          stack.api.heartbeat({ id: w.runnerId, ownerId: w.ownerId, version: null } as never, {
             supervisedSessionIds: [landing],
           } as never),
         'POST /runner/heartbeat body sessions[].sessionId': () =>
-          stack.api.heartbeat({ id: w.runnerId, version: null } as never, {
+          stack.api.heartbeat({ id: w.runnerId, ownerId: w.ownerId, version: null } as never, {
             sessions: [{ sessionId: landing, isolationStatus: 'shared-nogit' }],
           } as never),
         'POST /runner/heartbeat body expiredCommitErrors[].sessionId': () =>
-          stack.api.heartbeat({ id: w.runnerId, version: null } as never, {
+          stack.api.heartbeat({ id: w.runnerId, ownerId: w.ownerId, version: null } as never, {
             expiredCommitErrors: [{ sessionId: landing, operationId: randomUUID() }],
           } as never),
       };
@@ -759,6 +760,102 @@ test('only a claimed subject gets a session row, and the compensation points ins
     assert.equal((await stack.db.session.findUniqueOrThrow({
       where: { id: settled!.sessionId }, select: { status: true },
     })).status, RunStatus.SUCCEEDED);
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+
+/** How a door answered: the same string for the same refusal, whatever the id was. */
+async function answerOf(fn: () => Promise<unknown>): Promise<string> {
+  try {
+    await fn();
+    return 'resolved';
+  } catch (error) {
+    const err = error as {
+      name?: string;
+      message?: string;
+      getStatus?: () => number;
+      getResponse?: () => unknown;
+    };
+    const status = typeof err.getStatus === 'function' ? err.getStatus() : '';
+    return `${err.name ?? 'Error'}|${status}|${JSON.stringify(err.getResponse?.() ?? err.message ?? '')}`;
+  }
+}
+
+test("another account's landing id is answered exactly like an id that names nothing", { skip }, async () => {
+  const stack = await connect();
+  try {
+    const a = await world(stack, 'isolation-a');
+    const b = await world(stack, 'isolation-b');
+    const foreignLanding = await landingRow(stack, b);
+    const nothing = randomUUID();
+    const runnerA = { id: a.runnerId, ownerId: a.ownerId } as never;
+
+    // The three reads that answered before the ownership check: the id-only guard (source pin),
+    // the ownership loader (approvals) and the provider report.
+    const doors: Array<[string, (id: string) => Promise<unknown>]> = [
+      ['source/pin', (id) => stack.api.pinSessionSource(runnerA, id, { baseSha: 'a'.repeat(40) } as never)],
+      ['approvals', (id) => stack.api.createApproval(runnerA, id, { toolName: 'Bash', input: { command: 'ls' } } as never)],
+      ['cursor-key-check', (id) =>
+        stack.providers.recordCursorKeyCheck(a.runnerId, id, { state: 'INVALID', keyFingerprint: '0123456789abcdef' }, a.ownerId)],
+    ];
+    for (const [label, door] of doors) {
+      const foreign = await answerOf(() => door(foreignLanding));
+      const unknown = await answerOf(() => door(nothing));
+      assert.equal(foreign, unknown, `${label} answered another account's landing differently from a nonexistent id`);
+      assert.ok(!foreign.includes('SESSION_IS_PLATFORM_DRIVEN'), `${label} leaked that the id is a landing`);
+    }
+
+    // The heartbeat names the id in its body: no refusal, no cancellation, and the row is untouched.
+    const beat = await stack.api.heartbeat(
+      { id: a.runnerId, ownerId: a.ownerId, version: null } as never,
+      { supervisedSessionIds: [foreignLanding] } as never,
+    ) as { cancelSessionIds?: string[] };
+    assert.ok(!(beat.cancelSessionIds ?? []).includes(foreignLanding));
+    assert.deepEqual(
+      await stack.db.session.findUniqueOrThrow({
+        where: { id: foreignLanding },
+        select: { sessionKind: true, status: true, cancelRequestedAt: true },
+      }),
+      { sessionKind: 'LANDING', status: RunStatus.AWAITING_INPUT, cancelRequestedAt: null },
+    );
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+test('a SESSION_TURN_SETTLED watch on an open landing waits for the landing to end', { skip }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'watch-landing');
+    const landing = await landingRow(stack, w);
+    const settledWatch = (id: string) => ({
+      predicateVersion: 1,
+      predicate: { kind: 'ALL', over: 'ALL_TARGETS', leaf: 'SESSION_TURN_SETTLED' },
+      targets: [{ kind: 'SESSION', id }],
+      action: 'NOTIFY_USER',
+    });
+
+    // The open container sits at AWAITING_INPUT, which is LS1's "subject still open" — not a turn
+    // that settled, so awaiting the landing is awaiting its end.
+    const watch = await stack.watches.create(w.ownerId, settledWatch(landing) as never);
+    assert.equal(watch.state, 'ACTIVE', 'an open landing read as a settled turn');
+
+    // The control: a conversation parked at AWAITING_INPUT has settled its turn.
+    const conversation = await conversationRow(stack, w);
+    const immediate = await stack.watches.create(w.ownerId, settledWatch(conversation) as never);
+    assert.equal(immediate.state, 'MATCHED', 'a conversation at AWAITING_INPUT is settled');
+
+    // The landing ends: the same watch now matches, and its row is the one that moved.
+    await stack.db.session.update({
+      where: { id: landing },
+      data: { status: RunStatus.SUCCEEDED, completedAt: new Date() },
+    });
+    const evaluation = await new WatchEvaluatorService(stack.prisma, noopRealtime(), {
+      rollout: { mode: 'on', canaryOwners: new Set<string>(), problems: [] },
+    } as never).evaluate(watch.id);
+    assert.equal(evaluation.outcome, 'MATCHED');
   } finally {
     await stack.db.$disconnect();
   }

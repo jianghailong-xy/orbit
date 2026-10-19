@@ -53,14 +53,19 @@ export function assertEngineSession(session: SessionKindRow): void {
 export async function assertEngineSessionById(
   db: Pick<Prisma.TransactionClient, 'session'>,
   id: string,
+  /** The caller's account: a row another account owns is not this door's to answer as a landing. */
+  ownerId?: string,
 ): Promise<void> {
   // A unit double that does not model the session table cannot answer this question, and a control
   // plane without one is not a control plane: production's PrismaService always has it. The guard
   // stays out of such a double's way rather than turning its spec into a test of this read.
   const delegate = (db as {
-    session?: { findUnique?: (args: unknown) => Promise<SessionKindRow | null> };
+    session?: { findFirst?: (args: unknown) => Promise<SessionKindRow | null> };
   }).session;
-  if (typeof delegate?.findUnique !== 'function') return;
-  const row = await delegate.findUnique({ where: { id }, select: { sessionKind: true } });
+  if (typeof delegate?.findFirst !== 'function') return;
+  const row = await delegate.findFirst({
+    where: { id, ...(ownerId ? { ownerId } : {}) },
+    select: { sessionKind: true },
+  });
   if (row) assertEngineSession(row);
 }

@@ -3098,6 +3098,7 @@ export class SessionsService {
       completedAt: Date | null;
       archivedAt: Date | null;
       deletedAt: Date | null;
+      sessionKind: string;
       source: string;
       engine: string | null;
       provider: string;
@@ -3156,6 +3157,10 @@ export class SessionsService {
     const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
       SELECT
         s.id, s.status, s.title,
+        -- What drives the session (LS6): a LANDING row is never in the flat list, but a reader that
+        -- names sessions by id (link previews) gets the discriminator rather than a card that
+        -- claims the platform's container is an ordinary conversation.
+        s.kind            AS "sessionKind",
         s.created_at      AS "createdAt",
         s.last_turn_at    AS "lastTurnAt",
         -- When the turn now in flight was handed to the runner. last_turn_at cannot answer this:
@@ -3356,6 +3361,7 @@ export class SessionsService {
         completedAt: r.completedAt,
         archivedAt: r.archivedAt,
         deletedAt: r.deletedAt,
+        sessionKind: r.sessionKind,
         source: r.source,
         engine: engines.get(r.id) ?? null,
         provider: r.provider,

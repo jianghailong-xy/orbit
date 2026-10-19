@@ -183,6 +183,11 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const runtimeSessionId = randomUUID();
     const machineSessionId = await open('machine session', { status: 'RUNNING', runtimeSessionId });
     const orphanSessionId = await open('orphan session', { assignedRunnerId: null });
+    // An open LANDING container exactly as LS1 writes it: no engine, no runner, provider `orbit`.
+    const landingSessionId = await open('landing session', {
+      sessionKind: 'LANDING', status: 'AWAITING_INPUT', provider: 'orbit', providerBuiltin: true,
+      engine: null, assignedRunnerId: null, startsTaskWork: false,
+    });
     const takeoverSessionId = await open('takeover session', { status: 'RUNNING' });
     const leaseOwner = randomUUID();
     const leaseGeneration = randomUUID();
@@ -352,6 +357,7 @@ test('tenant isolation: past the runner gate and through the share links, anothe
 
     return {
       callingSessionId, coordinatorSessionId, newCoordinatorSessionId, machineSessionId, runtimeSessionId, orphanSessionId,
+      landingSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, turnSessionId, shellTurnId,
       finalizeSessionId, completeSessionId, sessionAttachmentId, allowedApprovalId, artifactRequestId, integrationJobId, landingTaskId,
       codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,

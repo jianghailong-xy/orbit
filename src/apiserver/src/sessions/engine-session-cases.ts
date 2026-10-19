@@ -248,17 +248,17 @@ export const ENGINE_SESSION_GUARD_SITES: Readonly<Record<string, EngineSessionGu
   },
   'ProvidersService.recordCursorKeyCheck': {
     file: 'providers/providers.service.ts',
-    snippet: '// Before the ownership answer: a LANDING row is the platform\'s own container, not a session',
+    snippet: '// Before the ownership answer, but only for a row of this runner\'s own account: another',
     note: 'POST /runner/sessions/:id/cursor-key-check (its own controller, RunnerProvidersController)',
   },
   'RunnerApiController.assertSessionOwnership': {
     file: 'runner-api/runner-api.controller.ts',
-    snippet: 'if (session) assertEngineSessionRow(session);',
+    snippet: 'if (session && (ownerId === undefined || session.ownerId === ownerId)) assertEngineSessionRow(session);',
     note: 'the runner doors that load the row themselves: attachments, artifacts, approvals, wakes, naming, suggestion, diff',
   },
   'RunnerApiController.assertEngineSessionById': {
     file: 'runner-api/runner-api.controller.ts',
-    snippet: 'return assertEngineSessionRowById(this.prisma, sessionId);',
+    snippet: 'return assertEngineSessionRowById(this.prisma, sessionId, ownerId);',
     note: 'the runner doors that name the session only by id: leases, pin, credential, reporting routes',
   },
   'RunnerApiController.assertNoLandingSessionNamed': {
