@@ -19,6 +19,7 @@ import {
 import {
   INTEGRATION_ITEM_KINDS,
   markOpenItemsHandling,
+  resolveLeaseExpiredItems,
   type OpenItemHandlingStart,
 } from './project-open-item';
 // Type-only, so the two modules do not import each other at run time: this one needs the two closed
@@ -941,6 +942,10 @@ export async function endTimedOutLanding(
     },
     text: timedOutText({ limitSeconds: job.limitSeconds, heartbeatAt: job.heartbeatAt, at: new Date() }),
   });
+  // §4.6 X-E5: the claim this end is about is over, so the owner's item about its silence is too.
+  // One place for every door that ends a timed-out job (the retry doors, the stop J-T8 makes, a
+  // superseded or retired candidate), because all of them come through this compare-and-set.
+  await resolveLeaseExpiredItems(tx, job.jobId);
   return errorCode;
 }
 

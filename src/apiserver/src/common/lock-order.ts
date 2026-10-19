@@ -180,7 +180,11 @@ export const LOCK_ORDER = [
       + '(project_id, status) in one statement, so two concurrent bulk writes over overlapping '
       + 'projects cannot take the same pair in opposite orders. No other taker exists: the detail '
       + 'read only SELECTs it, and the UPDATE branch nets inserted against deleted, so a statement '
-      + 'that moves no task between projects reaches this table not at all.',
+      + 'that moves no task between projects reaches this table not at all. '
+      + 'X-E5\'s clock (§4.6) is the same rank: one INSERT … SELECT that reads '
+      + '`project_integration_job` without a lock and writes one `project_open_item` child per claim '
+      + 'whose lease has expired for more than fifteen minutes, and the job gates that end such an '
+      + 'item write it inside their own rank-60 transactions — none of them waits on a session lock.',
   },
   {
     rank: 70,

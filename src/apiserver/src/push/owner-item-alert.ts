@@ -101,6 +101,12 @@ function alertBody(kind: OwnerItemKind, item: OwnerItemAlertInput): string {
 /** §7.5's heading for an item that BECAME the owner's, one per way it happened. The same five
  *  sentences `escalationHeading` draws on the project page (`ProjectProgressStatus.tsx`). */
 function escalationTitle(item: OwnerItemAlertInput): string {
+  // §4.6 X-E5's item is escalated at birth, so `waitedBeforeEscalation` would only ever say `1s`.
+  // Its heading says what the item is about instead: how long the claim has been silent, counted
+  // from the last report the runner made (the lease it outlived plus X-E5's fifteen minutes).
+  if (item.kind === 'LANDING_LEASE_EXPIRED') {
+    return `Now yours — no report from the runner for ${silentMinutes(item)}m`;
+  }
   switch (item.assigneeReason) {
     case 'COORDINATOR_ENDED':
       return 'Now yours — the coordinator conversation ended';
@@ -113,6 +119,22 @@ function escalationTitle(item: OwnerItemAlertInput): string {
     default:
       return `Now yours — no one acted on this for ${waitedBeforeEscalation(item)}`;
   }
+}
+
+/**
+ * How long the claim had been silent when the item was opened, off the two instants the row
+ * carries: the last report written into the payload, and the opening moment (`escalated_at`). A
+ * payload that names no report (nothing writes one today) falls back to the wait the row shows,
+ * so the sentence is never a division by a missing fact.
+ */
+function silentMinutes(item: OwnerItemAlertInput): number {
+  const lastReportAt = (item.payload as { lastReportAt?: unknown } | null)?.lastReportAt;
+  const reported = typeof lastReportAt === 'string' ? Date.parse(lastReportAt) : Number.NaN;
+  const openedAt = (item.escalatedAt ?? item.waitingSince).getTime();
+  const silentMs = Number.isFinite(reported)
+    ? openedAt - reported
+    : openedAt - item.waitingSince.getTime();
+  return Math.max(1, Math.floor(silentMs / MINUTE));
 }
 
 /** The heading the question card carries (`CoordinatorQuestionCard.COORDINATOR_QUESTION_HEADING`). */

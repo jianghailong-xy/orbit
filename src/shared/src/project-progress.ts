@@ -851,7 +851,9 @@ export interface ProjectIntegrationBuckets {
  * What opened an exception item, as §4.2's closed set spells it — and `START_REQUEST`, a
  * coordinator asking its owner to start the project (`project_request_start`, `project-start.ts`),
  * and `DONE_REQUEST`, one asking its owner to record the project done (`project-done.ts`), plus
- * `DELIVERY_REVIEW`, a finished delivery whose landing needs a bounded decision.
+ * `DELIVERY_REVIEW`, a finished delivery whose landing needs a bounded decision, and
+ * `LANDING_LEASE_EXPIRED`, the owner's item about a landing attempt whose runner stopped reporting
+ * (§4.6 X-E5).
  * The set is closed in the database too (`project_open_item_kind_chk`): a new kind is a migration.
  */
 export type OpenItemKind =
@@ -864,7 +866,8 @@ export type OpenItemKind =
   | 'FUSE_PAUSED'
   | 'START_REQUEST'
   | 'DONE_REQUEST'
-  | 'DELIVERY_REVIEW';
+  | 'DELIVERY_REVIEW'
+  | 'LANDING_LEASE_EXPIRED';
 
 /**
  * The kinds a project's coordinator can be handling (§7.1 V1/V2): `OpenItemKind` minus the owner-only
@@ -931,7 +934,9 @@ export type OpenItemAction =
   | 'ASK_COORDINATOR_AGAIN'
   | 'RESUME'
   | 'ANSWER'
-  | 'OPEN_LANDING';
+  | 'OPEN_LANDING'
+  /** §4.7 J-T10: end a landing attempt whose runner stopped reporting. Owner-only. */
+  | 'ABANDON';
 
 /** What a coordinator asked its owner to decide (§5.2 R7). */
 export interface CoordinatorQuestion {
@@ -1116,6 +1121,12 @@ export interface ProjectOpenItemRow<Instant = string> {
    * lands nothing (a question, a pause, a start request).
    */
   landingSessionId?: string | null;
+  /**
+   * The landing attempt an X-E5 item is about (§4.6): the integration job whose claim stopped
+   * reporting, as its public id. `ABANDON` names that job in its route, so a client drawing this
+   * row's doors needs it. Null for every other kind, and absent from a server that predates it.
+   */
+  integrationJobId?: string | null;
   promotionId: string | null;
   fuseEpisodeId: string | null;
   delivery: { state: OpenItemDeliveryState; sessionId: string | null; at: Instant | null };
