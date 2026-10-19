@@ -262,6 +262,9 @@ export interface OpenItemRow {
    *  the failure opened it; null for a payload an older build wrote and for the kinds that land
    *  nothing. `OPEN_LANDING` opens it. */
   landingSessionId: string | null;
+  /** The integration job an X-E5 item is about (§4.6): `ABANDON` names it in its route, so the
+   *  card cannot draw that press without it. Null for every other kind. */
+  integrationJobId: string | null;
   promotionId: string | null;
   fuseEpisodeId: string | null;
   /** Where this item is on its way to the coordinator, or that it is not owed to one. */
@@ -2822,6 +2825,7 @@ export class ProjectOpenItemService {
         handoverNote: true,
         taskId: true,
         sessionId: true,
+        integrationJobId: true,
         promotionId: true,
         fuseEpisodeId: true,
         assignedAt: true,
@@ -2985,6 +2989,9 @@ export class ProjectOpenItemService {
         handledBy: handledBy.get(row.id) ?? [],
         sessionId: row.sessionId,
         landingSessionId: landingSessionIdOf(row.payload),
+        // §4.6 X-E5: only this kind's item is about a job a press (`ABANDON`) names; every other
+        // row keeps the field null, so no client sees an id it has no door for.
+        integrationJobId: row.kind === LANDING_LEASE_EXPIRED_KIND ? row.integrationJobId : null,
         promotionId: row.promotionId,
         fuseEpisodeId: row.fuseEpisodeId,
         delivery: row.assignee !== 'COORDINATOR'
@@ -3070,6 +3077,7 @@ export class ProjectOpenItemService {
         handledBy: handledBy.get(row.id) ?? [],
         sessionId: row.sessionId,
         landingSessionId: landingSessionIdOf(row.payload),
+        integrationJobId: null,
         promotionId: row.promotionId,
         fuseEpisodeId: row.fuseEpisodeId,
         // Nobody is owed anything about a closed item, so nothing is on its way to anybody and

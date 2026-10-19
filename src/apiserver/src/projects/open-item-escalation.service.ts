@@ -339,13 +339,17 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
    * target, so two apiservers ticking at the same moment open each item once, a tick a minute for an
    * hour opens nothing after the first, and the caller therefore pushes once. A key already written
    * and since settled is left alone too: one claim is one card, ever (§4.2), and a takeover writes a
-   * new generation's key.
+   * new generation's key. The SELECT reads each candidate job FOR SHARE, so a report or a result
+   * committing between its snapshot and the insert is waited for and then seen: a claim that is
+   * talking again does not get a card about its silence.
    *
    * WHAT IT WRITES. The item and nothing else: `OWNER` / `ESCALATED` from birth, `escalated_at` at
    * the opening instant, and `escalate_at` / `remind_at` NULL (it is already the owner's, and there
-   * is no second reminder). No delivery to a coordinator conversation (X-D7), no turn, session, wake
-   * or job write — the abandon door (J-T10) is the only thing that ends the job, and a person is
-   * the only one who presses it.
+   * is no second reminder). Its title is §4.2's, `No word from the runner: <task>` — with
+   * `Merge check` / `Merge to main` for the promotion jobs — while "Now yours — no report from the
+   * runner for <N>m" is the push's own heading (§4.6, revision 23). No delivery to a coordinator
+   * conversation (X-D7), no turn, session, wake or job write — the abandon door (J-T10) is the only
+   * thing that ends the job, and a person is the only one who presses it.
    *
    * WHAT ENDS IT. Every edge in the transaction that moves the claim on (`resolveLeaseExpiredItems`):
    * a report, a release, a takeover's first report, any terminal state. A generation that changed
@@ -362,9 +366,13 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
              'OWNER', 'ESCALATED',
              live_task."id", j."session_id", j."id", j."promotion_id",
              'LE:' || j."id"::text || ':' || j."claim_generation"::text,
-             'No report from the runner for '
-               || floor(EXTRACT(EPOCH FROM (now() - COALESCE(j."heartbeat_at", j."claimed_at"))) / 60)::int
-               || 'm',
+             -- §4.2's title for this kind: 'No word from the runner: <task>', and the promotion
+             -- jobs name what they were merging instead. The heading "Now yours — no report from
+             -- the runner for <N>m" is the push's and the card's (§4.6, revision 23), not the row's.
+             'No word from the runner: ' || CASE j."kind"
+               WHEN 'CHECK_PROMOTION' THEN 'Merge check'
+               WHEN 'LAND_PROMOTION' THEN 'Merge to main'
+               ELSE COALESCE(live_task."title", 'a task') END,
              jsonb_build_object(
                'jobId', j."id"::text,
                'jobKind', j."kind",
@@ -408,10 +416,12 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
          -- §7.2 V6's limit, plus X-E5's fifteen minutes.
          AND EXTRACT(EPOCH FROM (now() - COALESCE(j."heartbeat_at", j."claimed_at")))
              > (${leaseLimitSeconds('j')} + ${LANDING_LEASE_GRACE_SECONDS})
-         -- readInFlightJobs' own local-lock rule: a job claimed at its last report while an older job
-         -- of the same runner, repository and ref still holds the in-process lock is queueing, not lost.
-         AND NOT (
-           COALESCE(j."heartbeat_at", j."claimed_at") <= j."claimed_at"
+         -- readInFlightJobs' own local-lock rule, spelled as it spells it: a job claimed at its last
+         -- report while an older job of the same runner, repository and ref still holds the
+         -- in-process lock is queueing, not lost. A NULL heartbeat is "not behind" there, so the
+         -- conjunction is COALESCEd rather than the column.
+         AND NOT COALESCE(
+           j."heartbeat_at" <= j."claimed_at"
            AND EXISTS (
              SELECT 1 FROM "project_integration_job" o
                JOIN "project_codebase" ocb ON ocb."id" = o."codebase_id"
@@ -420,7 +430,12 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
                 AND o."target_ref" = j."target_ref"
                 AND ocb."canonical_repo_url" = cb."canonical_repo_url"
                 AND o."claimed_at" < j."claimed_at"
-                AND o."id" <> j."id"))
+                AND o."id" <> j."id"), false)
+      -- A report or a result that commits between this statement's snapshot and its insert must not
+      -- leave a card about a claim that is talking again: the job row is read FOR SHARE, which waits
+      -- for the report transaction (it holds the row FOR NO KEY UPDATE), and under READ COMMITTED
+      -- the re-check sees the renewed heartbeat and drops the row.
+      FOR SHARE OF j
       ON CONFLICT ("project_id", "dedupe_key") WHERE "state" = 'OPEN' DO NOTHING
       RETURNING "id" AS "itemId", "project_id" AS "projectId", "owner_id" AS "ownerId"`);
     for (const item of opened) {

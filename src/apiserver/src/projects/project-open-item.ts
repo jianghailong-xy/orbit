@@ -1174,15 +1174,27 @@ export function leaseExpiredDedupeKey(
  * was released, a takeover took it, or the job reached any terminal state — so nobody owes the
  * owner a decision about it any more. Called in the transaction that wrote that fact, for every
  * open lease item of the job; a row already ended is left alone by the terminal guard.
+ *
+ * `by` is the party that moved it: the platform for a report, a release or a result, and for the
+ * abandon doors the person (`USER` with their id) or the coordinator (with its conversation), so
+ * the ending records who acted exactly as every other hand-ended row does.
  */
 export async function resolveLeaseExpiredItems(
   tx: Pick<Prisma.TransactionClient, 'projectOpenItem'>,
   jobId: string,
-  resolvedBy: OpenItemResolvedBy = 'PLATFORM',
+  by: { resolvedBy: OpenItemResolvedBy; resolvedByUserId?: string | null; resolvedBySessionId?: string | null }
+    = { resolvedBy: 'PLATFORM' },
 ): Promise<number> {
   const closed = await tx.projectOpenItem.updateMany({
     where: { integrationJobId: jobId, kind: LANDING_LEASE_EXPIRED_KIND, state: 'OPEN' },
-    data: { state: 'RESOLVED', resolution: 'JOB_MOVED_ON', resolvedBy, resolvedAt: new Date() },
+    data: {
+      state: 'RESOLVED',
+      resolution: 'JOB_MOVED_ON',
+      resolvedBy: by.resolvedBy,
+      resolvedByUserId: by.resolvedByUserId ?? null,
+      resolvedBySessionId: by.resolvedBySessionId ?? null,
+      resolvedAt: new Date(),
+    },
   });
   return closed.count;
 }

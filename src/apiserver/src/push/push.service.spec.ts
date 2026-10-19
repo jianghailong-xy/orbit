@@ -675,12 +675,13 @@ test('an escalated item says which way it became yours', async () => {
 test('X-E5’s lease item tells how long the runner has been silent, not the escalation formula', async () => {
   // The item is escalated at birth, so "no one acted on this for …" would only ever say 1s: the
   // contract (revision 23) gives this kind its own heading, counted from the last report the claim
-  // made — ten minutes of lease plus X-E5's fifteen, at the earliest.
+  // made — ten minutes of lease plus X-E5's fifteen, at the earliest. The body is §4.2's own title,
+  // so the banner names the landing the silence belongs to.
   const { service, sent } = ownerItemHarness(openItem({
     kind: 'LANDING_LEASE_EXPIRED',
     assignee: 'OWNER',
     assigneeReason: 'ESCALATED',
-    title: 'No report from the runner for 27m',
+    title: 'No word from the runner: Add the landing receipt',
     payload: { lastReportAt: '2026-09-13T12:00:00.000Z' },
     waitingSince: new Date('2026-09-13T12:27:00Z'),
     escalatedAt: new Date('2026-09-13T12:27:00Z'),
@@ -690,7 +691,7 @@ test('X-E5’s lease item tells how long the runner has been silent, not the esc
   const payload = JSON.parse(sent[0].body);
   assert.equal(payload.kind, 'escalated-to-you');
   assert.equal(payload.aps.alert.title, 'Now yours — no report from the runner for 27m');
-  assert.equal(payload.aps.alert.body, 'No report from the runner for 27m · Integration line');
+  assert.equal(payload.aps.alert.body, 'No word from the runner: Add the landing receipt · Integration line');
 });
 
 test('an Antigravity sign-out is announced under the name the Providers page gives it', async () => {

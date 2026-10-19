@@ -188,7 +188,11 @@ async function world(
 }
 
 /** A DONE task whose branch is handed to the line, as its DONE would (J-T1a / M-F2). */
-async function doneTask(stack: Stack, w: World, label: string): Promise<{ taskId: string; sessionId: string; branch: string }> {
+async function doneTask(
+  stack: Stack,
+  w: World,
+  label: string,
+): Promise<{ taskId: string; sessionId: string; branch: string; title: string }> {
   const title = `${label} ${randomUUID().slice(0, 8)}`;
   const created = await stack.tasks.create(w.ownerId, {
     title,
@@ -215,7 +219,7 @@ async function doneTask(stack: Stack, w: World, label: string): Promise<{ taskId
   });
   const queued = await stack.db.$transaction((tx) => enqueueForDoneTask(tx, w.ownerId, created.id));
   assert.ok(queued.enqueued, `the DONE queued nothing: ${JSON.stringify(queued)}`);
-  return { taskId: created.id, sessionId: session.id, branch };
+  return { taskId: created.id, sessionId: session.id, branch, title };
 }
 
 /** A task and a finished work session, written as rows — nothing is handed to the line. */
@@ -307,6 +311,8 @@ interface LeaseItem {
   waitingSince: Date;
   resolution: string | null;
   resolvedBy: string | null;
+  resolvedByUserId: string | null;
+  resolvedBySessionId: string | null;
   resolutionNote: string | null;
 }
 
@@ -318,7 +324,8 @@ function leaseItems(stack: Stack, projectId: string): Promise<LeaseItem[]> {
       id: true, kind: true, state: true, assignee: true, assigneeReason: true, dedupeKey: true,
       title: true, payload: true, taskId: true, sessionId: true, integrationJobId: true,
       promotionId: true, escalateAt: true, escalatedAt: true, remindAt: true, waitingSince: true,
-      resolution: true, resolvedBy: true, resolutionNote: true,
+      resolution: true, resolvedBy: true, resolvedByUserId: true, resolvedBySessionId: true,
+      resolutionNote: true,
     },
   }) as unknown as Promise<LeaseItem[]>;
 }
@@ -405,8 +412,11 @@ async function rawRunningJob(
   },
 ): Promise<string> {
   const id = randomUUID();
-  const claimedAt = new Date(Date.now() - (over.claimedAtMsAgo ?? 30 * MINUTE));
-  const heartbeatAt = new Date(Date.now() - (over.heartbeatMsAgo ?? 30 * MINUTE));
+  // One clock read for both instants: two reads can straddle a millisecond and make the local-lock
+  // predicate (`heartbeat_at <= claimed_at`) flicker between "silent since its claim" and not.
+  const now = Date.now();
+  const claimedAt = new Date(now - (over.claimedAtMsAgo ?? 30 * MINUTE));
+  const heartbeatAt = new Date(now - (over.heartbeatMsAgo ?? 30 * MINUTE));
   await stack.db.projectIntegrationJob.create({
     data: {
       id,
@@ -467,7 +477,7 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
 
   await t.test('(1) a v2 claim opens one item after fifteen minutes past the lease, once', async () => {
     const w = await world(stack, 'v2', 'PROJECT_BRANCH');
-    const { taskId, sessionId } = await doneTask(stack, w, 'v2');
+    const { taskId, sessionId, title: taskTitle } = await doneTask(stack, w, 'v2');
     const job = await claim(stack, w);
     assert.equal(job.kind, 'LAND_TASK');
     const { push, told } = recordingPush();
@@ -497,6 +507,8 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
       'the item is the owner’s from birth',
     );
     assert.equal(item.dedupeKey, leaseExpiredDedupeKey(job.jobId, job.claimGeneration));
+    assert.equal(item.title, `No word from the runner: ${taskTitle}`,
+      '§4.2’s title names the landing, not the heading the push carries');
     assert.equal(item.taskId, taskId, 'task_id is the live task the job named');
     assert.equal(item.sessionId, sessionId, 'session_id is the job’s source session');
     assert.equal(item.integrationJobId, job.jobId);
@@ -527,6 +539,8 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
     const alert = alertFor(item);
     assert.ok(alert);
     assert.equal(alert!.title, `Now yours — no report from the runner for ${Math.floor(26 * MINUTE / MINUTE)}m`);
+    assert.equal(alert!.body, `${item.title} · a project`,
+      'the body names the landing — the heading is the title');
     assert.deepEqual(told.filter((call) => call.method === 'notifyOwnerItem'),
       [{ method: 'notifyOwnerItem', args: [item.id] }],
       'the tick pushed the item it opened, once');
@@ -543,7 +557,7 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
 
   await t.test('(2) a legacy claim opens one too — its CHECK budget is part of the limit', async () => {
     const w = await world(stack, 'legacy', 'PROJECT_BRANCH', { mergeCheckTimeoutSeconds: 1_200 });
-    const { taskId } = await doneTask(stack, w, 'legacy');
+    const { taskId, title: taskTitle } = await doneTask(stack, w, 'legacy');
     // A legacy runner: it never declares the v2 protocol, so its claim records NULL.
     const job = await claim(stack, w, [INTEGRATION_JOB_CLAIM]);
     assert.equal(job.kind, 'LAND_TASK');
@@ -569,6 +583,7 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
     const [item] = await leaseItems(stack, w.projectId);
     assert.ok(item, 'a legacy claim past its budget and X-E5’s grace opens one item');
     assert.equal(item.dedupeKey, leaseExpiredDedupeKey(job.jobId, job.claimGeneration));
+    assert.equal(item.title, `No word from the runner: ${taskTitle}`);
     assert.equal(item.payload.progressProtocol, null);
     assert.equal(item.taskId, taskId);
   });
@@ -719,6 +734,9 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
     const [ownerItem] = await leaseItems(stack, ownerWorld.projectId);
     assert.deepEqual([ownerItem!.state, ownerItem!.resolution, ownerItem!.resolvedBy],
       ['RESOLVED', 'JOB_MOVED_ON', 'USER'], 'the owner’s press is recorded as the user’s');
+    assert.equal(ownerItem!.resolvedByUserId, ownerWorld.ownerId,
+      'and the person who pressed is on the row');
+    assert.equal(ownerItem!.resolvedBySessionId, null);
 
     const coordinatorWorld = await world(stack, 'abandon-coordinator', 'PROJECT_BRANCH');
     await doneTask(stack, coordinatorWorld, 'abandon-coordinator');
@@ -734,6 +752,9 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
     const [coordinatorItem] = await leaseItems(stack, coordinatorWorld.projectId);
     assert.deepEqual([coordinatorItem!.state, coordinatorItem!.resolution, coordinatorItem!.resolvedBy],
       ['RESOLVED', 'JOB_MOVED_ON', 'COORDINATOR'], 'the coordinator’s integration_abandon is its own');
+    assert.equal(coordinatorItem!.resolvedBySessionId, coordinatorWorld.coordinatorSessionId,
+      'and the conversation that pressed is on the row');
+    assert.equal(coordinatorItem!.resolvedByUserId, null);
   });
 
   await t.test('(7) a supersession and an M-T13 retirement end it in their own transactions', async () => {
@@ -966,6 +987,166 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
     const row = listed.needsYou.find((candidate) => candidate.itemId === item!.id);
     assert.deepEqual(row!.actions, ['ABANDON', 'OPEN_LANDING'],
       'OPEN_LANDING is appended when there is a landing to open');
+    assert.equal(row!.integrationJobId, job.jobId,
+      'the row names the job ABANDON’s route needs');
+  });
+
+  await t.test('(12) a LAND_PROMOTION opens, and only the abandon door ends it', async () => {
+    // The kind with no retry door at all (§4.7): a timed-out promotion landing is ended by Abandon
+    // and by nothing else, so the card is the only way back to the owner.
+    const w = await world(stack, 'land-promotion', 'PROJECT_BRANCH');
+    const promotion = randomUUID();
+    await stack.db.projectPromotion.create({
+      data: {
+        id: promotion, projectId: w.projectId, ownerId: w.ownerId, codebaseId: w.codebaseId,
+        sourceKind: 'PROJECT_BRANCH', sourceRef: w.integrationRef, sourceSha: sha('a'),
+        upstreamRef: w.upstreamRef, state: 'CONFIRMED', confirmedAt: new Date(),
+        confirmedByUserId: w.ownerId,
+      } as never,
+    });
+    const job = await rawRunningJob(stack, w, {
+      label: 'land-promotion', kind: 'LAND_PROMOTION', phase: 'MERGE',
+      claimedAtMsAgo: 30 * MINUTE, heartbeatMsAgo: 30 * MINUTE,
+      targetRef: w.upstreamRef, promotionId: promotion,
+    });
+    const { push } = recordingPush();
+    const clock = new ProjectOpenItemEscalationService(stack.prisma, push as never);
+    await tick(stack, clock, push);
+    const [item] = await leaseItems(stack, w.projectId);
+    assert.ok(item, 'a silent LAND_PROMOTION opened no item');
+    assert.equal(item!.title, 'No word from the runner: Merge to main',
+      'a promotion job names what it was merging, not a task');
+    assert.equal(item!.promotionId, promotion, 'the item names the candidate whose landing stopped');
+    assert.equal(item!.integrationJobId, job);
+
+    const abandoned = await abandonIntegrationJob(stack.prisma, {
+      jobId: job, projectId: w.projectId, ownerId: w.ownerId, by: 'owner',
+    });
+    assert.equal(abandoned.abandoned.state, 'ERROR');
+    assert.equal(abandoned.abandoned.errorCode, 'RUNNER_LOST',
+      'a v2 claim that never recorded PUSH can prove nothing was pushed');
+    const [after] = await leaseItems(stack, w.projectId);
+    assert.deepEqual([after!.state, after!.resolution, after!.resolvedBy],
+      ['RESOLVED', 'JOB_MOVED_ON', 'USER']);
+    assert.equal((await stack.db.projectPromotion.findUniqueOrThrow({
+      where: { id: promotion }, select: { state: true },
+    })).state, 'BLOCKED', 'the abandoned candidate goes back to its owner as BLOCKED');
+  });
+
+  await t.test('(13) the J-T9 retry door ends a timed-out claim through endTimedOutLanding', async () => {
+    const w = await world(stack, 'j-t9', 'PROJECT_BRANCH');
+    const { taskId } = await doneTask(stack, w, 'j-t9');
+    const job = await claim(stack, w);
+    const clock = new ProjectOpenItemEscalationService(stack.prisma, recordingPush().push as never);
+    await ageClaim(stack, job.jobId, 26 * MINUTE);
+    await tick(stack, clock, recordingPush().push);
+    assert.equal((await leaseItems(stack, w.projectId)).length, 1);
+
+    const retried = await stack.openItems.retryIntegration(
+      w.ownerId, w.projectId, taskId, { reason: 'the runner is gone; run it again' },
+      w.coordinatorSessionId,
+    );
+    assert.ok(retried, 'the retry door refused a timed-out landing');
+    const [item] = await leaseItems(stack, w.projectId);
+    assert.deepEqual([item!.state, item!.resolution, item!.resolvedBy],
+      ['RESOLVED', 'JOB_MOVED_ON', 'PLATFORM'],
+      'the J-T9 end answers the item in the retry door’s transaction');
+    const row = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+      where: { id: job.jobId }, select: { state: true, errorCode: true },
+    });
+    assert.deepEqual([row.state, row.errorCode], ['ERROR', 'RUNNER_LOST'],
+      'the end the door wrote is the one the item’s edge rode on');
+  });
+
+  await t.test('(14) a tick after the owner closed the card does not reopen it', async () => {
+    const w = await world(stack, 'handled', 'PROJECT_BRANCH');
+    await doneTask(stack, w, 'handled');
+    const job = await claim(stack, w);
+    const { push, told } = recordingPush();
+    const clock = new ProjectOpenItemEscalationService(stack.prisma, push as never);
+    await ageClaim(stack, job.jobId, 26 * MINUTE);
+    await tick(stack, clock, push);
+    const [item] = await leaseItems(stack, w.projectId);
+    assert.ok(item);
+    await stack.openItems.resolveOpenItem(
+      w.ownerId, w.projectId, item!.id,
+      { note: 'the runner is gone and I dealt with it by hand' }, { kind: 'OWNER' },
+    );
+    const pushed = told.length;
+
+    // The claim is still silent and still RUNNING — the fact X-E5 reads — but the owner has already
+    // answered the card, and one claim is one card.
+    await tick(stack, clock, push);
+    const items = await leaseItems(stack, w.projectId);
+    assert.equal(items.length, 1, 'the same claim was opened a second time after the owner closed it');
+    assert.deepEqual([items[0]!.state, items[0]!.resolution, items[0]!.resolvedBy],
+      ['RESOLVED', 'HANDLED', 'USER'], 'and its own ending is untouched');
+    assert.equal(told.length, pushed, 'the owner was told about it twice');
+  });
+
+  await t.test('(15) two replicas ticking at the same moment open one item and push once', async () => {
+    const w = await world(stack, 'concurrent', 'PROJECT_BRANCH');
+    await doneTask(stack, w, 'concurrent');
+    const job = await claim(stack, w);
+    await ageClaim(stack, job.jobId, 26 * MINUTE);
+    const { push, told } = recordingPush();
+    const one = new ProjectOpenItemEscalationService(stack.prisma, push as never);
+    const otherDb = prismaClientFor(URL!);
+    try {
+      const two = new ProjectOpenItemEscalationService(otherDb as unknown as PrismaService, push as never);
+      // Both statements run at once: the partial unique index is the arbiter, and the loser's
+      // ON CONFLICT DO NOTHING returns no row, so no push follows from it.
+      const [a, b] = await Promise.all([one.openLeaseExpiredItems(), two.openLeaseExpiredItems()]);
+      for (const item of [...a, ...b]) {
+        await (push as { notifyOwnerItem: (id: string) => Promise<void> }).notifyOwnerItem(item.itemId);
+      }
+      assert.equal([...a, ...b].filter((row) => row.projectId === w.projectId).length, 1,
+        'two replicas at one tick both inserted an item');
+    } finally {
+      await otherDb.$disconnect().catch(() => undefined);
+    }
+    assert.equal((await leaseItems(stack, w.projectId)).length, 1);
+    assert.equal(told.filter((call) => call.method === 'notifyOwnerItem').length, 1,
+      'and the claim was pushed once');
+  });
+
+  await t.test('(16) a J-T1e “judged too early” answer moves the claim, and closes the item', async () => {
+    // The answer is not terminal: the job goes back to the queue (or ends CANCELLED when a stop was
+    // asked), which clears the claim — so §4.2's ending is written in that same transaction too.
+    for (const stopped of [false, true]) {
+      const label = stopped ? 'too-early-stopped' : 'too-early';
+      const w = await world(stack, label, 'PROJECT_BRANCH');
+      const { sessionId } = await doneTask(stack, w, label);
+      const job = await claim(stack, w);
+      // The work finished AFTER the claim: an ALREADY_LANDED about this branch cannot have seen it.
+      await stack.db.session.update({ where: { id: sessionId }, data: { finishedAt: new Date() } });
+      if (stopped) {
+        await stack.db.projectIntegrationJob.update({
+          where: { id: job.jobId }, data: { cancelRequestedAt: new Date() },
+        });
+      }
+      const clock = new ProjectOpenItemEscalationService(stack.prisma, recordingPush().push as never);
+      await ageClaim(stack, job.jobId, 26 * MINUTE);
+      await tick(stack, clock, recordingPush().push);
+      assert.equal((await leaseItems(stack, w.projectId)).length, 1, `${label}: no item opened`);
+
+      await report(stack, w, job, {
+        state: 'ALREADY_LANDED', phase: 'VERIFY', sourceSha: sha('a'),
+      });
+      const [item] = await leaseItems(stack, w.projectId);
+      assert.deepEqual(
+        [item!.state, item!.resolution, item!.resolvedBy],
+        ['RESOLVED', 'JOB_MOVED_ON', 'PLATFORM'],
+        `${label}: the too-early answer did not close the item`,
+      );
+      assert.equal(
+        (await stack.db.projectIntegrationJob.findUniqueOrThrow({
+          where: { id: job.jobId }, select: { state: true },
+        })).state,
+        stopped ? 'CANCELLED' : 'QUEUED',
+        `${label}: the claim did not move the way the case set up`,
+      );
+    }
   });
 });
 

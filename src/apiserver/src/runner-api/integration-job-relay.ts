@@ -1529,6 +1529,9 @@ export async function applyIntegrationJobResult(
       // the reopen has room for its own generation (J-T8) — the same requeue every other terminal
       // result takes below.
       await queueReopenedDone();
+      // §4.6 X-E5: the claim is over either way — cleared for a requeue, ended for a stop that was
+      // asked — so the item about its silence is answered in this transaction like every other edge.
+      await resolveLeaseExpiredItems(tx, job.id);
       return {
         answer: {
           accepted: true,
@@ -1617,6 +1620,8 @@ export async function applyIntegrationJobResult(
                 heartbeatAt: null,
               },
           });
+          // §4.6 X-E5: the check's claim is over the same two ways, so its item is answered here.
+          await resolveLeaseExpiredItems(tx, job.id);
           return {
             answer: {
               accepted: true,
@@ -1805,11 +1810,15 @@ export async function applyIntegrationJobResult(
       await tx.projectIntegrationJob.update({ where: { id: job.id }, data: terminalData });
     }
     // §4.6 X-E5: the job is terminal, so the item about its claim's silence is answered — by the
-    // party that ended it (the owner pressing Abandon is USER, the coordinator's integration_abandon
-    // is COORDINATOR) or by the platform when a result closed it. Written in the same transaction as
-    // the terminal state, which is the fact the item was asking somebody to bring about.
-    await resolveLeaseExpiredItems(tx, job.id,
-      platformEnd ? (platformEnd.by === 'owner' ? 'USER' : 'COORDINATOR') : 'PLATFORM');
+    // party that ended it (the owner pressing Abandon is USER, with their id on the row; the
+    // coordinator's integration_abandon is COORDINATOR, with its conversation) or by the platform
+    // when a result closed it. Written in the same transaction as the terminal state, which is the
+    // fact the item was asking somebody to bring about.
+    await resolveLeaseExpiredItems(tx, job.id, !platformEnd
+      ? { resolvedBy: 'PLATFORM' }
+      : platformEnd.by === 'owner'
+        ? { resolvedBy: 'USER', resolvedByUserId: job.ownerId }
+        : { resolvedBy: 'COORDINATOR', resolvedBySessionId: platformEnd.sessionId ?? null });
 
     // §2.6, the other half: the line answered about a branch this task's work did not end on, so the
     // commits are on a branch nothing has offered and nothing will — the row just written is terminal

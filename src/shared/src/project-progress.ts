@@ -982,6 +982,12 @@ export interface ProjectOpenItemRow<Instant = string> {
    * lands nothing (a question, a pause, a start request).
    */
   landingSessionId?: string | null;
+  /**
+   * The landing attempt an X-E5 item is about (§4.6): the integration job whose claim stopped
+   * reporting, as its public id. `ABANDON` names that job in its route, so a client drawing this
+   * row's doors needs it. Null for every other kind, and absent from a server that predates it.
+   */
+  integrationJobId?: string | null;
   promotionId: string | null;
   fuseEpisodeId: string | null;
   delivery: { state: OpenItemDeliveryState; sessionId: string | null; at: Instant | null };
