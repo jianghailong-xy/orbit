@@ -38,6 +38,18 @@ Robolectric NATIVE captures from `ProjectLandingCardViewTest.theV6LivenessReadin
 (written under `src/android/build/evidence/a11f-landing-card/`), plus `3-timed-out.png` from that
 class's timed-out case. 360dp × 640dp, xhdpi, light theme.
 
+## ios/
+
+The Work overview's Landing card head on the iPhone — the shared `ProjectLandingHead` the six
+surfaces wear — in `ios-live.png`, `ios-silent.png`, `ios-legacy.png`, `ios-timed-out.png` and
+`ios-older.png`. Taken on a GitHub macOS runner by the probe harness in `probe-harness/` (its real
+`CompactShell` and shared sources, `project.yml` pointing at `../src`), with a stub serving the
+project's panorama and integration reads and one reading per launch; the UI test passed and wrote
+the five pictures (run `39262342506`, `run.txt`). The probe branch is throwaway and was deleted
+after the run; only the harness and the pictures live here. In the narrow phone card the liveness
+sentence is the part that shows — `checking · output 7s ago · claim 1 · ro…`, `checking · no word
+from runner wikow…`, `checking · reports only between steps…` — exactly the v4 07 line.
+
 ## Against the v4 board
 
 - `04-project-sessions-page` (landing card, merge check row, timed-out card): the head's mark,
