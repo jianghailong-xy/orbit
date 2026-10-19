@@ -80,9 +80,9 @@ class WikiPlanContractTest {
         // The rounds a draft gets: the card counts against the contract's three when a job does not say.
         assertEquals(3, jobs.fobj("rules").fint("attemptsMax"))
         val running = WikiPlanLogic.jobCard(WikiPlanJob.read(Json.parseToJsonElement(
-            """{"id":"j","kind":"draft","state":"running","provider":"local-vllm","startedAt":"2026-09-29T07:00:00Z"}""")),
+            """{"id":"j","kind":"draft","state":"running","provider":null,"startedAt":"2026-09-29T07:00:00Z"}""")),
             Instant.parse("2026-09-29T08:00:00Z"), true, null, false, null)
-        assertEquals("local-vllm · attempt 1 of 3 · started 1h ago", running?.text)
+        assertEquals("System model · attempt 1 of 3 · started 1h ago", running?.text)
         val routes = jobs.fobj("routes")
         assertTrue("the redraft is not a route of the user door", routes.fstr("redraft") in userRoutes)
     }
@@ -124,22 +124,21 @@ class WikiPlanContractTest {
         assertEquals("Other", WikiDocCopy.sectionKind(shown.docs.first().sections.first().kind))
     }
 
-    /** The job on the plan's read, as each card of the plan page draws it: queued behind a run, held with why, running on
-     * a round, and failed with the gate's errors. */
+    /** The job on the plan's read, as each card of the plan page draws it: queued, held with why, running on a round, and
+     * failed with the gate's errors. A job a task made before server execution keeps its session, which View run opens. */
     @Test fun theJobDecodes() {
         val running = WikiPlanState.decode(Json.parseToJsonElement("""
             {"spaceId":"34WSpace","confirmed":null,"draft":null,"proposals":[],
              "job":{"id":"34WJob","spaceId":"34WSpace","kind":"draft","trigger":"space_created","state":"running","instructions":null,
-                    "requestedAt":"2026-09-29T00:41:00.000Z","held":null,"waitingFor":null,"taskId":"34WTask","provider":"local-vllm",
+                    "requestedAt":"2026-09-29T00:41:00.000Z","held":null,"waitingFor":null,"taskId":"34WTask","provider":null,
                     "sessionId":"34WSession","madeAt":"2026-09-29T00:41:00.000Z","startedAt":"2026-09-29T00:42:00.000Z","endedAt":null,
                     "attempt":1,"attemptsMax":3,"version":null,"errors":[],"error":null,"report":null,"draft":null}}""")).job!!
-        assertEquals(listOf("draft", "space_created", "running", "local-vllm"), listOf(running.kind, running.trigger, running.state, running.provider))
+        assertEquals(listOf("draft", "space_created", "running", "34WSession"), listOf(running.kind, running.trigger, running.state, running.sessionId))
         assertEquals(1, running.attempt); assertEquals(3, running.attemptsMax)
 
         val waiting = WikiPlanJob.read(Json.parseToJsonElement("""
-            {"id":"34WJob","kind":"revise","trigger":"owner","state":"queued","instructions":"合并到 30 篇左右",
-             "waitingFor":{"taskId":"34WMaint","title":"Wiki maintenance: orbit","sessionId":"34WRun","startedAt":"2026-09-29T00:37:00.000Z"}}"""))!!
-        assertEquals(listOf("queued", "revise", "合并到 30 篇左右", "34WRun"), listOf(waiting.state, waiting.kind, waiting.instructions, waiting.waitingFor?.sessionId))
+            {"id":"34WJob","kind":"revise","trigger":"owner","state":"queued","instructions":"合并到 30 篇左右","waitingFor":null}"""))!!
+        assertEquals(listOf("queued", "revise", "合并到 30 篇左右"), listOf(waiting.state, waiting.kind, waiting.instructions))
 
         val held = WikiPlanJob.read(Json.parseToJsonElement(
             """{"id":"34WJob","kind":"draft","state":"held","held":{"reason":"no_maintenance_workspace","at":"2026-09-29T00:41:00.000Z"}}"""))!!

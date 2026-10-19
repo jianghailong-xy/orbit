@@ -50,7 +50,11 @@ class WikiContractTest {
     @Test fun maintenanceSettingsAreTheContracts() {
         val maintenance = at("space", "settings", "maintenance").jsonObject
         val defaults = maintenance.getValue("default").jsonObject
-        assertEquals(setOf("enabled", "workspaceId", "provider", "dailyRunLimit", "lookbackDays", "listId"), defaults.keys)
+        // The provider and the list are history the read still carries (keys.provider, keys.listId): the client reads neither.
+        val keys = setOf("enabled", "workspaceId", "dailyRunLimit", "lookbackDays")
+        assertEquals(keys, defaults.keys - setOf("provider", "listId"))
+        assertEquals(keys, WikiMaintenanceSettings::class.java.declaredFields
+            .filter { !java.lang.reflect.Modifier.isStatic(it.modifiers) && !it.isSynthetic }.map { it.name }.toSet())
         assertEquals(WikiMaintenanceSettings.default, WikiMaintenanceSettings.read(defaults))
         assertFalse("maintenance is off until the owner turns it on", WikiMaintenanceSettings.default.enabled)
         assertEquals(WikiMaintenanceSettings.default, WikiMaintenanceSettings.read(JsonObject(emptyMap())))

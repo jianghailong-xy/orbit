@@ -158,7 +158,7 @@ class WikiPlanScreenTest {
         writes["redraft"] = 200 to """{"created":true,"job":{"id":"j","kind":"revise","state":"queued"}}"""
         screen(OrbitRoute(Destination.WIKI_PLAN))
         compose.onNodeWithTag("wiki-plan-redraft").performClick()
-        compose.onNodeWithText(WikiPlanCopy.redraftNote("local-vllm", 1 to true)).assertExists()
+        compose.onNodeWithText(WikiPlanCopy.redraftNote(1 to true)).assertExists()
         compose.onNodeWithText(WikiPlanCopy.protectedKept(listOf("2.1"))).assertExists()
         compose.onNodeWithTag("wiki-plan-redraft-words").performTextInput("  merge the session documents  ")
         compose.onNodeWithTag("wiki-plan-redraft-go").performClick()

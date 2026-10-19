@@ -172,7 +172,7 @@ export function revertWikiChangeset(changesetId: string): Promise<WikiRevertAnsw
 export interface WikiSpaceUpdate {
   reviewMode?: WikiReviewMode;
   automaticSpotChecks?: boolean;
-  maintenance?: Partial<Pick<WikiMaintenanceSettings, 'enabled' | 'workspaceId' | 'provider' | 'dailyRunLimit' | 'lookbackDays'>>;
+  maintenance?: Partial<Pick<WikiMaintenanceSettings, 'enabled' | 'workspaceId' | 'dailyRunLimit' | 'lookbackDays'>>;
 }
 
 /** `PATCH /api/wiki/spaces/:id` — the owner's settings; refused to every session. */
@@ -184,8 +184,8 @@ export function updateWikiSpace(spaceId: string, body: WikiSpaceUpdate): Promise
 
 /**
  * `POST /api/wiki/spaces/:id/plan/redraft` — ask for a draft of the plan; with `instructions`, a revision
- * of its newest version. The server makes it a task of the space's maintenance list, queued behind the
- * list's unfinished task or held with why; a draft that has not ended answers a second press.
+ * of its newest version. The server makes it a wiki-worker job, or holds it with why; a draft that has not
+ * ended answers a second press.
  */
 export function redraftWikiPlan(spaceId: string, instructions: string | null): Promise<WikiPlanRedraftResult> {
   const words = instructions?.trim() ?? '';

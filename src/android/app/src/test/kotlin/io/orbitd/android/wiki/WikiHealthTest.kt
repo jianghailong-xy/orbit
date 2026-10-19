@@ -30,7 +30,7 @@ class WikiHealthTest {
             val health = WikiSpaceHealth.decode(case.jsonObject.getValue("health"))
             // The whole maintenance part: the look's parts, and — while the server runs the wiki — its reason (P9).
             val parts = WikiHealthLogic.parts(health, now)
-            if (!health.serverExecutes) assertEquals("$name: runner says the look alone", WikiHealthLogic.parts(health.maintenance, now), parts)
+            if (!health.serverExecutes) assertEquals("$name: a read without the executor says the look alone", WikiHealthLogic.parts(health.maintenance, now), parts)
             val expected = case.jsonObject.getValue("parts").jsonArray.map { it.jsonObject }
             assertEquals(name, expected.map { it.string("text") }, parts.map { it.text })
             assertEquals("$name: tones", expected.map { it.string("tone") }, parts.map { it.tone.name.lowercase() })
@@ -82,5 +82,18 @@ class WikiHealthTest {
         val waiting = WikiSpaceHealth.decode(Wire.json.parseToJsonElement("""{"spaceId":"s","entries":3,"maintenance":{"look":"off","enabled":false},
             "repo":{"look":"runner_offline","pending":1},"executor":{"mode":"server","serverExecutes":true},"systemModel":{"state":"up"}}"""))
         assertEquals("Maintenance off · ● Waiting for the runner to come online · Set up", WikiHealthLogic.text(WikiHealthLogic.parts(waiting, now)))
+    }
+
+    /** The server's reasons are said only while the read says the server executes the account's wiki: the fixture's
+     * offline runner, read without its executor, says no reason — the look alone. */
+    @Test fun aReadThatDoesNotSayTheServerExecutesSaysNoReason() {
+        val case = fixture.getValue("cases").jsonArray.map { it.jsonObject }
+            .first { it.string("name") == "server: maintained, and the runner the repository is read through is offline" }
+        val said = WikiSpaceHealth.decode(case.getValue("health"))
+        assertNotNull(WikiHealthLogic.serverReason(said))
+        val health = WikiSpaceHealth.decode(JsonObject(case.getValue("health").jsonObject - "executor"))
+        assertFalse(health.serverExecutes)
+        assertNull(WikiHealthLogic.serverReason(health))
+        assertEquals(WikiHealthLogic.parts(health.maintenance, now), WikiHealthLogic.parts(health, now))
     }
 }

@@ -9,10 +9,10 @@ import OrbitKit
 // web page's (`WikiSettingsPage.tsx`); the modes are `WikiModeLogic.modes`; every word is
 // `WikiModeCopy`'s. `WikiReviewModeCopyParityTests` holds both ends to that.
 //
-// While the server executes the account's wiki (`GET /wiki/system-model`'s `executor`, mock 35 ①②) there is no
-// provider to pick: maintenance names the deployment's System model, read-only with its state; the workspace is
-// where the repository is read from; and one sentence says where the wiki's material goes. Under runner — or from
-// a control plane that predates the read — the page is what it always was.
+// The server executes the wiki (mock 35 ①②), so there is no provider to pick: the workspace is where the repository
+// is read from, and while `GET /wiki/system-model`'s `executor` says the server executes the account's wiki,
+// maintenance names the deployment's System model, read-only with its state, and one sentence says where the wiki's
+// material goes. A read that does not say so — still loading, or a control plane from before it — draws neither.
 
 /// Where a press on the settings page goes.
 struct WikiSettingsActions {
@@ -28,7 +28,7 @@ struct WikiSettingsPage: View {
     let space: WikiSpace
     /// A workspace's name and runner, by id, when this client holds the workspace.
     var workspaceLabel: (String) -> String? = { _ in nil }
-    /// The System model while the server executes the account's wiki; nil under runner.
+    /// The System model while the read says the server executes the account's wiki; nil otherwise.
     var server: WikiSystemModelStatus? = nil
     var busy = false
     var actions = WikiSettingsActions()
@@ -94,12 +94,9 @@ struct WikiSettingsPage: View {
                         }
                     }
                     let place = maintenance.workspaceId.flatMap(workspaceLabel) ?? maintenance.workspaceId ?? "—"
+                    LabeledContent(WikiModeCopy.repoFrom, value: place)
                     if let server {
-                        LabeledContent(WikiModeCopy.repoFrom, value: place)
                         LabeledContent(WikiModeCopy.model) { WikiModelValue(model: server) }
-                    } else {
-                        LabeledContent(WikiModeCopy.workspace, value: place)
-                        LabeledContent(WikiModeCopy.provider, value: maintenance.provider)
                     }
                     LabeledContent(WikiModeCopy.dailyLimit, value: WikiModeCopy.runsADay(maintenance.dailyRunLimit))
                     LabeledContent(WikiModeCopy.lookback, value: WikiModeCopy.lookbackLabel(maintenance.lookbackDays))
@@ -116,7 +113,7 @@ struct WikiSettingsPage: View {
                         Text(WikiModeCopy.privacyNote)
                     }
                 } else if !maintenance.enabled {
-                    Text(WikiModeCopy.maintenanceNote)
+                    Text(WikiModeCopy.maintenanceNoteServer)
                 }
             }
             if maintenance.enabled {
@@ -142,7 +139,7 @@ struct WikiSettingsPage: View {
                             Text(WikiModeCopy.modeDefault).font(.orbitLabel).foregroundStyle(.secondary)
                         }
                     }
-                    Text(WikiModeCopy.modeNote(value, server: server != nil))
+                    Text(WikiModeCopy.modeNote(value))
                         .font(.orbitLabel)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -185,34 +182,30 @@ struct WikiModelValue: View {
     }
 }
 
-/// One choice in a Set up picker: a workspace or a provider, and the words it is listed by.
+/// One choice in the Set up picker: a workspace, and the words it is listed by.
 struct WikiPickerOption: Identifiable, Equatable {
     let id: String
     let label: String
 }
 
-/// What Set up / Edit writes: where the runs take place, on what, how many a day, and how far back the
+/// What Set up / Edit writes: where the repository is read from, how many runs a day, and how far back the
 /// first one reads — a pick, and the days `Last … days` reads.
 struct WikiMaintenanceChoice: Equatable {
     var workspaceID: String?
-    var provider: String
     var dailyRunLimit: Int
     var lookback: WikiModeLogic.LookbackChoice
     var lookbackDays: Int
 }
 
-/// Set up maintenance (mock 20 ②): the workspace, the provider it is pinned to, the daily limit and the
-/// look-back — then Turn on (or Save for one already on). A sheet form: Cancel on the left, the answer on
-/// the right. While the server runs the wiki (mock 35 ②) the System model stands where the provider was,
-/// read-only, and the form ends on where the wiki's material goes.
+/// Set up maintenance (mock 20 ②, 35 ②): the workspace the repository is read from, the System model read-only,
+/// the daily limit and the look-back — then Turn on (or Save for one already on). A sheet form: Cancel on the left,
+/// the answer on the right; it ends on where the wiki's material goes.
 struct WikiMaintenanceForm: View {
-    /// The workspaces it can run in, with the label each is listed by.
+    /// The workspaces the repository can be read from, with the label each is listed by.
     let workspaces: [WikiPickerOption]
-    /// The providers the server takes: the keys Claude Code runs, with their models.
-    let providers: [WikiPickerOption]
     let initial: WikiMaintenanceChoice
     let enabled: Bool
-    /// The System model while the server executes the account's wiki; nil under runner.
+    /// The System model while the read says the server executes the account's wiki; nil otherwise.
     let server: WikiSystemModelStatus?
     /// The write; true when it landed and the sheet can close.
     let submit: (WikiMaintenanceChoice) async -> Bool
@@ -221,11 +214,10 @@ struct WikiMaintenanceForm: View {
     @State private var choice: WikiMaintenanceChoice
     @State private var saving = false
 
-    init(workspaces: [WikiPickerOption], providers: [WikiPickerOption],
+    init(workspaces: [WikiPickerOption],
          initial: WikiMaintenanceChoice, enabled: Bool, server: WikiSystemModelStatus? = nil,
          submit: @escaping (WikiMaintenanceChoice) async -> Bool) {
         self.workspaces = workspaces
-        self.providers = providers
         self.initial = initial
         self.enabled = enabled
         self.server = server
@@ -233,17 +225,11 @@ struct WikiMaintenanceForm: View {
         _choice = State(initialValue: initial)
     }
 
-    /// The providers offered: the one the space names stays listed even when it is not configured yet.
-    private var providerOptions: [WikiPickerOption] {
-        providers.contains { $0.id == choice.provider }
-            ? providers : [WikiPickerOption(id: choice.provider, label: choice.provider)] + providers
-    }
-
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Picker(server != nil ? WikiModeCopy.repoFrom : WikiModeCopy.workspace, selection: $choice.workspaceID) {
+                    Picker(WikiModeCopy.repoFrom, selection: $choice.workspaceID) {
                         if choice.workspaceID == nil { Text(WikiModeCopy.noWorkspace).tag(String?.none) }
                         ForEach(workspaces) { workspace in
                             Text(workspace.label).tag(Optional(workspace.id))
@@ -252,36 +238,23 @@ struct WikiMaintenanceForm: View {
                     .pickerStyle(.menu)
                 } header: {
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(server != nil ? WikiModeCopy.maintenanceNoteServer : WikiModeCopy.maintenanceNote)
+                        Text(WikiModeCopy.maintenanceNoteServer)
                             .font(.orbitLabel)
                             .textCase(nil)
                             .fixedSize(horizontal: false, vertical: true)
-                        Text(server != nil ? WikiModeCopy.repoFrom : WikiModeCopy.workspace)
+                        Text(WikiModeCopy.repoFrom)
                     }
                 } footer: {
-                    Text(server != nil ? WikiModeCopy.repoFromNote : WikiModeCopy.workspaceNote)
+                    Text(WikiModeCopy.repoFromNote)
                 }
                 if let server {
-                    // Set by the deployment: shown, never picked, and nothing here writes the provider.
+                    // Set by the deployment: shown, never picked, and nothing here writes a provider.
                     Section {
                         LabeledContent(WikiModeCopy.model) { WikiModelValue(model: server) }
                     } header: {
                         Text(WikiModeCopy.model)
                     } footer: {
                         Text(WikiModeCopy.modelNote)
-                    }
-                } else {
-                    Section {
-                        Picker(WikiModeCopy.provider, selection: $choice.provider) {
-                            ForEach(providerOptions) { provider in
-                                Text(provider.label).tag(provider.id)
-                            }
-                        }
-                        .pickerStyle(.menu)
-                    } header: {
-                        Text(WikiModeCopy.provider)
-                    } footer: {
-                        Text(WikiModeCopy.providerNote)
                     }
                 }
                 Section {
@@ -360,17 +333,15 @@ struct WikiSettingsView: View {
                     // one called what the space is called is the one first offered.
                     let named = (model.agents?.items ?? []).first { $0.name == space.slug }?.id
                     let server = wiki.serverModel
-                    WikiMaintenanceForm(workspaces: workspaces, providers: providers,
+                    WikiMaintenanceForm(workspaces: workspaces,
                                         initial: WikiMaintenanceChoice(workspaceID: current.workspaceId ?? named,
-                                                                       provider: current.provider,
                                                                        dailyRunLimit: current.dailyRunLimit,
                                                                        lookback: WikiModeLogic.lookbackChoice(current.lookbackDays),
                                                                        lookbackDays: WikiModeLogic.lookbackDaysOffered(current.lookbackDays)),
                                         enabled: current.enabled, server: server) { choice in
-                        // `.some`: all of history is sent as null, which is a value, not a key left out. Under the
-                        // server the provider is left out: what the space names stays, for a return to runner.
+                        // `.some`: all of history is sent as null, which is a value, not a key left out.
                         let answer = await wiki.updateSpace(space, WikiSpaceUpdate(maintenance: WikiMaintenanceUpdate(
-                            enabled: true, workspaceId: choice.workspaceID, provider: server == nil ? choice.provider : nil,
+                            enabled: true, workspaceId: choice.workspaceID,
                             dailyRunLimit: choice.dailyRunLimit,
                             lookbackDays: .some(WikiModeLogic.lookbackDays(choice.lookback, days: choice.lookbackDays)))))
                         finish(answer)
@@ -408,18 +379,6 @@ struct WikiSettingsView: View {
 
     private func workspaceLabel(_ id: String) -> String? {
         workspaces.first { PublicID.storageKey($0.id) == PublicID.storageKey(id) }?.label
-    }
-
-    /// The providers the server takes for maintenance: the keys Claude Code runs, by the compatibility
-    /// table (each key's `engines`, docs/provider-engine-contract.md §3.5), since a maintenance run starts
-    /// a clean Claude Code — a DeepSeek key included, which Claude Code runs as well as DeepSeek Harness
-    /// does (web's `MaintenanceSetUp`).
-    private var providers: [WikiPickerOption] {
-        (model.agents?.configuredProviders ?? []).filter { ProviderEngines.of($0).contains("claude") }.map { provider in
-            WikiPickerOption(id: provider.slug,
-                             label: WikiModeLogic.providerLabel(provider.slug,
-                                                                model: provider.defaultModel ?? provider.models.first?.value))
-        }
     }
 
     private func finish(_ answer: String?) {
