@@ -442,7 +442,7 @@ func runWikiDocsBuild(t *Transport, sessionID string, opts wikiDocsBuildOptions,
 		}
 	}
 	summary.RepoSha = sha
-	fmt.Fprintf(progress, "Space %s: plan version %d, %s; the repository at origin/main %s in %s.\n", opts.spaceID,
+	fmt.Fprintf(progress, "Space %s: plan version %d, %s; the repository at origin's default branch %s in %s.\n", opts.spaceID,
 		plan.Confirmed.Version, wikiCount(len(docs), "document", "documents"), shortWikiHash(sha), root)
 	run := &wikiDocsBuildRun{
 		t: t, sessionID: sessionID, spaceID: opts.spaceID, planVersion: plan.Confirmed.Version,
@@ -2475,18 +2475,19 @@ func wikiDocsCheckout(flagValue string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// fetchWikiDocsRef fetches origin's main and answers the commit origin/main names after it: every
+// fetchWikiDocsRef fetches origin's default branch and answers the commit it names after it: every
 // repository piece of the run is read, and every repository quote checked, at that one commit.
 func fetchWikiDocsRef(repo string) (string, error) {
-	if _, code, stderr, err := wikiAnchorGit(repo, wikiAnchorFetchTimeout, "fetch", "--quiet", "--no-tags", "origin", wikiAnchorsVerifyRefspec); err != nil || code != 0 {
-		return "", fmt.Errorf("orbit wiki docs build: git fetch origin main failed in %s, so nothing was written — a document "+
-			"read from an origin/main that was not just fetched says nothing about main: %s", repo, firstNonEmpty(strings.TrimSpace(stderr), errString(err)))
+	trackingRef, err := fetchWikiOriginDefault(repo)
+	if err != nil {
+		return "", fmt.Errorf("orbit wiki docs build: git fetch of origin's default branch failed in %s, so nothing was written — a document "+
+			"read from a branch that was not just fetched says nothing about its current state: %s", repo, err)
 	}
-	out, code, stderr, err := wikiAnchorGit(repo, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}")
+	out, code, stderr, err := wikiAnchorGit(repo, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", trackingRef+"^{commit}")
 	ref := strings.TrimSpace(string(out))
 	if err != nil || code != 0 || !wikiCommitSha.MatchString(ref) {
-		return "", fmt.Errorf("orbit wiki docs build: origin/main names no commit in %s after the fetch: %s",
-			repo, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
+		return "", fmt.Errorf("orbit wiki docs build: %s names no commit in %s after the fetch: %s",
+			trackingRef, repo, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
 	}
 	return ref, nil
 }

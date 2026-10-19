@@ -1927,8 +1927,8 @@ func openWikiImportRepoAt(dir string) *wikiImportRepo {
 	if err != nil || root == "" {
 		return nil
 	}
-	ref := "origin/main"
-	if _, err := wikiImportGit(root, "rev-parse", "--verify", "--quiet", ref+"^{commit}"); err != nil {
+	ref := wikiOriginDefaultTrackingRef(root)
+	if ref == "" {
 		ref = "HEAD"
 	}
 	listing, err := wikiImportGit(root, "ls-tree", "-r", "--name-only", ref)

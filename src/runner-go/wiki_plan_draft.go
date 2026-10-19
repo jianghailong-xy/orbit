@@ -505,7 +505,7 @@ func (r *wikiPlanRun) checkout() error {
 		return err
 	}
 	r.repo = repo
-	r.say("Checkout %s at origin/main %s: %d files, %d documents, %d source files indexed.", root, shortWikiHash(ref), len(repo.files), len(repo.headings), len(repo.symbols))
+	r.say("Checkout %s at origin's default branch %s: %d files, %d documents, %d source files indexed.", root, shortWikiHash(ref), len(repo.files), len(repo.headings), len(repo.symbols))
 	return nil
 }
 
@@ -615,7 +615,7 @@ func (r *wikiPlanRun) resumedSha(root, ref string) string {
 	if _, err := wikiImportGit(root, "merge-base", "--is-ancestor", meta.Sha, ref); err != nil {
 		return ref
 	}
-	r.say("Resuming this job at %s, the origin/main its earlier run drafted from (origin/main is now %s).", shortWikiHash(meta.Sha), shortWikiHash(ref))
+	r.say("Resuming this job at %s, the default-branch commit its earlier run drafted from (the default branch is now %s).", shortWikiHash(meta.Sha), shortWikiHash(ref))
 	return meta.Sha
 }
 

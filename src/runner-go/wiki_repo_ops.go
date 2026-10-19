@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -120,7 +122,7 @@ type wikiRepoOpReadPiece struct {
 	// Why it is not there: "too_large" for a file over wikiRepoOpWholeFileBytes. Absent otherwise.
 	Reason string `json:"reason,omitempty"`
 	// The file's size in bytes at the commit; 0 when the commit has no such path.
-	Size int64 `json:"size,omitempty"`
+	Size int64  `json:"size,omitempty"`
 	Text string `json:"text,omitempty"`
 	// The answer was cut at the limit the request named, so its end is not the file's.
 	Truncated bool `json:"truncated,omitempty"`
@@ -250,10 +252,19 @@ func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, s
 		return "", "", fmt.Errorf("the operation names no working directory to read the repository in")
 	}
 	root, err := wikiImportGit(workDir, "rev-parse", "--show-toplevel")
+	want := strings.TrimSpace(cmd.RepoURLNorm)
+	if err != nil || root == "" || (want != "" && wikiRepoOpOrigin(root) != want) {
+		if child := wikiRepoOpChildCheckout(workDir, want); child != "" {
+			root, err = child, nil
+		}
+	}
 	if err != nil || root == "" {
+		if want != "" {
+			return "", "", fmt.Errorf("%s is not a git checkout, and no direct child is a clone of the space's repository: %v", workDir, err)
+		}
 		return "", "", fmt.Errorf("%s is not a git checkout: %v", workDir, err)
 	}
-	if want := strings.TrimSpace(cmd.RepoURLNorm); want != "" {
+	if want != "" {
 		origin, _ := wikiImportGit(root, "remote", "get-url", "origin")
 		if got := normalizeWikiRepoURL(origin); got != want {
 			return "", "", fmt.Errorf("the checkout %s is a clone of %s, not of the space's repository %s: "+
@@ -271,21 +282,67 @@ func wikiRepoOpCheckout(cmd WikiRepoOpCommand, input wikiRepoOpInput) (string, s
 		return root, "", nil
 	}
 	// A failure here is read in the job's error: it says which operation, in which checkout, and what git said.
-	if err := fetchWikiOriginMain(root); err != nil {
-		return "", "", fmt.Errorf("the %s operation could not fetch origin main into the checkout %s, so nothing was read: %v",
+	trackingRef, err := fetchWikiOriginDefault(root)
+	if err != nil {
+		return "", "", fmt.Errorf("the %s operation could not fetch origin's default branch into the checkout %s, so nothing was read: %v",
 			cmd.Kind, root, err)
 	}
-	out, code, stderr, err := wikiAnchorGit(root, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}")
+	out, code, stderr, err := wikiAnchorGit(root, wikiAnchorGitTimeout, "rev-parse", "--verify", "--quiet", trackingRef+"^{commit}")
 	ref := strings.TrimSpace(string(out))
 	if err != nil || code != 0 || !wikiCommitSha.MatchString(ref) {
-		return "", "", fmt.Errorf("the %s operation found no commit at origin/main in the checkout %s after the fetch, so "+
-			"nothing was read: %s", cmd.Kind, root, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
+		return "", "", fmt.Errorf("the %s operation found no commit at %s in the checkout %s after the fetch, so "+
+			"nothing was read: %s", cmd.Kind, trackingRef, root, firstNonEmpty(strings.TrimSpace(stderr), errString(err), ref))
 	}
 	if first != "" && !wikiRepoOpStartsFrom(root, ref, first) {
 		return "", "", fmt.Errorf("the checkout %s does not start from the space's first commit %s: "+
 			"it is another repository behind the same URL, so nothing was read", root, first)
 	}
 	return root, ref, nil
+}
+
+// wikiRepoOpChildCheckout resolves the common multi-repository workspace: its work directory is a
+// container, and each direct child is a separate checkout. The space's repository URL selects the child;
+// without that identity there is no safe choice to make. Only direct children are considered so a repository
+// operation never turns into an unbounded scan of the user's machine.
+func wikiRepoOpChildCheckout(workDir, want string) string {
+	if want == "" {
+		return ""
+	}
+	entries, err := os.ReadDir(workDir)
+	if err != nil {
+		return ""
+	}
+	preferred := want
+	if slash := strings.LastIndex(preferred, "/"); slash >= 0 {
+		preferred = preferred[slash+1:]
+	}
+	ordered := make([]os.DirEntry, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Name() == preferred {
+			ordered = append(ordered, entry)
+		}
+	}
+	for _, entry := range entries {
+		if entry.Name() != preferred {
+			ordered = append(ordered, entry)
+		}
+	}
+	for _, entry := range ordered {
+		if !entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		candidate := filepath.Join(workDir, entry.Name())
+		root, gitErr := wikiImportGit(candidate, "rev-parse", "--show-toplevel")
+		if gitErr == nil && root != "" && wikiRepoOpOrigin(root) == want {
+			return root
+		}
+	}
+	return ""
+}
+
+func wikiRepoOpOrigin(root string) string {
+	origin, _ := wikiImportGit(root, "remote", "get-url", "origin")
+	return normalizeWikiRepoURL(origin)
 }
 
 // wikiRepoOpLocalCommits is the commits a read or a diff names, when the checkout already has every one of

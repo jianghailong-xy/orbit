@@ -684,10 +684,10 @@ func (r *wikiMaintainRun) checkout() error {
 	}
 	r.repo = openWikiImportRepoAt(root)
 	if r.repo == nil {
-		return fmt.Errorf("the checkout %s could not be listed at origin/main", root)
+		return fmt.Errorf("the checkout %s could not be listed at origin's default branch", root)
 	}
 	r.about = wikiMaintainAbout(root, ref)
-	r.say("Checkout %s at origin/main %s.", root, shortWikiHash(ref))
+	r.say("Checkout %s at origin's default branch %s.", root, shortWikiHash(ref))
 	return nil
 }
 

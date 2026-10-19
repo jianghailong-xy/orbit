@@ -407,10 +407,14 @@ func runWikiArticles(t *Transport, sessionID, spaceID, only, model string, progr
 	return summary, nil
 }
 
-// wikiArticlesRef is the commit the checkout's origin/main stands at: the ref the articles are
+// wikiArticlesRef is the commit the checkout's origin default branch stands at: the ref the articles are
 // "generated at" (design §12.1). Empty when there is no such ref here.
 func wikiArticlesRef() string {
-	out, err := exec.Command("git", "rev-parse", "--verify", "-q", "origin/main^{commit}").Output()
+	ref := wikiOriginDefaultTrackingRef(".")
+	if ref == "" {
+		return ""
+	}
+	out, err := exec.Command("git", "rev-parse", "--verify", "-q", ref+"^{commit}").Output()
 	if err != nil {
 		return ""
 	}
