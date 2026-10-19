@@ -777,6 +777,24 @@ export async function applyIntegrationJobResult(
     // "too early", a branch the work did not end on, a failure nobody asked to hear about — is
     // read from here rather than inferred from the state.
     const cancelRequested = job.cancelRequestedAt !== null;
+    // J-T8: a stopped LAND_TASK is serialized with the DONE transaction that may be queueing at the
+    // same moment. That transaction takes the project binding (rank 55) and then counts this
+    // generation as in flight; this one takes the SAME row, BEFORE it reads the marker or the task
+    // and before any rank-60 write, and it takes it for every stopped LAND_TASK rather than only
+    // when the marker is already visible. The two orders then have exactly two outcomes:
+    //   * the DONE commits first — this read sees DONE and the marker, and queues the generation;
+    //   * this transaction wins — the DONE waits for it, then counts this generation as terminal
+    //     and queues its own generation with no loss.
+    // A lock taken only on what a plain pre-read saw would close neither: the DONE transaction
+    // never waits for a reader, so the result could commit after a DONE that found this generation
+    // still in flight, and both would decide the other was queueing.
+    const stoppedLanding = job.kind === 'LAND_TASK' && job.taskId != null && cancelRequested;
+    if (stoppedLanding) {
+      await tx.$queryRaw(Prisma.sql`
+        SELECT "id" FROM "project_codebase"
+         WHERE "project_id" = ${job.projectId}::uuid AND "slot" = 'primary'
+         FOR UPDATE`);
+    }
     // A stopped LAND_TASK whose task was reopened and written DONE again is owed the next
     // generation, queued in THIS transaction once the row below stops being the live one (J-T8).
     // WHATEVER RESULT the stopped generation reports: today's runner reads `cancelRequested` once,
@@ -784,29 +802,19 @@ export async function applyIntegrationJobResult(
     // LANDED, ALREADY_LANDED, NOTHING_TO_LAND, CHECK_FAILED, CONFLICT, ERROR — and the commits of
     // the DONE that came after the reopen are on a branch no generation of that DONE was ever
     // queued for. The marker is what says that DONE is waiting, and it is consumed by the enqueue.
-    // That is the DONE transaction's shape — task (50), then the project's binding (55), then the
-    // job (60) — so the binding is taken here, before the first rank-60 write, when it is going to
-    // happen. The two facts are re-read at the enqueue itself; one that appears in between turns
-    // this attempt into a deadlock the retry re-runs, and the re-run finds it here.
-    const queuesReopenedDone = job.kind === 'LAND_TASK' && job.taskId != null
-      && cancelRequested
+    const queuesReopenedDone = stoppedLanding
       && (await tx.taskReopenIntent.findFirst({
-        where: { taskId: job.taskId }, select: { taskId: true },
+        where: { taskId: job.taskId! }, select: { taskId: true },
       })) !== null
       && (await tx.task.findFirst({
-        where: { id: job.taskId }, select: { status: true },
+        where: { id: job.taskId! }, select: { status: true },
       }))?.status === 'DONE';
-    if (queuesReopenedDone) {
-      await tx.$queryRaw(Prisma.sql`
-        SELECT "id" FROM "project_codebase"
-         WHERE "project_id" = ${job.projectId}::uuid AND "slot" = 'primary'
-         FOR UPDATE`);
-    }
     /**
      * Queue the generation the DONE written after the reopen is owed, once this one is terminal —
-     * whatever it ended as. The marker and the task's status are asked again here: the pre-read
-     * above decided only whether to take the binding first. A task that is still being reworked or
-     * was taken away again queues nothing, and its marker lives until a DONE comes.
+     * whatever it ended as. The marker and the task's status are asked again here, after the
+     * terminal write: the binding lock above orders this transaction against the DONE, and this
+     * second read keeps a task somebody took away again in between from being queued. A task that
+     * is still being reworked queues nothing, and its marker lives until a DONE comes.
      */
     const queueReopenedDone = async (): Promise<void> => {
       if (!queuesReopenedDone || job.taskId == null) return;

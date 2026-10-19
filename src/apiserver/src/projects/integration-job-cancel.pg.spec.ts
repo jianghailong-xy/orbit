@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 
-import { PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
+import { Prisma, PrismaClient, RunStatus, RunnerStatus, TaskStatus } from '@prisma/client';
 import { Client } from 'pg';
 
 import {
@@ -677,6 +677,62 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
     });
     assert.deepEqual(rows.map((job) => [job.generation, job.state]), [[1, 'CANCELLED'], [2, 'QUEUED']],
       'the DONE after the reopen is queued in the too-early branch too');
+    assert.equal(await stack.db.taskReopenIntent.findUnique({ where: { taskId: work.taskId } }), null);
+  });
+
+  await t.test('(14) a result racing the DONE transaction cannot lose the next generation', async () => {
+    const w = await world(stack, 'requeue-race', 'PROJECT_BRANCH');
+    const work = await doneTask(stack, w, 'requeue-race');
+    const first = await claim(stack, w);
+    // Take the task away, then reopen it: the marker is written and the task is OPEN again. It has
+    // NOT been written DONE yet — the DONE transaction is the one this result races.
+    await stack.tasks.update(w.ownerId, work.taskId, { status: TaskStatus.CANCELLED } as never);
+    await stack.tasks.update(w.ownerId, work.taskId, {
+      status: TaskStatus.OPEN, supersededByTaskId: null, terminalReason: null,
+    } as never);
+    assert.ok(await stack.db.taskReopenIntent.findUnique({ where: { taskId: work.taskId } }));
+
+    // D, the DONE transaction, in its own connection and not committed: task row (50), the project
+    // binding (55), then the write. Its in-flight count would see this stopped generation as
+    // RUNNING, answer ALREADY_QUEUED and keep the marker — the state the result must not race past.
+    await sql.query('BEGIN');
+    await sql.query(`SELECT "id" FROM "task" WHERE "id" = $1::uuid FOR UPDATE`, [work.taskId]);
+    await sql.query(
+      `SELECT "id" FROM "project_codebase" WHERE "project_id" = $1::uuid AND "slot" = 'primary' FOR UPDATE`,
+      [w.projectId],
+    );
+    await sql.query(`UPDATE "task" SET "status" = 'DONE' WHERE "id" = $1::uuid`, [work.taskId]);
+
+    // R, the result. With the binding taken first it waits here; without that lock it would commit
+    // while D is still invisible, and both would decide the other was queueing.
+    const result = stack.jobs.applyResult(first.jobId, w.runnerId, {
+      claimGeneration: first.claimGeneration,
+      leaseOwner: first.leaseOwner,
+      state: 'CHECK_FAILED', phase: 'CHECK', checks: [RED_CHECK], conflicts: [],
+    });
+    let settled = false;
+    void result.then(() => { settled = true; }, () => { settled = true; });
+    const deadline = Date.now() + 10_000;
+    let waiting = false;
+    while (!settled && !waiting && Date.now() < deadline) {
+      const [row] = await stack.db.$queryRaw<Array<{ n: number }>>(Prisma.sql`
+        SELECT count(*)::int AS "n" FROM pg_stat_activity
+         WHERE "wait_event_type" = 'Lock' AND "datname" = current_database()
+           AND "pid" <> pg_backend_pid()`);
+      waiting = (row?.n ?? 0) > 0;
+      if (!waiting) await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    await sql.query('COMMIT');
+    const answered = await result;
+
+    assert.equal(answered.answer.accepted, true);
+    const rows = await stack.db.projectIntegrationJob.findMany({
+      where: { taskId: work.taskId, kind: 'LAND_TASK' },
+      orderBy: { generation: 'asc' },
+    });
+    assert.deepEqual(rows.map((job) => [job.generation, job.state]),
+      [[1, 'CHECK_FAILED'], [2, 'QUEUED']],
+      'either D queued the DONE itself or R found it; neither may lose it');
     assert.equal(await stack.db.taskReopenIntent.findUnique({ where: { taskId: work.taskId } }), null);
   });
 
