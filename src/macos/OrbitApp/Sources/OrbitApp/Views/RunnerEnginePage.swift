@@ -87,6 +87,8 @@ private struct RunnerEngineContent: View {
             head(health, now: now)
             if engine == "dsh" {
                 dshSection(offline: offline)
+            } else if engine == CursorRuntime.engine, CursorRuntime.state(of: runner).blocks {
+                cursorStateSection(health, offline: offline)
             } else if let health, health.installed == true, let login = RunnerPageFormat.loginEngine(engine) {
                 accountsSection(health, login: login, offline: offline, now: now)
             } else if let login = RunnerPageFormat.loginEngine(engine) {
@@ -97,7 +99,11 @@ private struct RunnerEngineContent: View {
                 installSection(Infrastructure.rowKind(health, install: runner.install, slug: engine),
                                installable: Infrastructure.installsOpenCode(runner), offline: offline)
             }
-            updateSection(offline: offline)
+            // Cursor CLI stays on the build Orbit pins, which a runner release moves: Update Engines Now
+            // has nothing to do for it (board iOS 2).
+            if engine != CursorRuntime.engine {
+                updateSection(offline: offline)
+            }
         }
         .formStyle(.grouped)
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface` behind the grouped form
@@ -177,8 +183,41 @@ private struct RunnerEngineContent: View {
                         .font(.orbitLabel)
                         .foregroundStyle(Color.secondary)
                 }
+            } footer: {
+                // Cursor CLI's page has no Update Engines Now to carry its footer.
+                if engine == CursorRuntime.engine { Text(cursorFooter(offline: offline)) }
             }
         }
+    }
+
+    /// Cursor CLI on a runner that can't run it at all (board iOS 2, its four states): a runner that
+    /// predates it, a platform its pinned build doesn't run on, or a build other than the pinned one —
+    /// what the state means and what fixes it, and the one fix that happens here: putting the pinned build
+    /// back (Reinstall). Nothing about accounts, which no sign-in here would make usable.
+    @ViewBuilder private func cursorStateSection(_ health: RunnerEngineHealth?, offline: Bool) -> some View {
+        let state = CursorRuntime.state(of: runner)
+        Section {
+            if let label = state.label {
+                Text(label).foregroundStyle(RunnerInk.amber)
+            }
+            if let hint = CursorRuntime.stateHint(state, installationError: health?.installationError) {
+                Text(hint).font(.orbitLabel).foregroundStyle(Color.secondary)
+            }
+            if let reinstall = CursorRuntime.installLabel(state) {
+                Button(reinstall) { install() }
+                    .disabled(offline || runner.install?.inFlight == true)
+            }
+            if runner.install?.engine == engine, let message = runner.install?.message, !message.isEmpty {
+                Text(message).font(.orbitLabel).foregroundStyle(Color.secondary)
+            }
+        } footer: {
+            Text(cursorFooter(offline: offline))
+        }
+    }
+
+    /// Cursor CLI's page footer: its version is the one Orbit pins; an offline machine says what it can't do.
+    private func cursorFooter(offline: Bool) -> String {
+        offline ? RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER : CursorRuntime.enginePageFooter
     }
 
     /// The engine, its version and whether it is kept current.
@@ -214,7 +253,8 @@ private struct RunnerEngineContent: View {
     @ViewBuilder private func accountsSection(_ health: RunnerEngineHealth, login: LoginEngine, offline: Bool,
                                               now: Date) -> some View {
         Section {
-            ForEach(RunnerPageFormat.accountLines(health)) { line in
+            ForEach(RunnerPageFormat.accountLines(health, usage: CodexAccounts.usage(engine, planUsage: runner.planUsage,
+                                                                                    engines: runner.engines))) { line in
                 let canPause = RunnerPageFormat.keepsAccounts(engine)
                     && (health.accounts ?? []).contains { $0.id == line.id }
                 // A row whose sign-in card is open has no swipe: its code field takes the drags.
@@ -250,6 +290,8 @@ private struct RunnerEngineContent: View {
                         Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER)
                     }
                 }
+            } else if engine == CursorRuntime.engine {
+                Text(cursorFooter(offline: offline))
             } else if offline {
                 Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER)
             }
@@ -288,7 +330,12 @@ private struct RunnerEngineContent: View {
                                          now: Date, canPause: Bool) -> some View {
         let windows = RunnerPageFormat.accountWindows(runner, engine: engine, account: line.id)
         let alone = (runner.engines?.first(where: { $0.engine == engine })?.accounts?.count ?? 0) < 2
-        let status = RunnerPageFormat.authStatus(line.auth)
+        // A Cursor CLI account a turn met Cursor's limit on is spent until its usage resets, which no
+        // reading says (web's "Spent · resets …").
+        let spent = line.auth == "yes"
+            ? RunnerPageFormat.accountUsageLimit(runner, engine: engine, account: line.id, now: now) : nil
+        let status = spent.map { RunnerPageFormat.Status(text: CursorRuntime.spentStatus($0, now: now), tone: .warn) }
+            ?? RunnerPageFormat.authStatus(line.auth)
         let removal = RunnerPageFormat.removal(runner.accountRemove, engine: engine, account: line.id)
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
@@ -329,6 +376,10 @@ private struct RunnerEngineContent: View {
                 Text("env key · runs on your Gemini key")
                     .font(.orbitLabel)
                     .foregroundStyle(Color.secondary)
+            } else if line.auth == "yes", engine == CursorRuntime.engine {
+                // Cursor reports no share of this account's usage, or only 0%, which is no reading
+                // (contract §11): under the plan's name, no number at all rather than one Orbit made up.
+                cursorUsageUnavailable(plan: line.plan)
             } else if line.auth == "yes", RunnerPageFormat.reportsQuota(engine) {
                 // Kimi only: a read that held no window at all is a plan with no quota limit, said so —
                 // not the failed-or-never-ran read's "No quota reported" (web QuotaCell).
@@ -531,15 +582,36 @@ private struct RunnerEngineContent: View {
 
     // MARK: words
 
+    /// `**Free plan** · Usage unavailable — Cursor doesn’t report how many of the Free plan’s requests
+    /// are left.` (board iOS 2 ③).
+    private func cursorUsageUnavailable(plan: String?) -> some View {
+        var line = AttributedString()
+        if let plan {
+            var name = AttributedString("\(plan) plan")
+            name.inlinePresentationIntent = .stronglyEmphasized
+            line = name + AttributedString(" · ")
+        }
+        line += AttributedString(CursorRuntime.usageUnavailable(plan: plan))
+        return Text(line)
+            .font(.orbitLabel)
+            .foregroundStyle(Color.secondary)
+    }
+
     /// `2.1.284 · checked 6m ago` — the updater's own footnote, amber when this machine has drifted.
     private func versionLine(_ health: RunnerEngineHealth?, now: Date) -> AttributedString {
         typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
         guard let health, health.installed == true else {
+            // A runner too old for Cursor CLI, or on a platform it doesn't run on, has nothing to install.
+            if engine == CursorRuntime.engine, let label = CursorRuntime.state(of: runner).blocksLabel {
+                return AttributedString(label)
+            }
             return AttributedString(RunnerPageCopy.RUNNER_ENGINE_NOT_INSTALLED)
         }
         let version = RunnerPageFormat.engineVersion(health.version)
         var line = AttributedString(version ?? "")
-        if let note = RunnerAttention.updateNoteOf(health.update, nowMs: RunnerPageFormat.nowMs(now)) {
+        // Cursor CLI's build is the one Orbit pins, which its note says.
+        if let note = RunnerAttention.updateNoteOf(health.update, nowMs: RunnerPageFormat.nowMs(now),
+                                                   pinned: engine == CursorRuntime.engine) {
             if version != nil { line += AttributedString(RunnerPageCopy.RUNNER_LINE_SEPARATOR) }
             var words = AttributedString(note.text)
             if note.tone == .warn { words[Colour.self] = RunnerInk.amber }

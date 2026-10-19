@@ -1,0 +1,11 @@
+run: https://github.com/jianghailong-xy/orbit/actions/runs/39178766623
+branch: probe/p7b-cursor-shots (never merged)
+sha: e9e1b0bc162cb0e40d70ead98e622aa87504374d (cf0ca8026 plus .p7b-probe/ and the probe's client.yml)
+device: iPhone 17 Pro simulator, iOS 26.5 (macos-26 runner, Xcode latest-stable)
+shots part a (test1NewSession test2Infrastructure test3Accounts): Executed 3 tests, with 0 failures (0 unexpected) in 1287.856 (1287.865) seconds
+shots part b (test4Keys test5Session test6ModesAndSwitch): Executed 3 tests, with 0 failures (0 unexpected) in 1039.600 (1039.618) seconds
+macos (OrbitKit swift test + OrbitApp swift build): test=success build=success 
+ios (XcodeGen + Simulator build): build=success 
+font-tokens: success
+nav-push: success
+android gate on the same commit: https://github.com/jianghailong-xy/orbit/actions/runs/39178766515 (success on its re-run; attempt 1 failed ProjectMergeShellTest:211 and ProjectSessionsShellTest:69, unrelated)

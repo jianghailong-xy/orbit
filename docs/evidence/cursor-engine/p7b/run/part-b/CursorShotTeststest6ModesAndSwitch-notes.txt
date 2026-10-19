@@ -1,0 +1,32 @@
+modes-light: mode 9 label="Accept Edits" value="" frame=(64.0, 797.0, 88.33333333333331, 18.0) hittable=true
+modes-light: open after 1
+modes-light: Default 9 label="Default" value="" frame=(64.0, 709.0, 250.0, 96.0) hittable=true enabled=false
+blocked-light: chip 9 label="Model Auto" value="" frame=(280.3333333333333, 797.0, 33.666666666666686, 18.0) hittable=true
+blocked-light: menu open after 1 press(es)
+blocked-light: Provider row 9 label="Provider, Automatic" value="" frame=(64.0, 368.0, 250.0, 60.0) hittable=true
+blocked-light: submenu open after 1 press(es)
+blocked-light: Team 9 label="Team" value="" frame=(64.0, 515.3333333333334, 250.0, 60.0) hittable=true enabled=false
+blocked-light: Default 9 label="Default" value="" frame=(64.0, 473.3333333333333, 250.0, 42.00000000000006) hittable=false enabled=false
+blocked-light: the note's second sentence 9 label="Start a new session to use one of these." value="" frame=(64.0, 769.6666666666666, 250.0, 62.0) hittable=true
+draft-pick-light: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+draft-pick-light: Cursor CLI row 9 label="Cursor CLI, Auto" value="" frame=(16.0, 515.0, 370.0, 58.0) hittable=true
+draft-light: chip 9 label="Model Auto" value="" frame=(252.33333333333334, 797.0, 33.66666666666666, 18.0) hittable=true
+draft-light: menu open after 1 press(es)
+draft-light: Provider row 9 label="Provider, Automatic" value="" frame=(36.0, 368.0, 250.0, 60.0) hittable=true
+draft-light: submenu open after 1 press(es)
+modes-dark: mode 9 label="Accept Edits" value="" frame=(64.0, 797.0, 88.33333333333331, 18.0) hittable=true
+modes-dark: open after 1
+modes-dark: Default 9 label="Default" value="" frame=(64.0, 709.0, 250.0, 96.0) hittable=true enabled=false
+blocked-dark: chip 9 label="Model Auto" value="" frame=(280.3333333333333, 797.0, 33.666666666666686, 18.0) hittable=true
+blocked-dark: menu open after 1 press(es)
+blocked-dark: Provider row 9 label="Provider, Automatic" value="" frame=(64.0, 368.0, 250.0, 60.0) hittable=true
+blocked-dark: submenu open after 1 press(es)
+blocked-dark: Team 9 label="Team" value="" frame=(64.0, 515.3333333333334, 250.0, 60.0) hittable=true enabled=false
+blocked-dark: Default 9 label="Default" value="" frame=(64.0, 473.3333333333333, 250.0, 42.00000000000006) hittable=true enabled=false
+blocked-dark: the note's second sentence 9 label="Start a new session to use one of these." value="" frame=(64.0, 769.6666666666666, 250.0, 62.0) hittable=true
+draft-pick-dark: hero 9 label="Engine: Claude Code. Switch" value="" frame=(104.66666666666667, 412.6666666666667, 192.66666666666663, 33.66666666666663) hittable=true
+draft-pick-dark: Cursor CLI row 9 label="Cursor CLI, Auto" value="" frame=(16.0, 515.0, 370.0, 58.0) hittable=true
+draft-dark: chip 9 label="Model Auto" value="" frame=(252.33333333333334, 797.0, 33.66666666666666, 18.0) hittable=true
+draft-dark: menu open after 1 press(es)
+draft-dark: Provider row 9 label="Provider, Automatic" value="" frame=(36.0, 368.0, 250.0, 60.0) hittable=true
+draft-dark: submenu open after 1 press(es)

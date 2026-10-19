@@ -1023,9 +1023,16 @@ struct ProviderDetailSettingsPage: View {
     var body: some View {
         let key = PublicID.storageKey(providerID)
         if let agents = model.agents,
-           let provider = agents.personalProviders.first(where: { $0.providerID.map(PublicID.storageKey) == key }) {
-            DeepSeekKeyPageView(key: provider, reading: agents.deepSeekBalances[providerID],
-                                refresh: { await agents.refreshDeepSeekBalance(providerID) })
+           let provider = (agents.personalProviders + agents.ownKeys)
+            .first(where: { $0.providerID.map(PublicID.storageKey) == key }) {
+            if CursorRuntime.isKey(provider) {
+                CursorKeyPageView(key: provider,
+                                  model: Infrastructure.cursorModel((model.runners?.runners ?? []).filter { $0.online == true }),
+                                  checkAgain: { await agents.recheckCursorKey(providerID) })
+            } else {
+                DeepSeekKeyPageView(key: provider, reading: agents.deepSeekBalances[providerID],
+                                    refresh: { await agents.refreshDeepSeekBalance(providerID) })
+            }
         } else {
             ContentUnavailableView(ProvidersOverview.keyGone, systemImage: "key")
         }

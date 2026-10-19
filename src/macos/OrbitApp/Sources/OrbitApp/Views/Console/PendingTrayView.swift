@@ -14,6 +14,10 @@ import OrbitKit
 struct PendingTrayView: View {
     let console: ConsoleModel
     let rows: [PendingTrayRow]
+    /// Under the rows, why none of them can go into the turn running now — an engine that takes no
+    /// message mid-turn (Cursor CLI's would stop the turn), said only while one is waiting for the
+    /// next turn (board iOS 5 ⑤, web `PendingTray`'s `note`).
+    var note: String? = nil
 
     var body: some View {
         if !rows.isEmpty {
@@ -23,6 +27,16 @@ struct PendingTrayView: View {
                     PendingTrayRowView(row: row,
                                        onSteer: { Task { await console.steerQueued(row.bubble) } },
                                        onWithdraw: { withdraw(row) })
+                }
+                if let note, rows.contains(where: { $0.heading == .nextTurn }) {
+                    Divider().padding(.leading, 38)
+                    Text(note)
+                        .font(.orbitMeta)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.leading, 38)
+                        .padding(.trailing, 12)
+                        .padding(.vertical, 8)
                 }
             }
             .composerBandCard(cornerRadius: 12)

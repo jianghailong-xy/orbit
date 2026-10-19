@@ -7,6 +7,7 @@ public enum LoginEngine: String, Codable, Equatable, Sendable, CaseIterable, Ide
     case codex
     case kimi
     case antigravity
+    case cursor
 
     public var id: String { rawValue }
 
@@ -18,6 +19,7 @@ public enum LoginEngine: String, Codable, Equatable, Sendable, CaseIterable, Ide
         case .codex:  return "Codex"
         case .kimi:   return "Kimi Code"
         case .antigravity: return "Antigravity"
+        case .cursor: return CursorRuntime.name
         }
     }
 }

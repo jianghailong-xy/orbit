@@ -6,9 +6,11 @@ import Foundation
 /// OpenCode beside its dialect's own engine (`ProviderEngines`). A session on OpenCode stores the key's
 /// own slug as its provider and the bare model; dispatch alone names the key for OpenCode.
 public enum OpenCodeKeys {
-    /// What a key's endpoint speaks: Anthropic Messages, OpenAI Responses, Moonshot's own API or Gemini's.
+    /// What a key's endpoint speaks: Anthropic Messages, OpenAI Responses, Moonshot's own API or Gemini's
+    /// — or Cursor's own, a Cursor User API Key, which is no model API: only Cursor CLI spends it, so
+    /// OpenCode does not (docs/cursor-runtime-contract.md §9).
     public enum Dialect: Equatable, Sendable {
-        case anthropic, openai, openaiCompatible, gemini
+        case anthropic, openai, openaiCompatible, gemini, cursor
     }
 
     /// The dialect a configured key's endpoint speaks, from the runtime its row names. DeepSeek Harness
@@ -19,6 +21,7 @@ public enum OpenCodeKeys {
         case "codex": return .openai
         case "kimi": return .openaiCompatible
         case "antigravity": return .gemini
+        case "cursor": return .cursor
         default: return nil
         }
     }

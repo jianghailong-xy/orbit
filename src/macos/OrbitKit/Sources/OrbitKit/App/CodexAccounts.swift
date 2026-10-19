@@ -28,6 +28,9 @@ public enum CodexAccounts {
     /// …or a model of its own, which only both of these together are (shared `OWN_CREDENTIAL_NEEDS_ALL`,
     /// runner `kimiUsesEnvModel`): either one alone still runs on the account's login.
     private static let kimiOwnModelEnvKeys = ["KIMI_MODEL_NAME", "KIMI_MODEL_API_KEY"]
+    /// Cursor CLI's: the runner's variable naming one of its accounts (shared `ACCOUNT_DIR_VAR`), or a key
+    /// or token of its own, which signs the CLI in by itself (shared `OWN_CREDENTIAL_KEYS`).
+    private static let cursorDecidingEnvKeys = ["ORBIT_CURSOR_ACCOUNT_DIR", "CURSOR_API_KEY", "CURSOR_AUTH_TOKEN"]
 
     /// The snapshot `engine`'s accounts' quota is read from: the runner's own report for Codex and
     /// Claude Code (`Runner.planUsage`). Antigravity's never rides there — it travels with the engine's
@@ -40,12 +43,14 @@ public enum CodexAccounts {
     }
 
     /// The account a workspace picked for its sessions on `engine` (`Agent.codexAccount`,
-    /// `.claudeAccount`, `.antigravityAccount`, `.kimiAccount`); nil leaves it to Automatic.
+    /// `.claudeAccount`, `.antigravityAccount`, `.kimiAccount`, `.cursorAccount`); nil leaves it to
+    /// Automatic.
     public static func workspaceAccount(_ engine: String, of agent: Agent?) -> String? {
         switch engine {
         case "claude": return agent?.claudeAccount
         case "antigravity": return agent?.antigravityAccount
         case "kimi": return agent?.kimiAccount
+        case "cursor": return agent?.cursorAccount
         default: return agent?.codexAccount
         }
     }
@@ -63,11 +68,14 @@ public enum CodexAccounts {
     /// Antigravity conversation lives in the session's own directory whichever account it runs on, so
     /// there is nothing to carry: a runner that keeps Antigravity accounts at all — one that signs them
     /// in (`antigravityAccountLoginCapability`) — moves a session between them.
+    /// Cursor CLI's (`cursor-account-move/v1`) is declared only once a conversation has been shown to
+    /// carry between two real identities (D5): until then a Cursor session that has talked stays put.
     public static func moveCapability(_ engine: String) -> String {
         switch engine {
         case "claude": return "claude-account-move/v1"
         case "antigravity": return antigravityAccountLoginCapability
         case "kimi": return "kimi-account-move/v1"
+        case "cursor": return CursorRuntime.accountMoveCapability
         default: return "codex-account-move/v1"
         }
     }
@@ -106,6 +114,7 @@ public enum CodexAccounts {
             || s.limitId != nil || s.limitName != nil || s.planType != nil
             || s.rateLimitReachedType != nil || s.credits != nil || s.rateLimits != nil
             || s.rateLimitReset != nil || s.fetchedAt != nil || s.buckets != nil
+            || s.planName != nil || s.includedUsage != nil
     }
 
     /// What an account is called where one is named: what the user called it — Default too, once
@@ -148,6 +157,7 @@ public enum CodexAccounts {
         case "claude": deciding = claudeDecidingEnvKeys
         case "antigravity": deciding = antigravityDecidingEnvKeys
         case "kimi": deciding = kimiDecidingEnvKeys
+        case "cursor": deciding = cursorDecidingEnvKeys
         default: deciding = decidingEnvKeys
         }
         return !deciding.contains(where: set)
@@ -178,7 +188,8 @@ public enum CodexAccounts {
         }
         let candidates: [Candidate] = accounts.filter { $0.auth != "no" }.map { account in
             let own = snapshot(usage, account: account.id)
-            let ws = own.map(windows) ?? []
+            // A Cursor CLI reading orders accounts and never says one is spent (shared `windowsOf`).
+            let ws = own.map(limits) ?? []
             // Not past its reset — or with no reset to go by, which nothing says has come.
             let open = ws.filter { !(resetTime($0).map { $0 <= now.timeIntervalSince1970 } ?? false) }
             let spent = open.filter { $0.utilization >= 100 }
@@ -191,7 +202,7 @@ public enum CodexAccounts {
             return Candidate(id: account.id,
                              nearLimit: own.map { nearlySpent($0, now: now) } ?? false,
                              expiresAt: own.map { expiresAt($0, now: now) } ?? .infinity,
-                             tightest: ws.map(\.utilization).max() ?? .infinity,
+                             tightest: own.flatMap { withLength($0).map(\.window.utilization).max() } ?? .infinity,
                              spentUntil: spentUntil)
         }
         func byID(_ a: Candidate, _ b: Candidate) -> Bool {
@@ -249,15 +260,17 @@ public enum CodexAccounts {
 
     /// Every window of one snapshot with its length in minutes (shared `windowsWithLength`): Claude's
     /// and Kimi Code's named ones by their names, Codex's as it reports them — nil when one does not
-    /// say — and Antigravity's buckets as the windows they are (`bucketWindow`).
+    /// say — Antigravity's buckets as the windows they are (`bucketWindow`), and a Cursor CLI account's
+    /// usage limit met and its reading, as long as its period (`CursorRuntime.windows`).
     static func withLength(_ s: PlanUsageSnapshot) -> [(window: PlanUsageWindow, mins: Int?)] {
         let week = 7 * 24 * 60
         let named: [(PlanUsageWindow?, Int)] = [(s.fiveHour, 5 * 60), (s.sevenDay, week), (s.sevenDayOpus, week),
                                                 (s.sevenDaySonnet, week), (s.month, monthMins),
                                                 (s.monthCode, monthMins)]
         let buckets: [PlanUsageWindow?] = (s.buckets ?? []).map(bucketWindow)
+        let cursor = CursorRuntime.windows(s)
         let reported = [s.primary, s.secondary] + (s.rateLimits ?? []).flatMap { [$0.primary, $0.secondary] }
-            + buckets
+            + buckets + [cursor.limit, cursor.reading]
         let all: [(window: PlanUsageWindow, mins: Int?)] =
             named.compactMap { window, mins in window.map { ($0, $0.windowDurationMins ?? mins) } }
             + reported.compactMap { window in window.map { ($0, $0.windowDurationMins) } }
@@ -265,13 +278,20 @@ public enum CodexAccounts {
     }
 
     /// Every window one snapshot reports: Claude's named ones, Kimi Code's monthly pair, Codex's
-    /// primary/secondary pair, the per-bucket windows Codex reports under `rateLimits`, and
-    /// Antigravity's buckets (`bucketWindow`).
+    /// primary/secondary pair, the per-bucket windows Codex reports under `rateLimits`, Antigravity's
+    /// buckets (`bucketWindow`), and a Cursor CLI account's usage limit met and its reading.
     static func windows(_ s: PlanUsageSnapshot) -> [PlanUsageWindow] {
+        limits(s) + [CursorRuntime.windows(s).reading].compactMap { $0 }
+    }
+
+    /// The windows that can say an account is spent (shared `windowsOf`): every one but a Cursor CLI
+    /// reading, which only orders accounts — past its included usage a paid plan can go on, on demand.
+    static func limits(_ s: PlanUsageSnapshot) -> [PlanUsageWindow] {
         [s.fiveHour, s.sevenDay, s.sevenDayOpus, s.sevenDaySonnet, s.month, s.monthCode, s.primary,
          s.secondary].compactMap { $0 }
             + (s.rateLimits ?? []).flatMap { [$0.primary, $0.secondary].compactMap { $0 } }
             + (s.buckets ?? []).map(bucketWindow)
+            + [CursorRuntime.windows(s).limit].compactMap { $0 }
     }
 
     /// How long an Antigravity bucket's window is, from agy's own name for it (shared

@@ -151,7 +151,7 @@ final class AntigravityGoogleClientTests: XCTestCase {
         let engine = try String(contentsOf: file("src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerEnginePage.swift"), encoding: .utf8)
         let relay = try String(contentsOf: file("src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerSignInView.swift"), encoding: .utf8)
         let rows = try String(contentsOf: file("src/macos/OrbitApp/Sources/OrbitApp/Views/RunnerPageParts.swift"), encoding: .utf8)
-        for piece in ["RunnerPageFormat.accountLines(health)",
+        for piece in ["RunnerPageFormat.accountLines(health, usage:",
                       "RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount, autoStart: true,",
                       "if RunnerPageFormat.canAddAccount(runner, engine: engine) {",
                       "} else if let hint = RunnerPageFormat.signInHint(runner, engine: engine) {",

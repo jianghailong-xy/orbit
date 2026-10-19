@@ -116,7 +116,9 @@ final class InfrastructurePageWiringTests: XCTestCase {
         let sections = code(try appSource(Self.sectionsFile))
         let keys = try slice(sections, from: "struct InfrastructureKeysSection: View {", to: "\n}\n")
         for piece in ["var balances: [String: ProviderBalanceReading] = [:]",
-                      "if let id = DeepSeekBalance.key(for: key, mine: keys)?.providerID {",
+                      "if let id = Self.pageID(key, mine: keys) {",
+                      // …as a Cursor key's opens its own, with its last check (board iOS 4 ①).
+                      "DeepSeekBalance.key(for: key, mine: mine)?.providerID ?? (CursorRuntime.isKey(key) ? key.providerID : nil)",
                       "Button { open(.providerDetail(providerID: id)) } label: {",
                       "} else if let balance, let value = DeepSeekBalance.rowValue(DeepSeekBalance.state(balance)) {"] {
             XCTAssertTrue(keys.contains(piece), "the API keys section lost `\(piece)`")
@@ -405,7 +407,7 @@ final class InfrastructurePageWiringTests: XCTestCase {
     /// nothing sent to a machine that is offline.
     func testTheEnginePageSignsInEachAccount() throws {
         let page = code(try appSource("Views/RunnerEnginePage.swift"))
-        for piece in ["RunnerPageFormat.accountLines(health)",
+        for piece in ["RunnerPageFormat.accountLines(health, usage:",
                       "RunnerPageFormat.accountWindows(runner, engine: engine, account: line.id)",
                       "RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount, autoStart: true,",
                       "onClose: { closeSignIn() }, onSignedIn: { landed(line.id) })",
@@ -431,7 +433,7 @@ final class InfrastructurePageWiringTests: XCTestCase {
                       "await runners.removeAccount(id, engine: login, account: line.id)",
                       ".disabled(offline || removal?.pending == true)",
                       "Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER)",
-                      "RunnerAttention.updateNoteOf(health.update, nowMs: RunnerPageFormat.nowMs(now))"] {
+                      "RunnerAttention.updateNoteOf(health.update, nowMs: RunnerPageFormat.nowMs(now),"] {
             XCTAssertTrue(page.contains(piece), "the engine page lost \(piece)")
         }
         // Any account — Default too — is renamed from its long-press menu, never from the swipe, and

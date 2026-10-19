@@ -123,6 +123,7 @@ struct EngineSwitchSheet: View {
         // A pool the server says cannot run at all is greyed out: no machine gives it an account that
         // can, so unlike a row a runner can fix it goes nowhere, and says why instead.
         let greyed = engine.unavailable != nil && engine.fixEngine == nil
+        let reasonBelow = Self.reasonBelowName(engine)
         Button {
             // Dismiss first, then switch — same ordering as AgentSwitchSheet, so the sheet
             // never tears down through a view the switch has already rebuilt.
@@ -141,10 +142,11 @@ struct EngineSwitchSheet: View {
                     ProviderMark(provider: engine.slug, size: 28, brandKey: engine.brandKey, label: engine.label)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(engine.label).foregroundStyle(.primary).lineLimit(1)
-                        // DeepSeek Harness with no DeepSeek key to run on: the way to one goes under its
-                        // name, since the row's end has no room for it (board iOS 4 ②).
-                        if engine.provider == nil, let reason = engine.unavailable {
-                            Text("\(reason)\(SessionProviderChoices.fixSuffix(engine.fixEngine))")
+                        // DeepSeek Harness with no DeepSeek key to run on, and Cursor CLI where this machine
+                        // can't run it: the way there goes under the name, since the row's end has no
+                        // room for it (board iOS 4 ②, Cursor board iOS 1 ④).
+                        if reasonBelow, let reason = engine.unavailable {
+                            Text("\(reason)\(SessionProviderChoices.fixSuffix(engine.fixEngine, unavailable: reason))")
                                 .font(.orbitListSubtitle)
                                 .foregroundStyle(Color.accentColor)
                                 .lineLimit(1)
@@ -177,9 +179,15 @@ struct EngineSwitchSheet: View {
     }
 
     private func trailing(_ engine: EngineChoice, greyed: Bool) -> String {
-        guard let provider = engine.provider else { return "" }
+        guard let provider = engine.provider, !Self.reasonBelowName(engine) else { return "" }
         guard let reason = engine.unavailable else { return provider.note ?? provider.modelLabel }
-        return greyed ? reason : "\(reason)\(SessionProviderChoices.fixSuffix(engine.fixEngine))"
+        return greyed ? reason : "\(reason)\(SessionProviderChoices.fixSuffix(engine.fixEngine, unavailable: reason))"
+    }
+
+    /// Whether a row says why it can't run under its name rather than at its end: DeepSeek Harness with
+    /// no key to land on, and Cursor CLI, whose reasons outrun the row's end ("Not signed in, sig…").
+    private static func reasonBelowName(_ engine: EngineChoice) -> Bool {
+        engine.unavailable != nil && (engine.provider == nil || engine.slug == CursorRuntime.engine)
     }
 }
 

@@ -57,12 +57,14 @@ struct AutoRetryCardView: View {
                                      hasRetryText: !retryText.isEmpty,
                                      nothingToResend: console.retryContinues,
                                      now: now,
-                                     takenOver: console.autoRetryTakenOver)
+                                     takenOver: console.autoRetryTakenOver,
+                                     cursor: console.cursorQuota)
         VStack(alignment: .leading, spacing: 8) {
             Label(s.title, systemImage: s.needsYou ? "exclamationmark.triangle.fill" : "clock.fill")
                 .foregroundStyle(s.needsYou ? Color.orange : Color.secondary)
                 .font(.orbitProse.bold())
             Text(s.body).font(.orbitLabel).foregroundStyle(.secondary)
+            if let answer = s.cursorAnswer { cursorLine(answer, elsewhere: s.cursorElsewhere) }
             if s.showsMessage {
                 Text(notice.message)
                     .font(.orbitLabel).foregroundStyle(.secondary).textSelection(.enabled)
@@ -86,6 +88,38 @@ struct AutoRetryCardView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(s.needsYou ? Color.orange.opacity(0.08) : Color.secondary.opacity(0.08),
                     in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    /// Cursor CLI's answer, whose plan ran out and until when — and, since a conversation that has
+    /// started can't move to another account yet (D5), a new session on one with room, one press away
+    /// (board iOS 5 ⑧, web parity).
+    private func cursorLine(_ answer: String, elsewhere: String?) -> some View {
+        var text = AttributedString(answer)
+        if let elsewhere {
+            text += AttributedString(" " + AutoRetryLogic.cursorElsewhereLead(elsewhere))
+            var link = AttributedString(AutoRetryLogic.cursorElsewhereLink(elsewhere))
+            link.link = Self.startElsewhereURL
+            text += link
+            text += AttributedString(".")
+        }
+        return Text(text)
+            .font(.orbitLabel)
+            .foregroundStyle(.secondary)
+            .environment(\.openURL, OpenURLAction { url in
+                guard url == Self.startElsewhereURL else { return .systemAction }
+                startElsewhere()
+                return .handled
+            })
+    }
+
+    /// The card's own link to a new session on another account; never leaves the app.
+    private static let startElsewhereURL = URL(string: "orbit-cursor:start-elsewhere")!
+
+    /// A new draft in this session's workspace, on Cursor CLI and the account the card names.
+    private func startElsewhere() {
+        guard let agentID = console.agentID, let account = console.cursorElsewhereAccount else { return }
+        app.consoleRegistry?.queueDraftAccount(agentID: agentID, engine: CursorRuntime.engine, account: account)
+        app.composeWithAgent(agentID)
     }
 
     /// A quota leads with the absolute moment its window resets — a time the reader may need to

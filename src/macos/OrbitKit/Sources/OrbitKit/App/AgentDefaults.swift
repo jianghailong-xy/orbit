@@ -99,7 +99,7 @@ public enum AgentDefaults {
     /// the retired `dsh` runtime holds DeepSeek's Anthropic-compatible endpoint; an unreadable runtime
     /// keeps the backend's Claude fallback. Mirrors web's `nativeEngine`.
     private static func nativeEngine(_ runtime: String?) -> String {
-        ["codex", "kimi", "antigravity"].contains(runtime ?? "") ? runtime ?? "claude" : "claude"
+        ["codex", "kimi", "antigravity", "cursor"].contains(runtime ?? "") ? runtime ?? "claude" : "claude"
     }
 
     /// Kimi's list comes from the runner too (`kimi provider list --json`, which also carries each
@@ -128,6 +128,15 @@ public enum AgentDefaults {
         ModelOption(id: "", name: "Gemini 3.8 Flash"),
     ]
 
+    /// Cursor CLI's models are its ACP catalogue on each runner (contract §10), whichever of its
+    /// credentials a session spends. Until a runner reports one, the one choice that is true is naming no
+    /// model, which a new session runs as Cursor's own default, Auto — only a fallback, as Antigravity's
+    /// is: once a catalogue is reported, Auto is its own row (`default`). Mirrors web's
+    /// CURSOR_MODEL_OPTIONS.
+    public static let cursorModels: [ModelOption] = [
+        ModelOption(id: "", name: "Auto"),
+    ]
+
     public static let defaultModelID = "claude-opus-5"
 
     /// The models an engine's own sign-in offers before its runner reports a catalogue. Claude and
@@ -142,6 +151,7 @@ public enum AgentDefaults {
         case "kimi":     return kimiModels
         case "opencode": return opencodeModels
         case "antigravity": return antigravityModels
+        case "cursor":   return cursorModels
         default:         return []
         }
     }
@@ -178,6 +188,8 @@ public enum AgentDefaults {
     public static func models(engine: String, provider: String?, catalog: RunnerModelCatalog?,
                               configured: [ConfiguredProvider]?) -> [ModelOption] {
         if engine == "dsh" { return catalog?.models(for: "dsh") ?? [] }
+        // Cursor CLI's catalogue, on its own sign-in and on a Cursor key alike (contract §10).
+        if engine == "cursor" { return catalog?.models(for: "cursor") ?? cursorModels }
         if let row = ProviderEngines.configuredRow(provider, configured) { return rowModels(row, catalog: catalog) }
         // The engine's own sign-in — and a provider since removed, whose own table went with it.
         return models(for: engine, catalog: catalog)
@@ -196,6 +208,8 @@ public enum AgentDefaults {
         // Harness's model values are opaque ACP tokens from the runner's catalogue; none is shipped,
         // and until one is reported the runtime picks.
         case "dsh":      return ""
+        // Cursor CLI's are its catalogue's too; naming none runs Auto.
+        case "cursor":   return ""
         default:         return defaultModelID
         }
     }
@@ -235,6 +249,13 @@ public enum AgentDefaults {
             if let saved = runtimeDefaults?["dsh"], !saved.isEmpty { return saved }
             return catalog?.models(for: "dsh")?.first?.id ?? ""
         }
+        // Cursor CLI starts a session on Auto (contract §10, §16.3): its catalogue's Auto row where it has
+        // one, else no model at all, which runs as Auto.
+        if engine == "cursor" {
+            if let saved = runtimeDefaults?["cursor"], !saved.isEmpty { return saved }
+            let catalogued = catalog?.models(for: "cursor") ?? []
+            return catalogued.first { $0.id == CursorRuntime.autoModel }?.id ?? catalogued.first?.id ?? ""
+        }
         if let row = ProviderEngines.configuredRow(provider, configured) {
             return rowDefaultModel(row, catalog: catalog, runtimeDefaults: runtimeDefaults)
         }
@@ -270,11 +291,15 @@ public enum AgentDefaults {
         // yet, and dispatch runs a model-less session on the reported default — so the caller falls
         // through to that default, which is what the pill must say.
         if model.isEmpty { return row == nil && engine == "antigravity" ? nil : model }
-        if engine != "dsh", let row, row.modelsFromRuntime != true { return model }
-        let judge = engine == "dsh" ? engine : row.map { nativeEngine($0.runtime) } ?? engine
+        // DeepSeek Harness and Cursor CLI list the runner's catalogue whichever key they spend.
+        let catalogued = engine == "dsh" || engine == "cursor"
+        if !catalogued, let row, row.modelsFromRuntime != true { return model }
+        let judge = catalogued ? engine : row.map { nativeEngine($0.runtime) } ?? engine
         guard let offered = catalog?.models(for: judge), !offered.isEmpty else { return model }
         if let reported = runtimeDefaults?[judge], reported == model { return model }
-        return offered.contains { $0.id == model } ? model : nil
+        // A Cursor CLI variant (`claude-opus-5-5[context=1m]`) is live while its model is.
+        let named = judge == CursorRuntime.engine ? CursorRuntime.decodeModel(model).model : model
+        return offered.contains { $0.id == model || $0.id == named } ? model : nil
     }
 
     /// The key a model picked for `engine` on `provider` is remembered under in
@@ -357,8 +382,8 @@ public enum AgentDefaults {
                                              configuredProvidersLoaded: Bool) -> String {
         let row = ProviderEngines.configuredRow(provider, configured)
         // A key owns its default and does not wait for runner heartbeat data — except under DeepSeek
-        // Harness, whose models are the runner's catalogue whichever key it spends.
-        if configuredProvidersLoaded, row != nil, engine != "dsh" {
+        // Harness and Cursor CLI, whose models are the runner's catalogue whichever key they spend.
+        if configuredProvidersLoaded, row != nil, engine != "dsh", engine != "cursor" {
             return defaultModel(engine: engine, provider: provider, catalog: catalog, configured: configured,
                                 runtimeDefaults: runtimeDefaults)
         }
@@ -382,9 +407,12 @@ public enum AgentDefaults {
     /// optional chains blows up combinatorially — and started failing every Swift job outright with
     /// "unable to type-check this expression in reasonable time". Same provider order, same result.
     public static func friendlyName(_ id: String, catalog: RunnerModelCatalog?) -> String {
-        for provider in ["claude", "codex", "kimi", "opencode", "antigravity", "dsh"] {
+        for provider in ["claude", "codex", "kimi", "opencode", "antigravity", "dsh", "cursor"] {
             let models: [ModelOption] = catalog?.models(for: provider) ?? []
             if let name = models.first(where: { $0.id == id })?.name { return name }
+            // A Cursor CLI variant is named by its model.
+            if provider == CursorRuntime.engine,
+               let name = models.first(where: { $0.id == CursorRuntime.decodeModel(id).model })?.name { return name }
         }
         return friendlyName(id)
     }
@@ -407,8 +435,13 @@ public enum AgentDefaults {
     public static func friendlyName(_ id: String, engine: String, provider: String?,
                                     catalog: RunnerModelCatalog?,
                                     configured: [ConfiguredProvider]?) -> String {
-        if let name = models(engine: engine, provider: provider, catalog: catalog, configured: configured)
-            .first(where: { $0.id == id })?.name {
+        let offered = models(engine: engine, provider: provider, catalog: catalog, configured: configured)
+        if let name = offered.first(where: { $0.id == id })?.name {
+            return name
+        }
+        // A Cursor CLI variant is named by its model; its settings are the chip's to say.
+        if engine == CursorRuntime.engine,
+           let name = offered.first(where: { $0.id == CursorRuntime.decodeModel(id).model })?.name {
             return name
         }
         // The empty id is every model-less runtime's "it picks for itself", which the id alone
@@ -509,10 +542,12 @@ public enum AgentDefaults {
 
     /// Harness's thinking levels are its catalogue row's `reasoningLevels` (ACP `reasoning_effort`),
     /// opaque like its model values (`off` included). A model the runner hasn't reported offers
-    /// Default only: there is no static list to fall back on. Mirrors web's `dshEffortOptions`.
-    private static func dshEfforts(model: String, catalog: RunnerModelCatalog?) -> [Effort] {
+    /// Default only: there is no static list to fall back on. Cursor CLI's are read the same way: each
+    /// model's own effort parameter, by its own values (contract §10), and Auto has none. Mirrors web's
+    /// `dshEffortOptions`.
+    private static func dshEfforts(model: String, catalog: RunnerModelCatalog?, engine: String = "dsh") -> [Effort] {
         var result: [Effort] = [.default]
-        for raw in catalog?.modelInfo(for: "dsh", model: model)?.reasoningLevels ?? [] {
+        for raw in catalog?.modelInfo(for: engine, model: model)?.reasoningLevels ?? [] {
             if let effort = Effort(rawValue: raw), effort != .default, !result.contains(effort) {
                 result.append(effort)
             }
@@ -531,8 +566,8 @@ public enum AgentDefaults {
     public static func efforts(for engine: String, provider: String? = nil, model: String,
                                catalog: RunnerModelCatalog?,
                                configured: [ConfiguredProvider]? = nil) -> [Effort] {
-        if engine == "dsh" {
-            return dshEfforts(model: model, catalog: catalog)
+        if engine == "dsh" || engine == "cursor" {
+            return dshEfforts(model: model, catalog: catalog, engine: engine)
         }
         if let declared = declaredEfforts(engine: engine, provider: provider, model: model, configured: configured) {
             return efforts(for: engine).filter {
@@ -585,8 +620,8 @@ public enum AgentDefaults {
     public static func normalizedEffort(_ effort: Effort, for engine: String, provider: String? = nil,
                                         model: String, catalog: RunnerModelCatalog?,
                                         configured: [ConfiguredProvider]? = nil) -> Effort {
-        if engine == "dsh" {
-            return dshEfforts(model: model, catalog: catalog).contains(effort) ? effort : .default
+        if engine == "dsh" || engine == "cursor" {
+            return dshEfforts(model: model, catalog: catalog, engine: engine).contains(effort) ? effort : .default
         }
         if let declared = declaredEfforts(engine: engine, provider: provider, model: model, configured: configured) {
             return nearestDeclaredEffort(effort, in: declared)
@@ -800,18 +835,27 @@ public enum AgentDefaults {
                                            provider: String? = nil,
                                            configured: [ConfiguredProvider]? = nil,
                                            catalog: RunnerModelCatalog? = nil) -> PermissionMode {
-        if !isSupported(mode, engine: engine) { return .default }
+        if !isSupported(mode, engine: engine) { return fallbackPermissionMode(engine) }
         return mode == .auto
             && !supportsAuto(model, engine: engine, provider: provider, configured: configured, catalog: catalog)
-            ? .default : mode
+            ? fallbackPermissionMode(engine) : mode
     }
 
-    /// Whether `engine` accepts this mode at all. Only DeepSeek Harness refuses modes outright
-    /// (`DshRuntime.permissionModes`, enforced at admission), so its others are shown but not
-    /// selectable rather than caveated: the session would be rejected. Mirrors web's
+    /// Whether `engine` accepts this mode at all. DeepSeek Harness and Cursor CLI refuse modes outright
+    /// (`DshRuntime.permissionModes`, `CursorRuntime.permissionModes` — Cursor CLI's Default, which can't
+    /// ask before an edit: the owner's choice D6), which the server enforces at admission: those are
+    /// shown but not selectable rather than caveated, since the session would be rejected. Mirrors web's
     /// `permissionModeSupported`.
     public static func isSupported(_ mode: PermissionMode, engine: String) -> Bool {
-        engine != "dsh" || DshRuntime.permissionModes.contains(mode)
+        if engine == "dsh" { return DshRuntime.permissionModes.contains(mode) }
+        return engine != CursorRuntime.engine || CursorRuntime.permissionModes.contains(mode)
+    }
+
+    /// The mode a session falls back to when its own can't run on `engine`: Default, except on Cursor
+    /// CLI, which has none and starts a session in Accept Edits (`CursorRuntime.defaultPermissionMode`,
+    /// as the server starts one nobody named a mode for). Mirrors web's `fallbackPermissionMode`.
+    public static func fallbackPermissionMode(_ engine: String) -> PermissionMode {
+        engine == CursorRuntime.engine ? CursorRuntime.defaultPermissionMode : .default
     }
 
     public static func label(_ mode: PermissionMode) -> String {

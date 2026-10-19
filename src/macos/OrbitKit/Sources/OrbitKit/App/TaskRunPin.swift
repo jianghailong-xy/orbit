@@ -15,8 +15,13 @@ public struct TaskRunPin: Equatable, Sendable {
     /// The engine its runs use: its own pin, else — under a provider an older client pinned alone — that
     /// provider's default engine, else the assignee's.
     public let runEngine: String
+    /// The engines the Engine field lists, in `ProviderEngines.all`'s order: every one these apps draw
+    /// with the account's runners in view (`ProviderEngines.appleShowsEngine` — Cursor CLI once one of
+    /// them knows it), and the task's own pin where it is one they don't, so the field still says what
+    /// is pinned.
+    public let engineChoices: [String]
 
-    public init(task: TaskItem, assignee: Agent?, configured: [ConfiguredProvider]) {
+    public init(task: TaskItem, assignee: Agent?, configured: [ConfiguredProvider], runners: [Runner]? = nil) {
         pinnedProvider = task.provider
         pinnedEngine = ProviderEngines.isEngine(task.engine) ? task.engine : nil
         assigneeProvider = assignee?.defaultProvider ?? "claude"
@@ -24,13 +29,8 @@ public struct TaskRunPin: Equatable, Sendable {
         runEngine = pinnedEngine
             ?? pinnedProvider.flatMap { ProviderEngines.defaultEngine(ofProvider: $0, configured: configured) }
             ?? assigneeEngine
-    }
-
-    /// The engines the Engine field lists, in `ProviderEngines.all`'s order: every one these apps draw
-    /// (`ProviderEngines.appleShowsEngine`), and the task's own pin where it is one they don't yet, so
-    /// the field still says what is pinned.
-    public var engineChoices: [String] {
-        ProviderEngines.all.filter { ProviderEngines.appleShowsEngine($0) || $0 == pinnedEngine }
+        let pinned = pinnedEngine
+        engineChoices = ProviderEngines.all.filter { ProviderEngines.appleShowsEngine($0, runners: runners) || $0 == pinned }
     }
 
     /// What the Engine field says while no engine is pinned: the assignee's — or, under a provider an

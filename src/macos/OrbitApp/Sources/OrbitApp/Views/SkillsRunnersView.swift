@@ -124,6 +124,7 @@ struct RunnersListView: View {
                 InfrastructurePoolsSection(memberPools: lists.memberPools, ownPools: lists.ownPools,
                                            open: opensPools ? push : nil)
                 InfrastructureKeysSection(keys: lists.keys, balances: model.agents?.deepSeekBalances ?? [:],
+                                          cursorModel: Infrastructure.cursorModel(lists.runners.filter { $0.online == true }),
                                           open: opensPools ? push : nil)
             }
             .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface`
@@ -656,7 +657,8 @@ struct RunnerDetailContent: View {
                 Text("This runner hasn’t reported its engines yet.")
                     .foregroundStyle(Color.secondary)
             }
-            ForEach(RunnerPageFormat.engines(runner)) { health in
+            // Cursor CLI's row once a runner of the account knows it — on this machine too if it predates it.
+            ForEach(RunnerPageFormat.engines(runner, fleet: runners.runners)) { health in
                 engineRow(health, offline: offline, now: now)
             }
             if !offline {
@@ -673,7 +675,7 @@ struct RunnerDetailContent: View {
             RunnerSectionHeader(RunnerPageCopy.RUNNER_ENGINES,
                                 trailing: RunnerPageFormat.enginesNote(runner, now: now))
         } footer: {
-            Text(offline ? RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER : RunnerPageCopy.RUNNER_ENGINES_FOOTER)
+            Text(RunnerPageFormat.enginesFooter(runner, fleet: runners.runners, offline: offline))
         }
     }
 
@@ -854,7 +856,7 @@ struct RunnerDetailContent: View {
     /// An engine the machine has installed opens its page; one it hasn't is only a line.
     @ViewBuilder private func engineRow(_ health: RunnerEngineHealth, offline: Bool, now: Date) -> some View {
         let row = RunnerEngineRow(health: health, runner: runner, offline: offline, now: now)
-        if health.installed == true {
+        if RunnerEngineRow.opensPage(health, runner: runner) {
             Button { model.push(.runnerEngine(runnerID: runner.id, engine: health.engine)) } label: {
                 row.foregroundStyle(Color.primary)
                     .contentShape(Rectangle())
