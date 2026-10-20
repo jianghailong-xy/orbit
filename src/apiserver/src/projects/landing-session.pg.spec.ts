@@ -1145,3 +1145,93 @@ test('the landing view carries the queue’s Retry fact and J-T4’s push bounda
       await stack.db.$disconnect();
     }
   });
+
+// ── the todo list ────────────────────────────────────────────────────────────────────────────────
+
+/** A task landing whose first claim reported a red check: the subject, its LANDING session, and
+ *  the INTEGRATION_CHECK_FAILED the result transaction opened about the task and the job. */
+async function redLanding(stack: Stack, label: string) {
+  const w = await world(stack, label);
+  const task = await doneTask(stack, w, label);
+  const job = await claimLanding(stack, w, `lease-${label}`, 'LAND_TASK');
+  const { landing } = await subjectOfJob(stack.db, job.jobId);
+  assert.equal((await report(stack, w, job, RED)).accepted, true);
+  const failed = await stack.db.projectOpenItem.findFirstOrThrow({
+    where: { taskId: task.taskId, state: 'OPEN', kind: 'INTEGRATION_CHECK_FAILED' },
+    select: { id: true },
+  });
+  return { w, task, job, landing, failedId: failed.id };
+}
+
+/** The landing view's todos as `[id, kind, state]`, through `GET /sessions/:id`'s reader. */
+async function todosOf(stack: Stack, w: World, landingSessionId: string) {
+  const view = await stack.sessions.get(w.ownerId, landingSessionId);
+  assert.equal(view.sessionKind, 'LANDING');
+  return (view.landing.todos as Array<{ id: string; kind: string; state: string }>)
+    .map((todo) => [todo.id, todo.kind, todo.state]);
+}
+
+test('the landing’s todos list its owed INTEGRATION_* item and not another kind about the same task',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const { w, task, job, landing, failedId } = await redLanding(stack, 'todos-kind');
+
+      // Another kind about the same task and the same job, and owed (a delivery review of a DONE
+      // task is): the landing is not where it is answered, so it is not one of its todos.
+      const review = await stack.db.projectOpenItem.create({
+        data: {
+          projectId: w.projectId, ownerId: w.ownerId, kind: 'DELIVERY_REVIEW', state: 'OPEN',
+          assignee: 'COORDINATOR', assigneeReason: 'DEFAULT', taskId: task.taskId,
+          integrationJobId: job.jobId, dedupeKey: `todos-review:${randomUUID()}`,
+          title: 'Review the delivery', payload: {},
+          waitingSince: new Date(Date.now() - 60_000), assignedAt: new Date(Date.now() - 60_000),
+        },
+        select: { id: true },
+      });
+
+      // The positive control: the red check's own item is listed, and only it.
+      assert.deepEqual(
+        await todosOf(stack, w, landing.sessionId),
+        [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
+        'only the integration item is a todo; the delivery review about the same task is not',
+      );
+      assert.equal(
+        (await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: review.id }, select: { state: true } })).state,
+        'OPEN',
+        'the delivery review is still OPEN: its kind alone keeps it off the page',
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('an INTEGRATION_* item still OPEN but owed by nobody is not one of the landing’s todos',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const { w, task, landing, failedId } = await redLanding(stack, 'todos-owed');
+      assert.deepEqual(
+        await todosOf(stack, w, landing.sessionId),
+        [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
+        'while the task stands, its integration item is owed and listed',
+      );
+
+      // The task goes away by a write that misses the item's closing edge (the 2026-10-02 shape: a
+      // door that forgets its edge). The integration item still reads OPEN, but a cancelled task's
+      // landing is owed by nobody (`openItemOwed`) and the session row's AWAITING_DECISION does not
+      // count it, so neither does the page.
+      await stack.db.task.update({ where: { id: task.taskId }, data: { status: TaskStatus.CANCELLED } });
+      assert.equal(
+        (await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: failedId }, select: { state: true } })).state,
+        'OPEN',
+      );
+      assert.deepEqual(
+        await todosOf(stack, w, landing.sessionId),
+        [],
+        'an OPEN integration item owed by nobody is not a todo',
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });

@@ -6,11 +6,13 @@ import type {
   SessionLandingTodo,
   SessionLandingView,
 } from '@orbit/shared';
+import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { readInFlightJobs } from './project-integration-line';
 import { pushBoundaryPassed } from './project-integration-job';
 import { readLandingTimeline } from './landing-timeline';
+import { INTEGRATION_ITEM_KINDS, openItemOwed } from './project-open-item';
 
 /**
  * The landing view (docs/project-integration-line-contract.md §2.9 LS1, LS6; errata E4):
@@ -24,7 +26,7 @@ import { readLandingTimeline } from './landing-timeline';
  *
  * Everything here is a fact another door already keeps: the newest attempt is the job row, its
  * liveness and blocking reason are `readInFlightJobs`' own read-time rules, the todos are the
- * project's OPEN items, and the generations are the subject's own episodes. Nothing is copied
+ * project's OPEN integration items still owed, and the generations are the subject's own episodes. Nothing is copied
  * into the session row and nothing is written.
  *
  * Deliberately absent until the later tasks add them: the job timeline and the per-check output.
@@ -176,20 +178,33 @@ export async function readLandingView(
 }
 
 /** The subject's OPEN integration items: what the landing page lists as its todos (LS4 — the item
- *  keeps its own card and assignee; the landing only shows that it is waiting). */
+ *  keeps its own card and assignee; the landing only shows that it is waiting).
+ *
+ *  Only the INTEGRATION_* kinds, and only while still OWED (`openItemOwed`): the same two filters
+ *  the session row's AWAITING_DECISION asks (`SessionsService`'s LANDING subquery), so the page
+ *  never lists a todo the row does not count. Another kind about the same task (a delivery review,
+ *  a task failure) is not the landing's to show, and an integration item whose candidate left the
+ *  live states, or whose task was cancelled or replaced, is owed by nobody however OPEN it reads. */
 async function readLandingTodos(
   prisma: PrismaService,
   ownerId: string,
   subject: { projectId: string; taskId: string | null; jobIds: string[] },
 ): Promise<SessionLandingTodo<Date>[]> {
   const tiers = [
-    ...(subject.taskId ? [{ taskId: subject.taskId }] : []),
-    ...(subject.jobIds.length > 0 ? [{ integrationJobId: { in: subject.jobIds } }] : []),
+    ...(subject.taskId ? [Prisma.sql`item."task_id" = ${subject.taskId}::uuid`] : []),
+    ...(subject.jobIds.length > 0
+      ? [Prisma.sql`item."integration_job_id" IN (${Prisma.join(subject.jobIds.map((id) => Prisma.sql`${id}::uuid`))})`]
+      : []),
   ];
   if (tiers.length === 0) return [];
-  return prisma.projectOpenItem.findMany({
-    where: { ownerId, projectId: subject.projectId, state: 'OPEN', OR: tiers },
-    orderBy: [{ waitingSince: 'asc' }, { id: 'asc' }],
-    select: { id: true, kind: true, state: true, title: true, waitingSince: true },
-  });
+  return prisma.$queryRaw<SessionLandingTodo<Date>[]>(Prisma.sql`
+    SELECT item."id", item."kind", item."state", item."title", item."waiting_since" AS "waitingSince"
+      FROM "project_open_item" item
+     WHERE item."owner_id" = ${ownerId}::uuid
+       AND item."project_id" = ${subject.projectId}::uuid
+       AND item."state" = 'OPEN'
+       AND item."kind" IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+       AND (${Prisma.join(tiers, ' OR ')})
+       AND ${openItemOwed('item')}
+     ORDER BY item."waiting_since" ASC, item."id" ASC`);
 }
