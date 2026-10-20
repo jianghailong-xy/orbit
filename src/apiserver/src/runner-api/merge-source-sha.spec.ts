@@ -117,6 +117,8 @@ test('heartbeat preserves an exact source marker behind the process-owner fence'
       );
 
       assert.deepEqual(reads, [
+        // The engine-path guard asks once whether the id is a LANDING row before anything else.
+        { where: { id: { in: [SESSION_ID] }, sessionKind: 'LANDING' }, select: { sessionKind: true } },
         {
           where: {
             id: SESSION_ID,
@@ -137,6 +139,7 @@ test('heartbeat preserves an exact source marker behind the process-owner fence'
         id: SESSION_ID,
         assignedRunnerId: RUNNER_ID,
         status: { in: ['PENDING', 'RUNNING', 'AWAITING_INPUT', 'INTERRUPTED'] },
+        sessionKind: 'CONVERSATION',
         inboxLeaseOwner: LEASE_OWNER,
       });
       assert.equal(writes[0].data.branchMerged, true);

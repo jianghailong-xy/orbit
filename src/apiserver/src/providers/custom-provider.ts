@@ -24,6 +24,7 @@ import { ACCOUNT_CHOICE, accountEnvVar, accountOnRunner } from './account';
 import { catalogModels } from './model-catalog';
 import { ANTHROPIC_HOST } from './plan-usage';
 import { decryptSecret } from './provider-crypto';
+import { LANDING_PROVIDER_SLUG } from './provider-slug';
 import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
 import {
   firstRuntimeCatalogModel,
@@ -42,6 +43,10 @@ import {
 export function isBuiltinProvider(slug?: string | null, providerBuiltin = true): boolean {
   if (!slug || slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX) return true;
   if (slug === AgentProvider.OPENCODE || slug === AgentProvider.ANTIGRAVITY || slug === AgentProvider.CURSOR) return true;
+  // The LANDING session's provider (0436) is the platform's own value, not a configured key: like a
+  // built-in engine's slug it is never looked up as one. It has no engine (builtinSessionEngine
+  // returns null), but "built-in" is what says no configured row answers to it.
+  if (slug === LANDING_PROVIDER_SLUG) return true;
   if (slug === AgentProvider.KIMI || slug === AgentProvider.DSH) return providerBuiltin;
   return false;
 }
@@ -216,6 +221,9 @@ export async function adminOnlyProviderRefusal(
   ownerId: string,
   slug: string,
 ): Promise<string | null> {
+  // The LANDING provider's shared row is the migration's compatibility fence, not a provider any
+  // account may be told about (0436).
+  if (slug === LANDING_PROVIDER_SLUG) return null;
   const shared = await db.modelProvider.findFirst({ where: { slug, ownerId: null }, select: { id: true } });
   if (!shared || (await isAdmin(db, ownerId))) return null;
   return `provider "${slug}" is available to admins only; ask an admin to add you to a shared pool`;

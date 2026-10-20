@@ -1735,7 +1735,7 @@ struct AgentSessionRow: View {
         switch tone {
         case .preview, .queued, .background, .watching, .review: return .secondary
         case .running:                       return .blue
-        case .approval:                      return .orange
+        case .approval, .warning:            return .orange
         }
     }
 }

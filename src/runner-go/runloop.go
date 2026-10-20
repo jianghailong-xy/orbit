@@ -963,8 +963,10 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	operationsInFlight := func() int { return heartbeatOps.inFlight() + install.inFlight() }
 	// The heartbeat's operations are stopped when the stop's budget for them runs out
 	// (shutdownSequence), not when the claim loop ends; what is handed back then is sent until the
-	// stop's deadline.
-	opsCtx, interruptOps := context.WithCancel(context.Background())
+	// stop's deadline. The cause says it was THIS runner stopping, which is a different fact from a
+	// landing cancelled on the control plane's request (integrate.go's context causes).
+	opsCtx, stopOps := context.WithCancelCause(context.Background())
+	interruptOps := func() { stopOps(errIntegrationInterrupted) }
 	defer interruptOps()
 	handBackCtx, stopHandBacks := context.WithCancel(context.Background())
 	defer stopHandBacks()
@@ -1208,6 +1210,12 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 	// finished answer for is settled rather than claimed and run again (integration_result_spool.go).
 	replaySpooledIntegrationResults(loopCtx, t)
 
+	// A scratch worktree a process killed mid-landing left under the worktrees directory is
+	// nobody's work; it goes before this process can claim a job. The ones builds before the move
+	// staged beside their workspace are swept once the first heartbeat names the workspaces (the
+	// beat function below), because only the control plane knows those directories.
+	sweepIntegrationScratch([]string{worktreesDir()}, nil)
+
 	// Heartbeat every 30s; honor server-requested cancellations.
 	hbStop := make(chan struct{})
 	hbDone := make(chan struct{})
@@ -1259,6 +1267,8 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		repoOpsNow := map[string]bool{}
 		// Whether the last beat was answered: what a managed instance's first beat is retried on.
 		beatTaken := false
+		// Whether the legacy half of the integration-scratch sweep has run (the beat function).
+		legacyScratchSwept := false
 		// The one browser-less sign-in this runner may have in flight — it writes the machine's
 		// single credentials file, so it guards itself rather than keying off a request id.
 		beat := func() {
@@ -1327,6 +1337,25 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 			// last found.
 			if resp.AgentDirs != nil {
 				agentDirs.trigger(resp.AgentDirs)
+			}
+			// The legacy half of the scratch sweep: builds before the move staged a job's
+			// throwaway worktree beside its workspace, and only the control plane knows those
+			// directories. Once, before this response's jobs are launched, the parent of every
+			// named workspace is swept. A job already integrating here is left alone; at the
+			// first answered beat there is none.
+			if resp.AgentDirs != nil && !legacyScratchSwept {
+				legacyScratchSwept = true
+				roots := make([]string, 0, len(resp.AgentDirs))
+				for _, target := range resp.AgentDirs {
+					if target.WorkDir != "" {
+						roots = append(roots, filepath.Dir(expandTilde(target.WorkDir)))
+					}
+				}
+				sweepIntegrationScratch(roots, func(jobID string) bool {
+					mergeMu.Lock()
+					defer mergeMu.Unlock()
+					return integratingNow[jobID]
+				})
 			}
 			// Adopt the control plane's authoritative max-concurrent (the editable DB
 			// value). 0 means an older server that doesn't report it — keep current.

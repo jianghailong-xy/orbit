@@ -37,6 +37,7 @@ import {
   keyCredential,
   usableProviderScope,
 } from './custom-provider';
+import { LANDING_PROVIDER_SLUG } from './provider-slug';
 import { SESSION_ENGINE_UNKNOWN_MESSAGE, sessionEngine, type SessionEngineFacts } from './session-engine';
 
 /** A configured key's row. */
@@ -187,6 +188,7 @@ export async function keyRowForSlug(
   ownerId: string,
   slug: string,
 ): Promise<KeyRow | null> {
+  if (slug === LANDING_PROVIDER_SLUG) return null;
   const row = await db.modelProvider.findFirst({ where: { slug, ...(await usableProviderScope(db, ownerId)) } });
   return row ?? (await aliasedKey(db, ownerId, slug))?.row ?? null;
 }
@@ -215,6 +217,10 @@ export async function classifyProvider(
   builtin?: boolean,
 ): Promise<ResolvedCredential> {
   const { db } = deps;
+  // The LANDING session's provider is the platform's own value (0436), not a credential: no key, pool
+  // or retired name may answer to it, and the compatibility row the migration parks on the slug is a
+  // fence for older replicas — never a provider a door may resolve.
+  if (slug === LANDING_PROVIDER_SLUG) throw new BadRequestException(notAvailable(door, slug));
   if (slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX || slug === AgentProvider.ANTIGRAVITY
     || slug === AgentProvider.CURSOR) {
     return { kind: 'login', engine: slug };
@@ -547,6 +553,7 @@ export async function storedCredential(
 ): Promise<ResolvedCredential | null> {
   const slug = session.provider || AgentProvider.CLAUDE;
   const builtin = session.providerBuiltin ?? true;
+  if (slug === LANDING_PROVIDER_SLUG) return null;
   if (slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX || slug === AgentProvider.ANTIGRAVITY
     || slug === AgentProvider.CURSOR) {
     return { kind: 'login', engine: slug };
@@ -607,6 +614,7 @@ export async function taskPinCredential(
   ownerId: string,
   slug: string,
 ): Promise<ResolvedCredential | null> {
+  if (slug === LANDING_PROVIDER_SLUG) return null;
   if (slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX || slug === AgentProvider.ANTIGRAVITY
     || slug === AgentProvider.KIMI || slug === AgentProvider.CURSOR) {
     return { kind: 'login', engine: slug };

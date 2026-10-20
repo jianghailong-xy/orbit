@@ -104,6 +104,16 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'handlingSessionId',
   'handlingUserId',
   'resolvedByJobId',
+  // Who caused a landing-timeline fact (migration 0438): the coordinator conversation or the owner
+  // a line is signed with — the same two addresses a rerun and a handling row carry. A reader
+  // follows them to the conversation or the person; nothing fences on them.
+  'actorSessionId',
+  'actorUserId',
+  // The landing-timeline facts' own addresses (migration 0438's structured `data`): the attempt a
+  // moved main queued next, and the person whose yes a skipped check carries. Both are rows a
+  // reader follows, never fences.
+  'nextJobId',
+  'approvedByUserId',
   // What a promotion is made of (migration 0285). Every one of them is an address a reader of the
   // card follows: the tasks the merge would carry, the two jobs that checked and landed it, the
   // account owner who confirmed it, the card itself, and the receipts it wrote. None is a fence —
@@ -112,6 +122,10 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'includedTaskIds',
   'checkJobId',
   'landJobId',
+  // The landing subject an attempt belongs to (migration 0436): an address a reader follows from
+  // the attempt to the session and its record. Not a fence — a job's own claim is fenced by
+  // `claimGeneration` and `claimLeaseOwner`.
+  'landingId',
   'confirmedByUserId',
   'openItemId',
   'receiptIds',

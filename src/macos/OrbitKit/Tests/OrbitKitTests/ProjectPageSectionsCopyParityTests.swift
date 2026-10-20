@@ -93,6 +93,23 @@ final class ProjectPageSectionsCopyParityTests: XCTestCase {
                             ("RETRIED_BY_COORDINATOR", ProjectPage.landingRetriedByCoordinator)] {
             assertSays(web, "\(key): '\(word)'", in: Self.panorama)
         }
+        // §7.2 V6's words (board docs/mocks/landing-session/v4, 05), every one of them in the web's
+        // `LANDING_LIVENESS_WORDS`; Kotlin's ProjectPage may only use these.
+        for (key, word) in [("OUTPUT", ProjectPage.landingOutput),
+                            ("NO_OUTPUT_FOR", ProjectPage.landingNoOutputFor),
+                            ("WITHIN_ITS", ProjectPage.landingWithinIts),
+                            ("BUDGET", ProjectPage.landingBudget),
+                            ("NO_WORD_FROM_RUNNER", ProjectPage.landingNoWordFromRunner),
+                            ("NO_WORD_FROM_THE_RUNNER", ProjectPage.landingNoWordFromTheRunner),
+                            ("REPORTS_ONLY_BETWEEN_STEPS", ProjectPage.landingReportsOnlyBetweenSteps),
+                            ("CLAIM", ProjectPage.landingClaim),
+                            ("ROUND", ProjectPage.landingRound),
+                            ("OF", ProjectPage.landingOf),
+                            ("TAKEN_OVER", ProjectPage.landingTakenOver),
+                            ("FIRST_STARTED", ProjectPage.landingFirstStarted),
+                            ("USUALLY", ProjectPage.landingUsually)] {
+            assertSays(web, "\(key): '\(word)'", in: Self.panorama)
+        }
         // A runner that stopped reporting says so — a fact about the REPORTS, worded apart from
         // `Update unavailable` (the app failing to read the server) and from any timeout (the job's
         // own verdict, which only the server's `blockingReason` words).

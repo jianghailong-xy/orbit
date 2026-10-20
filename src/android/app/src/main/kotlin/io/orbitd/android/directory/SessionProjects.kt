@@ -205,6 +205,11 @@ object SessionProjectCopy {
 
     /** A runner that stopped reporting, in the row's own scale: "no report for 11m", or "no report yet". */
     fun landingSilentWord(minutes: Int?) = minutes?.let { "no report for ${it}m" } ?: "no report yet"
+    /** §7.2 V6 in the row's own scale: the server judged the claim timed out — amber words and no needs-you dot, because a stopped
+     * landing is a fact rather than a question. */
+    const val landingTimedOut = "timed out"
+    /** The server's SILENT claim in the row's scale: "no word from runner · 4m" — inside the lease, so not a timeout. */
+    const val landingNoWordFromRunner = "no word from runner"
 
     /** The project page's landing line, shortened for a row: "Merge to main · queued · 13m", "Landing · checking · 4m · <task>";
      * null when nothing is in flight, and "Landing · N jobs" from a server that sends only the count. A silent runner is said in
@@ -215,11 +220,29 @@ object SessionProjectCopy {
             ?: return if (count > 0) SessionLine("Landing · $count ${if (count == 1) "job" else "jobs"}", SessionLine.Tone.QUEUED) else null
         val running = job.text("state") == "RUNNING"
         val heartbeat = ProjectTime.parse(job.text("heartbeatAt"))
-        val silent = running && (heartbeat?.let { ProjectTime.between(it, now) > 600 } ?: true)
         val word = ProjectPage.jobWords(main)[job.text("kind").orEmpty()] ?: "Integration"
+        val head = if (count > 1) "$word $count jobs" else word
+        val since = heartbeat ?: ProjectTime.parse(job.text("startedAt"))
+        val minutes = since?.let { max(0, ProjectTime.between(it, now).toInt() / 60) } ?: 0
+        // §7.2 V6: a server that derives the claim's liveness hands this row the fact, so it no longer reads the heartbeat against
+        // the claim lease by itself. A timeout is the server's verdict and is said in amber words — not the needs-you ink, not its dot.
+        job.text("liveness")?.takeIf { running }?.let { liveness ->
+            if (liveness == "LEASE_EXPIRED") return SessionLine(listOf(head, landingTimedOut, landingSilentWord(minutes)).joinToString(" · "),
+                SessionLine.Tone.WARNING)
+            if (liveness == "SILENT") return SessionLine(listOf(head, "$landingNoWordFromRunner · ${minutes}m").joinToString(" · "),
+                SessionLine.Tone.QUEUED)
+            // LIVE, QUIET and LEGACY: the runner is reporting (or reports only between steps, so its quiet is not silence). A healthy
+            // long check stays "checking".
+            val state = ProjectPage.phaseWords(main)[job.text("phase").orEmpty()] ?: "running"
+            val text = listOfNotNull(head, state, ProjectAttention.elapsedLabel(job.text("startedAt"), now),
+                if (count > 1) null else job.text("taskTitle")).filter { it.isNotEmpty() }.joinToString(" · ")
+            return SessionLine(text, SessionLine.Tone.RUNNING)
+        }
+        // An older server: the runner has gone quiet — the same claim lease the project page's landing row reads the same fact with.
+        val silent = running && (heartbeat?.let { ProjectTime.between(it, now) > 600 } ?: true)
         val state = if (!running) "queued" else if (silent) landingSilentWord(heartbeat?.let { (max(0.0, ProjectTime.between(it, now)) / 60).toInt() })
             else ProjectPage.phaseWords(main)[job.text("phase").orEmpty()] ?: "running"
-        val text = listOfNotNull(if (count > 1) "$word $count jobs" else word, state, ProjectAttention.elapsedLabel(job.text("startedAt"), now),
+        val text = listOfNotNull(head, state, ProjectAttention.elapsedLabel(job.text("startedAt"), now),
             if (count > 1) null else job.text("taskTitle")).filter { it.isNotEmpty() }.joinToString(" · ")
         return SessionLine(text, if (running && !silent) SessionLine.Tone.RUNNING else SessionLine.Tone.QUEUED)
     }

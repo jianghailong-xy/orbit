@@ -1,7 +1,28 @@
-import { INTEGRATION_CLAIM_STALE_MS, type IntegrationJobState, type TaskIntegrationView } from '@orbit/shared';
+import {
+  INTEGRATION_CLAIM_STALE_MS,
+  type IntegrationJobLiveness,
+  type IntegrationJobState,
+  type LandTaskIntegrationView,
+  type TaskIntegrationView,
+} from '@orbit/shared';
 import { DEFAULT_MAIN_BRANCH } from '../lib/projectStart';
 import { formatSpan } from '../lib/watches';
-import { LANDING_NO_REPORT_YET, jobPhases, landingNoReportFor } from './ProjectPanoramaHeader';
+import {
+  LANDING_LIVENESS_WORDS,
+  LANDING_NO_REPORT_YET,
+  jobPhases,
+  landingNoReportFor,
+} from './ProjectPanoramaHeader';
+
+/**
+ * §7.2 V6's fields, when the task's own landing carries them. The shared read model does not
+ * require them on `landTask` yet; this row takes them where a server sends them and keeps its own
+ * claim-lease reading only where it does not ("新字段缺席时与 main 相同").
+ */
+type LandTaskLive = LandTaskIntegrationView & {
+  liveness?: IntegrationJobLiveness | null;
+  runnerName?: string | null;
+};
 
 /**
  * A task's newest LAND_TASK, as the server's read model describes it
@@ -119,10 +140,27 @@ export function LandTaskStatus({
   // says "timed out", and it arrives as `blockingReason.summary` below.
   const heartbeat = job?.heartbeatAt ? Date.parse(job.heartbeatAt) : Number.NaN;
   const reported = Number.isFinite(heartbeat);
-  const silent = job?.state === 'RUNNING' && (!reported || now - heartbeat > INTEGRATION_CLAIM_STALE_MS);
-  const noReport = !silent ? null
-    : reported ? landingNoReportFor(Math.max(0, Math.floor((now - heartbeat) / 60_000)))
-      : LANDING_NO_REPORT_YET;
+  const minutes = Number.isFinite(heartbeat) ? Math.max(0, Math.floor((now - heartbeat) / 60_000)) : 0;
+  // §7.2 V6: a landing that carries the server's liveness is read from that verdict, never from
+  // this page's own 10-minute lease rule — a legacy claim's healthy long check must not be painted
+  // as a stall. LIVE and QUIET say nothing extra; SILENT says how long the runner has been quiet;
+  // LEASE_EXPIRED is the one timeout; LEGACY says why silence is not inferred.
+  const liveness = (job as LandTaskLive | null)?.liveness ?? null;
+  const runner = (job as LandTaskLive | null)?.runnerName ?? null;
+  const silent = liveness ? liveness === 'SILENT'
+    : job?.state === 'RUNNING' && (!reported || now - heartbeat > INTEGRATION_CLAIM_STALE_MS);
+  const noReport = liveness
+    ? liveness === 'LEASE_EXPIRED'
+      ? (reported ? landingNoReportFor(minutes) : LANDING_NO_REPORT_YET)
+      : liveness === 'SILENT'
+        ? `${runner ? `${LANDING_LIVENESS_WORDS.NO_WORD_FROM_RUNNER} ${runner}` : LANDING_LIVENESS_WORDS.NO_WORD_FROM_THE_RUNNER} for ${minutes}m`
+        : null
+    : !silent ? null
+      : reported ? landingNoReportFor(minutes)
+        : LANDING_NO_REPORT_YET;
+  // The one liveness fact with no other place on this page: a legacy claim reports only between
+  // steps, which is why a check 12 minutes in shows nothing moving.
+  const legacy = liveness === 'LEGACY' ? LANDING_LIVENESS_WORDS.REPORTS_ONLY_BETWEEN_STEPS : null;
   return (
     <div className="land-task-status" data-land-task-state={job?.state ?? integration.state}>
       <div className="land-task-status-head">
@@ -130,6 +168,7 @@ export function LandTaskStatus({
         <span className={`tdp-badge tone-${badge.tone}`}>{badge.label}</span>
         {job ? <span className="land-task-generation">generation {job.generation}</span> : null}
         {step ? <span className="land-task-step">{job!.state === 'RUNNING' ? step : `stopped while ${step}`}</span> : null}
+        {legacy ? <span className="land-task-no-report" data-liveness="LEGACY">{legacy}</span> : null}
         {noReport ? <span className="land-task-no-report" data-no-report="true">{noReport}</span> : null}
       </div>
       {job?.blockingReason ? (

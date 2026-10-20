@@ -197,6 +197,8 @@ export class QueueService {
     const pending = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId, status: 'PENDING', cancelRequestedAt: null,
+        // The claim SQL's own filter: a LANDING row is never claimed, so it is never held either.
+        sessionKind: 'CONVERSATION',
         OR: [
           { providerBuiltin: false },
           { assignedRunner: { accountPauses: { not: Prisma.DbNull } } },
@@ -412,6 +414,7 @@ export class QueueService {
         WHERE id = (
           SELECT s.id FROM "session" s
           WHERE s.status = 'PENDING'
+            AND s."kind" = 'CONVERSATION'
             AND NOT (s.id = ANY(${paused}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}

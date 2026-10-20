@@ -177,7 +177,8 @@ const watchPredicateGrammar = "The condition, in the closed v1 grammar: no shell
 	"{\"kind\":\"ALL\"|\"ANY\",\"over\":\"ALL_TARGETS\",\"leaf\":LEAF}, where ALL holds when LEAF holds for every target and " +
 	"ANY when it holds for at least one, or {\"kind\":\"ALL_OF\"|\"ANY_OF\",\"operands\":[terms]}, with at most 4 operands " +
 	"and 2 levels. Task leaves: TASK_TERMINAL (DONE, CANCELLED or FAILED), TASK_FAILED, TASK_DONE. Session leaves: " +
-	"SESSION_TURN_SETTLED (no longer PENDING or RUNNING: waiting for input, or over), SESSION_RUN_TERMINAL (its run " +
+	"SESSION_TURN_SETTLED (no longer PENDING or RUNNING: waiting for input, or over; for a LANDING session, only " +
+	"once its landing has ended), SESSION_RUN_TERMINAL (its run " +
 	"SUCCEEDED, FAILED or ended), SESSION_LIFECYCLE_TERMINAL (moved to Completed or Trash), SESSION_NEEDS_ATTENTION (an " +
 	"approval waits on a person). Every leaf must be about the kind of every target. \"All terminal or any failed\" is " +
 	"{\"kind\":\"ANY_OF\",\"operands\":[{\"kind\":\"ALL\",\"over\":\"ALL_TARGETS\",\"leaf\":\"TASK_TERMINAL\"}," +

@@ -14,13 +14,21 @@ function directProjectMembershipSql(sessionAlias: string): Prisma.Sql {
       SELECT p.id, 'COORDINATOR', 1
         FROM project p WHERE p.coordinator_session_id = ${s}.id
       UNION ALL
-      SELECT t.project_id, 'TASK', 2
+      -- The platform-driven container a landing subject opens (contract §2.9 LS1/LS6): it belongs
+      -- to the project of the subject it represents. The kind is required beside the link because
+      -- project_landing.session_id is pre-generated — the row may not exist yet, and a session of
+      -- any other kind is never that container.
+      SELECT l.project_id, 'LANDING', 2
+        FROM project_landing l
+        WHERE l.session_id = ${s}.id AND ${s}.kind = 'LANDING'
+      UNION ALL
+      SELECT t.project_id, 'TASK', 3
         FROM task t WHERE t.id = ${s}.task_id
       UNION ALL
-      SELECT t.project_id, 'CONTEXT', 3
+      SELECT t.project_id, 'CONTEXT', 4
         FROM task t WHERE t.id = ${s}.context_task_id
       UNION ALL
-      SELECT w.project_id, 'JUDGMENT', 4
+      SELECT w.project_id, 'JUDGMENT', 5
         FROM project_coordinator_wake w
         WHERE w.session_id = ${s}.id AND w.status = 'SESSION_OPENED'
     ) candidate(project_id, role, priority)
@@ -61,6 +69,9 @@ function projectMembershipCandidatesSql(projectId: string): Prisma.Sql {
     WITH direct(id) AS (
       SELECT p.coordinator_session_id FROM project p
         WHERE p.id = ${projectId}::uuid AND p.coordinator_session_id IS NOT NULL
+      UNION ALL
+      SELECT l.session_id FROM project_landing l
+        WHERE l.project_id = ${projectId}::uuid
       UNION ALL
       SELECT ts.id FROM session ts JOIN task t ON t.id = ts.task_id
         WHERE ts.task_id IS NOT NULL AND t.project_id = ${projectId}::uuid

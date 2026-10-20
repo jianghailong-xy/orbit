@@ -200,6 +200,131 @@ func TestMCPTaskRequestConfirmationRefusesOutsideASession(t *testing.T) {
 	}
 }
 
+func TestMCPIntegrationAbandonPostsTheJobUnderTheCoordinatingSession(t *testing.T) {
+	if !hasMCPTool(toolDescriptors(false, false), "integration_abandon") {
+		t.Fatalf("integration_abandon missing from the base tools")
+	}
+	var gotMethod, gotPath, gotSession string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotSession = r.Header.Get("X-Orbit-Session-Id")
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Write([]byte(`{"jobId":"j1","kind":"LAND_TASK","state":"ERROR","errorCode":"PUSH_OUTCOME_UNKNOWN"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("integration_abandon", map[string]interface{}{
+		"projectId": "p1", "jobId": "j1", "reason": "its runner is gone",
+	})
+	if res["isError"] == true {
+		t.Fatalf("integration_abandon returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/runner/projects/p1/integration/jobs/j1/abandon" {
+		t.Fatalf("integration_abandon hit %s %s", gotMethod, gotPath)
+	}
+	// The acting session is the whole authority: the server checks it against the project's own
+	// coordinator pointer.
+	if gotSession != "coordinator" {
+		t.Fatalf("the session header = %q", gotSession)
+	}
+	if gotBody["reason"] != "its runner is gone" {
+		t.Fatalf("the reason sent = %#v", gotBody["reason"])
+	}
+}
+
+func TestMCPIntegrationAbandonRequiresTheJobAndAReason(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	for name, args := range map[string]map[string]interface{}{
+		"no reason": {"projectId": "p1", "jobId": "j1", "reason": "   "},
+		"no job":    {"projectId": "p1", "reason": "its runner is gone"},
+	} {
+		res := mcp.callTool("integration_abandon", args)
+		if res["isError"] != true {
+			t.Errorf("%s was accepted: %#v", name, res)
+		}
+	}
+	if called {
+		t.Fatal("the door was reached without the job and the reason it needs")
+	}
+}
+
+func TestMCPProjectIntegrationGetReadsTheLineUnderTheActingSession(t *testing.T) {
+	if !hasMCPTool(toolDescriptors(false, false), "project_integration_get") {
+		t.Fatalf("project_integration_get missing from the base tools")
+	}
+	var gotMethod, gotPath, gotJob, gotClaim, gotRound, gotCheck, gotCursor, gotTimeline, gotSession string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotJob = r.URL.Query().Get("jobId")
+		gotClaim = r.URL.Query().Get("claim")
+		gotRound = r.URL.Query().Get("round")
+		gotCheck = r.URL.Query().Get("check")
+		gotCursor = r.URL.Query().Get("cursor")
+		gotTimeline = r.URL.Query().Get("timelineCursor")
+		gotSession = r.Header.Get("X-Orbit-Session-Id")
+		w.Write([]byte(`{"projectId":"p1","queue":[],"generations":[]}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_integration_get", map[string]interface{}{
+		"projectId": "p1", "jobId": "j1", "claim": "2", "round": "3", "check": "1",
+		"cursor": "c1", "timelineCursor": "t1c",
+	})
+	if res["isError"] == true {
+		t.Fatalf("project_integration_get returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodGet || gotPath != "/api/runner/projects/p1/integration" {
+		t.Fatalf("project_integration_get hit %s %s", gotMethod, gotPath)
+	}
+	// Every page selector travels as the query the server reserved it under — the timeline's own
+	// cursor included, so an agent can page both reads of one attempt.
+	if gotJob != "j1" || gotClaim != "2" || gotRound != "3" || gotCheck != "1" ||
+		gotCursor != "c1" || gotTimeline != "t1c" {
+		t.Fatalf("the page selectors sent = jobId %q, claim %q, round %q, check %q, cursor %q, timelineCursor %q",
+			gotJob, gotClaim, gotRound, gotCheck, gotCursor, gotTimeline)
+	}
+	// The acting session is the second half of the gate: the line is read as a session in the
+	// project, and the server checks it against the project's own membership.
+	if gotSession != "coordinator" {
+		t.Fatalf("the session header = %q", gotSession)
+	}
+}
+
+func TestMCPProjectIntegrationGetRequiresAProjectAndASession(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	for name, mcp := range map[string]*mcpServer{
+		"no project": {taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")},
+		"no session": {taskID: "t1", agentID: "a1", t: NewTransport(srv.URL, "tok")},
+	} {
+		args := map[string]interface{}{}
+		if name != "no project" {
+			args["projectId"] = "p1"
+		}
+		if res := mcp.callTool("project_integration_get", args); res["isError"] != true {
+			t.Errorf("%s was accepted: %#v", name, res)
+		}
+	}
+	if called {
+		t.Fatal("the read was sent without the project and the session it needs")
+	}
+}
+
 func TestMCPConfirmationReviewToolsPostTheInputUnderTheReviewingSession(t *testing.T) {
 	for _, tool := range []string{"task_confirmation_review", "task_confirmation_return"} {
 		if !hasMCPTool(toolDescriptors(false, false), tool) {
@@ -1658,6 +1783,20 @@ func TestMCPProviderAndAgentDescriptionsFollowTheDecoupledModel(t *testing.T) {
 	for _, tool := range []string{"agent_create", "agent_update"} {
 		if !strings.Contains(description(tool), "no engine or provider") {
 			t.Fatalf("%s does not say an agent has no engine or provider: %q", tool, description(tool))
+		}
+	}
+}
+
+// §2.9 LS6: the reads that carry a landing's address say so, so a coordinator opens the LANDING
+// session with session_get instead of going to the integration tables itself.
+func TestMCPReadsNameTheLandingSession(t *testing.T) {
+	tools := toolDescriptors(false, false)
+	for _, tool := range []string{"task_get", "project_get"} {
+		desc := mcpToolDescription(tools, tool)
+		for _, want := range []string{"landingSessionId", "session_get"} {
+			if !strings.Contains(desc, want) {
+				t.Fatalf("%s's description does not mention %q: %q", tool, want, desc)
+			}
 		}
 	}
 }

@@ -5119,6 +5119,12 @@ html[data-theme='dark'] .session-tag-chip {
   border-color: var(--brand-border);
   background: var(--brand-tint);
 }
+/* A merge job the server judged timed out: the WHOLE card turns amber, exactly as the landing
+   card does (owner 2026-10-19), whichever moment it is in — checking or merging. */
+.session-project-merge.is-timed-out {
+  border-color: var(--warning-border);
+  background: var(--warning-bg);
+}
 .session-project-merge.is-blocked {
   border-color: var(--warning-border);
 }
@@ -5422,6 +5428,11 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--brand);
 }
 .session-preview.tone-approval {
+  color: var(--warning-solid);
+}
+/* A landing the server judged timed out: amber words, and no needs-you dot — the dot means
+   somebody is waiting on you, and a stopped runner is a fact rather than a question. */
+.session-preview.tone-warning {
   color: var(--warning-solid);
 }
 .session-preview.tone-queued,
@@ -19110,6 +19121,10 @@ button.chat-jump-start:hover {
   background: var(--warning-bg);
   color: var(--warning-solid);
 }
+.landing-head.is-done .landing-head-mark {
+  background: var(--success-bg);
+  color: var(--success);
+}
 .landing-head-body {
   display: flex;
   flex: 1;
@@ -19233,6 +19248,402 @@ div.landing-jobs-open {
 .landing-jobs-error {
   color: var(--error);
   font-size: 12px;
+}
+/* The landing session page (contract §2.9 LS6, mockups v4 docs/mocks/landing-session/v4/05):
+   the shell's right pane with a conversation's anatomy and none of its composer — a status card
+   over the newest attempt, the server's timeline, and the one way out the footer names. */
+.landing-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.landing-page-head {
+  flex: none;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.landing-page-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.landing-page-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-1);
+  font-size: 18px;
+  font-weight: 650;
+}
+.landing-page-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.landing-page-chip-glyph {
+  font-size: 11px;
+  line-height: 1;
+}
+.landing-page-more {
+  flex: none;
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 16px;
+  cursor: pointer;
+}
+.landing-page-more:hover {
+  background: var(--bg-hover);
+  color: var(--text-1);
+}
+.landing-page-sub {
+  margin-top: 2px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.landing-page-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 0 16px;
+}
+.landing-page-note {
+  color: var(--text-2);
+  font-size: 13px;
+}
+.landing-page-error {
+  margin: 0 0 10px;
+  color: var(--error);
+  font-size: 12.5px;
+}
+.landing-status-card {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg-raised);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.landing-status-card.is-timed-out {
+  /* Only the title row wears the warning INK (mockups 05 e/f/i, owner review 2026-10-20); the
+     card keeps the board's pale warning wash, and the facts line and the push sentence are body
+     text on it. */
+  background: var(--warning-bg);
+  box-shadow: inset 0 0 0 1px var(--warning-border);
+}
+.landing-status-card.is-settled {
+  background: var(--success-bg);
+  box-shadow: inset 0 0 0 1px var(--success-border);
+}
+.landing-card-block {
+  margin-top: 10px;
+}
+.landing-card-heading {
+  color: var(--text-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+.landing-card-budget {
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.landing-card-meter {
+  position: relative;
+  margin-top: 6px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+}
+.landing-card-meter i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--brand);
+}
+/* Where this check USUALLY finishes, on the same bar (05 a): a still mark, not a second progress. */
+.landing-card-meter-tick {
+  position: absolute;
+  top: -2px;
+  width: 2px;
+  height: 7px;
+  border-radius: 1px;
+  background: var(--text-2);
+  transform: translateX(-1px);
+}
+.landing-card-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+/* The heartbeat is fresh: the board's green dot before the output's age (05 a). */
+.landing-live-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success-solid);
+}
+.landing-card-line {
+  margin-top: 6px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.landing-card-line b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.landing-card-on-pass {
+  margin-top: 8px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.landing-card-ok {
+  margin-top: 8px;
+  color: var(--success);
+  font-size: 12.5px;
+}
+.landing-card-tasks {
+  margin: 6px 0 0;
+  padding: 0 0 0 18px;
+  color: var(--text-2);
+  font-size: 13px;
+}
+.landing-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.landing-card-hint {
+  margin-top: 8px;
+  color: var(--text-3);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.landing-menu-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.landing-menu-sub {
+  color: var(--text-3);
+  font-size: 11.5px;
+  white-space: normal;
+}
+/* A destructive row's consequence is not part of the destructive label: the name is red, the
+   sentence under it stays the secondary ink (the board's web frame). */
+.orbit-menu [data-danger] .landing-menu-sub {
+  color: var(--text-3);
+}
+.landing-timeline {
+  padding: 0 2px;
+}
+.landing-timeline-fact {
+  margin: 0 0 8px;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.landing-timeline-section + .landing-timeline-section {
+  margin-top: 4px;
+}
+.landing-timeline-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 2px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.landing-timeline-heading::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-subtle);
+}
+.landing-timeline-section.is-current .landing-timeline-heading {
+  color: var(--brand);
+}
+.landing-timeline-state {
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 500;
+}
+.landing-timeline-entry {
+  display: flex;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+.landing-timeline-time {
+  width: 40px;
+  flex: none;
+  color: var(--text-4);
+  font-size: 12px;
+  padding-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.landing-timeline-glyph {
+  width: 16px;
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding-top: 1px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.landing-timeline-glyph.is-running {
+  color: var(--brand);
+}
+.landing-timeline-glyph.is-ok {
+  color: var(--success);
+}
+.landing-timeline-glyph.is-failed {
+  color: var(--error);
+}
+.landing-timeline-glyph.is-takeover {
+  color: var(--warning-solid);
+}
+.landing-timeline-glyph.is-queued {
+  color: var(--text-4);
+}
+.landing-timeline-body {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-1);
+}
+.landing-timeline-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.landing-timeline-sub {
+  display: block;
+  color: var(--text-3);
+  font-size: 12.5px;
+}
+.landing-timeline-log {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.landing-timeline-live {
+  margin: 6px 0 4px 66px;
+}
+.landing-timeline-live-label {
+  margin-bottom: 4px;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.landing-live-output {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #1b1d21;
+  color: #d7dae0;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 150px;
+  overflow: hidden;
+}
+.landing-timeline-noreport {
+  margin: 8px 0 2px 66px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--text-3);
+  font-size: 12px;
+}
+.landing-log {
+  display: block;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--text-2);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11.5px;
+  line-height: 1.5;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.landing-log-chunk {
+  display: block;
+}
+.landing-log-omitted,
+.landing-log-empty,
+.landing-log-loading {
+  display: block;
+  color: var(--text-4);
+}
+.landing-log-error {
+  display: block;
+  margin-top: 6px;
+  color: var(--error);
+  font-size: 12px;
+}
+.landing-page-foot {
+  flex: none;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-2);
+  font-size: 13px;
+}
+.landing-page-foot b {
+  color: var(--text-1);
+  font-weight: 600;
+}
+.landing-page-foot-line {
+  margin-top: 2px;
+  color: var(--text-2);
+  font-size: 12.5px;
+}
+.landing-page-link {
+  margin-left: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
 }
 .project-manual-task {
   display: -webkit-box;

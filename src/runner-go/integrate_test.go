@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -27,6 +28,10 @@ type integrationRepo struct {
 	t      *testing.T
 	origin string
 	work   string
+	// scratch is the root this repo's jobs stage their throwaway worktree under. It is a
+	// directory of the test's own rather than worktreesDir(): these cases run in parallel, and
+	// t.Setenv cannot be used in a parallel test.
+	scratch string
 }
 
 func newIntegrationRepo(t *testing.T) *integrationRepo {
@@ -38,7 +43,7 @@ func newIntegrationRepo(t *testing.T) *integrationRepo {
 	mustRun(t, root, "git", "init", "--quiet", "--initial-branch=main", work)
 	mustRun(t, work, "git", "config", "user.email", "orbit@example.invalid")
 	mustRun(t, work, "git", "config", "user.name", "orbit")
-	r := &integrationRepo{t: t, origin: origin, work: work}
+	r := &integrationRepo{t: t, origin: origin, work: work, scratch: filepath.Join(root, "scratch")}
 	r.write("README.md", "base\n")
 	r.commit("base")
 	mustRun(t, work, "git", "remote", "add", "origin", origin)
@@ -112,7 +117,13 @@ func (r *integrationRepo) command(sourceBranch, targetBranch string, checks ...I
 		UpstreamRef:  "refs/heads/main",
 		SourceRef:    "refs/heads/" + sourceBranch,
 		Checks:       checks,
+		scratchRoot:  r.scratch,
 	}
+}
+
+// scratchPath is where this repo's jobs stage their scratch worktree for one job id.
+func (r *integrationRepo) scratchPath(jobID string) string {
+	return filepath.Join(r.scratch, integrateScratchPrefix+jobID)
 }
 
 func mustRun(t *testing.T, dir, name string, args ...string) {
@@ -1199,6 +1210,7 @@ func (r *integrationRepo) promotionCommand(kind, sourceBranch, sourceKind string
 		UpstreamRef:         "refs/heads/main",
 		SourceRef:           "refs/heads/" + sourceBranch,
 		PromotionSourceKind: sourceKind,
+		scratchRoot:         r.scratch,
 	}
 }
 
@@ -1363,6 +1375,10 @@ func TestAutomaticPromotionHandsBackAMovedUpstream(t *testing.T) {
 	if handedBack.UpstreamSha != moved {
 		t.Fatalf("the result names upstream %q, want the tip it found %q", handedBack.UpstreamSha, moved)
 	}
+	if commits := handedBack.UpstreamMovedCommits; commits == nil || commits.Total != 1 ||
+		len(commits.Commits) != 1 || commits.Commits[0].Sha != moved {
+		t.Fatalf("upstreamMovedCommits = %+v, want the commit %s that moved main since the check", commits, moved)
+	}
 	for _, report := range reports {
 		if report == "upstreamMoved" {
 			t.Fatalf("the automatic landing reported upstreamMoved (%v): the promotion would read RECHECKING", reports)
@@ -1381,14 +1397,14 @@ func TestAutomaticPromotionHandsBackAMovedUpstream(t *testing.T) {
 	}
 }
 
-// TestAutomaticPromotionHandsBackAMainThatMovesDuringThePush is M-T12's last window: main was where
-// the check left it when the landing fetched, and moved before the push. The push is refused (no
-// force), the lost race is taken again from the fetch (runIntegrationJob's refetch round), and there
-// an automatic landing finds main moved and hands the candidate back: READY, nothing on main. The
-// move is made from the landing's own PUSH report, which the runner sends just before it pushes, so
-// the race is exact rather than timed. The owner-confirmed run of the same job through the same race
-// is the control: it merges again onto the main that moved and lands (M5).
-func TestAutomaticPromotionHandsBackAMainThatMovesDuringThePush(t *testing.T) {
+// TestPromotionEndsOnItsFirstRefusedPush is J-T13 (owner decision 2026-10-19): a LAND_PROMOTION
+// whose first push is refused TARGET_MOVED ends that claim — no refetch round re-does the merge and
+// the checks inside it. An automatic landing answers READY with nothing landed (M-T12: check the
+// candidate again on the new main); an owner-confirmed one answers ERROR / TARGET_MOVED, and the
+// control plane re-queues it as the next generation under the same confirmation. Both report what
+// moved the main. The move is made from the landing's own PUSH report, which the runner sends just
+// before it pushes, so the race is exact rather than timed.
+func TestPromotionEndsOnItsFirstRefusedPush(t *testing.T) {
 	t.Parallel()
 	for _, automatic := range []bool{true, false} {
 		r := newIntegrationRepo(t)
@@ -1396,9 +1412,14 @@ func TestAutomaticPromotionHandsBackAMainThatMovesDuringThePush(t *testing.T) {
 		land := automaticLanding(r, sourceSha, checked)
 		land.Automatic = automatic
 
+		var pushed int
 		var moved string
 		result := runIntegrationJob(land, func(phase string, _ *IntegrationUpstreamMoved) {
-			if phase != "PUSH" || moved != "" {
+			if phase != "PUSH" {
+				return
+			}
+			pushed++
+			if moved != "" {
 				return
 			}
 			r.write("elsewhere.txt", "somebody else landed in between\n")
@@ -1408,22 +1429,180 @@ func TestAutomaticPromotionHandsBackAMainThatMovesDuringThePush(t *testing.T) {
 		if moved == "" {
 			t.Fatalf("automatic=%v: the landing never reached PUSH (%s %s %s)", automatic, result.State, result.ErrorCode, result.Phase)
 		}
+		if pushed != 1 {
+			t.Fatalf("automatic=%v: the job reached PUSH %d times, want once: the first refusal ends the claim",
+				automatic, pushed)
+		}
+		if result.LandedSha != "" {
+			t.Fatalf("automatic=%v: the job landed %s after its push was refused", automatic, result.LandedSha)
+		}
+		if got := r.originRev("refs/heads/main"); got != moved {
+			t.Fatalf("automatic=%v: main is %s, want it left at the commit that moved it %s", automatic, got, moved)
+		}
+		commits := result.UpstreamMovedCommits
+		if commits == nil || commits.Total != 1 || len(commits.Commits) != 1 || commits.Commits[0].Sha != moved {
+			t.Fatalf("automatic=%v: upstreamMovedCommits = %+v, want the one commit %s", automatic, commits, moved)
+		}
+		if commits.Commits[0].Subject != "main moved between the fetch and the push" {
+			t.Fatalf("automatic=%v: subject = %q, want the commit's own", automatic, commits.Commits[0].Subject)
+		}
 		if automatic {
-			if result.State != "READY" || result.LandedSha != "" {
-				t.Fatalf("automatic landing whose push lost the race = %s %q (%s %s), want READY with nothing landed",
-					result.State, result.LandedSha, result.ErrorCode, result.Phase)
-			}
-			if got := r.originRev("refs/heads/main"); got != moved {
-				t.Fatalf("main is %s, want it left at the commit that moved it %s", got, moved)
+			if result.State != "READY" {
+				t.Fatalf("automatic landing whose push lost the race = %s (%s %s), want READY",
+					result.State, result.ErrorCode, result.Phase)
 			}
 			continue
 		}
-		if result.State != "LANDED" {
-			t.Fatalf("the owner-confirmed control = %s (%s %s), want LANDED onto the moved main", result.State, result.ErrorCode, result.Phase)
+		if result.State != "ERROR" || result.ErrorCode != "TARGET_MOVED" {
+			t.Fatalf("the owner-confirmed landing whose push lost the race = %s (%s %s), want ERROR / TARGET_MOVED",
+				result.State, result.ErrorCode, result.Phase)
 		}
-		if parent, _ := git(r.work, "rev-parse", result.LandedSha+"^1"); parent != moved {
-			t.Fatalf("the control landed onto %s, want the main that moved %s", parent, moved)
+		// The next generation — the same command, as the control plane re-queues it under the same
+		// confirmation — finds the new main at its fetch, re-checks and lands (M5).
+		next := runIntegrationJob(land, silent)
+		if next.State != "LANDED" {
+			t.Fatalf("the next generation = %s (%s %s), want LANDED onto the moved main",
+				next.State, next.ErrorCode, next.Phase)
 		}
+		if parent, _ := git(r.work, "rev-parse", next.LandedSha+"^1"); parent != moved {
+			t.Fatalf("the next generation landed onto %s, want the main that moved %s", parent, moved)
+		}
+	}
+}
+
+// TestUpstreamMovedCommitsAreFirstParentNewestFirstAndCapped is that list's shape (J-T4): one entry
+// per commit the upstream gained between the tip the landing worked from and the tip it found,
+// first-parent order, newest first, at most twenty, with the true total beside them and each
+// subject cut to 200 characters. Twenty-three commits land on main between the fetch and the push;
+// the result names the newest twenty and counts all twenty-three.
+func TestUpstreamMovedCommitsAreFirstParentNewestFirstAndCapped(t *testing.T) {
+	t.Parallel()
+	r := newIntegrationRepo(t)
+	sourceSha, checked := checkedProjectBranch(t, r)
+	land := ownerLanding(r, sourceSha, checked)
+
+	var landed []string
+	result := runIntegrationJob(land, func(phase string, _ *IntegrationUpstreamMoved) {
+		if phase != "PUSH" || len(landed) > 0 {
+			return
+		}
+		r.checkoutNew("elsewhere", "main")
+		long := strings.Repeat("long subject ", 30)
+		for i := 0; i < 23; i++ {
+			r.write("elsewhere.txt", fmt.Sprintf("somebody else landed %d\n", i))
+			message := fmt.Sprintf("main moved %d", i)
+			if i == 22 {
+				message = long
+			}
+			landed = append(landed, r.commit(message))
+		}
+		mustRun(t, r.work, "git", "push", "--quiet", r.origin, "HEAD:refs/heads/main")
+		r.checkout("main")
+		mustRun(t, r.work, "git", "branch", "-D", "elsewhere")
+	})
+	if result.State != "ERROR" || result.ErrorCode != "TARGET_MOVED" {
+		t.Fatalf("state = %s (%s %s), want ERROR / TARGET_MOVED", result.State, result.ErrorCode, result.Phase)
+	}
+	commits := result.UpstreamMovedCommits
+	if commits == nil {
+		t.Fatal("the result carries no upstreamMovedCommits")
+	}
+	if commits.Total != 23 {
+		t.Fatalf("total = %d, want the 23 commits that moved main", commits.Total)
+	}
+	if len(commits.Commits) != 20 {
+		t.Fatalf("commits = %d entries, want the 20 the contract allows", len(commits.Commits))
+	}
+	for i := range commits.Commits {
+		want := landed[len(landed)-1-i]
+		if commits.Commits[i].Sha != want {
+			t.Fatalf("commit %d is %s, want %s (newest first)", i, commits.Commits[i].Sha, want)
+		}
+	}
+	if subject := commits.Commits[0].Subject; len([]rune(subject)) != 200 {
+		t.Fatalf("subject is %d characters, want it cut to 200", len([]rune(subject)))
+	}
+}
+
+// TestLandTaskStillRefetchesAfterARefusedPush is J5's other half unchanged: the push race inside a
+// LAND_TASK is retried from the fetch, up to two more rounds. The target line moves during the first
+// push; the second round finds it, replays onto it and lands.
+func TestLandTaskStillRefetchesAfterARefusedPush(t *testing.T) {
+	t.Parallel()
+	r := newIntegrationRepo(t)
+	r.checkoutNew("project/line", "main")
+	r.checkout("main")
+	r.checkoutNew("task/b", "main")
+	r.write("b.txt", "from b\n")
+	r.commit("task b")
+	r.push("task/b")
+	r.checkout("main")
+
+	var pushed int
+	var moved string
+	result := runIntegrationJob(r.command("task/b", "project/line"), func(phase string, _ *IntegrationUpstreamMoved) {
+		if phase != "PUSH" {
+			return
+		}
+		pushed++
+		if moved != "" {
+			return
+		}
+		r.checkoutNew("elsewhere", "project/line")
+		r.write("elsewhere.txt", "somebody else landed first\n")
+		moved = r.commit("the line moved under the first push")
+		mustRun(t, r.work, "git", "push", "--quiet", r.origin, "HEAD:refs/heads/project/line")
+		r.checkout("main")
+		mustRun(t, r.work, "git", "branch", "-D", "elsewhere")
+	})
+	if moved == "" {
+		t.Fatalf("the landing never reached PUSH (%s %s %s)", result.State, result.ErrorCode, result.Phase)
+	}
+	if result.State != "LANDED" {
+		t.Fatalf("state = %s (%s %s), want LANDED after the refetch round", result.State, result.ErrorCode, result.Phase)
+	}
+	if pushed < 2 {
+		t.Fatalf("the job reached PUSH once: a LAND_TASK refetches and pushes again")
+	}
+	if result.UpstreamMovedCommits != nil {
+		t.Fatalf("a LAND_TASK carried upstreamMovedCommits: the field is a promotion's")
+	}
+}
+
+// TestUnknownPushesChecksTheTestedShaAgainstTheTarget is J12's receipt repair on the runner's side:
+// the command names earlier landings whose push outcome the control plane could not know, and after
+// the fetch the runner answers, for each one git can address, whether its tested commit is already
+// an ancestor of the target. A sha this repository does not have is left out rather than reported
+// as "not landed".
+func TestUnknownPushesChecksTheTestedShaAgainstTheTarget(t *testing.T) {
+	t.Parallel()
+	r := newIntegrationRepo(t)
+	r.checkoutNew("project/line", "main")
+	r.write("landed.txt", "already landed\n")
+	onTarget := r.commit("a commit that is on the target")
+	r.push("project/line")
+
+	r.checkoutNew("task/u", "main")
+	r.write("u.txt", "from u\n")
+	r.commit("task u")
+	r.push("task/u")
+	r.checkout("main")
+	absent := strings.Repeat("9", 40)
+
+	command := r.command("task/u", "project/line")
+	command.UnknownPushes = []IntegrationUnknownPush{
+		{JobID: "landed-before", TestedSha: onTarget},
+		{JobID: "never-pushed", TestedSha: absent},
+	}
+	result := runIntegrationJob(command, silent)
+	if result.State != "LANDED" {
+		t.Fatalf("state = %s (%s %s), want LANDED", result.State, result.ErrorCode, result.Phase)
+	}
+	if len(result.UnknownPushes) != 1 {
+		t.Fatalf("unknownPushes = %+v, want only the entry git could answer for", result.UnknownPushes)
+	}
+	if result.UnknownPushes[0].JobID != "landed-before" || !result.UnknownPushes[0].Landed {
+		t.Fatalf("unknownPushes = %+v, want landed-before reported landed", result.UnknownPushes)
 	}
 }
 
