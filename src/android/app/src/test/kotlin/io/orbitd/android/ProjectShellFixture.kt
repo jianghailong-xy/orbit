@@ -24,7 +24,10 @@ internal object ProjectShell {
     const val WAITING = "34A05dSessionWaiting03"
     const val PLAIN = "34A05dSessionPlain0004"
     const val DONE = "34A05dSessionDone00005"
-    private val ids = listOf(ALPHA, BETA, LAUNCH, QUIET, COORD, WORKER, WAITING, PLAIN, DONE)
+    /** A landing session (sessionKind LANDING): never in a list, reached by its link only. Its row may not exist yet — the
+     *  pre-generated id answers the landing view either way (contract §2.9 LS1). */
+    const val LANDING = "34A05dSessionLanding06"
+    private val ids = listOf(ALPHA, BETA, LAUNCH, QUIET, COORD, WORKER, WAITING, PLAIN, DONE, LANDING)
 
     /** Every request after the login, as `METHOD path?query`. */
     val calls = CopyOnWriteArrayList<String>()
@@ -65,6 +68,25 @@ internal object ProjectShell {
     /** Every write's body, by `METHOD path`. */
     val bodies = java.util.concurrent.ConcurrentHashMap<String, String>()
 
+    // A-1 / A-2: the landing session's view, and the inFlightJobs shape that names it. `landing` is the view
+    // `GET sessions/<LANDING>` answers with `sessionKind: LANDING`; null leaves that id a conversation row (an older server).
+    @Volatile var landing: String? = null
+    /** The landing session row's title; null for a row not inserted yet, which the pre-generated id answers without one. */
+    @Volatile var landingTitle: String? = null
+    /** `integration.inFlightJobs`, as a JSON array — each item carries its `landingSessionId` (A-2 reads the same shape). */
+    @Volatile var inFlightJobs: String? = null
+    /** What `GET sessions/<LANDING>/landing/log` answers, one page. */
+    @Volatile var landingLog = """{"jobId":"j-1","entries":[],"nextCursor":null}"""
+    /** The title `GET tasks/t-landing` answers, for a landing whose row does not exist to title itself. */
+    @Volatile var taskTitle = "Wire the page"
+    /** How many landing details were served as a landing (a diagnostics counter for tests). */
+    @Volatile var landingServed = 0
+    /** `projects/<LAUNCH>/coordinator/status`, which names the conversation a landing page's Open coordinator opens. */
+    @Volatile var coordinatorStatus = "{\"state\":\"NEVER_OPENED\"}"
+    /** What the landing doors answer: 200 (the body is read by no page) or a refusal in the server's own sentence. */
+    @Volatile var doorStatus = 200
+    @Volatile var doorMessage = "The job is no longer running."
+
     // A05-9: sessions moved to Trash. The server takes a move when the DELETE's held answer is let go; from then no list has the row.
     @Volatile var trashed: Set<String> = emptySet()
     @Volatile var holdDelete: CompletableDeferred<Unit>? = null
@@ -82,7 +104,10 @@ internal object ProjectShell {
         calls.clear(); started = true; startRequest = false; quietStatus = 200
         done = false; doneBy = "DERIVED"; doneCounts = true
         promotion = null; merged = "[]"; mergeCheck = false; holder = null; criteria = null; pressStatus = 200; mergeWaiting = false; bodies.clear()
-        landTasks = null; plan = null
+        landTasks = null; plan = null; landing = null; landingTitle = null; inFlightJobs = null
+        landingLog = """{"jobId":"j-1","entries":[],"nextCursor":null}"""; taskTitle = "Wire the page"
+        coordinatorStatus = "{\"state\":\"NEVER_OPENED\"}"; doorStatus = 200; doorMessage = "The job is no longer running."
+        landingServed = 0
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
         trashed = emptySet(); holdDelete = null; holdMembers = null; attention = null
         quietAttention = null; coordinatorWorking = false
@@ -119,7 +144,7 @@ internal object ProjectShell {
     private val integration get() = """{"line":"PROJECT_BRANCH","ref":"project/launch","integratingCount":1,"queuedCount":0,
         "inFlight":${if (mergeCheck) """{"kind":"CHECK_PROMOTION","state":"RUNNING","phase":"CHECK","startedAt":"${ago(7)}","heartbeatAt":"${ago(0)}"}"""
             else """{"kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskTitle":"Wire the page","startedAt":"${ago(3)}","heartbeatAt":"${ago(0)}"}"""}${
-            landTasks?.let { ""","landTasks":$it""" }.orEmpty()}}"""
+            landTasks?.let { ""","landTasks":$it""" }.orEmpty()}${inFlightJobs?.let { ""","inFlightJobs":$it""" }.orEmpty()}}"""
     private val openItems get() = if (!startRequest) """{"needsYou":[],"withCoordinator":[${holder.orEmpty()}]}""" else """{"needsYou":[],"withCoordinator":[],
         "startRequest":{"itemId":"start-1","waitingSince":"${ago(130)}","startRequest":{"criteriaDigest":"digest-1","why":"Everything is filed.",
         "settings":{"line":"PROJECT_BRANCH","automatic":true,"maxConcurrentTasks":3,"mergeCheckCommand":null,"projectBranchName":"project/launch"}}}}"""
@@ -167,6 +192,9 @@ internal object ProjectShell {
                 answer
             }
             path == "sessions" -> ok(when (view) { "open" -> list(COORD, WORKER, WAITING, PLAIN); "completed" -> list(DONE); else -> "[]" })
+            path == "sessions/$LANDING" && method == "GET" -> ok(landingDetail())
+            path == "sessions/$LANDING/landing/log" -> ok(landingLog)
+            path == "tasks/t-landing" -> ok("""{"id":"t-landing","title":"$taskTitle"}""")
             api.path.size == 2 && path.startsWith("sessions/") && method == "GET" -> ok(session(path.removePrefix("sessions/")))
             api.path.size == 2 && path.startsWith("sessions/") && method == "DELETE" -> {
                 holdDelete?.await()
@@ -179,18 +207,32 @@ internal object ProjectShell {
                 quietAttention?.let { ""","attention":$it""" }.orEmpty()}}]""")
             path == "projects/$LAUNCH" -> ok(project)
             path == "projects/$LAUNCH/integration" -> ok(integration)
+            path == "projects/$LAUNCH/coordinator/status" -> ok(coordinatorStatus)
             path == "projects/$LAUNCH/open-items" -> ok(openItems)
             path == "projects/$LAUNCH/promotions/current" -> promotion?.let(::ok) ?: ApiResponse(200, ByteArray(0))
             path == "projects/$LAUNCH/promotions/merged" -> ok(merged)
             path == "projects/$LAUNCH/dependency-graph" && plan != null -> ok(plan!!)
             path == "projects/$LAUNCH/acceptance/confirmation" && plan != null ->
                 ok("""{"state":"UNCONFIRMED","confirmed":false,"currentVersion":{"digest":"digest-1","material":[]}}""")
+            // The landing page's doors (J-T8's stop, J-T9's retry and re-check, J-T10's abandon): the answer is the server's.
+            method == "POST" && (path.endsWith("/integration/stop") || path.endsWith("/integration/retry") ||
+                path.contains("/integration/jobs/") && path.endsWith("/retry") || path.endsWith("/abandon")) ->
+                if (doorStatus == 200) ok("{}") else ApiResponse(doorStatus, """{"message":"$doorMessage","code":"DOOR_REFUSED"}""".encodeToByteArray())
             method == "POST" && path.startsWith("projects/$LAUNCH/promotions/") -> press(path.substringAfterLast('/'))
             path.startsWith("projects/") -> ok("{}")
             path.startsWith("wiki/") -> ApiResponse(404, """{"code":"WIKI_DISABLED","message":"The wiki is off."}""".encodeToByteArray())
             method == "GET" -> ok("[]")
             else -> ok("{}")
         }
+    }
+
+    /** The LANDING detail: the subject's view with the row's shape around it, or — no row yet — LS1's fallback, which has
+     *  no title and no workspace and still draws the page. */
+    private fun landingDetail(): String {
+        val view = landing ?: return session(LANDING)
+        landingServed++
+        return """{"id":"$LANDING","title":${landingTitle?.let { "\"$it\"" } ?: "null"},"status":"AWAITING_INPUT",
+            "sessionKind":"LANDING","workspace":null,"assignedRunner":null,"tags":[],"landing":$view}"""
     }
 
     /** The streams open and stay quiet: the account is connected, so writes are offered. */

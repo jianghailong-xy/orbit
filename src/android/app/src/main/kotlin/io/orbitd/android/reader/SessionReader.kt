@@ -68,6 +68,11 @@ import kotlinx.serialization.json.*
 @Composable
 fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi,
     data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}) {
+    // This page shows a conversation, and the store streams the one it shows: selecting it is the reader's own act, so a
+    // landing session — which SessionDestination never sends here — is never subscribed to (§2.9 LS6). A reader leaving
+    // clears the selection; a reader replacing another (a link to a second session) sets its own after the old one's.
+    LaunchedEffect(handle, route.id) { app.realtime.selectSession(route.id) }
+    DisposableEffect(handle, route.id) { onDispose { app.realtime.selectSession(null) } }
     var recordOpened by rememberSaveable { mutableStateOf(false) }
     val model = remember(handle, route.id, route.recordId) { SessionReaderModel(app.session, handle,
         app.realtime, route.id!!, app.processScope, route.recordId, recordOpened) }
