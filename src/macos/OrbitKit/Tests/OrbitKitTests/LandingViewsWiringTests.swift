@@ -68,11 +68,24 @@ final class LandingViewsWiringTests: XCTestCase {
         let abandon = String(page[split.lowerBound..<end.lowerBound])
         XCTAssertTrue(solid.contains(".buttonStyle(.borderedProminent)"), "Retry and Re-run the check stay solid")
         XCTAssertTrue(abandon.contains("Button(role: .destructive) { act(.abandon, landing) } label: {"))
-        XCTAssertTrue(abandon.contains(".buttonStyle(.bordered).controlSize(.small).disabled(acting)"),
-                      "Abandon is the bordered secondary door")
+        XCTAssertTrue(abandon.contains(".buttonStyle(.bordered).tint(.red).controlSize(.small).disabled(acting)"),
+                      "Abandon is the bordered secondary door, its fill the light red wash of a red tint")
         XCTAssertFalse(abandon.contains(".borderedProminent"), "Abandon is not a solid red door")
         XCTAssertTrue(abandon.contains("#if os(macOS)") && abandon.contains(".foregroundStyle(.red)"),
                       "a Mac push button keeps Abandon's word red")
+    }
+
+    /// The Landing card's sentence, which Linux cannot render: a card holding only a merge job says
+    /// no "Nothing to do" (that job lands no task; board v4 04 draws no body under its head), and a
+    /// timed-out card still says where its runner stopped. The model's `mergeJob` decides it
+    /// (ProjectLandingCardTests); this pins that the card reads it.
+    func testALoneMergeJobsCardSaysNoTaskLandingSentence() throws {
+        let card = code(try appSource("Views/ProjectLandingCard.swift"))
+        XCTAssertTrue(card.contains("if card.timedOut, let detail = card.detail {"),
+                      "a timed-out card says where its runner stopped")
+        XCTAssertTrue(card.contains("} else if !card.timedOut && (several || !card.mergeJob) {"),
+                      "the task-landing sentence is not said under a lone merge job")
+        XCTAssertTrue(card.contains("Text(ProjectPage.landingNothingToDo)"))
     }
 
     /// 方案 A's entrances: one job's card foot, a row each for several (never the merge job's), one
