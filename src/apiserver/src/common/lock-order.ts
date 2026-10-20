@@ -112,7 +112,7 @@ export const LOCK_ORDER = [
   {
     rank: 40,
     relation: 'project',
-    modes: 'FOR NO KEY UPDATE (session capacity fence, verdict gate, reconcile, unit L3 scope fence) · FOR KEY SHARE (task/session FK, project_event outbox, the X-E5 tick\'s SKIP LOCKED hold)',
+    modes: 'FOR NO KEY UPDATE (session capacity fence, verdict gate, reconcile, unit L3 scope fence) · FOR KEY SHARE (task/session FK, the X-E5 tick\'s SKIP LOCKED hold)',
     why:
       'Above `task` because that is the order every live taker of these two rows takes them in: ' +
       'session_admission_lock_order (0130) reaches the project row FOR NO KEY UPDATE from the same ' +
@@ -144,7 +144,7 @@ export const LOCK_ORDER = [
   {
     rank: 60,
     relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_task_status_count, project_fuse_episode, project_fuse_held_action',
-    modes: 'INSERT/UPDATE/DELETE · on `project_integration_job` also FOR UPDATE SKIP LOCKED (the claim, one job), FOR NO KEY UPDATE (the progress, release and output gates) and FOR SHARE SKIP LOCKED (the X-E5 insert)',
+    modes: 'INSERT/UPDATE/DELETE · on `project_integration_job` also FOR UPDATE SKIP LOCKED (the claim, one job), FOR NO KEY UPDATE (the progress, release and output gates) and FOR SHARE SKIP LOCKED (the X-E5 insert) · on `project_promotion` also FOR KEY SHARE SKIP LOCKED (the X-E5 tick\'s hold)',
     why:
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '
       + 'own. `project_integration_job` is here rather than at a rank of its own for that reason: '
@@ -188,7 +188,8 @@ export const LOCK_ORDER = [
       + 'projects cannot take the same pair in opposite orders. No other taker exists: the detail '
       + 'read only SELECTs it, and the UPDATE branch nets inserted against deleted, so a statement '
       + 'that moves no task between projects reaches this table not at all. '
-      + 'X-E5\'s clock (§4.6) is the same rank: one autocommit INSERT … SELECT that writes one '
+      + 'X-E5\'s clock (§4.6) is the same rank: one INSERT … SELECT, run in a transaction of its own '
+      + 'under a `lock_timeout` of 200 ms (`LEASE_ALARM_LOCK_TIMEOUT_MS`), that writes one '
       + '`project_open_item` per claim whose lease has expired for more than fifteen minutes, and that '
       + 'takes every row the item\'s foreign keys check before the keys do, all of it SKIP LOCKED — the '
       + 'due claims\' projects (40), then their tasks (50), then their candidates (60) FOR KEY SHARE, '
@@ -205,13 +206,23 @@ export const LOCK_ORDER = [
       + 'KEY SHARE also locks those an UPDATE made without changing a key, and waits for one held FOR '
       + 'UPDATE, being deleted or re-keyed by an open transaction. That wait comes before the statement '
       + 'holds any job or has written any item ((24)), with only parents taken in this rank order held, '
-      + 'so it closes no cycle with a transaction that keeps the order. The tick also waits at the unique '
-      + 'index, for another tick\'s uncommitted insert of the same key, and every tick inserts in job id '
-      + 'order. What would break this is a lock the alarm waits for — a parent or a job taken '
-      + 'without SKIP LOCKED, a key on the item naming a row the CTE does not take, or a parent taken '
-      + 'after the first job — and (19) and (21) are the cycles such a wait closed. It takes no session '
-      + 'lock — the item\'s `session_id` is history, not a key — and the job gates that end such an item '
-      + 'write it inside their own rank-60 transactions.',
+      + 'so it closes no cycle with a transaction that keeps the order. Once it holds a job, the one '
+      + 'place left that waits is the unique index: for another tick\'s uncommitted insert of the same '
+      + 'key, or for an open transaction ending or deleting a committed OPEN item of that key — and every '
+      + 'tick inserts in job id order. Each of those waits is cut at the timeout, which cancels the '
+      + 'statement with nothing written and leaves the whole tick\'s alarm to the next tick ((25)). Two '
+      + 'windows remain, each as long as the statement runs — milliseconds, unless those rare waits '
+      + 'lengthen it, each by no more than the timeout: a FOR UPDATE NOWAIT on a parent it holds (a '
+      + 'supersession, a MOVE_TASK approval) is refused, and a card another replica opened and somebody '
+      + 'closed while it ran is not seen through its snapshot, so the same key can be opened a second '
+      + 'time ((26) forces a wait cut at the timeout, which opens nothing). A unique index over every '
+      + 'state of the key is the complete fix of the second, and was not made. What would break this is '
+      + 'a lock the alarm waits for — a parent or a job taken without SKIP LOCKED, a key on the item '
+      + 'naming a row the CTE does not take, or a parent taken after the first job — and (19) and (21) '
+      + 'are the cycles such a wait closed; the timeout would not keep them harmless, since the other '
+      + 'side\'s deadlock check can come before it. It takes no session lock — the item\'s `session_id` '
+      + 'is history, not a key — and the job gates that end such an item write it inside their own '
+      + 'rank-60 transactions.',
   },
   {
     rank: 70,

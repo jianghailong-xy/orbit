@@ -5,6 +5,7 @@ import { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
+import { isLockNotAvailable } from '../tasks/task-supersession';
 import { DEFAULT_CHECK_TIMEOUT_SECONDS, INTEGRATION_PROGRESS_V2_PROTOCOL } from './project-integration-job';
 import { LANDED_RESULTS } from './project-criterion-landing';
 import {
@@ -45,6 +46,19 @@ export interface OpenedLeaseItem {
 
 /** §4.6 X-E5's grace past `LEASE_EXPIRED`: the claim has been expired for a quarter of an hour. */
 const LANDING_LEASE_GRACE_SECONDS = 15 * 60;
+
+/**
+ * How long X-E5's alarm waits for any one lock before it gives up the whole tick's alarm: the
+ * `lock_timeout` `openLeaseExpiredItems` runs its statement under. A timeout costs only a tick —
+ * nothing was written, and the next tick asks again from committed rows a minute later — while a
+ * wait costs others: for as long as it lasts, a FOR UPDATE NOWAIT on a parent the statement holds is
+ * refused, and the statement's snapshot ages, so a card opened and closed meanwhile is not seen. 200
+ * ms bounds each such wait to that long, and is still far longer than the wait two replicas ticking
+ * at the same moment meet at the unique index — the other's insert of the same key, a round trip
+ * from its commit — so that meeting still ends in ON CONFLICT DO NOTHING rather than a timeout
+ * (WHAT IT CAN STILL WAIT FOR, on the method).
+ */
+const LEASE_ALARM_LOCK_TIMEOUT_MS = 200;
 
 /** §7.2 V6's base lease — `INTEGRATION_CLAIM_STALE_MS` — as the statement below counts it. */
 const LEASE_SECONDS = INTEGRATION_CLAIM_STALE_MS / 1_000;
@@ -302,6 +316,10 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
   /** The landed items `reconcile` has already reported from this process, so a missing edge is one
    *  warning rather than one a minute for as long as the item stays open. */
   private readonly reportedLanded = new Set<string>();
+  /** The alarm's `lock_timeout`, `LEASE_ALARM_LOCK_TIMEOUT_MS`. Nothing in production sets it; a
+   *  spec that has to hold the alarm at one of its waits while it arranges what happens beside it
+   *  sets a longer one on its own instance. */
+  readonly leaseAlarmLockTimeoutMs: number = LEASE_ALARM_LOCK_TIMEOUT_MS;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -314,11 +332,13 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
 
   onModuleInit(): void {
     this.timer = setInterval(() => {
-      // Three writes, each one statement with its own failure: the backstop first, so what the
-      // sweep then hands over is only what somebody still owes (and a backstop that failed does
-      // not cost the sweep, which asks `openItemOwed` itself); then the sweep; then X-E5's lease
-      // alarm, which a sweep that threw must not skip — a silent runner's card is the only warning
-      // there is.
+      // Three writes, each with its own failure: the backstop first, so what the sweep then hands
+      // over is only what somebody still owes (and a backstop that failed does not cost the sweep,
+      // which asks `openItemOwed` itself); then the sweep, a statement like the backstop; then
+      // X-E5's lease alarm, one statement in a transaction of its own under a lock timeout, which a
+      // sweep that threw must not skip — a silent runner's card is the only warning there is. An
+      // alarm that was not granted a lock in time does not throw: it opens nothing, logs that it
+      // left this tick's alarm to the next one, and returns no item.
       void this.reconcile()
         .catch((e) => this.logger.error(`reconcile failed: ${(e as Error).message}`))
         .then(() => this.sweep())
@@ -383,7 +403,8 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
    * `readInFlightJobs` decides it, so that queue is never mistaken for silence.
    *
    * THE SHAPE. One `INSERT … SELECT … ON CONFLICT DO NOTHING RETURNING`, like the sweep: a statement
-   * that is its own compare-and-set. The partial unique index over OPEN items is the conflict
+   * that is its own compare-and-set, run in a transaction of its own whose only other statement sets
+   * its lock timeout (BOUNDED, below). The partial unique index over OPEN items is the conflict
    * target, so two apiservers ticking at the same moment open each item once, a tick a minute for an
    * hour opens nothing after the first, and the caller therefore pushes once. A key already written
    * and since settled is left alone too: one claim is one card, ever (§4.2), and a takeover writes a
@@ -397,28 +418,48 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
    * key waits for a row it cannot lock. Left to the keys, the project and the task came after the
    * job — the order J-T8's stop and a project delete met head-on: `task_reopen` holds the task FOR
    * UPDATE and then ends the same job, a delete holds the project FOR UPDATE and then deletes the
-   * job through its cascade, and PostgreSQL aborted one side ((19), (21)). Taking them first in a
-   * transaction of the tick's own held the task for as long as the insert then waited on the job,
-   * and a task-side FOR UPDATE NOWAIT (a supersession, a MOVE_TASK approval) was refused against it
-   * ((23)). So the statement takes every one of those rows itself, before its keys do and SKIP
-   * LOCKED: the `held` CTE takes the due claims' projects, then their tasks, then their candidates
-   * FOR KEY SHARE — the mode the keys take, each set sorted by id, in a UNION ALL that PostgreSQL
-   * runs branch by branch — and the SELECT takes the jobs FOR SHARE, in id order, and writes only
-   * the claims whose every parent the CTE holds. A claim whose job another transaction is writing
-   * (a report, a chunk or a result in flight), or one of whose parents is held FOR UPDATE, being
-   * deleted or having a key changed, is left out: it is the next tick's, a minute later ((22)). The
-   * keys then find every row they check already held by this statement, and are granted it at
-   * once. No session row is locked: the item's `session_id` is a history column, not a key.
+   * job through its cascade, and PostgreSQL aborted one side ((19), (21)). Taking them first with
+   * locks that wait, in a transaction of the tick's own (e88d5dd38), held the task for as long as
+   * the insert then waited on the job, and a task-side FOR UPDATE NOWAIT (a supersession, a
+   * MOVE_TASK approval) was refused against it ((23)). So the statement takes every one of those
+   * rows itself, before its keys do and SKIP LOCKED: the `held` CTE takes the due claims' projects,
+   * then their tasks, then their candidates FOR KEY SHARE — the mode the keys take, each set sorted
+   * by id, in a UNION ALL that PostgreSQL runs branch by branch — and the SELECT takes the jobs FOR
+   * SHARE, in id order, and writes only the claims whose every parent the CTE holds. A claim whose
+   * job another transaction is writing (a report, a chunk or a result in flight), or one of whose
+   * parents is held FOR UPDATE, being deleted or having a key changed, is left out: it is the next
+   * tick's, a minute later ((22)). The keys then find every row they check already held by this
+   * statement, and are granted it at once. No session row is locked: the item's `session_id` is a
+   * history column, not a key.
    *
    * WHAT IT CAN STILL WAIT FOR. SKIP LOCKED does not queue for a lock held on the row version it
    * reads, and it does not cover that row's newer versions: PostgreSQL's FOR KEY SHARE, the
    * parents' mode, also locks the versions an UPDATE made without changing a key, and waits for one
-   * held FOR UPDATE, being deleted or re-keyed by a transaction that is still open. The first of the
-   * three arrays the SELECT reads takes the whole `held` CTE, before any job row is locked or any
-   * item written, so that wait holds only parents taken in rank order and closes no cycle with a
-   * transaction that keeps the order ((24)). The unique index waits too, for another tick's
-   * uncommitted insert of the same key — and the ticks insert in job id order, so no two of them
+   * held FOR UPDATE, being deleted or re-keyed by a transaction that is still open, SKIP LOCKED or
+   * not. The first of the three arrays the SELECT reads takes the whole `held` CTE, before any job
+   * row is locked or any item written, so that wait holds only parents taken in rank order and
+   * closes no cycle with a transaction that keeps the order ((24)). Once the statement holds a job,
+   * the one place left that waits is the unique index: for another tick's uncommitted insert of the
+   * same key, or for an open transaction that is ending or deleting a committed OPEN item of that
+   * key, the job held FOR SHARE meanwhile — and the ticks insert in job id order, so no two of them
    * can each be waiting on a key the other has written.
+   *
+   * BOUNDED. Every one of those waits is cut at `LEASE_ALARM_LOCK_TIMEOUT_MS`. The transaction sets
+   * that `lock_timeout` before the statement, so a wait that outlives it cancels the statement and
+   * rolls the transaction back with nothing written; the method logs that it left the alarm to the
+   * next tick and returns no item, and every due claim's alarm, not only the one whose row was
+   * waited for, is the next tick's ((25)). What the timeout keeps short rather than closes is two
+   * windows, each as long as the statement runs: its own milliseconds, and no wait in it longer
+   * than the timeout. While it runs it holds the due projects, tasks and candidates it has taken
+   * FOR KEY SHARE, so a FOR UPDATE NOWAIT on one of them — a supersession's
+   * (`TasksService.lockTaskForSupersessionWrite`), a MOVE_TASK approval's — is refused with the 409
+   * that says a run is starting on the task. And it reads through the snapshot it started with, so
+   * a card another replica opened under a due key after that, and somebody closed before the
+   * statement reached its insert, is not seen by its NOT EXISTS, and the partial unique index,
+   * which covers OPEN items only, does not stop a second one: that claim's card can be opened
+   * again. A wait cut at the timeout opens nothing, and the tick that next asks sees the card
+   * ((26)). The complete fix of that second window is a unique index over every state of the key,
+   * which would make one claim one card a constraint; it was not made.
    *
    * WHAT IT WRITES. The item and nothing else: `OWNER` / `ESCALATED` from birth, `escalated_at` at
    * the opening instant, and `escalate_at` / `remind_at` NULL (it is already the owner's, and there
@@ -434,7 +475,7 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
    * without one of those edges leaves an item `reconcile` closes as not owed.
    */
   async openLeaseExpiredItems(): Promise<OpenedLeaseItem[]> {
-    const opened = await this.prisma.$queryRaw<OpenedLeaseItem[]>(Prisma.sql`
+    const statement = Prisma.sql`
       WITH due AS MATERIALIZED (
         -- The claims that are due, read without a lock: what the parents below are taken for.
         SELECT j."id" AS "jobId", j."project_id" AS "projectId", live_task."id" AS "taskId",
@@ -527,7 +568,25 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
       ORDER BY j."id"
       FOR SHARE OF j SKIP LOCKED
       ON CONFLICT ("project_id", "dedupe_key") WHERE "state" = 'OPEN' DO NOTHING
-      RETURNING "id" AS "itemId", "project_id" AS "projectId", "owner_id" AS "ownerId"`);
+      RETURNING "id" AS "itemId", "project_id" AS "projectId", "owner_id" AS "ownerId"`;
+    const lockTimeout = `${this.leaseAlarmLockTimeoutMs}ms`;
+    let opened: OpenedLeaseItem[];
+    try {
+      opened = await this.prisma.$transaction(async (tx) => {
+        // SET LOCAL lock_timeout, in the function form that takes its value as a parameter: it ends
+        // with this transaction, so the pooled connection's next user never runs under it.
+        await tx.$executeRaw`SELECT set_config('lock_timeout', ${lockTimeout}, true)`;
+        return tx.$queryRaw<OpenedLeaseItem[]>(statement);
+      });
+    } catch (error) {
+      // A lock not granted within the timeout: the statement asks for nothing NOWAIT, so this is the
+      // one way it raises lock_not_available. PostgreSQL cancelled it and the transaction rolled back,
+      // so nothing was written, and the next tick asks again from committed rows.
+      if (!isLockNotAvailable(error)) throw error;
+      this.logger.warn(`${LANDING_LEASE_EXPIRED_KIND} alarm left to the next tick: a lock it waited for `
+        + `was not granted within ${this.leaseAlarmLockTimeoutMs} ms, so it opened nothing`);
+      return [];
+    }
     for (const item of opened) {
       this.logger.warn(`opened ${LANDING_LEASE_EXPIRED_KIND} ${item.itemId} of project `
         + `${item.projectId}: the runner stopped reporting`);

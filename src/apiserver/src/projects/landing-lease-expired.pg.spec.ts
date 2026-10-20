@@ -65,7 +65,12 @@ import { ProjectPromotionService, automaticLandingRefusal } from './project-prom
  * and a tick and a project delete reaching the same job, finish without a deadlock in either order;
  * a task_update that cancels the task while a report holds its job is not refused; a report that
  * commits after the tick's snapshot is seen; and what PostgreSQL's FOR KEY SHARE still waits for, a
- * parent's newer version held FOR UPDATE, comes before the tick holds any job.
+ * parent's newer version held FOR UPDATE, comes before the tick holds any job — and, for a
+ * project's, before it holds any task. Every wait the tick can still meet is cut at its lock
+ * timeout: it then opens nothing and the claim is the next tick's, late by a tick and not lost, and
+ * a card another tick opened and the owner closed while it waited is not opened a second time. The
+ * cases that hold the tick at one of its waits while they arrange what happens beside it give it a
+ * longer timeout than production's.
  *
  * It never blocks M-T11, and it writes nothing an agent would run: no turn, session, wake or
  * delivery.
@@ -507,6 +512,39 @@ async function untilLockWaits(
   }
 }
 
+/** The backends of this database waiting on a lock right now, other than the asking connection's, and whom each waits for. */
+async function lockWaiters(sql: Client): Promise<Array<{ pid: number; query: string; blockedBy: number[] }>> {
+  const { rows } = await sql.query<{ pid: number; query: string; blocked_by: number[] }>(`
+    SELECT "pid", left(regexp_replace("query", '\\s+', ' ', 'g'), 160) AS "query",
+           pg_blocking_pids("pid") AS "blocked_by"
+      FROM pg_stat_activity
+     WHERE "wait_event_type" = 'Lock' AND "datname" = current_database() AND "pid" <> pg_backend_pid()
+     ORDER BY "query_start"`);
+  return rows.map((row) => ({ pid: row.pid, query: row.query.trim(), blockedBy: row.blocked_by }));
+}
+
+/** Until `accept` holds of the waiters, or a call under test has already ended — whichever comes first. */
+async function untilWaiters(
+  sql: Client,
+  accept: (waiters: Awaited<ReturnType<typeof lockWaiters>>) => boolean,
+  calls: ReadonlyArray<{ settled: boolean }>,
+): Promise<Awaited<ReturnType<typeof lockWaiters>>> {
+  const deadline = Date.now() + 15_000;
+  for (;;) {
+    const waiters = await lockWaiters(sql);
+    if (accept(waiters) || calls.some((call) => call.settled) || Date.now() > deadline) return waiters;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+/** Until every call has ended, or `ms` have passed — whichever comes first. */
+async function untilSettled(calls: ReadonlyArray<{ settled: boolean }>, ms: number): Promise<void> {
+  const deadline = Date.now() + ms;
+  while (!calls.every((call) => call.settled) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
 /** Until `count` requests for `project_open_item` itself are queued behind a table lock, or a call has ended. */
 async function untilInsertsQueued(
   sql: Client,
@@ -531,10 +569,41 @@ async function untilInsertsQueued(
  */
 const TICK_STATEMENT = /^(?:WITH due AS MATERIALIZED|INSERT INTO "project_open_item")/;
 
-/** The lease alarm on a client of its own, started without being awaited. */
-function tickOn(db: PrismaClient) {
-  return started(new ProjectOpenItemEscalationService(
-    db as unknown as PrismaService, recordingPush().push as never).openLeaseExpiredItems());
+/**
+ * The lock timeout of a case that holds the alarm at one of its waits while it arranges what happens beside it: longer
+ * than any of them holds it, so the wait is the one the case is about rather than the timeout's.
+ */
+const HELD_TICK_LOCK_TIMEOUT_MS = 60_000;
+
+/** The lock timeout of the cases about the bound itself: short, so that it, and not the holder, ends the wait. */
+const SHORT_LOCK_TIMEOUT_MS = 300;
+
+/**
+ * The alarm's lock timeout on this one clock. Set through a cast, so that this file compiles against a service that has
+ * no such field — one whose alarm waits as long as PostgreSQL makes it, which the bound cases below are red against.
+ */
+function waitingUpTo(clock: ProjectOpenItemEscalationService, ms: number): ProjectOpenItemEscalationService {
+  (clock as unknown as { leaseAlarmLockTimeoutMs: number }).leaseAlarmLockTimeoutMs = ms;
+  return clock;
+}
+
+/** Every warning this one clock logs, kept in `said` instead of printed. */
+function warningsOf(clock: ProjectOpenItemEscalationService, said: string[]): ProjectOpenItemEscalationService {
+  (clock as unknown as { logger: object }).logger = {
+    warn: (message: string) => { said.push(message); },
+    log: () => undefined,
+    error: () => undefined,
+    debug: () => undefined,
+  };
+  return clock;
+}
+
+/** The lease alarm on a client of its own, started without being awaited — under `lockTimeoutMs` when given. */
+function tickOn(db: PrismaClient, lockTimeoutMs?: number, warned?: string[]) {
+  const clock = new ProjectOpenItemEscalationService(db as unknown as PrismaService, recordingPush().push as never);
+  if (lockTimeoutMs !== undefined) waitingUpTo(clock, lockTimeoutMs);
+  if (warned) warningsOf(clock, warned);
+  return started(clock.openLeaseExpiredItems());
 }
 
 /**
@@ -1346,13 +1415,15 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
     const twoDb = prismaClientFor(url);
     try {
       // Two replicas, each with its own client. A table lock that admits readers and no writer holds both at their
-      // INSERT, and releasing it lets the two meet there: the partial unique index over OPEN items is the arbiter.
+      // INSERT, and releasing it lets the two meet there: the partial unique index over OPEN items is the arbiter. Both
+      // wait at the table lock, and the later one may then wait at the index for the other's commit, so both are given a
+      // timeout longer than either wait.
       await holder.query('BEGIN');
       await holder.query('LOCK TABLE "project_open_item" IN SHARE MODE');
-      const one = new ProjectOpenItemEscalationService(
-        oneDb as unknown as PrismaService, recordingPush().push as never);
-      const two = new ProjectOpenItemEscalationService(
-        twoDb as unknown as PrismaService, recordingPush().push as never);
+      const one = waitingUpTo(new ProjectOpenItemEscalationService(
+        oneDb as unknown as PrismaService, recordingPush().push as never), HELD_TICK_LOCK_TIMEOUT_MS);
+      const two = waitingUpTo(new ProjectOpenItemEscalationService(
+        twoDb as unknown as PrismaService, recordingPush().push as never), HELD_TICK_LOCK_TIMEOUT_MS);
       const first = started(one.openLeaseExpiredItems());
       const second = started(two.openLeaseExpiredItems());
       assert.equal(await untilInsertsQueued(sql, 2, [first.ended, second.ended]), 2,
@@ -1435,7 +1506,7 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
               VALUES ($1::uuid, $2::uuid, $3::uuid, 'LANDING_LEASE_EXPIRED', 'OWNER', 'ESCALATED', $4,
                       'No word from the runner: another replica', '{}'::jsonb, now(), now(), now())`,
             [randomUUID(), w.projectId, w.ownerId, leaseExpiredDedupeKey(job.jobId, job.claimGeneration)]);
-            tickCall = tickOn(tickDb);
+            tickCall = tickOn(tickDb, HELD_TICK_LOCK_TIMEOUT_MS);
             const waitingFirst = await untilLockWaits(sql, 1, [tickCall.ended]);
             assert.equal(waitingFirst.length, 1, 'the tick was not held by the second connection');
             assert.match(waitingFirst[0]!, TICK_STATEMENT,
@@ -1444,6 +1515,13 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
             const waitingBoth = await untilLockWaits(sql, 2, [reopenCall.ended, tickCall.ended]);
             assert.equal(waitingBoth.length, 2,
               `the reopen did not meet the tick while it was held: ${JSON.stringify(waitingBoth)}`);
+            // Met the tick, not merely waited beside it: the backend the reopen waits for is the tick's.
+            const waiters = await lockWaiters(sql);
+            const tickWaiter = waiters.find((waiter) => TICK_STATEMENT.test(waiter.query));
+            const reopenWaiter = waiters.find((waiter) => waiter !== tickWaiter);
+            assert.ok(tickWaiter && reopenWaiter, `two waiters, one of them the tick: ${JSON.stringify(waiters)}`);
+            assert.ok(reopenWaiter.blockedBy.includes(tickWaiter.pid),
+              `the reopen is not blocked by the tick: ${JSON.stringify(waiters)}`);
             await holder.query('ROLLBACK');
           }
 
@@ -1532,7 +1610,7 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
                   'No word from the runner: another replica', '{}'::jsonb, now(), now(), now())`,
         [randomUUID(), w.projectId, w.ownerId, leaseExpiredDedupeKey(job, 1)]);
       }
-      ticking = tickOn(tickDb);
+      ticking = tickOn(tickDb, HELD_TICK_LOCK_TIMEOUT_MS);
       const waiting = await untilLockWaits(sql, 1, [ticking.ended]);
       assert.equal(waiting.length, 1, 'the tick was not held at its first claim’s insert');
       assert.match(waiting[0]!, TICK_STATEMENT, 'the waiting statement is the tick’s');
@@ -1622,6 +1700,107 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
       // either. The remover's ROLLBACK runs once its DELETE has ended.
       await holder.query('ROLLBACK').catch(() => undefined);
       await holder.end().catch(() => undefined);
+      await remover.query('ROLLBACK').catch(() => undefined);
+      await Promise.all([removing?.result, ticking?.result]);
+      await remover.end().catch(() => undefined);
+      await tickDb.$disconnect().catch(() => undefined);
+    }
+  });
+
+  await t.test('(21b) a tick held at its insert, and a project delete that arrives and waits for it, do not deadlock', async () => {
+    // (21) in the other order: the tick has taken the claim's rows, the project FOR KEY SHARE among them, and is held at
+    // its insert when the delete arrives. What holds it there is another replica's uncommitted item under the same key,
+    // whose own foreign key takes the project FOR KEY SHARE as well. That item is written once the tick holds the
+    // project — while a first holder keeps the tick waiting in its CTE on the newer version of the claim's candidate, the
+    // way (24) does with a task (a project that still has a task is not deleted) — so the tick is the project's first
+    // locker, the one the delete's FOR UPDATE waits for first. The first holder then commits and the tick goes on to its
+    // insert. The delete waits for the tick, and the tick for the other replica only; once that item is rolled back the
+    // tick opens its own and commits, and the delete takes the project and goes through, the candidate, the job and the
+    // item going with it.
+    const w = await world(stack, 'delete-race-tick-first', 'PROJECT_BRANCH');
+    const promotionId = randomUUID();
+    await stack.db.projectPromotion.create({
+      data: {
+        id: promotionId, projectId: w.projectId, ownerId: w.ownerId, codebaseId: w.codebaseId,
+        sourceKind: 'PROJECT_BRANCH', sourceRef: w.integrationRef, sourceSha: sha('a'),
+        upstreamRef: w.upstreamRef, state: 'CONFIRMED', confirmedAt: new Date(), confirmedByUserId: w.ownerId,
+      } as never,
+    });
+    const jobId = await rawRunningJob(stack, w, {
+      label: 'delete-race-tick-first', kind: 'LAND_PROMOTION', phase: 'MERGE',
+      claimedAtMsAgo: 30 * MINUTE, heartbeatMsAgo: 30 * MINUTE, targetRef: w.upstreamRef, promotionId,
+    });
+    const first = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+    const replica = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+    const remover = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+    await first.connect();
+    await replica.connect();
+    await remover.connect();
+    // A statement that writes its item before it waits would hold the other replica's insert behind its own, and the
+    // delete behind it in turn: each side connection gives up after ten seconds rather than hanging this file.
+    await replica.query(`SET lock_timeout = '10s'`);
+    await remover.query(`SET lock_timeout = '10s'`);
+    const tickDb = prismaClientFor(url);
+    let removing: ReturnType<typeof started<unknown>> | undefined;
+    let ticking: ReturnType<typeof tickOn> | undefined;
+    try {
+      await first.query('BEGIN');
+      await first.query(
+        `UPDATE "project_promotion" SET "commits_ahead" = "commits_ahead" WHERE "id" = $1::uuid`, [promotionId]);
+      await first.query(`SELECT "id" FROM "project_promotion" WHERE "id" = $1::uuid FOR UPDATE`, [promotionId]);
+      ticking = tickOn(tickDb, HELD_TICK_LOCK_TIMEOUT_MS);
+      const inCte = await untilLockWaits(sql, 1, [ticking.ended]);
+      assert.deepEqual(inCte.map((query) => TICK_STATEMENT.test(query)), [true],
+        `the tick waits in its CTE for the candidate, holding the project: ${JSON.stringify(inCte)}`);
+
+      const { rows: [own] } = await replica.query<{ pid: number }>('SELECT pg_backend_pid() AS "pid"');
+      const replicaPid = own!.pid;
+      await replica.query('BEGIN');
+      await replica.query(`
+        INSERT INTO "project_open_item" (
+          "id", "project_id", "owner_id", "kind", "assignee", "assignee_reason", "dedupe_key", "title",
+          "payload", "waiting_since", "assigned_at", "escalated_at")
+        VALUES ($1::uuid, $2::uuid, $3::uuid, 'LANDING_LEASE_EXPIRED', 'OWNER', 'ESCALATED', $4,
+                'No word from the runner: another replica', '{}'::jsonb, now(), now(), now())`,
+      [randomUUID(), w.projectId, w.ownerId, leaseExpiredDedupeKey(jobId, 1)]);
+      await first.query('COMMIT');
+      const atInsert = await untilWaiters(sql, (waiters) => waiters.some((waiter) =>
+        TICK_STATEMENT.test(waiter.query) && waiter.blockedBy.includes(replicaPid)), [ticking.ended]);
+      const tickWaiter = atInsert.find((waiter) => TICK_STATEMENT.test(waiter.query));
+      assert.ok(tickWaiter && tickWaiter.blockedBy.includes(replicaPid),
+        `the tick is held at its insert by the other replica's item: ${JSON.stringify(atInsert)}`);
+
+      await remover.query('BEGIN');
+      removing = started<unknown>(remover.query(
+        `SELECT "id" FROM "project" WHERE "id" = $1::uuid AND "owner_id" = $2::uuid FOR UPDATE`,
+        [w.projectId, w.ownerId]));
+      const both = await untilWaiters(sql, (waiters) => waiters.some((waiter) =>
+        waiter.query.startsWith('SELECT "id" FROM "project"')), [removing.ended, ticking.ended]);
+      const removeWaiter = both.find((waiter) => waiter.query.startsWith('SELECT "id" FROM "project"'));
+      assert.ok(removeWaiter?.blockedBy.includes(tickWaiter.pid),
+        `the delete's FOR UPDATE of the project waits for the tick: ${JSON.stringify(both)}`);
+      assert.equal(ticking.ended.settled, false, 'the tick is still held at its insert');
+
+      await replica.query('ROLLBACK');
+      const ticked = await ticking.result;
+      assert.equal(ticked.error, null, `the tick failed: ${(ticked.error as Error | null)?.message}`);
+      const opened = (ticked.value ?? []).filter((item) => item.projectId === w.projectId);
+      assert.equal(opened.length, 1, 'the tick opened the claim’s item once the other replica’s was rolled back');
+      const took = await removing.result;
+      assert.equal(took.error, null, `the delete's lock failed: ${(took.error as Error | null)?.message}`);
+      await remover.query(`DELETE FROM "project" WHERE "id" = $1::uuid`, [w.projectId]);
+      await remover.query('COMMIT');
+      assert.equal(await stack.db.project.count({ where: { id: w.projectId } }), 0, 'the project is gone');
+      assert.equal(await stack.db.projectIntegrationJob.count({ where: { id: jobId } }), 0, 'and its job with it');
+      assert.equal(await stack.db.projectOpenItem.count({ where: { id: opened[0]!.itemId } }), 0,
+        'and the item the tick opened');
+    } finally {
+      // Every connection lets go before any call is awaited: a call a failed assertion left running may be waiting on
+      // any of them. The remover's ROLLBACK runs once its lock has been granted.
+      await first.query('ROLLBACK').catch(() => undefined);
+      await replica.query('ROLLBACK').catch(() => undefined);
+      await first.end().catch(() => undefined);
+      await replica.end().catch(() => undefined);
       await remover.query('ROLLBACK').catch(() => undefined);
       await Promise.all([removing?.result, ticking?.result]);
       await remover.end().catch(() => undefined);
@@ -1824,7 +2003,7 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
       await holder.query('BEGIN');
       await holder.query(`UPDATE "task" SET "title" = "title" WHERE "id" = $1::uuid`, [taskId]);
       await holder.query(`SELECT "id" FROM "task" WHERE "id" = $1::uuid FOR UPDATE`, [taskId]);
-      ticking = tickOn(tickDb);
+      ticking = tickOn(tickDb, HELD_TICK_LOCK_TIMEOUT_MS);
       const waiting = await untilLockWaits(sql, 1, [ticking.ended]);
       assert.equal(ticking.ended.settled, false, 'the tick did not wait for the newer version of the task');
       assert.deepEqual(waiting.map((query) => TICK_STATEMENT.test(query)), [true],
@@ -1853,6 +2032,192 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
       await prober.end().catch(() => undefined);
       await ticking?.result;
       await tickDb.$disconnect().catch(() => undefined);
+    }
+  });
+
+  await t.test('(24b) a project’s newer version is waited for before the tick takes any task', async () => {
+    // (24) one rank up, and what it shows about the CTE's order: the projects are taken before the tasks. One open
+    // transaction has updated a due claim's project without changing a key and then holds it FOR UPDATE, so the tick waits
+    // in its CTE at the project — and holds none of the due tasks while it does: a prober's FOR UPDATE NOWAIT on the
+    // claim's task, which the tick's FOR KEY SHARE of it would refuse, is granted. A CTE that took the tasks first would
+    // hold this one through the wait. Once the holder commits, the tick goes on and opens the item.
+    const w = await world(stack, 'newer-project', 'PROJECT_BRANCH');
+    const { taskId } = await doneTask(stack, w, 'newer-project');
+    const job = await claim(stack, w);
+    await ageClaim(stack, job.jobId, 26 * MINUTE);
+    const holder = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+    const prober = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+    await holder.connect();
+    await prober.connect();
+    const tickDb = prismaClientFor(url);
+    let ticking: ReturnType<typeof tickOn> | undefined;
+    try {
+      await holder.query('BEGIN');
+      await holder.query(`UPDATE "project" SET "title" = "title" WHERE "id" = $1::uuid`, [w.projectId]);
+      await holder.query(`SELECT "id" FROM "project" WHERE "id" = $1::uuid FOR UPDATE`, [w.projectId]);
+      ticking = tickOn(tickDb, HELD_TICK_LOCK_TIMEOUT_MS);
+      const waiting = await untilLockWaits(sql, 1, [ticking.ended]);
+      assert.equal(ticking.ended.settled, false, 'the tick did not wait for the newer version of the project');
+      assert.deepEqual(waiting.map((query) => TICK_STATEMENT.test(query)), [true],
+        `the waiting statement is the tick’s: ${JSON.stringify(waiting)}`);
+      await prober.query('BEGIN');
+      await assert.doesNotReject(
+        prober.query(`SELECT "id" FROM "task" WHERE "id" = $1::uuid FOR UPDATE NOWAIT`, [taskId]),
+        'the tick holds the claim’s task while it waits for the project: it took the tasks first');
+      await prober.query('ROLLBACK');
+
+      await holder.query('COMMIT');
+      const ticked = await ticking.result;
+      assert.equal(ticked.error, null, `the tick failed: ${(ticked.error as Error | null)?.message}`);
+      const items = await leaseItems(stack, w.projectId);
+      assert.deepEqual(items.map((item) => [item.integrationJobId, item.taskId, item.state]),
+        [[job.jobId, taskId, 'OPEN']], 'the claim is still silent, and the tick opened its item once it went on');
+      assert.deepEqual(
+        (ticked.value ?? []).filter((item) => item.projectId === w.projectId).map((item) => item.itemId),
+        items.map((item) => item.id),
+        'and it says so',
+      );
+    } finally {
+      await prober.query('ROLLBACK').catch(() => undefined);
+      await holder.query('ROLLBACK').catch(() => undefined);
+      await holder.end().catch(() => undefined);
+      await prober.end().catch(() => undefined);
+      await ticking?.result;
+      await tickDb.$disconnect().catch(() => undefined);
+    }
+  });
+
+  await t.test('(25) a wait longer than the lock timeout leaves the alarm to the next tick, and loses nothing', async () => {
+    // Every lock wait of the alarm is cut at its lock timeout. Forced with (24)'s wait — a due claim's task updated without
+    // changing a key and then held FOR UPDATE by one open transaction — under a short timeout: the tick gives up while the
+    // holder is still open, opens nothing and says so in one warning. Once the holder has ended, the next tick opens the
+    // item: the claim's card is a tick late, not lost.
+    const w = await world(stack, 'bounded-wait', 'PROJECT_BRANCH');
+    const { taskId } = await doneTask(stack, w, 'bounded-wait');
+    const job = await claim(stack, w);
+    await ageClaim(stack, job.jobId, 26 * MINUTE);
+    const holder = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+    await holder.connect();
+    const tickDb = prismaClientFor(url);
+    const warned: string[] = [];
+    let ticking: ReturnType<typeof tickOn> | undefined;
+    try {
+      await holder.query('BEGIN');
+      await holder.query(`UPDATE "task" SET "title" = "title" WHERE "id" = $1::uuid`, [taskId]);
+      await holder.query(`SELECT "id" FROM "task" WHERE "id" = $1::uuid FOR UPDATE`, [taskId]);
+      const startedAt = Date.now();
+      ticking = tickOn(tickDb, SHORT_LOCK_TIMEOUT_MS, warned);
+      await untilSettled([ticking.ended], 10_000);
+      assert.equal(ticking.ended.settled, true,
+        `the tick was still waiting for the task ${Date.now() - startedAt} ms later, with the holder open`);
+      const ticked = await ticking.result;
+      const tookMs = Date.now() - startedAt;
+      assert.equal(ticked.error, null,
+        `the tick failed instead of leaving its alarm to the next one: ${(ticked.error as Error | null)?.message}`);
+      assert.deepEqual(ticked.value, [], 'a tick that gave up returns no item');
+      assert.ok(tookMs >= SHORT_LOCK_TIMEOUT_MS, `it returned after ${tookMs} ms, so it did not wait out its timeout`);
+      assert.deepEqual(await leaseItems(stack, w.projectId), [], 'and it opened nothing');
+      assert.equal(warned.filter((line) => /alarm left to the next tick/.test(line)).length, 1,
+        `it said once that it left the alarm to the next tick: ${JSON.stringify(warned)}`);
+
+      await holder.query('COMMIT');
+      const next = await new ProjectOpenItemEscalationService(
+        stack.prisma, recordingPush().push as never).openLeaseExpiredItems();
+      const items = await leaseItems(stack, w.projectId);
+      assert.deepEqual(items.map((item) => [item.integrationJobId, item.taskId, item.state]),
+        [[job.jobId, taskId, 'OPEN']], 'the claim is still silent, and the next tick opens its item');
+      assert.deepEqual(next.filter((item) => item.projectId === w.projectId).map((item) => item.itemId),
+        items.map((item) => item.id), 'and says so');
+    } finally {
+      await holder.query('ROLLBACK').catch(() => undefined);
+      await holder.end().catch(() => undefined);
+      await ticking?.result;
+      await tickDb.$disconnect().catch(() => undefined);
+    }
+  });
+
+  await t.test('(26) a tick cut at its lock timeout does not open a card the owner closed meanwhile a second time', async () => {
+    // What the bound is for. A statement that waits keeps the snapshot it started with, and its NOT EXISTS reads that
+    // snapshot, so a card another replica opened after it, and the owner closed during the wait, is not seen; the partial
+    // unique index covers OPEN items only, so a tick that waited that out went on, opened the same key a second time, and
+    // its caller pushed it again. Replayed here with two silent claims of one project. One open transaction holds the
+    // second claim's task as (24) does, and tick A waits there in its CTE with both claims due in its snapshot. The second
+    // claim then reports — A holds no job while it waits — so for tick B, another replica's, only the first claim is due,
+    // and B opens its card without touching what A waits for. The owner closes that card by hand, and the holder ends. A
+    // gave up at its timeout before any of that, so nothing of it goes on, and a later tick sees the closed card: one row,
+    // ever, under the first claim's key.
+    const w = await world(stack, 'one-card-ever', 'PROJECT_BRANCH');
+    await doneTask(stack, w, 'one-card-ever');
+    const first = await claim(stack, w);
+    await ageClaim(stack, first.jobId, 26 * MINUTE);
+    const firstKey = leaseExpiredDedupeKey(first.jobId, first.claimGeneration);
+    const { taskId: secondTask, sessionId: secondSession } = await bareWork(stack, w, 'one-card-ever-second');
+    const second = await rawRunningJob(stack, w, {
+      label: 'one-card-ever-second', kind: 'LAND_TASK', claimedAtMsAgo: 40 * MINUTE, heartbeatMsAgo: 30 * MINUTE,
+      targetRef: w.upstreamRef, taskId: secondTask, sessionId: secondSession,
+    });
+    const holder = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+    const reporter = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
+    await holder.connect();
+    await reporter.connect();
+    // An alarm that does not give up may hold the second job through its wait; the report then gives up rather than
+    // hanging this file.
+    await reporter.query(`SET lock_timeout = '10s'`);
+    const aDb = prismaClientFor(url);
+    const warned: string[] = [];
+    const running: Array<Promise<unknown>> = [];
+    try {
+      await holder.query('BEGIN');
+      await holder.query(`UPDATE "task" SET "title" = "title" WHERE "id" = $1::uuid`, [secondTask]);
+      await holder.query(`SELECT "id" FROM "task" WHERE "id" = $1::uuid FOR UPDATE`, [secondTask]);
+      const tickA = tickOn(aDb, SHORT_LOCK_TIMEOUT_MS, warned);
+      running.push(tickA.result);
+      const waiting = await untilLockWaits(sql, 1, [tickA.ended]);
+      assert.ok(tickA.ended.settled || waiting.some((query) => TICK_STATEMENT.test(query)),
+        `tick A neither waited for the second claim's task nor ended: ${JSON.stringify(waiting)}`);
+      await untilSettled([tickA.ended], 10_000);
+      const aEndedWhileHeld = tickA.ended.settled;
+
+      // The second claim talks again, committed.
+      await reporter.query(`UPDATE "project_integration_job" SET "heartbeat_at" = now() WHERE "id" = $1::uuid`, [second]);
+      // Tick B: only the first claim is due for it, and it opens that claim's card.
+      const tickB = started(new ProjectOpenItemEscalationService(
+        stack.prisma, recordingPush().push as never).openLeaseExpiredItems());
+      running.push(tickB.result);
+      await untilSettled([tickB.ended], 10_000);
+      assert.equal(tickB.ended.settled, true, 'tick B did not end while tick A’s holder was open');
+      const b = await tickB.result;
+      assert.equal(b.error, null, `tick B failed: ${(b.error as Error | null)?.message}`);
+      const [card] = (b.value ?? []).filter((item) => item.projectId === w.projectId);
+      assert.ok(card, 'tick B opened the first claim’s card');
+      await stack.openItems.resolveOpenItem(
+        w.ownerId, w.projectId, card.itemId, { note: 'I restarted the runner by hand' }, { kind: 'OWNER' });
+
+      await holder.query('COMMIT');
+      const a = await tickA.result;
+      const later = await new ProjectOpenItemEscalationService(
+        stack.prisma, recordingPush().push as never).openLeaseExpiredItems();
+
+      const rows = await stack.db.projectOpenItem.findMany({
+        where: { projectId: w.projectId, dedupeKey: firstKey },
+        select: { id: true, state: true, resolution: true, resolvedBy: true },
+      });
+      assert.deepEqual(rows.map((row) => [row.id, row.state, row.resolution, row.resolvedBy]),
+        [[card.itemId, 'RESOLVED', 'HANDLED', 'USER']],
+        'one row, ever, under the first claim’s key: the card tick B opened and the owner closed');
+      assert.equal(a.error, null, `tick A failed: ${(a.error as Error | null)?.message}`);
+      assert.deepEqual((a.value ?? []).filter((item) => item.projectId === w.projectId), [], 'tick A opened nothing');
+      assert.equal(aEndedWhileHeld, true, 'tick A was still waiting long after its lock timeout');
+      assert.equal(warned.filter((line) => /alarm left to the next tick/.test(line)).length, 1,
+        `tick A said once that it left the alarm to the next tick: ${JSON.stringify(warned)}`);
+      assert.deepEqual(later.filter((item) => item.projectId === w.projectId), [],
+        'a later tick opened nothing: the first claim’s card is closed and the second claim is talking');
+    } finally {
+      await holder.query('ROLLBACK').catch(() => undefined);
+      await holder.end().catch(() => undefined);
+      await reporter.end().catch(() => undefined);
+      await Promise.all(running);
+      await aDb.$disconnect().catch(() => undefined);
     }
   });
 });
