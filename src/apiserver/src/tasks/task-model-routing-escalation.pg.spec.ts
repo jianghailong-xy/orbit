@@ -56,6 +56,8 @@ const CRASH = 'the engine exited 1';
 /** Claude Code's refusals once a window is spent: two of the usage-limit markers. */
 const SESSION_LIMIT = "You've hit your session limit · resets 6:20pm (Europe/Berlin)";
 const WEEKLY_LIMIT = "You've hit your weekly limit · resets 1pm (Europe/Berlin)";
+/** OpenAI turning a run away at admission: transient, across models, nothing about the task. */
+const AT_CAPACITY = 'Selected model is at capacity. Please try a different model.';
 
 interface Services {
   db: PrismaClient;
@@ -371,6 +373,55 @@ test('a usage-limit failure is not counted: it neither raises the tier nor break
         { priorRuns: 3, priorFailures: 1, quotaFailuresSkipped: 1 },
       );
       assert.deepEqual(await sessionOf(db, run4), { provider: 'claude', model: OPUS, effort: 'high' });
+    } finally {
+      await services.db.$disconnect();
+    }
+  });
+
+test('a model-at-capacity failure is not counted: it neither raises the tier nor breaks the chain before it',
+  { skip, timeout: 120_000 }, async () => {
+    assertCoordinatorPgUrlIsIsolated(URL!);
+    const services = connect();
+    try {
+      const { db } = services;
+      const target = await fixture(services, 'capacity');
+      const taskId = await taskIn(db, target);
+      const run1 = await runNow(services, target, taskId);
+      await end(db, run1, RunStatus.FAILED, { error: AT_CAPACITY });
+
+      // Run 1 only found the model at capacity: run 2 is the suggestion, M.
+      const run2 = await runNow(services, target, taskId);
+      let row = await decisionOf(db, run2);
+      assert.deepEqual(routed(row), {
+        level: 'M', applied: true, model: SONNET, effort: 'medium', lastRun: null, escalatedFrom: null,
+      });
+      assert.deepEqual(row.reasons, [
+        `Tier M: suggested by the coordinator — ${HINT_REASON}`, 'Run 1 found the model at capacity — not counted', ENGINE,
+      ]);
+
+      // A genuine failure still counts: run 3 is L. Run 3 then finds the model at capacity, so run 4
+      // stays at L rather than climbing to XL on it.
+      await end(db, run2, RunStatus.FAILED, { error: CRASH });
+      const run3 = await runNow(services, target, taskId);
+      assert.equal((await decisionOf(db, run3)).level, 'L');
+      await end(db, run3, RunStatus.FAILED, { error: AT_CAPACITY.toUpperCase() });
+      const run4 = await runNow(services, target, taskId);
+
+      row = await decisionOf(db, run4);
+      assert.deepEqual(routed(row), {
+        level: 'L', applied: true, model: OPUS, effort: 'high',
+        lastRun: { ordinal: 2, level: 'M', model: SONNET, outcome: 'FAILED' },
+        escalatedFrom: 'M',
+      });
+      assert.deepEqual(row.reasons, [
+        'Tier L — raised after run 2 (M) failed', 'Run 3 found the model at capacity — not counted', ENGINE,
+      ]);
+      const features = row.features as Record<string, unknown>;
+      assert.deepEqual(
+        { priorRuns: features.priorRuns, priorFailures: features.priorFailures,
+          quotaFailuresSkipped: features.quotaFailuresSkipped, capacityFailuresSkipped: features.capacityFailuresSkipped },
+        { priorRuns: 3, priorFailures: 1, quotaFailuresSkipped: 0, capacityFailuresSkipped: 1 },
+      );
     } finally {
       await services.db.$disconnect();
     }

@@ -124,6 +124,64 @@ type codexAppActiveTurn struct {
 	// steers: the mid-turn messages written into this turn, keyed by the Orbit turn id sent as
 	// clientUserMessageId — the only key Codex echoes back (codex_steer.go).
 	steers map[string]*codexSteerDelivery
+	// prepared is the input turn/start was sent, kept so a capacity retry replays it unchanged.
+	prepared *codexPreparedTurn
+	// capacityRetries counts the replays spent on "at capacity" (codexCapacityRetryDelays).
+	capacityRetries int
+	// retryWake is open while a capacity retry waits out its backoff; an interrupt closes it so
+	// the wait ends at once instead of holding a Stop or an `end` for up to two minutes.
+	retryWake chan struct{}
+}
+
+type codexCapacityRetry struct {
+	orbitTurnID string
+	prepared    codexPreparedTurn
+	attempt     int
+	delay       time.Duration
+	wake        chan struct{}
+	openSteers  []string
+}
+
+// beginCodexCapacityRetry turns a finalize of a turn that failed "at capacity" into a replay of the
+// same turn, while retries remain: the active turn goes back to its not-yet-started state — no
+// Codex turn id, so an interrupt in the backoff finalizes it as interrupted rather than addressing
+// a turn that is over — and the reply text the failed attempt left behind is dropped. Steers the
+// failed attempt still held are claimed for the caller to answer: Codex discarded them with it.
+func beginCodexCapacityRetry(activeMu *sync.Mutex, active **codexAppActiveTurn, result codexTurnResult, threadID string) (codexCapacityRetry, bool) {
+	activeMu.Lock()
+	defer activeMu.Unlock()
+	a := *active
+	if a == nil || a.finishing || a.interruptRequested || a.prepared == nil || a.capacityRetries >= len(codexCapacityRetryDelays) {
+		return codexCapacityRetry{}, false
+	}
+	status, errText := result.Status, result.Error
+	if status == "" {
+		status = a.result.Status
+	}
+	if errText == "" {
+		errText = a.result.Error
+	}
+	if status != stFailed || !isCodexCapacityError(errText) {
+		return codexCapacityRetry{}, false
+	}
+	retry := codexCapacityRetry{
+		orbitTurnID: a.orbitTurnID,
+		prepared:    *a.prepared,
+		attempt:     a.capacityRetries + 1,
+		delay:       codexCapacityRetryDelays[a.capacityRetries],
+		wake:        make(chan struct{}),
+		openSteers:  takeOpenCodexSteers(a),
+	}
+	a.capacityRetries++
+	a.retryWake = retry.wake
+	a.codexTurnID = ""
+	a.startSent = false
+	a.interruptSent = false
+	a.result = codexTurnResult{Status: stSucceeded, Subtype: "completed", RuntimeSessionID: threadID}
+	a.fullText.Reset()
+	a.deltaText.Reset()
+	a.thinkText.Reset()
+	return retry, true
 }
 
 type codexAppTurnSnapshot struct {
@@ -282,7 +340,43 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		activeMu: &activeMu, active: &active, emitFor: emitFor, completeTurn: completeTurn,
 	}
 
+	// sendTurn sends the active turn's turn/start; assigned below, once what it calls exists.
+	var sendTurn func(orbitTurnID string, prepared codexPreparedTurn)
+
+	// retryAtCapacity replays a turn that failed "at capacity" instead of finalizing it, after
+	// a backoff an interrupt cuts short. Every Codex turn of the session ends through
+	// finalizeActive — those that run Codex's auto_review approvals reviewer included — so all
+	// of them get it.
+	retryAtCapacity := func(result codexTurnResult) bool {
+		retry, ok := beginCodexCapacityRetry(&activeMu, &active, result, threadID)
+		if !ok {
+			return false
+		}
+		for _, steerTurnID := range retry.openSteers {
+			steerDispatch.fail(steerTurnID, errCodexSteerDropped)
+		}
+		logln("codex model at capacity for", job.SessionID+"; retrying turn", retry.orbitTurnID,
+			fmt.Sprintf("in %s (retry %d of %d)", retry.delay, retry.attempt, len(codexCapacityRetryDelays)))
+		asyncWg.Add(1)
+		go func() {
+			defer asyncWg.Done()
+			timer := time.NewTimer(retry.delay)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+			case <-retry.wake:
+			case <-workerCtx.Done():
+				return
+			}
+			sendTurn(retry.orbitTurnID, retry.prepared)
+		}()
+		return true
+	}
+
 	finalizeActive := func(result codexTurnResult) {
+		if retryAtCapacity(result) {
+			return
+		}
 		a, snapshot, ok := beginCodexAppTurnFinalize(&activeMu, &active)
 		if !ok {
 			return
@@ -504,56 +598,64 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 			if workerCtx.Err() != nil {
 				return
 			}
+			activeMu.Lock()
+			if active != nil && active.orbitTurnID == respCopy.TurnID {
+				active.prepared = &prepared
+			}
+			activeMu.Unlock()
+			sendTurn(respCopy.TurnID, prepared)
+		}()
+	}
 
-			ok, interrupted := beginCodexAppTurnStart(&activeMu, &active, respCopy.TurnID)
-			if !ok {
+	sendTurn = func(orbitTurnID string, prepared codexPreparedTurn) {
+		ok, interrupted := beginCodexAppTurnStart(&activeMu, &active, orbitTurnID)
+		if !ok {
+			return
+		}
+		if interrupted {
+			finalizeActive(codexTurnResult{Status: stInterrupted, Subtype: "interrupted"})
+			return
+		}
+
+		codexTurnID, err := app.startTurn(workerCtx, threadID, job, execDir, upDir, orbitTurnID, prepared.Prompt, prepared.ImagePaths)
+		if err != nil {
+			// Cleanup cancellation is a resumable detach, not a failed turn. In
+			// particular, never synthesize FAILED after a shutdown drain timeout.
+			if workerCtx.Err() != nil {
+				return
+			}
+			activeMu.Lock()
+			same := active != nil && active.orbitTurnID == orbitTurnID
+			interrupted := same && active.interruptRequested
+			activeMu.Unlock()
+			if !same {
 				return
 			}
 			if interrupted {
 				finalizeActive(codexTurnResult{Status: stInterrupted, Subtype: "interrupted"})
 				return
 			}
-
-			codexTurnID, err := app.startTurn(workerCtx, threadID, job, execDir, upDir, respCopy.TurnID, prepared.Prompt, prepared.ImagePaths)
-			if err != nil {
-				// Cleanup cancellation is a resumable detach, not a failed turn. In
-				// particular, never synthesize FAILED after a shutdown drain timeout.
-				if workerCtx.Err() != nil {
-					return
-				}
-				activeMu.Lock()
-				same := active != nil && active.orbitTurnID == respCopy.TurnID
-				interrupted := same && active.interruptRequested
-				activeMu.Unlock()
-				if !same {
-					return
-				}
-				if interrupted {
-					finalizeActive(codexTurnResult{Status: stInterrupted, Subtype: "interrupted"})
-					return
-				}
-				emit(evError, map[string]interface{}{"message": "failed to start codex turn: " + err.Error()})
-				finalizeActive(codexTurnResult{
-					Status:  stFailed,
-					Subtype: "turn_start_failed",
-					Error:   err.Error(),
-					Result:  err.Error(),
-				})
-				return
-			}
-			recordCodexTurnID(respCopy.TurnID, codexTurnID)
-			// The opening turn is underway: name the session in a side thread of this same
-			// app-server, once, when the control plane asked for it (codex_naming.go).
-			if firstSpawn && !resumedThread && job.Naming != nil {
-				namingOnce.Do(func() {
-					asyncWg.Add(1)
-					go func() {
-						defer asyncWg.Done()
-						nameCodexSession(workerCtx, t, app, job)
-					}()
-				})
-			}
-		}()
+			emit(evError, map[string]interface{}{"message": "failed to start codex turn: " + err.Error()})
+			finalizeActive(codexTurnResult{
+				Status:  stFailed,
+				Subtype: "turn_start_failed",
+				Error:   err.Error(),
+				Result:  err.Error(),
+			})
+			return
+		}
+		recordCodexTurnID(orbitTurnID, codexTurnID)
+		// The opening turn is underway: name the session in a side thread of this same
+		// app-server, once, when the control plane asked for it (codex_naming.go).
+		if firstSpawn && !resumedThread && job.Naming != nil {
+			namingOnce.Do(func() {
+				asyncWg.Add(1)
+				go func() {
+					defer asyncWg.Done()
+					nameCodexSession(workerCtx, t, app, job)
+				}()
+			})
+		}
 	}
 
 	waitForIdle := func() {
@@ -744,6 +846,10 @@ func requestCodexAppInterrupt(activeMu *sync.Mutex, active **codexAppActiveTurn)
 		return "", false
 	}
 	(*active).interruptRequested = true
+	if (*active).retryWake != nil {
+		close((*active).retryWake)
+		(*active).retryWake = nil
+	}
 	if !(*active).startSent && (*active).codexTurnID == "" {
 		return "", true
 	}
@@ -760,7 +866,9 @@ func markCodexAppTurnStarted(activeMu *sync.Mutex, active **codexAppActiveTurn, 
 	}
 	activeMu.Lock()
 	defer activeMu.Unlock()
-	if *active == nil || (*active).finishing {
+	// !startSent: a capacity retry is waiting out its backoff, and this id names the attempt that
+	// already failed.
+	if *active == nil || (*active).finishing || !(*active).startSent {
 		return "", ""
 	}
 	if orbitTurnID != "" && (*active).orbitTurnID != orbitTurnID {
@@ -785,6 +893,7 @@ func beginCodexAppTurnStart(activeMu *sync.Mutex, active **codexAppActiveTurn, o
 	if *active == nil || (*active).finishing || (*active).orbitTurnID != orbitTurnID {
 		return false, false
 	}
+	(*active).retryWake = nil
 	if (*active).interruptRequested {
 		return true, true
 	}

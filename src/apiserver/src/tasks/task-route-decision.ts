@@ -315,6 +315,15 @@ function quotaFailure(error: string | null): boolean {
 }
 
 /**
+ * "Selected model is at capacity": the provider turned the run away at admission, for minutes and
+ * across models, so like a spent quota it says nothing about the task. Keep the match identical to
+ * isCodexCapacityError in src/runner-go/codex.go.
+ */
+function capacityFailure(error: string | null): boolean {
+  return error?.toLowerCase().includes('at capacity') ?? false;
+}
+
+/**
  * The task's work runs as the router reads them (§3.3): newest first, numbered in the order they
  * were started ("run 1" is the first), each with the tier its own Route Decision named — a shadow
  * one included — and how it ended.
@@ -360,6 +369,7 @@ async function readRunHistory(
       ordinal: index + 1,
       status: run.status,
       quotaFailure: run.status === RunStatus.FAILED && quotaFailure(run.error),
+      capacityFailure: run.status === RunStatus.FAILED && capacityFailure(run.error),
       level: MODEL_ROUTING_LEVELS.find((level) => level === levels.get(run.id)) ?? null,
       model: run.model,
       effort: run.effort,
@@ -440,9 +450,11 @@ export async function planTaskRunRoute(
     },
     engines,
   });
-  // The run the router compared against: the newest one that did not stop at a usage limit.
-  const skipped = history.findIndex((run) => !run.quotaFailure);
+  // The run the router compared against: the newest one that did not stop at a usage limit or
+  // at a model at capacity.
+  const skipped = history.findIndex((run) => !run.quotaFailure && !run.capacityFailure);
   const last = skipped < 0 ? undefined : history[skipped];
+  const passedOver = skipped < 0 ? history : history.slice(0, skipped);
   const lastLevel = last ? priorLevel(last, env.runtime) : null;
   const escalatedFrom = decision.level && lastLevel && last?.outcome !== 'OK'
     && MODEL_ROUTING_LEVELS.indexOf(decision.level) > MODEL_ROUTING_LEVELS.indexOf(lastLevel)
@@ -483,8 +495,10 @@ export async function planTaskRunRoute(
       dependents,
       promptChars: prompt.length,
       priorRuns: history.length,
-      priorFailures: history.filter((run) => run.outcome !== 'OK' && !run.quotaFailure).length,
-      quotaFailuresSkipped: skipped < 0 ? history.length : skipped,
+      priorFailures: history
+        .filter((run) => run.outcome !== 'OK' && !run.quotaFailure && !run.capacityFailure).length,
+      quotaFailuresSkipped: passedOver.filter((run) => run.quotaFailure).length,
+      capacityFailuresSkipped: passedOver.filter((run) => !run.quotaFailure && run.capacityFailure).length,
       lastRun: last
         ? { ordinal: last.ordinal, level: lastLevel, model: last.model ?? null, outcome: last.outcome }
         : null,
