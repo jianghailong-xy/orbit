@@ -1,0 +1,4 @@
+D4 first session on a managed runner. Please do exactly this, and nothing else:
+1. Run one shell command that writes the single line D4-MARKER-7Q2K into a file named d4-first.txt in the current directory, then prints the current directory, the user id and that file's contents (for example: printf 'D4-MARKER-7Q2K\n' > d4-first.txt && pwd && id -u && cat d4-first.txt).
+2. Reply in one short sentence that names the file, the directory and repeats the marker.
+Keep the marker in mind: I will ask you about it later in this conversation.

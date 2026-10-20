@@ -1,0 +1,15 @@
+[orbit-runner 2026-10-20T23:18:57.591Z] managed runner instance identity read; it is sent with every request
+[orbit-runner 2026-10-20T23:18:57.591Z] volume check: 0 checkouts in 0 repositories after start; 0 stale lock files removed, 0 branches restored, 0 checkouts damaged
+[orbit-runner 2026-10-20T23:18:57.591Z] volume syncs: before reports only; the volume is a directory of /dev/nvme0n1p3 (ext4), which it shares, so a sync behind every tool would write back the whole filesystem
+[orbit-runner 2026-10-20T23:18:57.591Z] runner "orbit-managed" online -> http://172.18.0.1:2714 (max 2 concurrent)
+[orbit-runner 2026-10-20T23:19:12.597Z] claude plan-usage unavailable: open /var/lib/orbit/home/.claude/.credentials.json: no such file or directory
+[orbit-runner 2026-10-20T23:23:46.136Z] claim failed: Get "http://172.18.0.1:2714/api/runner/sessions/claim": EOF
+[orbit-runner 2026-10-20T23:23:57.595Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:24:53.518Z] claim failed: Get "http://172.18.0.1:2714/api/runner/sessions/claim": EOF
+[orbit-runner 2026-10-20T23:24:57.593Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:25:27.596Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:32:00.818Z] claim failed: Get "http://172.18.0.1:2714/api/runner/sessions/claim": EOF
+[orbit-runner 2026-10-20T23:32:27.596Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:27.078Z] claim failed: Get "http://172.18.0.1:2714/api/runner/sessions/claim": EOF
+[orbit-runner 2026-10-20T23:33:27.592Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:57.593Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
