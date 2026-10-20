@@ -31,9 +31,6 @@ RUN test "$(node --version)" = v26.10.0 \
       /opt/claude/bin/claude
 
 FROM node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
-ARG ORBIT_SOURCE_SHA
-LABEL org.opencontainers.image.title="Orbit optional managed runner" \
-      org.opencontainers.image.revision="$ORBIT_SOURCE_SHA"
 # Bootstrap HTTPS trust from Node's bundled public roots before installing Debian's
 # ca-certificates. Snapshot expiry is disabled; apt signature checks remain enabled.
 # apt 3 verifies HTTPS with OpenSSL, whose default CA file (/usr/lib/ssl/cert.pem) does not
@@ -54,10 +51,8 @@ RUN mkdir -p /etc/ssl/certs \
  && install -d -o 10001 -g 10001 -m 0700 /var/lib/orbit /var/lib/orbit/home
 
 COPY --from=orbit-build /usr/local/go/ /usr/local/go/
-COPY --from=orbit-build --chmod=0755 /out/orbit /usr/local/bin/orbit
 COPY --from=codex /opt/codex/ /opt/codex/
 COPY --from=claude /opt/claude/ /opt/claude/
-COPY --chmod=0755 deploy/managed-runner/image/entrypoint.py /usr/local/bin/orbit-container
 COPY --chmod=0644 deploy/managed-runner/image/pins.json /usr/local/share/orbit/pins.json
 ENV PATH="/usr/local/go/bin:${PATH}" \
     HOME=/var/lib/orbit/home \
@@ -80,6 +75,14 @@ RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex \
  && chmod 0755 /usr/local/share/orbit \
  && git config --system user.name 'Orbit Runner' \
  && git config --system user.email runner@orbit.invalid
+# What changes with every source commit comes after the slow steps above, so a new commit reuses
+# them and rebuilds only the runner binary, the entrypoint and the version record. A build argument
+# reaches every RUN after its ARG, so the source SHA must not be declared any earlier.
+COPY --from=orbit-build --chmod=0755 /out/orbit /usr/local/bin/orbit
+COPY --chmod=0755 deploy/managed-runner/image/entrypoint.py /usr/local/bin/orbit-container
+ARG ORBIT_SOURCE_SHA
+LABEL org.opencontainers.image.title="Orbit optional managed runner" \
+      org.opencontainers.image.revision="$ORBIT_SOURCE_SHA"
 # Record actual build-time versions without a login, registration or model call.
 RUN <<'SH'
 set -eu
