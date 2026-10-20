@@ -69,6 +69,10 @@ func TestAntigravityApprovalPolicyDecides(t *testing.T) {
 	write := func(path string) map[string]interface{} {
 		return map[string]interface{}{"TargetFile": path, "CodeContent": "x"}
 	}
+	// agy 1.4.3's write_file, which was write_to_file.
+	writeFile := func(path string) map[string]interface{} {
+		return map[string]interface{}{"Path": path, "Content": "x"}
+	}
 	cases := []struct {
 		name   string
 		mode   string
@@ -107,6 +111,20 @@ func TestAntigravityApprovalPolicyDecides(t *testing.T) {
 		{"write checkout hooks in accept edits", "acceptEdits", "write_to_file", write(filepath.Join(w.work, ".agents", "hooks.json")), "ask", ""},
 		{"write nested checkout config in accept edits", "acceptEdits", "write_to_file", write(filepath.Join(w.work, "pkg", ".agents", "mcp_config.json")), "ask", ""},
 		{"write policy", "default", "replace_file_content", map[string]interface{}{"TargetFile": filepath.Join(w.gemini, "orbit", "approval-policy.json")}, "deny", "Orbit's own configuration"},
+		// The same reads and writes under agy 1.4.3's names: read_file, write_file and edit_file, each
+		// with a Path; its run_command has no Cwd.
+		{"1.4.3 command", "default", "run_command", map[string]interface{}{"CommandLine": "git status", "WaitMsBeforeAsync": 5000}, "ask", ""},
+		{"1.4.3 read workspace", "default", "read_file", map[string]interface{}{"Path": filepath.Join(w.work, "a.go")}, "allow", ""},
+		{"1.4.3 read artifact", "default", "read_file", map[string]interface{}{"Path": filepath.Join(w.artifacts, "task.md")}, "allow", ""},
+		{"1.4.3 read outside", "default", "read_file", map[string]interface{}{"Path": "/etc/passwd"}, "ask", ""},
+		{"1.4.3 read outside by rule", "default", "read_file", map[string]interface{}{"Path": filepath.Join(w.outside, "notes.md")}, "allow", ""},
+		{"1.4.3 write artifact", "default", "write_file", writeFile(filepath.Join(w.artifacts, "plan.md")), "allow", ""},
+		{"1.4.3 write workspace in default", "default", "write_file", writeFile(filepath.Join(w.work, "new.go")), "ask", ""},
+		{"1.4.3 write workspace in accept edits", "acceptEdits", "write_file", writeFile(filepath.Join(w.work, "pkg", "new.go")), "allow", ""},
+		{"1.4.3 edit workspace in accept edits", "acceptEdits", "edit_file", map[string]interface{}{"Path": filepath.Join(w.work, "a.go"), "Target": "x", "Replacement": "y"}, "allow", ""},
+		{"1.4.3 write checkout hooks in accept edits", "acceptEdits", "write_file", writeFile(filepath.Join(w.work, ".agents", "hooks.json")), "ask", ""},
+		{"1.4.3 write hooks.json", "acceptEdits", "write_file", writeFile(filepath.Join(w.gemini, "config", "hooks.json")), "deny", "Orbit's own configuration"},
+		{"1.4.3 edit policy", "default", "edit_file", map[string]interface{}{"Path": filepath.Join(w.gemini, "orbit", "approval-policy.json")}, "deny", "Orbit's own configuration"},
 		// Subagents run their tools with no hook at all.
 		{"subagent", "acceptEdits", "invoke_subagent", map[string]interface{}{"Subagents": []interface{}{}}, "deny", "Subagents are not available"},
 		{"subagent definition", "default", "define_subagent", map[string]interface{}{"name": "x"}, "deny", "Subagents are not available"},
@@ -167,6 +185,11 @@ func TestAntigravityApprovalSubjectIsWhatTheCardShows(t *testing.T) {
 		{"read_url_content", map[string]interface{}{"Url": "https://go.dev"}, "WebFetch", map[string]interface{}{"url": "https://go.dev"}},
 		{"call_mcp_tool", map[string]interface{}{"ServerName": "docs", "ToolName": "search", "Arguments": map[string]interface{}{"q": "x"}}, "mcp__docs__search", map[string]interface{}{"q": "x"}},
 		{"manage_task", map[string]interface{}{"Action": "send_input"}, "manage_task", map[string]interface{}{"Action": "send_input"}},
+		// agy 1.4.3's calls, as its PreToolUse hook is handed them.
+		{"run_command", map[string]interface{}{"CommandLine": "make", "WaitMsBeforeAsync": 5000, "toolSummary": "Build"}, "Bash", map[string]interface{}{"command": "make"}},
+		{"write_file", map[string]interface{}{"Path": "/w/a", "Content": "hi"}, "Write", map[string]interface{}{"file_path": "/w/a", "content": "hi"}},
+		{"edit_file", map[string]interface{}{"Path": "/w/a", "Target": "x", "Replacement": "y"}, "Edit", map[string]interface{}{"file_path": "/w/a", "old_string": "x", "new_string": "y"}},
+		{"read_file", map[string]interface{}{"Path": "/w/a", "StartLine": 1}, "Read", map[string]interface{}{"file_path": "/w/a"}},
 	} {
 		name, input := agyApprovalSubject(tc.raw, tc.args)
 		gotJSON, _ := json.Marshal(input)

@@ -490,6 +490,9 @@ func waitGone(t *testing.T, what string, gone func() bool) {
 	}
 }
 
+// agyToolCall is a mock:tool line for a call with every parameter some agy release requires — 1.4.2's
+// tools require toolAction, and its run_command a Cwd, both of which 1.4.3 refuses — which the mock
+// trims to what the running agy declares. name may list a renamed tool's names: view_file|read_file.
 func agyToolCall(name string, args map[string]interface{}) string {
 	args["toolSummary"] = name
 	args["toolAction"] = "Using " + name
