@@ -313,10 +313,12 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(load.contains("api.listSessions(view: .completed, projectId: address.projectID,"))
         XCTAssertTrue(load.contains("let rows = try await openRead.value + completedRead.value"))
         XCTAssertTrue(load.contains("let kept = SessionFilter.removing(trashingSessions, from: rows)"))
-        XCTAssertTrue(load.contains("projectSessions = SessionProjectMembers.members(of: address.projectID, in: kept)")
-                      && load.contains("+ landedRows(of: address.projectID, in: kept)"),
+        XCTAssertTrue(load.contains("let members = SessionProjectMembers.members(of: address.projectID, in: kept)")
+                      && load.contains(".filter { !$0.isLanding }")
+                      && load.contains("projectSessions = members + landedRows(of: address.projectID, in: kept)"),
                       "one rule — this project's, never Trash, each once, newest first (SessionProjectMembersTests) — "
-                        + "over the read less the rows on their way to Trash, plus the landing rows the group lists")
+                        + "over the read less the rows on their way to Trash, plus the landing rows the group lists, "
+                        + "and a landing only once")
         XCTAssertFalse(load.contains("view: address.view"))
         XCTAssertFalse(load.contains("view: .trash"))
         XCTAssertFalse(load.contains("agentID:"))
@@ -681,9 +683,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let opened = try XCTUnwrap(load.range(of: "projectSessions = SessionProjectMembers.members("))
         let read = try XCTUnwrap(load.range(of: "let rows = try await openRead.value + completedRead.value"))
         XCTAssertLessThan(opened.lowerBound, read.lowerBound, "the members are in hand before any read answers")
-        XCTAssertTrue(load.contains("projectCompletedSessions[key] = SessionProjectMembers.members(of: address.projectID, in: kept)")
-                      && load.contains(".filter { $0.effectiveLifecycleState != .open }"),
-                      "coming back to the project opens on its Completed members too")
+        XCTAssertTrue(load.contains("projectCompletedSessions[key] = members.filter { $0.effectiveLifecycleState != .open }"),
+                      "coming back to the project opens on its Completed members too, and never on a landing")
 
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")

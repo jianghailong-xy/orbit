@@ -14,10 +14,12 @@ the words and the door conditions on Linux.
     `Landing` chip, the ⋯ menu, and `Run by Orbit · runner <name>` (or `· settled 9:51`).
   - status card: `ProjectLandingHead` with the newest attempt's word/right slot, then §7.2 V6's
     rows — the step clock against its budget, the liveness clause, the claim and round, the usual
-    duration — and, once settled, the outcome card (`Merged into main`, the tasks now on main, the
-    passed check and the landed tree).
+    duration — and, once settled, the green outcome card with ✓ (`Merged into main`, the tasks now
+    on main, the passed check and the landed tree). A checking merge round ends with
+    `Merges on its own when it passes.`
   - timeline: the server's own sentences, section per attempt, the check output behind `Log ›`
-    (paged by the cursor), the running check's tail, and the grey `No report from … since …` band.
+    (paged by the cursor), the running check's dark tail under `<check> · live <elapsed>` (and a
+    failed check's tail inline), and the grey `No report from … since …` band.
   - footer: the read-only sentence and the one way out (`Open coordinator ›` / `Review Card ›`).
   - the ⋯ menu is the web's: ways to look (Open Task, Open Source Session, Open Coordinator, Review
     Card), then the doors the view's facts open (Stop Landing / Cancel Merge before the push,
@@ -41,7 +43,9 @@ the words and the door conditions on Linux.
   and `Open landing ›`; it rereads every 4 s while the landing RUNS and 15 s while QUEUED. A source
   conversation's bottom carries the derived `Landing · checking ›` / `On project/<id> ✓ ›` label.
   The delivery card's third link is `Open the landing ↗`. The owner card (X-E5) is headed
-  `Now yours — no report from the runner for <N>m` and leads with the server's ABANDON.
+  `Now yours — no report from the runner for <N>m`, leads with the server's red ABANDON, draws the
+  claim's three rows (`Landing`, `Runner`, `Step`), takes `Mark as handled`, and its footer says
+  the wait alone — the item is escalated at birth.
 
 ## Tests (Linux, `swift:6.1` in Docker)
 
@@ -91,15 +95,26 @@ workflow that ran on `probe/landing-session-native`; its pictures land in
 
 | picture | board |
 |---|---|
-| `ios/ios-05-a-live.png` | 05 a — a merge check running, LIVE |
-| `ios/ios-05-c-merged.png` | 05 c — the round merged |
+| `ios/ios-05-a-live.png` | 05 a — a merge check running, LIVE: the dark output block, the on-pass line |
+| `ios/ios-05-c-merged.png` | 05 c — the round merged, in the green success card |
 | `ios/ios-05-e-timeout-menu.png` | 05 e/f — a timed-out check, ⋯ menu open (Abandon / Re-run) |
+| `ios/ios-05-i-task-timeout.png` | 05 i — a task segment timed out, Retry + Abandon |
+| `ios/ios-04-b1-card-one-job.png` | 04 b1 — one-job Landing card, `Open landing ›` at its foot |
+| `ios/ios-04-b2-card-several-jobs.png` | 04 b2 — two-job card: a link per task row, none on the merge row |
+| `ios/ios-04-a2-jobs-list.png` | 04 a2 — the jobs list, a link per row |
+| `ios/ios-04-b4-merge-row-queued.png` | 04 b4 — the merge round's whole row, `+1 job queued · All jobs ›` |
 | `ios/ios-04-c1-landings-group.png` | 04 c1 — the Landings group, waiting + folded |
+| `ios/ios-04-c2-confirmed.png` | 04 c2 — the CONFIRMED card's foot and `Open landing ›` |
+| `ios/ios-04-c3-cancelling.png` | 04 c3 — cancelling, with `Cancel requested` |
+| `ios/ios-04-c5-check-timeout.png` | 04 c5 — a timed-out merge check: Re-run the check + Abandon |
+| `ios/ios-04-c6-merge-timeout.png` | 04 c6 — a timed-out merge: Abandon only |
+| `ios/ios-04-c7-receipt.png` | 04 c7 — the receipt's foot and `Open landing ›` |
 | `ios/ios-06-task-landing.png` | 06 — the task page's Landing section |
 | `ios/ios-06-source-label.png` | 06 e — the source session's derived label |
-| `ios/ios-06-xe5-card.png` | 06 c — the X-E5 owner card: its heading and lead Abandon |
+| `ios/ios-06-b-delivery.png` | 06 b — the delivery card's `Open the landing ↗` |
+| `ios/ios-06-xe5-card.png` | 06 c — the X-E5 card: three lease rows, Mark as handled, red Abandon |
 | `mac/mac-05-a-live.png` | 05 a on the Mac |
-| `mac/mac-04-work-overview-merge-job.png` | 04 — the Work overview drawing a merge job |
+| `mac/mac-04-work-overview-merge-job.png` | 04 — the Work overview drawing a merge job, with no task attribution |
 
 ## What is not covered here
 

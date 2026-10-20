@@ -124,8 +124,10 @@ final class LandingViewsWiringTests: XCTestCase {
         XCTAssertTrue(app.contains("includeLanding: true"))
         XCTAssertTrue(app.contains("private(set) var landingInFlightCache: [String: ProjectIntegrationInFlight] = [:]"))
         XCTAssertTrue(app.contains("landingInFlightCache[landingSessionId] = ProjectIntegrationInFlight("))
-        XCTAssertTrue(app.contains("projectSessions = SessionProjectMembers.members(of: address.projectID, in: kept)")
-                      && app.contains("+ landedRows(of: address.projectID, in: kept)"))
+        XCTAssertTrue(app.contains("let members = SessionProjectMembers.members(of: address.projectID, in: kept)")
+                      && app.contains(".filter { !$0.isLanding }")
+                      && app.contains("projectSessions = members + landedRows(of: address.projectID, in: kept)"),
+                      "a landing row is a member too — it must not be drawn twice")
         XCTAssertTrue(app.contains("$0.isLanding && $0.landing?.state == \"AWAITING_DECISION\""),
                       "the Landings group's holders are read where a landing waits")
         XCTAssertTrue(app.contains("func abandonIntegrationJob(_ projectID: String, jobID: String) async throws"))

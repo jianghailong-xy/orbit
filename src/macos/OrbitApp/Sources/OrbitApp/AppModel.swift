@@ -2577,11 +2577,12 @@ final class AppModel {
             // row on its way to Trash (`trashingSessions`).
             let kept = SessionFilter.removing(trashingSessions, from: rows)
             // The page holds its members AND the landing rows its Landings group folds from
-            // (§2.9 LS6); only the members are sessions the page lists.
-            projectSessions = SessionProjectMembers.members(of: address.projectID, in: kept)
-                + landedRows(of: address.projectID, in: kept)
-            projectCompletedSessions[key] = SessionProjectMembers.members(of: address.projectID, in: kept)
-                .filter { $0.effectiveLifecycleState != .open }
+            // (§2.9 LS6). A landing has a membership too, so it is kept out of the member list —
+            // otherwise every landing row would be drawn both as a member and as a landing.
+            let members = SessionProjectMembers.members(of: address.projectID, in: kept)
+                .filter { !$0.isLanding }
+            projectSessions = members + landedRows(of: address.projectID, in: kept)
+            projectCompletedSessions[key] = members.filter { $0.effectiveLifecycleState != .open }
             projectSessionsReadAt = Date()
             projectSessionsError = nil
             for row in projectSessions { sessionDetails.store(row) }
@@ -2619,6 +2620,7 @@ final class AppModel {
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
             let kept = SessionFilter.removing(trashingSessions, from: rows)
             let completed = SessionProjectMembers.members(of: address.projectID, in: kept)
+                .filter { !$0.isLanding }
             // The refresh is also what keeps a settled landing's summary current.
             let landings = landedRows(of: address.projectID, in: kept)
                 + landedRows(of: address.projectID, in: projectSessions)

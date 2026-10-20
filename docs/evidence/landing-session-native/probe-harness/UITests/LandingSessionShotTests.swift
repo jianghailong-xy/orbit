@@ -131,7 +131,11 @@ final class LandingSessionShotTests: ProbeCase {
     func testIPhoneReceiptFoot() {
         setMode("receipt")
         let app = launch(until: "Merged into main", extra: ["-probe.page", "sessions"], "receipt")
-        press(element(app, containing: "Merged into main"))
+        // The merged row is in the timeline, below the cards: a lazy list has not built it until
+        // something scrolls to it.
+        let row = element(app, containing: "Merged into main")
+        bring(app, row, between: 120, and: 640, "receipt")
+        press(row)
         XCTAssertTrue(appears(app, "Open landing", timeout: 20),
                       "the receipt's foot never named the round's landing")
         shot(app, "ios-04-c7-receipt")
