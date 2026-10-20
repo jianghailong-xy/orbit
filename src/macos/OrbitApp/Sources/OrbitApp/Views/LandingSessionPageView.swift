@@ -130,7 +130,7 @@ struct LandingSessionPageView: View {
     private func menu(_ landing: SessionLandingView) -> some View {
         Menu {
             ForEach(menuItems(landing)) { item in
-                Button(role: item.danger ? .destructive : nil) {
+                Button(role: item.danger ? ButtonRole.destructive : nil) {
                     press(item, landing: landing)
                 } label: {
                     if let sub = item.sub {
@@ -457,8 +457,8 @@ struct LandingSessionPageView: View {
                 title: "\(LandingPageCopy.checkLabel(check.name)) · live "
                     + ProjectPage.landingClock(max(0, now.timeIntervalSince(
                         RelativeTime.parse(check.startedAt) ?? now))))
+                .padding(.leading, 24)
         }
-        .padding(.leading, 24)
     }
 
     // MARK: - the footer
@@ -647,7 +647,6 @@ private struct LandingCheckLogView: View {
     let sessionID: String
     let selectors: LandingLogSelectors
     @Environment(AppModel.self) private var app
-    @State private var cursor: String?
     @State private var page: LandingLogPage?
     @State private var failed: String?
 
@@ -741,7 +740,7 @@ private struct LandingLiveCheckView: View {
         .task {
             while !Task.isCancelled {
                 if let api, let page = try? await api.landingLog(sessionID: sessionID, selectors) {
-                    text = tail(page.entries.map(\.text))
+                    text = tail(page.entries.map(\.text).joined())
                 }
                 do { try await Task.sleep(nanoseconds: 4_000_000_000) } catch { return }
             }

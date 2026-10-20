@@ -580,6 +580,24 @@ final class LandingSessionPageTests: XCTestCase {
         XCTAssertEqual(LandingPageCopy.duration(ms: 3_600_000 + 5 * 60_000), "1h 05m")
     }
 
+    /// A section's state after its title: what stopped it, in the timeline's own words.
+    func testASectionsStateIsSaidAfterItsTitle() {
+        XCTAssertEqual(LandingPageCopy.sectionState("CHECK_FAILED"), "not landed · CHECK_FAILED")
+        XCTAssertEqual(LandingPageCopy.sectionState("CONFLICT"), "not landed · CONFLICT")
+        XCTAssertEqual(LandingPageCopy.sectionState("ERROR"), "stopped · ERROR")
+        XCTAssertEqual(LandingPageCopy.sectionState("CANCELLED"), "stopped")
+        // A successful section says it in its own lines; the settled round wears no suffix.
+        XCTAssertNil(LandingPageCopy.sectionState("RUNNING"))
+        XCTAssertNil(LandingPageCopy.sectionState("MERGED"))
+    }
+
+    /// The check label both the card's budget and the timeline's live row wear.
+    func testTheCheckLabelNamesTheTwoChecks() {
+        XCTAssertEqual(LandingPageCopy.checkLabel("MERGE_CHECK"), "Merge check")
+        XCTAssertEqual(LandingPageCopy.checkLabel("TASK_ACCEPTANCE"), "Task acceptance")
+        XCTAssertEqual(LandingPageCopy.checkLabel(nil), "Task acceptance")
+    }
+
     // MARK: - the terminal card
 
     func testAFailedCheckIsNamedWithItsExitAndDuration() {
