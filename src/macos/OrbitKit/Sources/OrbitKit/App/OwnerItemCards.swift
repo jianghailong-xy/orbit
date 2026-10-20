@@ -963,7 +963,7 @@ public enum OwnerItemStanding: Equatable, Sendable {
 public enum ExceptionCards {
     /// The card's header, in the words the needs-you banner uses for the same kind, so a person who
     /// pressed the banner finds the card saying what the banner said. `OwnerItemCardsTests` holds
-    /// both to `NeedsYouLogic.ownerItemText` — the banner and the card are the same fact.
+    /// both to `NeedsYouLogic.ownerItemWord` — the banner and the card are the same fact.
     public static let escalatedTitle = "Escalated to you"
     public static let pauseTitle = "Paused"
     /// §7.5's provenance mark, the same one the merge and question cards carry.

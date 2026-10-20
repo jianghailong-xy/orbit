@@ -279,7 +279,8 @@ class ProjectMergeShellTest {
         compose.onNodeWithTag("workspace:${ProjectShell.ALPHA}").performClick()
         await { exists(hasText("Plain notes") and hasClickAction()) }
         compose.onNode(hasText("Plain notes") and hasClickAction()).performClick()
-        await { exists(hasTestTag("needs-you-bar")) && exists(hasText("Approve merge to main · Launch"), unmerged = true) }
+        await { exists(hasTestTag("needs-you-bar-text") and hasText("Approve merge to main"), unmerged = true) &&
+            exists(hasTestTag("needs-you-bar-detail") and hasText("Launch"), unmerged = true) }
         compose.onNodeWithTag("needs-you-bar").performClick()
         await { exists(hasTestTag("project-sessions")) && exists(hasTestTag("project-merge-card:asking")) }
         assertFalse("the coordinator conversation is not where it opens", ProjectShell.calls.contains("GET sessions/${ProjectShell.COORD}"))
