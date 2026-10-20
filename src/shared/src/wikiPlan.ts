@@ -402,9 +402,9 @@ export interface WikiPlanDecisionResult {
 // ── The plan's jobs (contract `plan.jobs`, migration 0338) ──────────────────────────────────────
 
 /**
- * What a job does: draft a plan (`orbit wiki plan draft`), revise the newest version with the owner's
- * words (`orbit wiki plan revise`), or build the documents from a confirmed version (`orbit wiki docs
- * build`), which the owner's confirmation asks for.
+ * What a job does: draft a plan (`plan_draft`), revise the newest version with the owner's words
+ * (`plan_revise`), or build the documents from a confirmed version (`docs_build`), which the owner's
+ * confirmation asks for — each a wiki_job of the server's (contract `plan.jobs.kinds`).
  */
 export const WIKI_PLAN_JOB_KINDS = ['draft', 'revise', 'build'] as const;
 export type WikiPlanJobKind = (typeof WIKI_PLAN_JOB_KINDS)[number];
@@ -453,8 +453,6 @@ export const WIKI_PLAN_JOB_RULES = {
   draftMaxBytes: 1_000_000,
   /** A failure in words, at most. */
   errorMaxChars: 2_000,
-  /** The budget a job's task declares for its check, in seconds: the check reads one row. */
-  checkTimeoutSeconds: 300,
   /** The window of sessions the materials count and cluster, in days. */
   materialsSessionDays: 90,
   /** The most sessions and projects the materials list. */
@@ -463,10 +461,9 @@ export const WIKI_PLAN_JOB_RULES = {
 } as const;
 
 /**
- * A draft or a revision run by the wiki-worker (contract `plan.jobs.server`, design §8, P6): when the executor
- * switch gives the account to the server (`jobs.executor`), the plan job is made as a `wiki_job` instead of a
- * task of the hidden list, and the worker drafts with the System model through the request queue — the runner's
- * pipeline (`orbit wiki plan draft | revise`), ported, its repository read from the space's snapshot.
+ * A draft or a revision run by the wiki-worker (contract `plan.jobs.server`, design §8, P6): the plan job is made
+ * as a `wiki_job`, and the worker drafts with the System model through the request queue — the runner's pipeline
+ * (`orbit wiki plan draft | revise` before P11), ported, its repository read from the space's snapshot.
  */
 export const WIKI_PLAN_SERVER_JOB = {
   /** The wiki_job a draft and a revision run as (contract `jobs.kinds`). */
@@ -646,45 +643,6 @@ export interface WikiSupportSpaces {
   /** Whether the server executes this account's wiki: only then can its documents be asked for again. */
   serverExecutes: boolean;
   spaces: WikiSupportSpace[];
-}
-
-/**
- * `GET /api/runner/wiki/spaces/:id/plan/job`: the job the calling maintenance session runs, and what it
- * starts from — the space, its repository and the maintenance workspace's checkout.
- */
-export interface WikiPlanJobContext {
-  job: WikiPlanJob;
-  space: {
-    id: string;
-    title: string;
-    repo: { urlNorm: string | null; rootCommitSha: string | null };
-    workspace: { id: string; workDir: string | null } | null;
-  };
-}
-
-/** `POST …/plan/job/progress`: the gate round a draft's run is on, or how far a build's has got. */
-export type WikiPlanJobProgressRequest = { attempt: number } | WikiPlanBuildProgress;
-
-/** `POST …/plan/job/finish`: how the run ended. */
-export interface WikiPlanJobFinishRequest {
-  outcome: WikiPlanJobOutcome;
-  version?: number | null;
-  errors?: WikiPlanGateError[];
-  error?: string | null;
-  report?: WikiPlanJobReport | WikiPlanBuildReport | null;
-  draft?: WikiPlanDraftInput | null;
-}
-
-/** `GET …/plan/check?job=<id>`: `orbit wiki plan check`'s verdict. */
-export interface WikiPlanJobCheck {
-  spaceId: string;
-  jobId: string;
-  kind: WikiPlanJobKind;
-  outcome: WikiPlanJobOutcome | null;
-  version: number | null;
-  ok: boolean;
-  /** Why it is not ok, one sentence each. */
-  problems: string[];
 }
 
 /**

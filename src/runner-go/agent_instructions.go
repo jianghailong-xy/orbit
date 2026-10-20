@@ -234,9 +234,12 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// same coordinator asking the owner to record it done, which records nothing. skip-merge-check
 		// is the fourth of the asks: the coordinator puts a red check it believes is the check's own
 		// fault in front of the owner, and nothing is skipped unless they answer the card.
+		// integration is the read of the line itself — the queue, why each job waits, the generations
+		// and each candidate's check and merge — and the door that replaces a coordinator querying
+		// the production database. It writes nothing, so it needs no grant and no card.
 		// The two project verbs NOT here — ensure-coordinator and send — are the deliveries to a
 		// coordinator, which OPEN a conversation and so ride the orchestration gate below.
-		for _, action := range []string{"get", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start", "request-done", "skip-merge-check"} {
+		for _, action := range []string{"get", "integration", "create", "update", "delete", "crossings", "resolve-blocker", "merge-evidence", "request-start", "request-done", "skip-merge-check"} {
 			rules = append(rules, "Bash("+command+" project "+action+" *)")
 		}
 		// Every watch verb: they wait on Orbit's own work for the session they run in, which is the
@@ -248,23 +251,14 @@ func orbitCLIAllowedTools(executable string, allowOrchestration bool) []string {
 		// learned is not a power over anybody else's session, so it needs no orchestration grant —
 		// and the agent most likely to learn something worth recording is the plain single-session
 		// one. The commands themselves need ORBIT_SESSION_ID, which a session has.
-		// verify is the session's own proposals checked by its own provider's model: no more of a power.
-		// dossier and cursor advance are a Wiki maintenance run's, and the server refuses them to every
-		// other session (WIKI_NOT_MAINTENANCE_SESSION), so the rule lets through nothing the door does
-		// not check. The cursor is named with its one command, `advance`, as the capability's argv is:
-		// a cursor command added later is a decision made here, not one it inherits. `anchors verify` is
-		// the same run's re-verification, refused to every other session the same way.
-		// articles is the same run's too, refused to every other session the same way, and so is maintain,
-		// the whole run in one command, and docs build, its writing of the documents from the plan the
-		// owner confirmed. check only reads whether a run did what its task expected.
-		// plan draft and plan revise are a plan job's run, refused to every session but the job's the same
-		// way, and plan check, like check, only reads whether a job did what its task was made for.
-		for _, action := range []string{"search", "get", "propose", "verify", "dossier", "cursor advance", "anchors verify", "articles", "docs build", "maintain", "check", "plan draft", "plan revise", "plan check"} {
+		// verify asks the server to verify the session's own proposals and waits for its verdicts: no
+		// more of a power.
+		for _, action := range []string{"search", "get", "propose", "verify"} {
 			rules = append(rules, "Bash("+command+" wiki "+action+" *)")
 		}
-		// import proposes, into a space its owner named, what the session's own provider's model read in
-		// files the owner asked for: no more of a power than propose, and the server holds it to the same
-		// review mode and floors.
+		// import hands the server, for a space its owner named, files the owner asked for, and the
+		// server's model reads them: no more of a power than propose, and the server holds what it
+		// proposes to the same review mode and floors.
 		rules = append(rules, "Bash("+command+" wiki import *)")
 		// `orbit notify` is how a session reaches the human the runner works for — the reader most
 		// likely to be stuck without one is the plain single-session agent — and `orbit provider list`

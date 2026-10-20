@@ -75,6 +75,7 @@ import {
   MAX_PROMPT_CHARS,
   PermissionMode,
   type PermissionRule,
+  type ProjectIntegrationLogPage,
   ROOT_FALLBACK_PERMISSION_MODE,
   ROOT_REFUSED_PERMISSION_MODES,
   RunEventType,
@@ -90,6 +91,7 @@ import {
   SessionRunState,
   SessionState,
   type SessionProjectMembership,
+  type SessionLandingView,
   type SessionSearchHit,
   type SessionSourceRefusalDetail,
   type SourceRefusalCode,
@@ -147,6 +149,9 @@ import {
 } from '../projects/owner-decision-signal';
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
 import { branchName } from '../projects/project-criterion-landing';
+import { INTEGRATION_ITEM_KINDS, openItemOwed } from '../projects/project-open-item';
+import { readSourceLanding } from '../projects/landing-session';
+import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
   MATCHED_BY_CONTENT,
   MERGE_RECEIPT_RESULTS,
@@ -164,6 +169,7 @@ import {
   SessionConfigDto,
   AUTOMATIC_ACCOUNT,
   SessionInterruptDto,
+  SessionLandingSummary,
   SessionResumeDto,
   SessionTurnDto,
 } from './dto';
@@ -271,6 +277,12 @@ import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { returnQueuedTurns } from '../projects/project-open-item';
 import { OpenListDeltaStore } from './open-list-delta';
 import { readOpenListVersion } from './open-list-version';
+import {
+  SESSION_KIND_CONVERSATION,
+  SESSION_KIND_LANDING,
+  assertEngineSession as assertEngineSessionRow,
+} from './engine-session';
+import { readLandingView } from '../projects/landing-view';
 import {
   SESSION_RUNNER_OFFLINE_AFTER_MS,
   deriveSessionCapabilities,
@@ -2155,6 +2167,10 @@ export class SessionsService {
       where: {
         ownerId,
         deletedAt: null,
+        // LS6: a flat list (MCP `session_list`, `orbit session list`, the runners' own list) is
+        // conversations. Landing containers are reached by their link, or through the project
+        // grouping's `includeLanding` (a later task), never here.
+        sessionKind: SESSION_KIND_CONVERSATION,
         ...(filters.status ? { status: filters.status } : {}),
         ...(filters.parentSessionId ? { parentSessionId: filters.parentSessionId } : {}),
         ...runnerScopeWhere(filters.scope),
@@ -2209,6 +2225,7 @@ export class SessionsService {
         completedAt: true,
         archivedAt: true,
         deletedAt: true,
+        sessionKind: true,
         engine: true,
         provider: true,
         providerBuiltin: true,
@@ -2256,10 +2273,28 @@ export class SessionsService {
         assignedRunner: { select: { id: true, name: true } },
       },
     });
-    if (!session) throw new NotFoundException('session not found');
+    if (!session) {
+      // LS1: the landing row is inserted only after the first claim commits, so a link opened
+      // before that reaches the subject's pre-generated id. Render the same view from it.
+      // A runner-scoped caller is not offered the fallback: a landing is on no runner, so it is
+      // outside that scope exactly as a session of another machine is.
+      const landing = scope ? null : await readLandingView(this.prisma, ownerId, id);
+      if (landing) return SessionsService.landingOnlyDetail(id, landing);
+      throw new NotFoundException('session not found');
+    }
     const { providerBuiltin: _providerBuiltin, ...compact } = session;
     // The engine it runs on: recorded, else derived, null when nobody can tell (§6.1).
-    return withSessionState({ ...compact, engine: await sessionEngine(this.prisma, { ...session, ownerId }) });
+    const engine = await sessionEngine(this.prisma, { ...session, ownerId });
+    // A LANDING row has no engine, no runner and no turns: its detail is the landing view (§2.9
+    // LS6). The rest of this shape rides along unchanged so every client reads one payload.
+    const landing = session.sessionKind === SESSION_KIND_LANDING
+      ? await readLandingView(this.prisma, ownerId, id)
+      : undefined;
+    return withSessionState({
+      ...compact,
+      engine,
+      ...(landing ? { landing } : {}),
+    });
   }
 
   /**
@@ -2395,6 +2430,7 @@ export class SessionsService {
               LEFT JOIN conversation_turn ct
                 ON ct.id = e.turn_id AND ct.session_id = e.session_id
               WHERE s.owner_id = ${ownerId}::uuid
+                AND s.kind = 'CONVERSATION'
                 AND e.type IN ('user', 'assistant')
                 -- Keep the exact indexed expression as the cheap candidate filter. On an ordinary
                 -- delivery it contains the authored user text. A reclaimed continuation can
@@ -2507,6 +2543,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
+              AND s.kind = 'CONVERSATION'
               AND s.id = ${norm.sessionId}::uuid
             UNION
             -- Workspaces and logs commonly shorten a UUID to its first 8–12 hex characters. At this
@@ -2515,6 +2552,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
+              AND s.kind = 'CONVERSATION'
               AND replace(s.id::text, '-', '') LIKE ${
                 norm.sessionIdPrefix ? `${norm.sessionIdPrefix}%` : null
               }
@@ -2527,6 +2565,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
+              AND s.kind = 'CONVERSATION'
               AND ${sessionPredicate}
             UNION
             -- Joined names resolve against their own tiny tables first (~10 workspaces, ~500 tasks),
@@ -2534,12 +2573,14 @@ export class SessionsService {
             -- index instead would mean reindexing every session whenever a workspace is renamed.
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
+              AND s.kind = 'CONVERSATION'
               AND s.workspace_id IN (
                 SELECT id FROM workspace WHERE ${matches(stripMarks(Prisma.sql`name`))}
               )
             UNION
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
+              AND s.kind = 'CONVERSATION'
               AND s.task_id IN (
                 SELECT id FROM task WHERE ${matches(stripMarks(Prisma.sql`title`))}
               )
@@ -2705,6 +2746,7 @@ export class SessionsService {
           LEFT JOIN workspace a ON a.id = s.workspace_id
           LEFT JOIN task  t ON t.id = s.task_id
           WHERE s.owner_id = ${ownerId}::uuid
+            AND s.kind = 'CONVERSATION'
             AND s.deleted_at IS NULL
           ORDER BY s.last_turn_at DESC NULLS LAST, s.created_at DESC
           LIMIT ${take}::int
@@ -2761,6 +2803,9 @@ export class SessionsService {
       archivedAt: null,
       deletedAt: null,
       workspaceId: { not: null },
+      // LS6: a landing in flight is not a conversation waiting on anybody, and its AWAITING_INPUT
+      // means only that its subject is open. It counts in no workspace tally.
+      sessionKind: SESSION_KIND_CONVERSATION,
     } as const;
     const [active, running, jobs, blocked, jobCards] = await Promise.all([
       this.prisma.session.groupBy({
@@ -2895,9 +2940,10 @@ export class SessionsService {
     return [...counts.values()];
   }
 
-  /** The Open list's data version; see open-list-version.ts. */
-  openListVersion(ownerId: string): Promise<string> {
-    return readOpenListVersion(this.prisma, ownerId);
+  /** The Open list's data version; see open-list-version.ts. `includeLanding` widens it to the
+   *  landing source, which only a project-scoped read that asks for landings can see. */
+  openListVersion(ownerId: string, includeLanding = false): Promise<string> {
+    return readOpenListVersion(this.prisma, ownerId, Date.now(), includeLanding);
   }
 
   async list(
@@ -2907,6 +2953,9 @@ export class SessionsService {
       workspaceId?: string;
       tagId?: string;
       projectId?: string;
+      /** Return the project's LANDING sessions too (contract §2.9 LS6). Only the `projectId`
+       *  read honours it; every flat list stays conversations. */
+      includeLanding?: boolean;
       /** The workspaces a token confined to them may see (`workspaceConfinement`). */
       confinedTo?: readonly string[];
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
@@ -2925,14 +2974,22 @@ export class SessionsService {
           : filters.view === 'deleted'
             ? 'trash'
             : (filters.view ?? 'open');
+    // LS6: a landing container is in no flat list. It is listed only by the project grouping's
+    // read — the one that names a project and asks for it — so the page can draw its Landings
+    // group without every other list (and every older client) growing a row it cannot place.
+    // Trash never takes one: a LANDING row cannot be trashed.
+    const includeLanding = filters.includeLanding === true && filters.projectId !== undefined;
+    const kindAllowed = includeLanding && view !== 'trash' && view !== 'system'
+      ? Prisma.sql`(s.kind = 'CONVERSATION' OR s.kind = 'LANDING')`
+      : Prisma.sql`s.kind = 'CONVERSATION'`;
     const visibility: Prisma.Sql =
       view === 'trash'
-        ? Prisma.sql`s.deleted_at IS NOT NULL`
+        ? Prisma.sql`s.deleted_at IS NOT NULL AND s.kind = 'CONVERSATION'`
         : view === 'system'
           ? Prisma.sql`FALSE`
           : view === 'completed'
-            ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NOT NULL AND s.deleted_at IS NULL`
-            : Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NULL AND s.deleted_at IS NULL`;
+            ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NOT NULL AND s.deleted_at IS NULL AND ${kindAllowed}`
+            : Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NULL AND s.deleted_at IS NULL AND ${kindAllowed}`;
     const runnerFilter = filters.runnerId
       ? Prisma.sql`AND s.assigned_runner_id = ${filters.runnerId}::uuid`
       : Prisma.empty;
@@ -3000,14 +3057,17 @@ export class SessionsService {
       workspaceId?: string;
       tagId?: string;
       projectId?: string;
+      includeLanding?: boolean;
       confinedTo?: readonly string[];
     },
     since: string | undefined,
   ) {
     const rows = await this.list(ownerId, { ...filters, view: 'open' });
+    // A cursor is only valid for the list that produced it: the same filters with and without
+    // landings are two different lists, and one's cursor must not be read as the other's.
     const scope = JSON.stringify([
       filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null, filters.projectId ?? null,
-      filters.confinedTo ?? null,
+      filters.includeLanding === true, filters.confinedTo ?? null,
     ]);
     // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
     // alone would resend most of the list on most polls. The clients that read this delta draw
@@ -3080,6 +3140,7 @@ export class SessionsService {
       completedAt: Date | null;
       archivedAt: Date | null;
       deletedAt: Date | null;
+      sessionKind: string;
       source: string;
       engine: string | null;
       provider: string;
@@ -3128,6 +3189,8 @@ export class SessionsService {
       projectId: string | null;
       projectTitle: string | null;
       projectMembership: SessionProjectMembership | null;
+      /** The subject summary of a LANDING row; null on every conversation. */
+      landing: SessionLandingSummary | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
       retryAt: Date | null;
@@ -3138,6 +3201,10 @@ export class SessionsService {
     const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
       SELECT
         s.id, s.status, s.title,
+        -- What drives the session (LS6): a LANDING row is never in the flat list, but a reader that
+        -- names sessions by id (link previews) gets the discriminator rather than a card that
+        -- claims the platform's container is an ordinary conversation.
+        s.kind            AS "sessionKind",
         s.created_at      AS "createdAt",
         s.last_turn_at    AS "lastTurnAt",
         -- When the turn now in flight was handed to the runner. last_turn_at cannot answer this:
@@ -3244,6 +3311,49 @@ export class SessionsService {
         cp.id     AS "projectId",
         cp.title  AS "projectTitle",
         ${sessionProjectMembershipSql('s')} AS "projectMembership",
+        -- What a LANDING row says about its subject (contract §2.9 LS6): the kind of landing work
+        -- and where it stands, so the project sessions page can keep an in-flight one out of the
+        -- ordinary rows, list an awaiting one, and fold a settled one into "Earlier · n landed".
+        -- AWAITING_DECISION is an OPEN integration item about this segment or a BLOCKED candidate.
+        -- An item counts only while it is still OWED (openItemOwed — the one definition every
+        -- reader asks, where a closed edge or a candidate that left the live states is not owed)
+        -- and only inside the segment's project, so an item about the same task filed under
+        -- another project cannot mark this row. The segment's candidates are not only the first
+        -- one l.promotion_id names: every later candidate of the round joins through a job whose
+        -- landing_id is this row (openPromotionRound). Only a LANDING row runs the subquery;
+        -- every conversation answers NULL without reading anything.
+        CASE WHEN s.kind = 'LANDING' THEN (
+          SELECT jsonb_build_object(
+            'subject', l.subject,
+            'state', CASE
+              WHEN l.settled_at IS NOT NULL THEN 'SETTLED'
+              WHEN EXISTS (
+                SELECT 1 FROM project_open_item oi
+                 WHERE oi.state = 'OPEN'
+                   AND oi.project_id = l.project_id
+                   AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+                   AND ${openItemOwed('oi')}
+                   AND (oi.task_id = l.task_id
+                        OR oi.promotion_id = l.promotion_id
+                        OR EXISTS (
+                          SELECT 1 FROM project_integration_job j
+                           WHERE j.id = oi.integration_job_id AND j.landing_id = l.id))
+              ) OR EXISTS (
+                SELECT 1 FROM project_promotion pr
+                 WHERE pr.state = 'BLOCKED'
+                   AND (pr.id = l.promotion_id
+                        OR pr.id IN (
+                          SELECT j.promotion_id FROM project_integration_job j
+                           WHERE j.landing_id = l.id AND j.promotion_id IS NOT NULL))
+              ) THEN 'AWAITING_DECISION'
+              ELSE 'IN_FLIGHT'
+            END,
+            'settledAs', l.settled_as,
+            'settledAt', l.settled_at
+          )
+          FROM project_landing l
+          WHERE l.session_id = s.id
+        ) END AS "landing",
         q.reason  AS "queuedReason",
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit"
@@ -3338,6 +3448,7 @@ export class SessionsService {
         completedAt: r.completedAt,
         archivedAt: r.archivedAt,
         deletedAt: r.deletedAt,
+        sessionKind: r.sessionKind,
         source: r.source,
         engine: engines.get(r.id) ?? null,
         provider: r.provider,
@@ -3389,6 +3500,9 @@ export class SessionsService {
         projectId: r.projectId,
         projectTitle: r.projectTitle,
         projectMembership: r.projectMembership,
+        // Present only on a LANDING row: a client folding a summary into a row it holds reads an
+        // absent key as "nothing to clear", and no conversation ever had one.
+        ...(r.landing ? { landing: r.landing } : {}),
         // Null unless the row is queued behind a cap — "waiting its turn" is not a gate.
         queuedReason: r.queuedReason,
         queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
@@ -3467,6 +3581,30 @@ export class SessionsService {
     });
   }
 
+  /**
+   * One page of a landing session's check output (`GET /sessions/:id/landing/log`, contract §2.9
+   * LS2): what a check printed while the landing ran, kept as a bounded head and tail per check.
+   *
+   * The user gate is the session's owner, and another account's session is the same 404 as a
+   * session that does not exist — the page is only ever addressed through a session the reader
+   * owns. A session that is not a landing session has no landing subject and is answered the same
+   * way. Which attempt is read is the selectors': a `jobId` from the landing view's generations, or
+   * the newest attempt when the request names none; `claim`, `round` and `check` narrow within it,
+   * and `cursor` continues a page.
+   */
+  async landingLog(
+    ownerId: string,
+    id: string,
+    selectors: IntegrationLogSelectors,
+  ): Promise<ProjectIntegrationLogPage<Date>> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    return readLandingIntegrationLog(this.prisma, { ownerId, sessionId: id, selectors });
+  }
+
   async get(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
@@ -3541,7 +3679,12 @@ export class SessionsService {
         },
       },
     });
-    if (!session) throw new NotFoundException('session not found');
+    if (!session) {
+      // LS1: before the first claim inserts the row, the link still reaches its subject.
+      const landing = await readLandingView(this.prisma, ownerId, id);
+      if (landing) return SessionsService.landingOnlyDetail(id, landing);
+      throw new NotFoundException('session not found');
+    }
     // A Claude row with turns but no runtime session id has no conversation to resume (it predates
     // the column, or its id was minted by a different runtime), so the capabilities payload would
     // say MISSING_CONTEXT and the UI would block resume.
@@ -3612,6 +3755,19 @@ export class SessionsService {
     const route = session.taskId
       ? (await readTaskRouteSummaries(this.prisma, ownerId, [session.id])).get(session.id) ?? null
       : null;
+    // §2.9 LS1: a CONVERSATION may be the source work session of landing work, and the detail is
+    // where a client draws its "Landing · checking ›" / "On project/<id> ✓ ›" label. One probe of
+    // `project_integration_job_session_created_idx` for the newest generation, then the subject it
+    // names. A LANDING row has no derived label about itself, and no other kind exists.
+    const sourceLanding = session.sessionKind === 'LANDING'
+      ? null
+      : await readSourceLanding(this.prisma, session.id);
+    // §2.9 LS6: a LANDING row's detail carries the subject's view — its attempt, phase, checks,
+    // liveness, blocking reason, todos and generations. Rendered from `project_landing` so the row
+    // being there or not never changes the answer.
+    const landing = session.sessionKind === SESSION_KIND_LANDING
+      ? await readLandingView(this.prisma, ownerId, session.id)
+      : undefined;
     return withSessionCapabilities({
       ...rest,
       // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
@@ -3652,9 +3808,42 @@ export class SessionsService {
       projectTitle: coordinatorForProject?.title ?? null,
       projectIntegrationRef: integrationRef ? branchName(integrationRef) : null,
       projectMembership: await readSessionProjectMembership(this.prisma, session.id),
+      sourceLanding,
+      ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
     });
+  }
+
+  /**
+   * The detail a LANDING link answers with before its session row exists (LS1): the subject's view
+   * under the same keys a session detail carries, so a client that opened the link draws the page
+   * instead of a 404. `status` is the container lifecycle the row would have — AWAITING_INPUT
+   * while the subject is open, SUCCEEDED / CANCELLED once it settled.
+   */
+  private static landingOnlyDetail(id: string, landing: SessionLandingView<Date>): any {
+    const settledAs = landing.settledAs;
+    const status = landing.settledAt
+      ? (settledAs === 'LANDED' || settledAs === 'ALREADY_LANDED' || settledAs === 'NOTHING_TO_LAND'
+          || settledAs === 'MERGED'
+          ? RunStatus.SUCCEEDED
+          : RunStatus.CANCELLED)
+      : RunStatus.AWAITING_INPUT;
+    return {
+      id,
+      title: null,
+      prompt: null,
+      status,
+      completedAt: landing.settledAt,
+      archivedAt: landing.settledAt,
+      deletedAt: null,
+      sessionKind: SESSION_KIND_LANDING,
+      workspace: null,
+      assignedRunner: null,
+      tags: [],
+      createdAt: landing.openedAt,
+      landing,
+    };
   }
 
   /**
@@ -3682,9 +3871,13 @@ export class SessionsService {
         providerBuiltin: true,
         ownerId: true,
         mergeRecovery: true,
+        sessionKind: true,
       },
     });
     if (!parent) throw new NotFoundException('session not found');
+    // A merge repair is a child conversation an engine runs; a LANDING parent has no engine door to
+    // repair (§2.9 LS6).
+    assertEngineSessionRow(parent);
     const recovery = readMergeRecovery(parent.mergeRecovery);
     if (!recovery || !parent.workspaceId) {
       throw new ConflictException('no merge recovery is available for this session');
@@ -3760,9 +3953,10 @@ export class SessionsService {
   async cancelAutoRetry(ownerId: string, id: string): Promise<{ ok: true }> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true },
+      select: { id: true, sessionKind: true },
     });
     if (!session) throw new NotFoundException('session not found');
+    assertEngineSessionRow(session);
     await this.prisma.session.update({
       where: { id },
       // The claim too (migration 0354): the retry is over, so the session is not on its way to the
@@ -3786,6 +3980,7 @@ export class SessionsService {
    * arming one that has since been resumed would drop a re-send into a live conversation.
    */
   async armAutoRetry(ownerId: string, id: string, retryAt: string): Promise<{ retryAt: Date }> {
+    await this.assertEngineSession(ownerId, id);
     const at = new Date(retryAt);
     const now = Date.now();
     if (Number.isNaN(at.getTime()) || at.getTime() <= now)
@@ -4704,9 +4899,11 @@ export class SessionsService {
   async requestDiffRefresh(ownerId: string, id: string): Promise<void> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, sessionKind: true },
     });
     if (!session) throw new NotFoundException('session not found');
+    // It queues a diff turn for the runner: an engine door like any other (§2.9 LS6).
+    assertEngineSessionRow(session);
     if (!SessionsService.LIVE.includes(session.status)) return;
     const pending = await this.prisma.conversationTurn.findFirst({
       where: { sessionId: id, kind: 'diff', status: 'PENDING' },
@@ -4728,8 +4925,11 @@ export class SessionsService {
    * waits for it: this door is a request somebody is looking at, not a settle path.
    */
   async refreshRecap(ownerId: string, id: string): Promise<RecapOutcome> {
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true } });
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true, sessionKind: true } });
     if (!session) throw new NotFoundException('session not found');
+    // A landing writes no run_event, so every one of recap.ts's four gates would refuse it anyway;
+    // the door says so as the structural refusal rather than as "too little to recap" (§2.9 LS6).
+    assertEngineSessionRow(session);
     return enqueueRecap({ db: this.prisma, sessionId: id, force: true });
   }
 
@@ -4770,6 +4970,26 @@ export class SessionsService {
     }
   }
 
+  /**
+   * The engine-path guard, for a door that has only the caller's id and no row in hand (§2.9 LS6).
+   *
+   * A missing or foreign session is left to the door's own 404/403: this answers only a row the
+   * caller may see, so it cannot become an existence oracle.
+   */
+  private async assertEngineSession(ownerId: string, id: string): Promise<void> {
+    // A unit double that does not model the session table cannot answer this; production's
+    // PrismaService always does.
+    const delegate = (this.prisma as unknown as {
+      session?: { findFirst?: (args: unknown) => Promise<{ sessionKind?: string | null } | null> };
+    }).session;
+    if (typeof delegate?.findFirst !== 'function') return;
+    const row = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { sessionKind: true },
+    });
+    if (row) assertEngineSessionRow(row);
+  }
+
   /** Load an owner's session and assert it's still live (not ended/cancelled). */
   private async getLive(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
@@ -4790,6 +5010,9 @@ export class SessionsService {
   private async getSendable(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
+    // A LANDING row is never sendable: the composer, End and the queued-turn doors all reach this
+    // one loader, and none of them may drive the platform's container (§2.9 LS6).
+    assertEngineSessionRow(session);
     if (session.deletedAt) {
       throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
     }
@@ -5295,6 +5518,8 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      // No engine turn can be queued onto the platform's landing container (§2.9 LS6).
+      assertEngineSessionRow(session);
       turnRunnerId = session.assignedRunnerId;
       // A committed operation owns its key even after its Session later ends or moves to Trash.
       // Check the durable receipt while holding the Session lock before any lifecycle, attachment
@@ -5679,6 +5904,8 @@ export class SessionsService {
       senderSessionId?: string;
     },
   ) {
+    // Stopping a turn — or stopping one and replacing it — is an engine door (§2.9 LS6).
+    await this.assertEngineSession(ownerId, id);
     const content = dto?.content ?? '';
     const followUp = content.trim().length > 0 || (dto?.attachmentIds?.length ?? 0) > 0;
     // The runner's copy of the request, and the only thing it reads off an interrupt turn: the
@@ -6334,6 +6561,7 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      assertEngineSessionRow(session);
       if (session.deletedAt) {
         throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
       }
@@ -6449,6 +6677,7 @@ export class SessionsService {
     waitSeconds?: number,
     options: { rememberTarget?: boolean; recoveryAction?: MergeRecoveryAction; previewId?: string } = {},
   ) {
+    await this.assertEngineSession(ownerId, id);
     if (options.recoveryAction && !['preview', 'apply', 'sync-local', 'confirm-landed'].includes(options.recoveryAction)) {
       throw new BadRequestException('invalid merge recovery action');
     }
@@ -6975,6 +7204,7 @@ export class SessionsService {
   async commitWorktree(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
+    assertEngineSessionRow(session);
     if (session.isolationStatus !== 'worktree' || !session.branch) {
       throw new BadRequestException('session has no worktree to commit');
     }
@@ -7077,6 +7307,7 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      assertEngineSessionRow(session);
       if (session.isolationStatus !== 'worktree') {
         throw new BadRequestException('session has no worktree to adopt a branch from');
       }
@@ -7192,6 +7423,9 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
+      // End and Trash both land here; the platform's landing container is not a person's to close or
+      // throw away (§2.9 LS6).
+      assertEngineSessionRow(session);
       if (requireNoProjectBinding) {
         // Every Project binding path takes this same Session lock first. A non-locking lookup made
         // after acquiring it therefore decides a stable fact: an existing adopter is preserved,
@@ -7468,9 +7702,11 @@ export class SessionsService {
   ): Promise<ApprovalInfo> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, workspaceId: true },
+      select: { id: true, workspaceId: true, sessionKind: true },
     });
     if (!session) throw new NotFoundException('session not found');
+    // Answering a tool-permission card is an engine door (§2.9 LS6).
+    assertEngineSessionRow(session);
     if (dto.behavior !== 'allow' && dto.behavior !== 'deny') {
       throw new BadRequestException('behavior must be "allow" or "deny"');
     }
@@ -7869,6 +8105,16 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
+    // Reviving is an engine door: the platform's landing container has nothing to revive (§2.9 LS6).
+    assertEngineSessionRow(session);
+    // The run this request may stop is an engine door too, named in the body rather than the path.
+    if (dto.stopSessionId) {
+      const stop = await this.prisma.session.findFirst({
+        where: { id: dto.stopSessionId, ownerId },
+        select: { sessionKind: true },
+      });
+      if (stop) assertEngineSessionRow(stop);
+    }
     // A session's engine never changes (docs/provider-engine-contract.md §3.5): naming another one is
     // refused on the live path too, where the turn joins the process already running.
     await this.assertSameEngine(this.prisma, session, dto.engine);
@@ -8681,6 +8927,8 @@ export class SessionsService {
    * answer — out of the session's way (docs/personal-access-token-design.md §5). The rest is a token's.
    */
   async updateConfig(ownerId: string, id: string, dto: SessionConfigDto, credential?: AuthCredential) {
+    // Model, permission mode, effort, provider and account are all engine-path settings (§2.9 LS6).
+    await this.assertEngineSession(ownerId, id);
     refuseOwnerFieldsToToken(credential, { permissionMode: dto.permissionMode });
     if (
       dto.model === undefined &&
@@ -8967,6 +9215,8 @@ export class SessionsService {
    * transcript.
    */
   async switchAccount(ownerId: string, id: string, account: unknown) {
+    // Switching the runner account a session runs on is an engine door (§2.9 LS6).
+    await this.assertEngineSession(ownerId, id);
     if (typeof account !== 'string' || (account !== AUTOMATIC_ACCOUNT && !ACCOUNT_ID_PATTERN.test(account))) {
       throw new BadRequestException('account must be "automatic", "default" or the id of one of the runner\'s accounts');
     }
@@ -9097,6 +9347,9 @@ export class SessionsService {
     if (title.length > 200) throw new BadRequestException('title is too long (max 200 chars)');
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
+    // A landing's title is written by the server (titleManagedByProject); renaming it is an engine
+    // door's act (§2.9 LS6).
+    assertEngineSessionRow(session);
     // One statement is the ownership boundary: a manual rename and opting out of project-driven
     // synchronization either both land or neither does. Always clear the bit, even when the text
     // happens to equal the project title — equality is not intent and would introduce an ABA bug.
@@ -9191,11 +9444,12 @@ export class SessionsService {
     await withTransactionRetry(this.prisma, async (tx) => {
       // Serialize with purge: if restore wins, purge re-reads an Open row and refuses;
       // if purge wins, this lock query sees no row and restore returns 404.
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM "session"
+      const locked = await tx.$queryRaw<Array<{ id: string; sessionKind: string }>>`
+        SELECT id, "kind" AS "sessionKind" FROM "session"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
+      assertEngineSessionRow(locked[0]);
       await tx.session.update({
         where: { id },
         data: { completedAt: null, archivedAt: null, deletedAt: null },
@@ -9209,14 +9463,14 @@ export class SessionsService {
 
   /** Pin a session to the top of the list (personal ordering; never touches the runner). */
   async pin(ownerId: string, id: string) {
-    await this.get(ownerId, id); // ownership check (404s otherwise)
+    assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise)
     await this.prisma.session.update({ where: { id }, data: { pinnedAt: new Date() } });
     return { ok: true };
   }
 
   /** Remove a session's pin, dropping it back into time order. */
   async unpin(ownerId: string, id: string) {
-    await this.get(ownerId, id); // ownership check (404s otherwise)
+    assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise)
     await this.prisma.session.update({ where: { id }, data: { pinnedAt: null } });
     return { ok: true };
   }
@@ -9259,13 +9513,15 @@ export class SessionsService {
                FOR KEY SHARE`
         : [];
       const [session] = await tx.$queryRaw<
-        Array<{ workspaceId: string | null; folderId: string | null; deletedAt: Date | null }>
+        Array<{ workspaceId: string | null; folderId: string | null; deletedAt: Date | null; sessionKind: string }>
       >`
-        SELECT "workspace_id" AS "workspaceId", "folder_id" AS "folderId", "deleted_at" AS "deletedAt"
+        SELECT "workspace_id" AS "workspaceId", "folder_id" AS "folderId", "deleted_at" AS "deletedAt",
+               "kind" AS "sessionKind"
           FROM "session"
          WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
            FOR NO KEY UPDATE`;
       if (!session) throw new NotFoundException('session not found');
+      assertEngineSessionRow(session);
       if (workspaceId && workspaceId !== session.workspaceId) {
         await this.moveToWorkspaceLocked(tx, ownerId, id, { workspaceId, held: !!workspace }, folder, folderId);
         return { from: session.workspaceId, workspaceId, changed: true };
@@ -9593,12 +9849,13 @@ export class SessionsService {
     await withTransactionRetry(this.prisma, async (tx) => {
       // The Trash guard and irreversible delete must share the same row lock as restore.
       // A pre-lock deletedAt read could otherwise delete a session restored in between.
-      const locked = await tx.$queryRaw<Array<{ id: string; deletedAt: Date | null }>>`
-        SELECT id, "deleted_at" AS "deletedAt" FROM "session"
+      const locked = await tx.$queryRaw<Array<{ id: string; deletedAt: Date | null; sessionKind: string }>>`
+        SELECT id, "deleted_at" AS "deletedAt", "kind" AS "sessionKind" FROM "session"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
         FOR UPDATE`;
       const session = locked[0];
       if (!session) throw new NotFoundException('session not found');
+      assertEngineSessionRow(session);
       if (!session.deletedAt) {
         throw new BadRequestException('session must be in Trash before it can be permanently deleted');
       }

@@ -9,7 +9,6 @@ import {
   IsInt,
   IsOptional,
   IsString,
-  Matches,
   Max,
   MaxLength,
   Min,
@@ -18,16 +17,12 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
-  WIKI_CURSOR_OUTCOMES,
   WIKI_DECIDE_ACTIONS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
-  WIKI_MAINTENANCE_FAILURE_KINDS,
   WIKI_MAINTENANCE_LOOKBACK_DAYS,
   WIKI_REJECT_REASONS,
   WIKI_REVIEW_MODES,
-  type WikiCursorOutcome,
   type WikiDecideAction,
-  type WikiMaintenanceFailureKind,
   type WikiRejectReason,
   type WikiReviewMode,
 } from '@orbit/shared';
@@ -45,8 +40,9 @@ import { IsPublicId } from '../common/public-id';
 
 /**
  * `maintenance` in PATCH /api/wiki/spaces/:id, and in POST /api/wiki/spaces (contract
- * `space.settings.maintenance`): any of the five the owner sets. Declared before the two bodies that
- * carry it, whose decorator metadata names it as they are defined. `listId` is the server's and is not a field here — the whitelist drops it.
+ * `space.settings.maintenance`): any of the four the owner sets. Declared before the two bodies that
+ * carry it, whose decorator metadata names it as they are defined. `listId` is the server's and is not a field here — the whitelist drops it,
+ * as it drops `provider`, which a client that predates server execution still sends and nothing runs on.
  */
 export class WikiMaintenanceSettingsDto {
   @IsOptional()
@@ -59,13 +55,7 @@ export class WikiMaintenanceSettingsDto {
   @IsPublicId()
   workspaceId?: string | null;
 
-  /** A provider slug: a built-in engine or one of the owner's configured providers. */
-  @IsOptional()
-  @IsString()
-  @Matches(/^[a-z0-9][a-z0-9._-]{0,63}$/)
-  provider?: string;
-
-  /** How many maintenance tasks the space may make in one UTC day (contract `space.settings.maintenance.bounds`). */
+  /** How many maintenance runs the space may make in one UTC day (contract `space.settings.maintenance.bounds`). */
   @IsOptional()
   @IsInt()
   @Min(WIKI_MAINTENANCE_DAILY_RUN_LIMIT.min)
@@ -144,53 +134,6 @@ export class UpdateWikiSpaceDto {
   title?: string;
 }
 
-/**
- * POST /api/runner/wiki/spaces/:id/cursor — how a maintenance run ended (contract
- * `maintenance.cursor.advance`). `to` is required of a run that succeeded; the service says so, as
- * WIKI_CURSOR_INVALID, when it is missing.
- */
-export class WikiCursorAdvanceDto {
-  @IsOptional()
-  @IsString()
-  @MaxLength(2_000)
-  to?: string;
-
-  @IsOptional()
-  @IsIn(WIKI_CURSOR_OUTCOMES)
-  outcome?: WikiCursorOutcome;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(20_000)
-  error?: string;
-
-  /** Whose a failure was (contract `maintenance.job.recovery.failureKinds`): read off the error when it is not said. */
-  @IsOptional()
-  @IsIn(WIKI_MAINTENANCE_FAILURE_KINDS)
-  failureKind?: WikiMaintenanceFailureKind;
-}
-
-/**
- * POST /api/runner/wiki/spaces/:id/maintenance/advance — a Wiki maintenance run recorded its ops, and the cursor
- * moves past the sessions they came from (contract `maintenance.job.run.steps`, advance): `to` is the token of the
- * last page whose ops are recorded.
- */
-export class WikiMaintenanceAdvanceDto {
-  @IsString()
-  @MaxLength(2_000)
-  to!: string;
-}
-
-/**
- * POST /api/runner/wiki/spaces/:id/maintenance/finish — how a Wiki maintenance run ended, and what it did
- * (contract `maintenance.job.finish`): the cursor advance's three fields, and the run's report.
- */
-export class WikiMaintenanceFinishDto extends WikiCursorAdvanceDto {
-  @IsOptional()
-  @Allow()
-  report?: Record<string, unknown>;
-}
-
 /** POST /api/wiki/spaces/:id/workspaces — binding a workspace the owner named (§2.1 binding). */
 export class BindWikiWorkspaceDto {
   @IsPublicId()
@@ -264,30 +207,6 @@ export class WikiEntryRejectDto {
   @IsString()
   @MaxLength(2_000)
   note?: string;
-}
-
-/**
- * POST /api/runner/wiki/spaces/:id/verifications — verdicts on the calling session's own ops
- * (contract `reviewModes.verification.report`). `@Allow()`d and left to WikiService like `ops`: each
- * verdict is judged on its own, a malformed one is refused WIKI_SCHEMA naming its field while the
- * others are still recorded, and the one-off import calls the same service method with no DTO at all.
- */
-export class WikiVerificationReportDto {
-  @Allow()
-  verdicts?: unknown;
-}
-
-/**
- * POST /api/runner/wiki/spaces/:id/anchor-checks — what a maintenance run's re-verification found
- * (contract `anchorRules.verify.report`). `@Allow()`d and left to WikiService like the verdicts: the
- * report is refused WIKI_SCHEMA naming its field, and each entry is judged on its own.
- */
-export class WikiAnchorReportDto {
-  @Allow()
-  ref?: unknown;
-
-  @Allow()
-  entries?: unknown;
 }
 
 /** The owner's answer to one pending op, or to several of one changeset in one call. */

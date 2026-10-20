@@ -1,6 +1,6 @@
 /**
- * Activity's read of a space's server runs (contracts/wiki.contract.json `jobs.read`, P9), the executor switch as the
- * reads tell it to an account (`jobs.executor.read`), and the System model's state beside them on the health read —
+ * Activity's read of a space's server runs (contracts/wiki.contract.json `jobs.read`, P9), who executes an account's
+ * wiki as the reads tell it (`jobs.executor.read`), and the System model's state beside them on the health read —
  * against a real PostgreSQL, over the doors' real routes, with ids as the production app encodes them:
  *
  *   1. the runs read: the space's newest `jobs` rows newest first; each run's calls counted by state with their tokens,
@@ -8,8 +8,7 @@
  *      queues, counted across every account; the pipeline's progress read as a step and done of total;
  *   2. a call is its metadata alone: no prompt, system prompt, answer or partial, no lease column, no job input or
  *      report reaches the client;
- *   3. another account's space is the plain 404, and each account is told the mode and whether the server runs its
- *      own wiki — never who is on the canary list;
+ *   3. another account's space is the plain 404, and every account is told the server runs its wiki;
  *   4. with a recognisable System model address and key in the environment, and the worker's rows written against
  *      them (its state, and calls that answered, were refused and failed), neither appears in the jobs, the
  *      system-model or the health read (project criterion 1: the reads carry neither the address nor the key).
@@ -186,12 +185,6 @@ after(async () => {
   await model.close().catch(() => undefined);
 });
 
-/** The switch the reads are made under: canary, with these accounts on its list (or another mode). */
-function executor(mode: string, owners: string[] = []): void {
-  process.env.ORBIT_WIKI_EXECUTOR = mode;
-  process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS = owners.join(',');
-}
-
 interface Answer {
   status: number;
   text: string;
@@ -308,7 +301,6 @@ test('the runs read: the newest runs newest first, their calls counted and the n
   const h = await boot();
   const a = await account(h, 'P9 jobs owner');
   const b = await account(h, 'P9 jobs stranger');
-  executor('canary', [a.id]);
 
   // Twelve runs of the space, oldest first: the read answers the newest ten.
   const jobs: string[] = [];
@@ -402,11 +394,10 @@ test('the runs read: the newest runs newest first, their calls counted and the n
 
 // ── 3: whose it is ──────────────────────────────────────────────────────────────────────────────────
 
-test('another account\'s space is the plain 404, and each account is told the mode and whether the server runs its own wiki', { skip }, async () => {
+test('another account\'s space is the plain 404, and every account is told the server runs its wiki', { skip }, async () => {
   const h = await boot();
-  const a = await account(h, 'P9 canary owner');
+  const a = await account(h, 'P9 owner');
   const b = await account(h, 'P9 other owner');
-  executor('canary', [a.id]);
   await job(h, a, { kind: 'verify', createdAt: at(1) });
 
   expectStatus(await get(h, b.bearer, `/wiki/spaces/${a.spaceId}/jobs`), 404, 'a stranger reads nothing of another account\'s runs');
@@ -415,32 +406,23 @@ test('another account\'s space is the plain 404, and each account is told the mo
   expectStatus(own, 200, 'an account reads its own space');
   assert.deepEqual(own.body.jobs, [], 'a space the server never ran anything for');
 
-  // The executor as each account is told it: the mode, and whether the server runs this account's wiki.
-  const mine = await get(h, a.bearer, '/wiki/system-model');
-  expectStatus(mine, 200, 'the system-model read');
-  assert.deepEqual(mine.body.executor, { mode: 'canary', serverExecutes: true });
-  const theirs = await get(h, b.bearer, '/wiki/system-model');
-  assert.deepEqual(theirs.body.executor, { mode: 'canary', serverExecutes: false });
-  // The canary list stays on the server: the other account's read names nobody on it.
-  assert.equal(theirs.text.includes(a.id) || theirs.text.includes(uuidToBase62(a.id)), false, 'the canary list leaks');
+  // Who executes each account's wiki, as the account is told it: the server, for every account (P11).
+  for (const who of [a, b]) {
+    const read = await get(h, who.bearer, '/wiki/system-model');
+    expectStatus(read, 200, 'the system-model read');
+    assert.deepEqual(read.body.executor, { mode: 'server', serverExecutes: true });
+  }
 
-  // The health read carries the same answer, and the System model only while the server runs the account's wiki.
+  // The health read carries the same answer, and the System model's state beside it.
   const healthy = await get(h, a.bearer, `/wiki/spaces/${a.spaceId}/health`);
   expectStatus(healthy, 200, 'the health read');
-  assert.deepEqual(healthy.body.executor, { mode: 'canary', serverExecutes: true });
-  assert.ok(healthy.body.systemModel, 'the model\'s state beside the health of an account the server runs');
+  assert.deepEqual(healthy.body.executor, { mode: 'server', serverExecutes: true });
+  assert.ok(healthy.body.systemModel, 'the model\'s state beside the health');
   assert.deepEqual(Object.keys(healthy.body.systemModel).sort(), ['checkedAt', 'model', 'since', 'state', 'workerSeenAt']);
   const other = await get(h, b.bearer, `/wiki/spaces/${b.spaceId}/health`);
-  assert.deepEqual([other.body.executor, other.body.systemModel], [{ mode: 'canary', serverExecutes: false }, null]);
-  assert.equal(other.text.includes(a.id) || other.text.includes(uuidToBase62(a.id)), false, 'the canary list leaks');
+  assert.deepEqual(other.body.executor, { mode: 'server', serverExecutes: true });
+  assert.ok(other.body.systemModel, 'every account\'s health carries the model\'s state');
   expectStatus(await get(h, b.bearer, `/wiki/spaces/${a.spaceId}/health`), 404, 'nor another account\'s health');
-
-  // Under server every account is the server's; unset is runner, as it always was.
-  executor('server');
-  assert.deepEqual((await get(h, b.bearer, '/wiki/system-model')).body.executor, { mode: 'server', serverExecutes: true });
-  executor('');
-  assert.deepEqual((await get(h, a.bearer, '/wiki/system-model')).body.executor, { mode: 'runner', serverExecutes: false });
-  assert.equal((await get(h, a.bearer, `/wiki/spaces/${a.spaceId}/health`)).body.systemModel, null);
   await clean(h, a, b);
 });
 
@@ -449,7 +431,6 @@ test('another account\'s space is the plain 404, and each account is told the mo
 test('with the System model\'s address and key in the environment and the worker\'s rows written against them, no read names either', { skip, timeout: 60_000 }, async () => {
   const h = await boot();
   const a = await account(h, 'P9 no-secrets owner');
-  executor('canary', [a.id]);
   const config: WikiSystemModelConfig = readWikiSystemModel({
     ORBIT_WIKI_MODEL_BASE_URL: process.env.ORBIT_WIKI_MODEL_BASE_URL,
     ORBIT_WIKI_MODEL_API_KEY: process.env.ORBIT_WIKI_MODEL_API_KEY,

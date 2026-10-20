@@ -19,7 +19,6 @@ import {
   wikiCallRow,
   wikiRunFootText,
   wikiRunRow,
-  wikiRunsShown,
 } from '../lib/wikiRuns';
 
 /**
@@ -29,8 +28,8 @@ import {
  * ran, the tokens it spent and how it failed.
  *
  * A SERVER RUN HAS NO TASK AND NO SESSION, so nothing here links to one: the run's detail is this log, and the
- * status line's View run opens it (`?run=<job>` on Activity) instead of a session. Drawn while the server executes
- * the account's wiki, or once it ran something for the space; under runner Activity is what it always was.
+ * status line's View run opens it (`?run=<job>` on Activity) instead of a session. Drawn while the health read says
+ * the server executes the account's wiki.
  *
  * The words are `lib/wikiRuns.ts`', which OrbitKit's `WikiRunsLogic` says too, both held to
  * `src/shared/src/wiki-server-execution.fixture.json`.
@@ -50,7 +49,7 @@ export function WikiRunsCard({ space }: { space: WikiSpaceRow }) {
     document.getElementById(runAnchor(asked))?.scrollIntoView?.({ block: 'center' });
   }, [asked, rows.length]);
 
-  if (!wikiRunsShown(health.data?.executor?.serverExecutes === true, rows)) return null;
+  if (health.data?.executor?.serverExecutes !== true) return null;
   const model = health.data?.systemModel ?? null;
   const now = Date.now();
   return (

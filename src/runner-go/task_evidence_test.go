@@ -269,3 +269,18 @@ func TestTaskEvidenceDecideRefusesLocallyWithoutDecisionRevisionOrSession(t *tes
 		t.Fatalf("missing deciding session error = %v", err)
 	}
 }
+
+// collapsedSpace is text with every run of whitespace one space: a usage line the help wraps is
+// still the one line the contract writes.
+func collapsedSpace(text string) string {
+	return strings.Join(strings.Fields(text), " ")
+}
+
+func assertSaysAll(t *testing.T, what, text string, phrases ...string) {
+	t.Helper()
+	for _, phrase := range phrases {
+		if !strings.Contains(text, phrase) {
+			t.Errorf("%s does not say %q:\n%s", what, phrase, text)
+		}
+	}
+}

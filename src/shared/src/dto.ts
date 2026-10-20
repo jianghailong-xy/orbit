@@ -25,7 +25,6 @@ import {
 } from './enums';
 import { ModelUsage, NormalizedRunEvent, TokenUsage } from './events';
 import { SessionSourceSnapshot } from './source';
-import type { WikiMaintenanceRun } from './wiki';
 import type { WikiRepoOpCommand } from './wikiRepoOps';
 import type { ManagedRunnerSleepRequest, ManagedRunnerWorkload } from './managedRunner';
 
@@ -300,6 +299,20 @@ export interface RunnerModelInfo {
   /** Whether this model has the runtime's fast lane, from the same probe. Absent is "the runner
    *  could not say" and false is "it said no"; only the first falls back to the static table. */
   fastMode?: boolean;
+  /** Every setting the model takes beside its name, as the runtime lists them: Cursor CLI's effort,
+   *  context size, fast lane and thinking (runner-go cursor_models.go). Absent for a runtime that
+   *  lists none. A Cursor session names the ones it sets in its model value (cursorModels.ts). */
+  parameters?: RunnerModelParameter[];
+}
+
+/** One setting a model takes: the id that selects it, which is the model's own (one model's effort is
+ *  `effort`, another's `reasoning_effort`), the values it accepts and the one it starts on. */
+export interface RunnerModelParameter {
+  id: string;
+  label: string;
+  category?: string;
+  default?: string;
+  values: Array<{ value: string; label: string }>;
 }
 
 /** Models a runner says its local runtimes can use. Keys are provider ids. Antigravity's rows
@@ -912,6 +925,35 @@ export interface RunnerRepoCleanupResult {
   message?: string;
 }
 
+/**
+ * What drives a session (migration 0436, contract §2.9): CONVERSATION for every session an engine
+ * may run, LANDING for the platform-driven container a landing subject opens. Optional on payloads
+ * — a server older than the column omits it, and a client that does not know it ignores it.
+ */
+export type SessionKind = 'CONVERSATION' | 'LANDING';
+
+/**
+ * The landing this conversation produced work for (contract §2.9 LS1, migration 0436): the newest
+ * generation of integration work whose source session this is, and the subject it belongs to.
+ *
+ * Optional everywhere it appears. A conversation that produced no landing work answers null; a
+ * client that does not know the field ignores it. `state` is the newest attempt's own job state
+ * (QUEUED, RUNNING, READY, …) and `settledAs` is how the subject ended, so a label can say
+ * "Landing · checking" while it moves and "On project/<id> ✓" once it landed.
+ */
+export interface SessionSourceLanding {
+  /** The LANDING session's id (available before its row exists: it is pre-generated). */
+  landingSessionId: string;
+  subject: 'TASK' | 'PROMOTION';
+  /** The newest attempt's job state. */
+  state: string;
+  /** LANDED | ALREADY_LANDED | NOTHING_TO_LAND | MERGED | HANDLED | DECLINED | CANCELLED |
+   *  DELETED, or null while the subject is open. */
+  settledAs: string | null;
+  /** The branch the attempt writes, as the job froze it. */
+  targetRef: string;
+}
+
 /** One supervised session's live worktree diff (cf. TurnCompleteRequest, which carries
  *  the same snapshot at turn boundaries). */
 export interface SessionLiveState {
@@ -1271,7 +1313,9 @@ export const KIMI_REGIONS: readonly KimiRegion[] = ['mainland-cn', 'global'];
 export const KIMI_LOGIN_REGION_V1 = 'kimi-login-region/v1';
 
 /** Engines with an install action in Providers: every engine a runner signs in with, plus `dsh` and
- *  OpenCode, which are installed without one — the relay needs an install command, not a way in. */
+ *  OpenCode, which are installed without one — the relay needs an install command, not a way in.
+ *  Cursor CLI's (`cursor`, the same request for Install and Reinstall) goes only to a runner that knows
+ *  Cursor CLI: it declares `provider:cursor` or reports the engine. */
 export type InstallEngine = LoginEngine | 'opencode' | 'dsh';
 
 /**
@@ -1816,10 +1860,6 @@ export interface ClaimedSession {
    *  `source-pin/v1` (SR35), so a payload carrying this field only ever reaches a process that
    *  knows it must pin before it may create a worktree or spawn an engine (SR33). */
   source?: SessionSourceSnapshot;
-  /** Present on a Wiki maintenance session only (contracts/wiki.contract.json `maintenance.run`): the run it is
-   *  pinned to, and the clean start and guardrails it is started with. Only a runner that declares
-   *  `wiki-maintenance-run/v1` is handed such a session at all. */
-  wikiMaintenance?: WikiMaintenanceRun;
   /** Asks the runner to name the session through the engine running it, once its opening turn is
    *  underway (runner session_naming.go): present only while nothing else will name it and its engine
    *  can answer from inside its own process. A runner that ignores it leaves the title it has. */
@@ -2199,8 +2239,6 @@ export interface ReclaimSession {
    *  (SR29): a session already `PINNED` keeps the SHA its first claim froze, whatever the
    *  binding's configuration or the ref's tip have done since. */
   source?: SessionSourceSnapshot;
-  /** The maintenance run, cf. ClaimedSession.wikiMaintenance: a restarted runner starts it clean again. */
-  wikiMaintenance?: WikiMaintenanceRun;
 }
 
 /** Control plane → runner response for GET /runner/sessions/reclaim. */
@@ -2580,6 +2618,10 @@ export interface SessionSearchHit {
    *  highlight by locating the query inside it — no offset is carried, since collapsing the
    *  whitespace would invalidate one anyway. */
   snippet: string | null;
+  /** What drives the session. Every row a search answers is a CONVERSATION — LANDING rows are
+   *  excluded from every list — but the field is carried so a row read anywhere names its kind.
+   *  Absent from servers older than migration 0436. */
+  sessionKind?: SessionKind;
 }
 
 /** GET /sessions/search. `contentSearched` is false when the query was too short to search
@@ -2709,17 +2751,119 @@ export interface IntegrationJobCommand {
    *  `promotion-automatic-land/v1`; absent on every other job. */
   automatic?: boolean;
   checks: IntegrationCheckSpec[];
-  /** Somebody asked for this job to stop; the runner checks it at each phase boundary. */
+  /** Somebody asked for this job to stop. Today's runner reads it once, when it starts the job (and
+   *  a takeover's new process reads the request its claim carries), so a request written while a
+   *  legacy job runs only takes effect if the job is claimed again; the progress protocol adds it to
+   *  every answer (§2.2 J-T4, J-T12). */
   cancelRequested: boolean;
+  /** Earlier landings on this job's serial key whose push outcome the control plane could not know
+   *  (ERROR · PUSH_OUTCOME_UNKNOWN) and that have no receipt yet (J12). After its fetch the runner
+   *  asks git whether each one's tested commit is already an ancestor of the target, and reports
+   *  which are. An older runner ignores the field, and the control plane leaves those results to a
+   *  coordinator as it always did. */
+  unknownPushes?: IntegrationUnknownPush[];
+  /** The v2 progress protocol (§2.2 J-T4): before it pushes, the runner reports `phase = PUSH` and
+   *  waits for the answer. Sent only to a claim whose `progress_protocol` this server wrote as
+   *  `v2`; absent on every legacy claim, whose runner pushes without asking. */
+  reportBeforePush?: true;
 }
 
-/** Runner → control plane: still working (POST /runner/integration-jobs/:jobId/progress). */
+/** One earlier landing the control plane could not read the push outcome of, as a command names it
+ *  (J12): the job, and the commit it tested and would have pushed. */
+export interface IntegrationUnknownPush {
+  jobId: string;
+  testedSha: string;
+}
+
+/** That same landing after the runner asked git: `landed` is whether its tested commit is now an
+ *  ancestor of the target. Only an entry git answered for is reported, so an absent one means
+ *  "cannot tell", never "not landed". */
+export interface IntegrationUnknownPushCheck {
+  jobId: string;
+  landed: boolean;
+}
+
+/** The named sub-step a v2 claim is on, beside `phase` (§2.2 J-T4). It does not widen
+ *  `IntegrationJobPhase`: waiting for this runner's own integration lock happens inside FETCH, and
+ *  preparing the tree inside CHECK. */
+export type IntegrationJobStep = 'WAITING_LOCAL_LOCK' | 'PREPARE';
+
+/** The check a v2 claim is running, as its progress reports name it (§2.1, §2.2 J-T4). The job
+ *  row's `checks` holds FINISHED results in a different shape; this one is the check in flight. */
+export interface IntegrationJobCurrentCheck {
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  /** Position of this check in the run, from 1, and how many the run has in all. */
+  index: number;
+  count: number;
+  budgetSeconds: number;
+  startedAt: string;
+}
+
+/** Runner → control plane: still working (POST /runner/integration-jobs/:jobId/progress). Every
+ *  field past the fence is optional: a legacy runner sends only the first three and is still
+ *  served the same way. */
 export interface IntegrationJobProgressRequest {
   claimGeneration: string;
   leaseOwner: string;
   phase: IntegrationJobPhase;
+  /** The named sub-step, while one is (J-T4). Absent between steps. */
+  step?: IntegrationJobStep;
+  /** Which round inside this claim, from 1: a landing may retry its push onto a moved target. */
+  round?: number;
+  /** The check in flight, while one is. */
+  check?: IntegrationJobCurrentCheck;
+  /** How long the current step's output has been idle. The server writes `output_moved_at` as the
+   *  instant it received this report minus this; absent is "not measured". */
+  outputIdleMs?: number;
+  /** Bytes this step has produced so far. */
+  outputBytes?: number;
   /** Upstream moved under the job while it worked, for a reader of the timeline. */
   upstreamMoved?: { from: string; to: string; commits?: number };
+  /** The synchronous PUSH report's facts (J12), sent on `phase = PUSH` and nowhere else: the commit
+   *  about to be pushed, its tree, the commit it replays or merges into it, and the target tip it
+   *  expects. The control plane writes them on the row while the claim still holds it, so a job
+   *  whose push outcome later becomes unknown leaves the next landing on its serial key enough to
+   *  check — and, if the push did happen, to write the receipt nobody got to report. */
+  testedSha?: string;
+  testedTreeSha?: string;
+  sourceSha?: string;
+  targetShaBefore?: string;
+}
+
+/** Control plane → runner: the renewal was taken, and — a stop signal in the other direction —
+ *  whether somebody asked this job to stop (§2.2 J-T4). A v2 runner that reads `true` kills the
+ *  check's process group and answers CANCELLED. A 409 STALE_CLAIM / 409 ALREADY_FINAL / 404 is
+ *  the same signal with no answer left to report into. */
+export interface IntegrationJobProgressResponse {
+  accepted: true;
+  cancelRequested: boolean;
+}
+
+/** The check a chunk of output belongs to (POST /runner/integration-jobs/:jobId/output, contract
+ *  §2.2 J-T4, §2.9 LS2). `index` is the check's position in the run, from 1. */
+export interface IntegrationJobOutputCheck {
+  name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK';
+  index: number;
+}
+
+/** Runner → control plane: one chunk of a running check's combined output, uploaded as it is
+ *  written. Only a v2 claim uploads; a legacy claim keeps the 16 KB tail its result already carries.
+ *
+ *  A chunk is fenced on the claim the same way a progress report is: a 409 STALE_CLAIM / 409
+ *  ALREADY_FINAL or a 404 is a claim that can never be written into again, and the runner stops
+ *  uploading. `seq` numbers the chunks of one check from 0, so a resend is the chunk already stored
+ *  rather than a second copy. `text` is redacted by the runner before it leaves the machine. */
+export interface IntegrationJobOutputRequest {
+  claimGeneration: string;
+  leaseOwner: string;
+  check: IntegrationJobOutputCheck;
+  seq: number;
+  text: string;
+}
+
+/** Control plane → runner: the chunk was taken (or was already stored under its seq). */
+export interface IntegrationJobOutputResponse {
+  accepted: true;
 }
 
 /** Runner → control plane: give a claimed job back to the queue (POST
@@ -2771,6 +2915,45 @@ export interface IntegrationJobResultRequest {
   conflicts?: string[];
   errorCode?: string | null;
   errorDetail?: Record<string, unknown> | null;
+  /** With a LAND_PROMOTION that ended because the upstream moved under it (J-T13, M-T12): what the
+   *  upstream gained between the tip the job worked from and the tip it found. Written into the job
+   *  row and carried at the top level of its INTEGRATION_ERROR item's payload; never put in
+   *  `errorDetail`, which is copied verbatim into delivery text. */
+  upstreamMovedCommits?: UpstreamMovedCommits | null;
+  /** What this job's fetch found about the earlier unknown pushes its command named (J12): only the
+   *  entries git could answer for. */
+  unknownPushes?: IntegrationUnknownPushCheck[];
+}
+
+/** The commits that moved the upstream under a landing, as the runner measured them on the
+ *  repository it fetched (J-T4, J-T13 / M-T12): first-parent, newest first, at most twenty, with the
+ *  true total beside them. */
+export interface UpstreamMovedCommits {
+  total: number;
+  commits: UpstreamMovedCommit[];
+}
+
+export interface UpstreamMovedCommit {
+  sha: string;
+  /** Cut to 200 characters by the runner. */
+  subject: string;
+}
+
+/** The list as the control plane stores it: the runner's commits with its own reading of each one
+ *  added. Not what a runner sends — `IntegrationJobResultRequest` carries `UpstreamMovedCommits` —
+ *  because these two facts are the control plane's to establish, never the reporting machine's. */
+export interface UpstreamMovedCommitsEnriched {
+  total: number;
+  commits: UpstreamMovedCommitEnriched[];
+}
+
+export interface UpstreamMovedCommitEnriched extends UpstreamMovedCommit {
+  /** True when no LANDED LAND_PROMOTION on the job's serial key landed this commit, so it arrived
+   *  from outside the landing queue. */
+  outsideQueue: boolean;
+  /** The landing that put it there, when one did: the promotion job and its candidate for this
+   *  account, or only the reason for another account's — never its ids or titles. */
+  landedBy?: { jobId: string; promotionId: string } | { reason: 'ANOTHER_ACCOUNT' };
 }
 
 /** Control plane → runner: whether the result was taken, and what it derived. */

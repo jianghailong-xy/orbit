@@ -109,10 +109,11 @@ export function upload(
 
 /**
  * An answer as text with what differs between any two answers spelled one way — every id, in either
- * spelling, every instant, digest and cursor, the seq a session gives each new turn, and B2's names
- * for its objects, which are B's with a 2 — so that the answer to an id of A's and the answer to an
- * id that names nothing compare on everything else: the status, the words, which fields are there
- * and what the rest of them hold.
+ * spelling, every instant, digest and cursor, the seq a session gives each new turn, a live
+ * duration measured from an instant (B's objects are older than B2's by however long the fixtures
+ * took), and B2's names for its objects, which are B's with a 2 — so that the answer to an id of A's
+ * and the answer to an id that names nothing compare on everything else: the status, the words,
+ * which fields are there and what the rest of them hold.
  */
 export const answerOf = (reply: Reply) =>
   `${reply.status} ${reply.text}`
@@ -122,6 +123,7 @@ export const answerOf = (reply: Reply) =>
     .replace(/\b[0-9A-Za-z]{20,22}\b/g, '<id>')
     .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?/g, '<instant>')
     .replace(/"seq":\d+/g, '"seq":<n>')
+    .replace(/"waitMs":\d+/g, '"waitMs":<ms>')
     .replace(/\bb2(?=[ -])/g, 'b');
 
 /** An account of the run's: a user, and a JWT of theirs. */
@@ -351,6 +353,26 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         integrationRefSource: 'DEFAULT_RULE', integrationStartedAt: new Date(),
       },
     });
+    // A LANDING session and its landing subject (§2.9 LS1): the address the landing page and its
+    // check log are read through. It is the shape `ensureLandingSession` writes — no engine, no
+    // runner, the platform's reserved provider, and the subject pointing back at this session.
+    const landingSessionId = randomUUID();
+    await db.session.create({
+      data: {
+        id: landingSessionId, title: `${name} landing`, ownerId, creatorId: ownerId, workspaceId,
+        prompt: 'Orbit runs this landing. This conversation is a record, not an engine.',
+        status: 'AWAITING_INPUT', sessionKind: 'LANDING', startsTaskWork: false,
+        provider: 'orbit', providerBuiltin: true, titleManagedByProject: true,
+        dispatchOrigin: 'USER', runSource: 'MANUAL',
+      },
+    });
+    const landingId = randomUUID();
+    await db.projectLanding.create({
+      data: {
+        id: landingId, projectId, ownerId, codebaseId: codebase.id, subject: 'TASK',
+        taskId: projectTaskId, episode: 1, sessionId: landingSessionId,
+      },
+    });
     const promotionId = (await db.projectPromotion.create({
       data: {
         projectId, ownerId, codebaseId: codebase.id, sourceKind: 'PROJECT_BRANCH', sourceRef: `refs/heads/project/${projectId}`,
@@ -367,6 +389,8 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
         serialKey: `https://census.invalid/${name}#refs/heads/project/${projectId}`,
         targetRef: `refs/heads/project/${projectId}`, upstreamRef: 'refs/heads/main',
         sourceRef: 'refs/heads/orbit/census', idempotencyKey: `ij:v1:census:${projectId}`,
+        // The attempt belongs to the landing subject above, so the landing's log read can name it.
+        landingId,
       },
     })).id;
     const contract = await db.projectCompletionContract.findUniqueOrThrow({ where: { projectId } });
@@ -587,6 +611,7 @@ export function censusFixtures({ run: RUN, db, sql, server, jwt }: CensusWorld) 
       listRevision,
       projectId,
       projectTaskId,
+      landingSessionId,
       attemptId,
       projectCriterionId: toUuid(projectRead.acceptanceCriteriaItems[0].id),
       openItemId,

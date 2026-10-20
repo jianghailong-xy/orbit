@@ -222,10 +222,10 @@ const wikiConnSlack = 3 * time.Second
 
 // ── A connection that went silent ───────────────────────────────────────────────────────────────
 
-// 09-29 at 15:23Z: the run's connection to the edge went silent under an article's write, after carrying the
-// calls before it. The health check finds it dead a ping's wait and the ping's own after it last said
-// anything — nowhere near the write's 2-minute timeout — and closes it; the write goes again, on a new
-// connection, and is answered.
+// 09-29 at 15:23Z: the run's connection to the edge went silent under a write, after carrying the calls
+// before it. The health check finds it dead a ping's wait and the ping's own after it last said anything —
+// well inside the write's own timeout — and closes it; the write goes again, on a new connection, and is
+// answered.
 func TestWikiConnHealthFindsASilentConnectionAndSendsAgainOnANewOne(t *testing.T) {
 	sendPing, ping, first := time.Second, 500*time.Millisecond, 100*time.Millisecond
 	withWikiConnHealth(t, sendPing, ping)
@@ -233,11 +233,11 @@ func TestWikiConnHealthFindsASilentConnectionAndSendsAgainOnANewOne(t *testing.T
 	door := newSilentDoor(t, func(conn, call int) bool { return conn == 1 && call >= 2 })
 	tr := door.transport()
 
-	if _, err := tr.wikiArticleInput("maintenance-session", "space-1", "web-client"); err != nil {
+	if _, err := tr.listWikiVerifications("verifications", "caller-session", "space-1", "", 1); err != nil {
 		t.Fatalf("the call before: %v", err)
 	}
 	began := time.Now()
-	_, err := tr.writeWikiArticles("maintenance-session", "space-1", "agent-tooling", map[string]interface{}{"entrySetSha256": "sha"})
+	_, _, err := tr.registerWikiNote("caller-session", "space-1", map[string]interface{}{"path": "memory/a.md", "text": "a fact"})
 	took := time.Since(began)
 	if err != nil {
 		t.Fatalf("the write on a connection that went silent = %v after %s\n%s", err, took, strings.Join(lines.lines(), "\n"))
@@ -246,7 +246,7 @@ func TestWikiConnHealthFindsASilentConnectionAndSendsAgainOnANewOne(t *testing.T
 		t.Errorf("the write was answered after %s: want it within the health check's time, %s", took, limit)
 	}
 
-	want := []silentCall{{"articles/web-client/input", 1, true}, {"articles/agent-tooling", 1, false}, {"articles/agent-tooling", 2, true}}
+	want := []silentCall{{"verifications", 1, true}, {"notes", 1, false}, {"notes", 2, true}}
 	if got := door.reached(); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("the door was reached by %v: want %v — the write again, on a new connection", got, want)
 	}
@@ -255,7 +255,7 @@ func TestWikiConnHealthFindsASilentConnectionAndSendsAgainOnANewOne(t *testing.T
 		t.Errorf("the silent connection was closed by the client %v after it went silent (closed: %v)", after, closed)
 	}
 	if got := lines.lines(); len(got) != 1 ||
-		!strings.Contains(got[0], "orbit wiki: POST /runner/wiki/spaces/space-1/articles/agent-tooling failed (http2: client connection lost); retry 1 in 100ms") {
+		!strings.Contains(got[0], "orbit wiki: POST /runner/wiki/spaces/space-1/notes failed (http2: client connection lost); retry 1 in 100ms") {
 		t.Errorf("the retries said %q: want one, for the connection the health check found lost", got)
 	}
 }
@@ -270,7 +270,7 @@ func TestWikiConnHealthSendsATimedOutCallAgainOnANewConnection(t *testing.T) {
 	lines := withRealClockWikiRetry(t, 100*time.Millisecond, time.Second, 10*time.Second)
 	door := newSilentDoor(t, func(conn, call int) bool { return conn == 1 && call >= 2 })
 	tr := door.transport()
-	run, input := "/runner/wiki/spaces/space-1/maintenance/run", "/runner/wiki/spaces/space-1/articles/web-client/input"
+	run, input := "/runner/wiki/spaces/space-1/verifications", "/runner/wiki/spaces/space-1/import"
 	get := func(path string, timeout time.Duration) (int, time.Duration, error) {
 		var out json.RawMessage
 		began := time.Now()
@@ -303,8 +303,8 @@ func TestWikiConnHealthSendsATimedOutCallAgainOnANewConnection(t *testing.T) {
 	if err := <-longDone; err != nil {
 		t.Fatalf("the call that silenced the connection: %v\n%s", err, strings.Join(lines.lines(), "\n"))
 	}
-	want := []silentCall{{"maintenance/run", 1, true}, {"articles/web-client/input", 1, false}, {"maintenance/run", 2, true},
-		{"articles/web-client/input", 2, true}}
+	want := []silentCall{{"verifications", 1, true}, {"import", 1, false}, {"verifications", 2, true},
+		{"import", 2, true}}
 	if got := door.reached(); fmt.Sprint(got) != fmt.Sprint(want) {
 		t.Errorf("the door was reached by %v: want %v — each retry on the new connection", got, want)
 	}
@@ -315,9 +315,9 @@ func TestWikiConnHealthSendsATimedOutCallAgainOnANewConnection(t *testing.T) {
 	}
 }
 
-// 09-29 at 15:23Z again, all of it: the articles stage's calls in flight at once, on the one connection, which
-// goes silent under them — the run lost every one of them to its timeout. Each is found out with the
-// connection, and answered on a new one a health check's time later.
+// 09-29 at 15:23Z again, all of it: a run's calls in flight at once, on the one connection, which goes silent
+// under them — the run lost every one of them to its timeout. Each is found out with the connection, and
+// answered on a new one a health check's time later.
 func TestWikiConnHealthCarriesABatchOfCallsOffADeadConnection(t *testing.T) {
 	sendPing, ping, first := time.Second, 500*time.Millisecond, 100*time.Millisecond
 	withWikiConnHealth(t, sendPing, ping)
@@ -325,25 +325,24 @@ func TestWikiConnHealthCarriesABatchOfCallsOffADeadConnection(t *testing.T) {
 	door := newSilentDoor(t, func(conn, call int) bool { return conn == 1 && call >= 2 })
 	tr := door.transport()
 
-	if _, err := tr.planWikiArticles("maintenance-session", "space-1"); err != nil {
-		t.Fatalf("the stage's first call: %v", err)
+	if _, err := tr.getWikiEntry("caller-session", "e1", ""); err != nil {
+		t.Fatalf("the run's first call: %v", err)
 	}
-	article := map[string]interface{}{"entrySetSha256": "sha"}
 	batch := map[string]func() error{
-		"POST articles/agent-tooling": func() error {
-			_, err := tr.writeWikiArticles("maintenance-session", "space-1", "agent-tooling", article)
+		"POST notes": func() error {
+			_, _, err := tr.registerWikiNote("caller-session", "space-1", map[string]interface{}{"path": "memory/a.md", "text": "a fact"})
 			return err
 		},
-		"GET articles/web-client/input": func() error {
-			_, err := tr.wikiArticleInput("maintenance-session", "space-1", "web-client")
+		"GET verifications": func() error {
+			_, err := tr.listWikiVerifications("verifications", "caller-session", "space-1", "", 1)
 			return err
 		},
-		"GET articles/apple-clients/input": func() error {
-			_, err := tr.wikiArticleInput("maintenance-session", "space-1", "apple-clients")
+		"GET search": func() error {
+			_, err := tr.searchWiki("caller-session", wikiSearchQuery{Q: "trgm index"})
 			return err
 		},
-		"POST articles/ui-design": func() error {
-			_, err := tr.writeWikiArticles("maintenance-session", "space-1", "ui-design", article)
+		"POST verifications/request": func() error {
+			_, err := tr.requestWikiVerification("caller-session", "space-1")
 			return err
 		},
 	}
@@ -373,9 +372,9 @@ func TestWikiConnHealthCarriesABatchOfCallsOffADeadConnection(t *testing.T) {
 	answered := map[string]bool{}
 	for _, call := range door.reached() {
 		switch {
-		case call.path == "article-plan":
+		case call.path == "/api/runner/wiki/entries/e1":
 			if !call.answered || call.conn != 1 {
-				t.Errorf("the plan = %+v: want it answered on the first connection", call)
+				t.Errorf("the first call = %+v: want it answered on the first connection", call)
 			}
 		case call.answered && call.conn == 1:
 			t.Errorf("%s was answered on the connection that went silent", call.path)
@@ -408,9 +407,9 @@ func TestWikiConnHealthGivesUpOnceTheBudgetIsSpentWithTheOriginalError(t *testin
 	door := newSilentDoor(t, func(int, int) bool { return true })
 	tr := door.transport()
 
-	path := "/runner/wiki/spaces/space-1/articles/agent-tooling"
+	path := "/runner/wiki/spaces/space-1/notes"
 	began := time.Now()
-	_, err := tr.writeWikiArticles("maintenance-session", "space-1", "agent-tooling", map[string]interface{}{"entrySetSha256": "sha"})
+	_, _, err := tr.registerWikiNote("caller-session", "space-1", map[string]interface{}{"path": "memory/a.md", "text": "a fact"})
 	took := time.Since(began)
 
 	// The transport's own error, not one of this code's: what a caller did with it before, it still does.
@@ -452,13 +451,13 @@ func TestWikiConnHealthGivesUpOnceTheBudgetIsSpentWithTheOriginalError(t *testin
 	}
 
 	// With the health check as it ships, a silent connection holds a send until the budget's end — not until the
-	// write's own 2-minute timeout — and the call gives up then, with the send's own timeout.
+	// write's own 20-second timeout — and the call gives up then, with the send's own timeout.
 	withWikiConnHealth(t, 30*time.Second, 15*time.Second)
 	budget = 2 * time.Second
 	lines = withRealClockWikiRetry(t, 100*time.Millisecond, max, budget)
 	door = newSilentDoor(t, func(int, int) bool { return true })
 	began = time.Now()
-	_, err = door.transport().writeWikiArticles("maintenance-session", "space-1", "agent-tooling", map[string]interface{}{"entrySetSha256": "sha"})
+	_, _, err = door.transport().registerWikiNote("caller-session", "space-1", map[string]interface{}{"path": "memory/a.md", "text": "a fact"})
 	took = time.Since(began)
 	if !errors.Is(err, context.DeadlineExceeded) || took > budget+wikiConnSlack {
 		t.Errorf("a send on a silent connection = %v after %s: want it given up at the %s budget, as its own timeout", err, took, budget)

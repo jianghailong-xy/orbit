@@ -3,14 +3,14 @@ import { WIKI_IMPORT_JOB, WIKI_IMPORT_RULES, WIKI_LIMITS } from '@orbit/shared';
 /**
  * What the import makes of a note (contracts/wiki.contract.json `import.server`, design §8, P5): the prompt,
  * the reading of the model's answer, and the checks every entry is held to before it becomes an op — ported
- * from `src/runner-go/wiki_import.go`, which does the same on the runner until P10 removes it.
+ * from `src/runner-go/wiki_import.go`, which did the same on the runner until P11 removed that half of it.
  *
- * ONE RULE, TWO IMPLEMENTATIONS, NO DRIFT. The two paths run side by side until P10, and what is deterministic
- * here — the prompt, the parse, the repair, the field checks, the quote, the verify command, a path's reading —
- * answers exactly what the Go code answers for the same input (`wiki-import.golden.json` holds both to the same
- * outputs). The one thing that is not a port is where the anchors are checked: the runner held them to the
- * checkout it ran in, and the server holds them to the space's snapshot of origin/main (contract `repoOps`) —
- * a path the tree has, a commit origin/main reaches.
+ * ONE RULE, NO DRIFT. The two paths ran side by side until P11, and what is deterministic here — the prompt,
+ * the parse, the repair, the field checks, the quote, the verify command, a path's reading — answers exactly
+ * what the Go code answered for the same input (`src/shared/src/wiki-import.fixture.json`, frozen since P11,
+ * holds the server to its outputs). The one thing that is not a port is where the anchors are checked: the
+ * runner held them to the checkout it ran in, and the server holds them to the space's snapshot of origin/main
+ * (contract `repoOps`) — a path the tree has, a commit origin/main reaches.
  *
  * Nothing in this file touches the database or the model: the job (wiki-import-job.ts) asks, and this reads.
  */
@@ -36,7 +36,7 @@ export interface WikiImportOp {
   body: Record<string, unknown>;
 }
 
-// ── Go's own readings of text, where the port has to answer exactly what the runner answers ──────────────
+// ── Go's own readings of text, where the port has to answer exactly what the runner answered ─────────────
 
 /** Go's unicode.IsSpace, which strings.TrimSpace and strings.Fields read by. */
 const GO_SPACE = '\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
@@ -71,7 +71,7 @@ const REPLACEMENT_CHAR = '�';
  * Go's json.Unmarshal of a model's answer, where JSON.parse alone answers differently: a number past
  * float64's range is an error there (a map or slice decode is a float64 decode), not Infinity, and a
  * lone surrogate in any string or key comes out U+FFFD. Both are put right, so the decoded answer is
- * the value Go hands its checks.
+ * the value Go handed the runner's checks.
  */
 export function parseAnswerJson(body: string): unknown {
   const value: unknown = JSON.parse(body, (_key: string, item: unknown) => {
@@ -157,7 +157,7 @@ function goQuote(text: string): string {
 /**
  * Go's json.Marshal of a value decoded from JSON: object keys sorted by their bytes, and `<`, `>`, `&`,
  * U+2028 and U+2029 escaped. The retry names the rejected entries in this form and the idempotency key is
- * the sha256 of it, so both are the bytes the runner writes for the same value.
+ * the sha256 of it, so both are the bytes the runner wrote for the same value.
  */
 export function goJson(value: unknown): string {
   if (value === null || value === undefined) return 'null';
@@ -721,7 +721,7 @@ export class WikiImportRepo {
 
   /**
    * @param root the checkout the command ran in, when it named one: a note's absolute path under it is read
-   *   relative to it, as the runner reads one under its own checkout.
+   *   relative to it, as the runner read one under its own checkout.
    * @param name the repository's name (…/orbit.git reads orbit): a note that names a file by an absolute path
    *   names it inside some checkout called that.
    */

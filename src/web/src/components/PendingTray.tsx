@@ -115,11 +115,14 @@ function Row({ row }: { row: PendingTrayRow }) {
   );
 }
 
-export function PendingTray({ rows }: { rows: readonly PendingTrayRow[] }) {
+/** `note` says, under the rows, why none of them can go into the turn running now — an engine that
+ *  takes no message mid-turn (Cursor CLI's would stop the turn), said only while one is waiting. */
+export function PendingTray({ rows, note }: { rows: readonly PendingTrayRow[]; note?: string | null }) {
   if (rows.length === 0) return null;
   return (
     <div className="pending-tray" role="list" aria-label="Messages not read yet">
       {rows.map((row) => <Row key={row.key} row={row} />)}
+      {note && rows.some((row) => row.heading === 'next') && <div className="pending-tray-note">{note}</div>}
     </div>
   );
 }

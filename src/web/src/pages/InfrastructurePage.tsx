@@ -17,6 +17,7 @@ import { KeyImpact } from '../components/KeyImpact';
 import { EngineTile, ProviderGallery, ProviderTile, vendorName, vendorOf } from '../components/ProviderGallery';
 import { RunnerEngines } from '../components/RunnerEngines';
 import { DeepSeekBalanceLine } from '../components/DeepSeekBalance';
+import { CursorKeyCheckLine } from '../components/CursorKeyCheck';
 import { hasDeepSeekBalance } from '../lib/deepseekBalance';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
@@ -242,6 +243,8 @@ export function InfrastructurePage() {
             <KeyEngines row={p} />
             {/* A DeepSeek key also carries its whole account's balance (DeepSeekBalance.tsx). */}
             {hasDeepSeekBalance(p) && <DeepSeekBalanceLine row={p} />}
+            {/* A Cursor key, what Cursor answered its last check (CursorKeyCheck.tsx). */}
+            {p.runtime === 'cursor' && <CursorKeyCheckLine row={p} />}
           </div>
           {/* The Enabled column collapses to a dot on narrow screens — the tag's words would
               outrun a phone's width on their own. */}

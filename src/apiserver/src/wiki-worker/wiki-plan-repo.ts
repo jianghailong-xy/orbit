@@ -4,8 +4,8 @@ import { goCompare, goFieldsFunc, goTrim } from './wiki-plan-format';
 
 /**
  * What the drafting job reads of the repository, and how it checks what the plan says of it (contract
- * `plan.jobs.server`, design §4.3) — ported from `src/runner-go/wiki_plan_repo.go`, which reads the same off a
- * checkout on the runner until P10 removes it.
+ * `plan.jobs.server`, design §4.3) — ported from `src/runner-go/wiki_plan_repo.go`, which read the same off a
+ * checkout on the runner until P11 removed that half of it: what is left there is the snapshot operation's reading.
  *
  * THE SNAPSHOT, NOT A CHECKOUT. The server holds no repository: the space's runner indexes origin/main once a
  * commit (`repoOps` snapshot — every path with its size, every document's headings, every source file's symbols,
@@ -16,8 +16,8 @@ import { goCompare, goFieldsFunc, goTrim } from './wiki-plan-format';
  * WHAT THE INDEX DOES NOT CARRY is text: the overview's documents, schema.prisma's models, and — for the one
  * check that reads a file — the text of a file a symbol is looked for in when its index does not name it. Those
  * are read at the same sha through the runner's `read` operation, at most `repoOps.read.sectionChars` characters a
- * file, and handed to this class (`withTexts`). That limit is the one place the two paths can differ: a symbol
- * whose every part a file spells only past its first 22,000 characters is found on the runner and not here.
+ * file, and handed to this class (`withTexts`). That limit was the one place the two paths could differ: a symbol
+ * whose every part a file spells only past its first 22,000 characters was found on the runner and is not here.
  *
  * A REFERENCE IS FOUND OR IT IS NOT. A file is a path of the tree (or a directory, or a glob that matches one); a
  * docs section is one of that document's headings; a symbol is one of that file's indexed declarations — or,
@@ -39,10 +39,10 @@ export interface WikiPlanHeading {
   text: string;
 }
 
-/** The plan's character caps of the repository's materials, the runner's numbers (wiki_plan_prompts.go). */
+/** The plan's character caps of the repository's materials, the runner's numbers (as wiki_plan_prompts.go had them). */
 export const WIKI_PLAN_MATERIAL_CAPS = WIKI_PLAN_SERVER_JOB.materialCaps;
 
-/** The overview's documents, in the order the runner reads them, and the README they fall back to. */
+/** The overview's documents, in the order the runner read them, and the README they fall back to. */
 export const WIKI_PLAN_OVERVIEW_DOCS = ['docs/README.md', 'docs/architecture.md'] as const;
 export const WIKI_PLAN_OVERVIEW_FALLBACK = 'README.md';
 
@@ -128,7 +128,7 @@ export class WikiPlanRepo {
   private readonly fileSet: Set<string>;
   private readonly dirs = new Set<string>();
   private readonly sizes = new Map<string, number>();
-  /** Every document's headings, for the documents that have any (a heading-less document reads as none, as on the runner). */
+  /** Every document's headings, for the documents that have any (a heading-less document reads as none, as it did on the runner). */
   private readonly headings = new Map<string, WikiPlanHeading[]>();
   private readonly symbols = new Map<string, string[]>();
   private readonly contractKeys = new Map<string, string[]>();
@@ -295,7 +295,7 @@ export class WikiPlanRepo {
 
   /**
    * The contracts/ inventory: each file with its top-level keys (contracts.md). The index carries an object's keys
-   * only, so a contract whose JSON is an array — or an empty object — reads as the runner reads a file that is not
+   * only, so a contract whose JSON is an array — or an empty object — reads as the runner read a file that is not
    * JSON at all.
    */
   contractsText(): string {
@@ -350,7 +350,7 @@ export class WikiPlanRepo {
     return out.sort(goCompare);
   }
 
-  /** The symbols of the files the patterns name, one file a line, within maxChars bytes (as the runner's builder counts). */
+  /** The symbols of the files the patterns name, one file a line, within maxChars bytes (as the runner's builder counted). */
   codeExcerpt(patterns: readonly string[], maxChars: number): string {
     const files = this.codeFiles(patterns);
     let b = '';

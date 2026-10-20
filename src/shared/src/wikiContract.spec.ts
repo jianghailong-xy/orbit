@@ -27,11 +27,8 @@ import {
   WIKI_KINDS,
   WIKI_LIMITS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
-  WIKI_MAINTENANCE_LIST_TITLE,
   WIKI_MAINTENANCE_LOOKBACK_DAYS,
   WIKI_MAINTENANCE_RULES,
-  WIKI_MAINTENANCE_RUN,
-  WIKI_MAINTENANCE_RUN_V1,
   WIKI_OPS,
   WIKI_OP_DECISIONS,
   WIKI_PUSHABLE_TRUST,
@@ -90,10 +87,7 @@ import {
   WIKI_MAINTENANCE_HELD_REASONS,
   WIKI_MAINTAIN_JOB,
   WIKI_MAINTENANCE_JOB,
-  WIKI_MAINTENANCE_RECOVERY,
   wikiMaintenanceBehind,
-  wikiMaintenanceCheckCommand,
-  wikiMaintenanceEndpointIsLocal,
   wikiMaintenanceRunSessions,
   type WikiMaintenanceReport,
 } from './wikiMaintain';
@@ -106,7 +100,6 @@ import {
   WIKI_REPO_OP_STATES,
   WIKI_STORED_TEXT_ENCODINGS,
 } from './wikiRepoOps';
-import { PROVIDER_PRESETS } from './providerPresets';
 import { WIKI_MAINTENANCE_HEALTH, WIKI_MAINTENANCE_LOOKS, wikiMaintenanceLook } from './wikiHealth';
 import {
   WIKI_DOC_BLOCK_KINDS,
@@ -138,8 +131,8 @@ import {
   type WikiSystemModelRead,
 } from './wikiSystemModel';
 import {
-  WIKI_EXECUTOR_ENV,
   WIKI_EXECUTOR_MODES,
+  WIKI_EXECUTOR_READ,
   WIKI_IMPORT_JOB,
   WIKI_JOB,
   WIKI_JOB_FAILURE_KINDS,
@@ -194,6 +187,61 @@ const CONTRACT: any = JSON.parse(readFileSync(path.join(ROOT, 'contracts/wiki.co
 /** The object-valued keys of a contract map, in the order the file writes them. */
 const keysOf = (map: Record<string, unknown>): string[] => Object.keys(map);
 
+/**
+ * Every key an object of `text` (valid JSON) writes twice, as `$.path.key`. JSON.parse keeps only the last of
+ * two, so the first is never read; this walks the text key by key, as Python's object_pairs_hook would.
+ */
+function duplicateKeys(text: string): string[] {
+  const found: string[] = [];
+  let i = 0;
+  const space = (): void => {
+    while (/\s/.test(text[i] ?? '')) i += 1;
+  };
+  const string = (): string => {
+    const start = i;
+    i += 1;
+    while (text[i] !== '"') i += text[i] === '\\' ? 2 : 1;
+    i += 1;
+    return JSON.parse(text.slice(start, i)) as string;
+  };
+  const value = (at: string): void => {
+    space();
+    if (text[i] === '{') {
+      i += 1;
+      const keys = new Set<string>();
+      space();
+      while (text[i] !== '}') {
+        const key = string();
+        if (keys.has(key)) found.push(`${at}.${key}`);
+        keys.add(key);
+        space();
+        i += 1;
+        value(`${at}.${key}`);
+        space();
+        if (text[i] === ',') i += 1;
+        space();
+      }
+      i += 1;
+    } else if (text[i] === '[') {
+      i += 1;
+      space();
+      for (let n = 0; text[i] !== ']'; n += 1) {
+        value(`${at}[${n}]`);
+        space();
+        if (text[i] === ',') i += 1;
+        space();
+      }
+      i += 1;
+    } else if (text[i] === '"') {
+      string();
+    } else {
+      while (i < text.length && !/[,\]}\s]/.test(text[i])) i += 1;
+    }
+  };
+  value('$');
+  return found;
+}
+
 describe('wiki contract', () => {
   it('is version 1 of orbit.wiki, and every file it points at exists', () => {
     expect(CONTRACT.name).toBe('orbit.wiki');
@@ -209,6 +257,15 @@ describe('wiki contract', () => {
     ]) {
       expect(existsSync(path.join(ROOT, file)), `${file} does not exist`).toBe(true);
     }
+  });
+
+  it('writes each key of an object once, so no sentence is lost to the one after it', () => {
+    // 2026-10-09 to 10-19: docs.build.server held two "nul" keys, and nobody read the first sentence.
+    expect(duplicateKeys(readFileSync(path.join(ROOT, 'contracts/wiki.contract.json'), 'utf8'))).toEqual([]);
+    expect(duplicateKeys('{"a": {"b": 1, "b": [2, {"c": "\\"}", "c": 3}]}, "d": [{"c": 4}]}')).toEqual([
+      '$.a.b',
+      '$.a.b[1].c',
+    ]);
   });
 
   it('stores the wiki in the nine tables the project names', () => {
@@ -523,7 +580,6 @@ describe('wiki contract', () => {
     const user: string[] = CONTRACT.agentSurface.doors.user.routes;
     const runner: string[] = [
       ...CONTRACT.agentSurface.doors.runner.routes,
-      ...CONTRACT.agentSurface.doors.runner.maintenanceRoutes,
       ...CONTRACT.agentSurface.doors.runner.verificationRoutes,
     ];
     // The run's read is the owner's, on the owner's door, and nowhere an agent can reach.
@@ -593,9 +649,6 @@ describe('wiki contract', () => {
     const reopen = CONTRACT.reviewModes.verification.reopen;
     expect(reopen.rejected).toMatch(/verification_history/u);
     expect(reopen.tainted).toMatch(/automatic/u);
-    // The verifier's own call thinks only when asked to.
-    expect(CONTRACT.agentSurface.verify.thinking).toMatch(/CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0/u);
-    expect(CONTRACT.agentSurface.verify.cleanClaudeCode).not.toMatch(/CLAUDE_CODE_EFFORT_LEVEL/u);
   });
 
   it('verifies before Automatic applies: four verdicts, a trail, a fallback, and no clock', () => {
@@ -623,29 +676,20 @@ describe('wiki contract', () => {
     // Spot-check cards and verifying ops leave the 30-op queue to what the owner has to decide.
     expect(CONTRACT.limitNotes.quota).toMatch(/a spot-check card does not count/u);
     expect(CONTRACT.reviewModes.spotChecks.card).toMatch(/does NOT count toward pendingOpsPerSpace/u);
-    // The verifier reports only for the session that proposed, over the runner door.
+    // The session that proposed asks for its ops' verification over the runner door, and reports no verdict.
     const runner = CONTRACT.agentSurface.doors.runner;
-    expect(runner.verificationRoutes).toEqual([verification.routes.list, verification.routes.report, verification.routes.request]);
+    expect(runner.verificationRoutes).toEqual([verification.routes.list, verification.routes.request]);
     expect(CONTRACT.agentSurface.verify.cli).toBe('orbit wiki verify');
-    expect(CONTRACT.agentSurface.verify.cleanClaudeCode).toMatch(/--bare --tools "" --strict-mcp-config/u);
     expect(CONTRACT.agentSurface.verify.unreadable).toMatch(/is not a verdict/u);
   });
 
   it('hands what ended sessions left waiting to the next maintenance run, and to nobody else', () => {
     // The 71 ops three failed runs left waiting: no proposer is left to verify them, so the space's
-    // maintenance run adopts them — on routes of its own, beside the proposer's.
+    // maintenance run adopts them, through no door.
     const verification = CONTRACT.reviewModes.verification;
     const adoption = verification.adoption;
-    const runner = CONTRACT.agentSurface.doors.runner;
-    for (const route of Object.values(adoption.routes) as string[]) {
-      expect(runner.maintenanceRoutes).toContain(route);
-      expect(runner.verificationRoutes).not.toContain(route);
-    }
-    expect(CONTRACT.maintenance.job.routes.adoptions).toBe(adoption.routes.list);
-    expect(CONTRACT.maintenance.job.routes.adopt).toBe(adoption.routes.report);
     expect(verification.who.maintenance).toMatch(/adoption/u);
-    expect(adoption.who).toMatch(/WIKI_NOT_MAINTENANCE_SESSION/u);
-    expect(adoption.who).toMatch(/another owner's space a plain 404/u);
+    expect(adoption.who).toMatch(/The space's maintenance run — its maintain job \(maintenance\.job\.server, 2026-10-11\) — and nobody else: no door reaches it/u);
     expect(adoption.who).toMatch(/SUCCEEDED, FAILED or CANCELLED, or it was completed or deleted/u);
     // At most so many a run — one page of the list — and one left without a verdict waits for the next.
     expect(WIKI_MAINTENANCE_JOB.adoptOpsMax).toBe(50);
@@ -664,18 +708,16 @@ describe('wiki contract', () => {
     // The report counts them apart from the run's own ops.
     const adopted: NonNullable<NonNullable<WikiMaintenanceReport['verification']>['adopted']> = { ops: 0, verified: 0, failed: 0 };
     expect(CONTRACT.maintenance.job.report).toMatch(new RegExp(`adopted \\{${Object.keys(adopted).join(', ')}\\}`, 'u'));
-    // The server's own run adopts as its wiki job, and besides what ended sessions left, what the space's ended runs left
-    // (2026-10-11): never its own job's, never a job's that has not ended, never another space's. The writer holds it, and a
-    // session's run on the runner door adopts what it always did.
-    expect(adoption.who).toMatch(/The server's own maintenance run \(maintenance\.job\.server, 2026-10-11\) adopts as its wiki job/u);
+    // The run adopts as its wiki job, and besides what ended sessions left, what the space's ended runs left
+    // (2026-10-11): never its own job's, never a job's that has not ended, never another space's. The writer holds it.
+    expect(adoption.who).toMatch(/It adopts, in the worker, through WikiService\.listVerifications and recordVerifications with adopt/u);
     expect(adoption.who).toMatch(/whose job succeeded, failed or was cancelled and is not the adopting one/u);
     expect(adoption.who).toMatch(/never those of a job still queued, running or waiting; never another space's/u);
     expect(adoption.who).toMatch(/records a verdict for such an op from the space's maintain job alone/u);
-    expect(adoption.who).toMatch(/A session's run adopts exactly what it did before: its list holds no job's op/u);
     for (const state of ['succeeded', 'failed', 'cancelled']) expect(WIKI_JOB_STATES).toContain(state);
-    expect(adoption.run).toMatch(/a server run's once its job has ended \(maintenance\.job\.server\.verify\)/u);
+    expect(adoption.run).toMatch(/once its job has ended \(maintenance\.job\.server\.verify\), the next run adopts it/u);
     expect(adoption.run).toMatch(/one list, the ended sessions' ops and the ended jobs' together, oldest first/u);
-    expect(verification.who.maintenance).toMatch(/what the space's ended runs left waiting/u);
+    expect(verification.who.maintenance).toMatch(/what ended sessions and the space's ended runs left waiting/u);
   });
 
   it('leaves an op the verification got no verdict for to the next run, and fails nothing', () => {
@@ -687,13 +729,15 @@ describe('wiki contract', () => {
     expect(verify).toMatch(/read as strictly as the first/u);
     expect(verify).toMatch(/one of the run's own after both passes, or an adopted one — is not live/u);
     expect(verify).toMatch(/fails nothing: the run goes on, succeeds and advances the cursor, and the next run adopts the op/u);
-    expect(verify).toMatch(/A 401 from the model's endpoint and an error from the server still end the run failed/u);
+    expect(verify).toMatch(/An error from the server still ends the run failed/u);
     expect(job.run.failure).toMatch(/Nor does an op the verification left without a verdict/u);
     expect(CONTRACT.reviewModes.verification.adoption.run).toMatch(/An op of the run's own that its two passes left without a verdict waits the same way/u);
     // The report counts what waits for the next run apart.
     expect(job.report).toMatch(/verification \{verified, failed, waitingForNextRun — /u);
-    // orbit wiki verify on its own still exits non-zero for an op left without a verdict; a run does not go by that.
-    expect(CONTRACT.agentSurface.verify.unreadable).toMatch(/The command exits non-zero when any op failed\. A maintenance run does not go by that exit/u);
+    // orbit wiki verify still exits non-zero when its wait ends with an op left without a verdict; a run, which verifies
+    // in its own process, fails nothing for one.
+    expect(CONTRACT.agentSurface.verify.does).toMatch(/The command exits non-zero when the wait runs out with ops still without a verdict/u);
+    expect(CONTRACT.agentSurface.verify.unreadable).toMatch(/A maintenance run verifies its own ops in its own process, asks once more about those left without a verdict, and what is still without one fails nothing/u);
   });
 
   it('has the local model name a duplicate by a number of its own, never by an id it would copy wrong', () => {
@@ -701,7 +745,7 @@ describe('wiki contract', () => {
     // run after run, and its op never got a verdict. It is shown numbers, answers with one, and the command maps it back.
     const verify = CONTRACT.agentSurface.verify;
     expect(verify.prompt).toMatch(/each by a number of its own, E1 to En in the order listed, and never by its id/u);
-    expect(verify.prompt).toMatch(/"duplicateOf": the number of the neighbour it duplicates, for a duplicate\}, and the command reports the id that number stands for/u);
+    expect(verify.prompt).toMatch(/"duplicateOf": the number of the neighbour it duplicates, for a duplicate\}, and the verdict reported names the id that number stands for/u);
     // Read as strictly as ever: a number is one the prompt listed, and an id is none, whole or cut short.
     expect(verify.unreadable).toMatch(/A number is one the prompt listed, exactly: an id, whole or cut short, is none, and nothing is guessed from a prefix/u);
     expect(verify.unreadable).toMatch(/as plan\.gate\.values reads a closed-set value/u);
@@ -723,7 +767,7 @@ describe('wiki contract', () => {
     }
     expect(values).toMatch(/a pair counting as a wrapping only with no more of either inside; nothing else is read loosely/u);
     expect(values).toMatch(/Decision, decisions and decision with a zero-width space after it are none/u);
-    expect(values).toMatch(/The runner's own gate \(plan\.jobs\.run\) and a maintenance run's check of its proposal read and write values the same way/u);
+    expect(values).toMatch(/The plan job's own gate \(plan\.jobs\.run\) and a maintenance run's check of its proposal read and write values the same way/u);
     // The fields it names are the plan's closed sets.
     expect(CONTRACT.plan.gate.checks).toEqual([...WIKI_PLAN_GATE_CHECKS]);
     expect(keysOf(CONTRACT.plan.sectionKinds)).toEqual([...WIKI_PLAN_SECTION_KINDS]);
@@ -825,19 +869,12 @@ describe('wiki contract', () => {
     expect(WIKI_MAINTENANCE_RULES.errorClusterMinSessions).toBe(3);
     expect(WIKI_MAINTENANCE_RULES.backlogThreshold).toBe(20);
     expect(WIKI_MAINTENANCE_RULES.maxPendingAgeHours).toBe(24);
-    expect(maintenance.list.title).toBe(WIKI_MAINTENANCE_LIST_TITLE);
-    expect(maintenance.list.hidden).toBe(true);
     expect(keysOf(maintenance.cursor.factKinds)).toEqual([...WIKI_CURSOR_FACT_KINDS]);
     expect(maintenance.cursor.advance.outcomes).toEqual([...WIKI_CURSOR_OUTCOMES]);
-    // Both maintenance routes this side serves are the runner door's maintenance routes.
-    const routes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
-    expect(routes).toContain(maintenance.dossier.route);
-    expect(routes).toContain(maintenance.cursor.advance.route);
     // The refusals the cursor answers are declared, with their statuses.
     const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
     expect(status('WIKI_CURSOR_BEHIND')).toBe(409);
     expect(status('WIKI_CURSOR_INVALID')).toBe(400);
-    expect(status('WIKI_NOT_MAINTENANCE_SESSION')).toBe(403);
     // The token estimate the budget was measured with: ASCII at 3.4 a token, the rest at 1.25, plus one.
     expect(maintenance.dossier.budget).toMatch(/wikiEstimateTokens/u);
     expect(wikiEstimateTokens('')).toBe(0);
@@ -876,8 +913,8 @@ describe('wiki contract', () => {
     expect(CONTRACT.maintenance.job.run.steps.find((step: string) => step.startsWith('extract:'))).toMatch(/locator \{start, end\}/u);
   });
 
-  it('ships the maintenance job the contract states: its trigger, its task, its run and its check', () => {
-    // Criterion 3: a committed fact makes the task, its run proposes as maintenance, and its check judges it.
+  it('ships the maintenance job the contract states: its trigger and its run', () => {
+    // Criterion 3: a committed fact makes the run, and the run proposes as maintenance.
     const job = CONTRACT.maintenance.job;
     expect(job.rules).toEqual(WIKI_MAINTENANCE_JOB);
     // The demo's A2+6: at most six entries from one 8k dossier, and never more than twenty sessions a run.
@@ -886,37 +923,18 @@ describe('wiki contract', () => {
     expect(job.trigger.due).toEqual([...WIKI_MAINTENANCE_DUE]);
     expect(job.held.reasons).toEqual([...WIKI_MAINTENANCE_HELD_REASONS]);
     for (const reason of WIKI_MAINTENANCE_HELD_REASONS) expect(job.held[reason]).toBeTruthy();
-    // The due threshold counts sessions (design §8.2's «20 个会话»), and no clock starts a task.
+    // The due threshold counts sessions (design §8.2's «20 个会话»), and no clock starts a run.
     expect(CONTRACT.maintenance.cursor.due).toMatch(/sessions have a fact after the watermark/u);
-    expect(job.trigger.conditions).toMatch(/No clock starts a task/u);
-    // A plan job the owner asked for goes before the next run (2026-10-01): none is made while one is queued.
+    expect(job.trigger.conditions).toMatch(/No clock starts a run/u);
+    // One run of a space at a time: none is made while its maintain job has not ended, read again under the space's lock.
     const notMade: string[] = job.trigger.notMade;
-    expect(notMade.some((why) => why.startsWith('a plan job of the space is queued for the list (plan.jobs.staggered): it goes first'))).toBe(true);
-    expect(job.trigger.lock).toMatch(/the space's queued plan jobs/u);
-    // A task whose session died holds the list no more (2026-10-02): it is rerun once or closed first.
-    expect(notMade.some((why) => why.includes('is not dead (maintenance.job.recovery.deadTask)'))).toBe(true);
-    expect(job.recovery.rules).toEqual(WIKI_MAINTENANCE_RECOVERY);
+    expect(notMade.some((why) => why.startsWith('a maintain job of the space has not ended (queued, running or waiting): one run of a space at a time'))).toBe(true);
+    expect(job.trigger.lock).toMatch(/a lock on the space's row, after the space's unfinished maintain jobs and the day's count are read again under it/u);
+    // Whose a failed run's failure was, and how many times the run started.
     expect(job.recovery.failureKinds).toEqual([...WIKI_MAINTENANCE_FAILURE_KINDS]);
-    expect(WIKI_MAINTENANCE_RECOVERY.rerunAfterMinutes).toBeGreaterThanOrEqual(10);
-    expect(WIKI_MAINTENANCE_RECOVERY.rerunsMax).toBe(1);
-    expect(job.recovery.deadTask).toMatch(/no session of it is PENDING, RUNNING, AWAITING_INPUT or INTERRUPTED/u);
-    expect(job.recovery.rerun).toMatch(/rules\.rerunAfterMinutes after its session ended/u);
-    expect(job.recovery.close).toMatch(/the task is set FAILED/u);
-    expect(job.recovery.orphan).toMatch(/The run did not report its end\./u);
     expect(job.recovery.attempts).toMatch(/startedAt, never written again/u);
-    expect(job.recovery.inSession).toMatch(/rules\.serverWaitMinutes at most/u);
     expect(job.recovery.migration).toMatch(/0356_wiki_maintenance_run_attempts/u);
     expect(CONTRACT.maintenance.cursor.advance.body.failureKind).toMatch(/when it is not said, read off its error/u);
-    // The task's one criterion is the check, in exactly the shape the server writes it.
-    expect(job.task.completionCriterion).toBe('EXECUTABLE');
-    expect(job.task.acceptanceCommand).toBe(wikiMaintenanceCheckCommand('<id>', '<token>'));
-    expect(job.task.acceptanceExpectedExitCode).toBe(0);
-    expect(job.cli.check).toMatch(/^orbit wiki check --space <id> --expect-cursor <token>/u);
-    expect(job.cli.maintain).toMatch(/^orbit wiki maintain --space <id>/u);
-    // Every route of the job is a runner-door maintenance route.
-    const routes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
-    for (const route of Object.values(job.routes) as string[]) expect(routes).toContain(route);
-    expect(job.check.route).toBe(job.routes.check);
     expect(CONTRACT.maintenance.dossier.query.until).toMatch(/does not go past/u);
     expect(job.tables).toEqual(['wiki_maintenance_run']);
     // Criterion 3, revision 3: the run writes only the plan's sections its facts touched, and no topic article.
@@ -933,8 +951,6 @@ describe('wiki contract', () => {
     expect(job.docs.proposal).toMatch(/One plan proposal a run at most/u);
     expect(job.docs.report).toMatch(/WikiMaintenanceDocsReport/u);
     expect(job.report).toMatch(/docs \(maintenance\.job\.docs\.report\)/u);
-    expect(job.routes.docs).toBe(CONTRACT.docs.routes.affected);
-    expect(job.routes.withdraw).toBe(CONTRACT.docs.routes.withdraw);
     // A run's size fits its guardrails at six entries a session.
     const size = (mode: 'manual' | 'tiered' | 'automatic', activeEntries: number, pendingInSpace = 0) =>
       wikiMaintenanceRunSessions({ mode, activeEntries, pendingInSpace });
@@ -950,22 +966,16 @@ describe('wiki contract', () => {
   it('ships criterion 3 revision 4: the cursor moves once the ops are recorded, and a space behind catches up', () => {
     const job = CONTRACT.maintenance.job;
     // The step order of revision 4: … propose → cursor advance (past the sessions whose ops were recorded) → verify →
-    // anchors → docs, and a failure after the advance still fails the run, its check with it.
+    // anchors → docs, and a failure after the advance still fails the run.
     const steps: string[] = job.run.steps;
     const at = (name: string) => steps.findIndex((step) => step.startsWith(`${name}:`));
     expect(at('advance')).toBe(at('propose') + 1);
     expect(at('verify')).toBe(at('advance') + 1);
-    expect(steps[at('advance')]).toMatch(/POST …\/maintenance\/advance/u);
+    expect(steps[at('advance')]).toMatch(/the cursor's advance \(WikiMaintenance\.advanceRecorded\)/u);
     expect(steps[at('advance')]).toMatch(/the next run does not read those sessions again/u);
-    expect(job.routes.advance).toBe('POST /api/runner/wiki/spaces/:id/maintenance/advance');
-    expect(CONTRACT.agentSurface.doors.runner.maintenanceRoutes).toContain(job.routes.advance);
-    expect(job.run.failure).toMatch(/Before the ops are recorded — any step up to propose, a run cut short — the cursor does not move/u);
-    expect(job.run.failure).toMatch(/the run still ends failed, the report says so \(cursorAdvanced\), and its check fails/u);
+    expect(job.run.failure).toMatch(/Before the ops are recorded — any step up to propose — the cursor does not move/u);
+    expect(job.run.failure).toMatch(/the run still ends failed, and the report says so \(cursorAdvanced\)/u);
     expect(job.report).toMatch(/cursorAdvanced/u);
-    expect(job.check.advancedThenFailed).toMatch(/reached is true, and the run ended failed — 1/u);
-    expect(job.check.passes).toMatch(/the cursor did not advance, or an op did not pass its checks: non-zero/u);
-    expect(job.cli.maintainPrecondition).toMatch(/moves the cursor only past the sessions whose ops it recorded/u);
-    expect(CONTRACT.maintenance.run.truncated).toMatch(/no further than past the ops the run had recorded/u);
     const report: WikiMaintenanceReport = { sessions: 0, dossiers: 0, unchanged: 0, offTopic: 0,
       entries: { extracted: 0, kept: 0, dropped: 0, foreign: 0, principles: 0 },
       ops: { proposed: 0, recorded: 0, refused: 0, selfCheckDropped: 0, heldBack: 0, heldBackByBreaker: 0, applied: 0, waiting: 0 },
@@ -981,16 +991,16 @@ describe('wiki contract', () => {
     expect(catchUp.migration).toMatch(/0357_wiki_maintenance_catch_up/u);
     expect(existsSync(path.join(__dirname, '../../..', catchUp.migration))).toBe(true);
     expect(catchUp.behind).toMatch(/no clock starts anything/u);
-    expect(catchUp.trigger).toMatch(/the end of the space's latest run is itself a fact that makes the next run, with no other new fact/u);
-    expect(catchUp.dailyLimit).toMatch(/not counted against settings\.maintenance\.dailyRunLimit when the provider it is pinned to is a local endpoint, or when it failed/u);
-    expect(catchUp.dailyLimit).toMatch(/one on a public provider that did not fail counts/u);
+    expect(catchUp.trigger).toMatch(/The end of a run makes the next one only as maintenance\.job\.server\.trigger says — when it queued the space's articles job, which a run made in catch-up never does — so while catch-up is active the next run is made by the space's next fact/u);
+    expect(catchUp.dailyLimit).toMatch(/not counted against settings\.maintenance\.dailyRunLimit when it ran on a local endpoint \(localEndpoint\) or when it failed/u);
+    expect(catchUp.dailyLimit).toMatch(/one on a public endpoint that did not fail counts/u);
     expect(catchUp.paused).toMatch(/last rules\.pauseAfterFailures runs that ended all failed/u);
     expect(catchUp.docs).toMatch(/docs\.skipped catching_up/u);
     expect(job.docs.skipped).toContain('catching_up');
     expect(steps[at('docs')]).toMatch(/docs\.skipped catching_up/u);
     const notMade: string[] = job.trigger.notMade;
-    expect(notMade.some((why) => why.includes('the end of its latest run is one (maintenance.job.catchUp.trigger)'))).toBe(true);
-    expect(notMade.some((why) => why.includes('the run would count (maintenance.job.catchUp.dailyLimit)'))).toBe(true);
+    expect(notMade.some((why) => why.includes("the end of a run that queued the space's articles job asks with no fact (maintenance.job.server.trigger)"))).toBe(true);
+    expect(notMade.some((why) => why.includes("held: the day's runs are used up (maintenance.job.catchUp.dailyLimit)"))).toBe(true);
     expect(job.held.daily_limit_reached).toMatch(/maintenance\.job\.catchUp\.dailyLimit/u);
     expect(CONTRACT.space.settings.maintenance.keys.dailyRunLimit).toMatch(/maintenance\.job\.catchUp\.dailyLimit/u);
     expect(CONTRACT.maintenance.health.maintenance.dailyLimitReached).toMatch(/maintenance\.job\.catchUp\.dailyLimit/u);
@@ -1003,22 +1013,10 @@ describe('wiki contract', () => {
     expect(wikiMaintenanceBehind(hoursAgo(WIKI_MAINTENANCE_CATCH_UP.behindHours, 1), now)).toBe(true);
     expect(wikiMaintenanceBehind(hoursAgo(13 * 24), now)).toBe(true);
 
-    // A local endpoint: this machine or a private network, judged by the host the provider's base URL names.
-    for (const local of ['http://127.0.0.1:8000', 'http://localhost:8000/v1', 'http://LOCALHOST', 'http://gpu.localhost:8000',
-      'http://127.10.0.3', 'http://10.0.4.2:8000', 'http://172.16.0.1', 'http://172.31.255.254', 'http://192.168.1.20:8000/anthropic',
-      'http://169.254.3.4', 'http://[::1]:8000', 'http://[0:0:0:0:0:0:0:1]', 'http://[fd12:3456::7]:8000', 'http://[fe80::1]',
-      'http://user:secret@127.0.0.1:8000']) {
-      expect(wikiMaintenanceEndpointIsLocal(local), local).toBe(true);
-    }
-    for (const remote of ['https://api.anthropic.com', 'https://api.deepseek.com/anthropic', 'http://gpu-box:8000', 'http://8.8.8.8',
-      'http://172.32.0.1', 'http://172.15.255.255', 'http://192.169.0.1', 'http://11.0.0.1', 'http://[2001:db8::1]', 'http://[::]',
-      'http://localhost.example.com', 'http://127.0.0.1.nip.io', '127.0.0.1:8000', '', null, undefined]) {
-      expect(wikiMaintenanceEndpointIsLocal(remote), String(remote)).toBe(false);
-    }
-    // No vendor preset is a local endpoint: each is its vendor's API, which bills.
-    for (const preset of PROVIDER_PRESETS) expect(wikiMaintenanceEndpointIsLocal(preset.baseUrl), preset.slug).toBe(false);
-    expect(catchUp.localEndpoint).toMatch(/presetSlug null/u);
-    expect(catchUp.localEndpoint).toMatch(/local-vllm at http:\/\/127\.0\.0\.1:8000 is local/u);
+    // A local endpoint: this machine or a private network, judged by the host the System model's address names, when the
+    // worker starts the run.
+    expect(catchUp.localEndpoint).toContain(`The System model's address (${WIKI_SYSTEM_MODEL_ENV.baseUrl}) is local when its host is this machine or a private network`);
+    expect(catchUp.localEndpoint).toMatch(/The worker judges it when it starts the run and keeps it on the run's row as local_endpoint/u);
   });
 
   it('reads a space\'s health the way the contract states it, and tells the owner once a streak', () => {
@@ -1054,53 +1052,7 @@ describe('wiki contract', () => {
     expect(health.client).toMatch(/wiki-health\.fixture\.json/u);
   });
 
-  it('ships the run a maintenance session is claimed with, as the contract states it', () => {
-    // Design §8.2's guardrails, which the claim writes into every maintenance session's agent config.
-    const run = CONTRACT.maintenance.run;
-    expect(run.maxTurns).toBe(WIKI_MAINTENANCE_RUN.maxTurns);
-    expect(WIKI_MAINTENANCE_RUN.maxTurns).toBe(120);
-    expect(run.disallowedTools).toEqual([...WIKI_MAINTENANCE_RUN.disallowedTools]);
-    expect([...WIKI_MAINTENANCE_RUN.disallowedTools]).toEqual(['Task', 'Agent', 'WebFetch', 'WebSearch']);
-    expect(run.permissionMode).toBe(WIKI_MAINTENANCE_RUN.permissionMode);
-    expect(run.runtime).toBe(WIKI_MAINTENANCE_RUN.runtime);
-    expect(run.providerFallbacks).toEqual([]);
-    // Only a runner that declares the capability is handed one; the runner side pins the same string.
-    expect(run.capability).toBe(WIKI_MAINTENANCE_RUN_V1);
-    // The clean start is the runner's; what the server promises of it is the shape of the field it sends.
-    expect(run.field).toMatch(/providerFallbacks, maxTurns, disallowedTools, cleanStart, refusal\?/u);
-    expect(run.cleanStart.flags).toEqual(expect.arrayContaining(['--bare', '--strict-mcp-config', '--max-turns 120']));
-    expect(run.cleanStart.thinking).toMatch(/CLAUDE_CODE_EFFORT_LEVEL=unset and MAX_THINKING_TOKENS=0/u);
-    expect(run.cleanStart.auth).toMatch(/apiKeyHelper/u);
-    // The orbit wiki commands are pre-approved by the CLI's path, as the system prompt gives it, and bare, as the
-    // task prompts write them — bare only where `orbit` on the engine's PATH is the runner's own executable
-    // (2026-10-01..03: every bare one was refused, and four runs failed on it).
-    expect(run.cleanStart.flags).toContain("--allowedTools <the orbit MCP tools below and the orbit wiki commands, by the CLI's path and bare (orbitCommand)>");
-    expect(run.cleanStart.orbitCommand).toMatch(/The orbit wiki commands the platform pre-approves for every session, and no other command of the CLI, are pre-approved by the CLI's absolute path/u);
-    expect(run.cleanStart.orbitCommand).toMatch(/and also as the bare `orbit wiki <command>` the task prompts write \(maintenance\.job\.task, plan\.jobs\.task\), when `orbit` on the PATH the engine is handed is the runner's own executable/u);
-    expect(run.cleanStart.orbitCommand).toMatch(/with the executable's directory added at its end when that is what makes `orbit` on it the runner's own/u);
-    expect(run.cleanStart.orbitCommand).toMatch(/the bare form is not pre-approved, so a bare command is refused rather than run on another program/u);
-    expect(run.cleanStart.environment).toMatch(/PATH \(with the CLI's directory added when orbitCommand says so\)/u);
-    for (const command of ['maintain', 'plan draft', 'docs build']) {
-      expect(`${CONTRACT.maintenance.job.task.description} ${CONTRACT.plan.jobs.task.description}`).toContain(`run \`orbit wiki ${command} --space <id>\``);
-    }
-    expect(readFileSync(path.join(ROOT, 'docs/wiki-contract.md'), 'utf8')).toContain('- **`orbit` 写路径或裸命令都放行**（`cleanStart.orbitCommand`）');
-    // The one Bash call is the whole run: five hours whether or not the model names a timeout, and every
-    // maintenance session's task tells it to name that and not to run a call the tool cut off again (2026-10-03).
-    expect(run.bashTimeoutMs).toBe(WIKI_MAINTENANCE_RUN.bashTimeoutMs);
-    expect(WIKI_MAINTENANCE_RUN.bashTimeoutMs).toBe(5 * 60 * 60 * 1000);
-    expect(run.cleanStart.bash).toMatch(/BASH_DEFAULT_TIMEOUT_MS and BASH_MAX_TIMEOUT_MS are bashTimeoutMs/u);
-    expect(run.cleanStart.bash).toMatch(/The --settings file carries no env block, which would outrank the environment/u);
-    expect(run.bashCall).toMatch(/tell the model to give the call timeout bashTimeoutMs, never a shorter one/u);
-    expect(run.bashCall).toMatch(/the command is not run again, with any timeout, and no retry is spent on it: the run reports what it printed up to there and ends/u);
-    expect(run.bashCall).toMatch(/That is not the one retry maintenance\.job\.recovery\.inSession keeps/u);
-    expect(CONTRACT.maintenance.job.recovery.inSession).toMatch(/is no such run: it is not run again at all \(maintenance\.run\.bashCall\)/u);
-    for (const description of [CONTRACT.maintenance.job.task.description, CONTRACT.plan.jobs.task.description]) {
-      expect(description).toMatch(/timeout maintenance\.run\.bashTimeoutMs/u);
-      expect(description).toMatch(/is not run again \(maintenance\.run\.bashCall\)/u);
-    }
-  });
-
-  it('re-verifies the anchors git can check, on the routes and by the rules the contract states', () => {
+  it('re-verifies the anchors git can check, by the rules the contract states', () => {
     // Criterion 4: a maintenance run re-verifies paths, symbols and commits on origin/main.
     const verify = CONTRACT.anchorRules.verify;
     expect(verify.types).toEqual([...WIKI_GIT_ANCHOR_TYPES]);
@@ -1108,11 +1060,8 @@ describe('wiki contract', () => {
     expect(verify.rules).toEqual(WIKI_ANCHOR_RULES);
     expect(WIKI_ANCHOR_RULES.symbolRegionLines).toBe(20);
     expect(WIKI_ANCHOR_RULES.reportEntriesMax).toBeLessThanOrEqual(WIKI_ANCHOR_RULES.listEntriesMax);
-    // Both routes are the runner door's maintenance routes: no other session reaches them.
-    const routes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
-    expect(routes).toContain(verify.list.route);
-    expect(routes).toContain(verify.report.route);
-    expect(verify.who).toMatch(/WIKI_NOT_MAINTENANCE_SESSION/u);
+    // The space's maintenance run lists and reports them, and nothing else: no door does.
+    expect(verify.who).toMatch(/the server's maintain job \(maintenance\.job\.server\.anchors\) — and nothing else: no door lists a space's anchors or takes a report/u);
     // A commit that is not an ancestor of origin/main is missing, never verified.
     expect(verify.checks.commit).toMatch(/not an ancestor/u);
     expect(verify.checks.commit).toMatch(/missing/u);
@@ -1162,31 +1111,26 @@ describe('wiki contract', () => {
     const order = WIKI_ARTICLE_CATEGORY_KEYS.map((key) => WIKI_DEFAULT_TOPICS.filter((t) => t.category === key).map((t) => t.slug));
     expect(order.flat()).toEqual(slugs);
 
-    // Its doors: the owner's three reads on the user door, a maintenance run's three routes on the runner door.
+    // Its doors: the owner's four reads on the user door, and no route on the runner door.
     const routes = articles.routes;
     const user: string[] = CONTRACT.agentSurface.doors.user.routes;
-    const maintenanceRoutes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
     for (const read of [routes.directory, routes.article, routes.part, routes.index]) expect(user).toContain(read);
-    for (const write of [routes.plan, routes.input, routes.write]) expect(maintenanceRoutes).toContain(write);
+    expect(Object.values<string>(routes).some((route) => route.includes('/api/runner/'))).toBe(false);
     expect(user.some((route) => route.startsWith('POST') && route.includes('/articles'))).toBe(false);
     // A view: never a source, never pushed, never an agent's answer.
     expect(CONTRACT.sourceRules.firstHand).toMatch(/topic summary or any other view is never a source/u);
     expect(articles.view.push).toMatch(/Never in <orbit_wiki_context>/u);
     expect(articles.view.agents).toMatch(/wiki_search or wiki_get/u);
-    expect(articles.who.write).toMatch(/isWikiMaintenanceSession/u);
+    expect(articles.who.write).toMatch(/No door builds either, and the user door has no write route: any other caller is an error of the server's own code \(WikiArticles\.assertWriter\)/u);
     const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
     expect(status('WIKI_ARTICLE_STALE')).toBe(409);
-    // Server execution (P4): the job's numbers, its kind, the runner door closed for a server-run account.
+    // Server execution (P4): the job's numbers and its kind.
     expect(articles.job).toEqual({ ...WIKI_ARTICLES_JOB });
     expect(CONTRACT.jobs.kinds).toContain('articles');
     expect(CONTRACT.jobs.kindRuns.articles).toMatch(/articles\.serverExecution/u);
-    expect(status('WIKI_SERVER_EXECUTES')).toBe(409);
-    expect(articles.who.write).toMatch(/WIKI_SERVER_EXECUTES/u);
-    expect(articles.serverExecution.runnerDoor).toMatch(/WIKI_SERVER_EXECUTES/u);
     expect(articles.regeneration).toMatch(/owner's decision of 2026-10-08/u);
     expect(existsSync(path.join(ROOT, 'src/shared/src/wiki-article-writer.fixture.json'))).toBe(true);
     expect(CONTRACT.realtime.publishedWhen.some((when: string) => /articles were written/u.test(when))).toBe(true);
-    expect(articles.cli.tool).toMatch(/^none/u);
   });
 
   it('ships the plan the contract states: its closed sets, rules and schema, its tables, its gate and its doors', () => {
@@ -1228,16 +1172,13 @@ describe('wiki contract', () => {
     expect(sql).toMatch(/UNIQUE INDEX IF NOT EXISTS "wiki_plan_space_id_draft_key" ON "wiki_plan" \("space_id"\) WHERE "status" = 'draft'/u);
     expect(sql).toMatch(/UNIQUE INDEX IF NOT EXISTS "wiki_plan_space_id_confirmed_key" ON "wiki_plan" \("space_id"\) WHERE "status" = 'confirmed'/u);
 
-    // Its doors: the owner's six on the user door, a maintenance run's three on the runner door, and
-    // nothing the runner door has confirms or decides.
+    // Its doors: the owner's six on the user door, no route on the runner door, and none that takes a draft or a proposal.
     const routes = plan.routes;
     const user: string[] = CONTRACT.agentSurface.doors.user.routes;
-    const maintenanceRoutes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
     for (const route of [routes.state, routes.versions, routes.version, routes.edit, routes.confirm, routes.decide]) expect(user).toContain(route);
-    for (const route of [routes.runnerState, routes.draft, routes.propose]) expect(maintenanceRoutes).toContain(route);
-    for (const route of [routes.runnerState, routes.draft, routes.propose]) expect(route).not.toMatch(/confirm|decide/u);
+    expect(Object.values<string>(routes).some((route) => route.includes('/api/runner/'))).toBe(false);
     expect(plan.who.owner).toMatch(/WIKI_OWNER_CHANNEL_ONLY/u);
-    expect(plan.who.draft).toMatch(/isWikiMaintenanceSession/u);
+    expect(plan.who.draft).toMatch(/in process: no door takes a draft or a proposal, nor answers a read of the plan to a session/u);
     expect(plan.guard).toMatch(/^requireConfirmedPlan\(/u);
     expect(plan.guard).toMatch(/WIKI_PLAN_UNCONFIRMED/u);
     const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
@@ -1257,15 +1198,15 @@ describe('wiki contract', () => {
     expect(plan.idempotency.replay).toMatch(/before WIKI_PLAN_STALE/u);
     expect(plan.idempotency.reused).toMatch(/WIKI_IDEMPOTENCY_KEY_REUSED \(409\)/u);
     expect(status('WIKI_IDEMPOTENCY_KEY_REUSED')).toBe(409);
-    expect(plan.idempotency.runner).toMatch(/wikiRecordsOnce/u);
+    expect(plan.idempotency.runner).toMatch(/wikiPlanServerDraftKey/u);
     const keyed = readFileSync(path.join(ROOT, plan.idempotency.migration), 'utf8').replace(/\s+/gu, ' ');
     expect(plan.idempotency.migration).toMatch(/0339_wiki_plan_idempotency/u);
     expect(keyed).toContain('CREATE UNIQUE INDEX IF NOT EXISTS "wiki_plan_owner_idempotency_key" ON "wiki_plan" ("owner_id", "idempotency_key")');
     expect(keyed).toContain('CHECK (("idempotency_key" IS NULL) = ("request_sha256" IS NULL)');
   });
 
-  it('ships the plan\'s jobs the contract states: kinds, triggers, states, held reasons, rules, routes and CLI', () => {
-    // Criterion 11: a draft or a revision of a space's plan, run as a task of its maintenance list.
+  it('ships the plan\'s jobs the contract states: kinds, triggers, states, held reasons, rules and routes', () => {
+    // Criterion 11: a draft or a revision of a space's plan, run as a job of the wiki-worker.
     const jobs = CONTRACT.plan.jobs;
     expect(jobs.phase).toBe(2);
     expect(jobs.tables).toEqual(['wiki_plan_job']);
@@ -1280,13 +1221,11 @@ describe('wiki contract', () => {
     // Three rounds: the first, and two more with every error handed back.
     expect(WIKI_PLAN_JOB_RULES.attemptsMax).toBe(3);
     // The build writes the documents of a confirmed version; the owner's confirmation asks for it.
-    expect(jobs.kinds.build).toMatch(/^orbit wiki docs build:/u);
+    expect(jobs.kinds.build).toMatch(/^the documents of a confirmed version written section by section \(wiki_job docs_build, docs\.build\.server\), which the owner's confirmation asks for/u);
     expect(jobs.triggers.owner).toMatch(/plan\/versions\/:version\/confirm/u);
     expect(jobs.request).toMatch(/A build is asked for by the owner's confirmation/u);
     expect(jobs.progress).toMatch(/\{ docs: \{ done, total \}, current: \{ slug, title \} \| null \}/u);
     expect(jobs.buildReport).toMatch(/WikiPlanBuildReport/u);
-    expect(jobs.cli.build).toMatch(/^orbit wiki docs build --space <id>/u);
-    expect(jobs.check.passes).toMatch(/for a build, one its owner confirmed/u);
     // One build of a space waits at a time, and a build names its version from the start (migration 0340).
     const buildSql = readFileSync(path.join(ROOT, jobs.buildMigration), 'utf8').replace(/\s+/gu, ' ');
     expect(buildSql).toContain(`"wiki_plan_job_space_id_waiting_build_key" ON "wiki_plan_job" ("space_id") WHERE "kind" = 'build' AND "state" IN ('queued', 'held')`);
@@ -1294,14 +1233,12 @@ describe('wiki contract', () => {
     // A fact asks for a job, and what moves it on is a fact too — never a clock.
     expect(jobs.means).toMatch(/never a clock/u);
     expect(jobs.trigger).toMatch(/No clock asks anything/u);
-    // A queued job goes before the next maintenance run, and a task's end published on a session moves it (2026-10-01).
-    expect(jobs.staggered).toMatch(/a queued job goes first: the maintenance trigger makes no task while the list has one that has not ended, nor while a job of the space is queued/u);
-    expect(jobs.states.queued).toMatch(/before the next maintenance run/u);
-    expect(jobs.trigger).toMatch(/whether published for the owner or on a session/u);
+    // A job and the space's maintenance runs are wiki jobs of their own, one of a space at a time: a request makes a
+    // job at once, and the owner's change to the settings asks one that waits again.
+    expect(jobs.staggered).toMatch(/A job does not wait for the space's maintenance runs, nor they for it: each is a wiki_job of its own, and the worker runs one job of a space at a time/u);
+    expect(jobs.states.queued).toMatch(/recorded and not made yet: a request makes it at once/u);
+    expect(jobs.trigger).toMatch(/the owner's change to a space's maintenance settings asks its held and queued jobs again/u);
     expect(jobs.notAMaintenanceRun).toMatch(/wikiMaintenanceRunsToday/u);
-    expect(jobs.task.list).toMatch(/Wiki maintenance list/u);
-    expect(jobs.task.acceptanceCommand).toBe('orbit wiki plan check --space <id> --job <id>');
-    expect(jobs.task.completionCriterion).toBe('EXECUTABLE');
 
     // The migration's CHECKs are these closed sets.
     const sql = readFileSync(path.join(ROOT, jobs.migration), 'utf8');
@@ -1321,23 +1258,12 @@ describe('wiki contract', () => {
       `"wiki_plan_job_space_id_open_draft_key" ON "wiki_plan_job" ("space_id") WHERE "kind" IN ('draft', 'revise') AND "state" IN ('queued', 'held', 'made')`,
     );
 
-    // The owner's route is on the user door; the run's five are maintenance routes of the runner door.
+    // The owner's route is on the user door, and none is on the runner door.
     const user: string[] = CONTRACT.agentSurface.doors.user.routes;
-    const maintenanceRoutes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
     expect(CONTRACT.plan.routes.redraft).toBe(jobs.routes.redraft);
     expect(user).toContain(jobs.routes.redraft);
-    for (const name of ['context', 'progress', 'finish', 'check', 'materials']) {
-      expect(maintenanceRoutes).toContain(jobs.routes[name]);
-      expect(jobs.routes[name]).not.toMatch(/confirm|decide/u);
-    }
+    expect(Object.values<string>(jobs.routes).some((route) => route.includes('/api/runner/'))).toBe(false);
     expect(jobs.who.redraft).toMatch(/WIKI_OWNER_CHANNEL_ONLY/u);
-    expect(jobs.who.runner).toMatch(/WIKI_PLAN_NO_JOB/u);
-    const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
-    expect(status('WIKI_PLAN_NO_JOB')).toBe(409);
-    expect(jobs.cli.tool).toMatch(/^none/u);
-    expect(jobs.cli.draft).toMatch(/^orbit wiki plan draft --space <id>/u);
-    expect(jobs.cli.revise).toMatch(/^orbit wiki plan revise --space <id> \[--instructions <file>\]/u);
-    expect(jobs.cli.check).toBe('orbit wiki plan check --space <id> --job <id> [--json]');
   });
 
   it('ships the documents of the version in force asked for again: the owner\'s route, the support route, and their rules', () => {
@@ -1367,11 +1293,8 @@ describe('wiki contract', () => {
     expect(rebuild.who).toMatch(/OWNER_INTERACTIVE/u);
     expect(jobs.who.support).toMatch(/PatForbidden ADMIN/u);
     expect(jobs.who.support).toMatch(/IMPERSONATION_FORBIDDEN/u);
-    // Only while the server executes the account: the runner's path is unchanged until P11.
-    expect(rebuild.when).toMatch(/WIKI_RUNNER_EXECUTES \(409\)/u);
-    expect(rebuild.runnerPath).toMatch(/Unchanged until P11/u);
-    const status = (code: string) => CONTRACT.refusals.find((r: { code: string }) => r.code === code)?.httpStatus;
-    expect(status('WIKI_RUNNER_EXECUTES')).toBe(409);
+    // Whenever the owner asks: the server executes every account's wiki.
+    expect(rebuild.when).toMatch(/Whenever the owner asks, of the version in force: the server executes every account's wiki/u);
     // The version in force alone, one build of it on its way, and neither counted nor held back by the day's limit.
     expect(rebuild.version).toMatch(/WIKI_PLAN_UNCONFIRMED/u);
     expect(rebuild.version).toMatch(/WIKI_PLAN_STALE/u);
@@ -1416,7 +1339,7 @@ describe('wiki contract', () => {
     expect(docs.dispositionsMigration).toMatch(/0337_wiki_doc_dispositions/u);
     expect(existsSync(path.join(ROOT, docs.dispositionsMigration))).toBe(true);
     expect(readFileSync(path.join(ROOT, docs.dispositionsMigration), 'utf8')).toContain(`CHECK (jsonb_typeof("dispositions") = 'array')`);
-    // The server's half of a section's material, and the runner's build over both halves.
+    // The server's half of a section's material, and the build over both halves.
     expect(keysOf(docs.material.weights)).toEqual([...WIKI_DOC_MATERIAL_WEIGHTS]);
     expect(docs.material.rules).toEqual(WIKI_DOC_MATERIAL_RULES);
     expect(docs.material.records).toMatch(/sourceText/u);
@@ -1425,8 +1348,6 @@ describe('wiki contract', () => {
     expect(docs.material.projects).toMatch(/\{ id, title \}/u);
     expect(docs.material.projects).toMatch(/22P02/u);
     expect(docs.build.rules).toEqual(WIKI_DOC_BUILD_RULES);
-    expect(docs.build.cli).toMatch(/^orbit wiki docs build --space <id> \[--doc <slug>\] \[--section <key>\]/u);
-    expect(docs.build.tool).toMatch(/^none/u);
     expect(docs.build.templates).toMatch(/Orbit has not recorded it done/u);
     // More than 5% marks a document; a whole document fits one write.
     expect(WIKI_DOC_RULES.needsReviewAbove).toBe(0.05);
@@ -1477,16 +1398,13 @@ describe('wiki contract', () => {
     expect(sql).toContain(`char_length("excerpt") <= ${WIKI_DOC_RULES.excerptMaxChars}`);
     expect(sql).toContain(`CONSTRAINT "wiki_doc_section_repo_sha_chk" CHECK ("repo_sha" ~ '^[0-9a-f]{40}$')`);
 
-    // Its doors: the owner's three reads on the user door, a maintenance run's two on the runner door.
+    // Its doors: the owner's three reads on the user door, and no route on the runner door.
     const routes = docs.routes;
     const user: string[] = CONTRACT.agentSurface.doors.user.routes;
-    const maintenanceRoutes: string[] = CONTRACT.agentSurface.doors.runner.maintenanceRoutes;
     for (const read of [routes.directory, routes.doc, routes.index]) expect(user).toContain(read);
-    for (const route of [routes.writerState, routes.writerDoc, routes.material, routes.write, routes.affected, routes.withdraw]) {
-      expect(maintenanceRoutes).toContain(route);
-    }
+    expect(Object.values<string>(routes).some((route) => route.includes('/api/runner/'))).toBe(false);
     expect(user.some((route) => route.startsWith('POST') && route.includes('/docs'))).toBe(false);
-    expect(docs.who.write).toMatch(/isWikiMaintenanceSession/u);
+    expect(docs.who.write).toMatch(/no door builds either, and the user door has no write route: any other caller is an error of the server's own code \(WikiDocs\.assertWriter\)/u);
     expect(docs.who.write).toMatch(/WIKI_PLAN_UNCONFIRMED/u);
     // A view: never a source, never pushed, never an agent's answer.
     expect(docs.view.push).toMatch(/Never in <orbit_wiki_context>/u);
@@ -1512,13 +1430,15 @@ describe('wiki contract', () => {
       expect(['request', 'op'], r.code).toContain(r.scope);
       expect(r.when, r.code).toBeTruthy();
     }
-    // Design §5.4's twelve are all here; anything more is marked as this contract's own addition.
+    // Design §5.4's twelve are all here but WIKI_NOT_MAINTENANCE_SESSION, which went with the maintenance sessions (P11);
+    // anything more is marked as this contract's own addition.
     const design = [
       'WIKI_DISABLED', 'WIKI_SPACE_UNBOUND', 'WIKI_SCHEMA', 'WIKI_KIND_OWNER_ONLY', 'WIKI_SOURCE_UNRESOLVED',
       'WIKI_QUOTE_NOT_FOUND', 'WIKI_REVISION_CONFLICT', 'WIKI_QUOTA', 'WIKI_REVIEW_QUEUE_FULL', 'WIKI_PROBE_REFUSED',
-      'WIKI_OWNER_CHANNEL_ONLY', 'WIKI_NOT_MAINTENANCE_SESSION',
+      'WIKI_OWNER_CHANNEL_ONLY',
     ];
     for (const code of design) expect(codes).toContain(code);
+    expect(codes).not.toContain('WIKI_NOT_MAINTENANCE_SESSION');
     for (const r of CONTRACT.refusals.filter((x: { code: string }) => !design.includes(x.code))) {
       expect(r.addedByThisContract, `${r.code} is not in design §5.4 and does not say it was added`).toBe(true);
     }
@@ -1545,10 +1465,11 @@ describe('wiki contract', () => {
     for (const tool of surface.tools) expect(tool).not.toMatch(/accept|confirm|decide|delete/u);
 
     expect(keysOf(surface.doors)).toEqual(['user', 'runner']);
+    // No maintenance session is left to serve: the runner door has no maintenance routes.
+    expect(surface.doors.runner).not.toHaveProperty('maintenanceRoutes');
     const user: string[] = surface.doors.user.routes;
     const runner: string[] = [
       ...surface.doors.runner.routes,
-      ...surface.doors.runner.maintenanceRoutes,
       ...surface.doors.runner.verificationRoutes,
     ];
     for (const route of user) expect(route).toMatch(/^(GET|POST|PATCH) \/api\/wiki\//u);
@@ -1645,10 +1566,10 @@ describe('wiki contract', () => {
     expect(imports.source).toMatch(/never the owner's own words/u);
     // A run is one changeset's worth.
     expect(WIKI_IMPORT_RULES.opsPerRun).toBe(WIKI_LIMITS.opsPerChangeset);
-    // Its two routes are the runner door's, and neither decides anything.
+    // Its one route is the runner door's, and decides nothing: it registers a note.
     const runner = CONTRACT.agentSurface.doors.runner;
-    expect(runner.importRoutes).toEqual([imports.note.route, imports.propose.route]);
-    for (const route of runner.importRoutes) expect(route).toMatch(/^POST \/api\/runner\/wiki\/spaces\/:id\/(notes|imports)$/u);
+    expect(runner.importRoutes).toEqual([imports.note.route]);
+    for (const route of runner.importRoutes) expect(route).toMatch(/^POST \/api\/runner\/wiki\/spaces\/:id\/notes$/u);
     expect(imports.note.redaction).toMatch(/BEFORE anything is stored or hashed/u);
     // A CLI verb with no tool beside it, whose description leads with what its reader must not do.
     expect(imports.cli.command).toMatch(/^orbit wiki import --from <dir\|file> --space <id>/u);
@@ -1657,7 +1578,7 @@ describe('wiki contract', () => {
     expect(CONTRACT.agentSurface.tools).not.toContain('wiki_import');
   });
 
-  it('reads an import on the server when the switch gives the account to it, under the same rules (server execution P5)', () => {
+  it('reads an import on the server, under the same rules (server execution P5)', () => {
     const server = CONTRACT.import.server;
     // The job's numbers and words are the shared constants the worker and the door run by.
     expect(server.priority).toBe(WIKI_IMPORT_JOB.priority);
@@ -1672,23 +1593,27 @@ describe('wiki contract', () => {
       expect(wikiModelWaitLimitSeconds(step)).toBe(WIKI_MODEL_QUEUE.waitLimitSeconds.import);
       expect(wikiModelCallBudgetSeconds(step)).toBe(WIKI_MODEL_QUEUE.defaultCallBudgetSeconds);
     }
-    // Three routes on the runner door, beside the two the import has always had, and none of them decides anything.
+    // Three routes on the runner door, beside the note route the import has always had, and none of them decides anything.
     const runner = CONTRACT.agentSurface.doors.runner;
     expect(runner.importJobRoutes).toEqual([WIKI_IMPORT_JOB.routes.executor, WIKI_IMPORT_JOB.routes.create, WIKI_IMPORT_JOB.routes.read]);
     expect([server.executor.route, server.create.route, server.read.route]).toEqual(runner.importJobRoutes);
     for (const route of runner.importJobRoutes) expect(route).toMatch(/^(GET|POST) \/api\/runner\/wiki\/spaces\/:id\/import(-jobs(\/:jobId)?)?$/u);
-    // A job of its own kind, which the worker runs; and the runner's half answers exactly what the server's does.
+    // The note route takes only a note the server reads: a command that would read it with the session's own model is
+    // refused before anything is registered.
+    expect(server.door).toMatch(/is refused WIKI_SERVER_EXECUTES before anything is registered/u);
+    expect(CONTRACT.refusals.find((r: { code: string }) => r.code === 'WIKI_SERVER_EXECUTES')?.httpStatus).toBe(409);
+    // A job of its own kind, which the worker runs, held to the answers the runner's reading gave (the fixture its Go
+    // test wrote).
     expect(WIKI_JOB_KINDS).toContain('import');
     expect(CONTRACT.jobs.kindRuns.import).toMatch(/import\.server/u);
-    expect(server.when).toMatch(/Under runner \(the default\)/u);
     expect(server.propose).toMatch(/origin import/u);
     expect(server.deterministic).toContain('src/shared/src/wiki-import.fixture.json');
-    for (const file of ['src/shared/src/wiki-import.fixture.json', 'src/runner-go/wiki_import_fixture_test.go', 'src/apiserver/src/wiki-worker/wiki-import-golden.spec.ts']) {
+    for (const file of ['src/shared/src/wiki-import.fixture.json', 'src/apiserver/src/wiki-worker/wiki-import-golden.spec.ts']) {
       expect(existsSync(path.join(ROOT, file)), `${file} does not exist`).toBe(true);
     }
   });
 
-  it('builds the documents on the server when the switch gives the account to it, as the runner builds them (server execution P7)', () => {
+  it('builds the documents on the server, as the runner built them (server execution P7)', () => {
     const server = CONTRACT.docs.build.server;
     // The job's numbers and words are the shared constants the worker runs by.
     expect(server.priority).toBe(WIKI_DOCS_BUILD_JOB.priority);
@@ -1711,23 +1636,21 @@ describe('wiki contract', () => {
     expect(WIKI_JOB_KINDS).toContain(WIKI_DOCS_BUILD_JOB.kind);
     expect(CONTRACT.jobs.kindRuns.docs_build).toMatch(/docs\.build\.server/u);
     expect(CONTRACT.plan.jobs.server.build).toMatch(/`docs_build` wiki_job/u);
-    expect(CONTRACT.docs.who.write).toMatch(/docs_build job/u);
+    expect(CONTRACT.docs.who.write).toMatch(/docs_build and maintain jobs/u);
     expect(CONTRACT.repoOps.waiting).toMatch(/docs\.build\.server\.repository/u);
-    expect(server.who).toMatch(/Under the default runner none of this runs/u);
-    expect(server.door).toMatch(/WIKI_SERVER_EXECUTES/u);
     expect(server.repository).toMatch(/wholeFileBytes/u);
     expect(server.repository).toMatch(/boundedChars/u);
     // A whole file fits one item; a request is packed well under the API's body cap.
     expect(WIKI_REPO_OPS.wholeFileBytes).toBeLessThanOrEqual(WIKI_REPO_OPS.operationBytes);
     expect(WIKI_REPO_OPS.operationBytes).toBeLessThanOrEqual(WIKI_REPO_OPS.apiBodyBytes);
-    // The runner's prompts and steps, held to one fixture both implementations read.
+    // The runner's prompts and steps, held to the one fixture its Go test wrote.
     expect(server.calls).toContain('src/shared/src/wiki-docs-build.fixture.json');
-    for (const file of ['src/shared/src/wiki-docs-build.fixture.json', 'src/runner-go/wiki_docs_build_fixture_test.go', 'src/apiserver/src/wiki-worker/wiki-docs-build-golden.spec.ts']) {
+    for (const file of ['src/shared/src/wiki-docs-build.fixture.json', 'src/apiserver/src/wiki-worker/wiki-docs-build-golden.spec.ts']) {
       expect(existsSync(path.join(ROOT, file)), `${file} does not exist`).toBe(true);
     }
   });
 
-  it('drafts and revises the plan on the server when the switch gives the account to it, under the same rules (server execution P6)', () => {
+  it('drafts and revises the plan on the server, under the same rules (server execution P6)', () => {
     const server = CONTRACT.plan.jobs.server;
     // The job's numbers and words are the shared constants the worker and the trigger run by.
     expect(server.kinds).toEqual({ ...WIKI_PLAN_SERVER_JOB.kinds });
@@ -1756,15 +1679,10 @@ describe('wiki contract', () => {
       expect(CONTRACT.jobs.kindRuns[kind]).toMatch(/plan\.jobs\.server/u);
     }
     expect(WIKI_PLAN_SERVER_JOB.priority).toBeGreaterThan(0);
-    expect(CONTRACT.jobs.make).toMatch(/since P6 a plan job of the account is made as a `plan_draft` or `plan_revise` job/u);
-    // Under runner nothing of it happens; the runner door's drafting routes are the server's otherwise.
-    expect(server.when).toMatch(/Under runner \(the default\)/u);
-    expect(server.door).toMatch(/WIKI_SERVER_EXECUTES/u);
-    // A build is the documents' pipeline, the server's too since P7: its session is refused the job routes like any other.
-    expect(server.door).toMatch(/a build job's session too/u);
+    expect(CONTRACT.jobs.make).toMatch(/since P6 a plan job is made as a `plan_draft` or `plan_revise` job/u);
+    // A build is the documents' pipeline, the server's since P7.
     expect(server.build).toMatch(/docs\.build\.server/u);
-    expect(CONTRACT.refusals.map((r: { code: string }) => r.code)).toContain('WIKI_SERVER_EXECUTES');
-    // A replay drafts from what its first run read, and the two paths are held to one fixture.
+    // A replay drafts from what its first run read, and one fixture holds the server's drafting to the runner's answers.
     expect(server.materials).toMatch(/wiki_plan_job\.materials/u);
     for (const file of [server.migration, 'src/shared/src/wiki-plan.fixture.json', 'src/runner-go/wiki_plan_fixture_test.go',
       'src/apiserver/src/wiki-worker/wiki-plan-golden.spec.ts']) {
@@ -1837,9 +1755,8 @@ describe('wiki contract', () => {
     ]);
   });
 
-  it('runs the maintenance pipeline on the server: the job, its numbers, its identity and its door (server execution P8)', () => {
-    // The run moves off the runner for an account the switch gives the server: a `maintain` wiki job, the
-    // System model in place of a session's provider, and the repository through `wiki_repo_op` alone.
+  it('runs the maintenance pipeline on the server: the job, its numbers and its identity (server execution P8)', () => {
+    // The run is the server's: a `maintain` wiki job, the System model, and the repository through `wiki_repo_op` alone.
     const server = CONTRACT.maintenance.job.server;
     expect(existsSync(path.join(ROOT, server.migration)), `${server.migration} does not exist`).toBe(true);
     const sql = readFileSync(path.join(ROOT, server.migration), 'utf8').replace(/\s+/gu, ' ');
@@ -1874,12 +1791,11 @@ describe('wiki contract', () => {
     // A run's end that queued the articles asks for the next round at once (2026-10-10): its own job set aside.
     expect(server.trigger).toMatch(/A run's end asks too \(the owner's decision of 2026-10-10/u);
     expect(server.identity).toMatch(/wiki_changeset\.job_id/u);
-    expect(server.door).toMatch(/WIKI_SERVER_EXECUTES/u);
     // The run's own ops are its job's, whichever attempt recorded them, and the second pass asks under units of its own
     // (2026-10-10): a replay verifies what a stop left waiting, and the retry suffix reaches the model.
     expect(server.verify).toMatch(/^The run's own ops are its job's \(identity\), whichever attempt recorded them/u);
     expect(server.verify).toMatch(/under a unit of its own, <opId>#retry, as the extraction's retry is asked under <sessionId>#retry/u);
-    expect(server.verify).toMatch(/Its prompt is the runner's second pass's, byte for byte/u);
+    expect(server.verify).toMatch(/Its prompt is the second pass's: the op's prompt as the list reads it now, with wikiVerifyRetrySuffix when the first answer was no verdict/u);
     // What both passes leave without a verdict is the space's next server run's to adopt once the job has ended (2026-10-11),
     // where no later run used to take it up.
     expect(server.verify).toMatch(/once the job has ended the space's next server run adopts it \(reviewModes\.verification\.adoption\.who\)/u);
@@ -1893,7 +1809,7 @@ describe('wiki contract', () => {
     expect(readFileSync(path.join(ROOT, 'docs/wiki-contract.md'), 'utf8')).toContain('事务没能按时开始、或被自己的超时关掉（P2028），按时拿不到连接（P2024）');
   });
 
-  it('runs wiki jobs on the server: the table, the kinds, the lease, the retry and the switch (server execution P1b)', () => {
+  it('runs wiki jobs on the server: the table, the kinds, the lease, the retry and the executor (server execution P1b)', () => {
     const jobs = CONTRACT.jobs;
     expect(existsSync(path.join(ROOT, jobs.migration)), `${jobs.migration} does not exist`).toBe(true);
     const sql = readFileSync(path.join(ROOT, jobs.migration), 'utf8').replace(/\s+/gu, ' ');
@@ -1924,18 +1840,16 @@ describe('wiki contract', () => {
     expect(sql).toContain('ALTER TABLE "wiki_maintenance_run" ALTER COLUMN "task_id" DROP NOT NULL');
     expect(sql).toContain('ADD COLUMN IF NOT EXISTS "job_id" UUID');
     expect(sql).toContain('("task_id" IS NOT NULL) <> ("job_id" IS NOT NULL)');
-    expect(jobs.runRows.count).toMatch(/count the maintenance list's tasks made since midnight/u);
-    // The executor switch: the two variables, the three modes, and the default that changes nothing.
-    expect(jobs.executor.env).toEqual({ ...WIKI_EXECUTOR_ENV });
-    for (const name of Object.values(WIKI_EXECUTOR_ENV)) expect(name).toMatch(/^ORBIT_WIKI_EXECUTOR(_[A-Z]+)*$/u);
+    expect(jobs.runRows.count).toMatch(/count the run rows the space's maintain jobs made since midnight UTC/u);
+    // No switch: the server executes every account, and nothing of the switch is left but the modes a read may name.
+    expect(jobs.executor.removed).toMatch(/the server executes every account's wiki, and there is no switch/u);
+    for (const key of ['env', 'default', 'rules', 'mistyped', 'rollback']) expect(jobs.executor, key).not.toHaveProperty(key);
     expect(jobs.executor.modes).toEqual([...WIKI_EXECUTOR_MODES]);
-    expect(jobs.executor.default).toBe('runner');
-    expect(keysOf(jobs.executor.rules)).toEqual([...WIKI_EXECUTOR_MODES]);
-    expect(jobs.executor.mistyped).toMatch(/read as runner/u);
-    // What a read tells the account that asks: the mode and whether the server executes its wiki, never the list.
+    // What a read tells the account that asks: the mode and whether the server executes its wiki — for every account, the server.
     const view: WikiExecutorView = { mode: 'canary', serverExecutes: true };
     expect(jobs.executor.read.fields).toEqual(Object.keys(view));
-    expect(jobs.executor.read.rule).toMatch(/Never the list itself/u);
+    expect(WIKI_EXECUTOR_READ).toEqual({ mode: 'server', serverExecutes: true });
+    expect(jobs.executor.read.rule).toContain(`{ mode: ${WIKI_EXECUTOR_READ.mode}, serverExecutes: ${WIKI_EXECUTOR_READ.serverExecutes} }, the same for every account since P11`);
   });
 
   it('reports the whole job, its hand-backs and replays included: what a replay carries, kind by kind (2026-10-10)', () => {

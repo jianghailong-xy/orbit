@@ -180,6 +180,13 @@ import {
 import { PROJECT_LIVE_SESSION_STATUS_SQL } from '../projects/live-session-status';
 import { readCurrentVerifier, readTaskWorkState } from '../projects/project-task-work-state';
 import { readTaskIntegrationViews } from '../projects/project-task-integration';
+import { stopInFlightJob } from '../projects/project-integration-line';
+import { LANDING_PROVIDER_SLUG } from '../providers/provider-slug';
+import {
+  settleTaskSegmentAfterCancel,
+  settleTaskSegmentAfterMove,
+  settleTaskSegmentsAfterDelete,
+} from '../projects/landing-session';
 import {
   admitProjectScopeWrite,
   type ScopeAdmission,
@@ -6483,6 +6490,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       if (fenced) throw new ConflictException(fenced);
       throw error;
     });
+    // §2.9 LS3 rule 3: the project the task left settles its open segment CANCELLED — the work it
+    // was landing there is not that project's any more. The target opens its own segment through
+    // that project's enqueue. Own transaction, after the move committed.
+    await settleTaskSegmentAfterMove(this.prisma, { ownerId, taskId, fromProjectId: from })
+      .catch((error) => this.logger.warn(`landing settlement after task move failed: ${(error as Error)?.message ?? error}`));
     // After the commit, what the owner's own move in `update` delivers: the task's row, and both
     // projects — either can be left settled, or holding a criterion that just became ready.
     await this.publishAffectedTaskRows(
@@ -10303,6 +10315,42 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
                 update: { createdAt: new Date() },
               });
             }
+            // J-T8: a task put back to work, or one written CANCELLED / FAILED, stops its landing.
+            // The landing rows are children of this transaction's rank-50 task lock (rank 60), so
+            // the task and the stop are one fact: either both commit or neither does. A QUEUED
+            // landing ends CANCELLED on the spot and a RUNNING one is asked to stop — or ended,
+            // when it is already silent past its limit — by the one rule every stop door shares
+            // (`stopInFlightJob`). An ordinary status edit (DONE → IN_PROGRESS) is work continuing
+            // and stops nothing: the claim guard already waits for the work that is running.
+            const stopsTheLanding =
+              ((task.status === TaskStatus.CANCELLED || task.status === TaskStatus.FAILED)
+                && before.status !== task.status)
+              || (isTaskReopenDoor
+                && reopenStatusBefore != null
+                && ['DONE', 'CANCELLED', 'FAILED'].includes(reopenStatusBefore)
+                && task.status === TaskStatus.OPEN);
+            if (stopsTheLanding) {
+              const landings = await tx.projectIntegrationJob.findMany({
+                where: {
+                  ownerId,
+                  taskId: id,
+                  kind: 'LAND_TASK',
+                  state: { in: ['QUEUED', 'RUNNING'] },
+                },
+                select: { id: true, projectId: true },
+              });
+              const stoppedAt = new Date();
+              for (const landing of landings) {
+                await stopInFlightJob(tx, {
+                  projectId: landing.projectId,
+                  jobId: landing.id,
+                  now: stoppedAt,
+                  cause: 'TASK_REOPEN',
+                  actor: { type: 'PLATFORM' },
+                  reason: 'the task was reopened, cancelled or failed',
+                });
+              }
+            }
             if (dto.fixesOpenItemId) {
               await this.assertFixesOpenItem(
                 tx, ownerId, task.projectId, dto.fixesOpenItemId, actingSessionId, true,
@@ -10445,6 +10493,13 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // this door just filed is handed to whoever is responsible for it (contract §4.2, §4.4).
     await this.openItems?.resolveByFact([id]);
     await this.openItems?.deliverForTasks([id]);
+    // §2.9 LS3 rule 2: a task written CANCELLED settles its open segment. FAILED, a reopen and
+    // every retry are deliberately not settlement facts (they keep the segment open for the next
+    // generation). Own transaction, after the write committed.
+    if (updated.status === TaskStatus.CANCELLED && before.status !== TaskStatus.CANCELLED) {
+      await settleTaskSegmentAfterCancel(this.prisma, { ownerId, taskId: id })
+        .catch((error) => this.logger.warn(`landing settlement after task cancel failed: ${(error as Error)?.message ?? error}`));
+    }
     const changedFields = Object.keys(dto).sort();
     const updateIdentity = createHash('sha256')
       .update(JSON.stringify(changedFields.map((field) => [
@@ -11968,6 +12023,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
    * decrypted only for a key on Anthropic's protocol, the one protocol a subscription token runs on.
    */
   private async keyQuota(ownerId: string, slug: string): Promise<{ subscription: boolean } | null> {
+    // The LANDING provider's row is a compatibility fence, not a key (0436): it must never be
+    // decrypted or read as an account's credential by the quota gate.
+    if (slug === LANDING_PROVIDER_SLUG) return null;
     const row = await this.prisma.modelProvider.findFirst({
       where: { slug, OR: [{ ownerId }, { ownerId: null }] },
       select: { runtime: true, baseUrl: true, apiKeyEnc: true, presetSlug: true },
@@ -12441,7 +12499,11 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
 
   async remove(ownerId: string, id: string) {
     await this.loadDetail(ownerId, id);
-    const { survivingLinks, projectIds } = await this.deleteAndStopRuns(ownerId, [id]);
+    const { survivingLinks, projectIds, deletedTaskIds } = await this.deleteAndStopRuns(ownerId, [id]);
+    // §2.9 LS3 rule 2: the subject of a deleted task settles DELETED, in its own transaction after
+    // the delete committed. History references keep naming the task that is gone.
+    await settleTaskSegmentsAfterDelete(this.prisma, { ownerId, taskIds: deletedTaskIds })
+      .catch((error) => this.logger.warn(`landing settlement after task delete failed: ${(error as Error)?.message ?? error}`));
     // Cascades may remove prerequisite edges from other open DAGs, so the deleted id is not an
     // incremental answer: it cannot be fetched, and it does not name all surviving rows affected
     // by the cascades. Say explicitly that the owner's task snapshots must be reconciled.
@@ -12489,7 +12551,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   private async deleteAndStopRuns(
     ownerId: string,
     ids: string[],
-  ): Promise<{ deleted: number; survivingLinks: string[]; projectIds: string[] }> {
+  ): Promise<{ deleted: number; survivingLinks: string[]; projectIds: string[]; deletedTaskIds: string[] }> {
     // Retried whole. Everything it decides is read inside the closure and under the owner mutex —
     // the surviving links, the occupying runs, the rows the DELETE names — so a re-run deletes
     // against the state the winning transaction left. The run teardown below is deliberately
@@ -12504,7 +12566,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     // `lock_not_available`, which `classifyTransactionError` deliberately does not call transient —
     // it is a decision, not a fault. Retrying it would spend the attempts re-earning the same
     // correct refusal; untranslated it reaches the caller as a 500 with a SQLSTATE in it.
-    const { deleted, runs, links, projectIds } = await this.runTaskWorkTranslatingFences(
+    const { deleted, runs, links, projectIds, deletedTaskIds } = await this.runTaskWorkTranslatingFences(
       () => withTransactionRetry(
         this.prisma,
       async (tx) => {
@@ -12597,6 +12659,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           deleted: res.count,
           runs: occupying.map((s) => s.id),
           links: locked,
+          // Every task the DELETE removed, cascaded verifiers included: a landing segment about
+          // one of them settles DELETED after the commit (§2.9 LS3, rule 2).
+          deletedTaskIds: doomed,
           projectIds: [
             ...new Set(locked.map((task) => task.projectId).filter((id): id is string => !!id)),
           ],
@@ -12641,7 +12706,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
           .filter((id): id is string => !!id && !doomed.has(id)),
       ),
     ];
-    return { deleted, survivingLinks, projectIds };
+    return { deleted, survivingLinks, projectIds, deletedTaskIds };
   }
 
   async addComment(
@@ -15447,7 +15512,9 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
   async batchDelete(ownerId: string, taskIds: string[]) {
     const uniqueIds = [...new Set(taskIds)];
     if (uniqueIds.length === 0) return { deleted: 0 };
-    const { deleted, survivingLinks } = await this.deleteAndStopRuns(ownerId, uniqueIds);
+    const { deleted, survivingLinks, deletedTaskIds } = await this.deleteAndStopRuns(ownerId, uniqueIds);
+    await settleTaskSegmentsAfterDelete(this.prisma, { ownerId, taskIds: deletedTaskIds })
+      .catch((error) => this.logger.warn(`landing settlement after task delete failed: ${(error as Error)?.message ?? error}`));
     if (deleted > 0) {
       // A representative deleted id is neither fetchable nor complete (verification tasks and
       // dependency edges can cascade). Future incremental clients need an explicit reconciliation

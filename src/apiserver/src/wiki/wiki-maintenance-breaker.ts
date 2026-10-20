@@ -12,14 +12,14 @@ import { Prisma } from '@prisma/client';
  * spent, and the space's active entries are counted as they stood when the run began — the active entries
  * now, less the ones the run's own adds made active since.
  *
- * The run is its session: a maintenance task's run is one session, and every changeset it records names
- * it. A run the server's worker executes has no session: it names the wiki job that runs it
- * (`wiki_changeset.job_id`, migration 0407), and the count is the same over that. No clock and no run row
- * is read, so the count is the same whoever asks and whenever.
+ * The run is its wiki job: a run the server's worker executes has no session, and every changeset it records
+ * names the wiki job that runs it (`wiki_changeset.job_id`, migration 0407). A maintenance task's run before
+ * P11 was one session, which every changeset it recorded named, and the count is the same over that. No clock
+ * and no run row is read, so the count is the same whoever asks and whenever.
  *
  * A dry run answers with this count (`breakerReading`, contract `refusalRules.dryRun`): the entries the run
- * began with, what it has spent — a retry of `orbit wiki maintain` in the same session included — and what
- * remains. The runner holds its batches to that answer rather than counting anything of its own.
+ * began with, what it has spent — a replay of its job included — and what remains. The run holds its
+ * batches to that answer rather than counting anything of its own.
  */
 export interface WikiMaintenanceRunChanges {
   /** The distinct entries the run's earlier changesets changed through the review mode. */

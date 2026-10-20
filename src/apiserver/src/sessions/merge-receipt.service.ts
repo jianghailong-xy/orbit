@@ -34,6 +34,7 @@ import {
   normalizeSha,
   resultLanded,
 } from './merge-receipt';
+import { assertEngineSession } from './engine-session';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { storeDerivedProjectStatus } from '../projects/project-done-derived';
 import {
@@ -42,6 +43,7 @@ import {
 } from '../projects/task-checkpoint.service';
 import { checkpointMergeReceiptKey } from '../projects/task-checkpoint';
 import { retireCandidatesLandedByReceipt } from '../projects/project-promotion.service';
+import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 
 export interface RecordMergeReceiptInput {
   result: MergeReceiptResult;
@@ -318,9 +320,11 @@ export class MergeReceiptService {
     const run = async (db: Prisma.TransactionClient) => {
       const session = await db.session.findFirst({
         where: { id: sessionId, ownerId },
-        select: { id: true, branch: true, taskId: true, mergeStatus: true, task: { select: { projectId: true } } },
+        select: { id: true, branch: true, taskId: true, mergeStatus: true, sessionKind: true, task: { select: { projectId: true } } },
       });
       if (!session) throw new NotFoundException('session not found');
+      // A landing session has no branch of its own to record a merge against (§2.9 LS6).
+      assertEngineSession(session);
 
       const sourceBranch = (input.sourceBranch ?? session.branch ?? '').trim();
       const targetBranch = (input.targetBranch ?? '').trim();
@@ -502,6 +506,15 @@ export class MergeReceiptService {
     // whose response was lost is in, and the first attempt's delivery is the one that may have been
     // lost with it. Re-deriving a fact nothing has moved answers ALREADY_AWAKE and costs a read.
     await this.deliverProjectFactsAfterCommit(recorded.receipt.projectId, recorded.receipt.taskId);
+    // §2.9 LS3 / errata E5: a landed receipt is the task segment's landing fact, whichever door
+    // recorded it — including the replay of one already recorded, which is what retires a candidate
+    // an older build left standing (M-T13). Its own transaction, after the receipt committed.
+    await settleTaskSegmentAfterReceipt(this.prisma, {
+      taskId: recorded.receipt.taskId,
+      projectId: recorded.receipt.projectId,
+      result: recorded.receipt.result,
+    }).catch((error) => this.logger.warn(
+      `landing settlement after receipt ${recorded.receipt.id} failed: ${(error as Error)?.message ?? error}`));
     return recorded;
   }
 
@@ -652,6 +665,14 @@ export class MergeReceiptService {
        *  (integration contract §3.3 M-T11). Written into the receipt's `detail` so the ledger itself
        *  says which merges a person made and which the platform made on its own. */
       confirmedAutomatically?: boolean;
+      /**
+       * J12's repair: this receipt is for a landing whose push outcome the platform could not read
+       * at the time (ERROR · PUSH_OUTCOME_UNKNOWN) and which a later job found on the target. It is
+       * written against THAT job — the `jobId` above — whose terminal row is never rewritten (J4),
+       * so the marker is what makes the repair visible in the ledger rather than looking like an
+       * ordinary report.
+       */
+      recoveredUnknownPush?: boolean;
     },
   ): Promise<string[]> {
     const sourceSha = normalizeSha(args.sourceSha, 'sourceSha');
@@ -686,6 +707,7 @@ export class MergeReceiptService {
           ...(args.landedTreeSha ? { landedTreeSha: args.landedTreeSha } : {}),
           ...(args.mainSyncSha ? { mainSyncSha: args.mainSyncSha } : {}),
           ...(args.confirmedAutomatically ? { confirmedAutomatically: true } : {}),
+          ...(args.recoveredUnknownPush ? { recoveredUnknownPush: true } : {}),
         } as Prisma.InputJsonValue,
         idempotencyKey: mergeReceiptIdempotencyKey({
           sessionId: args.sessionId,

@@ -22,13 +22,13 @@ import {
 
 /**
  * The writer the server's `articles` job writes with (wiki-articles-writer.ts), held to what
- * `src/runner-go/wiki_articles_test.go` holds the runner's to: the grouping puts a topic's entries in groups by
- * their paths first and gives the same groups every time, what a draft keeps is counted as the server keeps
- * it, a title and a group's name are read out of what the model wrote. And beside those, what only the server's
- * worker has to answer for: the grouping lets the event loop run while it computes (design §4.5).
+ * `src/runner-go/wiki_articles_test.go` held the runner's to before P11 deleted both: the grouping puts a topic's
+ * entries in groups by their paths first and gives the same groups every time, what a draft keeps is counted as
+ * the server keeps it, a title and a group's name are read out of what the model wrote. And beside those, what
+ * only the server's worker has to answer for: the grouping lets the event loop run while it computes (design §4.5).
  *
- * The runner and the server are held to ONE ANSWER for the same input by `src/shared/src/wiki-article-writer.fixture.json`,
- * which `wiki_articles_test.go` reads too: the prompts word for word, the groups index for index.
+ * The server is held to the ONE ANSWER the runner gave for the same input, `src/shared/src/wiki-article-writer.fixture.json`,
+ * which `wiki_articles_test.go` wrote and which is frozen since P11: the prompts word for word, the groups index for index.
  */
 
 // From build/wiki-worker back to the repository root, as wiki-system-model.spec.ts reads the contract.
@@ -37,7 +37,7 @@ const CONTRACT = JSON.parse(readFileSync(path.join(ROOT, 'contracts/wiki.contrac
   articles: { rules: Record<string, number>; job: Record<string, unknown> };
 };
 
-/** The topic the runner and the server must write the same way (its `about` says how it is made). */
+/** The topic the runner wrote and the server must write the same way (its `about` says how it was made). */
 const WRITER_FIXTURE = JSON.parse(readFileSync(path.join(ROOT, 'src/shared/src/wiki-article-writer.fixture.json'), 'utf8')) as {
   model: { names: string[]; article: string; short: string; shortFor: string };
   topics: Array<{ slug: string; title: string; entrySetSha256: string; entries: WikiArticleWriterEntry[] }>;

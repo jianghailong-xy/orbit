@@ -18,6 +18,22 @@ export const CURSOR_RUNNER_UPGRADE_ERROR =
   'support; update this runner first';
 
 /**
+ * Whether a runner, as its persisted heartbeat describes it, knows Cursor CLI: it declares
+ * provider:cursor, or it reports Cursor CLI among its engines, which a release that knows it does for
+ * every engine it knows, installed or not (src/runner-go/doctor.go engineSpecs). A release that does
+ * neither predates Cursor CLI and has no install for it. The web asks the same before it offers Install
+ * or Reinstall (runnerKnowsCursor, src/web/src/lib/cursorRuntime.ts).
+ */
+export function runnerKnowsCursor(runner: {
+  capabilities?: readonly string[] | null;
+  capabilitiesReportedAt?: Date | null;
+  engines?: unknown;
+}): boolean {
+  if (runner.capabilitiesReportedAt && runner.capabilities?.includes(`provider:${AgentProvider.CURSOR}`)) return true;
+  return !!sanitizeRunnerEngines(runner.engines)?.some((engine) => engine.engine === 'cursor');
+}
+
+/**
  * Why a runner that declares dsh still cannot start it, by what its last engine report says. Each
  * leads with the runner's own `DSH_*` code, which the clients' repair reads (web `dshRepair`,
  * OrbitKit `DshRuntime.repair`); the remedy follows the clients' runner-state hints.

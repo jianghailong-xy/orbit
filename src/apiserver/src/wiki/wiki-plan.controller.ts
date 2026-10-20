@@ -15,13 +15,13 @@ type Headers = { headers: Record<string, string | string[] | undefined> };
  * new draft; confirms the draft; and accepts or rejects a proposal.
  *
  * And the owner asks for a draft, or a revision with their instructions (`redraft`): a job of the plan
- * the server runs as a task of the space's maintenance list (contract `plan.jobs`) — or, for the version
- * in force, its documents again (`build`, contract `plan.jobs.rebuild`), while the server executes the wiki.
+ * the wiki-worker runs (contract `plan.jobs`) — or, for the version in force, its documents again (`build`,
+ * contract `plan.jobs.rebuild`).
  *
  * THE OWNER CHANNEL, EVERY ROUTE. A request carrying a session header is refused
  * WIKI_OWNER_CHANNEL_ONLY before anything is read, whatever the session's role — the plan is what every
  * document is written from, and a session reporting a person's answer is not a person answering. The
- * runner door has no route that confirms or decides anything (`RunnerWikiPlanController`).
+ * runner door has no route of the plan at all since P11, and never had one that confirms or decides anything.
  *
  * A controller of its own rather than more routes on `WikiController`, so the specs that stand that one
  * up by hand construct it exactly as before. Another account's space, version or proposal is the plain
@@ -77,8 +77,8 @@ export class WikiPlanController {
 
   /**
    * Ask for a draft of the plan — with `instructions`, a revision of its newest version (contract
-   * `plan.routes.redraft`): made as a task of the space's maintenance list, queued behind its unfinished
-   * task, or held with why. The space's draft that has not ended answers a second request.
+   * `plan.routes.redraft`): made as the wiki-worker's job, or held with why. The space's draft that has not
+   * ended answers a second request.
    */
   @Post('spaces/:id/plan/redraft')
   @HttpCode(HttpStatus.OK)
@@ -88,8 +88,8 @@ export class WikiPlanController {
 
   /**
    * Ask for the documents of the version in force again (contract `plan.jobs.rebuild`): a build of it, as its
-   * confirmation asked for — only while the server executes the account's wiki, and only of the version in force.
-   * That version's own build that has not ended answers a second request.
+   * confirmation asked for — only of the version in force. That version's own build that has not ended answers
+   * a second request.
    */
   @Post('spaces/:id/plan/versions/:version/build')
   @HttpCode(HttpStatus.OK)

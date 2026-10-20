@@ -49,6 +49,7 @@ import { WikiController } from './wiki.controller';
 import { appendWikiContext } from './wiki-push';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiService, type WikiPrincipal } from './wiki.service';
+import { wikiVerifyPrincipal } from '../wiki-worker/wiki-verify-job';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -299,9 +300,9 @@ function importer(ownerId: string): WikiPrincipal {
   return { origin: 'import', ownerId, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
 }
 
-/** The proposing session, as the runner door's verification path knows it. */
+/** The proposing session, as the server's verify job reads its ops and records their verdicts (wiki-worker/wiki-verify-job.ts). */
 function agent(ownerId: string, sessionId: string): WikiPrincipal {
-  return { origin: 'agent', ownerId, userId: null, sessionId, toolCallId: null };
+  return wikiVerifyPrincipal(ownerId, sessionId);
 }
 
 function verdict(opId: string, value: string, over: Record<string, unknown> = {}): Record<string, unknown> {
@@ -353,15 +354,17 @@ async function ownerFinds(h: Harness, owner: Account, spaceId: string, q: string
   return new Set((answer.body.hits as Array<{ id: string }>).map((hit) => toUuid(hit.id)));
 }
 
-/** What the verification list hands the calling session, every page of it. */
-async function listed(h: Harness, who: Caller, spaceId: string): Promise<VerificationItem[]> {
+/**
+ * What the verification list hands the server's verify job for one proposing session's ops, every page of it: the
+ * job's own read (`WikiService.listVerifications`), which the runner door no longer hands any session.
+ */
+async function listed(h: Harness, ownerId: string, sessionId: string, spaceId: string): Promise<VerificationItem[]> {
   const items: VerificationItem[] = [];
   let after: string | null = null;
   for (let page = 0; page < 50; page += 1) {
-    const answer = await call(h, who, 'GET', `/runner/wiki/spaces/${spaceId}/verifications?limit=5${after ? `&after=${after}` : ''}`);
-    expectStatus(answer, 200, 'the verification list');
-    items.push(...(answer.body.items as VerificationItem[]));
-    after = answer.body.next;
+    const answer = await h.service.listVerifications(agent(ownerId, sessionId), toUuid(spaceId), { after, limit: 5 });
+    items.push(...(answer.items as unknown as VerificationItem[]));
+    after = answer.next;
     if (!after) return items;
   }
   throw new Error('the verification list never ended');
@@ -442,7 +445,7 @@ test('evidence · a tool call, a tool result and a thinking reach the verifier a
   });
 
   await t.test('the list hands each source\'s text: a tool\'s name and input, a result\'s content, a thinking\'s words', async () => {
-    const items = await listed(h, mine, space);
+    const items = await listed(h, owner.id, proposer, space);
     const item = (title: string) => {
       const found = items.find((candidate) => candidate.entry.title === title);
       assert.ok(found, `${title} is not in the list`);
@@ -460,7 +463,7 @@ test('evidence · a tool call, a tool result and a thinking reach the verifier a
   });
 
   await t.test('an empty thinking and a system event\'s counts are nothing to read, and the op says so', async () => {
-    const items = await listed(h, mine, space);
+    const items = await listed(h, owner.id, proposer, space);
     const nothing = items.find((candidate) => candidate.entry.title === 'A claim that rests on nothing readable')!;
     assert.deepEqual(nothing.sources.map((source) => source.text), [null, null]);
     assert.equal(nothing.evidence, 'unreadable');
@@ -470,7 +473,7 @@ test('evidence · a tool call, a tool result and a thinking reach the verifier a
   });
 
   await t.test('a long result is redacted before it is cut, and the cut is marked', async () => {
-    const items = await listed(h, mine, space);
+    const items = await listed(h, owner.id, proposer, space);
     const source = items.find((candidate) => candidate.entry.title === 'A long tool output')!.sources[0];
     assert.equal(source.truncated, true);
     assert.equal([...source.text!].length, WIKI_REVIEW_RULES.verificationSourceMaxChars);
@@ -501,7 +504,7 @@ test('evidence · a verdict about records nobody could read leaves its op no mor
     const outcomes = await propose(h, mine, ['Supported', 'Partial', 'Unsupported'].map((word) => ({
       op: 'add', entry: pitfall(`${word} about nothing readable`), sources: nothing,
     })));
-    const items = await listed(h, mine, space);
+    const items = await listed(h, owner.id, proposer, space);
     for (const outcome of outcomes) {
       assert.equal(items.find((item) => toUuid(item.opId) === toUuid(outcome.opId!))?.evidence, 'unreadable', 'the list says so first');
     }
@@ -524,13 +527,11 @@ test('evidence · a verdict about records nobody could read leaves its op no mor
   });
 
   await t.test('the server reads the evidence itself: a verdict can be no more than its op\'s sources allow', async () => {
-    // The same verdict, reported over the runner door: what the verifier claims it read does not enter into it.
+    // The same verdict, from a verifier that says it read the records: what it claims to have read does not enter into it.
     const [outcome] = await propose(h, mine, [{ op: 'add', entry: pitfall('A second claim about nothing readable'), sources: nothing }]);
-    const answer = await call(h, mine, 'POST', `/runner/wiki/spaces/${space}/verifications`, {
-      verdicts: [{ ...verdict(outcome.opId!, 'supported'), evidence: 'readable' }],
-    });
-    expectStatus(answer, 200, 'the report');
-    assert.equal(answer.body.outcomes[0].trust, 'unreviewed');
+    const answer = await h.service.recordVerifications(agent(owner.id, proposer), space, [{ ...verdict(outcome.opId!, 'supported'), evidence: 'readable' }]);
+    assert.equal(answer.outcomes[0].status, 'applied', JSON.stringify(answer.outcomes[0]));
+    assert.equal((answer.outcomes[0] as { trust?: string }).trust, 'unreviewed');
     assert.equal((await entryRow(h, outcome.entryId!)).trust, 'unreviewed');
   });
 
@@ -845,14 +846,14 @@ test('evidence · reopening: what was rejected for want of text waits for its ve
     assert.equal(near.status, 'proposed');
     assert.equal(near.rejectedReason, undefined);
     assert.equal(near.rejectedBecause, undefined);
-    const items = await listed(h, mine, space);
+    const items = await listed(h, owner.id, proposer, space);
     const recorded = items.find((item) => toUuid(item.opId) === toUuid(probe.opId!))!.similar.find((candidate) => toUuid(candidate.id) === blindEntry);
     assert.ok(recorded, 'the probe\'s recorded neighbour, read now');
     assert.equal(recorded.rejectedReason, undefined, 'no longer offered as a claim found not true');
   });
 
   await t.test('the list hands it back with its text, and a new verdict decides it', async () => {
-    const items = await listed(h, mine, space);
+    const items = await listed(h, owner.id, proposer, space);
     const item = items.find((candidate) => toUuid(candidate.opId) === blindOp);
     assert.ok(item, 'listed again');
     assert.equal(item.evidence, 'readable');

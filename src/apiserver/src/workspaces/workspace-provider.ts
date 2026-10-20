@@ -50,6 +50,13 @@ export const DEFAULT_AGENT_PROVIDER: AgentProviderSeed = {
  *    reproduce the startup path" test is the common case). Counting those let one scripted probe
  *    re-point the project default, which is what put OpenCode in front of a human who had never
  *    chosen it.
+ *  • LANDING rows (`kind = 'CONVERSATION'` below) — the platform-driven container a landing subject
+ *    opens. It sits in a workspace with `task_id`/`parent_session_id` both NULL like an ordinary
+ *    conversation, but its provider is the reserved `orbit` slug that no engine runs: counting one
+ *    would make every later session created without a provider in that workspace be refused with
+ *    `provider not available: "orbit"` (docs/project-integration-line-contract.md §2.9 LS6, errata
+ *    E4). The same predicate guards the task dispatcher and @-mention delivery, which seed the same
+ *    way.
  *
  * Written as a LATERAL per id rather than the obvious `DISTINCT ON (workspace_id) … ORDER BY
  * created_at DESC`: Postgres has no skip scan, so that form reads *every* session belonging to
@@ -96,6 +103,7 @@ export async function lastProviderByWorkspace(
       SELECT engine, provider, provider_builtin, owner_id
       FROM "session"
       WHERE workspace_id = a.id AND task_id IS NULL AND parent_session_id IS NULL
+        AND kind = 'CONVERSATION'
       ORDER BY created_at DESC
       LIMIT 1
     ) s
@@ -106,6 +114,7 @@ export async function lastProviderByWorkspace(
     WHERE NOT EXISTS (
       SELECT 1 FROM "session"
       WHERE workspace_id = a.id AND task_id IS NULL AND parent_session_id IS NULL
+        AND kind = 'CONVERSATION'
     )
     UNION ALL
     SELECT a.id, NULL, NULL, false, NULL, true, m.owner_id::text
@@ -114,6 +123,7 @@ export async function lastProviderByWorkspace(
     WHERE NOT EXISTS (
       SELECT 1 FROM "session"
       WHERE workspace_id = a.id AND task_id IS NULL AND parent_session_id IS NULL
+        AND kind = 'CONVERSATION'
     )
   `);
   const seeds = new Map<string, AgentProviderSeed>();

@@ -71,25 +71,6 @@ func userTokenEnvCases() []userTokenEnvCase {
 			},
 		},
 		{
-			// Built from nothing and two allowlists, so it inherits neither token; held to the rule all the same.
-			name:  "claude wiki maintenance clean start",
-			sites: []string{"claude_spawn.go spawnClaude", "wiki_maintenance_session.go wikiMaintenanceEnv"},
-			holds: []string{session},
-			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
-				capture := fakeEngineCapturingEnv(t, "claude")
-				job.WikiMaintenance = &WikiMaintenanceRun{CleanStart: true}
-				if err := prepareWikiMaintenanceStart(job, filepath.Join(dir, "scratch")); err != nil {
-					t.Fatal(err)
-				}
-				proc, err := spawnClaude(context.Background(), job, dir, nil)
-				if err != nil {
-					t.Fatal(err)
-				}
-				t.Cleanup(func() { _ = proc.stdin.Close(); _ = proc.cmd.Wait() })
-				return readCapturedEnv(t, capture)
-			},
-		},
-		{
 			name: "codex exec", sites: []string{"codex.go runCodexTurn"}, holds: inherited,
 			env: func(t *testing.T, job *ClaimedSession, dir string) []string {
 				capture := fakeEngineCapturingEnv(t, providerCodex)

@@ -10,8 +10,8 @@
  *
  *   (1) refused, and nothing written: another account's space (404), a session header (WIKI_OWNER_CHANNEL_ONLY), an
  *       access token (OWNER_INTERACTIVE_CREDENTIAL_REQUIRED), an administrator viewing Orbit as the owner
- *       (IMPERSONATION_READ_ONLY), a draft, a superseded version or no such version (WIKI_PLAN_STALE, 404), a space with
- *       no plan in force (WIKI_PLAN_UNCONFIRMED), and an account the server does not execute (WIKI_RUNNER_EXECUTES);
+ *       (IMPERSONATION_READ_ONLY), a draft, a superseded version or no such version (WIKI_PLAN_STALE, 404), and a space
+ *       with no plan in force (WIKI_PLAN_UNCONFIRMED);
  *   (2) the owner asks on the plan page: a build of the version in force, made as a docs_build wiki_job at the owner's
  *       priority — no task, no session, no Activity row — which the plan's read shows writing the documents;
  *   (3) asked again while it is on its way, one after another and two at once: the same job, and no second row;
@@ -20,9 +20,8 @@
  *   (5) the support door: a member is refused 403, an access token PAT_FORBIDDEN, a view-as token
  *       IMPERSONATION_FORBIDDEN, a missing, blank or long reason WIKI_SCHEMA — nothing written; an administrator is
  *       answered with the owner's build (trigger support, requested by the administrator) and one Activity row naming
- *       the account, the space, the version, the job and the reason; asked again, the same build, recorded again; the
- *       runner's path refused WIKI_RUNNER_EXECUTES with no Activity row; and the account's spaces read as picking one
- *       needs.
+ *       the account, the space, the version, the job and the reason; asked again, the same build, recorded again; and
+ *       the account's spaces read as picking one needs.
  *
  * Not destructive: every row belongs to a user this run creates.
  */
@@ -41,7 +40,7 @@ import { hashPassword } from '../common/crypto.util';
 import { prismaClientFor } from '../prisma/prisma-client';
 import type { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { wikiMaintenanceRunsToday } from './wiki-maintenance-session';
+import { wikiMaintenanceRunsToday } from './wiki-maintenance-run';
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const RUN = randomUUID().slice(0, 8);
@@ -80,10 +79,8 @@ test('the documents of a plan in force asked for again: by its owner, and by an 
   };
   const owner = await account('owner', 'MEMBER');
   const stranger = await account('stranger', 'MEMBER');
-  const onRunner = await account('on-runner', 'MEMBER');
   const admin = await account('admin', 'ADMIN');
-  // The canary lists the owner alone: the server executes their wiki, and nobody else's.
-  server = await startApiserver(url, jwtSecret, { ORBIT_WIKI: 'on', ORBIT_WIKI_EXECUTOR: 'canary', ORBIT_WIKI_EXECUTOR_CANARY_OWNERS: owner.id });
+  server = await startApiserver(url, jwtSecret, { ORBIT_WIKI: 'on' });
   const api = (method: string, path: string, bearer: string, body?: unknown, headers?: Record<string, string>): Promise<Reply> =>
     call(server!, method, `/api${path}`, bearer, body, headers);
   const ok = (reply: Reply, what: string): Reply => {
@@ -147,21 +144,19 @@ test('the documents of a plan in force asked for again: by its owner, and by an 
      VALUES ($1,$2,$3,'build','owner','ended',$4,now() - interval '1 day',now() - interval '1 day','failed',2,$5,$3,now() - interval '1 day')`,
     [failedBuild, spaceId, owner.id, failedJob, fault],
   );
-  // A second space of the owner's with a draft and nothing in force; and a space on the runner's path.
+  // A second space of the owner's with a draft and nothing in force.
   const draftOnly = await space(owner, `drafts only ${RUN}`, null);
   await version(draftOnly, owner.id, 1, 'draft');
-  const runnerSpace = await space(onRunner, `on the runner ${RUN}`, null);
-  await version(runnerSpace, onRunner.id, 1, 'confirmed');
 
   const ownersBuilds = (ownerId: string) => rows(
     `SELECT "id","state","trigger","version","job_id","task_id","requested_by_user_id" FROM "wiki_plan_job"
       WHERE "owner_id" = $1 AND "kind" = 'build' ORDER BY "created_at","id"`, [ownerId]);
   const footprint = async () => ({
-    builds: (await rows(`SELECT count(*)::int AS n FROM "wiki_plan_job" WHERE "kind" = 'build' AND "owner_id" = ANY($1::uuid[])`, [[owner.id, onRunner.id]]))[0].n,
-    jobs: (await rows(`SELECT count(*)::int AS n FROM "wiki_job" WHERE "owner_id" = ANY($1::uuid[])`, [[owner.id, onRunner.id]]))[0].n,
-    tasks: (await rows(`SELECT count(*)::int AS n FROM "task" WHERE "owner_id" = ANY($1::uuid[])`, [[owner.id, onRunner.id]]))[0].n,
+    builds: (await rows(`SELECT count(*)::int AS n FROM "wiki_plan_job" WHERE "kind" = 'build' AND "owner_id" = $1`, [owner.id]))[0].n,
+    jobs: (await rows(`SELECT count(*)::int AS n FROM "wiki_job" WHERE "owner_id" = $1`, [owner.id]))[0].n,
+    tasks: (await rows(`SELECT count(*)::int AS n FROM "task" WHERE "owner_id" = $1`, [owner.id]))[0].n,
     activity: (await rows(`SELECT count(*)::int AS n FROM "activity" WHERE "type" = $1 AND "actor_id" = ANY($2::uuid[])`,
-      [WIKI_PLAN_REBUILD.activity, [owner.id, stranger.id, onRunner.id, admin.id]]))[0].n,
+      [WIKI_PLAN_REBUILD.activity, [owner.id, stranger.id, admin.id]]))[0].n,
   });
   const build = (bearer: string, id: string, n: number, headers?: Record<string, string>) =>
     api('POST', `/wiki/spaces/${id}/plan/versions/${n}/build`, bearer, {}, headers);
@@ -172,7 +167,7 @@ test('the documents of a plan in force asked for again: by its owner, and by an 
     .accessToken as string;
 
   let made = '';
-  await t.test('(1) refused, and nothing written: another account, a session, a token, a viewer, a version not in force, the runner\'s path', async () => {
+  await t.test('(1) refused, and nothing written: another account, a session, a token, a viewer, a version not in force', async () => {
     const before = await footprint();
     refused(await build(stranger.login, spaceId, 2), 404, null, 'another account\'s space');
     refused(await build(owner.login, spaceId, 2, { 'x-orbit-session-id': randomUUID() }), 403, 'WIKI_OWNER_CHANNEL_ONLY', 'with a session header');
@@ -182,10 +177,6 @@ test('the documents of a plan in force asked for again: by its owner, and by an 
     refused(await build(owner.login, spaceId, 1), 409, 'WIKI_PLAN_STALE', 'a superseded version');
     refused(await build(owner.login, spaceId, 9), 404, null, 'no such version');
     refused(await build(owner.login, draftOnly, 1), 409, 'WIKI_PLAN_UNCONFIRMED', 'a space with no plan in force');
-    const runnerPath = await build(onRunner.login, runnerSpace, 1);
-    refused(runnerPath, 409, 'WIKI_RUNNER_EXECUTES', 'an account on the runner\'s path');
-    assert.match(runnerPath.json.message, /ORBIT_WIKI_EXECUTOR=canary/u);
-    assert.doesNotMatch(runnerPath.json.message, new RegExp(owner.id, 'u'), 'the canary list is not read out');
     assert.deepEqual(await footprint(), before, 'no build, job, task or Activity row was written');
   });
 
@@ -255,7 +246,6 @@ test('the documents of a plan in force asked for again: by its owner, and by an 
     refused(await api('POST', route, admin.login, { reason: 'why', version: 2 }), 400, 'WIKI_SCHEMA', 'a field it does not take');
     refused(await api('POST', `/admin/wiki/spaces/${randomUUID()}/plan/build`, admin.login, { reason: 'nobody\'s' }), 404, null, 'a space that is nobody\'s');
     refused(await api('POST', `/admin/wiki/spaces/${draftOnly}/plan/build`, admin.login, { reason: 'drafts' }), 409, 'WIKI_PLAN_UNCONFIRMED', 'no plan in force');
-    refused(await api('POST', `/admin/wiki/spaces/${runnerSpace}/plan/build`, admin.login, { reason: 'the runner' }), 409, 'WIKI_RUNNER_EXECUTES', 'the runner\'s path');
     assert.deepEqual(await footprint(), before, 'nothing written by any refusal');
 
     // The build of (4) is on its way: the administrator is answered with it, and the request is recorded.
@@ -288,7 +278,7 @@ test('the documents of a plan in force asked for again: by its owner, and by an 
 
     // The account's spaces, as the administrator picks one: what picking needs, oldest first.
     const listed = ok(await api('GET', `/admin/wiki/users/${owner.id}/spaces`, admin.login), 'the owner\'s spaces').json;
-    assert.deepEqual([toUuid(listed.userId), listed.serverExecutes], [owner.id, true]);
+    assert.equal(toUuid(listed.userId), owner.id);
     assert.deepEqual(listed.spaces.map((one: { id: string; title: string; confirmedVersion: number | null; docs: unknown; building: boolean }) =>
       [toUuid(one.id), one.title, one.confirmedVersion, one.docs, one.building]), [
       [spaceId, `cbai docs ${RUN}`, 2, { written: 0, total: 1 }, true],
@@ -296,8 +286,6 @@ test('the documents of a plan in force asked for again: by its owner, and by an 
     ]);
     // The id's public spelling beside it (PublicIdInterceptor), and nothing the space knows.
     assert.deepEqual(Object.keys(listed.spaces[0]).sort(), ['building', 'confirmedVersion', 'docs', 'id', 'publicId', 'title'], 'nothing the space knows');
-    const theirs = ok(await api('GET', `/admin/wiki/users/${onRunner.id}/spaces`, admin.login), 'the runner path\'s spaces').json;
-    assert.equal(theirs.serverExecutes, false);
     refused(await api('GET', `/admin/wiki/users/${randomUUID()}/spaces`, admin.login), 404, null, 'an account that does not exist');
   });
 });

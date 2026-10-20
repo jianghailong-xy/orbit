@@ -2725,7 +2725,7 @@ func gcWorktrees(t *Transport, live map[string]bool, pressure worktreeGCPressure
 	var names []string
 	for _, e := range entries {
 		if !e.IsDir() || live[e.Name()] || strings.HasPrefix(e.Name(), rebaseScratchPrefix) || strings.HasPrefix(e.Name(), mergeRecoveryWorktreePrefix) ||
-			strings.HasPrefix(e.Name(), retiredCheckoutPrefix) {
+			strings.HasPrefix(e.Name(), retiredCheckoutPrefix) || strings.HasPrefix(e.Name(), integrateScratchPrefix) {
 			continue
 		}
 		var touched time.Time

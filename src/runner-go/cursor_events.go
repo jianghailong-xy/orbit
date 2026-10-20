@@ -12,7 +12,11 @@ package main
 // it in_progress, and complete it. So a card goes out once its input is whole — at in_progress, and an
 // edit at its completion, the only update that carries the change it made — under the name and input
 // of the Orbit tool it is (cursorToolCall). There is no `failed` status: the outcome is read from
-// rawOutput (cursorToolResult).
+// rawOutput (cursorToolResult) — except a call Orbit refused, which Cursor completes with nothing at all
+// when it is a command or an edit: the permission bridge marks its card first (refuse), and it settles
+// as not run, also when the turn ends before Cursor completes it. A call whose approval card the turn's end
+// withdrew before anybody answered it was answered cancelled and did not run either: the bridge marks it as
+// it withdraws the card (withdraw), and the turn's settlement says so, with how the turn ended.
 //
 // A sub-agent's own updates arrive under the sub-agent's session id, which subagent_spawned binds to
 // the Task card that launched it: they go out stamped with that card's id (parentToolUseId, which the
@@ -55,6 +59,11 @@ type cursorTool struct {
 	// subagent is the kind of sub-agent a Task card launched, once subagent_spawned names it.
 	subagent      string
 	emitted, done bool
+	// refused: Orbit answered the permission request about this call with no allow, so it did not run.
+	refused bool
+	// withdrawn: the turn's end withdrew the approval card of this call's permission request before anybody
+	// answered it, and the request was answered cancelled, so it did not run.
+	withdrawn bool
 }
 
 type cursorTurn struct {
@@ -339,9 +348,13 @@ func (m *cursorEventMapper) tool(turn *cursorTurn, session string, update map[st
 			m.emitToolUse(turn, tool)
 		}
 	case "completed", "failed":
-		m.emitToolUse(turn, tool)
-		content, isError := cursorToolResult(tool)
-		m.emitToolResult(turn, tool, content, isError)
+		// A call whose card the turn's end withdrew did not run, whatever Cursor completes it with (it takes the
+		// cancelled answer as a refusal): the turn's settlement closes its card.
+		if !tool.withdrawn {
+			m.emitToolUse(turn, tool)
+			content, isError := cursorToolResult(tool)
+			m.emitToolResult(turn, tool, content, isError)
+		}
 	}
 }
 
@@ -469,8 +482,18 @@ func (m *cursorEventMapper) settle(turnID string, result map[string]interface{},
 		tool := turn.tools[id]
 		if !tool.done {
 			// A cancelled card is never completed (§3.3), and nothing more comes for any once the turn is over.
+			// A call Orbit refused did not run, however the turn ended: Cursor CLI runs nothing before it has the
+			// answer (§5.2), so it settles as its completion would have. Nor did one whose approval card the
+			// turn's end withdrew unanswered: it settles as not run, saying how the turn ended.
+			content, isError := cursorUnfinishedTool(request.Status), true
+			switch {
+			case tool.refused:
+				content, isError = cursorToolResult(tool)
+			case tool.withdrawn:
+				content = cursorWithdrawnTool(request.Status)
+			}
 			m.emitToolUse(turn, tool)
-			m.emitToolResult(turn, tool, cursorUnfinishedTool(request.Status), true)
+			m.emitToolResult(turn, tool, content, isError)
 		}
 		m.retired[id] = true
 	}
@@ -510,6 +533,16 @@ func cursorUnfinishedTool(status string) string {
 		return "Interrupted: the turn was stopped before this tool finished; it may have run in part."
 	}
 	return "Cursor CLI ended the turn before this tool reported a result; it may have run."
+}
+
+// cursorWithdrawnTool is what a call settles with whose approval card its turn's end withdrew before anybody
+// answered it: the request was answered cancelled, which Cursor CLI takes as a refusal, so the call did not
+// run (§5.2; measured, p5c/accept-edits-stop and p5c/accept-edits-disconnect).
+func cursorWithdrawnTool(status string) string {
+	if status == stInterrupted {
+		return "Not run: the turn was stopped before this tool call was approved."
+	}
+	return "Not run: the turn ended before this tool call was approved."
 }
 
 // cursorTurnFailure is how Orbit reports a turn that ended on chunk, when chunk is the error sentence
@@ -632,10 +665,12 @@ func cursorTodos(value interface{}) []interface{} {
 }
 
 // cursorToolResult is a completed card's outcome. Cursor has no failed status (§4.1): a refusal, an
-// error or a non-zero exit code is read from rawOutput.
+// error or a non-zero exit code is read from rawOutput. A command or an edit Orbit refused completes
+// with no rawOutput at all, which would read as a success with nothing to show, so that refusal is Orbit's
+// own (refused); an MCP call Orbit refused says {rejected:true}.
 func cursorToolResult(tool *cursorTool) (string, bool) {
 	out := mapValue(tool.rawOutput)
-	if out["rejected"] == true {
+	if tool.refused || out["rejected"] == true {
 		return "Not run: the tool call was rejected.", true
 	}
 	if failure := out["error"]; failure != nil && failure != false {
@@ -748,6 +783,32 @@ func (m *cursorEventMapper) permissionAsk(toolCall map[string]interface{}) (curs
 		ask.Name, ask.Input, _ = cursorToolCall(tool)
 	}
 	return ask, ask.Name != ""
+}
+
+// refuse marks the running turn's card toolID as a call Orbit did not allow, before Orbit's answer goes
+// out: whatever Cursor CLI completes it with, or if the turn ends before it does, it settles as not run
+// (cursorToolResult, settle). No card of that id in that turn, nothing to mark.
+func (m *cursorEventMapper) refuse(turnID, toolID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if turn := m.active; turn != nil && turn.id == turnID {
+		if tool := turn.tools[toolID]; tool != nil {
+			tool.refused = true
+		}
+	}
+}
+
+// withdraw marks the running turn's card toolID as a call whose approval card the turn's end withdrew before
+// anybody answered it, before the turn settles: its request is answered cancelled, so it settles as not run
+// (settle). No card of that id in that turn, nothing to mark.
+func (m *cursorEventMapper) withdraw(turnID, toolID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if turn := m.active; turn != nil && turn.id == turnID {
+		if tool := turn.tools[toolID]; tool != nil {
+			tool.withdrawn = true
+		}
+	}
 }
 
 // cursorRequestTool reads a permission request's own tool call the way formatOperation writes it

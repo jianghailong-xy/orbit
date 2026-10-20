@@ -178,4 +178,47 @@ class ProjectLandingCardViewTest {
     private fun assertGrey(pixel: Int) = channels(pixel).let { (r, g, b) -> assertTrue("grey card, got $r/$g/$b", maxOf(r, g, b) - minOf(r, g, b) <= 4 && r < 250) }
     /** The amber card: the warning ink's wash, red well above blue. */
     private fun assertAmber(pixel: Int) = channels(pixel).let { (r, g, b) -> assertTrue("amber card, got $r/$g/$b", r - b >= 8 && r >= g) }
+
+    /** A §7.2 V6 read: the step clock against its budget, the claim and its round, the output's last
+     * move and the server's liveness, on the same head the six surfaces wear. */
+    private fun v6view(liveness: String, step: Long = 110, heartbeat: Long = 0, outputAge: Long = 6): JsonObject {
+        val check = """{"name":"TASK_ACCEPTANCE","index":1,"count":3,"budgetSeconds":3600,"startedAt":"${iso(step)}"}"""
+        val job = """{"jobId":"j-1","kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskId":"t-1",
+            "taskTitle":"维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0","generation":1,
+            "startedAt":"${iso(step)}","queuedAt":"${iso(step + 34)}","heartbeatAt":"${iso(heartbeat)}",
+            "runner":"wikova","runnerName":"wikova","timedOut":false,"limitSeconds":null,"retryable":false,
+            "progressProtocol":"v2","claim":1,"round":1,"check":$check,
+            "stepStartedAt":"${iso(step)}","outputMovedAt":"${iso(outputAge)}","typicalMs":null,"liveness":"$liveness"}"""
+        return Json.parseToJsonElement("""{"integratingCount":1,"queuedCount":0,
+            "inFlight":$job,"inFlightJobs":[$job],
+            "landTasks":[{"taskId":"t-1","taskTitle":"x","integration":{"landTask":{"jobId":"j-1","state":"RUNNING",
+              "phase":"CHECK","targetRef":"refs/heads/project/2zwQZ2hd93IvLb59t6p9d","startedAt":"${iso(step)}"}}}]}""").jsonObject
+    }
+
+    /** §7.2 V6's readings as drawn: LIVE and QUIET run the clock, SILENT freezes it at the runner's last
+     * word, LEGACY says why its quiet is not a stall — each written to a PNG for the evidence. */
+    @Test fun theV6LivenessReadingsAreDrawnOnTheHead() {
+        val readings = listOf(
+            Triple("LIVE", v6view("LIVE"), "1m 50s of 60m" to "checking · output 6s ago · claim 1 · round 1 of 3"),
+            Triple("QUIET", v6view("QUIET", outputAge = 840), "1m 50s of 60m" to
+                "checking · no output for 14m · within its 60m budget · claim 1 · round 1 of 3"),
+            Triple("SILENT", v6view("SILENT", step = 600, heartbeat = 240), "6m 0s of 60m" to
+                "checking · no word from runner wikova for 4m · claim 1 · round 1 of 3"),
+            Triple("LEGACY", v6view("LEGACY", step = 720, heartbeat = 720), "12m 0s of 60m" to
+                "checking · reports only between steps · claim 1 · round 1 of 3"))
+        for ((name, view, copy) in readings) {
+            draw(ProjectPage.landingCard(view, now, now, false)!!)
+            says("landing-head:right", copy.first)
+            says("landing-head:detail", copy.second)
+            // A frozen clock keeps the ring still; LIVE and QUIET turn it, LEGACY keeps turning it
+            // because its quiet is the protocol rather than a stall.
+            if (name == "SILENT") compose.onNodeWithTag("landing-ring:running", useUnmergedTree = true).assertDoesNotExist()
+            else compose.onNodeWithTag("landing-ring:running", useUnmergedTree = true).assertExists()
+            shot("5-v6-${name.lowercase()}")
+        }
+        // A server that sends none draws the older head, word for word (this file's other cases).
+        draw(ProjectPage.landingCard(view(job("j-old")), now, now, false)!!)
+        says("landing-head:right", "1m 6s"); says("landing-head:detail", "checking · waited 0m 34s · updated just now")
+        shot("5-v6-older-server")
+    }
 }

@@ -41,8 +41,8 @@ import { cutRunes } from './wiki-import-extract';
  * decision of 2026-10-09), and the sweep only ever meets a lease nobody handed back — a worker that died.
  *
  * WHO RUNS
- * `owners` is the claim's account filter: null for every account (`server`), the canary list under `canary`,
- * and the empty array under `runner` — a worker started with the default claims nothing at all.
+ * `owners` is the claim's account filter: null for every account, which is what the worker claims; a list of
+ * accounts scopes a claim to them (a spec's own claims).
  *
  * THE RETRY LIMIT
  * An infra failure puts the job back in the queue, but not for ever (contract `jobs.retry.limit`): the attempt
@@ -475,8 +475,7 @@ export async function endWikiJobsPastRetryLimit(prisma: PrismaService, owners: r
 
 /**
  * What waits on a job that ended for good, settled in the transaction that ended it, and only when that end
- * matched: the rollback sweep's cancellation (wiki/wiki-executor-sweep.ts, contract `jobs.executor.rollback`) and
- * the retry limit's failure (`jobs.retry.limit`).
+ * matched: the retry limit's failure (`jobs.retry.limit`).
  *
  * Its model calls still queued or running are cancelled. A cancelled row's error, error_kind, partial and lease
  * columns must be NULL (the 0401 constraints), so a replayed job asks again from nothing. Its repository

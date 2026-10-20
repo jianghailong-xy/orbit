@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   wikiMaintenanceLook,
   wikiMaintenanceSettings,
+  WIKI_EXECUTOR_READ,
   type WikiCursorOutcome,
   type WikiMaintenanceFailureKind,
   type WikiMaintenanceHealth,
@@ -10,10 +11,8 @@ import {
 } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { readWikiRepoReadiness } from '../wiki-worker/wiki-repo-ops';
-import { currentWikiExecutorSwitch, wikiExecutorView } from './wiki-executor-switch';
 import { countBacklog, spaceScope, type FactPosition } from './wiki-maintenance';
-import { wikiMaintenanceCatchUpOf, wikiMaintenanceRunsToday } from './wiki-maintenance-session';
-import { wikiMaintenanceProviderIsLocal } from './wiki-maintenance-settings';
+import { wikiMaintenanceCatchUpOf, wikiMaintenanceRunsToday } from './wiki-maintenance-run';
 import { WikiSystemModelReads } from './wiki-system-model';
 
 /**
@@ -64,20 +63,13 @@ export class WikiHealth {
       oldestPendingAt = counted.oldestPendingAt;
     }
     const today = await wikiMaintenanceRunsToday(this.prisma, ownerId, spaceId, now);
-    // The server's half (contract `jobs.executor.read`, P9): whether the server executes this account's wiki,
-    // and the System model it calls while it does — what the line's server reasons are said from. Under runner
-    // the model is none of this account's business, and is not read.
-    const executor = wikiExecutorView(currentWikiExecutorSwitch(), ownerId);
     // A run made in active catch-up on a local endpoint is not counted against the day (contract
-    // `maintenance.job.catchUp.dailyLimit`): while that holds, the day's limit holds no run back. An account
-    // the server executes has no provider to read (P8): the run row says whether the System model's endpoint
-    // was the machine's own or a private one — the worker records it when it starts the run — and nothing
-    // about a provider is validated here.
+    // `maintenance.job.catchUp.dailyLimit`): while that holds, the day's limit holds no run back. The run row
+    // says whether the System model's endpoint was the machine's own or a private one — the worker records it
+    // when it starts the run (P8).
     const uncounted = settings.enabled
       && (await wikiMaintenanceCatchUpOf(this.prisma, ownerId, spaceId, oldestPendingAt, now)).state === 'active'
-      && (executor.serverExecutes
-        ? await this.latestRunIsLocal(ownerId, spaceId)
-        : await wikiMaintenanceProviderIsLocal(this.prisma, ownerId, settings.provider));
+      && (await this.latestRunIsLocal(ownerId, spaceId));
 
     const maintenance: Omit<WikiMaintenanceHealth, 'look'> = {
       enabled: settings.enabled,
@@ -118,16 +110,17 @@ export class WikiHealth {
         },
         pending: repo.pending,
       },
-      executor,
-      systemModel: executor.serverExecutes ? await new WikiSystemModelReads(this.prisma).read(now) : null,
+      // The server's half (contract `jobs.executor.read`, P9): the server executes every account's wiki, and the
+      // System model it calls is what the line's server reasons are said from.
+      executor: WIKI_EXECUTOR_READ,
+      systemModel: await new WikiSystemModelReads(this.prisma).read(now),
     };
   }
 
   /**
    * Whether the space's latest maintenance run was made on an endpoint of this machine or a private network
-   * (P8): the run row's `localEndpoint`, which the worker writes when it starts a run the server executes
-   * from the System model's address. A space that has not run reads as not local, as a provider nothing
-   * holds does.
+   * (P8): the run row's `localEndpoint`, which the worker writes when it starts a run from the System model's
+   * address. A space that has not run reads as not local.
    */
   private async latestRunIsLocal(ownerId: string, spaceId: string): Promise<boolean> {
     const run = await this.prisma.wikiMaintenanceRun.findFirst({
@@ -139,38 +132,28 @@ export class WikiHealth {
   }
 
   /**
-   * The run under way: the latest that started and has not ended, while its maker has not ended either —
-   * started when its latest attempt did (a retry's or a rerun's start, not the run's first). A run of a
-   * task is under way while that task is (the session died without saying how: the task's end is the
-   * answer); a run of a wiki job is under way while the job is (migration 0401, the server path).
+   * The run under way: the latest that started and has not ended, while its wiki job has not ended either
+   * (migration 0401) — started when its latest attempt did (a retry's start, not the run's first). A run a
+   * maintenance task made before the server ran them has no job, and is under way no more.
    */
   private async running(ownerId: string, spaceId: string): Promise<WikiMaintenanceHealth['running']> {
     const run = await this.prisma.wikiMaintenanceRun.findFirst({
       where: { ownerId, spaceId, startedAt: { not: null }, endedAt: null },
       orderBy: [{ startedAt: 'desc' }, { id: 'desc' }],
-      select: { taskId: true, jobId: true, sessionId: true, startedAt: true, lastStartedAt: true },
+      select: { jobId: true, sessionId: true, startedAt: true, lastStartedAt: true },
     });
     const startedAt = run?.lastStartedAt ?? run?.startedAt;
-    if (!run || !startedAt) return null;
-    if (run.jobId) {
-      const job = await this.prisma.wikiJob.findFirst({
-        where: { id: run.jobId, ownerId, state: { in: ['queued', 'running', 'waiting'] } },
-        select: { id: true },
-      });
-      return job ? { sessionId: run.sessionId, jobId: run.jobId, startedAt: startedAt.toISOString() } : null;
-    }
-    if (!run.taskId) return null;
-    // A run whose session died without saying how it ended leaves its row open; its task has ended.
-    const task = await this.prisma.task.findFirst({
-      where: { id: run.taskId, ownerId, status: { in: ['OPEN', 'IN_PROGRESS'] } },
+    if (!run?.jobId || !startedAt) return null;
+    const job = await this.prisma.wikiJob.findFirst({
+      where: { id: run.jobId, ownerId, state: { in: ['queued', 'running', 'waiting'] } },
       select: { id: true },
     });
-    return task ? { sessionId: run.sessionId, jobId: null, startedAt: startedAt.toISOString() } : null;
+    return job ? { sessionId: run.sessionId, jobId: run.jobId, startedAt: startedAt.toISOString() } : null;
   }
 
   /**
-   * The run that ended last, and how: what the status line's View run opens — the session of a run a maintenance
-   * session made, or the row on Activity of a run the server's job made (`jobId`, which has no session).
+   * The run that ended last, and how: what the status line's View run opens — the row on Activity of the run the
+   * server's job made (`jobId`), or the session of a run a maintenance session made before the server ran them.
    */
   private async lastRun(ownerId: string, spaceId: string): Promise<WikiMaintenanceHealth['lastRun']> {
     const run = await this.prisma.wikiMaintenanceRun.findFirst({

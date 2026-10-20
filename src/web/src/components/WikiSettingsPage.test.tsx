@@ -6,8 +6,15 @@ import { MemoryRouter } from 'react-router-dom';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { WIKI_DEFAULT_SPACE_SETTINGS, type WikiSpaceSettings, type WikiSystemModelRead, type WikiSystemModelReadState } from '@orbit/shared';
+import {
+  WIKI_DEFAULT_SPACE_SETTINGS,
+  WIKI_EXECUTOR_READ,
+  type WikiSpaceSettings,
+  type WikiSystemModelRead,
+  type WikiSystemModelReadState,
+} from '@orbit/shared';
 import type { WikiSpaceRow } from '../lib/wiki';
+import { WIKI_MODE_NOTES } from '../lib/wikiReviewMode';
 import { WikiSettingsPage } from './WikiSettingsPage';
 
 /**
@@ -37,6 +44,8 @@ function space(settings: Partial<WikiSpaceSettings> = {}): WikiSpaceRow {
 }
 
 let patches: Array<Record<string, unknown>> = [];
+/** Every path the page read. */
+let reads: string[] = [];
 /** What `GET /api/wiki/system-model` answers; null is a control plane from before the read (a 404). */
 let systemModel: WikiSystemModelRead | null = null;
 
@@ -47,7 +56,6 @@ interface ServerFixture {
     form: { fields: Array<{ label: string; note: string }> };
     maintenanceNote: string;
     privacy: string;
-    automaticNote: string;
     models: Array<{ status: { state: WikiSystemModelReadState; model: string | null }; label: string; state: string; tone: string }>;
   };
 }
@@ -64,11 +72,11 @@ function serverFixture(): ServerFixture {
 
 const SERVER = serverFixture();
 
-/** The System model as the read answers it while the server executes this account's wiki. */
+/** The System model as the read answers it: the server executes every account's wiki (`WIKI_EXECUTOR_READ`, P11). */
 function servedBy(state: WikiSystemModelReadState = 'up', model: string | null = 'qwen3.8-27b-fp8'): WikiSystemModelRead {
   return {
     state, model, since: '2026-10-08T06:00:00.000Z', checkedAt: '2026-10-08T06:29:55.000Z', workerSeenAt: '2026-10-08T06:29:55.000Z',
-    executor: { mode: 'canary', serverExecutes: true },
+    executor: WIKI_EXECUTOR_READ,
   };
 }
 
@@ -80,6 +88,7 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
     patches.push(JSON.parse(String(init.body)));
     return reply(200, {});
   }
+  reads.push(url);
   if (url === '/api/workspaces') {
     return reply(200, [
       { id: WORKSPACE_ID, name: 'orbit', runner: { id: 'r', name: 'wikova', displayName: null } },
@@ -88,14 +97,6 @@ async function serve(url: string, init?: RequestInit): Promise<Response> {
   }
   if (url === '/api/wiki/system-model') {
     return systemModel ? reply(200, systemModel) : reply(404, { message: 'Cannot GET /api/wiki/system-model' });
-  }
-  if (url === '/api/providers') {
-    return reply(200, [
-      { slug: 'local-vllm', label: 'local-vllm', runtime: 'claude', models: [{ value: 'qwen3.8-27b-fp8', label: 'qwen' }], defaultModel: 'qwen3.8-27b-fp8' },
-      // Claude Code runs a DeepSeek key as well as DeepSeek Harness does; it runs no Moonshot key.
-      { slug: 'deepseek', label: 'DeepSeek', runtime: 'claude', models: [], defaultModel: null, engines: ['claude', 'opencode', 'dsh'] },
-      { slug: 'moonshot', label: 'Kimi (Moonshot)', runtime: 'kimi', models: [], defaultModel: null, engines: ['kimi', 'opencode'] },
-    ]);
   }
   return reply(404, { message: `${url} is not in this fixture` });
 }
@@ -112,7 +113,8 @@ beforeEach(() => {
   }));
   vi.stubGlobal('fetch', vi.fn(serve));
   patches = [];
-  systemModel = null;
+  reads = [];
+  systemModel = servedBy();
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -189,7 +191,7 @@ describe('Wiki settings', () => {
     expect(modes).toEqual(['Manual', 'Tiered', 'Automatic']);
     expect(container.querySelector('.wk-mode.on .wk-mode-t')?.textContent).toBe('Tiered');
     expect(container.querySelector('.wk-mode-tag')?.closest('.wk-mode')?.textContent).toContain('Tiered');
-    expect(page.indexOf('Spot-check Automatic')).toBeGreaterThan(page.indexOf('local-vllm checks each change'));
+    expect(page.indexOf('Spot-check Automatic')).toBeGreaterThan(page.indexOf('The System model checks each change'));
     expect(page).toContain('Always asks you, in any mode: principles, anything a session proposed');
   });
 
@@ -220,7 +222,7 @@ describe('Wiki settings', () => {
     expect(text()).not.toContain('switched itself back');
   });
 
-  it('sets maintenance up: the workspace named for the space, local-vllm, 8 runs a day, the last 14 days', async () => {
+  it('sets maintenance up: the workspace named for the space, the System model, 8 runs a day, the last 14 days', async () => {
     await mount(space());
     expect(text()).toContain('Wiki maintenance');
     expect(container.querySelector('.wk-maint-state')?.textContent).toContain('Off');
@@ -228,33 +230,13 @@ describe('Wiki settings', () => {
     await settle();
     const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(dialog.textContent).toContain('Set up maintenance');
-    const fields = [...dialog.querySelectorAll('.wk-setup-k')].map((node) => node.textContent);
-    expect(fields).toEqual(['Workspace', 'Provider', 'Daily limit', 'Look back']);
     expect(dialog.textContent).toContain('orbit · wikova');
-    expect(dialog.textContent).toContain('local-vllm');
     expect(dialog.textContent).toContain('runs a day');
     expect(dialog.textContent).toContain('Last 14 days');
     expect(dialog.querySelector<HTMLInputElement>('input[aria-label="days"]')?.value).toBe('14');
     await act(async () => button('Turn on', dialog).click());
     await settle();
-    expect(patches).toEqual([
-      { maintenance: { enabled: true, workspaceId: WORKSPACE_ID, provider: 'local-vllm', dailyRunLimit: 8, lookbackDays: 14 } },
-    ]);
-  });
-
-  it('offers the keys Claude Code runs, by the compatibility table — a DeepSeek key, and no Moonshot key', async () => {
-    await mount(space());
-    await act(async () => button('Set up…', container).click());
-    await settle();
-    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
-    expect(dialog).toBeTruthy();
-    await act(async () => document.getElementById('wk-setup-provider')!.click());
-    await settle();
-    const options = [...document.body.querySelectorAll<HTMLElement>('[role="listbox"] [role="option"]')].map((node) => node.textContent ?? '');
-    expect(options.length).toBe(2);
-    expect(options.some((option) => option.includes('local-vllm'))).toBe(true);
-    expect(options.some((option) => option.includes('deepseek'))).toBe(true);
-    expect(options.some((option) => option.includes('moonshot'))).toBe(false);
+    expect(patches).toEqual([{ maintenance: { enabled: true, workspaceId: WORKSPACE_ID, dailyRunLimit: 8, lookbackDays: 14 } }]);
   });
 
   it('looks back as far as the owner picks: all of history, from now on, or days they type', async () => {
@@ -300,16 +282,17 @@ describe('Wiki settings', () => {
   });
 
   it('shows maintenance on — where, on what, how often, how far back — and turns it off', async () => {
+    // A space set up before server execution still reads its provider and its hidden list back (history): neither is shown.
     await mount(
       space({
         maintenance: { enabled: true, workspaceId: WORKSPACE_ID, provider: 'local-vllm', dailyRunLimit: 6, lookbackDays: 30, listId: 'list' },
       }),
     );
     const rows = [...container.querySelectorAll('.wk-maint-rows > .k')].map((node) => node.textContent);
-    expect(rows).toEqual(['Status', 'Workspace', 'Provider', 'Daily limit', 'Look back']);
+    expect(rows).toEqual(SERVER.settings.rows);
     const page = text();
     expect(page).toContain('orbit · wikova');
-    expect(page).toContain('local-vllm · pinned, no fallback');
+    expect(page).not.toContain('local-vllm');
     expect(page).toContain('6 runs a day');
     expect(page).toContain('Last 30 days');
     await act(async () => button('Turn off', container).click());
@@ -318,11 +301,10 @@ describe('Wiki settings', () => {
   });
 });
 
-describe('Wiki settings while the server executes the account’s wiki (mock 35 ①②)', () => {
+describe('Wiki settings name the System model (mock 35 ①②)', () => {
   const ON = { enabled: true, workspaceId: WORKSPACE_ID, provider: 'local-vllm', dailyRunLimit: 6, lookbackDays: 30, listId: 'list' };
 
-  it('names the System model and its state instead of a provider, reads the repository from the workspace, and says where the material goes', async () => {
-    systemModel = servedBy();
+  it('names the System model and its state, reads the repository from the workspace, and says where the material goes', async () => {
     await mount(space({ reviewMode: 'automatic', maintenance: ON }));
     const rows = [...container.querySelectorAll('.wk-maint-rows > .k')].map((node) => node.textContent);
     expect(rows).toEqual(SERVER.settings.rows);
@@ -334,7 +316,7 @@ describe('Wiki settings while the server executes the account’s wiki (mock 35 
     expect(page).not.toContain('local-vllm');
     expect(container.querySelector('.wk-privacy')?.textContent).toBe(SERVER.settings.privacy);
     // Automatic's sentence names who checks: the System model.
-    expect(container.querySelector('.wk-mode.on .wk-mode-d')?.textContent).toBe(SERVER.settings.automaticNote);
+    expect(container.querySelector('.wk-mode.on .wk-mode-d')?.textContent).toBe(WIKI_MODE_NOTES.automatic);
   });
 
   it('says each of the model’s five states in its words and colour', async () => {
@@ -350,7 +332,6 @@ describe('Wiki settings while the server executes the account’s wiki (mock 35 
   });
 
   it('sets maintenance up with no provider to pick, and writes none', async () => {
-    systemModel = servedBy();
     await mount(space());
     expect(container.querySelector('.wk-maint-d')?.textContent).toBe(SERVER.settings.maintenanceNote);
     expect(container.querySelector('.wk-privacy')?.textContent).toBe(SERVER.settings.privacy);
@@ -363,20 +344,24 @@ describe('Wiki settings while the server executes the account’s wiki (mock 35 
     expect(dialog.querySelector('#wk-setup-provider'), 'no provider picker').toBeNull();
     expect(dialog.querySelector('.wk-setup-model')?.textContent).toBe('System model · qwen3.8-27b-fp8Up');
     expect(dialog.querySelector('.wk-privacy')?.textContent).toBe(SERVER.settings.privacy);
+    // Nothing is listed to pick from: the page never asks for the account's providers.
+    expect(reads.filter((url) => url.startsWith('/api/providers'))).toEqual([]);
     await act(async () => button('Turn on', dialog).click());
     await settle();
     expect(patches).toEqual([{ maintenance: { enabled: true, workspaceId: WORKSPACE_ID, dailyRunLimit: 8, lookbackDays: 14 } }]);
   });
 
-  it('is what it always was under runner, and for a control plane that predates the read', async () => {
-    for (const read of [{ ...servedBy(), executor: { mode: 'runner' as const, serverExecutes: false } }, null]) {
+  it('draws no System model and no privacy note while the read does not say the server executes the account’s wiki', async () => {
+    // A control plane from before the read (a 404), and a read from before `executor`.
+    for (const read of [null, { ...servedBy(), executor: undefined }]) {
       systemModel = read;
       await mount(space({ reviewMode: 'automatic', maintenance: ON }));
-      expect([...container.querySelectorAll('.wk-maint-rows > .k')].map((node) => node.textContent))
-        .toEqual(['Status', 'Workspace', 'Provider', 'Daily limit', 'Look back']);
-      expect(text()).toContain('local-vllm · pinned, no fallback');
+      const rows = [...container.querySelectorAll('.wk-maint-rows > .k')].map((node) => node.textContent);
+      expect(rows).toEqual(SERVER.settings.rows.filter((row) => row !== 'Model'));
+      expect(container.querySelector('.wk-model-line')).toBeNull();
       expect(container.querySelector('.wk-privacy')).toBeNull();
-      expect(container.querySelector('.wk-mode.on .wk-mode-d')?.textContent).toContain('local-vllm checks each change');
+      expect(text()).not.toContain('local-vllm');
+      expect(container.querySelector('.wk-mode.on .wk-mode-d')?.textContent).toBe(WIKI_MODE_NOTES.automatic);
       act(() => root.unmount());
       root = createRoot(container);
     }

@@ -1,9 +1,38 @@
 import { IsArray, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { IsPublicId } from '../common/public-id';
-import type { SessionTurnIntent } from '@orbit/shared';
+import type { SessionKind, SessionLandingView, SessionTurnIntent } from '@orbit/shared';
 import { MERGE_RECEIPT_RESULTS, type MergeReceiptResult } from './merge-receipt';
 
 const MERGE_RECEIPT_RESULT_VALUES = [...MERGE_RECEIPT_RESULTS];
+
+/**
+ * The optional fields a session payload carries once the platform's landing containers exist
+ * (contract §2.9 LS6): `sessionKind` on every row, and `landing` — the subject's view — on one
+ * read directly. Both optional, so a client built before migration 0436 ignores them.
+ */
+export interface SessionLandingFields {
+  sessionKind?: SessionKind;
+  landing?: SessionLandingView | null;
+}
+
+/**
+ * What a list row says about a LANDING session (contract §2.9 LS6; docs/session-list-projects-
+ * design.md §2/§3.2): the subject it represents and where it stands, so the project sessions page
+ * can keep an in-flight landing out of the ordinary rows, list an awaiting one, and fold a settled
+ * one into "Earlier · n landed". AWAITING_DECISION is the segment having an OPEN integration item
+ * or a BLOCKED candidate; the row does not carry the item itself — its own card is where that is
+ * answered. Grouping and the 24-hour window are the client's; the server says only these facts.
+ *
+ * Carried on a list row only (`GET /sessions?projectId=&includeLanding=1`), absent from every
+ * other row, and a client that does not know the field ignores it.
+ */
+export interface SessionLandingSummary {
+  subject: 'TASK' | 'PROMOTION';
+  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED';
+  /** How a SETTLED segment ended; null while it is open. */
+  settledAs: string | null;
+  settledAt: string | Date | null;
+}
 
 export interface CreateSessionDto {
   /** Optional display title; defaults to a slice of the prompt. */

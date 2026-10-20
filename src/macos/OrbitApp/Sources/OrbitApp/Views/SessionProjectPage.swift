@@ -89,7 +89,7 @@ struct SessionProjectRowView: View {
 
     private var lineColor: Color {
         switch row.line.tone {
-        case .approval: return .orange
+        case .approval, .warning: return .orange
         case .running: return .blue
         case .preview, .queued, .background, .watching, .review: return .secondary
         }
@@ -719,7 +719,12 @@ private struct ProjectMergeCardView: View {
     @State private var acting = false
     @State private var actionError: String?
 
+    /// A merge job the server judged timed out turns the WHOLE card amber, as the landing card
+    /// does (owner 2026-10-19), whichever moment it is in.
+    private var timedOut: Bool { landing?.timedOut == true }
+
     private var tint: Color {
+        if timedOut { return .orange }
         switch shape {
         case .checking: return .secondary
         case .asking, .blocked: return .orange
@@ -750,10 +755,11 @@ private struct ProjectMergeCardView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(shape == .checking ? Color.secondary.opacity(0.1) : tint.opacity(0.08),
+        .background(timedOut ? Color.orange.opacity(0.08)
+                    : shape == .checking ? Color.secondary.opacity(0.1) : tint.opacity(0.08),
                     in: RoundedRectangle(cornerRadius: 14))
         .overlay {
-            if shape != .checking {
+            if timedOut || shape != .checking {
                 RoundedRectangle(cornerRadius: 14).strokeBorder(tint.opacity(0.3), lineWidth: 1)
             }
         }

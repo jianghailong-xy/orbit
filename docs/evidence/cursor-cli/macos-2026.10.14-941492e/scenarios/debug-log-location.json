@@ -1,0 +1,53 @@
+{
+ "name": "debug-log-location",
+ "runId": "2026-10-17T08-37-19-553Z",
+ "startedAt": "2026-10-17T08:39:15.058Z",
+ "finishedAt": "2026-10-17T08:40:01.666Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/debug-log-location.ndjson",
+ "protocolLines": 24,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "by default the CLI writes a debug log to /tmp/cursor-agent-logs-<uid>/ (shared by every account)",
+   "ok": true
+  },
+  {
+   "name": "TMPDIR moves it",
+   "ok": true
+  },
+  {
+   "name": "CURSOR_AGENT_DISABLE_DEBUG_LOG=1 turns it off",
+   "ok": true
+  },
+  {
+   "name": "the debug logs carry no API key, JWT or token fields",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "debug log files written by each process": {
+   "default": {
+    "inTmp": 1,
+    "inTmpdir": 0,
+    "filesWithSecrets": 0
+   },
+   "TMPDIR set": {
+    "inTmp": 0,
+    "inTmpdir": 1,
+    "filesWithSecrets": 0
+   },
+   "CURSOR_AGENT_DISABLE_DEBUG_LOG=1": {
+    "inTmp": 0,
+    "inTmpdir": 0,
+    "filesWithSecrets": null
+   }
+  }
+ }
+}

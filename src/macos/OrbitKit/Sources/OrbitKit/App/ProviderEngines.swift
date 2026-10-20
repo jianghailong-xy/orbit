@@ -28,14 +28,15 @@ public enum ProviderEngines {
     /// Every engine, in the order a picker lists them (shared `ALL_ENGINES`).
     public static let all: [String] = names.map(\.engine)
 
-    /// Whether these apps draw `engine` in a list of engines: every engine but Cursor CLI, which the
-    /// server knows (project P1) and which has no screens here until P7b builds the owner's design
-    /// board — web `webShowsEngine`, Kotlin `androidShowsEngine`. The new-session hero's engines, a
-    /// task's Engine field, Infrastructure's engine cards and a machine's Engines rows leave it out, a
-    /// runner's report of it included, so they read as they did before it was registered. Opening
-    /// Cursor CLI here is changing this one function.
-    public static func appleShowsEngine(_ engine: String) -> Bool {
-        engine != "cursor"
+    /// Whether these apps draw `engine` in a list of engines, given the runners in view — the account's,
+    /// wherever a page has them, else the one it is about (web `webShowsEngine`, Kotlin
+    /// `androidShowsEngine`). Every engine but Cursor CLI always; Cursor CLI once one of those runners
+    /// knows it (`CursorRuntime.runnerKnows`: it declares `provider:cursor` or reports the engine), which
+    /// is the order its rollout keeps: the runners and what they declare first, then the entrances
+    /// (project P9). Until then the new-session hero's engines, a task's Engine field, Infrastructure's
+    /// engine cards and a machine's Engines rows leave it out, and the apps read as they did before it.
+    public static func appleShowsEngine(_ engine: String, runners: [Runner]?) -> Bool {
+        engine != "cursor" || (runners ?? []).contains(where: CursorRuntime.runnerKnows)
     }
 
     /// "Antigravity CLI" for `antigravity`; an engine this build doesn't know, by the name it came as.
@@ -65,6 +66,7 @@ public enum ProviderEngines {
     /// The engine whose own protocol each dialect is: what a key runs on when nothing else is named.
     private static let nativeEngine: [OpenCodeKeys.Dialect: String] = [
         .anthropic: "claude", .openai: "codex", .openaiCompatible: "kimi", .gemini: "antigravity",
+        .cursor: "cursor",
     ]
 
     private static let deepSeekHost = "api.deepseek.com"
@@ -91,6 +93,8 @@ public enum ProviderEngines {
         case .key(let runtime, let presetSlug, let baseUrl, let subscriptionToken):
             guard let dialect = OpenCodeKeys.dialect(runtime), let native = nativeEngine[dialect] else { return [] }
             if subscriptionToken { return dialect == .anthropic ? ["claude"] : [] }
+            // A Cursor key is spent by Cursor CLI alone: it is no model API OpenCode could call.
+            if dialect == .cursor { return ["cursor"] }
             // A row still on the retired `dsh` runtime ran on DeepSeek Harness, and keeps doing so by default.
             let legacyDsh = runtime == "dsh"
             let first = legacyDsh ? "dsh" : native
@@ -115,7 +119,7 @@ public enum ProviderEngines {
 
     /// The engines whose own sign-in on the runner is a credential: the provider slug is the engine's
     /// name, and only that engine runs it.
-    public static let loginEngines = ["claude", "codex", "kimi", "antigravity"]
+    public static let loginEngines = ["claude", "codex", "kimi", "antigravity", "cursor"]
 
     /// Whether `provider` is an engine's own sign-in on the runner (its slug is the engine's name).
     public static func isLoginProvider(_ provider: String?) -> Bool {
@@ -129,7 +133,7 @@ public enum ProviderEngines {
         if let engines = key.engines { return engines.filter(isEngine) }
         guard let dialect = OpenCodeKeys.dialect(key.runtime), let native = nativeEngine[dialect] else { return [] }
         let first = key.runtime == "dsh" ? "dsh" : native
-        return key.runsOnOpenCode == true ? [first, "opencode"] : [first]
+        return key.runsOnOpenCode == true && dialect != .cursor ? [first, "opencode"] : [first]
     }
 
     /// The configured key (or pool) `provider` names. An engine's own sign-in and OpenCode's own config

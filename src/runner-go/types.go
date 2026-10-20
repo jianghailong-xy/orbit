@@ -1,6 +1,9 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Wire DTOs — JSON tags mirror @orbit/shared exactly (camelCase). The control
 // plane's ValidationPipe passes these plain objects through unchanged.
@@ -543,6 +546,50 @@ type IntegrationJobCommand struct {
 	Automatic       bool                   `json:"automatic,omitempty"`
 	Checks          []IntegrationCheckSpec `json:"checks"`
 	CancelRequested bool                   `json:"cancelRequested"`
+	// Earlier landings on this job's serial key whose push outcome the control plane could not know
+	// (ERROR / PUSH_OUTCOME_UNKNOWN) and that have no receipt yet (J12). After its fetch the runner
+	// asks git whether each one's tested commit is already an ancestor of the target, and reports
+	// which are. An older runner ignores the field; the control plane then leaves those results to
+	// a coordinator as it always did.
+	UnknownPushes []IntegrationUnknownPush `json:"unknownPushes,omitempty"`
+	// ReportBeforePush is set on a claim made under the v2 progress protocol (§2.2 J-T4): before it
+	// pushes, the runner reports phase = PUSH synchronously and waits for the answer. Absent on a
+	// legacy claim, whose runner reports the phase best-effort and pushes without asking.
+	ReportBeforePush bool `json:"reportBeforePush,omitempty"`
+	// scratchRoot is where this job stages its throwaway worktree; empty means the runner's
+	// worktreesDir. It is never on the wire and no control plane sets it: it exists so a test
+	// that runs in parallel — and so cannot set ORBIT_HOME for the whole process — can give each
+	// case a root of its own.
+	scratchRoot string
+	// progressEvery and pushReportBudget shorten the v2 protocol's two timings for a test; zero
+	// means the package's constants (integrationProgressEvery, integrationPushReportBudget). They
+	// are never on the wire.
+	progressEvery    time.Duration
+	pushReportBudget time.Duration
+	// outputSender uploads one chunk of a check's output (contract §2.2 J-T4's output route). It is
+	// set for a v2 claim only, so a legacy claim uploads nothing and keeps the 16 KB result tail it
+	// always had. outputEvery and outputChunkBytes shorten the uploader's two timings for a test;
+	// zero means the package's constants. outputRedactor is the machine's own secrets, applied to
+	// every chunk before it leaves the runner. None of them is on the wire.
+	outputSender     integrationOutputSender
+	outputEvery      time.Duration
+	outputChunkBytes int
+	outputRedactor   *integrationOutputRedactor
+}
+
+// IntegrationUnknownPush is one earlier landing the control plane could not read the push outcome
+// of, as its command names it (J12): the job, and the commit that job tested and would have pushed.
+type IntegrationUnknownPush struct {
+	JobID     string `json:"jobId"`
+	TestedSha string `json:"testedSha"`
+}
+
+// IntegrationUnknownPushCheck is that same landing after the runner asked git: landed is whether the
+// tested commit is now an ancestor of the target. Only a sha git could answer for is reported, so an
+// absent entry means "cannot tell", never "not landed".
+type IntegrationUnknownPushCheck struct {
+	JobID  string `json:"jobId"`
+	Landed bool   `json:"landed"`
 }
 
 // IntegrationCheckSpec is one command to run on the combined tree before anything is pushed.
@@ -566,13 +613,79 @@ type IntegrationCheckResult struct {
 }
 
 // IntegrationJobProgressRequest renews the lease and says which step the job reached.
+//
+// Everything past the fence is optional and is what a v2 claim adds (§2.2 J-T4): the named sub-step,
+// the round inside this claim, the check in flight, and how idle and how large that step's output
+// is. A legacy claim sends the first three and is served exactly as it always was.
 type IntegrationJobProgressRequest struct {
 	ClaimGeneration string `json:"claimGeneration"`
 	LeaseOwner      string `json:"leaseOwner"`
 	Phase           string `json:"phase"`
+	// Step is the named sub-step beside Phase: WAITING_LOCAL_LOCK inside FETCH, PREPARE inside CHECK.
+	Step string `json:"step,omitempty"`
+	// Round is which round inside this claim, from 1: a landing may retry its push onto a moved target.
+	Round int `json:"round,omitempty"`
+	// Check is the check in flight, while one is.
+	Check *IntegrationJobCurrentCheck `json:"check,omitempty"`
+	// OutputIdleMs is how long the current step's output has been idle; the control plane writes
+	// output_moved_at as its own receive instant minus this. Absent is "not measured".
+	OutputIdleMs *int64 `json:"outputIdleMs,omitempty"`
+	// OutputBytes is how much output this step has produced so far.
+	OutputBytes *int64 `json:"outputBytes,omitempty"`
 	// The upstream moved under a confirmed promotion, so the merge and the checks are being redone
 	// on the new tip (§3.3 M-T7). Nil on every other report.
 	UpstreamMoved *IntegrationUpstreamMoved `json:"upstreamMoved,omitempty"`
+	// The synchronous PUSH report's facts (J12): the commit about to be pushed, the tree it carries,
+	// the commit it replays or merges into it, and the target tip it expects. The control plane
+	// records them on the row while the claim still holds it, so a job whose push outcome later
+	// becomes unknown leaves the next landing on its serial key enough to check — and, if the push
+	// did happen, to write the receipt it never got to report. Nil on every other report.
+	TestedSha       string `json:"testedSha,omitempty"`
+	TestedTreeSha   string `json:"testedTreeSha,omitempty"`
+	SourceSha       string `json:"sourceSha,omitempty"`
+	TargetShaBefore string `json:"targetShaBefore,omitempty"`
+}
+
+// IntegrationJobOutputCheck is the check a chunk of output belongs to (contract §2.2 J-T4's output
+// route): its name and its position in the run, from 1.
+type IntegrationJobOutputCheck struct {
+	Name  string `json:"name"`
+	Index int    `json:"index"`
+}
+
+// IntegrationJobOutputRequest is one chunk of a running check's combined output, uploaded as it is
+// written. Only a v2 claim uploads; seq numbers the chunks of one check from 0, so a chunk sent
+// twice is the chunk already stored. Text is redacted before it leaves the machine.
+type IntegrationJobOutputRequest struct {
+	ClaimGeneration string                    `json:"claimGeneration"`
+	LeaseOwner      string                    `json:"leaseOwner"`
+	Check           IntegrationJobOutputCheck `json:"check"`
+	Seq             int                       `json:"seq"`
+	Text            string                    `json:"text"`
+}
+
+// IntegrationJobOutputResponse says the chunk was taken (or was already stored under its seq).
+type IntegrationJobOutputResponse struct {
+	Accepted bool `json:"accepted"`
+}
+
+// IntegrationJobCurrentCheck is the check a v2 claim is running, as its progress reports name it
+// (§2.1, §2.2 J-T4). The job row's Checks holds finished results; this is the check in flight.
+type IntegrationJobCurrentCheck struct {
+	Name          string `json:"name"`
+	Index         int    `json:"index"`
+	Count         int    `json:"count"`
+	BudgetSeconds int    `json:"budgetSeconds"`
+	StartedAt     string `json:"startedAt"`
+}
+
+// IntegrationJobProgressResponse is the renewal's answer, and the stop signal in the other
+// direction (§2.2 J-T4): a v2 runner that reads CancelRequested kills the check's process group,
+// pushes nothing and reports CANCELLED. A 409 STALE_CLAIM / ALREADY_FINAL or a 404 is the same
+// signal with no answer left to report into.
+type IntegrationJobProgressResponse struct {
+	Accepted        bool `json:"accepted"`
+	CancelRequested bool `json:"cancelRequested"`
 }
 
 // IntegrationUpstreamMoved is the two tips of that move, for a reader of the timeline.
@@ -626,6 +739,29 @@ type IntegrationJobResultRequest struct {
 	Conflicts          []string                 `json:"conflicts,omitempty"`
 	ErrorCode          string                   `json:"errorCode,omitempty"`
 	ErrorDetail        map[string]any           `json:"errorDetail,omitempty"`
+	// With a LAND_PROMOTION that ended because the upstream moved under it (J-T13, M-T12): what the
+	// upstream gained between the tip this job worked from and the tip it found. The control plane
+	// writes it into the job row, and its INTEGRATION_ERROR item carries it at the payload's top
+	// level; it is never put in ErrorDetail, which is copied verbatim into delivery text.
+	UpstreamMovedCommits *IntegrationUpstreamMovedCommits `json:"upstreamMovedCommits,omitempty"`
+	// What this job's fetch found about the earlier unknown pushes its command named (J12): only the
+	// ones git could answer for, and whether their tested commit is on the target.
+	UnknownPushes []IntegrationUnknownPushCheck `json:"unknownPushes,omitempty"`
+}
+
+// IntegrationUpstreamMovedCommits is the list of commits that moved the upstream under a landing, as
+// the runner measured it on the repository it fetched (J-T13 / M-T12): first-parent, newest first,
+// at most the twenty the contract allows, with the true total beside them.
+type IntegrationUpstreamMovedCommits struct {
+	Total   int                      `json:"total"`
+	Commits []IntegrationMovedCommit `json:"commits"`
+}
+
+// IntegrationMovedCommit is one of those commits. Subject is cut to 200 characters here because the
+// repository is the only place the full one is read.
+type IntegrationMovedCommit struct {
+	Sha     string `json:"sha"`
+	Subject string `json:"subject"`
 }
 
 // IntegrationJobResultResponse is the control plane's answer: whether it took the result.
@@ -998,8 +1134,8 @@ type AgentExecConfig struct {
 	// it on. A spawn flag like FastMode's settings key: it moves only across a re-spawn.
 	PromptSuggestions bool                   `json:"promptSuggestions,omitempty"`
 	MaxTurns          *int                   `json:"maxTurns"`
-	MaxBudgetUsd *float64               `json:"maxBudgetUsd"`
-	McpConfig    map[string]interface{} `json:"mcpConfig"`
+	MaxBudgetUsd      *float64               `json:"maxBudgetUsd"`
+	McpConfig         map[string]interface{} `json:"mcpConfig"`
 	// Custom env vars injected into the coding-engine process.
 	Env map[string]string `json:"env"`
 }
@@ -1090,10 +1226,6 @@ type ClaimedSession struct {
 	// was created and nothing runs in the workDir; runSessionProcess ends the run FAILED with it
 	// instead of starting an engine. Runner-internal.
 	SourceRefusal *SourcePinRefusal `json:"-"`
-	// WikiMaintenance is present on a Wiki maintenance session only: the run it is pinned to and started
-	// clean for (wiki_maintenance_session.go). A runner is handed one only once it declares
-	// wiki-maintenance-run/v1.
-	WikiMaintenance *WikiMaintenanceRun `json:"wikiMaintenance,omitempty"`
 	// Naming asks this runner to name the session through the engine running it, once its opening
 	// turn is underway (session_naming.go). The control plane sends it only while the session still
 	// carries the title cut from its prompt, it holds no key it could name the session with itself,
@@ -1291,8 +1423,6 @@ type ReclaimSession struct {
 	// Source, cf. ClaimedSession.Source. On reclaim it is read, never re-derived (SR29): a session
 	// already PINNED comes back on the SHA its first claim froze.
 	Source *SessionSource `json:"source,omitempty"`
-	// WikiMaintenance, cf. ClaimedSession.WikiMaintenance: a restarted runner starts the run clean again.
-	WikiMaintenance *WikiMaintenanceRun `json:"wikiMaintenance,omitempty"`
 }
 
 type ReclaimResponse struct {

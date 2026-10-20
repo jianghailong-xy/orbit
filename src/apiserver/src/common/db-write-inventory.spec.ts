@@ -241,7 +241,10 @@ test('every transaction unit matches its declared retry shape, and every stateme
  * recovered from a stack.
  */
 test('every retry names the operation it is retrying', () => {
-  const LABEL = /loggedRetry\(this\.(?:log|logger),|this\.transientWriteRetry\('/g;
+  // A module-level singleton (`const logger = new Logger(...)`) is the same named operation as a
+  // class's `this.logger`; `projects/landing-session.ts` is written as functions because the
+  // enqueue paths call it from inside their own transactions.
+  const LABEL = /loggedRetry\((?:this\.(?:log|logger)|logger),|this\.transientWriteRetry\('/g;
   const mismatched: string[] = [];
   for (const file of sources(SRC)) {
     const rel = path.relative(SRC, file).split(path.sep).join('/');

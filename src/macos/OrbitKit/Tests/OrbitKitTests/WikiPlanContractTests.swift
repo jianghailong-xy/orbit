@@ -48,22 +48,17 @@ final class WikiPlanContractTests: XCTestCase {
                        WikiPlanGateCheck.allCases.filter { $0 != .unknown }.map(\.rawValue))
     }
 
-    /// The owner's six routes are the user door's; the runner door has the maintenance run's three, and
-    /// none of them confirms or decides anything.
+    /// The owner's six routes are the user door's, and the runner door has no route of the plan.
     func testTheOwnersRoutesAreOnTheUserDoor() throws {
         let routes = try XCTUnwrap(try planSection()["routes"] as? [String: String])
         let doors = try XCTUnwrap((try contract()["agentSurface"] as? [String: Any])?["doors"] as? [String: Any])
         let user = Set(try XCTUnwrap((doors["user"] as? [String: Any])?["routes"] as? [String]))
-        let maintenance = Set(try XCTUnwrap((doors["runner"] as? [String: Any])?["maintenanceRoutes"] as? [String]))
+        let runner = try XCTUnwrap(doors["runner"] as? [String: Any]).values.flatMap { $0 as? [String] ?? [] }
         for name in ["state", "versions", "version", "edit", "confirm", "decide"] {
             let route = try XCTUnwrap(routes[name], name)
             XCTAssertTrue(user.contains(route), "\(route) is not a route the user door declares")
         }
-        for name in ["runnerState", "draft", "propose"] {
-            let route = try XCTUnwrap(routes[name], name)
-            XCTAssertTrue(maintenance.contains(route), "\(route) is not a maintenance route")
-            XCTAssertFalse(route.contains("confirm") || route.contains("decide"), route)
-        }
+        XCTAssertFalse(runner.contains { $0.contains("/plan") }, "the runner door has a route of the plan: \(runner.sorted())")
         XCTAssertTrue(try XCTUnwrap((try planSection()["who"] as? [String: Any])?["owner"] as? String).contains("WIKI_OWNER_CHANNEL_ONLY"))
     }
 
@@ -132,8 +127,7 @@ final class WikiPlanContractTests: XCTestCase {
         XCTAssertEqual(decoded.confirmed?.docs?.first?.sections?.first?.kind, .unknown)
     }
 
-    /// The plan's jobs (contract `plan.jobs`): their closed sets, the owner's redraft route on the user door
-    /// and the run's five on the runner door's maintenance routes, and the refusal a run with no job gets.
+    /// The plan's jobs (contract `plan.jobs`): their closed sets, and the owner's redraft route on the user door.
     func testTheJobsClosedSetsAndRoutesAreTheContracts() throws {
         let jobs = try XCTUnwrap(try planSection()["jobs"] as? [String: Any], "the contract's plan has no jobs")
         XCTAssertEqual(Set(try XCTUnwrap(jobs["kinds"] as? [String: Any]).keys), known(WikiPlanJobKind.self))
@@ -147,17 +141,12 @@ final class WikiPlanContractTests: XCTestCase {
         let routes = try XCTUnwrap(jobs["routes"] as? [String: String])
         let doors = try XCTUnwrap((try contract()["agentSurface"] as? [String: Any])?["doors"] as? [String: Any])
         let user = Set(try XCTUnwrap((doors["user"] as? [String: Any])?["routes"] as? [String]))
-        let maintenance = Set(try XCTUnwrap((doors["runner"] as? [String: Any])?["maintenanceRoutes"] as? [String]))
         XCTAssertTrue(user.contains(try XCTUnwrap(routes["redraft"])), "the redraft is not a route of the user door")
-        for name in ["context", "progress", "finish", "check", "materials"] {
-            XCTAssertTrue(maintenance.contains(try XCTUnwrap(routes[name], name)), "\(name) is not a maintenance route")
-        }
-        let refusals = try XCTUnwrap(try contract()["refusals"] as? [[String: Any]])
-        XCTAssertEqual(refusals.first { $0["code"] as? String == "WIKI_PLAN_NO_JOB" }?["httpStatus"] as? Int, 409)
     }
 
-    /// The job on the plan's read, as each card of the plan page draws it: queued behind a run, held with
-    /// why, running on a round, and failed with the gate's errors; a value a later server adds is `.unknown`.
+    /// The job on the plan's read, as each card of the plan page draws it: queued, held with why, running on a
+    /// round, and failed with the gate's errors; a value a later server adds is `.unknown`. The read's `waitingFor`,
+    /// `taskId` and `provider` are the runner path's (contract `plan.jobs.read`): a job decodes whatever they hold.
     func testTheJobDecodes() throws {
         let running = #"""
         {"spaceId":"34WSpace","confirmed":null,"draft":null,"proposals":[],
@@ -170,7 +159,7 @@ final class WikiPlanContractTests: XCTestCase {
         XCTAssertEqual(job.kind, .draft)
         XCTAssertEqual(job.trigger, .spaceCreated)
         XCTAssertEqual(job.state, .running)
-        XCTAssertEqual(job.provider, "local-vllm")
+        XCTAssertEqual(job.sessionId, "34WSession", "a job a task made before server execution keeps its session")
         XCTAssertEqual(job.attempt, 1)
         XCTAssertEqual(job.attemptsMax, 3)
 
@@ -182,7 +171,7 @@ final class WikiPlanContractTests: XCTestCase {
         XCTAssertEqual(waiting.state, .queued)
         XCTAssertEqual(waiting.kind, .revise)
         XCTAssertEqual(waiting.instructions, "合并到 30 篇左右")
-        XCTAssertEqual(waiting.waitingFor?.sessionId, "34WRun")
+        XCTAssertNil(waiting.sessionId)
 
         let held = #"{"id":"34WJob","kind":"draft","state":"held","held":{"reason":"no_maintenance_workspace","at":"2026-09-29T00:41:00.000Z"}}"#
         XCTAssertEqual(try JSONDecoder().decode(WikiPlanJob.self, from: Data(held.utf8)).held?.reason, .noMaintenanceWorkspace)

@@ -26,11 +26,11 @@ import { WikiRepoOpRefused, type WikiRepoOps } from './wiki-repo-ops';
 /**
  * The server's `articles` job (wiki-articles-job.ts, contract `jobs.kindRuns.articles`) with everything around it
  * stood in for: the plan, a topic's input and the write of `WikiArticles`, the space's snapshot, and the queue —
- * `ask`, answered as the fixture's model answers. What `src/runner-go/wiki_articles_test.go` holds the runner's
- * command to, held here to the job:
+ * `ask`, answered as the fixture's model answers. What `src/runner-go/wiki_articles_test.go` held the runner's
+ * command to before P11 deleted both, held here to the job:
  *
- *   - it asks exactly what the runner asks: every call of `wiki-article-writer.fixture.json`, word for word, by
- *     the unit it is filed under — and groups the big topic as the runner does;
+ *   - it asks exactly what the runner asked: every call of the frozen `wiki-article-writer.fixture.json`, word for
+ *     word, by the unit it is filed under — and groups the big topic as the runner did;
  *   - a topic whose entries did not change is neither read nor written, and the model is not asked about it;
  *   - a draft that keeps too little is asked for once more;
  *   - a write refused WIKI_ARTICLE_STALE, or a call that ended in a way that is the work's, leaves that topic
@@ -40,8 +40,8 @@ import { WikiRepoOpRefused, type WikiRepoOps } from './wiki-repo-ops';
  *   - a replay folds in what the attempt before it finished (contract `jobs.carry`): the topic written before a stop
  *     is in its report, written, once, and every call of both attempts is counted once.
  *
- * The end-to-end run — the executor, the queue, a fake System model, the real write path and a canary account —
- * is `wiki-articles-job.pg.spec.ts`.
+ * The end-to-end run — the executor, the queue, a fake System model and the real write path — is
+ * `wiki-articles-job.pg.spec.ts`.
  */
 
 const ROOT = path.resolve(__dirname, '../../../..');
@@ -113,7 +113,7 @@ interface Door {
   principals: WikiPrincipal[];
 }
 
-/** WikiArticles as the runner door answers: the fixture's topics, every one changed unless `unchanged` names it. */
+/** WikiArticles, as it answers the job: the fixture's topics, every one changed unless `unchanged` names it. */
 function door(options: { unchanged?: string[]; refuse?: (slug: string) => Error | null } = {}): Door {
   const inputs: string[] = [];
   const writes = new Map<string, WikiArticleWriteRequest>();
@@ -216,7 +216,7 @@ test('the job asks what the runner asks: every call of wiki-article-writer.fixtu
     for (const [unit, prompt] of Object.entries(want)) assert.equal(calls[slug][unit], prompt, `${slug} ${unit}, word for word`);
   }
 
-  // The writes: what the server's write route is handed, as the runner hands it.
+  // The writes: what `WikiArticles.write` is handed, as the runner handed the server's write route before P11.
   const groups: Record<string, string[][]> = {};
   for (const topic of FIXTURE.topics) {
     const written = d.writes.get(topic.slug)!;

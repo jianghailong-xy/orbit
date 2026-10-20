@@ -85,6 +85,7 @@ func init() {
 		sessionSourcePinV1,
 		codexRateLimitResetCapabilityV1,
 		integrationJobCapabilityV1,
+		integrationProgressV2Capability,
 		promotionAutomaticLandCapabilityV1,
 		codexAccountLoginCapabilityV1,
 		antigravityGoogleLoginCapabilityV1,
@@ -100,7 +101,6 @@ func init() {
 		kimiAccountRemoveCapabilityV1,
 		kimiAccountMoveCapabilityV1,
 		sessionMoveCapabilityV1,
-		wikiMaintenanceRunV1,
 		wikiRepoOpCapabilityV1,
 		wikiRepoOpReadCapabilityV1,
 		cursorKeyCheckCapabilityV1,
@@ -676,11 +676,24 @@ func (t *Transport) mergeResult(sessionID string, b MergeResultRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/merge-result", b, nil, 15*time.Second)
 }
 
-// integrationJobProgress renews a claimed job's lease and records the step it reached. Short
-// timeout and a plain error: a progress report that does not arrive costs nothing but the lease,
-// and the job's own work carries on regardless (docs/project-integration-line-contract.md §2.3).
-func (t *Transport) integrationJobProgress(jobID string, b IntegrationJobProgressRequest) error {
-	return t.do(nil, "POST", "/runner/integration-jobs/"+jobID+"/progress", b, nil, 15*time.Second)
+// integrationJobProgress renews a claimed job's lease and records the step it reached, and answers
+// what the control plane said (§2.2 J-T4). The answer is the stop signal in the other direction:
+// cancelRequested is a stop request, and a 409 or 404 is a claim that is no longer this process's.
+// A legacy claim's calls are best effort and ignore both, as they always have.
+func (t *Transport) integrationJobProgress(ctx context.Context, jobID string, b IntegrationJobProgressRequest) (*IntegrationJobProgressResponse, error) {
+	var out IntegrationJobProgressResponse
+	if err := t.do(ctx, "POST", "/runner/integration-jobs/"+jobID+"/progress", b, &out, 15*time.Second); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// integrationJobOutput uploads one chunk of a running check's output (contract §2.2 J-T4's output
+// route, §2.9 LS2). The answer matters only when it is a refusal: a 409 STALE_CLAIM / ALREADY_FINAL
+// or a 404 says the claim can never be written into again, and the uploader stops sending.
+func (t *Transport) integrationJobOutput(ctx context.Context, jobID string, b IntegrationJobOutputRequest) error {
+	var out IntegrationJobOutputResponse
+	return t.do(ctx, "POST", "/runner/integration-jobs/"+jobID+"/output", b, &out, 15*time.Second)
 }
 
 // integrationJobRelease hands a claimed job back (contract §2.2 J-T11): released, it is queued for the
@@ -1315,6 +1328,45 @@ func (t *Transport) getProject(id string) (json.RawMessage, error) {
 	return out, err
 }
 
+// getProjectIntegration reads a project's integration line as a session in the project (contract
+// §2.2 J-T4, §2.9 LS6): the queue, the three job kinds, why each waits, each task's newest landing
+// and each merge candidate's newest check and merge. READ ONLY.
+//
+// The session header is the authority the server checks against project membership; jobId names one
+// attempt and serves its check output under `log` (continued by cursor) and its timeline (continued
+// by timelineCursor), narrowed by claim, round and check (§2.9 LS2). This is the door that replaces
+// a coordinator querying the production database: the alternative to calling it is not a smaller
+// answer, it is an ungoverned one.
+func (t *Transport) getProjectIntegration(sessionID, id, jobID, claim, round, check, cursor, timelineCursor string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("reading a project's integration line needs a session: it is read as a session in the project")
+	}
+	if jobID != "" {
+		if err := validatePathSegmentID(jobID); err != nil {
+			return nil, err
+		}
+	}
+	query := url.Values{}
+	for name, value := range map[string]string{
+		"jobId": jobID, "claim": claim, "round": round, "check": check,
+		"cursor": cursor, "timelineCursor": timelineCursor,
+	} {
+		if value != "" {
+			query.Set(name, value)
+		}
+	}
+	path := "/runner/projects/" + url.PathEscape(id) + "/integration"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "GET", path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // getTaskAttribution reads unit L7's attribution boundary for one task: the project the work
 // counts towards (title, Base62 id, status), where it was NOTICED (evidence, and labelled as
 // evidence — §3 SC7 is explicit that finding work somewhere grants no authority to write there),
@@ -1640,6 +1692,25 @@ func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/tasks/"+url.PathEscape(taskID)+"/integration/retry",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// abandonIntegrationJob ends a running job whose runner has stopped reporting (contract §2.2
+// J-T10), as the project's coordinating session. The session header is the authority the server
+// checks against the project's own coordinator pointer; the reason travels as the body and stays on
+// the job's error_detail. The server's gate is the claim's lease expiry — a job still inside it is
+// refused — and a refusal travels as the server raised it.
+func (t *Transport) abandonIntegrationJob(sessionID, id, jobID, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(jobID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/integration/jobs/"+url.PathEscape(jobID)+"/abandon",
 		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }
@@ -2390,9 +2461,8 @@ func (t *Transport) proposeWikiChangeset(sessionID string, body interface{}) (js
 }
 
 // listWikiVerifications reads one page of the ops the calling session proposed that wait for their
-// verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`) — or, on
-// `maintenance/verifications`, of the ops ended sessions left waiting there, which a maintenance run of the
-// space adopts (`reviewModes.verification.adoption`). route is the path after the space.
+// verification in a space (`orbit wiki verify`, contract `reviewModes.verification.list`). route is the
+// path after the space.
 func (t *Transport) listWikiVerifications(route, sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
@@ -2410,10 +2480,9 @@ func (t *Transport) listWikiVerifications(route, sessionID, spaceID, after strin
 
 // requestWikiVerification asks the server to verify the ops the calling session proposed in a space
 // (contract `reviewModes.verification.routes.request`, `servedBy`): what `orbit wiki verify` calls where
-// the list answered that this deployment verifies on the server, so the command waits for the verdict
-// instead of asking a model of the session's provider about it. One queued job per session and space, so
-// asking twice while one is queued is one job; the answer names it, and answers `servedBy: runner` with
-// no job where the server does not run for the account.
+// the list answered that this deployment verifies on the server, before it waits for the verdicts. One
+// queued job per session and space, so asking twice while one is queued is one job; the answer names it,
+// and answers `servedBy: runner` with no job where the server does not run for the account.
 func (t *Transport) requestWikiVerification(sessionID, spaceID string) (json.RawMessage, error) {
 	if err := validatePathSegmentID(spaceID); err != nil {
 		return nil, err
@@ -2421,98 +2490,6 @@ func (t *Transport) requestWikiVerification(sessionID, spaceID string) (json.Raw
 	var out json.RawMessage
 	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/verifications/request"
 	_, err := t.doWiki(http.MethodPost, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
-	return out, err
-}
-
-// reportWikiVerifications reports verdicts for ops the list on the same route gave. A report none of
-// whose verdicts was recorded comes back as a 4xx carrying every outcome, as a refused proposal does.
-//
-// Sent again through a transient failure: a verdict is recorded only while its op still waits for one
-// (the update's predicate), and the same verdict for an op already verified that way is answered with
-// what was recorded, writing nothing (wiki.service.ts applyVerdict).
-func (t *Transport) reportWikiVerifications(route, sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
-	if err := validatePathSegmentID(spaceID); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/" + route
-	_, err := t.doWiki(http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID), true)
-	return out, err
-}
-
-// listWikiDossiers reads one page of a space's dossiers for the Wiki maintenance run the calling
-// session is (`orbit wiki dossier`, contract `maintenance.dossier`). after is a cursor token an earlier
-// page handed out, and a limit of 0 leaves the page's size to the server.
-func (t *Transport) listWikiDossiers(sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
-	if err := validatePathSegmentID(spaceID); err != nil {
-		return nil, err
-	}
-	values := url.Values{}
-	if after != "" {
-		values.Set("after", after)
-	}
-	if limit > 0 {
-		values.Set("limit", strconv.Itoa(limit))
-	}
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/dossiers"
-	if encoded := values.Encode(); encoded != "" {
-		path += "?" + encoded
-	}
-	var out json.RawMessage
-	_, err := t.doWiki(http.MethodGet, path, nil, &out, wikiDossierPageTimeout, sessionHeader(sessionID), true)
-	return out, err
-}
-
-// advanceWikiCursor reports how the calling session's maintenance run ended (`orbit wiki cursor
-// advance`, contract `maintenance.cursor.advance`): a succeeded run moves the space's cursor to its
-// token, and a failed or truncated one is recorded and moves nothing — and is counted, so only a
-// succeeded run's report is sent again through a transient failure (wikiReportsSuccess).
-func (t *Transport) advanceWikiCursor(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
-	if err := validatePathSegmentID(spaceID); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/cursor"
-	_, err := t.doWiki(http.MethodPost, path, body, &out, taskOpTimeout, sessionHeader(sessionID), wikiReportsSuccess(body))
-	return out, err
-}
-
-// listWikiAnchors reads one page of a space's live entries with git anchors, for the Wiki maintenance
-// run the calling session is (`orbit wiki anchors verify`, contract `anchorRules.verify.list`). after is
-// the next an earlier page gave, and a limit of 0 leaves the page's size to the server.
-func (t *Transport) listWikiAnchors(sessionID, spaceID, after string, limit int) (json.RawMessage, error) {
-	if err := validatePathSegmentID(spaceID); err != nil {
-		return nil, err
-	}
-	values := url.Values{}
-	if after != "" {
-		values.Set("after", after)
-	}
-	if limit > 0 {
-		values.Set("limit", strconv.Itoa(limit))
-	}
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/anchors"
-	if encoded := values.Encode(); encoded != "" {
-		path += "?" + encoded
-	}
-	var out json.RawMessage
-	_, err := t.doWiki(http.MethodGet, path, nil, &out, taskOpTimeout, sessionHeader(sessionID), true)
-	return out, err
-}
-
-// reportWikiAnchorChecks reports what the calling session's maintenance run found on origin/main
-// (`orbit wiki anchors verify`, contract `anchorRules.verify.report`): each entry is recorded on its own.
-//
-// Sent again through a transient failure: a check sets an entry's anchors and their state to what was
-// found (it counts nothing, and moves no revision), and files a challenge only while none of the entry's
-// is open (wiki.service.ts applyAnchorCheck), so a second landing writes what the first did.
-func (t *Transport) reportWikiAnchorChecks(sessionID, spaceID string, body interface{}) (json.RawMessage, error) {
-	if err := validatePathSegmentID(spaceID); err != nil {
-		return nil, err
-	}
-	var out json.RawMessage
-	path := "/runner/wiki/spaces/" + url.PathEscape(spaceID) + "/anchor-checks"
-	_, err := t.doWiki(http.MethodPost, path, body, &out, wikiAnchorReportTimeout, sessionHeader(sessionID), true)
 	return out, err
 }
 

@@ -289,7 +289,9 @@ struct ConsoleView: View {
             // The reader's messages nothing has read yet, on the composer they were sent from —
             // not folded while typing: they are about the message flow being typed into.
             PendingTrayView(console: console, rows: console.pendingTrayRows(
-                turnRunning: (appModel.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running))
+                turnRunning: (appModel.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running),
+                            // Why none of them goes into the turn running now: Cursor CLI's would stop it.
+                            note: console.engine == CursorRuntime.engine ? CursorRuntime.queueNote : nil)
             ComposerView(console: console)
             // What the provider pick standing in the composer will do, and WHEN — the
             // part that matters, because a run keeps its provider for its whole life.

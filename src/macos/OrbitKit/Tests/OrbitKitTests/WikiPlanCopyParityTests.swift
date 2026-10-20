@@ -428,21 +428,9 @@ final class WikiPlanCopyParityTests: XCTestCase {
         for row in try rows("time") {
             XCTAssertEqual(WikiPlanCopy.time(since: row["since"] as? String, until: row["until"] as? String), row["says"] as? String)
         }
-        for row in try rows("redraftNotes") {
-            let from = (row["from"] as? [String: Any]).map { (version: $0["version"] as! Int, inForce: $0["inForce"] as! Bool) }
-            XCTAssertEqual(WikiPlanCopy.redraftNote(provider: row["provider"] as? String, from: from, serverExecutes: false), row["says"] as? String)
-        }
+        // The sentences that name the drafter — the empty plan's and Redraft…'s — are the server-execution fixture's
+        // (`WikiServerExecutionCopyParityTests`).
         for row in try rows("protectedKept") { XCTAssertEqual(WikiPlanCopy.protectedKept(row["numbers"] as! [String]), row["says"] as? String) }
-        for row in try rows("emptyText") {
-            // The runner's rows: the server's sentence is `WikiServerExecutionCopyParityTests`'.
-            XCTAssertEqual(WikiPlanCopy.emptyText(provider: row["provider"] as? String, serverExecutes: false), row["says"] as? String)
-        }
-        for row in try rows("emptyNote") {
-            // These are the runner's rows: the server's line is `WikiServerExecutionCopyParityTests`', from the
-            // other fixture, and the web says it in the same function (`wikiPlanEmptyNote`).
-            XCTAssertEqual(WikiPlanCopy.emptyNote(where: row["where"] as? String, provider: row["provider"] as? String, serverExecutes: false),
-                           row["says"] as? String)
-        }
         for row in try rows("saveNote") { XCTAssertEqual(WikiPlanCopy.saveNote(row["n"] as! Int), row["says"] as? String) }
         for row in try rows("editTitle") { XCTAssertEqual(WikiPlanCopy.editTitle(row["number"] as! String), row["says"] as? String) }
         for row in try rows("confirmed") { XCTAssertEqual(WikiPlanCopy.confirmed(row["n"] as! Int), row["says"] as? String) }
@@ -552,7 +540,7 @@ final class WikiPlanCopyParityTests: XCTestCase {
                            expected.meta, name)
             XCTAssertEqual(shown?.status == .failed ? WikiPlanCopy.failedHint(inForce: state.confirmed?.version) : nil, expected.hint, name)
 
-            let card = WikiPlanLogic.jobCard(state.job, now: now, runnerOnline: online, serverExecutes: false, failed: shown?.status == .failed ? failed : nil,
+            let card = WikiPlanLogic.jobCard(state.job, now: now, runnerOnline: online, failed: shown?.status == .failed ? failed : nil,
                                              inForce: inForce, directory: state.confirmed != nil ? shared.docs.directory.read : nil)
             XCTAssertEqual(card.map { "\($0.look.rawValue) | \($0.title) | \($0.text)" }, expected.jobCard.map { "\($0.look) | \($0.title) | \($0.text)" }, name)
             XCTAssertEqual(card?.link.map { "\($0.label) \($0.to.rawValue) \($0.sessionId ?? "-")" },
@@ -739,14 +727,14 @@ final class WikiPlanCopyParityTests: XCTestCase {
                            "case .changes:", "case .documents:"], "the native plan page")
         assertOrder(arms, ["Text(WikiPlanCopy.confirm)", "Label(WikiPlanCopy.redraft"], "Confirm plan, then Redraft…")
         assertSays(arms, ".disabled(shown.status == .failed || busy)", in: "WikiPlanView.swift")
-        // The empty page: what a plan is, Draft plan, where and how long it runs — and, while the server drafts
-        // it, the System model's line (`WIKI_PLAN_NOTE_SERVER`, `WikiServerExecutionCopyParityTests`).
+        // The empty page: what a plan is, Draft plan, and where and how long it runs — the System model's
+        // (`WIKI_PLAN_EMPTY_TEXT`, `WIKI_PLAN_EMPTY_NOTE_SERVER`, `WikiServerExecutionCopyParityTests`).
         let webEmpty = try slice(page, from: "function PlanEmpty(", to: "function PlanGateReport(")
-        assertOrder(webEmpty, ["{WIKI_PLAN_EMPTY_TITLE}", "{wikiPlanEmptyText(provider, serverExecutes)}", "{WIKI_PLAN_DRAFT}", "{wikiPlanEmptyNote(where, provider, serverExecutes)}"],
+        assertOrder(webEmpty, ["{WIKI_PLAN_EMPTY_TITLE}", "{WIKI_PLAN_EMPTY_TEXT}", "{WIKI_PLAN_DRAFT}", "{WIKI_PLAN_EMPTY_NOTE_SERVER}"],
                     "the web's empty plan")
         let nativeEmpty = try slice(nativePage, from: "private var empty: some View {", to: "private func docRow(")
-        assertOrder(nativeEmpty, ["Text(WikiPlanCopy.emptyTitle)", "Text(WikiPlanCopy.emptyText(provider: provider, serverExecutes: serverExecutes))", "Text(WikiPlanCopy.draft)",
-                                  "Text(WikiPlanCopy.emptyNote(where: whereItRuns, provider: provider, serverExecutes: serverExecutes))"],
+        assertOrder(nativeEmpty, ["Text(WikiPlanCopy.emptyTitle)", "Text(WikiPlanCopy.emptyText)", "Text(WikiPlanCopy.draft)",
+                                  "Text(WikiPlanCopy.emptyNoteServer)"],
                     "the native empty plan")
     }
 
@@ -815,7 +803,7 @@ final class WikiPlanCopyParityTests: XCTestCase {
 
         // Redraft…: the note, the owner's words, the protected documents kept, Cancel and Redraft.
         let webRedraft = try slice(page, from: "function PlanRedraftModal(", to: "const KIND_OPTIONS")
-        for literal in ["{WIKI_PLAN_REDRAFT_GO}", "{wikiPlanRedraftNote(provider,", "placeholder={WIKI_PLAN_REDRAFT_PLACEHOLDER}",
+        for literal in ["{WIKI_PLAN_REDRAFT_GO}", "{wikiPlanRedraftNote(newest ?", "placeholder={WIKI_PLAN_REDRAFT_PLACEHOLDER}",
                         "{wikiPlanProtectedKept(protectedDocs)}", "{WIKI_PLAN_REDRAFT_TITLE}"] {
             assertSays(webRedraft, literal, in: Self.page)
         }
@@ -825,10 +813,8 @@ final class WikiPlanCopyParityTests: XCTestCase {
             assertSays(nativeRedraft, literal, in: "WikiPlanView.swift")
         }
         let screens = try native("Views/WikiDocScreens.swift")
-        // The dialog's drafter is the System model's while the server drafts it.
-        assertSays(screens, "WikiPlanCopy.redraftNote(provider: model.wikiMaintenanceProvider,", in: "WikiDocScreens.swift")
-        XCTAssertTrue(screens.contains("serverExecutes: wiki.serverExecutes),"),
-                      "the redraft dialog is handed the executor switch")
+        // The dialog's sentence, from the newest version: its drafter is the System model.
+        assertSays(screens, "WikiPlanCopy.redraftNote(from: newest.map", in: "WikiDocScreens.swift")
         // Edit: title, question, length, protected, the sections with Add section, and Save draft.
         let webEdit = try slice(page, from: "function PlanEditDrawer(", to: "function PlanSectionEditModal(")
         assertOrder(webEdit, ["{WIKI_PLAN_EDIT_TITLE_FIELD}", "{WIKI_PLAN_QUESTION}", "{WIKI_PLAN_LENGTH}", "{WIKI_PLAN_PROTECTED}", "{WIKI_PLAN_SECTIONS}",

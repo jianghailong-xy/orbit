@@ -43,11 +43,10 @@ import {
  * The `docs_build` job (contracts/wiki.contract.json `docs.build.server`, `jobs.kindRuns.docs_build`; design §8,
  * P7): what a build job's session did with `orbit wiki docs build`, done by the wiki-worker with the System model.
  *
- * MADE BY THE OWNER'S CONFIRMATION. For an account the executor switch gives the server, the build a confirmed
- * version asks for is made as this job rather than as a task of the hidden list (wiki-plan-job.ts,
- * `makeWikiPlanJobOnServer`); its input names the plan job, and the plan job is how the plan page sees it — its
- * progress as each document is taken up, and how it ended (`plan.jobs.progress`, `plan.jobs.finish`), as a
- * session's run reported them.
+ * MADE BY THE OWNER'S CONFIRMATION. For every account, the build a confirmed version asks for is made as this
+ * job (wiki-plan-job.ts, `makeWikiPlanJobOnServer`); its input names the plan job, and the plan job is how the
+ * plan page sees it — its progress as each document is taken up, and how it ended (`plan.jobs.progress`,
+ * `plan.jobs.finish`), as a session's run reported them before P11.
  *
  * THE REPOSITORY AT ONE COMMIT, READ BY THE SPACE'S RUNNER. A snapshot of origin/main names the commit (the
  * runner's fetch, as the CLI's own fetch did) and lists every file with its size; the files a section's
@@ -59,8 +58,8 @@ import {
  * are many and short, and parking on each would replay the build each time.
  *
  * THE SERVER'S HALF IS READ IN PROCESS: the records of a section's session condition through
- * wiki-docs-material.ts, as the runner door's material route reads them; the writes through `WikiDocs.write`, the
- * route's own writer, as the server's principal (`wikiDocsBuildJobPrincipal`).
+ * wiki-docs-material.ts, as the runner door's material route read them before P11; the writes through
+ * `WikiDocs.write`, the shared writer, as the server's principal (`wikiDocsBuildJobPrincipal`).
  *
  * EVERY CALL IS A BREAKPOINT. A call's unit is its section and the digest of its prompt (wiki-docs-build.ts), so a
  * job replayed after its worker died, or retried after the model was away, reuses each answer whose question did
@@ -93,7 +92,7 @@ export interface WikiDocsBuildJobDeps {
   repoWaitMs?: number;
 }
 
-/** What the job reports: the run's summary (the command's `--json`), and the plan job it built for. */
+/** What the job reports: the run's summary (what the command's `--json` printed), and the plan job it built for. */
 export interface WikiDocsBuildJobReport extends Partial<WikiDocsBuildSummary> {
   kind: 'docs_build';
   planJobId: string;
@@ -236,10 +235,10 @@ async function progress(prisma: PrismaService, context: WikiJobContext, value: R
 /** The plan job's end, as `plan.jobs.finish` keeps it: by its wiki job, with no session. */
 async function finishPlanJob(deps: WikiDocsBuildJobDeps, jobId: string, planJobId: string, end: WikiPlanJobEnd): Promise<void> {
   const error = end.error === null ? null : cutRunes(end.error, 2000);
-  await finishWikiPlanJob(deps.prisma, planJobId, null, { ...end, error }, new Date(), 'build', jobId);
+  await finishWikiPlanJob(deps.prisma, planJobId, { ...end, error }, new Date(), 'build', jobId);
 }
 
-/** The build's report as the plan job keeps it (`WikiPlanBuildReport`), the runner's `finishWikiDocsBuildJob` word for word. */
+/** The build's report as the plan job keeps it (`WikiPlanBuildReport`), as the runner's `finishWikiDocsBuildJob` made it, word for word. */
 export function buildReportOf(summary: WikiDocsBuildSummary, model: string): WikiPlanBuildReport {
   const written = summary.docs.filter((doc) => doc.sections.length > 0 && doc.sections.every((section) => section.outcome !== 'failed')).length;
   return {
@@ -256,9 +255,9 @@ export function buildReportOf(summary: WikiDocsBuildSummary, model: string): Wik
 // ── The confirmed plan ──────────────────────────────────────────────────────────────────────────
 
 /**
- * The confirmed plan as the runner door's plan read gives it to the writer: documents and sections in the plan's
- * order, each section's sources as stored — so its fingerprint is the runner's — and its session condition as the
- * material route reads it.
+ * The confirmed plan as the runner door's plan read gave it to the writer before P11: documents and sections in the
+ * plan's order, each section's sources as stored — so its fingerprint is the runner's — and its session condition as
+ * the material route read it.
  */
 async function readConfirmedPlan(
   prisma: PrismaService,
@@ -324,7 +323,7 @@ async function readConfirmedPlan(
 
 // ── The write ───────────────────────────────────────────────────────────────────────────────────
 
-/** One write through the route's own writer; a refusal is the section's, said as the runner said it. */
+/** One write through the shared writer (`WikiDocs.write`); a refusal is the section's, said as the runner said it. */
 async function write(deps: WikiDocsBuildJobDeps, ownerId: string, spaceId: string, slug: string, request: WikiDocsWriteRequest): Promise<WikiDocsWriteAnswer> {
   try {
     // What the model wrote goes to the shared writer without any U+0000 (contract `jobs.serverWrites`): Postgres keeps
@@ -372,7 +371,8 @@ const READ_CUT_MARKER = /\n…(?: \(rest omitted\)|（后略）)\n$/u;
  * takes such a `<sha>:<path>` for a pathspec (`looks_like_pathspec`), and `git show` exits 0 printing nothing: the
  * runner's writer read an empty file, found no section and no symbol in it, and took a code path's head and a
  * contract with nothing in them. The documents' build, the maintenance run's comparison and its proposal check all
- * read through this, so the server reads such a source as the runner does until the runner's path is removed (P11).
+ * read through this, so the server reads such a source as the runner did, and P11 kept the reading when it removed
+ * the runner's path.
  */
 export class WikiDocsSnapshotRepo implements WikiDocRepo {
   private readonly texts = new Map<string, WikiDocShown | null>();
@@ -417,8 +417,8 @@ export class WikiDocsSnapshotRepo implements WikiDocRepo {
    * returns once every one of them is held, including one another section's read has in flight: the sections
    * of a document are built `docs.build.rules.parallel` at a time, and two of them often name one file. The
    * second used to start no read of its own and show the file before the first read landed (v27, 2026-10-09:
-   * docs/article-durable-agent-work.md, named by several sections of one document). The runner's writer has no
-   * such window, since it reads each file with `git show` when it shows it.
+   * docs/article-durable-agent-work.md, named by several sections of one document). The runner's writer had no
+   * such window, since it read each file with `git show` when it showed it.
    */
   async prepare(paths: readonly string[]): Promise<void> {
     const wanted = [...new Set(paths.map((path) => wikiDocCleanPath(path)))].filter((path) => this.sizes.has(path));

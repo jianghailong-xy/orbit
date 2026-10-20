@@ -40,7 +40,8 @@ import {
 
 /**
  * One build of a space's documents (contracts/wiki.contract.json `docs.build`, `docs.build.server`; design §8, P7):
- * `runWikiDocsBuild` in src/runner-go/wiki_docs_build.go, run on the server over what the job hands it.
+ * `runWikiDocsBuild` of src/runner-go/wiki_docs_build.go, ported before P11 deleted it and run on the server over what
+ * the job hands it.
  *
  * EACH DOCUMENT IN THE PLAN'S ORDER; IN EACH, ITS SECTIONS `docs.build.rules.parallel` AT A TIME, THE OVERVIEW LAST.
  * A section gathers its material — the repository's half from the files its sources name at the run's commit, the
@@ -49,7 +50,7 @@ import {
  * merges the pieces, one writes the section, a paragraph that marks only its last sentence is asked for once more,
  * a footnote with no quote that holds is asked about once more, and the section is written with its ledger — one
  * write at a time, since each classifies the whole document again. The overview is written from the others as they
- * are written. All of it is the Go file's, function for function (wiki-docs-writer.ts).
+ * are written. All of it is ported from the Go file, function for function (wiki-docs-writer.ts).
  *
  * WHAT A FAILURE IS. A call that ended in a way that is the call's (`WikiDocsCallFailed`) or a write the server
  * refused (`WikiDocsWriteRefused`) fails the section, and the run goes on to the next, as the runner's did. Anything
@@ -350,7 +351,7 @@ class DocsBuildRun {
         const again = wikiDocParseWritten(await this.ask(run, WIKI_DOCS_BUILD_JOB.steps.rewrite, label, prompt + wikiDocEndOnlyNote(lonely)));
         if (again.body !== '' && wikiDocEndOnlyParagraphs(again.body).length < lonely.length) draft = again;
       } catch (error) {
-        // The first draft stands, as on the runner when the second call did not answer.
+        // The first draft stands, as it did on the runner when the second call did not answer.
         if (!(error instanceof WikiDocsCallFailed)) throw error;
       }
     }
@@ -393,7 +394,7 @@ class DocsBuildRun {
     return { run, section: footnoted.section, answer };
   }
 
-  /** A section's material (`gather`): the repository's half from the files it names, the server's half from its door. */
+  /** A section's material (`gather`): the repository's half from the files it names, the server's half from `material`. */
   private async gather(doc: WikiDocsPlanDoc, index: number): Promise<{ pieces: WikiDocPiece[]; missing: string[] }> {
     const section = doc.sections[index];
     const paths = [
@@ -575,7 +576,7 @@ function countFootnotes(footnotes: readonly WikiDocFootnote[]): WikiDocsBuildSec
 }
 
 /**
- * Run `work` over `items`, at most `limit` at once, the way the runner's semaphore does. The first error that is
+ * Run `work` over `items`, at most `limit` at once, the way the runner's semaphore did. The first error that is
  * not a section's own stops it: nothing new is started, the ones running finish, and the error is thrown.
  */
 async function pool<T>(items: readonly T[], limit: number, signal: AbortSignal | undefined, work: (item: T) => Promise<void>): Promise<void> {
