@@ -3,6 +3,8 @@ import { Prisma } from '@prisma/client';
 
 import { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
 
+import { orderedIds } from '../common/lock-order';
+import { loggedRetry, type TransactionRetryOptions, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { DEFAULT_CHECK_TIMEOUT_SECONDS, INTEGRATION_PROGRESS_V2_PROTOCOL } from './project-integration-job';
@@ -77,6 +79,53 @@ function leaseLimitSeconds(alias: string): Prisma.Sql {
                                 ${DEFAULT_CHECK_TIMEOUT_SECONDS})::int
                   ELSE 0 END
     END`;
+}
+
+/**
+ * §4.6 X-E5's fact as SQL: the FROM and WHERE through which both of `openLeaseExpiredItems`'
+ * statements find the claims that are due, over the aliases `leaseLimitSeconds` reads. One spelling,
+ * so the claims the tick takes the parents of and the claims it then writes items for are chosen by
+ * the same predicate.
+ */
+function leaseExpiredClaims(): Prisma.Sql {
+  return Prisma.sql`
+        FROM "project_integration_job" j
+        JOIN "project_codebase" cb ON cb."id" = j."codebase_id"
+        LEFT JOIN "session" s ON s."id" = j."session_id"
+        LEFT JOIN "task" acceptance_task ON acceptance_task."id" = s."task_id"
+        -- task_id is a foreign key on the item; the job's is a history reference (0423), so it is
+        -- written only while the row it names is there — the liveTaskId mapping the result path uses.
+        LEFT JOIN "task" live_task ON live_task."id" = j."task_id"
+        LEFT JOIN "project_promotion" p ON p."id" = j."promotion_id"
+        LEFT JOIN "project_landing" landing ON landing."id" = j."landing_id"
+        LEFT JOIN "runner" r ON r."id" = j."runner_id"
+       WHERE j."state" = 'RUNNING'
+         AND COALESCE(j."heartbeat_at", j."claimed_at") IS NOT NULL
+         -- One item per claim, ever (§4.2): a claim that reported and went silent again is the same
+         -- silence the owner was already told about, so an item already ended under this key is
+         -- not opened a second time. A takeover is a new key and asks afresh.
+         AND NOT EXISTS (
+           SELECT 1 FROM "project_open_item" seen
+            WHERE seen."project_id" = j."project_id"
+              AND seen."dedupe_key" = 'LE:' || j."id"::text || ':' || j."claim_generation"::text)
+         -- §7.2 V6's limit, plus X-E5's fifteen minutes.
+         AND EXTRACT(EPOCH FROM (now() - COALESCE(j."heartbeat_at", j."claimed_at")))
+             > (${leaseLimitSeconds('j')} + ${LANDING_LEASE_GRACE_SECONDS})
+         -- readInFlightJobs' own local-lock rule, spelled as it spells it: a job claimed at its last
+         -- report while an older job of the same runner, repository and ref still holds the
+         -- in-process lock is queueing, not lost. A NULL heartbeat is "not behind" there, so the
+         -- conjunction is COALESCEd rather than the column.
+         AND NOT COALESCE(
+           j."heartbeat_at" <= j."claimed_at"
+           AND EXISTS (
+             SELECT 1 FROM "project_integration_job" o
+               JOIN "project_codebase" ocb ON ocb."id" = o."codebase_id"
+              WHERE o."state" = 'RUNNING'
+                AND o."runner_id" = j."runner_id"
+                AND o."target_ref" = j."target_ref"
+                AND ocb."canonical_repo_url" = cb."canonical_repo_url"
+                AND o."claimed_at" < j."claimed_at"
+                AND o."id" <> j."id"), false)`;
 }
 
 /** One item the backstop closed, or found landed and left open, as its log line reads it. */
@@ -267,7 +316,7 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
 
   onModuleInit(): void {
     this.timer = setInterval(() => {
-      // Three statements, each with its own failure: the backstop first, so what the sweep then
+      // Three writes, each with its own failure: the backstop first, so what the sweep then
       // hands over is only what somebody still owes (and a backstop that failed does not cost the
       // sweep, which asks `openItemOwed` itself); then the sweep; then X-E5's lease alarm, which a
       // sweep that threw must not skip — a silent runner's card is the only warning there is.
@@ -334,14 +383,30 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
    * fifteen minutes. A job waiting its turn on its runner's local lock is not timed out, exactly as
    * `readInFlightJobs` decides it, so that queue is never mistaken for silence.
    *
-   * THE SHAPE. One `INSERT … SELECT … ON CONFLICT DO NOTHING RETURNING`, like the sweep: a statement
-   * that is its own compare-and-set. The partial unique index over OPEN items is the conflict
-   * target, so two apiservers ticking at the same moment open each item once, a tick a minute for an
-   * hour opens nothing after the first, and the caller therefore pushes once. A key already written
-   * and since settled is left alone too: one claim is one card, ever (§4.2), and a takeover writes a
-   * new generation's key. The SELECT reads each candidate job FOR SHARE, so a report or a result
-   * committing between its snapshot and the insert is waited for and then seen: a claim that is
-   * talking again does not get a card about its silence.
+   * THE SHAPE. The write is one `INSERT … SELECT … ON CONFLICT DO NOTHING RETURNING`, like the sweep:
+   * a statement that is its own compare-and-set. The partial unique index over OPEN items is the
+   * conflict target, so two apiservers ticking at the same moment open each item once, a tick a
+   * minute for an hour opens nothing after the first, and the caller therefore pushes once. A key
+   * already written and since settled is left alone too: one claim is one card, ever (§4.2), and a
+   * takeover writes a new generation's key. The SELECT reads each candidate job FOR SHARE, so a report
+   * or a result committing between its snapshot and the insert is waited for and then seen: a claim
+   * that is talking again does not get a card about its silence.
+   *
+   * THE LOCK ORDER (`common/lock-order.ts`). The item's foreign keys take its project (rank 40) and
+   * its task (rank 50) FOR KEY SHARE, and inside the insert they take them last — at the end of the
+   * statement, after the job (rank 60) is already held FOR SHARE. That is the one order J-T8's stop
+   * meets head-on: `task_reopen` holds the task FOR UPDATE and then ends the same job, so each side
+   * waited for the other until PostgreSQL aborted one (`landing-lease-expired.pg.spec.ts` (19) forces
+   * both orders), and a project delete — the project FOR UPDATE, then the job through its cascade — is
+   * the same cycle one rank up ((21)). So the insert has a transaction of its own: it reads which
+   * claims are due without a lock, takes those claims' projects and then their tasks FOR KEY SHARE,
+   * each sorted in one statement — the mode the keys take anyway, moved ahead of the job, as I2 moves
+   * a creator session ahead of a task write — and only then inserts, reading the jobs FOR SHARE in id
+   * order and only the claims whose parents it holds; one that came due in between is the next
+   * tick's. The promotion the item names (rank 60) is left to its key: nothing holds a candidate FOR
+   * UPDATE but that same project delete's cascade, which holds the project first. Retried whole on a
+   * conflict, since every read is inside the closure and the insert is its own compare-and-set;
+   * `retry` is where a caller watches that.
    *
    * WHAT IT WRITES. The item and nothing else: `OWNER` / `ESCALATED` from birth, `escalated_at` at
    * the opening instant, and `escalate_at` / `remind_at` NULL (it is already the owner's, and there
@@ -355,8 +420,31 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
    * a report, a release, a takeover's first report, any terminal state. A generation that changed
    * without one of those edges leaves an item `reconcile` closes as not owed.
    */
-  async openLeaseExpiredItems(): Promise<OpenedLeaseItem[]> {
-    const opened = await this.prisma.$queryRaw<OpenedLeaseItem[]>(Prisma.sql`
+  async openLeaseExpiredItems(
+    retry: TransactionRetryOptions = loggedRetry(this.logger, 'openItemEscalation.openLeaseExpiredItems'),
+  ): Promise<OpenedLeaseItem[]> {
+    const opened = await withTransactionRetry(this.prisma, async (tx) => {
+      // Which claims are due, read without a lock: what the parents below are taken for.
+      const due = await tx.$queryRaw<Array<{ jobId: string; projectId: string; taskId: string | null }>>(Prisma.sql`
+        SELECT j."id" AS "jobId", j."project_id" AS "projectId", live_task."id" AS "taskId"
+        ${leaseExpiredClaims()}`);
+      if (due.length === 0) return [];
+      // The parents the item's foreign keys take, in rank order and before the job: the projects
+      // (40), then the tasks that are still there (50), each sorted in one statement.
+      await tx.$queryRaw(Prisma.sql`
+        SELECT "id" FROM "project"
+         WHERE "id" = ANY(${orderedIds(due.map((claim) => claim.projectId))}::uuid[])
+         ORDER BY "id"
+           FOR KEY SHARE`);
+      const taskIds = orderedIds(due.map((claim) => claim.taskId));
+      if (taskIds.length > 0) {
+        await tx.$queryRaw(Prisma.sql`
+          SELECT "id" FROM "task"
+           WHERE "id" = ANY(${taskIds}::uuid[])
+           ORDER BY "id"
+             FOR KEY SHARE`);
+      }
+      return tx.$queryRaw<OpenedLeaseItem[]>(Prisma.sql`
       INSERT INTO "project_open_item" (
         "id", "project_id", "owner_id", "kind", "assignee", "assignee_reason",
         "task_id", "session_id", "integration_job_id", "promotion_id",
@@ -401,50 +489,18 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
                                 AND j."push_reported_generation" = j."claim_generation"),
                'landingSessionId', landing."session_id"::text),
              now(), now(), now(), NULL, NULL
-        FROM "project_integration_job" j
-        JOIN "project_codebase" cb ON cb."id" = j."codebase_id"
-        LEFT JOIN "session" s ON s."id" = j."session_id"
-        LEFT JOIN "task" acceptance_task ON acceptance_task."id" = s."task_id"
-        -- task_id is a foreign key on the item; the job's is a history reference (0423), so it is
-        -- written only while the row it names is there — the liveTaskId mapping the result path uses.
-        LEFT JOIN "task" live_task ON live_task."id" = j."task_id"
-        LEFT JOIN "project_promotion" p ON p."id" = j."promotion_id"
-        LEFT JOIN "project_landing" landing ON landing."id" = j."landing_id"
-        LEFT JOIN "runner" r ON r."id" = j."runner_id"
-       WHERE j."state" = 'RUNNING'
-         AND COALESCE(j."heartbeat_at", j."claimed_at") IS NOT NULL
-         -- One item per claim, ever (§4.2): a claim that reported and went silent again is the same
-         -- silence the owner was already told about, so an item already ended under this key is
-         -- not opened a second time. A takeover is a new key and asks afresh.
-         AND NOT EXISTS (
-           SELECT 1 FROM "project_open_item" seen
-            WHERE seen."project_id" = j."project_id"
-              AND seen."dedupe_key" = 'LE:' || j."id"::text || ':' || j."claim_generation"::text)
-         -- §7.2 V6's limit, plus X-E5's fifteen minutes.
-         AND EXTRACT(EPOCH FROM (now() - COALESCE(j."heartbeat_at", j."claimed_at")))
-             > (${leaseLimitSeconds('j')} + ${LANDING_LEASE_GRACE_SECONDS})
-         -- readInFlightJobs' own local-lock rule, spelled as it spells it: a job claimed at its last
-         -- report while an older job of the same runner, repository and ref still holds the
-         -- in-process lock is queueing, not lost. A NULL heartbeat is "not behind" there, so the
-         -- conjunction is COALESCEd rather than the column.
-         AND NOT COALESCE(
-           j."heartbeat_at" <= j."claimed_at"
-           AND EXISTS (
-             SELECT 1 FROM "project_integration_job" o
-               JOIN "project_codebase" ocb ON ocb."id" = o."codebase_id"
-              WHERE o."state" = 'RUNNING'
-                AND o."runner_id" = j."runner_id"
-                AND o."target_ref" = j."target_ref"
-                AND ocb."canonical_repo_url" = cb."canonical_repo_url"
-                AND o."claimed_at" < j."claimed_at"
-                AND o."id" <> j."id"), false)
+        ${leaseExpiredClaims()}
+         -- Only the claims whose parents this transaction holds.
+         AND j."id" = ANY(${due.map((claim) => claim.jobId)}::uuid[])
       -- A report or a result that commits between this statement's snapshot and its insert must not
       -- leave a card about a claim that is talking again: the job row is read FOR SHARE, which waits
       -- for the report transaction (it holds the row FOR NO KEY UPDATE), and under READ COMMITTED
-      -- the re-check sees the renewed heartbeat and drops the row.
+      -- the re-check sees the renewed heartbeat and drops the row. In id order, like the parents.
+      ORDER BY j."id"
       FOR SHARE OF j
       ON CONFLICT ("project_id", "dedupe_key") WHERE "state" = 'OPEN' DO NOTHING
       RETURNING "id" AS "itemId", "project_id" AS "projectId", "owner_id" AS "ownerId"`);
+    }, retry);
     for (const item of opened) {
       this.logger.warn(`opened ${LANDING_LEASE_EXPIRED_KIND} ${item.itemId} of project `
         + `${item.projectId}: the runner stopped reporting`);

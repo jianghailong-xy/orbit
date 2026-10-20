@@ -181,10 +181,19 @@ export const LOCK_ORDER = [
       + 'projects cannot take the same pair in opposite orders. No other taker exists: the detail '
       + 'read only SELECTs it, and the UPDATE branch nets inserted against deleted, so a statement '
       + 'that moves no task between projects reaches this table not at all. '
-      + 'X-E5\'s clock (§4.6) is the same rank: one INSERT … SELECT that reads '
-      + '`project_integration_job` without a lock and writes one `project_open_item` child per claim '
-      + 'whose lease has expired for more than fifteen minutes, and the job gates that end such an '
-      + 'item write it inside their own rank-60 transactions — none of them waits on a session lock.',
+      + 'X-E5\'s clock (§4.6) is the same rank, and its item is a child whose parents the clock takes '
+      + 'itself, since nothing else holds them: the INSERT … SELECT reads `project_integration_job` FOR '
+      + 'SHARE — so a report committing under it is waited for and seen — and writes one '
+      + '`project_open_item` per claim whose lease has expired for more than fifteen minutes, whose '
+      + 'foreign keys take the project (40) and the task (50) FOR KEY SHARE. Left to the insert, those '
+      + 'came after the job and closed a cycle with J-T8\'s stop (`task_reopen` holds the task FOR '
+      + 'UPDATE and then ends the same job) and with a project delete (the project FOR UPDATE, then the '
+      + 'job through its cascade); `landing-lease-expired.pg.spec.ts` (19) and (21) force both. So the '
+      + 'tick is a transaction of its own that takes the due claims\' projects and then their tasks FOR '
+      + 'KEY SHARE, each sorted in one statement, before the insert takes the jobs FOR SHARE in id order; '
+      + 'the promotion its key takes at this rank is held FOR UPDATE by nothing but that delete\'s '
+      + 'cascade, after the project. It takes no session lock — the item\'s `session_id` is history, not '
+      + 'a key — and the job gates that end such an item write it inside their own rank-60 transactions.',
   },
   {
     rank: 70,
