@@ -110,6 +110,8 @@ final class LandingRerunDoorTests: XCTestCase {
     }
 
     /// The merge card's door is the same request, naming the card instead (web's `RERUN_CHECK_REASON`).
+    /// This holds that APIClient sends the reason it is given, verbatim; which reason each OrbitApp
+    /// door passes is pinned in `LandingViewsWiringTests.testEachReRunDoorSendsItsOwnReason`.
     func testTheMergeCardsReRunNamesTheCard() async throws {
         let recorder = Recorder()
         LandingRerunURLProtocol.handler = { request in

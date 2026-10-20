@@ -139,6 +139,32 @@ final class LandingViewsWiringTests: XCTestCase {
         XCTAssertTrue(chip.contains("orbit-session:"))
     }
 
+    /// Each Re-run the check door names its own sentence, as web's two doors do: the merge card on
+    /// the project sessions page sends the merge card's, the landing page the landing page's.
+    /// APIClient only forwards the reason it is given, so the choice is pinned here, at the doors.
+    func testEachReRunDoorSendsItsOwnReason() throws {
+        let collapse = { (text: String) in text.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+        let card = code(try appSource("Views/SessionProjectPage.swift"))
+        XCTAssertTrue(collapse(card).contains("try await app.rerunPromotionCheck(address.projectID, promotionID: promotionID, reason: LandingPageCopy.rerunCheckReason)"),
+                      "the merge card's Re-run the check names the merge card")
+        XCTAssertFalse(card.contains("rerunLandingCheckReason"), "the merge card never sends the landing page's sentence")
+        let page = code(try appSource("Views/LandingSessionPageView.swift"))
+        XCTAssertTrue(collapse(page).contains("try await api.rerunPromotionCheck(projectID: landing.projectId, promotionID: promotionID, reason: LandingPageCopy.rerunLandingCheckReason)"),
+                      "the landing page's Re-run the check names the landing page")
+        XCTAssertFalse(page.contains("LandingPageCopy.rerunCheckReason"), "the landing page never sends the merge card's sentence")
+    }
+
+    /// The timeline's marks read each line's structured fields, as web and Android do: the ✓ and
+    /// the inline output come from `checkPassed` / `succeeded`, never from the sentence's words.
+    func testTheTimelinesMarksReadTheLinesFields() throws {
+        let page = code(try appSource("Views/LandingSessionPageView.swift"))
+        XCTAssertTrue(page.contains("} else if entry.kind == \"CHECK_FINISHED\", let check = entry.check, !entry.checkPassed {"))
+        XCTAssertTrue(page.contains("return entry.succeeded ? Mark(glyph: \"✓\", color: .green) : Mark(glyph: \"✗\", color: .red)"))
+        for words in ["contains(\"passed\")", "\"Nothing to push\"", "\"Already\"", "hasPrefix("] {
+            XCTAssertFalse(page.contains(words), "the page still reads a line's words: \(words)")
+        }
+    }
+
     /// The page's own reads: `includeLanding=1` on the project list, the landing's own cadence, and
     /// the last inFlight snapshot kept for a page that cannot reach the server.
     func testTheLandingReadsAreWired() throws {
