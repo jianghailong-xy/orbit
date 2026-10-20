@@ -5341,6 +5341,19 @@ final class ConsoleModel {
         }
     }
 
+    /// End the timed-out attempt an X-E5 item is about (J-T10): the card's own lead door. The item
+    /// and the project's landings are read again afterwards, as the Retry does.
+    func abandonIntegration(_ row: ProjectOpenItemRow) async {
+        guard let projectID, let jobID = row.integrationJobId, !jobID.isEmpty,
+              ExceptionCards.addressed(row, .abandon) else { return }
+        do {
+            try await api.abandonIntegrationJob(projectID: projectID, jobID: jobID)
+            await refreshRulerQuestions(force: true)
+        } catch {
+            statusMessage = "\(ExceptionCards.abandonFailed) — \(APIClient.failureReason(error))."
+        }
+    }
+
     /// The merge candidate whose card this conversation has delivered, or nil when it has none.
     ///
     /// The browser's `currentPromotionId`, which is what decides whether a `Review` door is drawn

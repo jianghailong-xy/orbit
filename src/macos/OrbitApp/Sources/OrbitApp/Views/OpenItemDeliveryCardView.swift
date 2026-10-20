@@ -225,6 +225,12 @@ struct OpenItemDeliveryCardView: View {
                 Button(OpenItemDeliveryCard.openSession) { openURL(url) }
                     .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
             }
+            // The landing this failure came from (§2.9 LS6, board v4 06 b): the third link, after
+            // the two main's card already had. A delivery whose item recorded none draws nothing.
+            if let url = OpenItemDeliveryCard.landingLink(card) {
+                Button(OpenItemDeliveryCard.openLanding) { openURL(url) }
+                    .buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.tint)
+            }
             Spacer(minLength: 0)
         }
     }

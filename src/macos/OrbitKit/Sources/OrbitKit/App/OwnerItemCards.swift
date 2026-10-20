@@ -1378,6 +1378,8 @@ public enum ExceptionCards {
     /// `ABANDON_MAY_HAVE_PUSHED`.
     public static let abandonMayHavePushed =
         "Ends this attempt. It may have been pushed, and nothing is queued again."
+    /// What a refused Abandon says — the browser's `ABANDON_FAILED`.
+    public static let abandonFailed = "The attempt was not ended"
     /// The same press said of a candidate's check: a re-run re-checks the CURRENT candidate with
     /// the reason the reader gives — the browser's `PROMOTION_RETRY_CONSEQUENCE`.
     public static let promotionRetryConsequence =

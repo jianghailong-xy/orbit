@@ -597,6 +597,29 @@ final class LandingSessionPageTests: XCTestCase {
         XCTAssertFalse(card.running)
     }
 
+    func testAnOfflinePlaceholderFreezesTheClockAndOpensNothing() throws {
+        let inFlight = ProjectIntegrationInFlight(
+            taskTitle: "Ledger migration order", state: "RUNNING", startedAt: at(14, 56, 40),
+            kind: "LAND_TASK", phase: "CHECK", heartbeatAt: at(14, 58, 30), jobId: "job-1",
+            taskId: "task-1", runner: "wikova", claim: 1, round: 1,
+            check: ProjectIntegrationCheck(name: "MERGE_CHECK", index: 1, count: 3,
+                                           budgetSeconds: 3_600, startedAt: step),
+            liveness: "LIVE")
+        let view = try XCTUnwrap(LandingPageCopy.offlinePlaceholder(
+            sessionId: "landing-1", projectId: "project-1", inFlight: inFlight))
+        XCTAssertEqual(view.sessionId, "landing-1")
+        XCTAssertEqual(view.currentAttempt?.jobId, "job-1")
+        let card = try XCTUnwrap(LandingPageCopy.attemptCard(
+            view, now: now, updatedAt: nil, failed: true))
+        XCTAssertEqual(card.state, "Update unavailable")
+        XCTAssertEqual(card.detail, "Update unavailable")
+        XCTAssertFalse(card.running)
+        XCTAssertFalse(card.timedOut)
+        XCTAssertEqual(LandingPageCopy.gates(view, now: now, updatedAt: nil, failed: true), .none)
+        XCTAssertNil(LandingPageCopy.offlinePlaceholder(sessionId: "s", projectId: nil,
+                                                         inFlight: nil))
+    }
+
     func testAConflictAndAnErrorSayWhatStoppedThem() {
         let conflict = LandingPageCopy.attemptCard(
             landing { $0.currentAttempt = attempt { $0.state = "CONFLICT" } },

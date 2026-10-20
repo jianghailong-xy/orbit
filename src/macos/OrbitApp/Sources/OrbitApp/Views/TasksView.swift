@@ -1234,6 +1234,7 @@ private struct TaskDetailContent: View {
             await model.watches?.load()
         }
         .task(id: detailPollKey) { await pollBusyDetail() }
+        .task(id: landingPollKey) { await pollLanding() }
         .task(id: taskID) {
             guard let baseURL = model.baseURL else { return }
             // Nil when it could not be read: the menu then says nothing rather than guessing.
@@ -1293,6 +1294,27 @@ private struct TaskDetailContent: View {
         return "\(taskID)|\(busy)"
     }
 
+    /// §2.7a's cadence for the Landing section: a landing that RUNS is read every 4 s, a queued one
+    /// every 15 s. The key changes when the attempt's state does, restarting the loop at the new
+    /// pace — and the loop stops once the landing settles.
+    private var landingPollKey: String {
+        let pace = TaskLandingCopy.refetchInterval(tasks.detail?.id == taskID
+            ? tasks.detail?.integration : nil)
+        return "\(taskID)|\(pace.map { String($0) } ?? "none")"
+    }
+
+    private func pollLanding() async {
+        while !Task.isCancelled {
+            guard tasks.detail?.id == taskID,
+                  let interval = TaskLandingCopy.refetchInterval(tasks.detail?.integration)
+            else { return }
+            do { try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000)) }
+            catch { return }
+            guard tasks.detail?.id == taskID else { return }
+            _ = await tasks.loadDetail(taskID)
+        }
+    }
+
     private func loadDetail() async {
         let loaded = await tasks.loadDetail(taskID)
         if !loaded, tasks.detailMissing, model.selectedTaskID == taskID {
@@ -1340,6 +1362,11 @@ private struct TaskDetailContent: View {
             }
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
+            // Where the task's work stands after DONE (§2.7a): the newest landing attempt and why
+            // it waits or where it stopped, apart from the status above — the web's first block.
+            if let landing = TaskLandingLogic.status(task.integration, taskStatus: task.status.rawValue) {
+                landingSection(landing)
+            }
             // A row settled by a check always gets the card — with the check, or with the fact that
             // there isn't one. That empty state is where a reader otherwise reads the header hint's
             // sentence and finds nothing behind it.
@@ -1433,6 +1460,77 @@ private struct TaskDetailContent: View {
         .padding(.vertical, 3)
         .overlay(Capsule().strokeBorder((chip.isGate ? Color.orange : Color.secondary).opacity(0.35), lineWidth: 0.5))
         .background(chip.isGate ? Color.orange.opacity(0.1) : Color.clear, in: Capsule())
+    }
+
+    /// The task's Landing section, in the web's `LandTaskStatus` words: the badge, the generation,
+    /// the step it is on or stopped at, the reason, and the six facts — then the one way into the
+    /// segment's landing session.
+    private func landingSection(_ status: TaskLandingStatus) -> some View {
+        Section(TaskLandingCopy.landingSection) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
+                    if let badge = status.badge {
+                        Text(badge.label)
+                            .font(.orbitLabel.weight(.semibold))
+                            .foregroundStyle(ink(badge.tone))
+                            .padding(.horizontal, 8).padding(.vertical, 2)
+                            .background(ink(badge.tone).opacity(0.14), in: Capsule())
+                    }
+                    if let generation = status.generation {
+                        Text("\(TaskLandingCopy.generation) \(generation)")
+                            .font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                    if let step = status.step {
+                        Text(step).font(.orbitMeta).foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                if let legacy = status.legacy {
+                    Text(legacy).font(.orbitMeta).foregroundStyle(.secondary)
+                }
+                if let noReport = status.noReport {
+                    Text(noReport).font(.orbitMeta.weight(.semibold)).foregroundStyle(.orange)
+                }
+                if let reason = status.reason {
+                    Text(reason).font(.orbitMeta).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if let receipt = status.receipt {
+                    Text(receipt).font(.orbitMeta).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !status.facts.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(status.facts, id: \.label) { fact in
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Text(fact.label)
+                                    .font(.orbitMeta).foregroundStyle(.secondary)
+                                    .frame(width: 92, alignment: .leading)
+                                Text(fact.value)
+                                    .font(.orbitMeta.monospacedDigit())
+                                    .lineLimit(1).truncationMode(.middle)
+                            }
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+                if let sessionID = status.landingSessionId, !sessionID.isEmpty {
+                    LandingEntryLink(entry: .link(sessionID), compact: false)
+                        .padding(.top, 2)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func ink(_ tone: String) -> Color {
+        switch tone {
+        case "amber": return .orange
+        case "blue": return .blue
+        case "green": return .green
+        case "red": return .red
+        default: return .secondary
+        }
     }
 
     /// What went wrong the last time, above the presses it is about.

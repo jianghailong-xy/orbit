@@ -296,8 +296,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let app = code(try appSource("AppModel.swift"))
         let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
         XCTAssertFalse(load.contains("async let"), "project session reads must avoid async-let teardown")
-        XCTAssertTrue(load.contains("let openRead = Task { try await api.listSessions(view: .open,"))
-        XCTAssertTrue(load.contains("let completedRead = Task { try await api.listSessions(view: .completed,"))
+        XCTAssertTrue(load.contains("let openRead = Task {"))
+        XCTAssertTrue(load.contains("try await api.listSessions(view: .open, projectId: address.projectID,"))
+        XCTAssertTrue(load.contains("let completedRead = Task {"))
+        XCTAssertTrue(load.contains("try await api.listSessions(view: .completed, projectId: address.projectID,"))
         XCTAssertTrue(load.contains("defer {\n                openRead.cancel()\n                completedRead.cancel()\n            }"))
         XCTAssertTrue(load.contains("let rows = try await openRead.value + completedRead.value"))
     }
@@ -305,13 +307,16 @@ final class SessionProjectPageWiringTests: XCTestCase {
     func testThePageLoadsOpenAndCompletedAcrossAllWorkspacesAndDeduplicates() throws {
         let app = code(try appSource("AppModel.swift"))
         let load = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {", to: "\n    }")
-        XCTAssertTrue(load.contains("api.listSessions(view: .open, projectId: address.projectID)"))
-        XCTAssertTrue(load.contains("api.listSessions(view: .completed, projectId: address.projectID)"))
+        XCTAssertTrue(load.contains("api.listSessions(view: .open, projectId: address.projectID,"))
+        XCTAssertTrue(load.contains("includeLanding: true)"),
+                      "the page's own widening (§2.9 LS6): the Landings group is folded from these rows")
+        XCTAssertTrue(load.contains("api.listSessions(view: .completed, projectId: address.projectID,"))
         XCTAssertTrue(load.contains("let rows = try await openRead.value + completedRead.value"))
-        XCTAssertTrue(load.contains("let kept = SessionFilter.removing(trashingSessions, from: rows)\n"
-                                    + "            projectSessions = SessionProjectMembers.members(of: address.projectID, in: kept)"),
+        XCTAssertTrue(load.contains("let kept = SessionFilter.removing(trashingSessions, from: rows)"))
+        XCTAssertTrue(load.contains("projectSessions = SessionProjectMembers.members(of: address.projectID, in: kept)")
+                      && load.contains("+ landedRows(of: address.projectID, in: kept)"),
                       "one rule — this project's, never Trash, each once, newest first (SessionProjectMembersTests) — "
-                        + "over the read less the rows on their way to Trash")
+                        + "over the read less the rows on their way to Trash, plus the landing rows the group lists")
         XCTAssertFalse(load.contains("view: address.view"))
         XCTAssertFalse(load.contains("view: .trash"))
         XCTAssertFalse(load.contains("agentID:"))
@@ -671,13 +676,15 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let opened = try XCTUnwrap(load.range(of: "projectSessions = SessionProjectMembers.members("))
         let read = try XCTUnwrap(load.range(of: "let rows = try await openRead.value + completedRead.value"))
         XCTAssertLessThan(opened.lowerBound, read.lowerBound, "the members are in hand before any read answers")
-        XCTAssertTrue(load.contains("projectCompletedSessions[key] = projectSessions.filter { $0.effectiveLifecycleState != .open }"),
+        XCTAssertTrue(load.contains("projectCompletedSessions[key] = SessionProjectMembers.members(of: address.projectID, in: kept)")
+                      && load.contains(".filter { $0.effectiveLifecycleState != .open }"),
                       "coming back to the project opens on its Completed members too")
 
         let source = code(try appSource("Views/SessionProjectPage.swift"))
         let page = try slice(source, from: "struct SessionProjectPage: View {", to: "\n}\n")
-        XCTAssertTrue(page.contains("private var sessions: [Session] { app.projectSessionsAddress == address ? app.projectSessions : [] }"),
-                      "another address's rows are never drawn as this page's")
+        XCTAssertTrue(page.contains("private var sessions: [Session] {")
+                      && page.contains("(app.projectSessionsAddress == address ? app.projectSessions : []).filter { !$0.isLanding }"),
+                      "another address's rows are never drawn as this page's, and a landing row is no member")
         let title = try slice(page, from: "private var title: some View {", to: "\n    }")
         XCTAssertFalse(title.contains("app.projectSessionsLoading"),
                        "the first frame, before the page's load has begun, counts nothing")
@@ -718,13 +725,16 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertTrue(members.contains("guard projectSessionsError == nil, let readAt = projectSessionsReadAt, openListAnswered else {\n"
                                        + "            return await loadProjectSessions(address)\n        }"),
                       "until a read has answered, or before the server answered the app's Open list, a poll is the read")
-        XCTAssertTrue(members.contains("SessionProjectMembers.poll(shown: projectSessions, projectID: address.projectID,"))
+        XCTAssertTrue(members.contains("SessionProjectMembers.poll(")
+                      && members.contains("shown: projectSessions.filter { !$0.isLanding },"))
         XCTAssertTrue(members.contains("openList: sessions"))
-        XCTAssertTrue(members.contains("if poll.members != projectSessions { projectSessions = poll.members }"),
+        XCTAssertTrue(members.contains("if polled != projectSessions { projectSessions = polled }"),
                       "a poll that changed nothing redraws nothing")
         XCTAssertFalse(members.contains("view: .open"), "the Open members are the app's Open list's")
         let due = try XCTUnwrap(members.range(of: "guard poll.moved || Date().timeIntervalSince(readAt) >= SessionProjectMembers.completedRefresh else { return }"))
-        let completed = try XCTUnwrap(members.range(of: "try await api.listSessions(view: .completed, projectId: address.projectID)"))
+        let completed = try XCTUnwrap(members.range(of: "try await api.listSessions(view: .completed, projectId: address.projectID,"))
+        XCTAssertTrue(members.contains("includeLanding: true"),
+                      "the refresh keeps the landing rows the group lists current")
         XCTAssertLessThan(due.lowerBound, completed.lowerBound, "the Completed list is asked for only when it may have moved")
         XCTAssertFalse(members.contains("async let"))
 
@@ -799,8 +809,10 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let app = code(try appSource("AppModel.swift"))
         let load = try slice(app, from: "func loadProjectStart(_ address: SessionProjectAddress) async {",
                              to: "\n    }")
-        XCTAssertTrue(load.contains("guard row?.status == .open, row?.started == false else {"),
-                      "a started project's page reads nothing more than before")
+        XCTAssertTrue(load.contains("guard row?.status == .open, row?.started == false || landingWaits else {"),
+                      "a started project's page reads nothing more than before — unless a landing waits")
+        XCTAssertTrue(load.contains("$0.isLanding && $0.landing?.state == \"AWAITING_DECISION\""),
+                      "the Landings group's holder is the same read the start row already makes")
         XCTAssertTrue(load.contains("api.projectOpenItems(projectID: address.projectID)"))
         XCTAssertTrue(load.contains("projectSessionsAddress == address, !Task.isCancelled"))
         XCTAssertFalse(load.contains("async let"))

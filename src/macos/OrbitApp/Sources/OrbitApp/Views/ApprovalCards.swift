@@ -4439,8 +4439,29 @@ private struct OwnerItemCardView: View {
             guard let promotionID = row.promotionId,
                   console.mergeCardPromotionID == promotionID else { return nil }
             return { PlatformHaptics.tap(); console.revealPromotionCard(promotionID) }
+        case .openLanding:
+            // A reading door: the landing this item is about, opened through the app's own
+            // `orbit-session:` route — the same door the delivery card's third link uses.
+            guard let url = ExceptionCards.landingLink(row) else { return nil }
+            return { PlatformHaptics.tap(); openURL(url) }
+        case .abandon:
+            // §4.6 X-E5's lead: end the attempt whose runner stopped reporting (J-T10).
+            guard ExceptionCards.addressed(row, .abandon) else { return nil }
+            return { abandon(row) }
         default:
             return nil
+        }
+    }
+
+    /// The Abandon press: no second press while it is on its way, and the console re-reads what
+    /// the card was drawn from.
+    private func abandon(_ row: ProjectOpenItemRow) {
+        guard !sending else { return }
+        PlatformHaptics.tap()
+        sending = true
+        Task {
+            await console.abandonIntegration(row)
+            sending = false
         }
     }
 
@@ -4987,6 +5008,11 @@ struct PromotionReceiptSheet: View {
                         if let undo = PromotionCards.revertLine(promotion) {
                             CardRow(label: "Undo", value: undo)
                         }
+                    }
+                    // The receipt's foot still opens the round's landing (方案 A): the merge
+                    // happened, and every attempt is still read there.
+                    if let landingID = ProjectMergeCard.receiptLandingSessionId(promotion) {
+                        LandingEntryLink(entry: .link(landingID), compact: false)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

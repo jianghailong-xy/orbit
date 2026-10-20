@@ -212,6 +212,14 @@ public enum ProjectPage {
         /// The line under the title: the state, what the job waited for a runner before its clock
         /// began, and where the reports stand — "checking · waited 1m 20s · updated just now".
         public let detail: String
+
+        /// A head a view composes itself — the landing page's status card, whose two slots come
+        /// from `LandingPageCopy.attemptCard` rather than from a project integration row.
+        public init(right: String, isClock: Bool, detail: String) {
+            self.right = right
+            self.isClock = isClock
+            self.detail = detail
+        }
     }
     public struct LandingJobLine: Equatable, Sendable, Identifiable {
         public let jobId: String

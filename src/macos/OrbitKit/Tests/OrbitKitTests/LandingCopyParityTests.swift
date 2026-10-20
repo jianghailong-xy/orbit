@@ -227,6 +227,8 @@ final class LandingCopyParityTests: XCTestCase {
         }
         assertSays(web, "export const ABANDON_MAY_HAVE_PUSHED = '\(ExceptionCards.abandonMayHavePushed)';",
                    in: Self.progressStatus)
+        assertSays(web, "export const ABANDON_FAILED = '\(ExceptionCards.abandonFailed)';",
+                   in: Self.progressStatus)
         // §4.6 X-E5: escalated at birth, its heading counts the claim's silence.
         assertSays(web, "'Now yours — no report from the runner'", in: Self.progressStatus)
         assertSays(web, "`Now yours — no report from the runner for ${silent}m`",

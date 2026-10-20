@@ -885,6 +885,31 @@ public extension LandingPageCopy {
         guard let landingSessionId, !landingSessionId.isEmpty else { return .noPage }
         return .link(landingSessionId)
     }
+
+    /// The read-only page a device that cannot reach the server opens from the inFlight snapshot it
+    /// already holds: the attempt as the integration read last described it, with the clock frozen,
+    /// `Update unavailable` in the head, and — by `gates`' own rule for a failed read — no door.
+    /// Nil when nothing was cached, which leaves the page's own "Update unavailable" note.
+    static func offlinePlaceholder(sessionId: String, projectId: String?,
+                                   inFlight: ProjectIntegrationInFlight?) -> SessionLandingView? {
+        guard let inFlight else { return nil }
+        let attempt = SessionLandingAttempt(
+            jobId: inFlight.jobId ?? "", kind: inFlight.kind ?? "", state: inFlight.state,
+            generation: 1, phase: inFlight.phase, round: inFlight.round, claim: inFlight.claim ?? 0,
+            runnerName: inFlight.runner, sourceSessionId: inFlight.taskId,
+            targetRef: "", startedAt: inFlight.startedAt, heartbeatAt: inFlight.heartbeatAt,
+            outputMovedAt: inFlight.outputMovedAt, progressProtocol: inFlight.progressProtocol,
+            check: inFlight.check.map {
+                LandingAttemptCheck(name: $0.name, index: $0.index, count: $0.count,
+                                    budgetSeconds: $0.budgetSeconds, startedAt: $0.startedAt)
+            },
+            liveness: inFlight.liveness, blockingReason: inFlight.blockingReason,
+            timedOut: false, limitSeconds: nil, retryable: false, pushBoundaryPassed: false)
+        return SessionLandingView(
+            sessionId: sessionId, projectId: projectId ?? "", subject: "TASK",
+            taskId: inFlight.taskId, openedAt: inFlight.startedAt,
+            currentAttempt: attempt)
+    }
 }
 
 /// A landing entrance's two answers: a session id to open, or the fact that this server names none.
