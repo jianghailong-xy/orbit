@@ -1,0 +1,3 @@
+failed: in view after 0 move(s) at (50.0, 519.0, 321.6666666666667, 141.66666666666674)
+failed: landing log reads
+23:24:01 "GET /api/sessions/L1/landing/log?jobId=jL&claim=1&round=1&check=1 HTTP/1.1" 200 -

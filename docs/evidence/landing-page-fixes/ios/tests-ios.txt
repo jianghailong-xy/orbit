@@ -1,0 +1,10 @@
+Test Case '-[LandingSessionProbeUITests.LandingPageFixesTests testIPhoneEarlierFoldOpensFromTheEmptyMiddleOfItsRow]' started.
+Test Case '-[LandingSessionProbeUITests.LandingPageFixesTests testIPhoneEarlierFoldOpensFromTheEmptyMiddleOfItsRow]' passed (81.982 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingPageFixesTests testIPhoneFailedCheckOutputLoadsInline]' started.
+Test Case '-[LandingSessionProbeUITests.LandingPageFixesTests testIPhoneFailedCheckOutputLoadsInline]' passed (20.911 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingPageFixesTests testIPhoneMergeCheckThatEndedReadyDrawsACheckmark]' started.
+Test Case '-[LandingSessionProbeUITests.LandingPageFixesTests testIPhoneMergeCheckThatEndedReadyDrawsACheckmark]' passed (27.718 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 130.610 (130.623) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 130.610 (130.626) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 130.610 (130.628) seconds
+** TEST SUCCEEDED **
