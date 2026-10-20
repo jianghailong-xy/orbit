@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient, RunStatus, RunnerStatus } from '@prisma/client';
 import { Client } from 'pg';
 
@@ -48,7 +49,11 @@ import { ProjectPromotionService } from './project-promotion.service';
  *     stored;
  *   * the page read narrows by job, claim, round and check, and a cursor continues it;
  *   * a landing session's log is the reader's: another account's session, a session that is not a
- *     landing, and another landing's job are all 404.
+ *     landing, and another landing's job are all 404;
+ *   * the chunk holds its job row FOR NO KEY UPDATE: the FOR KEY SHARE a child row's foreign key
+ *     takes on that row, held open by another transaction, does not hold a chunk up, and a DELETE
+ *     of the job (FOR UPDATE) still does. Both races are driven from a second connection and the
+ *     wait is read from pg_stat_activity, so neither case sleeps to make its interleaving.
  *
  *   bash scripts/run-pg-spec.sh src/apiserver/src/projects/integration-job-log.pg.spec.ts
  *
@@ -421,6 +426,153 @@ test("a landing session's log is the reader's; another account's session, anothe
       /integration job not found/,
     );
   } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+/** A client that keeps every statement it sends, for a case to read the lock clause it took from. */
+function loggedClient(url: string): { db: PrismaClient; prisma: PrismaService; statements: string[] } {
+  const statements: string[] = [];
+  const db = new PrismaClient({ adapter: new PrismaPg(url), log: [{ emit: 'event', level: 'query' }] });
+  (db as unknown as { $on: (event: 'query', listener: (query: { query: string }) => void) => void })
+    .$on('query', (query) => statements.push(query.query));
+  return { db, prisma: db as unknown as PrismaService, statements };
+}
+
+/**
+ * Which comes first for the call under test: it settles, or it waits on a lock. A backend of this
+ * database other than the asking one that waits on a lock can only be that call — every spec file
+ * has a database of its own, its cases run one at a time, and the side connection holding the lock
+ * is not waiting. Bounded, so a case whose call does neither is red rather than hung.
+ */
+async function settlesOrWaits(db: PrismaClient, settled: () => boolean): Promise<'SETTLED' | 'WAITING' | 'NEITHER'> {
+  const deadline = Date.now() + 15_000;
+  while (Date.now() < deadline) {
+    if (settled()) return 'SETTLED';
+    const [row] = await db.$queryRaw<Array<{ n: number }>>`
+      SELECT count(*)::int AS "n" FROM pg_stat_activity
+       WHERE "wait_event_type" = 'Lock' AND "datname" = current_database() AND "pid" <> pg_backend_pid()`;
+    if ((row?.n ?? 0) > 0) return 'WAITING';
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  return settled() ? 'SETTLED' : 'NEITHER';
+}
+
+/** A second connection, proven to be this spec's own database before it takes anything. */
+async function sideConnection(): Promise<Client> {
+  const side = new Client({ connectionString: URL, connectionTimeoutMillis: 5_000 });
+  await side.connect();
+  await verifyCoordinatorPgIdentity(side);
+  return side;
+}
+
+test("a chunk is accepted while another transaction holds its job row FOR KEY SHARE, as a child row's foreign key does", { skip, concurrency: 1 }, async () => {
+  assertCoordinatorPgUrlIsIsolated(URL);
+  const stack = await connect();
+  const logged = loggedClient(URL);
+  const side = await sideConnection();
+  let chunk: Promise<unknown> | undefined;
+  try {
+    const w = await world(stack, 'key-share');
+    await doneTask(stack, w, 'key-share');
+    const job = await claim(stack, w);
+    // What the INSERT of a timeline fact or an item takes on the job row through its foreign key,
+    // held open by a transaction that has not finished.
+    await side.query('BEGIN');
+    await side.query(
+      'SELECT 1 FROM "project_integration_job" WHERE "id" = $1::uuid FOR KEY SHARE',
+      [job.jobId],
+    );
+    let settled = false;
+    const sent = receiveIntegrationJobOutput(logged.prisma, {
+      jobId: job.jobId,
+      runnerId: w.runnerId,
+      ownerId: w.ownerId,
+      body: {
+        claimGeneration: job.claimGeneration,
+        leaseOwner: job.leaseOwner,
+        check: { name: 'MERGE_CHECK', index: 1 },
+        seq: 0,
+        text: 'beside a key share\n',
+      },
+    });
+    chunk = sent;
+    void sent.then(() => { settled = true; }, () => { settled = true; });
+    assert.equal(
+      await settlesOrWaits(stack.db, () => settled),
+      'SETTLED',
+      'the chunk waited on a FOR KEY SHARE holder of its job row, which only a FOR UPDATE of that row does',
+    );
+    assert.deepEqual(await sent, { accepted: true });
+    const stored = await stack.db.projectIntegrationJobLog.findMany({
+      where: { jobId: job.jobId }, select: { seq: true, text: true },
+    });
+    assert.deepEqual(stored, [{ seq: 0, text: 'beside a key share\n' }], 'the chunk committed with the key share still held');
+
+    // The mode, as the statement the gate sent spells it: FOR NO KEY UPDATE, which a second chunk's
+    // own lock and a DELETE's FOR UPDATE both conflict with.
+    const gate = logged.statements.filter((query) =>
+      /FROM "project_integration_job"/.test(query) && /"claim_lease_owner"/.test(query));
+    assert.equal(gate.length, 1, `the job row is read once, under the claim: ${JSON.stringify(gate)}`);
+    assert.match(gate[0], /\bFOR NO KEY UPDATE\s*$/);
+    await side.query('COMMIT');
+  } finally {
+    await side.query('ROLLBACK').catch(() => undefined);
+    await chunk?.catch(() => undefined);
+    await side.end().catch(() => undefined);
+    await logged.db.$disconnect();
+    await stack.db.$disconnect();
+  }
+});
+
+test('a chunk waits for a DELETE of its job row: accepted once the delete rolls back, NOT_FOUND once it commits', { skip, concurrency: 1 }, async () => {
+  assertCoordinatorPgUrlIsIsolated(URL);
+  const stack = await connect();
+  const side = await sideConnection();
+  let chunk: Promise<unknown> | undefined;
+  try {
+    const w = await world(stack, 'delete');
+    await doneTask(stack, w, 'delete');
+    const job = await claim(stack, w);
+    const sendWhileDeleting = async (seq: number, end: 'ROLLBACK' | 'COMMIT') => {
+      await side.query('BEGIN');
+      const deleted = await side.query('DELETE FROM "project_integration_job" WHERE "id" = $1::uuid', [job.jobId]);
+      assert.equal(deleted.rowCount, 1, 'the side transaction deletes the job row, and so holds it FOR UPDATE');
+      let settled = false;
+      const sent = output(stack, w, job, seq, `chunk ${seq}\n`);
+      chunk = sent;
+      void sent.then(() => { settled = true; }, () => { settled = true; });
+      assert.equal(
+        await settlesOrWaits(stack.db, () => settled),
+        'WAITING',
+        'the chunk did not wait for a transaction that is deleting its job',
+      );
+      assert.equal(settled, false, 'the chunk is still waiting while the delete is open');
+      await side.query(end);
+      return sent;
+    };
+
+    assert.deepEqual(await sendWhileDeleting(0, 'ROLLBACK'), { accepted: true });
+    assert.deepEqual(
+      (await stack.db.projectIntegrationJobLog.findMany({ where: { jobId: job.jobId }, select: { seq: true } }))
+        .map((row) => row.seq),
+      [0],
+      'the chunk is written once the delete is gone',
+    );
+
+    await assert.rejects(
+      sendWhileDeleting(1, 'COMMIT'),
+      (error: unknown) => error instanceof IntegrationJobRefused && error.refusal === 'NOT_FOUND',
+    );
+    assert.equal(
+      await stack.db.projectIntegrationJobLog.count({ where: { jobId: job.jobId } }),
+      0,
+      'nothing of the deleted job is left, and nothing was written after it',
+    );
+  } finally {
+    await side.query('ROLLBACK').catch(() => undefined);
+    await chunk?.catch(() => undefined);
+    await side.end().catch(() => undefined);
     await stack.db.$disconnect();
   }
 });

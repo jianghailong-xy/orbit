@@ -1192,17 +1192,25 @@ async function progressRefusal(
  * One chunk of a running check's output (POST /runner/integration-jobs/:jobId/output, contract
  * §2.2 J-T4, §2.9 LS2), written to `project_integration_job_log` under the claim it names.
  *
- * THE FENCE IS THE PROGRESS REPORT'S. The job row is taken FOR UPDATE in the transaction, matched on
- * this runner, `RUNNING`, the exact (leaseOwner, claimGeneration), so a chunk from a claim that was
- * taken over, released or abandoned writes nothing and is told STALE_CLAIM; a terminal job is
- * ALREADY_FINAL; another account's job is 404. A takeover therefore cannot receive output from the
- * process it replaced, which is the same property a result has.
+ * THE FENCE IS THE PROGRESS REPORT'S. The job row is taken FOR NO KEY UPDATE in the transaction,
+ * matched on this runner, `RUNNING`, the exact (leaseOwner, claimGeneration), so a chunk from a claim
+ * that was taken over, released or abandoned writes nothing and is told STALE_CLAIM; a terminal job
+ * is ALREADY_FINAL; another account's job is 404. A takeover therefore cannot receive output from
+ * the process it replaced, which is the same property a result has.
+ *
+ * FOR NO KEY UPDATE, NOT FOR UPDATE, for the progress report's reason: a chunk writes no column of
+ * the job row, let alone a key, so it must not hold off the FOR KEY SHARE that a child row's foreign
+ * key takes on the same row — the foreign key of a timeline fact or an item another transaction
+ * writes beside the job does not wait on a chunk, nor a chunk on it. What the lock is there for is
+ * unchanged: every door that moves the claim on writes the row, a DELETE of the job takes it FOR
+ * UPDATE, and both conflict with FOR NO KEY UPDATE exactly as they did with FOR UPDATE.
  *
  * THE CAP IS APPLIED IN THE SAME TRANSACTION, after the insert: the check's chunks are read in seq
  * order, the first bytes up to the head cap and the last bytes up to the tail cap are kept, and every
  * chunk between them is deleted with its byte count (and any bytes it already marked) added to the
  * first retained tail row's `truncatedBytes`. Holding the job row while it trims serialises two
- * chunks of one check, so two writers cannot each compute a cap the other then exceeds.
+ * chunks of one check — FOR NO KEY UPDATE conflicts with itself — so two writers cannot each compute
+ * a cap the other then exceeds.
  *
  * NOTHING ELSE IS WRITTEN: no job row column, no run_event (this is not a transcript event), no
  * session. The route is a job gate and never waits on a session lock (§2.9 LS2).
@@ -1228,7 +1236,7 @@ export async function receiveIntegrationJobOutput(
            AND "state" = 'RUNNING'
            AND "claim_lease_owner" = ${chunk.leaseOwner}
            AND "claim_generation" = ${BigInt(chunk.claimGeneration)}
-         FOR UPDATE`);
+         FOR NO KEY UPDATE`);
       if (!job) throw await progressRefusal(tx, input);
       // The claim is ours: the chunk row. A resent seq inserts nothing, which is the idempotency
       // the key names; either way the trim below runs against the committed set.
@@ -1743,9 +1751,14 @@ export async function applyIntegrationJobResult(
       // Not written down as final, and NOT without a trace: the row goes back to the queue it came
       // from, clearing the claim, and the line will be handed it again — which, by the claim guard
       // above, is the first heartbeat after this task's work has stopped moving. Nothing follows
-      // from this result (no receipt, no item resolution, nothing for the caller to deliver): it is
-      // not an answer, it is the same question asked too early, and the runner is told so rather
-      // than told an error, because nothing about its work was wrong.
+      // from this result as an answer (no receipt, no item opened, none of the items a landing or a
+      // failure settles resolved, nothing for the caller to deliver): it is not an answer, it is the
+      // same question asked too early, and the runner is told so rather than told an error, because
+      // nothing about its work was wrong. What the transaction does write is about the claim, not
+      // the answer: the row's requeue (or CANCELLED end) and its timeline line, the landing a DONE
+      // written after a reopen is owed (J-T8), and — the claim being over either way — the
+      // resolution of the job's open X-E5 `LANDING_LEASE_EXPIRED` items, as on every other edge that
+      // ends a claim (§4.6).
       //
       // A STOP WAS ASKED, though, and a QUEUED row is never left carrying one (J-T8, and the CHECK
       // the migration adds): the row ends CANCELLED here rather than becoming a row nothing would
