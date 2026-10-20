@@ -197,7 +197,9 @@ final class ProjectLandingHeadTests: XCTestCase {
         XCTAssertEqual(v6(liveness: "LIVE", check: one, round: 2).head.detail,
                        "checking · output 6s ago · claim 1 · round 2 of 3")
         XCTAssertEqual(v6(liveness: "LIVE").head.detail, "checking · output 6s ago · claim 1 · round 1 of 3")
-        XCTAssertEqual(v6(kind: "", liveness: "LIVE").head.detail, "checking · output 6s ago · claim 1 · round 1")
+        // With a check of 3 in flight, so the old rule (M = the check's count) would say "of 3" here.
+        XCTAssertEqual(v6(kind: "", liveness: "LIVE", check: acceptance).head.detail,
+                       "checking · output 6s ago · claim 1 · round 1")
     }
 
     /// The jobs sheet reads each job's own kind: the merge beside a landing names no M.
