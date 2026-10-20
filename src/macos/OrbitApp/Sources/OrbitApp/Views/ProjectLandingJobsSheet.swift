@@ -91,6 +91,10 @@ struct ProjectLandingJobsSheet: View {
                     .controlSize(.small)
                     .disabled(retrying.contains(row.jobId))
             }
+            // Every row's own way into the landing it belongs to (owner 2026-10-19) — a sibling of
+            // Retry and of the row's task press. A merge into main lands no task and its row is no
+            // press, so this is that row's only way in; a server that names none says so in grey.
+            LandingEntryLink(entry: LandingPageCopy.landingEntry(row.landingSessionId))
             if let failure = failures[row.jobId] {
                 Text(failure)
                     .font(.orbitMeta)

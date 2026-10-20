@@ -38,27 +38,44 @@ struct ProjectLandingCardView: View {
         job.timedOut ? ProjectPalette.warningInk : job.running ? Color.accentColor : Color.secondary
     }
 
+    /// Several jobs: a row each, drawn OUTSIDE the press — a link may not live inside a button —
+    /// and the row of a merge into main carries no entry, as the merge card is that round's way in.
+    private var several: Bool { card.jobs.count > 1 }
+    /// A card holding one job: the single row IS that job, so its way in is the card's foot.
+    private var lead: ProjectPage.LandingCard.Job? { several ? nil : card.jobs.first }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             if onOpenJobs != nil || onOpenProject != nil {
                 Button {
                     if let onOpenJobs { onOpenJobs() } else { onOpenProject?() }
                 } label: {
-                    content.contentShape(Rectangle())
+                    pressBody.contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             } else {
-                content
+                pressBody
             }
-
-            if let jobID = card.retryJobId {
+            if several {
+                jobRows
+                if let target = card.target { targetLine(target) }
+                sentence
+            }
+            if card.retryJobId != nil || onOpenJobs != nil || lead != nil {
                 HStack(spacing: 8) {
-                    Button { press(jobID) } label: { Text(ProjectPage.landingRetry) }
-                        .font(.orbitLabel.weight(.semibold))
-                        .buttonStyle(.borderedProminent)
-                        .buttonBorderShape(.capsule)
-                        .controlSize(.small)
-                        .disabled(retrying)
+                    if let jobID = card.retryJobId {
+                        Button { press(jobID) } label: { Text(ProjectPage.landingRetry) }
+                            .font(.orbitLabel.weight(.semibold))
+                            .buttonStyle(.borderedProminent)
+                            .buttonBorderShape(.capsule)
+                            .controlSize(.small)
+                            .disabled(retrying)
+                    }
+                    if let lead {
+                        // One job: the card's foot names its landing (owner 2026-10-19, 方案 A), or
+                        // says the server names none in the same slot.
+                        LandingEntryLink(entry: LandingPageCopy.landingEntry(lead.landingSessionId))
+                    }
                     Spacer(minLength: 8)
                     // Only where there is a list to open: on a server that lists no jobs the card's
                     // press goes to the project page, and "All jobs" would name nothing.
@@ -93,31 +110,35 @@ struct ProjectLandingCardView: View {
         .padding(.vertical, 4)
     }
 
-    /// Everything the card says above its foot: the head, what is landing, the branch it lands on
-    /// and the sentence — the whole of the press where there is one.
-    private var content: some View {
+    /// Everything the card says inside its press: the head and, for one job, what is landing.
+    /// Several jobs keep only the head here — their rows are siblings of the press.
+    @ViewBuilder private var pressBody: some View {
         VStack(alignment: .leading, spacing: 8) {
             head
-            if card.jobs.count > 1 {
-                jobRows
-            } else if let what = card.what {
+            if !several, let what = card.what {
                 Text(what).font(.orbitLabel).lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if let target = card.target {
-                // The branch this lands on, the field the task page's Target row prints, cut in the
-                // middle when the page is narrow.
-                Text("\(ProjectPage.landingOnto) \(target)")
-                    .font(.orbitMeta).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
-            }
-            if card.timedOut, let detail = card.detail {
-                Text(detail).font(.orbitMeta).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else if !card.timedOut {
-                Text(ProjectPage.landingNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)
-            }
+            if !several, let target = card.target { targetLine(target) }
+            if !several { sentence }
+        }
+    }
+
+    private func targetLine(_ target: String) -> some View {
+        // The branch this lands on, the field the task page's Target row prints, cut in the middle
+        // when the page is narrow.
+        Text("\(ProjectPage.landingOnto) \(target)")
+            .font(.orbitMeta).foregroundStyle(.secondary)
+            .lineLimit(1).truncationMode(.middle)
+    }
+
+    @ViewBuilder private var sentence: some View {
+        if card.timedOut, let detail = card.detail {
+            Text(detail).font(.orbitMeta).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if !card.timedOut {
+            Text(ProjectPage.landingNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)
         }
     }
 
@@ -139,6 +160,11 @@ struct ProjectLandingCardView: View {
                     }
                     Spacer(minLength: 8)
                     Text(job.state).font(.orbitMeta).foregroundStyle(jobInk(job))
+                    // Every row names its own landing — except the merge job's, whose way in is
+                    // the merge card (方案 A).
+                    if !job.mergeJob {
+                        LandingEntryLink(entry: LandingPageCopy.landingEntry(job.landingSessionId))
+                    }
                 }
             }
         }

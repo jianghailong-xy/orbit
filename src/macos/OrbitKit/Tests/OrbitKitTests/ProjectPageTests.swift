@@ -658,7 +658,7 @@ final class ProjectPageTests: XCTestCase {
             jobId: "j-merge", taskId: nil,
             line: ProjectPage.LandingLine(what: nil, running: false, state: "queued", clock: "41m 8s",
                                           word: "Merge to main", clockLabel: "Queued for", updated: "Updated just now"),
-            detail: nil, retryable: false))
+            detail: nil, retryable: false, mergeJob: true))
 
         func detail(phase: String?, runner: String? = "workstation-gpu") -> String? {
             let view = ProjectIntegrationView(inFlight: .init(state: "RUNNING", startedAt: iso(6_630)), inFlightJobs: [

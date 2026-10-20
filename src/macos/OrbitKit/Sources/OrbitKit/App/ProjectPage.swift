@@ -212,6 +212,14 @@ public enum ProjectPage {
         /// The line under the title: the state, what the job waited for a runner before its clock
         /// began, and where the reports stand — "checking · waited 1m 20s · updated just now".
         public let detail: String
+
+        /// A head a view composes itself — the landing page's status card, whose two slots come
+        /// from `LandingPageCopy.attemptCard` rather than from a project integration row.
+        public init(right: String, isClock: Bool, detail: String) {
+            self.right = right
+            self.isClock = isClock
+            self.detail = detail
+        }
     }
     public struct LandingJobLine: Equatable, Sendable, Identifiable {
         public let jobId: String
@@ -224,7 +232,23 @@ public enum ProjectPage {
         public let detail: String?
         /// Whether to offer Retry: the server's `retryable`, never inferred from `timedOut`.
         public let retryable: Bool
+        /// The landing session this job belongs to (§2.9), or nil where the server named none.
+        public let landingSessionId: String?
+        /// A round of merging into main: its row carries the word and no "Open landing ›" — the
+        /// merge card is that round's way in.
+        public let mergeJob: Bool
         public var id: String { jobId }
+
+        public init(jobId: String, taskId: String?, line: LandingLine, detail: String?,
+                    retryable: Bool, landingSessionId: String? = nil, mergeJob: Bool = false) {
+            self.jobId = jobId
+            self.taskId = taskId
+            self.line = line
+            self.detail = detail
+            self.retryable = retryable
+            self.landingSessionId = landingSessionId
+            self.mergeJob = mergeJob
+        }
     }
 
     // The job list's words, held to the web's by `ProjectPageSectionsCopyParityTests`.
@@ -362,7 +386,11 @@ public enum ProjectPage {
         let unavailable = cannotRead(now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
         let main = RunSettings.mainBranchName(view.upstreamRef)
         let word = integrationJobWords(main)[inFlight.kind ?? ""] ?? "Integration"
-        let what = jobs > 1 ? landingJobsCount(jobs, timedOut: timedOutJobs) : inFlight.taskTitle
+        // A merge lands no single task (§2.9): a task title on the row would attribute the round to
+        // work it never touched, whatever a server puts in `taskTitle`.
+        let mergeJob = ProjectMergeCard.mergeJobKinds.contains(inFlight.kind ?? "")
+        let what = jobs > 1 ? landingJobsCount(jobs, timedOut: timedOutJobs)
+            : mergeJob ? nil : inFlight.taskTitle
         // What the job waited for a runner before it was claimed — the row's own `inFlight` carries
         // it, and only a CLAIMED job has one to show: a queued job's whole clock is that wait.
         let wait = running ? waitLine(inFlight.waitMs) : nil
@@ -447,17 +475,22 @@ public enum ProjectPage {
         let main = RunSettings.mainBranchName(view.upstreamRef)
         return (view.inFlightJobs ?? []).map { job in
             let word = integrationJobWords(main)[job.kind] ?? "Integration"
+            let mergeJob = ProjectMergeCard.mergeJobKinds.contains(job.kind)
+            let what = mergeJob ? nil : job.taskTitle
             let line = job.timedOut && !unavailable
-                ? timedOutLine(job, word: word, what: job.taskTitle, now: now)
-                : liveLine(word: word, what: job.taskTitle, running: job.state == "RUNNING", phase: job.phase,
+                ? timedOutLine(job, word: word, what: what, now: now)
+                : liveLine(word: word, what: what, running: job.state == "RUNNING", phase: job.phase,
                            startedAt: job.startedAt, heartbeatAt: job.heartbeatAt, now: now,
                            updatedAt: updatedAt, unavailable: unavailable, main: main,
                            runner: job.runnerName, claim: job.claim, round: job.round, check: job.check,
                            stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
                            typicalMs: job.typicalMs, livenessWord: job.liveness,
                            firstStartedAt: firstStartedAt(view, jobId: job.jobId))
-            return LandingJobLine(jobId: job.jobId, taskId: job.taskId, line: line,
-                                  detail: landingJobDetail(job, main: main), retryable: job.retryable)
+            return LandingJobLine(
+                jobId: job.jobId, taskId: job.taskId, line: line,
+                detail: landingJobDetail(job, main: main), retryable: job.retryable,
+                landingSessionId: job.landingSessionId,
+                mergeJob: ProjectMergeCard.mergeJobKinds.contains(job.kind))
         }
     }
 
@@ -656,7 +689,32 @@ public enum ProjectPage {
             public let retryable: Bool
             /// What a timed-out runner did before it stopped; the job list's own sentence.
             public let detail: String?
+            /// The job's own word — "Landing", "Merge check", "Merge to main" — which its row
+            /// shows in the name slot when it lands no single task.
+            public let word: String
+            /// The landing session this job belongs to (§2.9), or nil where the server named none.
+            public let landingSessionId: String?
+            /// A round of merging into main: its row carries the word and no "Open landing ›" —
+            /// the merge card is that round's way in.
+            public let mergeJob: Bool
             public var id: String { jobId }
+
+            public init(jobId: String, taskId: String?, title: String?, state: String,
+                        running: Bool, timedOut: Bool, retryable: Bool, detail: String?,
+                        word: String = "", landingSessionId: String? = nil,
+                        mergeJob: Bool = false) {
+                self.jobId = jobId
+                self.taskId = taskId
+                self.title = title
+                self.state = state
+                self.running = running
+                self.timedOut = timedOut
+                self.retryable = retryable
+                self.detail = detail
+                self.word = word
+                self.landingSessionId = landingSessionId
+                self.mergeJob = mergeJob
+            }
         }
 
         /// What is in flight, in the landing row's own word: "Landing", "Merge check".
@@ -712,9 +770,15 @@ public enum ProjectPage {
         }
         let jobs = landingJobLines(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
             .map { job in
-                LandingCard.Job(jobId: job.jobId, taskId: job.taskId, title: job.line.what, state: job.line.state,
+                LandingCard.Job(jobId: job.jobId, taskId: job.taskId,
+                                // A merge job lands no single task, so its row is named by its
+                                // word — "Merge to main", "Merge check" — rather than left blank.
+                                title: job.line.what ?? job.line.word, state: job.line.state,
                                 running: job.line.running, timedOut: job.line.timedOut,
-                                retryable: job.retryable, detail: job.detail)
+                                retryable: job.retryable, detail: job.detail,
+                                word: job.line.word,
+                                landingSessionId: job.landingSessionId,
+                                mergeJob: job.mergeJob)
             }
         // The row's own rule for the name slot, one row down: several jobs are a count in the head
         // and a row each in the body; one job is its title in the body.
@@ -1066,7 +1130,8 @@ public enum ProjectPage {
         case .coordinatorQuestion: return .coordinatorQuestion
         case .fusePaused: return .fusePaused
         case .unknown: return .unknown
-        case .integrationConflict, .integrationCheckFailed, .integrationError, .taskFailed:
+        case .integrationConflict, .integrationCheckFailed, .integrationError, .taskFailed,
+             .deliveryReview, .landingLeaseExpired:
             return .escalated
         }
     }

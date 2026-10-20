@@ -292,6 +292,9 @@ struct ConsoleView: View {
                 turnRunning: (appModel.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running),
                             // Why none of them goes into the turn running now: Cursor CLI's would stop it.
                             note: console.engine == CursorRuntime.engine ? CursorRuntime.queueNote : nil)
+            // The landing this conversation's work fed, at the session's own bottom (owner
+            // 2026-10-19, board v4 06 e): absent from a session that produced no landing work.
+            SourceLandingChip(console: console)
             ComposerView(console: console)
             // What the provider pick standing in the composer will do, and WHEN — the
             // part that matters, because a run keeps its provider for its whole life.
@@ -306,7 +309,12 @@ struct ConsoleView: View {
 
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
         Group {
-            if let console = registry.peek(sessionID) {
+            // A LANDING session is platform work, not a conversation (§2.9 LS6): the same frame
+            // (`.console`, so every push and `/sessions/<id>` link still lands here) draws the
+            // landing page instead of a transcript, and nothing ever creates a console model for it.
+            if appModel.session(id: sessionID)?.isLanding == true {
+                LandingSessionPageView(sessionID: sessionID)
+            } else if let console = registry.peek(sessionID) {
                 transcriptAndBand(console, navTitleWidth: navTitleWidth)
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
                 .environment(registry.attachments)
@@ -356,6 +364,9 @@ struct ConsoleView: View {
         // view's lifecycle) — so backing out to the list reliably drops the connection even if SwiftUI
         // keeps this off-screen view cached, and at most one session ever streams.
         .task(id: sessionID) {
+            // Platform work has no transcript to hydrate, and a console model for one would write
+            // an empty store beside a page that never shows it.
+            guard appModel.session(id: sessionID)?.isLanding != true else { return }
             _ = registry.model(for: sessionID, agentID: agentID)
         }
         .onChange(of: sessionID) { _, _ in
@@ -405,12 +416,17 @@ struct ConsoleView: View {
         // says.
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                if let session = appModel.session(id: sessionID) {
-                    sessionMenu(session)
-                } else {
-                    Button {} label: { Image(systemName: "ellipsis") }
-                        .disabled(true)
-                        .accessibilityLabel("Session actions")
+                // A landing session is platform work (LS6): its page carries the ⋯ menu the design
+                // gives it, and none of the conversation's own actions — no rename, share, pin,
+                // move or complete. The frame still shows Back, which is how a reader leaves.
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    if let session = appModel.session(id: sessionID) {
+                        sessionMenu(session)
+                    } else {
+                        Button {} label: { Image(systemName: "ellipsis") }
+                            .disabled(true)
+                            .accessibilityLabel("Session actions")
+                    }
                 }
             }
         }
@@ -441,10 +457,14 @@ struct ConsoleView: View {
         // `.primaryAction` there, as the project and task pages' menus do.
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { showShare = true } label: {
-                    Label("Share session", systemImage: "square.and.arrow.up")
+                // No Share on a landing session (LS6): it is platform work, not a conversation,
+                // and its page's own ⋯ menu is the whole of what it offers.
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    Button { showShare = true } label: {
+                        Label("Share session", systemImage: "square.and.arrow.up")
+                    }
+                    .help("Share a read-only link to this session")
                 }
-                .help("Share a read-only link to this session")
             }
         }
         #endif
