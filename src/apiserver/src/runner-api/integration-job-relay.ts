@@ -2033,8 +2033,10 @@ export async function applyIntegrationJobResult(
         filesChanged: body.filesChanged ?? null,
         checks,
         conflicts: body.conflicts ?? [],
-        // J-T8: the result settles a cancellation that was asked of this claim — unless it landed.
+        // J-T8: the result settles a cancellation that was asked of this claim — unless it landed,
+        // or it cannot prove it did not push (§2.6 J12), which the step it stopped at tells.
         cancelRequested,
+        phase: (INTEGRATION_JOB_PHASES.includes(body.phase as never) ? body.phase : null) ?? job.phase ?? null,
         // J12's code, so the promotion can tell a push that lost a race (J-T13) from a failure M-T9
         // blocks for, and whether the runner is one that reports the move at all: an older runner's
         // ERROR / TARGET_MOVED keeps today's path.

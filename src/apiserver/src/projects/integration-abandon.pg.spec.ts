@@ -634,6 +634,54 @@ test('abandon: the lease gate, J12\'s code, and only-end-never-re-queue', {
     assert.equal(abandoned.state, 'ERROR');
     assert.equal((await jobRow(stack, job.jobId)).state, 'ERROR');
   });
+
+  // §2.6 J12 / M-T10: a merge the owner called back while its runner was still reporting, whose
+  // runner then went silent and was abandoned. The abandon's own code decides the candidate: what
+  // cannot prove nothing was pushed is BLOCKED, what proves it is CANCELLED — and, the generation
+  // having been asked to stop, neither opens a failure item (J-T8, revision 25).
+  const stoppedThenAbandoned = async (label: string, capabilities?: string[]) => {
+    const w = await world(stack, label, 'MAIN');
+    const { candidate } = await confirmedLanding(stack, w, label);
+    const land = await claim(stack, w, capabilities);
+    assert.equal(land.kind, 'LAND_PROMOTION');
+    assert.equal((await stack.promotions.cancel({ userId: w.ownerId }, w.projectId, candidate.id)).state,
+      'CONFIRMED', 'a claim still reporting is only asked to stop');
+    assert.ok((await jobRow(stack, land.jobId)).cancelRequestedAt);
+    await ageClaim(stack, land.jobId, 11 * 60_000);
+    const abandoned = await abandonIntegrationJob(stack.prisma, {
+      jobId: land.jobId, projectId: w.projectId, ownerId: w.ownerId, by: 'owner',
+    });
+    return {
+      abandoned: abandoned.abandoned,
+      promotion: await stack.db.projectPromotion.findUniqueOrThrow({
+        where: { id: candidate.id }, select: { state: true, blockedReason: true },
+      }),
+      items: await stack.db.projectOpenItem.count({ where: { integrationJobId: land.jobId, state: 'OPEN' } }),
+      landings: await stack.db.projectIntegrationJob.count({
+        where: { promotionId: candidate.id, kind: 'LAND_PROMOTION' },
+      }),
+    };
+  };
+
+  await t.test('(11) a stopped legacy merge abandoned with an unknown push outcome is BLOCKED, not CANCELLED', async () => {
+    const ended = await stoppedThenAbandoned('stopped-abandoned-unknown', [INTEGRATION_JOB_CLAIM]);
+    assert.equal(ended.abandoned.errorCode, 'PUSH_OUTCOME_UNKNOWN');
+    assert.equal(ended.promotion.state, 'BLOCKED', 'it may have pushed, so the merge is not recorded as cancelled');
+    assert.equal(ended.promotion.blockedReason, 'ERROR');
+    assert.equal(ended.abandoned.openItemId, null);
+    assert.equal(ended.items, 0, 'a stopped generation opens no failure item, even when abandoned');
+    assert.equal(ended.landings, 1, 'nothing is queued in its place');
+  });
+
+  await t.test('(12) a stopped v2 merge abandoned before its push (RUNNER_LOST) is CANCELLED', async () => {
+    const ended = await stoppedThenAbandoned('stopped-abandoned-lost');
+    assert.equal(ended.abandoned.errorCode, 'RUNNER_LOST');
+    assert.equal(ended.promotion.state, 'CANCELLED', 'a v2 claim with no PUSH report proves nothing was pushed');
+    assert.equal(ended.promotion.blockedReason, null);
+    assert.equal(ended.abandoned.openItemId, null);
+    assert.equal(ended.items, 0);
+    assert.equal(ended.landings, 1);
+  });
 });
 
 test('stop: QUEUED ends now, RUNNING is asked, past the push boundary is refused', {
