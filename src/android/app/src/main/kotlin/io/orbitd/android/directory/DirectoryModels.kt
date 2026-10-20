@@ -48,7 +48,13 @@ data class DirectorySession(
     val waitingKind: String? = null, val ownerItems: JsonArray? = null,
     /** The project this session belongs to in any role; null for an ordinary conversation and from an older server. */
     val projectMembership: SessionProjectMembership? = null,
+    /** `LANDING` for platform work with no engine (contract §2.9 LS6), `CONVERSATION` otherwise; absent from an older server. */
+    val sessionKind: String? = null,
+    /** What a LANDING row says about its subject, on `GET /sessions?projectId=&includeLanding=1` only; absent everywhere else. */
+    val landing: SessionLandingSummary? = null,
 ) {
+    /** Whether this row is a landing session (platform work), not a conversation. */
+    val isLanding get() = sessionKind == "LANDING"
     val workspace get() = workspaceId ?: agentId ?: agent?.id
     val name get() = title?.takeIf(String::isNotBlank) ?: "Untitled session"
     val stateLabel get() = when {
@@ -60,12 +66,21 @@ data class DirectorySession(
         else -> (runState ?: status).lowercase().replace('_', ' ').replaceFirstChar(Char::uppercase)
     }
 }
+/** What a LANDING session row says about its subject (`SessionLandingSummary`, contract §2.9 LS6): the subject it represents and where
+ * it stands, so the project's page can keep an in-flight landing out of the ordinary rows, list an awaiting one, and fold a settled
+ * one into "Earlier · n landed". Every slot optional, so a server that sends less still decodes. */
+@Serializable
+data class SessionLandingSummary(val subject: String? = null, val state: String? = null,
+    val settledAs: String? = null, val settledAt: String? = null)
+
 /** A session's project membership (OrbitKit `SessionProjectMembership`): derived from its coordinator, task, context, judgment or
  * root relation. A role or status this build does not know is kept as the server spelled it, and matches none of the known ones. */
 @Serializable
 data class SessionProjectMembership(val projectId: String, val projectTitle: String = "", val projectStatus: String = "UNKNOWN",
     val role: String = "UNKNOWN") {
     val isCoordinator get() = role == "COORDINATOR"
+    /** A landing session's membership (`LANDING`, contract §2.9 LS6): no engine, and never a member of the page's timeline. */
+    val isLanding get() = role == "LANDING"
 }
 @Serializable
 data class SearchHit(val id: String, val title: String, val status: String = "UNKNOWN",

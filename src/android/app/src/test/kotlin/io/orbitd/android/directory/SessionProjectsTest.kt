@@ -55,6 +55,24 @@ class SessionProjectsTest {
     private fun make(s: DirectorySession, watching: WatchSessionSummary? = null) = SessionLine.make(s, true, watching, now = now)
     private fun counted(listing: SessionProjectListing, folder: String) = listing.assigned.filter { it.folderId == folder }
 
+    /** §2.9 LS6: a LANDING row is platform work, never a project row's member — it adds nothing to the row's count, needs-you,
+     * running or background jobs, and it is no row of its own (it is the page's Landings group). */
+    @Test fun landingRowsAreNeverAProjectRowsMembers() {
+        val landing = session("land", role = "LANDING", state = "RUNNING", approvals = 1, jobs = 1).copy(
+            sessionKind = "LANDING", landing = SessionLandingSummary("TASK", "AWAITING_DECISION", null, null))
+        val base = listing(listOf(coordinator(), session("worker")))
+        val withLanding = listing(listOf(coordinator(), session("worker"), landing))
+        val (a, b) = base.projects.single() to withLanding.projects.single()
+        assertEquals(a.sessionCount, b.sessionCount); assertEquals(a.needsYou, b.needsYou)
+        assertEquals(a.runningCount, b.runningCount); assertEquals(a.jobs, b.jobs)
+        assertTrue(b.members.none { it.isLanding })
+        assertTrue(withLanding.sessions.none { it.isLanding })
+        assertEquals(listOf("p1"), withLanding.entries.map { it.id })
+        // And the page's own reads split them the same way: members never take one, landings take only it.
+        assertEquals(listOf("coordinator", "worker"), SessionProjectMembers.members("p1", listOf(coordinator(), session("worker"), landing)).map { it.id })
+        assertEquals(listOf("land"), SessionProjectMembers.landings("p1", listOf(coordinator(), session("worker"), landing)).map { it.id })
+    }
+
     @Test fun allMembershipRolesMergeInOpenAndCompleted() {
         val members = listOf(coordinator()) + listOf("TASK", "CONTEXT", "JUDGMENT", "CHILD").map { session(it, role = it) }
         for (view in listOf(SessionView.OPEN, SessionView.COMPLETED)) {

@@ -24,16 +24,18 @@ class ExceptionCardsTest {
         requiredAction: String? = null, primaryAction: String? = null, handledBy: List<String>? = null,
         waitingSince: String = "2026-09-19T19:01:41.497Z", escalatedAt: String? = "2026-09-19T21:02:23.903Z",
         detailLine: String = "the run ended with exit code 1", delivery: String? = null, facts: JsonElement = JsonNull,
-        fuseEpisodeId: String? = null, title: String = "Task failed: P5.1 Route Handlers") = buildJsonObject {
+        fuseEpisodeId: String? = null, title: String = "Task failed: P5.1 Route Handlers",
+        landingSessionId: String? = null, integrationJobId: String? = null, lease: JsonElement = JsonNull) = buildJsonObject {
         put("itemId", "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4"); put("kind", kind); put("title", title); put("detailLine", detailLine)
         put("assignee", assignee); put("assigneeReason", reason); put("waitingSince", waitingSince); put("escalatedAt", escalatedAt)
         put("taskId", taskId); put("sessionId", sessionId); put("promotionId", promotionId); put("fuseEpisodeId", fuseEpisodeId)
+        put("landingSessionId", landingSessionId); put("integrationJobId", integrationJobId)
         putJsonObject("delivery") { put("state", if (delivery == null) "NOT_REQUIRED" else "DELIVERED"); put("sessionId", delivery); put("at", JsonNull) }
         putJsonArray("actions") { actions.forEach { add(it) } }
         requiredAction?.let { put("requiredAction", it) }
         primaryAction?.let { put("primaryAction", it) }
         handledBy?.let { titles -> putJsonArray("handledBy") { titles.forEachIndexed { i, t -> addJsonObject { put("taskId", "t$i"); put("title", t); put("state", "OPEN") } } } }
-        put("question", JsonNull); put("facts", facts)
+        put("question", JsonNull); put("facts", facts); put("lease", lease)
     }
 
     /** The coordinator conversation's cards for these items, as the catalogue grants them. */
@@ -120,6 +122,85 @@ class ExceptionCardsTest {
         assertEquals(ExceptionCards.notRunAgain, ExceptionCards.refusalHeadline(CardVerb.RETRY_TASK))
         assertEquals(ExceptionCards.notMarkedHandled, ExceptionCards.refusalHeadline(CardVerb.MARK_HANDLED))
         assertNull(ExceptionCards.refusalHeadline(CardVerb.CANCEL_TASK))
+    }
+
+    // MARK: the two landing doors (§2.9 LS6, §4.6 X-E5)
+
+    private fun lease(jobKind: String = "LAND_TASK", protocol: String? = "v2", pushed: Boolean = false, generation: Int = 2,
+        runner: String? = "workstation-gpu", phase: String = "REBASE", claim: Int = 1, round: Int = 1, checks: Int = 3,
+        reportedAt: String = "2026-09-21T11:30:00Z", expiredAt: String? = "2026-09-21T11:40:00Z") = buildJsonObject {
+        put("jobKind", jobKind); protocol?.let { put("progressProtocol", it) }; put("pushReported", pushed); put("generation", generation)
+        runner?.let { put("runner", it) }; put("phase", phase); put("claimGeneration", claim); put("round", round); put("checkCount", checks)
+        put("lastReportAt", reportedAt); expiredAt?.let { put("leaseExpiredAt", it) }
+    }
+
+    private fun xe5(actions: List<String> = listOf("ABANDON", "OPEN_LANDING"), primaryAction: String? = "ABANDON",
+        lease: JsonElement = lease(), landingSessionId: String? = "L1", integrationJobId: String? = "j-1",
+        waitingSince: String = "2026-09-19T19:01:41.497Z", escalatedAt: String? = "2026-09-19T21:02:23.903Z",
+        facts: JsonElement = JsonNull) =
+        row(kind = "LANDING_LEASE_EXPIRED", reason = "ESCALATED", actions = actions, primaryAction = primaryAction, taskId = "t1",
+            sessionId = null, landingSessionId = landingSessionId, integrationJobId = integrationJobId, lease = lease,
+            waitingSince = waitingSince, escalatedAt = escalatedAt, facts = facts)
+
+    /** OPEN_LANDING opens the session the row names and sends nothing; ABANDON is the one job's, through the landing page's own door.
+     * Both are drawn only where the row carries the address they need, and an action this build cannot name is still no door. */
+    @Test fun theLandingDoorsAreDrawnOnlyWhereTheRowCarriesTheirAddresses() {
+        val full = xe5()
+        assertEquals(listOf("ABANDON", "OPEN_LANDING"), ExceptionCards.drawn(full))
+        assertNull("Open landing only looks: it sends nothing", ExceptionCards.verb(full, "OPEN_LANDING"))
+        assertEquals(CardVerb.ABANDON, ExceptionCards.verb(full, "ABANDON"))
+        val card = cards(full).single()
+        assertTrue(CardVerb.ABANDON in card.actions)
+        val abandon = CardRequests.build(card, CardVerb.ABANDON)
+        assertEquals(listOf("projects", "p1", "integration", "jobs", "j-1", "abandon"), abandon.path)
+        assertEquals(HttpMethod.POST, abandon.method)
+        assertEquals(ExceptionCards.notAbandoned, ExceptionCards.refusalHeadline(CardVerb.ABANDON))
+        // A row an older build opened names no landing and no job: neither door is drawn, and neither is a press.
+        val older = xe5(actions = listOf("ABANDON", "OPEN_LANDING"), landingSessionId = null, integrationJobId = null, lease = JsonNull)
+        assertEquals(emptyList<String>(), ExceptionCards.drawn(older))
+        assertEquals(listOf(CardVerb.MARK_HANDLED), cards(older).single().actions)
+        // An action this build cannot name is never a door, beside the two it can.
+        assertEquals(listOf("ABANDON", "OPEN_LANDING"), ExceptionCards.drawn(xe5(actions = listOf("SOMETHING_NEW", "ABANDON", "OPEN_LANDING"))))
+    }
+
+    /** X-E5 leads with the server's ABANDON as its solid primary, whatever order it was listed in, and every door's line follows J12. */
+    @Test fun theXe5CardLeadsWithAbandonAndItsConsequenceFollowsJ12() {
+        val mine = ExceptionCards.presses(xe5(primaryAction = null))
+        assertEquals(listOf("ABANDON" to ExceptionCards.PressTier.PRIMARY, "OPEN_LANDING" to ExceptionCards.PressTier.SECONDARY),
+            mine.map { it.action to it.tier })
+        assertEquals(ExceptionCards.abandon to "Ends this attempt. Nothing was pushed, and nothing is queued again.",
+            mine[0].label to mine[0].consequence)
+        assertEquals(ExceptionCards.openLanding to "Open the landing: every attempt, step by step.", mine[1].label to mine[1].consequence)
+        // J12: a check never pushes; a v2 claim that recorded none proves nothing was pushed; anything else may have been.
+        assertEquals("Ends this attempt. Nothing was pushed, and nothing is queued again.",
+            ExceptionCards.actionConsequence(xe5(lease = lease(jobKind = "CHECK_PROMOTION")), "ABANDON"))
+        assertEquals("Ends this attempt. Nothing was pushed, and nothing is queued again.",
+            ExceptionCards.actionConsequence(xe5(lease = lease(jobKind = "LAND_TASK", protocol = "v2", pushed = false)), "ABANDON"))
+        listOf(lease(jobKind = "LAND_TASK", protocol = "v2", pushed = true), lease(jobKind = "LAND_TASK", protocol = null),
+            lease(jobKind = "LAND_PROMOTION", protocol = null), JsonNull).forEach { facts ->
+            assertEquals("J12: ${facts}", ExceptionCards.abandonMayHavePushed, ExceptionCards.actionConsequence(xe5(lease = facts), "ABANDON"))
+        }
+    }
+
+    /** X-E5's heading is the fact it is about — how long the claim has been silent — never "no one acted on this for 1s", and its footer
+     * says the wait alone because there is no window the coordinator had it through. */
+    @Test fun theXe5HeadingAndFooterSayHowLongTheRunnerHasBeenSilent() {
+        val item = xe5(lease = lease(expiredAt = null), waitingSince = "2026-09-21T11:57:00Z", escalatedAt = "2026-09-21T11:57:00Z")
+        assertEquals("Now yours — no report from the runner for 27m", ExceptionCards.headingLine(item, now))
+        assertEquals(27, ExceptionCards.leaseSilentMinutes(item))
+        assertEquals("Owner: you · waiting 3m", ExceptionCards.ownerLine(item, now))
+        assertEquals("a row from before the facts names no minutes", "Now yours — no report from the runner",
+            ExceptionCards.heading(xe5(lease = JsonNull), now))
+        // The lease block: which landing, on which runner and since when, and where it stopped — in board v4 06 c's three rows.
+        val facts = ExceptionCards.facts(xe5(facts = Wire.json.parseToJsonElement("""{"task":{"title":"Land · Wire the page"}}"""))) as ExceptionCards.Facts.Rows
+        assertEquals(listOf("Landing", "Runner", "Step"), facts.rows.map { it.label })
+        assertEquals("Land · Wire the page · generation 2", facts.rows[0].value)
+        assertTrue("Runner " + facts.rows[1].value, facts.rows[1].value.startsWith("workstation-gpu · last report "))
+        assertEquals("rebasing · claim 1 · round 1 of 3", facts.rows[2].value)
+        // An item an older build opened carries no lease and keeps the sentence it always did.
+        assertEquals(ExceptionCards.Facts.DetailLine("the run ended with exit code 1"),
+            ExceptionCards.facts(row(kind = "LANDING_LEASE_EXPIRED", lease = JsonNull)))
+        assertTrue("X-E5 is closed by hand like the other exceptions", ExceptionCards.markable(xe5()))
     }
 
     // MARK: what the card opens with
@@ -296,6 +377,10 @@ class ExceptionCardsTest {
             ExceptionCards.markHandledTitle, ExceptionCards.markHandledBody, ExceptionCards.markHandledReason, ExceptionCards.notMarkedHandled,
             ExceptionCards.notRerunCheck, ExceptionCards.notRetriedLanding, ExceptionCards.notRunAgain, ExceptionCards.notReturned, ExceptionCards.notResumed,
             ExceptionCards.ownerPrefix, ExceptionCards.cameToOwnerAt, ExceptionCards.nothingLanded, ExceptionCards.afterAFix, ExceptionCards.branchUnchanged,
+            ExceptionCards.openLanding, ExceptionCards.abandon, ExceptionCards.abandonMayHavePushed, ExceptionCards.notAbandoned,
+            ExceptionCards.landingFactLabel, ExceptionCards.runnerFactLabel, ExceptionCards.stepFactLabel, ExceptionCards.generationWord,
+            ExceptionCards.lastReportWord, ExceptionCards.leaseExpiredWord, ExceptionCards.theRunnerWord,
+            "Open the landing: every attempt, step by step.", "Ends this attempt. Nothing was pushed, and nothing is queued again.",
             ExceptionCards.CheckTail.less, "Review", "Answer", "Open coordinator", "Cancel task", "Ask the coordinator again",
             "Open the current merge card.", "Record your answer on the coordinator question.", "The coordinator resumes and held work can continue.",
             "Open the coordinator conversation.", "Open the task session to repair the branch.", "A new integration attempt is queued with your reason.",

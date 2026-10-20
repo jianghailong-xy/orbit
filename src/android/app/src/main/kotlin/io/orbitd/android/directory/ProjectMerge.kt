@@ -51,6 +51,19 @@ object ProjectMergeCard {
     fun mergeLandingLine(view: JsonObject, now: Instant, updatedAt: Instant?, refreshFailed: Boolean): LandingLine? =
         if (isMergeJob(view.obj("inFlight"))) ProjectPage.landingLine(view, now, updatedAt, refreshFailed) else null
 
+    /** The round's landing session (§2.9 LS6): the candidate's own, or the merge job's while the candidate row does not carry one
+     * (iOS `roundLandingSessionId`). The checking and merging cards' whole head row opens it. */
+    fun roundLandingSessionId(promotion: JsonObject?, view: JsonObject?): String? =
+        promotion?.text("landingSessionId")?.takeIf { it.isNotEmpty() }
+            ?: view?.let { ProjectPage.inFlightJobs(it) }.orEmpty().firstOrNull { it.text("kind") in mergeJobKinds }
+                ?.text("landingSessionId")?.takeIf { it.isNotEmpty() }
+
+    /** The landing a MERGED round's receipt opens from its foot (方案 A): the round's, recorded on the candidate. */
+    fun receiptLandingSessionId(promotion: JsonObject?): String? = promotion?.text("landingSessionId")?.takeIf { it.isNotEmpty() }
+
+    /** The merge job in flight, if one is — the round's job, for the timed-out card's doors and its detail. */
+    fun mergeJob(view: JsonObject?): JsonObject? = view?.let { ProjectPage.inFlightJobs(it) }.orEmpty().firstOrNull { it.text("kind") in mergeJobKinds }
+
     /** The word the blocked card and the review print before [blockedByLine]'s sentence (OrbitKit `PromotionCards.blockedByLabel`). */
     const val blockedByLabel = "Blocked by"
 

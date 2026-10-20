@@ -25,6 +25,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
+import io.orbitd.android.reader.LandingTarget
+import io.orbitd.android.reader.landingEntry
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.coroutines.launch
 
@@ -82,10 +84,14 @@ internal fun LandingRing(running: Boolean, size: Dp) {
  * per job with each one's own state — the branch it lands on, and the sentence that takes the reader off the hook, or, timed out,
  * where the runner stopped. A press opens the jobs in flight ([onOpenJobs]) or, from a server that lists none, [onOpenProject]; with
  * neither the card is a read. [retry] answers why a Retry did not go through, null when it did.
+ *
+ * 方案 A's explicit way in (owner 2026-10-19): one job names its landing at the card's foot; several name one per row, drawn OUTSIDE
+ * the press — a link may not live inside a button — and the row of a merge into main carries none, as the merge card is that round's
+ * way in. [openLanding] opens the session; a server that names none says so in grey in the same slot.
  */
 @Composable
-internal fun ProjectLandingCardView(card: LandingCard, onOpenJobs: (() -> Unit)?, onOpenProject: (() -> Unit)?, retry: suspend (String) -> String?,
-    modifier: Modifier = Modifier) {
+internal fun ProjectLandingCardView(card: LandingCard, onOpenJobs: (() -> Unit)?, onOpenProject: (() -> Unit)?, openLanding: (String) -> Unit,
+    retry: suspend (String) -> String?, modifier: Modifier = Modifier) {
     val warning = LocalOrbitColors.current.needsYou
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val scope = rememberCoroutineScope()
@@ -95,35 +101,45 @@ internal fun ProjectLandingCardView(card: LandingCard, onOpenJobs: (() -> Unit)?
     val chrome = if (card.timedOut) Modifier.background(warning.copy(alpha = 0.08f), shape).border(1.dp, warning.copy(alpha = 0.3f), shape)
         else Modifier.background(muted.copy(alpha = 0.1f), shape)
     val press = onOpenJobs ?: onOpenProject
+    val several = card.jobs.size > 1
+    // A card holding one job: the single row IS that job, so its way in is the card's foot.
+    val lead = if (several) null else card.jobs.firstOrNull()
     Column(modifier.fillMaxWidth().then(chrome).padding(12.dp).testTag("landing-card"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Column(Modifier.fillMaxWidth().then(if (press != null) Modifier.clickable(role = Role.Button, onClick = press) else Modifier)
             .testTag("landing-card:body"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             ProjectLandingHead(card.title, card.head, card.running, card.timedOut)
-            if (card.jobs.size > 1) Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Each job in its own ink, so a queued job behind a running one does not wear the running one's colour.
+            if (!several) card.what?.let {
+                Text(it, Modifier.testTag("landing-card:what"), style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+            if (!several) TargetLine(card.target)
+            if (!several) Sentence(card)
+        }
+        if (several) {
+            // Each job in its own ink, so a queued job behind a running one does not wear the running one's colour; and each names
+            // its own landing, except the merge job's, whose way in is the merge card.
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 card.jobs.forEach { job -> Row(Modifier.testTag("landing-card:job:${job.jobId}"), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(job.title.orEmpty(), Modifier.weight(1f), style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(job.state, style = MaterialTheme.typography.labelMedium, maxLines = 1,
                         color = if (job.timedOut) warning else if (job.running) MaterialTheme.colorScheme.primary else muted)
+                    if (!job.mergeJob) LandingEntryLink(landingEntry(job.landingSessionId), "landing-card:job:${job.jobId}:open-landing", openLanding)
                 } }
-            } else card.what?.let {
-                Text(it, Modifier.testTag("landing-card:what"), style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            // The branch it lands on, the field the task page's Target row prints, cut in the middle when the page is narrow.
-            card.target?.let { Text("${ProjectPage.landingOnto} $it", Modifier.testTag("landing-card:onto"), style = MaterialTheme.typography.labelMedium,
-                color = muted, maxLines = 1, overflow = TextOverflow.MiddleEllipsis) }
-            if (card.timedOut) card.detail?.let { Text(it, Modifier.testTag("landing-card:detail"), style = MaterialTheme.typography.labelMedium, color = muted) }
-            else Text(ProjectPage.landingNothingToDo, style = MaterialTheme.typography.labelMedium, color = muted)
+            TargetLine(card.target)
+            Sentence(card)
         }
-        card.retryJobId?.let { jobId ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Button(onClick = {
-                    if (!retrying) {
-                        retrying = true; actionError = null
-                        scope.launch { try { actionError = retry(jobId) } finally { retrying = false } }
-                    }
-                }, enabled = !retrying, modifier = Modifier.heightIn(min = 40.dp).testTag("landing-card:retry")) { Text(ProjectPage.landingRetry) }
+        if (card.retryJobId != null || onOpenJobs != null || lead != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                card.retryJobId?.let { jobId ->
+                    Button(onClick = {
+                        if (!retrying) {
+                            retrying = true; actionError = null
+                            scope.launch { try { actionError = retry(jobId) } finally { retrying = false } }
+                        }
+                    }, enabled = !retrying, modifier = Modifier.heightIn(min = 40.dp).testTag("landing-card:retry")) { Text(ProjectPage.landingRetry) }
+                }
+                lead?.let { LandingEntryLink(landingEntry(it.landingSessionId), "landing-card:open-landing", openLanding) }
                 Spacer(Modifier.weight(1f))
                 // Only where there is a list to open: elsewhere the card's press goes to the project page, and "All jobs" would name nothing.
                 onOpenJobs?.let { TextButton(onClick = it, modifier = Modifier.testTag("landing-card:all-jobs")) {
@@ -133,4 +149,32 @@ internal fun ProjectLandingCardView(card: LandingCard, onOpenJobs: (() -> Unit)?
         actionError?.let { Text(it, Modifier.testTag("landing-card:error"), style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.error, maxLines = 3, overflow = TextOverflow.Ellipsis) }
     }
+}
+
+/** "Open landing ›" — the explicit way into the landing session a job belongs to (contract §2.9 LS6, 方案 A). A server that names
+ * none says so in grey in the same slot, and nothing presses: the reader learns why the way in is missing rather than hunting. */
+@Composable
+internal fun LandingEntryLink(entry: LandingTarget, tag: String, openLanding: (String) -> Unit) {
+    when (entry) {
+        is LandingTarget.Link -> TextButton(onClick = { openLanding(entry.sessionId) }, modifier = Modifier.testTag(tag)) {
+            Text("${entry.label} ›", fontWeight = FontWeight.SemiBold)
+        }
+        LandingTarget.NoPage -> Text(entry.label, Modifier.testTag(tag), style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
+    }
+}
+
+/** The branch the work lands on — the field the task page's Target row prints — cut in the middle when the page is narrow. */
+@Composable
+private fun TargetLine(target: String?) {
+    target?.let { Text("${ProjectPage.landingOnto} $it", Modifier.testTag("landing-card:onto"), style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.MiddleEllipsis) }
+}
+
+/** What a timed-out runner did before it stopped, or the sentence that takes the reader off the hook while it lands. */
+@Composable
+private fun Sentence(card: LandingCard) {
+    if (card.timedOut) card.detail?.let { Text(it, Modifier.testTag("landing-card:detail"), style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    else Text(ProjectPage.landingNothingToDo, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

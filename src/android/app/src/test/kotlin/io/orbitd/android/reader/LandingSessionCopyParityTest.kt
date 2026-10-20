@@ -2,6 +2,7 @@ package io.orbitd.android.reader
 
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -66,6 +67,8 @@ class LandingSessionCopyParityTest {
         sentence(LandingSessionCopy.taskAcceptanceExited("§a", "§b"), "§a" to "\\(code)", "§b" to "\\(expected)")
         sentence(LandingSessionCopy.mayHavePushedAt("§t"), "§t" to "\\(time)")
         sentence(LandingSessionCopy.nextMergeOpens(7), "7" to "\\(next)")
+        assertEquals("+2 jobs queued", LandingSessionCopy.moreJobsQueued(3)); assertNull(LandingSessionCopy.moreJobsQueued(1))
+        sentence("+2 jobs queued", "2" to "\\(others)", "jobs" to "job\\(others == 1 ? \"\" : \"s\")")
         sentence(LandingSessionCopy.bytesOmitted(2048), "2048" to "\\(bytes)")
     }
 }

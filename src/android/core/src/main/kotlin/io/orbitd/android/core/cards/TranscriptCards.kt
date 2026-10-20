@@ -3,6 +3,13 @@ package io.orbitd.android.core.cards
 import io.orbitd.android.core.realtime.RunEvent
 import kotlinx.serialization.json.*
 
+/** The delivery card's two ways into the record (iOS `OpenItemDeliveryCard`, board v4 06 b): the session whose failure opened the
+ * item, and the landing it belongs to (§2.9 LS6). Held to OrbitKit's `OpenItemDelivery.swift`. */
+object OpenItemDeliveryCopy {
+    const val openSession = "Open the failed session ↗"
+    const val openLanding = "Open the landing ↗"
+}
+
 /** Only the protocol's explicit projections produce cards. Agent prose cannot grant an action. */
 fun transcriptCards(event: RunEvent): List<InteractionCard> = buildList {
     val payload = event.fields
