@@ -12,7 +12,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -24,6 +26,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import io.orbitd.android.R
 import io.orbitd.android.tasks.TaskTime
 import io.orbitd.android.ui.LocalOrbitColors
 import kotlinx.serialization.json.*
@@ -47,7 +50,9 @@ internal fun MergeRecoveryRow(recovery: MergeRecovery, working: Boolean, open: (
  * branches and how local and remote targets stand, the commits the push adds and the complete candidate
  * diff, the merge check — and the step the state asks for pinned at the foot. It reads the bar live, and
  * closes itself once the recovery is gone. [turnActive] is the bar's own gate (`WorktreeBarLogic.turnActive`),
- * so a turn in flight holds the steps back here exactly as it holds Merge and Commit there.
+ * so a turn in flight holds the steps back here exactly as it holds Merge and Commit there. With a repair
+ * session at work on a server that checks each repair turn by itself, the review is the repair loop's board:
+ * the repair row's six states, the check in flight, and the steps they ask for.
  */
 @Composable
 internal fun MergeRecoveryReview(model: WorktreeModel, d: JsonObject, r: MergeRecovery, turnActive: Boolean, open: (String) -> Unit, close: () -> Unit) {
@@ -55,16 +60,24 @@ internal fun MergeRecoveryReview(model: WorktreeModel, d: JsonObject, r: MergeRe
     var pressed by remember { mutableStateOf<MergeRecovery.Button?>(null) }
     val supported = (d["mergeRecoverySupported"] as? JsonPrimitive)?.booleanOrNull == true
     val working = state.busy || d.string("mergeStatus") == "pending"
-    val repair = d["mergeRepairSession"] as? JsonObject
-    val repairState = repair?.let { it.string("runState") ?: it.string("runStatus") }
-    val blocked = working || turnActive || repairState in setOf("QUEUED", "RUNNING")
-    val buttons = r.buttons(supported)
+    val repair = MergeRecovery.repair(d)
+    val landed = r.code == "ALREADY_LANDED"
+    // The repair loop's row, the server's check of what the repair left, and the steps (MergeRecovery.review).
+    val (row, checking, buttons) = r.review(d)
+    val blocked = working || turnActive || repair?.running == true
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    // What the check is about to replace fades while the server checks the repair.
+    val dim = if (checking) Modifier.alpha(0.4f) else Modifier
     fun run(step: MergeRecovery.Button) {
         pressed = step
-        if (step.action == "repair") model.repairRecovery(step.preparePR == true) { id -> close(); open("orbit-session:$id") }
-        else model.recoverMerge(step.action, r.previewId, r.targetBranch)
+        when (step.action) {
+            "open" -> repair?.id?.let { close(); open("orbit-session:$it") }
+            "repair" -> model.repairRecovery(step.preparePR == true) { id -> close(); open("orbit-session:$id") }
+            else -> model.recoverMerge(step.action, r.previewId, r.targetBranch)
+        }
     }
+    // Opening the repair is never held back, and waiting for its check is never a step.
+    fun enabled(step: MergeRecovery.Button) = when (step.action) { "open" -> true; "wait" -> false; else -> !blocked }
     fun title(step: MergeRecovery.Button) = if (working && pressed == step) "Working…" else step.title
     Dialog(close, properties = DialogProperties(usePlatformDefaultWidth = false)) { Surface(Modifier.fillMaxSize().safeDrawingPadding()) { Column {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -74,47 +87,48 @@ internal fun MergeRecoveryReview(model: WorktreeModel, d: JsonObject, r: MergeRe
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(r.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, modifier = Modifier.semantics { heading() })
-                    if (working) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp); Text("Working…", color = secondary)
+                    if (checking || working) Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(Modifier.size(12.dp), strokeWidth = 1.5.dp)
+                        Text(if (checking) "Checking the repair…" else "Working…", color = secondary)
                     } else if (r.checkedAt != null || buttons.headerCheck != null) Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                         r.checkedAt?.let { Text("Checked ${TaskTime.relative(it) ?: it}", color = secondary, style = MaterialTheme.typography.bodyMedium)
                             if (buttons.headerCheck != null) Text("·", color = secondary) }
                         buttons.headerCheck?.let { check -> TextButton(enabled = !blocked, onClick = { run(check) }) { Text(check.title) } }
                     }
-                    lede(r)?.let { Text(it, color = secondary, style = MaterialTheme.typography.bodyMedium) }
+                    r.lede()?.let { Text(it, color = secondary, style = MaterialTheme.typography.bodyMedium) }
                 }
             }
-            if (repair != null) item {
-                val running = repairState in setOf("QUEUED", "RUNNING")
-                val failed = repairState == "FAILED"
-                Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Opens the repair session") { repair.string("id")?.let { open("orbit-session:$it") } },
-                    horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (running) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp)
-                    else Text(if (failed) "✕" else "✓", color = if (failed) MaterialTheme.colorScheme.error else LocalOrbitColors.current.success)
-                    Column(Modifier.weight(1f)) {
-                        Text(if (running) "Repair session running" else if (failed) "Repair session failed" else "Repair session completed",
-                            style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                        Text(repair.string("title") ?: "Resolve merge recovery for ${r.targetBranch}", color = secondary, style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                        if (running) Text("Tap to open the running session", color = secondary, style = MaterialTheme.typography.bodySmall)
-                        else if (!failed) Text("Ready to check again", color = secondary, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Text("›", color = secondary)
-                }
+            if (repair != null && row != null) item {
+                RepairRowView(row, repair.title ?: "Resolve merge recovery for ${r.targetBranch}") { repair.id?.let { open("orbit-session:$it") } }
             }
-            d.string("mergeError")?.takeIf { !r.ready && it.isNotBlank() }?.let { message -> item { Fold("Details") { Mono(message) } } }
+            d.string("mergeError")?.takeIf { !r.ready && !landed && it.isNotBlank() }?.let { message -> item { Column(dim) { Fold("Details") { Mono(message) } } } }
             r.conflicts?.takeIf { it.isNotEmpty() }?.let { conflicts -> item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Conflicts", style = MaterialTheme.typography.titleSmall)
+                Column(dim, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(r.conflictsHeading, style = MaterialTheme.typography.titleSmall)
                     conflicts.forEach { SelectionContainer { Text(it, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodySmall) } }
+                    r.movedAfterRepairNote?.let { Text(it, color = secondary, style = MaterialTheme.typography.bodySmall) }
+                }
+            } }
+            // Board ⑥: the commits on origin that already carry this session's, before the branches.
+            r.landedCommits?.takeIf { landed && it.isNotEmpty() }?.let { commits -> item {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row { Text("On origin/${r.targetBranch}", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
+                        Text("${commits.size} ${if (commits.size == 1) "commit" else "commits"}", color = secondary, style = MaterialTheme.typography.bodySmall) }
+                    commits.forEach { CommitRow(it, null, merged = MergeRecovery.day(it.date)) }
+                    r.landedNote?.let { Text(it, color = secondary, style = MaterialTheme.typography.bodySmall) }
                 }
             } }
             item {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(buildAnnotatedString {
-                        append(branchLabel(d.string("branch") ?: "this session", secondary)); append(" → "); append(r.targetBranch)
-                    }, fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, maxLines = 2)
+                Column(dim, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    // One line, as the board and the bar's pill draw it: a long branch gives up its middle, never the target.
+                    Row {
+                        Text(branchLabel(d.string("branch") ?: "this session", secondary), Modifier.weight(1f, fill = false),
+                            fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
+                        Text(" → ${r.targetBranch}", fontFamily = FontFamily.Monospace, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                    }
                     r.targetRelation?.let { Text(it, color = secondary, style = MaterialTheme.typography.bodySmall) }
                     r.repairBranch?.let { Text("Repair branch $it", color = secondary, style = MaterialTheme.typography.bodySmall) }
+                    if (landed) r.localNote?.let { Text(it, color = secondary, style = MaterialTheme.typography.bodySmall) }
                 }
             }
             val candidate = if (r.candidateSha != null) r.patch else null
@@ -122,15 +136,16 @@ internal fun MergeRecoveryReview(model: WorktreeModel, d: JsonObject, r: MergeRe
             if (!push.isNullOrEmpty()) item {
                 var all by rememberSaveable { mutableStateOf(false) }
                 val (shown, hidden) = r.inlinePushCommits()
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(dim, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row { Text("Pushes to origin/${r.targetBranch}", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                         Text("${push.size} ${if (push.size == 1) "commit" else "commits"}", color = secondary, style = MaterialTheme.typography.bodySmall) }
                     (if (all) push else shown).forEach { CommitRow(it, r.origin(it)) }
                     if (hidden > 0 && !all) TextButton(onClick = { all = true }) { Text("All ${push.size} commits · $hidden more from this session") }
                     Text(r.landingNote, color = secondary, style = MaterialTheme.typography.bodySmall)
                 }
-            } else r.localCommits?.takeIf { it.isNotEmpty() }?.let { local -> item {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Nothing is pushed for a session already on origin: the local target's own commits are its note above.
+            } else r.localCommits?.takeIf { !landed && it.isNotEmpty() }?.let { local -> item {
+                Column(dim, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Row { Text("Local-only commits — included in the push", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall)
                         Text("${local.size}", color = secondary, style = MaterialTheme.typography.bodySmall) }
                     local.forEach { CommitRow(it, null) }
@@ -138,10 +153,10 @@ internal fun MergeRecoveryReview(model: WorktreeModel, d: JsonObject, r: MergeRe
             } }
             candidate?.let { patch -> item {
                 val (lines, _) = remember(patch) { diffLines(patch, cap = 4_000) }
-                Fold("Complete candidate diff · against origin/${r.targetBranch}") { DiffLines(lines) }
+                Column(dim) { Fold("Complete candidate diff · against origin/${r.targetBranch}") { DiffLines(lines) } }
             } }
             r.check?.let { check -> item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(dim, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row { Text("Merge check", Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
                         Text(when (check.status) { "unconfigured" -> "Not configured"; "passed" -> "Passed"; else -> "Failed" },
                             color = if (check.status == "failed") MaterialTheme.colorScheme.error else secondary) }
@@ -155,8 +170,12 @@ internal fun MergeRecoveryReview(model: WorktreeModel, d: JsonObject, r: MergeRe
             HorizontalDivider()
             Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                buttons.primary?.let { step -> Button(onClick = { run(step) }, enabled = !blocked, modifier = Modifier.fillMaxWidth()) { Text(title(step)) } }
-                buttons.secondary.forEach { step -> TextButton(onClick = { run(step) }, enabled = !blocked) { Text(title(step)) } }
+                buttons.primary?.let { step -> Button(onClick = { run(step) }, enabled = enabled(step), modifier = Modifier.fillMaxWidth()) {
+                    if (step.action == "wait") { CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp); Spacer(Modifier.width(8.dp)) }
+                    Text(title(step))
+                } }
+                buttons.secondary.forEach { step -> TextButton(onClick = { run(step) }, enabled = enabled(step)) { Text(title(step)) } }
+                buttons.note?.let { Text(it, color = secondary, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center) }
                 if (!supported) Text("Update the runner to use target synchronization recovery.", color = secondary,
                     style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
             }
@@ -164,27 +183,49 @@ internal fun MergeRecoveryReview(model: WorktreeModel, d: JsonObject, r: MergeRe
     } } }
 }
 
-private fun lede(r: MergeRecovery): String? {
-    val t = r.targetBranch
-    if (r.ready) return if (!r.pushCommits.isNullOrEmpty()) null else "Preserves both target histories." + if (r.addsMergeCommit == true) " Adds one merge commit." else ""
-    return when (r.code) {
-        "TARGET_DIVERGED" -> "Local $t and origin/$t each have unique commits."
-        "TARGET_AHEAD" -> "Local $t has extra commits that are not on origin/$t. Review them before continuing this merge."
-        "LOCAL_SYNC_PENDING" -> "The remote contains the reviewed candidate. Save blocking local edits before syncing; this action only updates this machine."
-        else -> null
+/** The repair session's row, opening it: how it stands, its title, and the line the state adds — the check's verdict, its question, its error. */
+@Composable
+private fun RepairRowView(row: MergeRecovery.RepairRow, title: String, open: () -> Unit) {
+    val colors = LocalOrbitColors.current
+    val secondary = MaterialTheme.colorScheme.onSurfaceVariant
+    val tint = when (row.state) {
+        MergeRecovery.RepairState.READY -> colors.success
+        MergeRecovery.RepairState.CONFLICTS, MergeRecovery.RepairState.NEEDS_REPLY -> colors.needsYou
+        MergeRecovery.RepairState.FAILED -> MaterialTheme.colorScheme.error
+        else -> secondary
+    }
+    Row(Modifier.fillMaxWidth().clickable(onClickLabel = "Opens the repair session", onClick = open),
+        horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        when (row.state) {
+            MergeRecovery.RepairState.RUNNING, MergeRecovery.RepairState.CHECKING -> CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 1.5.dp)
+            // No verdict of the repair's to show, so no sign either.
+            MergeRecovery.RepairState.FINISHED -> Unit
+            else -> Icon(painterResource(when (row.state) {
+                MergeRecovery.RepairState.CONFLICTS -> R.drawable.ic_warning
+                MergeRecovery.RepairState.NEEDS_REPLY -> R.drawable.ic_suggestion
+                MergeRecovery.RepairState.FAILED -> R.drawable.ic_x_circle
+                else -> R.drawable.ic_check_circle
+            }), null, Modifier.size(18.dp), tint = if (row.state == MergeRecovery.RepairState.COMPLETED) colors.success else tint)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(row.headline, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            Text(title, color = secondary, style = MaterialTheme.typography.bodySmall, maxLines = 1)
+            row.line?.let { Text(it, color = tint, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+        }
+        Text("›", color = secondary)
     }
 }
 
-/** One commit: its subject, then where it comes from, who, when and which. */
+/** One commit: its subject, then where it comes from, who, when and which — or, for one already on origin, the day it [merged]. */
 @Composable
-private fun CommitRow(commit: MergeRecovery.Commit, origin: MergeRecovery.Origin?) {
+private fun CommitRow(commit: MergeRecovery.Commit, origin: MergeRecovery.Origin?, merged: String? = null) {
     val secondary = MaterialTheme.colorScheme.onSurfaceVariant
     Column {
         Text(commit.subject, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
         Text(buildAnnotatedString {
             origin?.let { withStyle(SpanStyle(color = if (it == MergeRecovery.Origin.SESSION) secondary else LocalOrbitColors.current.needsYou,
                 fontWeight = FontWeight.SemiBold)) { append(it.label + " · ") } }
-            append("${commit.author} · ${TaskTime.relative(commit.date) ?: commit.date} · ")
+            append(if (merged != null) "Merged $merged · ${commit.author} · " else "${commit.author} · ${TaskTime.relative(commit.date) ?: commit.date} · ")
             withStyle(SpanStyle(fontFamily = FontFamily.Monospace)) { append(commit.sha.take(8)) }
         }, color = secondary, style = MaterialTheme.typography.bodySmall)
     }

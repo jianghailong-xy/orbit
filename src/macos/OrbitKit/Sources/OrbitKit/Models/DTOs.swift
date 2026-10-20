@@ -1368,6 +1368,12 @@ public struct MergeRepairSession: Codable, Equatable, Sendable, Identifiable {
     public let lifecycleState: SessionLifecycleState?
     public let error: String?
     public let completedAt: String?
+    /// When its turn last ended (or it finished), when it finished, and the start of what it last
+    /// said — what a repair waiting for the owner asked, up to 200 characters. Nil from a server
+    /// that predates the server's own check after a repair round.
+    public let lastTurnAt: String?
+    public let finishedAt: String?
+    public let lastAssistantText: String?
 
     public var effectiveRunStatus: RunStatus? { runStatus ?? status }
     public var effectiveRunState: SessionRunState? {
@@ -1418,6 +1424,11 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     public let mergeRecovery: MergeRecovery?
     public let mergeRepairSession: MergeRepairSession?
     public let mergeRecoverySupported: Bool?
+    /// The recovery step the pending merge operation runs ("preview" | "apply" | "sync-local"); a
+    /// pending preview is a check under way.
+    public let mergeRecoveryAction: String?
+    /// Set while a repair round's check waits for this session's own turn to end. Nil from older servers.
+    public let mergeRepairTurnEndedAt: String?
     public let workspace: SessionDetailAgent?
     /// The server-resolved merge target: an explicit choice, project integration line, or default.
     public let mergeTarget: String?
@@ -1488,6 +1499,8 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         mergeRecovery = try values.decodeIfPresent(MergeRecovery.self, forKey: .mergeRecovery)
         mergeRepairSession = try values.decodeIfPresent(MergeRepairSession.self, forKey: .mergeRepairSession)
         mergeRecoverySupported = try values.decodeIfPresent(Bool.self, forKey: .mergeRecoverySupported)
+        mergeRecoveryAction = try values.decodeIfPresent(String.self, forKey: .mergeRecoveryAction)
+        mergeRepairTurnEndedAt = try values.decodeIfPresent(String.self, forKey: .mergeRepairTurnEndedAt)
         workspace = try values.decodeIfPresent(SessionDetailAgent.self, forKey: .workspace)
         mergeTarget = try values.decodeIfPresent(String.self, forKey: .mergeTarget)
         mergeTargets = try values.decodeIfPresent([String].self, forKey: .mergeTargets)
@@ -1516,6 +1529,7 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 mergeStatus: String? = nil, mergeError: String? = nil, mergeTarget: String? = nil,
                 mergeRecovery: MergeRecovery? = nil, mergeRecoverySupported: Bool? = nil,
                 mergeRepairSession: MergeRepairSession? = nil,
+                mergeRecoveryAction: String? = nil, mergeRepairTurnEndedAt: String? = nil,
                 workspace: SessionDetailAgent? = nil,
                 mergeTargets: [String]? = nil, branchMerged: Bool? = nil, worktreeBranch: String? = nil,
                 commitStatus: String? = nil, commitError: String? = nil,
@@ -1543,6 +1557,8 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.mergeRecovery = mergeRecovery
         self.mergeRepairSession = mergeRepairSession
         self.mergeRecoverySupported = mergeRecoverySupported
+        self.mergeRecoveryAction = mergeRecoveryAction
+        self.mergeRepairTurnEndedAt = mergeRepairTurnEndedAt
         self.workspace = workspace
         self.mergeTarget = mergeTarget
         self.mergeTargets = mergeTargets

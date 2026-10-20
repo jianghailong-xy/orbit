@@ -1738,6 +1738,11 @@ model Session {
   mergeError           String?   @map("merge_error")
   mergeRecovery        Json?     @map("merge_recovery")
   mergeRecoveryAction  String?   @map("merge_recovery_action")
+  /// When a repair session's turn ended whose check of this session's recovery is still owed: the
+  /// server checks again after every repair turn (SessionsService.checkAfterRepairTurn), and while
+  /// this session runs a turn of its own — when a merge is refused — the check waits here until that
+  /// turn ends. Null when no check is owed (migration 0431).
+  mergeRepairTurnEndedAt DateTime? @map("merge_repair_turn_ended_at")
   mergeRequestedAt     DateTime? @map("merge_requested_at")
   // Fresh for every queued attempt. Runner results must echo this UUID, so a
   // delayed result from an attempt cleared by Resume cannot complete a later one.
@@ -2044,6 +2049,9 @@ model SessionMergeReceipt {
   /// `MERGED` (the target moved and now contains this source), `ALREADY_MERGED` (it was already
   /// there — the external-ff-only and re-run cases, which are a RESULT and not a no-op), `CONFLICT`
   /// (git refused, `conflicts` names the paths) and `ERROR` (everything else, `detail` says what).
+  /// 0432 adds `MATCHED_BY_CONTENT`: the owner's Done on a recovery check that found every commit of
+  /// the session on the target as other commits with the same patch-id. Written by the server alone,
+  /// and not a landed result — the source is no ancestor of the target (sessions/merge-receipt.ts).
   result String
 
   sourceBranch String  @map("source_branch")

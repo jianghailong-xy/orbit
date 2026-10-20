@@ -1682,6 +1682,11 @@ export interface MergeRepairSession {
   sessionState?: string | null;
   error?: string | null;
   completedAt?: string | null;
+  /** When its turn last ended (it moves with activity during a turn) and when it finished. Absent from older servers. */
+  lastTurnAt?: string | null;
+  finishedAt?: string | null;
+  /** What it last said — for a repair waiting on the owner, what it asked — clipped to 200 characters. */
+  lastAssistantText?: string | null;
 }
 
 /** The tiers a task can be suggested at (`task.modelHint`, docs/model-routing-design.md §3.1). */
@@ -1839,6 +1844,8 @@ export interface SessionDetail {
   mergeRecovery?: MergeRecovery | null;
   mergeRepairSession?: MergeRepairSession | null;
   mergeRecoveryAction?: MergeRecoveryAction | null;
+  /** Non-null while a check a repair turn left owed waits for this session's own turn to end; the server then runs it. */
+  mergeRepairTurnEndedAt?: string | null;
   mergeRecoverySupported?: boolean;
   mergedAt?: string | null;
   // The server-resolved merge target: an explicit choice, a project integration line, or the

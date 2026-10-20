@@ -1,6 +1,8 @@
 /** Recovery travels on the existing fenced merge operation. Old clients keep reading message. */
 export const SESSION_MERGE_RECOVERY_V1 = 'session-merge-recovery-v1';
-export type MergeRecoveryAction = 'preview' | 'apply' | 'sync-local';
+/** `confirm-landed` is the owner's Done on an ALREADY_LANDED check (see mergeRecoveryConfirmable). The server
+ *  records the session merged by itself and no runner is sent anything; clients that predate it never offer it. */
+export type MergeRecoveryAction = 'preview' | 'apply' | 'sync-local' | 'confirm-landed';
 export interface MergeRecoveryCommit {
   sha: string;
   subject: string;
@@ -72,6 +74,14 @@ export function mergeRecoveryReady(r: MergeRecovery | null | undefined): boolean
     typeof r.patch === 'string' && ['passed', 'unconfigured'].includes(r.check?.status ?? '');
 }
 
+/** Whether Done (`confirm-landed`) may close this recovery: a check that found every one of the session's commits
+ *  already on origin, naming the source it checked and the previewId it was stored under. The runner mints no
+ *  previewId for this result; the server gives it one when it stores it. */
+export function mergeRecoveryConfirmable(r: MergeRecovery | null | undefined): boolean {
+  return !!r && r.code === 'ALREADY_LANDED' && !!r.previewId &&
+    typeof r.sourceSha === 'string' && /^[0-9a-f]{40}$/.test(r.sourceSha);
+}
+
 /** Where a commit the push adds comes from. Local-only first: an unpublished local merge is still unpublished. */
 export function mergeRecoveryCommitOrigin(r: MergeRecovery, c: MergeRecoveryCommit): 'local' | 'merge' | 'session' {
   if (r.localCommits?.some((l) => l.sha === c.sha)) return 'local';
@@ -96,11 +106,36 @@ export function mergeRecoveryPrompt(r: MergeRecovery, preparePr = false): string
     `Frozen source: ${r.sourceSha ?? 'unknown'}\nLocal target: ${r.localSha ?? 'unknown'}\n` +
     `Remote target: ${r.remoteSha ?? 'unknown'}\nPhase: ${r.phase ?? r.code}\n` +
     `Conflicting files: ${(r.conflicts ?? []).join(', ') || 'see the diagnostic'}\n\n` +
-    'Work only in the separate repair worktree. ' +
+    repairInstructions(preparePr);
+}
+
+/** The next step of the same recovery, for the repair session already working on it: where the recovery stands
+ *  now, so the session goes on from its own context. A repair left unfinished lists its unresolved files. */
+export function mergeRecoveryContinuePrompt(r: MergeRecovery, preparePr = false): string {
+  return `This is the next step of the same merge recovery for ${r.targetBranch}: ` +
+    `${preparePr ? 'prepare a reviewable PR candidate from the repair' : 'continue the repair'}. Here is where it stands now.\n\n` +
+    `Check result: ${r.code}\nPhase: ${r.phase ?? r.code}\n` +
+    `${r.code === 'REPAIR_IN_PROGRESS' ? 'Unresolved files' : 'Conflicting files'}: ` +
+    `${(r.conflicts ?? []).join(', ') || 'see the diagnostic'}\n` +
+    `Repair branch: ${r.repairBranch ?? 'the one you have been repairing on'}\n` +
+    `Repair worktree: ${r.repairWorktree ?? 'the one you have been repairing in'}\n` +
+    `Repository: ${r.repoRoot ?? 'see the workspace configuration'}\n` +
+    `Frozen source: ${r.sourceSha ?? 'unknown'}\nLocal target: ${r.localSha ?? 'unknown'}\n` +
+    `Remote target: ${r.remoteSha ?? 'unknown'}\n\n` +
+    repairInstructions(preparePr);
+}
+
+/** What every message to a repair session asks of it, the first one and each that continues it. */
+function repairInstructions(preparePr: boolean): string {
+  return 'Work only in the separate repair worktree. ' +
     (preparePr ? 'Preserve both sides’ content; organize commits on a separate PR candidate according to repository policy. Preserve the original source branch. '
       : 'Preserve both target histories and the original source branch. ') +
     'Finish the pending merge/rebase there, resolving every conflict, and run the repository checks. ' +
+    'Commit the resolution in the repair worktree: Orbit reads anything left uncommitted there as an unfinished repair. ' +
     'Do not reset or rebase the shared target checkout. Do not push the target. ' +
     (preparePr ? 'Respect required linear history and branch protection. Prepare a candidate branch and complete diff for review; do not claim it is merged. ' : '') +
-    'Report the repair branch and checks when finished. The owner will check the recovery again and review its complete diff before any target push.';
+    'Report the repair branch and checks when finished. ' +
+    'When this turn ends, Orbit checks the recovery again by itself, so there is no need to ask for a check. ' +
+    'If the repair needs a decision from the owner, ask the owner directly in this conversation. ' +
+    'The owner reviews the complete diff before any target push.';
 }

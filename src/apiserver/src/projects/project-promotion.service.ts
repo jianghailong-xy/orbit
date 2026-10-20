@@ -1879,6 +1879,9 @@ async function writeUpstreamReceipts(
     where: { id: { in: input.promotion.includedTaskIds } },
     select: { id: true },
   })).map((row) => row.id));
+  // The merge ends the merge recovery each of these sessions was holding: all of them at once, in id order,
+  // before the receipts below take their own locks — so `fromIntegrationJob` finds nothing left to clear.
+  await MergeReceiptService.clearLandedRecoveries(tx, [...liveSessions]);
   const receiptIds: string[] = [];
   for (const taskId of input.promotion.includedTaskIds) {
     const landing = byTask.get(taskId);
