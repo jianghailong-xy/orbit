@@ -31,7 +31,11 @@ final class LandingSessionShotTests: ProbeCase {
         }
         XCTAssertFalse(appears(app, "Retire the v1 ledger", timeout: 2), "the fold starts closed")
         shot(app, "ios-04-earlier-bare")
-        press(element(app, containing: "Earlier"))
+        // The fold's own button: the drawer, mounted under the page, has an "Earlier" of its own.
+        let fold = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Earlier"))
+            .allElementsBoundByIndex.first(where: { $0.isHittable })
+        XCTAssertNotNil(fold, "the bare fold is no button on the page")
+        if let fold { press(fold) }
         for title in ["Retire the v1 ledger", "Webhook retry cap", "main · #2"] {
             XCTAssertTrue(appears(app, title, timeout: 20), "the open fold never listed `\(title)`")
         }
