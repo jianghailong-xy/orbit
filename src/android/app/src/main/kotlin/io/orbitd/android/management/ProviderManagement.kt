@@ -46,14 +46,15 @@ private fun rememberReload(resumed: Boolean, revision: Long, load: suspend () ->
     LaunchedEffect(resumed, revision) { if (resumed) load() }
 }
 
-/** Infrastructure (Settings' Machines & models row), or one of its pages when the route names it: a pool (own:<id> / shared:<id>) or a
- * DeepSeek key (key:<id>). */
+/** Infrastructure (Settings' Machines & models row), or one of its pages when the route names it: a pool (own:<id> / shared:<id>), a
+ * DeepSeek key (key:<id>) or a Cursor key (cursor-key:<id>). */
 @Composable
 fun InfrastructureSettings(api: ManagementApi, revision: Long, record: String?, open: (OrbitRoute) -> Unit, back: () -> Unit) {
     when {
         record?.startsWith("own:") == true -> PoolScreen(api, revision, ownId = record.removePrefix("own:"), sharedId = null, back = back)
         record?.startsWith("shared:") == true -> PoolScreen(api, revision, ownId = null, sharedId = record.removePrefix("shared:"), back = back)
         record?.startsWith("key:") == true -> DeepSeekKeyPage(api, revision, record.removePrefix("key:"))
+        record?.startsWith("cursor-key:") == true -> CursorKeyPage(api, revision, record.removePrefix("cursor-key:"))
         else -> InfrastructurePage(api, revision, open)
     }
 }
@@ -89,6 +90,7 @@ internal object KeyEngines {
     /** The protocol a key's endpoint speaks, its row's `runtime` (web `runtimeSummary`) — not an engine: a key runs on several. */
     fun protocol(runtime: String?) = when (runtime) {
         ProviderEngines.CODEX -> "OpenAI-compatible"; ProviderEngines.KIMI -> "Moonshot API"; ProviderEngines.ANTIGRAVITY -> "Gemini API"
+        ProviderEngines.CURSOR -> CursorCopy.PROTOCOL
         else -> "Anthropic-compatible"
     }
 

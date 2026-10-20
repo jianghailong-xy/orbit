@@ -5,11 +5,12 @@ package main
 // The runner installs that build itself rather than through Cursor's installer: it downloads the
 // build's tarball for this platform, checks it against the size and SHA-256 the contract recorded,
 // and unpacks it into a version directory of its own, <orbit home>/cursor/versions/<version>, which it
-// never rewrites afterwards. The official install script would also link ~/.local/bin/agent and
-// ~/.local/bin/cursor, keep only the newest two versions and leave a detached cleanup process behind
-// (§1.1); none of that happens here. Every Cursor CLI process Orbit starts runs that directory's
-// cursor-agent by its absolute path, so nothing another copy of the CLI on the machine does — an
-// update included — changes what a session runs.
+// never rewrites afterwards — only a person's Install or Reinstall puts the pinned build back where
+// another one is found in its place (reinstallCursor). The official install script would also link
+// ~/.local/bin/agent and ~/.local/bin/cursor, keep only the newest two versions and leave a detached
+// cleanup process behind (§1.1); none of that happens here. Every Cursor CLI process Orbit starts runs
+// that directory's cursor-agent by its absolute path, so nothing another copy of the CLI on the
+// machine does — an update included — changes what a session runs.
 //
 // Even `cursor-agent --version` writes a cli-config.json and a compile cache under HOME (measured on
 // the pinned build), so every process the runner starts for itself runs in a throwaway home
@@ -162,18 +163,27 @@ func cursorExecutablePath() (string, error) {
 	if err := cursorPlatformError(); err != nil {
 		return "", err
 	}
-	exe, err := cursorExecutableIn(cursorVersionDir())
+	exe, _, err := cursorPinnedBuild()
+	return exe, err
+}
+
+// cursorPinnedBuild checks the pinned version directory as cursorExecutablePath does, and says whether
+// what is there is provably not the pinned build (another): no entry point Orbit published, or a build
+// that answers its version probe with another version. A build that did not answer at all is not
+// provably anything — on a loaded machine that is a busy CLI, which sessions may be running on.
+func cursorPinnedBuild() (exe string, another bool, err error) {
+	exe, err = cursorExecutableIn(cursorVersionDir())
 	if err != nil {
-		return "", err
+		return "", true, err
 	}
 	version, err := cursorProbeVersion(exe)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if version != cursorSupportedVersion {
-		return "", cursorVersionMismatch(version)
+		return "", true, cursorVersionMismatch(version)
 	}
-	return exe, nil
+	return exe, false, nil
 }
 
 // cursorPublishedVersions are the version directories Orbit has published here, newest last: the
@@ -199,7 +209,23 @@ func cursorPublishedVersions() []string {
 // installCursor publishes the pinned build in Orbit's version directory. The caller holds
 // engineInstall.mu, shared with every other install and update. A directory already published is
 // never rewritten, broken or not: a different build goes into a directory of its own.
-func installCursor(ctx context.Context, proxyVars []envVar) (err error) {
+func installCursor(ctx context.Context, proxyVars []envVar) error {
+	return publishCursor(ctx, proxyVars, false)
+}
+
+// reinstallCursor is installCursor for a person's Install or Reinstall from Orbit (installEngineNow),
+// and the one way a pinned version directory that is provably not the pinned build (cursorPinnedBuild)
+// is put right: the checked tarball takes its place, and what was there is deleted. A pinned build that
+// is ready is left as it is, never downloaded or written again, and so is one that did not answer its
+// version probe. No session starts on what is replaced — a launch takes the pinned build only once it
+// says it is that version — and a build an earlier pin installed keeps its own directory, untouched, for
+// the sessions running on it.
+func reinstallCursor(ctx context.Context, proxyVars []envVar) error {
+	return publishCursor(ctx, proxyVars, true)
+}
+
+// publishCursor is installCursor, and reinstallCursor when replace is set.
+func publishCursor(ctx context.Context, proxyVars []envVar, replace bool) (err error) {
 	defer func() {
 		if err != nil && !strings.HasPrefix(err.Error(), "CURSOR_") {
 			err = fmt.Errorf("CURSOR_INSTALL_FAILED: installing Cursor CLI %s failed: %w", cursorSupportedVersion, err)
@@ -210,9 +236,13 @@ func installCursor(ctx context.Context, proxyVars []envVar) (err error) {
 		return err
 	}
 	target := cursorVersionDir()
+	replacing := false
 	if _, err := os.Lstat(target); err == nil {
-		_, err = cursorExecutablePath()
-		return err
+		_, another, err := cursorPinnedBuild()
+		if err == nil || !replace || !another {
+			return err
+		}
+		replacing = true
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -245,7 +275,20 @@ func installCursor(ctx context.Context, proxyVars []envVar) (err error) {
 	if version != cursorSupportedVersion {
 		return cursorVersionMismatch(version)
 	}
-	return os.Rename(unpacked, target)
+	if !replacing {
+		return os.Rename(unpacked, target)
+	}
+	// Set aside inside the stage, which goes with it, and put back if the checked build cannot take
+	// its place: one rename each, on the same filesystem.
+	replaced := filepath.Join(stage, "replaced")
+	if err := os.Rename(target, replaced); err != nil {
+		return err
+	}
+	if err := os.Rename(unpacked, target); err != nil {
+		_ = os.Rename(replaced, target)
+		return err
+	}
+	return nil
 }
 
 // removeStaleCursorStages deletes what an install interrupted long ago left in the versions directory:

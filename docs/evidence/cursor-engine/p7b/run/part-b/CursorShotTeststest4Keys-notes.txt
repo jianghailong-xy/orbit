@@ -1,0 +1,16 @@
+keys-light-settings-row: in view after 2 drag(s) at (16.0, 726.0, 370.0, 52.0)
+keys-light: Settings row 9 label="Infrastructure, 1 needs you" value="" frame=(16.0, 726.0, 370.0, 52.0) hittable=true
+keys-light: in view after 12 drag(s) at (16.0, 778.3333333333334, 370.0, 61.666666666666515)
+keys-light: Cursor row 9 label="Cursor, Auto, Cursor CLI" value="" frame=(16.0, 601.6666666666665, 370.0, 88.33333333333337) hittable=true
+keys2-light-settings-row: in view after 2 drag(s) at (16.0, 722.0, 370.0, 52.0)
+keys2-light: Settings row 9 label="Infrastructure, 1 needs you" value="" frame=(16.0, 722.0, 370.0, 52.0) hittable=true
+keys2-light: never in the band 200.0–760.0; last frame (16.0, 690.0, 370.0, 88.33333333333337)
+keys-light: Cursor 2 row 9 label="Cursor 2, Auto, Cursor CLI, Rejected" value="" frame=(16.0, 690.0, 370.0, 88.33333333333337) hittable=true
+keys-dark-settings-row: in view after 2 drag(s) at (16.0, 722.0, 370.0, 52.0)
+keys-dark: Settings row 9 label="Infrastructure, 1 needs you" value="" frame=(16.0, 722.0, 370.0, 52.0) hittable=true
+keys-dark: in view after 12 drag(s) at (16.0, 778.3333333333334, 370.0, 61.666666666666515)
+keys-dark: Cursor row 9 label="Cursor, Auto, Cursor CLI" value="" frame=(16.0, 601.6666666666665, 370.0, 88.33333333333337) hittable=true
+keys2-dark-settings-row: in view after 2 drag(s) at (16.0, 722.0, 370.0, 52.0)
+keys2-dark: Settings row 9 label="Infrastructure, 1 needs you" value="" frame=(16.0, 722.0, 370.0, 52.0) hittable=true
+keys2-dark: never in the band 200.0–760.0; last frame (16.0, 690.0, 370.0, 88.33333333333337)
+keys-dark: Cursor 2 row 9 label="Cursor 2, Auto, Cursor CLI, Rejected" value="" frame=(16.0, 690.0, 370.0, 88.33333333333337) hittable=true

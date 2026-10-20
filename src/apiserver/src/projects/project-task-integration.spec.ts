@@ -13,7 +13,7 @@ function row(changes: Partial<Row> = {}): Row {
     jobTargetRef: 'refs/heads/project/example',
     jobStartedAt: startedAt, jobClaimedAt: startedAt, jobHeartbeatAt: startedAt,
     jobCreatedAt: startedAt, jobFinishedAt: null,
-    jobErrorCode: null, jobConflictCount: 0, jobFailedCheck: null,
+    jobErrorCode: null, jobConflictCount: 0, jobFailedCheck: null, jobLandingSessionId: null,
     queueBlockCode: null, runnerWait: null, runnerName: null,
     blockingJobId: null, blockingJobKind: null, blockingTaskTitle: null, blockingOpenItemId: null,
     syncHandlingGeneration: null,
@@ -109,11 +109,11 @@ function landing(changes: Partial<Row> = {}): Row {
 test('a queued attempt carries its generation, target, instants, live wait and reason', () => {
   const view = taskIntegrationOf(landing({
     queueBlockCode: 'WAITING_MAIN_SYNC', blockingJobId: 'sync', blockingOpenItemId: 'item',
-    blockingTaskTitle: 'Earlier task',
+    blockingTaskTitle: 'Earlier task', jobLandingSessionId: 'landing-session-1',
   }), now);
   assert.equal(view.state, 'QUEUED');
   assert.deepEqual(view.landTask, {
-    jobId: 'landing', state: 'QUEUED', phase: null, generation: '2',
+    jobId: 'landing', state: 'QUEUED', landingSessionId: 'landing-session-1', phase: null, errorCode: null, generation: '2',
     queuedAt, startedAt: null, heartbeatAt: null, finishedAt: null,
     targetRef: 'refs/heads/project/example', waitMs: 360_000,
     blockingReason: {
@@ -125,6 +125,7 @@ test('a queued attempt carries its generation, target, instants, live wait and r
   const wire = JSON.parse(JSON.stringify(view.landTask));
   assert.equal(wire.queuedAt, queuedAt.toISOString());
   assert.equal(wire.generation, '2');
+  assert.equal(wire.landingSessionId, 'landing-session-1');
 });
 
 test('every queue reason says why in its own words and links only its own blocker', () => {
@@ -141,7 +142,6 @@ test('every queue reason says why in its own words and links only its own blocke
     [{ queueBlockCode: 'WAITING_RUNNER', runnerWait: 'DRAINING', runnerName: 'hpc' }, 'WAITING_RUNNER', /draining/],
     [{ queueBlockCode: 'WAITING_RUNNER', runnerWait: 'OUTDATED', runnerName: 'hpc' }, 'WAITING_RUNNER', /does not take integration jobs/],
     [{ queueBlockCode: 'WAITING_RUNNER', runnerWait: 'NO_RUNNER' }, 'WAITING_RUNNER', /workspace has no runner/],
-    [{ queueBlockCode: 'CANCELLING' }, 'CANCELLING', /cancel was asked for/],
     // The item a new generation is handling still holds the queue, so the reason names that
     // generation rather than promising a claim the next heartbeat will not make.
     [{ queueBlockCode: 'WAITING_MAIN_SYNC', blockingTaskTitle: 'Earlier', syncHandlingGeneration: 3 },

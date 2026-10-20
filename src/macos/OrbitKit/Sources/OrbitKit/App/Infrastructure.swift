@@ -136,7 +136,9 @@ public enum Infrastructure {
 
     /// Whether this engine is signed out on this machine (web's `signedOutOn`): installed, the CLI's own
     /// answer is no, and no account of it is signed in either — with one that is, sessions there still run
-    /// on it. Antigravity only where its Google sign-in can be started, the one way back in there is.
+    /// on it. Antigravity only where its Google sign-in can be started, the one way back in there is; and
+    /// Cursor CLI only where the machine can run it at all — one that can't says so on its row instead,
+    /// and signing in there would not help.
     static func signedOut(_ runner: Runner, _ engine: LoginEngine) -> Bool {
         let health = engineHealth(runner, engine)
         guard rowKind(health, install: runner.install, engine: engine) == .signedOut else { return false }
@@ -144,6 +146,7 @@ public enum Infrastructure {
             && (runner.antigravity?.supported == false || runner.antigravity?.googleLogin != .available) {
             return false
         }
+        if engine == .cursor && CursorRuntime.state(of: runner) != .ready { return false }
         return !(health?.accounts ?? []).contains { $0.auth == "yes" }
     }
 
@@ -186,13 +189,14 @@ public enum Infrastructure {
     /// accounts; each enabled key under every engine the server says it runs on (`engines`) — a DeepSeek
     /// key under Claude Code, OpenCode and DeepSeek Harness, a Claude subscription token under Claude Code
     /// alone — with the model a session on it starts on there; its pools that can start a session (one
-    /// that is unavailable is in Needs you instead). Not an engine these apps don't draw yet
+    /// that is unavailable is in Needs you instead). Cursor CLI once a runner of the account knows it
     /// (`ProviderEngines.appleShowsEngine`).
     public static func engineCards(runners: [Runner], keys: [ConfiguredProvider],
                                    pools: [ProviderPool]) -> [EngineCard] {
         let online = runners.filter { $0.online == true }
         let harness = harnessModel(online)
-        return ProviderEngines.all.filter(ProviderEngines.appleShowsEngine).map { engine in
+        let cursor = cursorModel(online)
+        return ProviderEngines.all.filter { ProviderEngines.appleShowsEngine($0, runners: runners) }.map { engine in
             // DeepSeek Harness has no sign-in on a machine: it runs on DeepSeek keys alone.
             let machines = engine == "dsh" ? [] : online.compactMap { runner -> String? in
                 let count = logins(runner, engine)
@@ -201,7 +205,10 @@ public enum Infrastructure {
                 return count > 1 ? "\(name) ×\(count)" : name
             }
             let engineKeys = keys.filter { $0.enabled != false && ProviderEngines.of($0).contains(engine) }
-                .map { EngineCard.Key(label: $0.label, model: engine == "dsh" ? harness : defaultModel($0)) }
+                .map { key -> EngineCard.Key in
+                    let model = engine == "dsh" ? harness : engine == CursorRuntime.engine ? cursor : defaultModel(key)
+                    return EngineCard.Key(label: key.label, model: model)
+                }
             let enginePools = pools.filter {
                 $0.unavailable == nil && (ProviderPools.runsCodex($0) ? "codex" : "claude") == engine
             }
@@ -223,12 +230,27 @@ public enum Infrastructure {
         let login = LoginEngine(rawValue: engine)
         let health = login.flatMap { engineHealth(runner, $0) } ?? runner.engines?.first { $0.engine == engine }
         guard let health, health.installed == true,
-              !(login == .antigravity && runner.antigravity?.supported == false) else { return 0 }
+              !(login == .antigravity && runner.antigravity?.supported == false),
+              !(login == .cursor && CursorRuntime.state(of: runner) != .ready) else { return 0 }
         let accounts = health.accounts ?? []
         if accounts.isEmpty { return health.auth == "yes" ? 1 : 0 }
         return accounts.filter {
             $0.auth == "yes" || RunnerPageFormat.runsOnEnvKey(health, account: $0.id, auth: $0.auth)
         }.count
+    }
+
+    /// The model a Cursor CLI session on a Cursor key starts on: Auto, Cursor's own default, by the name
+    /// the catalogue of the first machine online that can run it gives it — the models are Cursor CLI's on
+    /// each machine, whichever key it runs on (contract §10). Auto with none (web's `cursorModelOf`).
+    public static func cursorModel(_ online: [Runner]) -> String {
+        for runner in online {
+            guard CursorRuntime.state(of: runner) == .ready, let catalog = runner.modelCatalog?.cursor, !catalog.isEmpty
+            else { continue }
+            let model = runner.runtimeDefaultModels?[CursorRuntime.engine].flatMap { $0.isEmpty ? nil : $0 }
+                ?? CursorRuntime.autoModel
+            return catalog.first { $0.value == model }?.label ?? catalog[0].label
+        }
+        return "Auto"
     }
 
     /// The model a session on this key starts on, by the name the key's own list gives it (web's
@@ -289,7 +311,14 @@ public enum Infrastructure {
         if relay?.status == "failed" { return updating ? "Update failed" : "Install failed" }
         if relay?.status == "pending" || relay?.status == "installing" { return updating ? "Updating…" : "Installing…" }
         guard let reported = runner.engines else { return "Engines not reported" }
-        let engines = LoginEngine.allCases.filter { $0 != .antigravity || runner.antigravity?.googleLogin == .available }
+        // Cursor CLI wherever its row can get it signed in, installed or not, as every engine here — not on
+        // a runner too old for it or a platform it doesn't run on, whose row has nothing to sign in.
+        let cursor = CursorRuntime.state(of: runner)
+        let engines = LoginEngine.allCases.filter {
+            ($0 != .antigravity || runner.antigravity?.googleLogin == .available)
+                && ($0 != .cursor || (RunnerPageFormat.showsCursor(runner)
+                                      && cursor != .updateRunner && cursor != .unsupportedPlatform))
+        }
         let shown = reported.filter { health in engines.contains { $0.rawValue == health.engine } }
         let nowMs = RunnerPageFormat.nowMs(now)
         let stale = shown.filter {

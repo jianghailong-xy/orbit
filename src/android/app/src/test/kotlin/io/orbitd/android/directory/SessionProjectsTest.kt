@@ -468,4 +468,21 @@ class SessionProjectsTest {
         assertEquals("OPEN", members.first().effectiveLifecycleState)
         assertFalse(moved)
     }
+
+    /** §7.2 V6: a landing the server judged timed out is amber words, and the needs-you dot stays off — that dot means a
+     * question for the reader, and a stopped runner is a fact. */
+    @Test fun aTimedOutLandingIsAmberWordsAndLightsNoDot() {
+        val integration = buildJsonObject {
+            put("line", "MAIN"); put("ref", "main"); put("activeJobCount", 1)
+            putJsonObject("inFlight") {
+                put("state", "RUNNING"); put("kind", "LAND_PROMOTION"); put("phase", "CHECK")
+                put("startedAt", ago(31)); put("heartbeatAt", ago(23)); put("liveness", "LEASE_EXPIRED")
+            }
+        }
+        val row = listing(listOf(coordinator()), projects = listOf(project(integration = integration))).projects.first()
+        assertEquals("Merge to main · timed out · no report for 23m", row.line.text)
+        assertEquals(Tone.WARNING, row.line.tone)
+        assertNull(row.indicator)
+        assertFalse(row.needsYou)
+    }
 }

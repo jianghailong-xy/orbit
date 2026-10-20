@@ -371,6 +371,17 @@ export function RunnerSignIn({
   // A card that goes away mid-flow can never point its tab anywhere.
   useEffect(() => dropTab, []);
 
+  // Cursor CLI's link stops working about 23 minutes after the runner relays it (expiresAt): the card
+  // counts down to it, a minute at a time.
+  const cursorLink = engine === 'cursor' && status === 'awaiting_approval' && !!s?.url;
+  const [clock, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    if (!cursorLink) return;
+    setClock(Date.now());
+    const tick = setInterval(() => setClock(Date.now()), 30_000);
+    return () => clearInterval(tick);
+  }, [cursorLink]);
+
   if (status === 'done') {
     return (
       <div className="rsi rsi-done">
@@ -409,6 +420,52 @@ export function RunnerSignIn({
         </div>
         <div className="rsi-hint">
           The runner picks it up on its next check-in, so this can take up to a minute.
+        </div>
+        <button className="rsi-link" onClick={() => cancel.mutate()} type="button">
+          Cancel
+        </button>
+      </div>
+    );
+  }
+
+  // Cursor CLI's `agent login` prints one link and waits on it (docs/cursor-runtime-contract.md §9):
+  // nothing comes back through here — the runner sees the sign-in finish — so the card offers the link,
+  // in this browser or another, says how long it lasts, and waits.
+  if (cursorLink && s?.url) {
+    const signInUrl = s.url;
+    const left = s.expiresAt ? Math.ceil((Date.parse(s.expiresAt) - clock) / 60_000) : null;
+    return (
+      <div className="rsi">
+        <div className="rsi-hint">
+          {adding ? (
+            <>Sign in on <b>cursor.com</b> with the account you are adding:</>
+          ) : account ? (
+            <>Sign in on <b>cursor.com</b> with this account again:</>
+          ) : (
+            <>Sign in on <b>cursor.com</b> with the account this runner should use:</>
+          )}
+        </div>
+        <div className="rsi-actions">
+          <a className="rsi-open" href={signInUrl} target="_blank" rel="noopener noreferrer">
+            <ExportOutlined /> Open cursor.com
+          </a>
+          <button
+            className="rsi-link"
+            type="button"
+            onClick={() => {
+              void copyText(signInUrl).then((ok) => { if (ok) setCopiedUrl(signInUrl); });
+            }}
+          >
+            {copiedUrl === signInUrl ? 'Sign-in link copied' : 'Copy sign-in link'}
+          </button>
+        </div>
+        <div className="rsi-row">
+          <LoadingOutlined /> Waiting for you to sign in…
+          {left !== null && (
+            <span className="rsi-expiry">
+              {' '}· {left > 0 ? `link expires in ${left} min` : 'the link has expired'}
+            </span>
+          )}
         </div>
         <button className="rsi-link" onClick={() => cancel.mutate()} type="button">
           Cancel
@@ -606,7 +663,10 @@ export function RunnerSignIn({
           {start.isPending
             ? 'Starting…'
             : status === 'failed'
-              ? `Try signing in to ${ENGINE_NAME[engine]} again`
+              ? // Cursor's link is what ran out or failed: a new run of `agent login` hands a new one.
+                engine === 'cursor'
+                ? 'Get a new link'
+                : `Try signing in to ${ENGINE_NAME[engine]} again`
               : engine === 'antigravity' ? 'Sign in with Google' : `Sign in to ${ENGINE_NAME[engine]}`}
         </button>
         {onUseApiKey && (

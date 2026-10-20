@@ -59,7 +59,7 @@ func TestManagedIntegrationResultIsOnTheVolumeBeforeItIsSent(t *testing.T) {
 	syncs := recordVolumeSyncs(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/integration-jobs/job-9/result") {
-			if !spooledResultOnDisk(t, "job-9") {
+			if !spooledResultOnDisk(t, "job-9", "4") {
 				t.Error("the result was sent before it was spooled")
 			}
 			syncs.note("send")

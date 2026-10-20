@@ -1,6 +1,11 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.tasks.TaskRunHandoff
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import kotlin.math.ceil
 
 /** One auto-retry row of the transcript (OrbitKit `AutoRetryNotice`, projected by [EngineReading]): the runtime's own sentence,
@@ -67,7 +72,7 @@ internal object AutoRetryLogic {
      */
     fun state(notice: AutoRetryNotice, live: Boolean, retryAtMs: Long?, attempts: Int, provider: String, runnerName: String?,
         hasRetryText: Boolean, nothingToResend: Boolean = false, nowMs: Long, takenOver: TaskRunHandoff.Conflict? = null,
-        rand: () -> Double = { Math.random() }): State {
+        cursor: CursorQuota? = null, rand: () -> Double = { Math.random() }): State {
         val quota = notice.quota
         // Read once: the body, the labels and both controls branch on it, and must never disagree about the verb.
         val continues = live && nothingToResend
@@ -93,7 +98,9 @@ internal object AutoRetryLogic {
                 else "Tried $attempts times — the API is still failing. Over to you."
             quota -> {
                 val on = runnerName?.let { if (it.isEmpty()) "" else " on “$it”" }.orEmpty()
-                "${window.second} for $provider$on is used up." + when { continues -> " $nothingToSend"; needsYou -> " Auto-retry is off."; else -> "" }
+                // A Cursor CLI session's card names the account — or the key — rather than the engine's slug (iOS 5 ⑧, web Web 5 ④).
+                val whose = cursor?.takeIf { live }?.let { "${it.account} (${CursorRuntime.CLI})" } ?: provider
+                "${window.second} for $whose$on is used up." + when { continues -> " $nothingToSend"; needsYou -> " Auto-retry is off."; else -> "" }
             }
             else -> "The $provider API could not answer — nothing about your message caused it." +
                 when { continues -> " $nothingToSend"; needsYou -> " Auto-retry is off."; else -> "" }
@@ -118,6 +125,35 @@ internal object AutoRetryLogic {
             takenOver = taken,
         )
     }
+
+    /**
+     * A Cursor CLI session's quota card, in Orbit's words for the account rather than the engine's slug (the board's iOS 5 ⑧, web
+     * `CursorQuotaHelp`): Cursor says only "Upgrade your plan to continue" (contract §12), so the card names whose plan that is and until
+     * when, and — since a conversation that has started can't move to another account yet (D5) — where a new session could go instead.
+     * [account] is the account (or key) the session ran on by its name in Orbit; [plan] its plan as Cursor names it; [resetsAt] when its
+     * included usage comes back; [elsewhere] another of the runner's Cursor CLI accounts with room, by id and name.
+     */
+    data class CursorQuota(val account: String, val plan: String? = null, val resetsAt: String? = null, val elsewhere: Pair<String, String>? = null)
+
+    /** What Cursor answered, out of the runner's sentence (`… Cursor said: "Upgrade your plan to continue."`). */
+    fun cursorAnswer(message: String) = Regex("Cursor said: \"(.+?)\\.?\"").find(message)?.groupValues?.get(1) ?: "Upgrade your plan to continue"
+
+    /** The card's line on Cursor's answer: "Cursor answered “Upgrade your plan to continue”: Default’s Free plan has no requests left
+     * until Oct 24." — the plan and the day where the runner read them. */
+    fun cursorLine(help: CursorQuota, message: String, zone: ZoneId = ZoneId.systemDefault()): String {
+        val said = "Cursor answered “${cursorAnswer(message)}”"
+        if (help.plan == null && help.resetsAt == null) return "$said."
+        val until = help.resetsAt?.let { day(it, zone) }?.let { " until $it" }.orEmpty()
+        return "$said: ${help.account}’s ${help.plan?.let { "$it plan" } ?: "plan"} has no ${if (help.plan == "Free") "requests" else "included usage"} left$until."
+    }
+
+    /** "This conversation can’t move to Team yet — " before the press that starts a new session there, and the press's words. */
+    fun cursorElsewhere(label: String) = "This conversation can’t move to $label yet — " to "start a new session on $label"
+
+    /** "Oct 24": the day a plan's usage comes back. */
+    private fun day(iso: String, zone: ZoneId) = runCatching {
+        DateTimeFormatter.ofPattern("MMM d", Locale.US).withZone(zone).format(Instant.parse(iso))
+    }.getOrNull()
 
     /** The window that ran out, in the runtime's own terms, titled by its length (the runtime's "session limit" would read as a
      * limit on the Orbit session). Codex names no window and falls through. */

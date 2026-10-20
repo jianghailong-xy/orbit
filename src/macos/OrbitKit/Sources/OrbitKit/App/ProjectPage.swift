@@ -112,6 +112,34 @@ public enum ProjectPage {
 
     // MARK: - Work overview: the landing in flight
 
+    /// §7.2 V6's read-time liveness of an integration claim, as the server derives it (`liveness`).
+    public enum LandingLivenessWord: String, Equatable, Sendable {
+        case live = "LIVE"
+        case quiet = "QUIET"
+        case silent = "SILENT"
+        case leaseExpired = "LEASE_EXPIRED"
+        case legacy = "LEGACY"
+    }
+
+    /// What a head draws from §7.2 V6 when the server sends it: the current step's own clock
+    /// against its budget (the head's main number, "2m 40s of 60m"), the clauses that follow the
+    /// state in the head's one line, and whether the local clock may advance between reads — only
+    /// LIVE and QUIET, and only while the read itself is fresh. Web: `LandingLiveness`.
+    public struct LandingLiveness: Equatable, Sendable {
+        /// The right slot's number: the step's clock, with its budget while a check is in flight.
+        public let clock: String
+        /// The facts after the state word, in the order the board draws them.
+        public let clauses: [String]
+        /// Whether the local clock runs: LIVE / QUIET on a read no older than 90 s.
+        public let ticking: Bool
+
+        public init(clock: String, clauses: [String], ticking: Bool) {
+            self.clock = clock
+            self.clauses = clauses
+            self.ticking = ticking
+        }
+    }
+
     /// The landing in flight, in the words the card's live line uses — the one row that says what
     /// the platform itself is doing while a project's numbers stand still.
     ///
@@ -143,10 +171,13 @@ public enum ProjectPage {
         /// The server judged the job's runner silent past its limit: the row says so in the warning
         /// ink, with a triangle where the ring was, and nothing spins.
         public let timedOut: Bool
+        /// §7.2 V6's facts, once the server sends them; nil from a server that predates them, whose
+        /// line is then worded exactly as it was before they existed.
+        public let liveness: LandingLiveness?
 
         public init(what: String?, running: Bool, state: String, clock: String, word: String = "Integration",
                     clockLabel: String = "Elapsed", updated: String? = nil, wait: String? = nil,
-                    timedOut: Bool = false) {
+                    timedOut: Bool = false, liveness: LandingLiveness? = nil) {
             self.word = word
             self.what = what
             self.running = running
@@ -156,12 +187,13 @@ public enum ProjectPage {
             self.updated = updated
             self.wait = wait
             self.timedOut = timedOut
+            self.liveness = liveness
         }
 
         /// The head's two slots (`landingHead`), from this line's own facts.
         public var head: LandingHead {
             ProjectPage.landingHead(state: state, timedOut: timedOut, clockLabel: clockLabel,
-                                    clock: clock, wait: wait, updated: updated)
+                                    clock: clock, wait: wait, updated: updated, liveness: liveness)
         }
     }
 
@@ -213,6 +245,22 @@ public enum ProjectPage {
     /// "waited 1m 20s" — the wait as a clause of the head's one line rather than a field label: the
     /// row's old `Waited` was a column heading, and this is a sentence.
     public static let landingWaited = "waited"
+    /// §7.2 V6's words (board docs/mocks/landing-session/v4, 05): held to the web's
+    /// `LANDING_LIVENESS_WORDS` by `ProjectPageSectionsCopyParityTests`, and the only words Kotlin's
+    /// `ProjectPage` may use for the same facts.
+    public static let landingOutput = "Output"
+    public static let landingNoOutputFor = "No output for"
+    public static let landingWithinIts = "within its"
+    public static let landingBudget = "budget"
+    public static let landingNoWordFromRunner = "No word from runner"
+    public static let landingNoWordFromTheRunner = "No word from the runner"
+    public static let landingReportsOnlyBetweenSteps = "Reports only between steps"
+    public static let landingClaim = "claim"
+    public static let landingRound = "round"
+    public static let landingOf = "of"
+    public static let landingTakenOver = "Taken over"
+    public static let landingFirstStarted = "first started"
+    public static let landingUsually = "usually"
 
     public static let integrationJobWords = [
         "LAND_TASK": "Landing", "CHECK_PROMOTION": "Merge check", "LAND_PROMOTION": "Merge to main",
@@ -307,7 +355,9 @@ public enum ProjectPage {
         // the server itself uses. Read only where the server hands over no verdict of its own (a
         // server that does not list its jobs) — one that lists them judges the timeouts, and this
         // row takes that word instead.
-        let silent = listed == nil && running
+        // Only where the server hands over no liveness of its own: a server that sends it has
+        // already judged the claim, and LEGACY's quiet is the protocol, not a stall.
+        let silent = inFlight.liveness == nil && listed == nil && running
             && (heartbeatAt.map { now.timeIntervalSince($0) > 600 } ?? true)
         let unavailable = cannotRead(now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
         let main = RunSettings.mainBranchName(view.upstreamRef)
@@ -322,7 +372,24 @@ public enum ProjectPage {
         return liveLine(word: word, what: what, running: running, phase: inFlight.phase,
                         startedAt: inFlight.startedAt, heartbeatAt: inFlight.heartbeatAt, now: now,
                         updatedAt: updatedAt, unavailable: unavailable, main: main, silent: silent,
-                        wait: wait)
+                        wait: wait, runner: inFlight.runner, claim: inFlight.claim, round: inFlight.round,
+                        check: inFlight.check, stepStartedAt: inFlight.stepStartedAt,
+                        outputMovedAt: inFlight.outputMovedAt, typicalMs: inFlight.typicalMs,
+                        livenessWord: inFlight.liveness,
+                        firstStartedAt: firstStartedAt(view, jobId: inFlight.jobId))
+    }
+
+    /// When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the
+    /// column a claim leaves alone across a takeover (`started_at = COALESCE(started_at, now())`),
+    /// while the integration line's `startedAt` is the claim now holding it. That is the fact
+    /// "Taken over 17:31 · first started 17:03" needs, and it exists only for a job that lands a
+    /// task — a promotion and a merge check have no landTask row. Web: `firstStartedAt`.
+    private static func firstStartedAt(_ view: ProjectIntegrationView, jobId: String?) -> String? {
+        guard let jobId else { return nil }
+        for task in view.landTasks where task.landTask?.jobId == jobId {
+            return task.landTask?.startedAt
+        }
+        return nil
     }
 
     /// The head's two slots, composed from the facts the landing line already counted — the same
@@ -335,11 +402,19 @@ public enum ProjectPage {
     /// when there was one, and the freshness — "checking · waited 1m 20s · updated just now" — with
     /// the freshness's own capital folded away, because the line reads as one sentence.
     public static func landingHead(state: String, timedOut: Bool, clockLabel: String, clock: String,
-                                   wait: String?, updated: String?) -> LandingHead {
+                                   wait: String?, updated: String?,
+                                   liveness: LandingLiveness? = nil) -> LandingHead {
         if timedOut {
             let silence = "\(clockLabel) \(clock)"  // "No report for 110m"
             return LandingHead(right: state, isClock: false,
                                detail: [silence, updated].compactMap { $0 }.joined(separator: " · "))
+        }
+        // The V6 head: the step's clock against its budget at the right, and the state plus the
+        // facts the server derived in one line. A server that sends none takes the shape below,
+        // word for word.
+        if let liveness {
+            return LandingHead(right: liveness.clock, isClock: true,
+                               detail: ([state] + liveness.clauses).joined(separator: " · "))
         }
         if state == landingNoReport {
             return LandingHead(right: clock, isClock: true, detail: updated ?? state)
@@ -376,7 +451,11 @@ public enum ProjectPage {
                 ? timedOutLine(job, word: word, what: job.taskTitle, now: now)
                 : liveLine(word: word, what: job.taskTitle, running: job.state == "RUNNING", phase: job.phase,
                            startedAt: job.startedAt, heartbeatAt: job.heartbeatAt, now: now,
-                           updatedAt: updatedAt, unavailable: unavailable, main: main)
+                           updatedAt: updatedAt, unavailable: unavailable, main: main,
+                           runner: job.runnerName, claim: job.claim, round: job.round, check: job.check,
+                           stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
+                           typicalMs: job.typicalMs, livenessWord: job.liveness,
+                           firstStartedAt: firstStartedAt(view, jobId: job.jobId))
             return LandingJobLine(jobId: job.jobId, taskId: job.taskId, line: line,
                                   detail: landingJobDetail(job, main: main), retryable: job.retryable)
         }
@@ -387,6 +466,86 @@ public enum ProjectPage {
         refreshFailed || updatedAt.map { now.timeIntervalSince($0) > 90 } == true
     }
 
+    /// §7.2 V6's head facts, or nil for a server that does not send them (or a claim the server
+    /// gave no liveness: a queued job, and LEASE_EXPIRED, which the timed-out line words). Web:
+    /// `landingLiveness`.
+    ///
+    /// The main number is the CURRENT STEP's own clock — from `stepStartedAt`, not the claim —
+    /// against the check's budget: "2m 40s of 60m". The local clock runs only for LIVE and QUIET
+    /// on a read no older than 90 s; SILENT freezes it at the runner's last word, and LEGACY at
+    /// the read it came with. Nothing here infers a timeout: LEASE_EXPIRED is the server's word
+    /// and the timed-out line draws it.
+    private static func landingLiveness(liveness: String?, running: Bool, startedAt: String,
+                                        heartbeatAt: String?, claim: Int?, round: Int?,
+                                        check: ProjectIntegrationCheck?, stepStartedAt: String?,
+                                        outputMovedAt: String?, typicalMs: Int?, runner: String?,
+                                        firstStartedAt: String?, now: Date, updatedAt: Date?) -> LandingLiveness? {
+        guard let liveness, liveness != "LEASE_EXPIRED", running else { return nil }
+        let stepStart = RelativeTime.parse(stepStartedAt ?? startedAt)
+        let heartbeat = heartbeatAt.flatMap(RelativeTime.parse)
+        let outputMoved = outputMovedAt.flatMap(RelativeTime.parse)
+        let fresh = updatedAt.map { now.timeIntervalSince($0) <= 90 } ?? true
+        let ticking = (liveness == "LIVE" || liveness == "QUIET") && fresh
+        // The clock a reader watches: the local second only for LIVE and QUIET on a fresh read;
+        // the runner's last word while it is silent; the read itself for a legacy claim, whose
+        // runner reports only between steps and whose silence is not to be inferred.
+        let elapsedAt: Date
+        if ticking {
+            elapsedAt = now
+        } else if liveness == "SILENT" {
+            elapsedAt = heartbeat ?? stepStart ?? now
+        } else {
+            elapsedAt = updatedAt ?? now
+        }
+        let stepClock = landingClock(stepStart.map { elapsedAt.timeIntervalSince($0) } ?? 0)
+        let budget = check.map { Int((Double($0.budgetSeconds) / 60).rounded()) }
+        func minutes(_ at: Date) -> Int { max(0, Int(now.timeIntervalSince(at)) / 60) }
+        // The liveness sentence leads the line, right after the step word: the narrow cards (the
+        // sessions page's Landing card, the 360 dp Android card) elide everything past it, and the
+        // board says the liveness there — "checking · output 1s ago" (v4 04 and 07). The claim,
+        // round and the usual duration follow it and are read in full on the wider rows.
+        var clauses: [String] = []
+        if liveness == "LIVE" {
+            if let outputMoved {
+                clauses.append("\(lowercasingFirst(landingOutput)) "
+                    + "\(max(0, Int(now.timeIntervalSince(outputMoved).rounded())))s ago")
+            }
+        } else if liveness == "QUIET" {
+            if let outputMoved {
+                clauses.append("\(lowercasingFirst(landingNoOutputFor)) \(minutes(outputMoved))m")
+            }
+            if let budget { clauses.append("\(landingWithinIts) \(budget)m \(landingBudget)") }
+        } else if liveness == "SILENT" {
+            let since = heartbeat ?? stepStart ?? now
+            let who = runner.flatMap { $0.isEmpty ? nil : "\(lowercasingFirst(landingNoWordFromRunner)) \($0)" }
+                ?? lowercasingFirst(landingNoWordFromTheRunner)
+            clauses.append("\(who) for \(minutes(since))m")
+        } else if liveness == "LEGACY" {
+            clauses.append(lowercasingFirst(landingReportsOnlyBetweenSteps))
+        }
+        if check?.name == "MERGE_CHECK", let typicalMs {
+            clauses.append("\(landingUsually) ~\(Int((Double(typicalMs) / 60_000).rounded()))m")
+        }
+        if let claim, claim >= 1 {
+            clauses.append("\(landingClaim) \(claim)")
+            if let round {
+                var text = "\(landingRound) \(round)"
+                if let check { text += " \(landingOf) \(check.count)" }
+                clauses.append(text)
+            }
+        }
+        if let claim, claim > 1, let claimedAt = RelativeTime.parse(startedAt) {
+            if let first = firstStartedAt.flatMap(RelativeTime.parse) {
+                clauses.append("\(landingTakenOver) \(landingClockTime(claimedAt)) · "
+                    + "\(landingFirstStarted) \(landingClockTime(first))")
+            } else {
+                clauses.append("\(landingTakenOver) \(landingClockTime(claimedAt))")
+            }
+        }
+        return LandingLiveness(clock: budget.map { "\(stepClock) \(landingOf) \($0)m" } ?? stepClock,
+                               clauses: clauses, ticking: ticking)
+    }
+
     /// A job running or waiting its turn, as the row draws it. `unavailable` freezes the clock at the
     /// last update the app had and stops the row claiming activity; `silent` freezes it at the last
     /// REPORT instead — the same freeze, reached from the runner's silence rather than this app's read.
@@ -394,7 +553,11 @@ public enum ProjectPage {
     private static func liveLine(word: String, what: String?, running: Bool, phase: String?,
                                  startedAt: String, heartbeatAt: String?, now: Date, updatedAt: Date?,
                                  unavailable: Bool, main: String, silent: Bool = false,
-                                 wait: String? = nil) -> LandingLine {
+                                 wait: String? = nil, runner: String? = nil, claim: Int? = nil,
+                                 round: Int? = nil, check: ProjectIntegrationCheck? = nil,
+                                 stepStartedAt: String? = nil, outputMovedAt: String? = nil,
+                                 typicalMs: Int? = nil, livenessWord: String? = nil,
+                                 firstStartedAt: String? = nil) -> LandingLine {
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         let reported = heartbeatAt.flatMap(RelativeTime.parse)
         let lastUpdate = running ? (reported ?? updatedAt) : updatedAt
@@ -412,13 +575,22 @@ public enum ProjectPage {
         } else {
             report = age.map { $0 == 0 ? "Updated just now" : "Updated \($0)m ago" }
         }
-        return LandingLine(what: what, running: running && !unavailable && !silent,
+        let v6 = unavailable ? nil : landingLiveness(
+            liveness: livenessWord, running: running, startedAt: startedAt, heartbeatAt: heartbeatAt,
+            claim: claim, round: round, check: check, stepStartedAt: stepStartedAt,
+            outputMovedAt: outputMovedAt, typicalMs: typicalMs, runner: runner,
+            firstStartedAt: firstStartedAt, now: now, updatedAt: updatedAt)
+        return LandingLine(what: what,
+                           // A legacy claim's runner reports only between steps, so its quiet is
+                           // not a stall: the ring keeps turning and the line says why. SILENT is
+                           // the state that stops it.
+                           running: running && !unavailable && !silent && livenessWord != "SILENT",
                            state: unavailable ? "Update unavailable"
                                : silent ? landingNoReport
                                    : running ? (integrationPhaseWords(main)[phase ?? ""] ?? "running") : "queued",
-                           clock: landingClock(elapsed), word: word,
+                           clock: v6?.clock ?? landingClock(elapsed), word: word,
                            clockLabel: running ? "Elapsed" : "Queued for",
-                           updated: report, wait: wait)
+                           updated: report, wait: wait, liveness: v6)
     }
 
     /// A job the server judged timed out: how long its runner has said nothing, in whole minutes,
@@ -444,8 +616,13 @@ public enum ProjectPage {
             // A runner with no name is "The runner", as the web's truthiness reads an empty one.
             let runner = job.runnerName.flatMap { $0.isEmpty ? nil : "Runner \($0)" } ?? "The runner"
             let step = integrationPhaseWords(main)[job.phase ?? ""] ?? "running"
-            let push = job.phase == "PUSH" || job.phase == "VERIFY" ? landingMayHaveBeenPushed : landingNoPushRecorded
-            return "\(runner) took it at \(time(job.startedAt)) · stopped at \(step) · \(push)"
+            // A merge check never pushes: J12's "may have been pushed" is about a landing's push,
+            // and a check that stopped has nothing to say about one.
+            let push = job.kind == "CHECK_PROMOTION" ? nil
+                : job.phase == "PUSH" || job.phase == "VERIFY" ? landingMayHaveBeenPushed : landingNoPushRecorded
+            var line = "\(runner) took it at \(time(job.startedAt)) · stopped at \(step)"
+            if let push { line += " · \(push)" }
+            return line
         }
         guard let retriedBy = job.retriedBy else { return nil }
         let who = retriedBy == "OWNER" ? landingRetriedByOwner : landingRetriedByCoordinator
@@ -507,6 +684,8 @@ public enum ProjectPage {
         public let clockLabel: String
         public let wait: String?
         public let updated: String?
+        /// §7.2 V6's facts for the head; nil from a server that does not send them.
+        public let liveness: LandingLiveness?
         /// What the timed-out lead job's runner did before it stopped, or nil.
         public let detail: String?
         /// The job Retry takes, when the server says a retry takes one.
@@ -516,7 +695,7 @@ public enum ProjectPage {
         /// word, the same clock, the same state and freshness, in the merged row's anatomy.
         public var head: LandingHead {
             ProjectPage.landingHead(state: state, timedOut: timedOut, clockLabel: clockLabel,
-                                    clock: clock, wait: wait, updated: updated)
+                                    clock: clock, wait: wait, updated: updated, liveness: liveness)
         }
     }
 
@@ -549,6 +728,7 @@ public enum ProjectPage {
             jobs: jobs,
             target: lead.flatMap { landingTarget(view, jobId: $0.jobId) },
             clock: line.clock, clockLabel: line.clockLabel, wait: line.wait, updated: line.updated,
+            liveness: line.liveness,
             detail: line.timedOut ? lead?.detail : nil,
             retryJobId: lead?.retryable == true ? lead?.jobId : nil)
     }

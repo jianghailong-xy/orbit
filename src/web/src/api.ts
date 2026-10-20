@@ -8,6 +8,7 @@ import type {
   OwnerAnswerCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionLandingView,
   SessionMessageCard,
   SessionReplyCard,
   SessionMoveTargets,
@@ -457,6 +458,8 @@ export const createInteractiveSession = (body: {
   antigravityAccount?: string;
   /** The same again for the built-in Kimi engine: one of the runner's Kimi Code accounts. */
   kimiAccount?: string;
+  /** The same again for Cursor CLI on its own sign-in: one of the runner's Cursor CLI accounts. */
+  cursorAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -1717,6 +1720,12 @@ export interface TaskRunRoute {
  *  per-session git worktree result (null until the runner reports completion). */
 export interface SessionDetail {
   id: string;
+  /** What drives the session (contract §2.9 LS6): `LANDING` is platform work with no engine.
+   *  Optional, because a server that predates the column does not send it. */
+  sessionKind?: 'CONVERSATION' | 'LANDING';
+  /** A LANDING session's subject view (§2.9 LS1/LS6): its attempt, phase, checks, liveness,
+   *  timeline and todos. Present on a landing and on the pre-generated id before its row exists. */
+  landing?: SessionLandingView | null;
   /** Latest run outcome and sidebar lifecycle location are independent product dimensions. */
   runState?: string;
   lifecycleState?: string;

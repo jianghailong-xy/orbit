@@ -161,7 +161,9 @@ export class ReaperService implements OnModuleInit, OnModuleDestroy {
   private async sweep(): Promise<void> {
     const now = Date.now();
     const sessions = await this.prisma.session.findMany({
-      where: { status: { in: SWEPT } },
+      // A LANDING row is platform-driven and has no runner: it must never read as a dropped run,
+      // be force-finalized or be armed for a retry (§2.9 LS6).
+      where: { status: { in: SWEPT }, sessionKind: 'CONVERSATION' },
       select: {
         id: true,
         taskId: true,

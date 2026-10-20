@@ -79,6 +79,8 @@ import {
   isAsyncAgentLaunchAck,
   isRateLimitApiErrorText,
   isRetryableApiErrorText,
+  IntegrationJobOutputRequest,
+  IntegrationJobOutputResponse,
   IntegrationJobProgressRequest,
   IntegrationJobReleaseRequest,
   IntegrationJobReleaseResponse,
@@ -213,6 +215,7 @@ import {
   returnQueuedTurns,
 } from '../projects/project-open-item';
 import { enqueueForDoneTask } from '../projects/project-integration-job';
+import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 import { ProjectFuseService } from '../projects/project-fuse.service';
 import { ProjectPromotionService } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
@@ -265,6 +268,10 @@ import {
 } from './scheduled-wakeup';
 import { nextAutoRetryAt } from '../sessions/auto-retry.service';
 import { SessionNotSendable, SessionsService } from '../sessions/sessions.service';
+import {
+  assertEngineSession as assertEngineSessionRow,
+  assertEngineSessionById as assertEngineSessionRowById,
+} from '../sessions/engine-session';
 import { appendSessionMessageContext } from '../sessions/session-message';
 import { SessionRequestService } from '../sessions/session-request.service';
 import {
@@ -375,6 +382,7 @@ import {
   advertisedRunnerProviders,
   dshRuntimeUnavailable,
   runnerAdvertisesProvider,
+  runnerKnowsCursor,
   withProviderDeclarations,
 } from './runner-provider-support';
 import { coordinatorCreateAllowedBy } from './unstarted-project-create';
@@ -1237,6 +1245,16 @@ export class RunnerApiController {
           ),
         ]
       : [];
+    // The three session ids this body may carry. None of them may name a LANDING row: the platform
+    // drives those and no runner hosts, reports on or changes one (§2.9 LS6). Checked before the
+    // runner row and any session row is written, so a body naming one changes nothing at all. The
+    // raw field is read rather than the parsed one: a heartbeat without a lease owner ignores the
+    // field downstream, but naming a landing in it is still refused.
+    await this.assertNoLandingSessionNamed([
+      ...(dto?.supervisedSessionIds ?? []),
+      ...(dto?.sessions ?? []).map((s) => s?.sessionId),
+      ...(dto?.expiredCommitErrors ?? []).map((e) => e?.sessionId),
+    ], (runner as { ownerId?: string }).ownerId);
     const reportedEngines = dto?.engines == null ? null : (sanitizeRunnerEngines(dto.engines) ?? []);
     // Read the engine health this heartbeat is about to overwrite, but only when the incoming
     // report actually claims a signed-out engine — otherwise there is no transition to find and
@@ -1458,6 +1476,7 @@ export class RunnerApiController {
             id: { in: supervisedSessionIds },
             assignedRunnerId: runner.id,
             status: { in: OPEN },
+            sessionKind: 'CONVERSATION',
             inboxLeaseOwner: heartbeatLeaseOwner,
           },
           select: { id: true },
@@ -1488,6 +1507,7 @@ export class RunnerApiController {
                 id: s.sessionId,
                 assignedRunnerId: runner.id,
                 status: { in: OPEN },
+                sessionKind: 'CONVERSATION',
                 ...(heartbeatLeaseOwner ? { inboxLeaseOwner: heartbeatLeaseOwner } : {}),
               },
               data: {
@@ -1715,20 +1735,47 @@ export class RunnerApiController {
 
   /**
    * A claimed integration job is still being worked on (contract §2.3, §2.2 J-T4): the phase it
-   * reached, and the lease renewal that keeps another runner from taking it over. Fenced on
-   * (leaseOwner, claimGeneration) and on the runner token, so a process whose claim was taken over
-   * gets 409 STALE_CLAIM and stops rather than reporting into a job that is no longer its.
+   * reached, the check in flight, and the lease renewal that keeps another runner from taking it
+   * over. Fenced on (leaseOwner, claimGeneration) and on the runner token, and answered with
+   * `cancelRequested` — the stop signal a v2 runner reads between reports and before its push.
+   * A fence miss is 409 STALE_CLAIM (claim taken over, released or abandoned), 409 ALREADY_FINAL
+   * (job written down) or 404 (another account's job); all three tell the runner to stop.
    */
   @UseGuards(RunnerAuthGuard)
   @Post('integration-jobs/:jobId/progress')
   @HttpCode(200)
   async integrationJobProgress(
-    @CurrentRunner() runner: { id: string },
+    @CurrentRunner() runner: { id: string; ownerId?: string },
     @Param('jobId', PublicIdPipe) jobId: string,
     @Body() body: IntegrationJobProgressRequest,
   ) {
     try {
-      return await this.integrationQueue().progress(runner.id, jobId, body);
+      return await this.integrationQueue().progress(runner.id, jobId, body, runner.ownerId);
+    } catch (error) {
+      throw integrationJobHttpError(error);
+    }
+  }
+
+  /**
+   * One chunk of a running check's output (contract §2.2 J-T4's output route, §2.9 LS2): the runner
+   * streams what the check prints while it runs, fenced on the claim it names, and the control plane
+   * keeps a bounded head and tail per check.
+   *
+   * Only a v2 claim uploads. The fence is the progress route's — a claim that was taken over,
+   * released or abandoned is 409 STALE_CLAIM, a job already written down is 409 ALREADY_FINAL, and
+   * another account's job is 404 — and each of those is a stop signal for the uploader rather than a
+   * transient failure. The body is refused 400 when it is not a chunk.
+   */
+  @UseGuards(RunnerAuthGuard)
+  @Post('integration-jobs/:jobId/output')
+  @HttpCode(200)
+  async integrationJobOutput(
+    @CurrentRunner() runner: { id: string; ownerId?: string },
+    @Param('jobId', PublicIdPipe) jobId: string,
+    @Body() body: IntegrationJobOutputRequest,
+  ): Promise<IntegrationJobOutputResponse> {
+    try {
+      return await this.integrationQueue().output(jobId, runner.id, body, runner.ownerId);
     } catch (error) {
       throw integrationJobHttpError(error);
     }
@@ -2144,11 +2191,24 @@ export class RunnerApiController {
    * `installing` — the runner's own guard makes the repeat a no-op. An abandoned install is swept
    * here for the same reason sign-ins are: the runner's installer times out on its own, so a row
    * still in flight past that window has no process behind it and would block the next attempt.
+   *
+   * Cursor CLI's install is judged again on the runner as this heartbeat has just described it
+   * (runnerKnowsCursor), which the start (RunnersService.startInstall) could only check against the
+   * last one: a process that does not know Cursor CLI is never handed it, and the install is settled
+   * as failed with the words that say to update it rather than left to time out.
    */
   private async drainInstallRequest(runnerId: string): Promise<InstallCommand | undefined> {
     const r = await this.prisma.runner.findUnique({
       where: { id: runnerId },
-      select: { installStatus: true, installEngine: true, installAt: true, installMode: true },
+      select: {
+        installStatus: true,
+        installEngine: true,
+        installAt: true,
+        installMode: true,
+        capabilities: true,
+        capabilitiesReportedAt: true,
+        engines: true,
+      },
     });
     if (!r?.installStatus) return undefined;
     const update = r.installMode === 'update';
@@ -2171,6 +2231,14 @@ export class RunnerApiController {
     // An update names no engine — it does every CLI already on the machine, like the engine-update loop.
     if (update) return { attempt: r.installAt?.toISOString() ?? '', mode: 'update' };
     if (!isInstallEngine(r.installEngine)) return undefined;
+    if (r.installEngine === 'cursor' && !runnerKnowsCursor(r)) {
+      // On the install this read, so one started since is never the one settled.
+      await this.prisma.runner.updateMany({
+        where: { id: runnerId, installStatus: 'pending', installEngine: 'cursor', installAt: r.installAt },
+        data: { installStatus: 'failed', installMessage: CURSOR_RUNNER_UPGRADE_ERROR },
+      });
+      return undefined;
+    }
     return { engine: r.installEngine, attempt: r.installAt?.toISOString() ?? '', mode: 'install' };
   }
 
@@ -2556,6 +2624,7 @@ export class RunnerApiController {
         where: {
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
+          sessionKind: 'CONVERSATION',
           ...providerWhere,
           cancelRequestedAt: null,
         },
@@ -2571,6 +2640,7 @@ export class RunnerApiController {
           id: { in: unmarked },
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
+          sessionKind: 'CONVERSATION',
           ...providerWhere,
           cancelRequestedAt: null,
         },
@@ -2602,6 +2672,7 @@ export class RunnerApiController {
       where: {
         assignedRunnerId: runnerId,
         status: RunStatus.PENDING,
+        sessionKind: 'CONVERSATION',
         cancelRequestedAt: null,
         sourceState: { not: 'UNBOUND' },
       },
@@ -2617,6 +2688,7 @@ export class RunnerApiController {
           id: { in: unmarked },
           assignedRunnerId: runnerId,
           status: RunStatus.PENDING,
+          sessionKind: 'CONVERSATION',
           cancelRequestedAt: null,
           sourceState: { not: 'UNBOUND' },
         },
@@ -2761,7 +2833,14 @@ export class RunnerApiController {
     );
     const supportsSourcePin = runnerSupportsCapability(capabilities, SESSION_SOURCE_PIN_V1);
     const sessions = await this.prisma.session.findMany({
-      where: { assignedRunnerId: runner.id, ownerId: runner.ownerId, status: { in: OPEN } },
+      where: {
+        assignedRunnerId: runner.id,
+        ownerId: runner.ownerId,
+        status: { in: OPEN },
+        // A reclaim re-hands live work to a runner that lost contact; a LANDING is never work a
+        // runner holds (§2.9 LS6).
+        sessionKind: 'CONVERSATION',
+      },
       include: {
         // Same standing "always allow" grants the claim path sends: a reclaimed session must
         // not start re-asking about calls this workspace already approved permanently.
@@ -3112,6 +3191,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SourcePinRequest,
   ): Promise<SourcePinResponse> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     const outcome = await withTransactionRetry(
       this.prisma,
       async (tx) => {
@@ -3166,6 +3246,7 @@ export class RunnerApiController {
     @Headers(RUNNER_CAPABILITIES_HEADER) capabilities?: string | string[],
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<TakeoverTurnLeasesResponse> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     if (!leaseOwner) throw new BadRequestException('leaseOwner is required');
     const expectedLeaseOwner = parseLeaseGeneration(dto?.expectedLeaseOwner ?? undefined);
@@ -3332,6 +3413,7 @@ export class RunnerApiController {
     @Body() dto: ActivateTurnLeasesRequest,
     @Headers(RUNNER_PROVIDERS_HEADER) providerHeader?: string,
   ): Promise<ActivateTurnLeasesResponse> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     const generation = parseLeaseGeneration(dto?.leaseGeneration);
     if (!generation) throw new BadRequestException('leaseGeneration is required');
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
@@ -3518,6 +3600,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto?: ReleaseTurnLeasesRequest,
   ): Promise<{ ok: true }> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     const generation = parseLeaseGeneration(dto?.leaseGeneration);
     const leaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     // Retried whole. A release is idempotent by construction — it clears an ownership this
@@ -3578,6 +3661,7 @@ export class RunnerApiController {
     @CurrentRunner() runner: { id: string; ownerId: string },
     @Param('id', PublicIdPipe) sessionId: string,
   ): Promise<OrchestrationCredentialResponse> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     return { orchestrationToken: await this.orchestration.reissue(runner, sessionId) };
   }
 
@@ -3641,7 +3725,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('attId', PublicIdPipe) attId: string,
   ): Promise<StreamableFile> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     const att = await this.prisma.attachment.findFirst({
       where: { id: attId, sessionId },
       select: { data: true, mimeType: true },
@@ -3668,7 +3752,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @UploadedFileParam() file: UploadedFile | undefined,
   ): Promise<{ id: string }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id);
+    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     assertValidUpload(file);
     const f = file as UploadedFile;
     const row = await this.prisma.attachment.create({
@@ -3692,7 +3776,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ArtifactResultRequest,
   ): Promise<{ ok: true }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id);
+    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (!dto?.requestId) throw new BadRequestException('requestId is required');
     await withTransactionRetry(this.prisma, async (tx) => {
       const turn = await tx.conversationTurn.findFirst({
@@ -4464,7 +4548,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ApprovalCreateRequest,
   ): Promise<{ id: string; status: ApprovalStatus }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id);
+    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     // Stripped before the lookup, not only before the write, so a retry finds the row the first
     // call created: the idempotency key and the column it was stored in have to agree.
     const toolUseId = stripNul(dto.toolUseId);
@@ -4637,7 +4721,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('approvalId', PublicIdPipe) approvalId: string,
   ): Promise<ApprovalDecisionResponse> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     const deadline = Date.now() + APPROVAL_LONG_POLL_MS;
     for (;;) {
       const a = await this.prisma.approval.findFirst({
@@ -4698,7 +4782,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: BackgroundWakeDto,
   ): Promise<BackgroundWakeReceipt> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (!this.sessions) throw new Error('background wakes are filed through SessionsService, which this controller was built without');
     const clientTurnId = `${BACKGROUND_WAKE_TURN_PREFIX}${dto.wakeId}`;
     let merged = false;
@@ -4749,7 +4833,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: ScheduledWakeupDto,
   ): Promise<ScheduledWakeupReceipt> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (dto.stop === true) return cancelScheduledWakeup(this.prisma, sessionId);
     return withTransactionRetry(
       this.prisma,
@@ -4771,7 +4855,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SessionNamingDto,
   ): Promise<{ applied: boolean }> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     if (!this.sessions) throw new Error('SessionsService is unavailable');
     return { applied: await this.sessions.applyEngineTitle(sessionId, stripNul(dto.replaces), stripNul(dto.title)) };
   }
@@ -4791,7 +4875,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Param('turnId', PublicIdPipe) turnId: string,
   ): Promise<{ suggestion?: string }> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     const turn = await this.prisma.conversationTurn.findUnique({ where: { id: turnId } });
     // The turn is the source of truth for the person's text (the runner's `user` echo carries
     // generated context beside it). No turn of this session, or one opened with attachments and
@@ -4830,6 +4914,7 @@ export class RunnerApiController {
     // this body — without the pipe the id reaches `where: { id: dto.turnId }` exactly as sent.
     @Body(PublicIdPipe.forFields('turnId')) body: TurnCompleteRequest,
   ) {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     // Stripped once, at the edge, rather than at each write: `result` alone reaches the session's
     // `error`, a turn's `deliveryFailureReason` and two different task comments below, and the
     // worktree snapshot reaches two rows more — a per-write strip is a list to keep in sync, which
@@ -6168,6 +6253,7 @@ export class RunnerApiController {
   @Post('sessions/:id/events')
   @HttpCode(202)
   async events(@CurrentRunner() runner: { id: string }, @Param('id', PublicIdPipe) sessionId: string, @Body() batch: RunEventBatch) {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     const leaseOwner = parseLeaseGeneration(batch?.leaseOwner);
     // Sanitized here, at the edge, so nothing downstream can carry a byte Postgres refuses:
     // every write below — run_event.payload, tool_call, the denormalized preview columns — is
@@ -6901,6 +6987,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() body: RunFinalizeRequest,
   ): Promise<RunFinalizeResponse> {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     // See turnComplete: the engine's last words (`result`, `error`) and the branch's per-file
     // patches all land in text/jsonb here, and a NUL in any of them fails the whole statement.
     const dto = stripNul(body);
@@ -7213,6 +7300,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() body: { leaseOwner?: string; ok?: boolean; error?: string; title?: string },
   ) {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     // See turnComplete: the title is read out of the transcript file being imported, so it is
     // workspace bytes reaching a text column.
     const dto = stripNul(body);
@@ -7318,6 +7406,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SessionMergeResultRequest,
   ) {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     if (
       dto?.status !== 'merged' &&
       dto?.status !== 'conflict' &&
@@ -7350,6 +7439,10 @@ export class RunnerApiController {
     // (§2.5 J10). A Map rather than a Set for the same reason it was a Set: re-adding the same
     // project on a retried attempt overwrites rather than accumulates.
     const receiptProjects = new Map<string, string | null>();
+    // The landed receipts this request recorded, for the landing subject they settle after the
+    // commit (§2.9 LS3 / errata E5). Keyed by project and task so a retried closure overwrites
+    // rather than accumulates.
+    const landedReceipts = new Map<string, { projectId: string; taskId: string; result: 'MERGED' | 'ALREADY_MERGED' }>();
     // Retried whole. The worktree-op claim is re-read under its row lock inside the closure, so a
     // re-run either still owns the operation it is reporting on or finds it reclaimed — the same
     // two outcomes a first attempt has.
@@ -7509,19 +7602,20 @@ export class RunnerApiController {
             })
           : null;
         if (task?.projectId) receiptProjects.set(task.projectId, current.taskId ?? null);
+        // `[K6]` §7 / §13.7 MR2: a merge that moved nothing is `ALREADY_MERGED`, not `MERGED`.
+        // Both are landed, so every projection below treats them alike; what the distinction
+        // keeps is the one fact a reader cannot re-derive later — whether this request advanced
+        // the target or found the work already there. Older runners never set the flag and keep
+        // producing `MERGED`, which is what they always meant.
+        const receiptResult = merged
+          ? (dto.alreadyMerged ? 'ALREADY_MERGED' as const : 'MERGED' as const)
+          : dto.status === 'conflict' ? 'CONFLICT' as const : 'ERROR' as const;
         await MergeReceiptService.fromRunnerMergeResult(tx, {
           ownerId: current.ownerId,
           sessionId,
           taskId: current.taskId,
           projectId: task?.projectId ?? null,
-          // `[K6]` §7 / §13.7 MR2: a merge that moved nothing is `ALREADY_MERGED`, not `MERGED`.
-          // Both are landed, so every projection below treats them alike; what the distinction
-          // keeps is the one fact a reader cannot re-derive later — whether this request advanced
-          // the target or found the work already there. Older runners never set the flag and keep
-          // producing `MERGED`, which is what they always meant.
-          result: merged
-            ? (dto.alreadyMerged ? 'ALREADY_MERGED' : 'MERGED')
-            : dto.status === 'conflict' ? 'CONFLICT' : 'ERROR',
+          result: receiptResult,
           sourceBranch,
           sourceSha,
           targetBranch,
@@ -7546,6 +7640,14 @@ export class RunnerApiController {
               commitSha: sourceSha,
             })),
         });
+        if (task?.projectId && current.taskId
+            && (receiptResult === 'MERGED' || receiptResult === 'ALREADY_MERGED')) {
+          landedReceipts.set(`${task.projectId}:${current.taskId}`, {
+            projectId: task.projectId,
+            taskId: current.taskId,
+            result: receiptResult,
+          });
+        }
       }
     }, loggedRetry(this.logger, 'runnerApi.mergeResult'));
     // The third receipt writer's own post-commit edge, and the reason it is written out here rather
@@ -7557,6 +7659,13 @@ export class RunnerApiController {
     // un-record them.
     for (const [projectId, landedTaskId] of receiptProjects) {
       await this.mergeReceipts?.deliverProjectFactsAfterCommit(projectId, landedTaskId);
+    }
+    // §2.9 LS3 / errata E5: the merge also landed a task segment whose candidate this request
+    // retired (M-T13). Its own transaction, after the receipt committed.
+    for (const landed of landedReceipts.values()) {
+      await settleTaskSegmentAfterReceipt(this.prisma, landed)
+        .catch((error) => this.logger.warn(
+          `landing settlement after merge-result failed: ${(error as Error)?.message ?? error}`));
     }
     // The checkout is free again. A message the user sent while this merge executed is
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it
@@ -7582,6 +7691,7 @@ export class RunnerApiController {
     @Param('id', PublicIdPipe) sessionId: string,
     @Body() dto: SessionCommitResultRequest,
   ) {
+    await this.assertEngineSessionById(sessionId, (runner as { ownerId?: string }).ownerId);
     if (
       dto?.status !== 'committed' &&
       dto?.status !== 'nochange' &&
@@ -7691,7 +7801,7 @@ export class RunnerApiController {
     // See turnComplete: these patches are file content, and `git diff` only hides a NUL behind
     // "Binary files differ" when it sits in the first 8000 bytes.
     const dto = stripNul(body);
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     // See turnComplete: a healed base with an omitted legacy `omitempty` slice means the newly
     // computed snapshot is empty, never that the old changedFiles still belong to the new base.
     const changedFilesSnapshot =
@@ -7762,7 +7872,7 @@ export class RunnerApiController {
     workDir: string | null;
     title: string;
   }> {
-    const session = await this.assertSessionOwnership(sessionId, runner.id);
+    const session = await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     const runtimeSessionId = session.runtimeSessionId ?? undefined;
     if (!runtimeSessionId) {
       throw new NotFoundException('session has no runtime session ID');
@@ -7803,7 +7913,7 @@ export class RunnerApiController {
     events: { seq: number; type: string; payload: unknown; ts: Date }[];
     hasMore: boolean;
   }> {
-    await this.assertSessionOwnership(sessionId, runner.id);
+    await this.assertSessionOwnership(sessionId, runner.id, (runner as { ownerId?: string }).ownerId);
     const asInt = (s: string | undefined, fallback: number): number => {
       const n = Number(s);
       return s !== undefined && s !== '' && Number.isFinite(n) ? Math.trunc(n) : fallback;
@@ -8131,10 +8241,51 @@ export class RunnerApiController {
     return at ? new Date(at.getTime() + Math.floor(Math.random() * QUOTA_RETRY_JITTER_MS)) : null;
   }
 
-  private async assertSessionOwnership(sessionId: string, runnerId: string) {
+  /**
+   * The engine-path guard for a door that names the session only by id (§2.9 LS6): a LANDING row is
+   * the platform's own container, never something a runner may report into or act on.
+   */
+  private assertEngineSessionById(sessionId: string, ownerId?: string): Promise<void> {
+    return assertEngineSessionRowById(this.prisma, sessionId, ownerId);
+  }
+
+  /**
+   * A heartbeat names sessions in its body — supervised ids, worktree snapshots, expired commit
+   * attempts. A LANDING row may be named by none of them (§2.9 LS6); the whole heartbeat is refused
+   * rather than the offending field silently dropped, because no runner ever hosts one.
+   */
+  private async assertNoLandingSessionNamed(
+    sessionIds: readonly (string | undefined | null)[],
+    ownerId?: string,
+  ): Promise<void> {
+    const ids = [
+      ...new Set(
+        sessionIds
+          .filter((id): id is string => typeof id === 'string' && SESSION_ID_RE.test(id))
+          .map((id) => id.toLowerCase()),
+      ),
+    ];
+    if (ids.length === 0) return;
+    // A unit double that does not model the session table cannot answer; production always can.
+    const delegate = (this.prisma as unknown as { session?: { findFirst?: unknown } }).session;
+    if (typeof delegate?.findFirst !== 'function') return;
+    const landing = await this.prisma.session.findFirst({
+      // Owner-scoped: another account's landing id must answer exactly as any other id of theirs,
+      // not as 409 SESSION_IS_PLATFORM_DRIVEN (which would confirm the id exists and is a landing).
+      where: { id: { in: ids }, ...(ownerId ? { ownerId } : {}), sessionKind: 'LANDING' },
+      select: { sessionKind: true },
+    });
+    if (landing) assertEngineSessionRow(landing);
+  }
+
+  private async assertSessionOwnership(sessionId: string, runnerId: string, ownerId?: string) {
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
     });
+    // Before the ownership comparison, but only for a row of this caller's own account: a runner is
+    // refused its own LANDING as a structural fact (409 SESSION_IS_PLATFORM_DRIVEN), while another
+    // account's landing is answered exactly as any other id of theirs is.
+    if (session && (ownerId === undefined || session.ownerId === ownerId)) assertEngineSessionRow(session);
     if (!session || session.assignedRunnerId !== runnerId) {
       throw new ForbiddenException('session does not belong to this runner');
     }

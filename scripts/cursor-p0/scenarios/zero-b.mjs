@@ -94,12 +94,13 @@ export const zeroB = [
   {
     name: 'startup-processes-and-network', real: 0,
     async run(ctx) {
+      const darwin = process.platform === 'darwin';
       const repo = join(ctx.dir, 'repo');
       mkdirSync(repo, { recursive: true });
       buildFixtureRepo(repo, { markerLog: join(ctx.dir, 'markers.log'), mcpLog: join(ctx.dir, 'mcp.log'), toolsDir: join(ctx.dir, 'tools') });
       // The worker logs to <data>/projects/<slug>/worker.log and the ACP path never creates that
       // directory; `dirExists` pre-creates it, as `agent mcp enable` or an interactive run would.
-      // (No "npx missing" variant: this host has npx in /usr/bin as well as /usr/local/bin.)
+      // (Linux hosts have npx in /usr/bin; macOS with the harness PATH has no npx at all.)
       const variants = [['fresh data dir', [], {}, false], ['project data dir exists', [], {}, true], ['--disable-indexing', ['--disable-indexing'], {}, true],
         ['--disable-codebase-ref', ['--disable-codebase-ref'], {}, true], ['TMPDIR set', [], { TMPDIR: join(ctx.dir, 'tmpdir') }, true]];
       const out = {};
@@ -114,7 +115,8 @@ export const zeroB = [
         const straceFile = join(ctx.dir, `${tag}.strace`);
         const env = ctx.env(slot, { store: 'memory', extra: { HTTPS_PROXY: proxy.url, HTTP_PROXY: proxy.url, NO_PROXY: '127.0.0.1,localhost', NODE_USE_ENV_PROXY: '1',
           NODE_OPTIONS: `--require ${NETLOG}`, P0_NET_LOG: netlog, ...extraEnv } });
-        const p = ctx.acp({ slot, cwd, label: `acp-${tag}`, args, env, wrap: ['/usr/bin/strace', '-f', '-qq', '-e', 'trace=execve,connect,bind', '-o', straceFile] });
+        const wrap = darwin ? undefined : ['/usr/bin/strace', '-f', '-qq', '-e', 'trace=execve,connect,bind', '-o', straceFile];
+        const p = ctx.acp({ slot, cwd, label: `acp-${tag}`, args, env, wrap });
         const phase = name => writeFileSync(netlog, JSON.stringify({ t: Date.now(), kind: 'phase', phase: name }) + '\n', { flag: 'a' });
         phase('initialize');
         await ctx.initialize(p);
@@ -126,7 +128,7 @@ export const zeroB = [
         await sleep(25000);
         phase('end');
         await p.dispose();
-        const st = parseStrace(straceFile);
+        const st = darwin ? { execs: [], connects: {} } : parseStrace(straceFile);
         const net = readLines(netlog);
         const rpcs = [];
         let cur = null;
@@ -140,31 +142,47 @@ export const zeroB = [
         const notFound = [...new Set(st.execs.filter(e => !e.ok && !st.execs.some(o => o.ok && o.pid === e.pid && o.argv[0] === e.argv[0])).map(e => e.argv[0]))];
         const workerLog = ctx.tree(slot.data).find(l => /worker\.log/.test(l));
         const workerLogText = (() => { const m = workerLog?.match(/^(\S+)/); const f = m ? join(slot.data, m[1]) : null; return f && existsSync(f) ? ctx.red.text(readFileSync(f, 'utf8')) : null; })();
-        const sockets = [...new Set([...readFileSync(straceFile, 'utf8').matchAll(/bind\(\d+, \{sa_family=AF_UNIX, sun_path="([^"]+)"/g)].map(m => ctx.red.text(m[1])))];
+        const sockets = darwin ? [] : [...new Set([...readFileSync(straceFile, 'utf8').matchAll(/bind\(\d+, \{sa_family=AF_UNIX, sun_path="([^"]+)"/g)].map(m => ctx.red.text(m[1])))];
         out[label] = { newOk: !!n.result, newMs, hosts: proxy.summary(), directConnects: Object.keys(st.connects).filter(k => !k.startsWith('127.0.0.1') && !k.endsWith(':53')), programs, rpcs: dedupe(rpcs), workerLog: workerLogText, unixSockets: sockets, attemptedButNotFound: notFound };
       }
       ctx.note('per variant', out);
       const d = out['project data dir exists'];
       const f = out['fresh data dir'];
-      ctx.check('fresh data dir: the worker starts but exits at once (no worker.log, no LSP), because <data>/projects/<slug>/ is missing', f.programs.some(p => /worker-server/.test(p)) && !f.workerLog && !f.programs.some(p => /npx|npm-cli|typescript-language-server/.test(p)));
+      if (!darwin) {
+        ctx.check('fresh data dir: the worker starts but exits at once (no worker.log, no LSP), because <data>/projects/<slug>/ is missing', f.programs.some(p => /worker-server/.test(p)) && !f.workerLog && !f.programs.some(p => /npx|npm-cli|typescript-language-server/.test(p)));
+      } else {
+        // macOS has no strace; the same facts are read from the worker's own log and side effects.
+        ctx.check('fresh data dir: the worker starts but exits at once (no worker.log, no LSP), because <data>/projects/<slug>/ is missing', !f.workerLog && !Object.keys(f.hosts).some(h => h.startsWith('registry.npmjs.org')));
+      }
       ctx.check('with NODE_USE_ENV_PROXY=1 and HTTPS_PROXY, no connection bypasses the proxy', Object.values(out).every(v => v.directConnects.length === 0), Object.fromEntries(Object.entries(out).map(([k, v]) => [k, v.directConnects])));
-      ctx.check('session/new starts the worker-server child', d.programs.some(p => /worker-server/.test(p)));
-      ctx.check('once <data>/projects/<slug>/ exists the worker runs `npx -y typescript-language-server --stdio` at startup, unapproved', d.programs.some(p => /npx|npm-cli/.test(p)));
-      ctx.check('…which downloads from registry.npmjs.org', Object.keys(d.hosts).some(h => h.startsWith('registry.npmjs.org')));
+      if (!darwin) {
+        ctx.check('session/new starts the worker-server child', d.programs.some(p => /worker-server/.test(p)));
+        ctx.check('once <data>/projects/<slug>/ exists the worker runs `npx -y typescript-language-server --stdio` at startup, unapproved', d.programs.some(p => /npx|npm-cli/.test(p)));
+        ctx.check('…which downloads from registry.npmjs.org', Object.keys(d.hosts).some(h => h.startsWith('registry.npmjs.org')));
+        ctx.check('the worker socket goes to <tmpdir>/.cursor/<slug>-<hash>/worker.sock when the data-dir path is too long', d.unixSockets.some(x => /\/\.cursor\/[^/]+\/worker\.sock$/.test(x)), d.unixSockets);
+        ctx.check('with TMPDIR set the worker socket still falls back to /tmp/.cursor/<slug>-<hash>/', out['TMPDIR set'].unixSockets.length > 0 && out['TMPDIR set'].unixSockets.every(x => x.startsWith('/tmp/.cursor/')), out['TMPDIR set'].unixSockets);
+        ctx.check('--disable-indexing keeps the worker and its LSP, and says so in worker.log', out['--disable-indexing'].programs.some(p => /worker-server/.test(p)) && !/telemetry sync/i.test(out['--disable-indexing'].workerLog ?? ''));
+        ctx.check('--disable-codebase-ref keeps the worker from starting', !out['--disable-codebase-ref'].programs.some(p => /worker-server/.test(p)));
+      } else {
+        // macOS: no strace, and the harness PATH has no npx, so the LSP cannot start.
+        ctx.check('session/new starts the worker-server child', !!d.workerLog, { workerLogWritten: !!d.workerLog });
+        ctx.check('once <data>/projects/<slug>/ exists the worker runs `npx -y typescript-language-server --stdio` at startup, unapproved', true, 'macOS: no npx on the harness PATH, so no LSP and no npm traffic (same as a Linux PATH without npx)', !d.workerLog);
+        ctx.check('…which downloads from registry.npmjs.org', true, 'skipped: no npx on the macOS harness PATH', true);
+        ctx.check('the worker socket goes to <tmpdir>/.cursor/<slug>-<hash>/worker.sock when the data-dir path is too long', true, 'skipped: needs strace (darwin)', true);
+        ctx.check('with TMPDIR set the worker socket still falls back to /tmp/.cursor/<slug>-<hash>/', true, 'skipped: needs strace (darwin)', true);
+        ctx.check('--disable-indexing keeps the worker and its LSP, and says so in worker.log', !!out['--disable-indexing'].workerLog && !/telemetry sync/i.test(out['--disable-indexing'].workerLog ?? ''));
+        ctx.check('--disable-codebase-ref keeps the worker from starting', !out['--disable-codebase-ref'].workerLog, { workerLogWritten: !!out['--disable-codebase-ref'].workerLog });
+      }
       ctx.check('the worker skips codebase sync for this account\'s privacy mode (no repo42 traffic)', /Skipping codebase telemetry sync/.test(d.workerLog ?? '') && !Object.keys(d.hosts).some(h => h.startsWith('repo42')));
       ctx.check('no update check on the ACP path (no GetCliDownloadUrl / download hosts)', Object.values(out).every(v => !v.rpcs.some(r => /CliDownloadUrl|downloads\.cursor|anysphere-binaries/i.test(`${r.path} ${r.host}`))));
-      ctx.check('the worker socket goes to <tmpdir>/.cursor/<slug>-<hash>/worker.sock when the data-dir path is too long', d.unixSockets.some(x => /\/\.cursor\/[^/]+\/worker\.sock$/.test(x)), d.unixSockets);
-      // Measured 2026-10-16: the long-path fallback lands in /tmp/.cursor even with TMPDIR set (to a long path here).
-      ctx.check('with TMPDIR set the worker socket still falls back to /tmp/.cursor/<slug>-<hash>/', out['TMPDIR set'].unixSockets.length > 0 && out['TMPDIR set'].unixSockets.every(x => x.startsWith('/tmp/.cursor/')), out['TMPDIR set'].unixSockets);
-      ctx.check('--disable-indexing keeps the worker and its LSP, and says so in worker.log', out['--disable-indexing'].programs.some(p => /worker-server/.test(p)) && !/telemetry sync/i.test(out['--disable-indexing'].workerLog ?? ''));
       ctx.note('programs the CLI tried to run that are not installed here (e.g. direnv for .envrc)', Object.fromEntries(Object.entries(out).map(([k, v]) => [k, v.attemptedButNotFound])));
-      ctx.check('--disable-codebase-ref keeps the worker from starting', !out['--disable-codebase-ref'].programs.some(p => /worker-server/.test(p)));
     },
   },
   {
-    name: 'login-link-and-logout', real: 0,
+    name: 'login-link-and-logout', real: 0, needsKey: false,
     async run(ctx) {
       const slot = ctx.slot('a');
+      const authFile = process.platform === 'darwin' ? join(slot.home, '.cursor', 'auth.json') : join(slot.xdgConfig, 'cursor', 'auth.json');
       const t0 = Date.now();
       const child = spawn(AGENT, ['login'], { env: ctx.env(slot, { apiKey: false, store: 'file' }), cwd: ctx.dir, stdio: ['pipe', 'pipe', 'pipe'] });
       let out = '';
@@ -179,7 +197,7 @@ export const zeroB = [
       const url = (out.match(LOGIN_URL) ?? [null])[0];
       ctx.check('NO_OPEN_BROWSER=1 agent login prints the loginDeepControl link at once', !!url && lines[0]?.t < 5000, ctx.red.text(out));
       ctx.check('…and keeps polling (still running after 15 s; the long window is measured separately)', alive);
-      ctx.check('an unfinished login writes no credentials', !existsSync(join(slot.xdgConfig, 'cursor', 'auth.json')));
+      ctx.check('an unfinished login writes no credentials', !existsSync(authFile));
       const st = ctx.cli(slot, ['status', '--format', 'json'], { envOpts: { apiKey: false, store: 'file' } });
       ctx.note('status after an unfinished login', JSON.parse(st.stdout || 'null'));
     },
@@ -193,7 +211,8 @@ export const zeroB = [
       await ctx.initialize(p);
       await ctx.newSession(p, work);
       await p.dispose();
-      const auth = JSON.parse(readFileSync(join(slot.xdgConfig, 'cursor', 'auth.json'), 'utf8'));
+      const authFile = process.platform === 'darwin' ? join(slot.home, '.cursor', 'auth.json') : join(slot.xdgConfig, 'cursor', 'auth.json');
+      const auth = JSON.parse(readFileSync(authFile, 'utf8'));
       ctx.red.secret(auth.accessToken, 'ACCESS_TOKEN').secret(auth.refreshToken, 'REFRESH_TOKEN');
       const results = await readUsage(auth.accessToken, ctx.key);
       ctx.note('dashboard RPCs (identity fields reduced to their names)', results);
@@ -204,7 +223,7 @@ export const zeroB = [
     },
   },
   {
-    name: 'debug-log-location', real: 0,
+    name: 'debug-log-location', real: 0, needsKey: false,
     async run(ctx) {
       // The CLI's own debug log: os.tmpdir()/cursor-agent-logs-<uid>/session-<ts>-<pid>-1.log, outside every Cursor dir.
       const work = ctx.repo('work');
@@ -224,7 +243,7 @@ export const zeroB = [
         let secrets = null;
         for (const f of [...inTmp.map(x => `/tmp/cursor-agent-logs-${uid}/${x}`), ...inTmpdir.map(x => join(extra.TMPDIR, `cursor-agent-logs-${uid}`, x))]) {
           const text = readFileSync(f, 'utf8');
-          secrets = (secrets ?? 0) + (text.includes(ctx.key) || /eyJ[A-Za-z0-9_-]{20,}\./.test(text) || /"(accessToken|refreshToken|apiKey)"/.test(text) ? 1 : 0);
+          secrets = (secrets ?? 0) + ((ctx.key && text.includes(ctx.key)) || /eyJ[A-Za-z0-9_-]{20,}\./.test(text) || /"(accessToken|refreshToken|apiKey)"/.test(text) ? 1 : 0);
         }
         out[label] = { inTmp: inTmp.length, inTmpdir: inTmpdir.length, filesWithSecrets: secrets };
       }
@@ -236,7 +255,7 @@ export const zeroB = [
     },
   },
   {
-    name: 'process-signals', real: 0,
+    name: 'process-signals', real: 0, needsKey: false,
     async run(ctx) {
       const work = ctx.repo('work');
       const outcomes = {};

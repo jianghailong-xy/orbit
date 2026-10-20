@@ -156,7 +156,7 @@ export function ProjectMergeStrip({
   const onPass = shape === 'checking' ? promotionOnPassLine(current) : null;
 
   return (
-    <div className={`session-project-merge is-${shape}`} data-shape={shape}>
+    <div className={`session-project-merge is-${shape}${line?.timedOut ? ' is-timed-out' : ''}`} data-shape={shape}>
       {shape === 'checking' ? landing : null}
       {onPass ? <div className="session-project-merge-note">{onPass}</div> : null}
       {shape === 'asking' && current ? (

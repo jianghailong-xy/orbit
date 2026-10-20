@@ -199,6 +199,10 @@ var userModeRoutes = []struct {
 	{command: "task dependency-remove", args: []string{"t1", "--depends-on", "t2", "--json"}, method: "DELETE", path: "/api/tasks/t1/dependencies/t2"},
 
 	{command: "project get", args: []string{"P1", "--json"}, method: "GET", path: "/api/projects/P1"},
+	// The line's read as the person: the user route answers the settings and the queue the project
+	// page draws, and the agent-only page slots travel as the query they are named by.
+	{command: "project integration", args: []string{"P1", "--job-id", "J1", "--cursor", "c1", "--json"},
+		method: "GET", path: "/api/projects/P1/integration", query: map[string]string{"jobId": "J1", "cursor": "c1"}},
 	{command: "project crossings", args: []string{"P1", "--state", "PENDING", "--json"},
 		method: "GET", path: "/api/projects/P1/handoffs", query: map[string]string{"state": "PENDING"}},
 	{command: "project resolve-blocker", args: []string{"P1", "--blocker-id", "B1", "--reason", "landed", "--json"},

@@ -134,3 +134,43 @@ describe('the landing line, by the project’s main branch', () => {
     }
   });
 });
+
+/** §7.2 V6 on the row: the server's liveness replaces this line's own claim-lease reading. */
+describe('the project row, from a server that derives the claim’s liveness', () => {
+  const v6 = (over: Partial<NonNullable<ProjectListIntegration['inFlight']>>) => integration({
+    inFlight: { taskTitle: null, kind: 'CHECK_PROMOTION', phase: 'CHECK', state: 'RUNNING',
+      startedAt: ago(31), heartbeatAt: ago(0), liveness: 'LIVE', ...over },
+  });
+
+  it('writes a timeout in amber words and lights no needs-you dot', () => {
+    const row = lineOf([coordinator()], project({
+      integration: integration({ inFlight: { taskTitle: null, kind: 'LAND_PROMOTION', phase: 'CHECK', state: 'RUNNING',
+        startedAt: ago(31), heartbeatAt: ago(23), liveness: 'LEASE_EXPIRED' } }),
+    }));
+    expect(row.line).toEqual({ text: 'Merge to main · timed out · no report for 23m', tone: 'warning' });
+    // The amber dot means somebody is waiting on you; a stopped landing is a fact, not a question.
+    expect(row.indicator).toBeNull();
+    expect(row.needsYou).toBe(false);
+  });
+
+  it('says SILENT without calling it a timeout, and keeps a healthy long check checking', () => {
+    expect(sessionProjectLandingLine(v6({ liveness: 'SILENT', heartbeatAt: ago(4) }), NOW))
+      .toEqual({ text: 'Merge check · no word from runner · 4m', tone: 'queued' });
+    // LIVE and QUIET are healthy, and so is LEGACY: a legacy runner reports only between steps, so
+    // twelve quiet minutes are not a stall — the row says the step, not "no report".
+    for (const liveness of ['LIVE', 'QUIET'] as const) {
+      expect(sessionProjectLandingLine(v6({ liveness, heartbeatAt: ago(0), startedAt: ago(12) }), NOW))
+        .toEqual({ text: 'Merge check · checking · 12m', tone: 'running' });
+    }
+    const legacy = sessionProjectLandingLine(v6({ liveness: 'LEGACY', heartbeatAt: ago(12), startedAt: ago(12) }), NOW);
+    expect(legacy).toEqual({ text: 'Merge check · checking · 12m', tone: 'running' });
+    expect(legacy!.text).not.toMatch(/no report|timed? ?out/i);
+  });
+
+  it('is word for word the older server’s line when the server sends no liveness', () => {
+    const old = integration({
+      inFlight: { taskTitle: 'P5', kind: 'LAND_TASK', phase: 'FETCH', state: 'RUNNING', startedAt: ago(4), heartbeatAt: ago(11) },
+    });
+    expect(sessionProjectLandingLine(old, NOW)).toEqual({ text: 'Landing · no report for 11m · 4m · P5', tone: 'queued' });
+  });
+});

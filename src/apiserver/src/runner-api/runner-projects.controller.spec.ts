@@ -98,6 +98,51 @@ test('getProject is exposed as GET projects/:id', () => {
   assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.GET);
 });
 
+test('getProjectIntegration is GET projects/:id/integration and passes the session and page slots through', async () => {
+  const handler = RunnerProjectsController.prototype.getProjectIntegration;
+  assert.equal(Reflect.getMetadata(PATH_METADATA, handler), 'projects/:id/integration');
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.GET);
+
+  const seen: unknown[] = [];
+  const expected = { projectId: 'project-1', queue: [] };
+  const projects = {
+    integrationForAgent: async (...args: unknown[]) => {
+      seen.push(args);
+      return expected;
+    },
+  } as never;
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never, {} as never);
+
+  const result = await controller.getProjectIntegration(
+    RUNNER, 'project-1', ' session-1 ', 'job-1', '1', '2', '3', 'cursor-1',
+  );
+
+  assert.deepEqual(seen, [[
+    'owner-1',
+    'project-1',
+    'session-1',
+    { jobId: 'job-1', claim: 1, round: 2, check: 3, cursor: 'cursor-1' },
+  ]]);
+  assert.equal(result, expected);
+});
+
+test('getProjectIntegration refuses a page slot that is not a non-negative integer', async () => {
+  const projects = {
+    integrationForAgent: async () => assert.fail('a malformed page slot reached the service'),
+  } as never;
+  const controller = new RunnerProjectsController(projects, acceptanceDouble(), {} as never, {} as never);
+
+  for (const bad of ['-1', '1.5', 'x', '']) {
+    await assert.rejects(
+      () => controller.getProjectIntegration(RUNNER, 'project-1', 'session-1', undefined, bad),
+      (error) => error instanceof BadRequestException
+        && (error.getResponse() as { message?: string }).message
+          === 'claim must be a non-negative integer',
+      `claim=${JSON.stringify(bad)} was accepted`,
+    );
+  }
+});
+
 // The id an agent holds is the base62 short form (that is what every payload encodes ids as), so
 // the param has to decode before it reaches a `@db.Uuid` column — the same gate the user-facing
 // ProjectsController puts on the same id. Both id-bearing routes, not just the read: a write that
@@ -295,7 +340,7 @@ test('retryIntegration reruns the landing in the runner owner scope, as the acti
   const openItems = {
     retryIntegration: async (...call: unknown[]) => {
       seen.push(call);
-      return { taskId: 'task-1', jobId: 'job-2', generation: 2 };
+      return { taskId: 'task-1', jobId: 'job-2', generation: 2, landingSessionId: 'landing-session-1' };
     },
   } as never;
   const controller = new RunnerProjectsController(
@@ -310,7 +355,8 @@ test('retryIntegration reruns the landing in the runner owner scope, as the acti
   const retried = await controller.retryIntegration(RUNNER, ` ${SESSION_ID} `, 'project-1', 'task-1', body);
 
   assert.deepEqual(seen, [['owner-1', 'project-1', 'task-1', body, SESSION_ID]]);
-  assert.deepEqual(retried, { taskId: 'task-1', jobId: 'job-2', generation: 2 });
+  assert.deepEqual(retried, { taskId: 'task-1', jobId: 'job-2', generation: 2, landingSessionId: 'landing-session-1' },
+    'the answer reaches the caller whole, the landing session address included');
   // A missing header is passed on as missing, for the service to refuse — never read as the owner.
   await controller.retryIntegration(RUNNER, undefined, 'project-1', 'task-1', body);
   assert.deepEqual(seen[1], ['owner-1', 'project-1', 'task-1', body, undefined]);
@@ -339,6 +385,76 @@ test('skipIntegrationMergeCheck is exposed as POST projects/:id/tasks/:taskId/in
       `${id} does not resolve through PublicIdPipe`,
     );
   }
+});
+
+test('abandonIntegrationJob is exposed as POST projects/:id/integration/jobs/:jobId/abandon', () => {
+  const handler = RunnerProjectsController.prototype.abandonIntegrationJob;
+  assert.equal(
+    Reflect.getMetadata(PATH_METADATA, handler),
+    'projects/:id/integration/jobs/:jobId/abandon',
+  );
+  assert.equal(Reflect.getMetadata(METHOD_METADATA, handler), RequestMethod.POST);
+  const args = Reflect.getMetadata(ROUTE_ARGS_METADATA, RunnerProjectsController, 'abandonIntegrationJob') as
+    | Record<string, { data?: unknown; pipes?: unknown[] }>
+    | undefined;
+  for (const id of ['id', 'jobId']) {
+    const arg = Object.values(args ?? {}).find((candidate) => candidate.data === id);
+    assert.ok(arg, `no ${id} param on abandonIntegrationJob`);
+    assert.ok(
+      (arg.pipes ?? []).some((pipe) => pipe === PublicIdPipe || pipe instanceof PublicIdPipe),
+      `${id} does not resolve through PublicIdPipe`,
+    );
+  }
+});
+
+/**
+ * The abandon door is the retry doors' shape: the runner owner's scope, the acting session as the
+ * authority, and the reason trimmed so the record keeps the sentence the caller meant. A blank
+ * reason is refused before the service — an abandonment nobody explained is a record with only its
+ * consequence on it.
+ */
+test('abandonIntegrationJob abandons in the runner owner scope, as the acting session', async () => {
+  const seen: unknown[] = [];
+  const integrationJobs = {
+    abandon: async (input: unknown) => {
+      seen.push(input);
+      return {
+        abandoned: {
+          jobId: 'job-1', kind: 'LAND_TASK', state: 'ERROR',
+          errorCode: 'PUSH_OUTCOME_UNKNOWN', openItemId: null,
+        },
+        after: null,
+      };
+    },
+  } as never;
+  const controller = new RunnerProjectsController(
+    {} as never,
+    acceptanceDouble(),
+    {} as never,
+    orchestrationDouble(),
+    undefined,
+    undefined,
+    integrationJobs,
+  );
+
+  const abandoned = await controller.abandonIntegrationJob(
+    RUNNER, ` ${SESSION_ID} `, 'project-1', 'job-1', { reason: ' its runner is gone ' },
+  );
+
+  assert.deepEqual(seen, [{
+    jobId: 'job-1',
+    projectId: 'project-1',
+    ownerId: 'owner-1',
+    by: 'coordinator',
+    sessionId: SESSION_ID,
+    reason: 'its runner is gone',
+  }]);
+  assert.equal(abandoned.state, 'ERROR');
+  await assert.rejects(
+    controller.abandonIntegrationJob(RUNNER, SESSION_ID, 'project-1', 'job-1', { reason: '   ' }),
+    /reason is required/,
+  );
+  assert.equal(seen.length, 1, 'a blank reason never reached the service');
 });
 
 test('skipIntegrationMergeCheck skips in the runner owner scope, as the acting session and its card', async () => {
@@ -786,6 +902,11 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     (name) => name !== 'constructor',
   );
   assert.deepEqual(handlers.slice().sort(), [
+    // `integration_abandon` (§2.2 J-T10): the coordinator ending one of its project's running jobs
+    // whose runner has stopped reporting, with a reason. On the machine door because the acting
+    // session is the authority — the server checks it against the project's current coordinator —
+    // and the gate is the claim's own lease expiry, not an item's assignment.
+    'abandonIntegrationJob',
     // A coordinator putting a question to the account owner (§5.2 R7). It belongs on the machine
     // door and nowhere else: only the conversation a project is coordinated FROM may ask, and that
     // conversation reaches Orbit through this door. Asking grants nothing and starts nothing — the
@@ -800,6 +921,12 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     // confirmation card — that press is not here, and its absence is the assertion below.
     'ensureCoordinator',
     'getProject',
+    // The agent's read of the integration line (`project_integration_get`, §2.2 J-T4, §2.9 LS6):
+    // the queue, all three job kinds, the blocking reasons, every current generation, each task's
+    // newest landing and each candidate's newest check and merge. A GET because it is READ ONLY —
+    // it is the door that replaces a coordinator querying the production database — and the acting
+    // session has to be one of the project's, which the service checks.
+    'getProjectIntegration',
     'handOverOpenItem',
     // Unit L7's one, and it is a GET on purpose. §7 RB2 puts the ANSWER to a cross-project
     // crossing with the user, so this door carries the question and not the write: an agent that
@@ -858,12 +985,16 @@ test('the runner project bridge exposes exactly create, the reads, update, the q
     ]),
   );
   assert.deepEqual(verbs, {
+    abandonIntegrationJob: RequestMethod.POST,
     askOwner: RequestMethod.POST,
     createProject: RequestMethod.POST,
     // POST because it may open one, like the owner's open and replace. The verb is not the
     // authority: what keeps this from being a `replace` is the service's reachability check.
     ensureCoordinator: RequestMethod.POST,
     getProject: RequestMethod.GET,
+    // GET: the whole verb is the assertion. An agent reads the line it coordinates; it never writes
+    // the queue through this door — every write is one of the doors below.
+    getProjectIntegration: RequestMethod.GET,
     // Unit L7: GET. The verb is the assertion — a POST appearing here would be a coordinator
     // answering a crossing on a person's behalf.
     listProjectHandoffs: RequestMethod.GET,

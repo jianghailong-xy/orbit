@@ -47,6 +47,13 @@ interface SessionRow {
   projectMembership?: SessionProjectMembership | null;
   projectId?: string | null;
   projectTitle?: string | null;
+  /** The landing summary a LANDING row carries; absent on every conversation. */
+  landing?: {
+    subject: 'TASK' | 'PROMOTION';
+    state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED';
+    settledAs: string | null;
+    settledAt: string | null;
+  };
 }
 
 interface Harness {
@@ -55,6 +62,7 @@ interface Harness {
   sql: Client;
   db: PrismaClient;
   realtime: RealtimeService;
+  sessions: SessionsService;
   bearers: Map<string, string>;
 }
 
@@ -110,7 +118,7 @@ function boot(): Promise<Harness> {
     app.setGlobalPrefix('api');
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { app, base: await app.getUrl(), sql, db, realtime, bearers };
+    return { app, base: await app.getUrl(), sql, db, realtime, sessions, bearers };
   })();
   return harness;
 }
@@ -162,6 +170,98 @@ async function wake(w: World, sessionId: string, status = 'SESSION_OPENED'): Pro
       id: randomUUID(), projectId: w.project.id, sessionId, status, event: 'PROJECT_TASKS_SETTLED',
       subjectType: 'PROJECT', subjectId: w.project.id, subjectVersion: randomUUID(),
       idempotencyKey: `membership:${randomUUID()}`,
+    },
+  });
+}
+
+/** The project's primary repository binding; every landing subject names one. */
+async function codebase(w: World): Promise<string> {
+  const row = await w.h.db.projectCodebase.create({
+    data: {
+      ownerId: w.ownerId, projectId: w.project.id,
+      canonicalRepoUrl: `https://github.com/example/membership-${w.project.id}`,
+      upstreamRef: 'refs/heads/main', integrationRef: 'refs/heads/main', refAuthority: 'REMOTE',
+    },
+  });
+  return row.id;
+}
+
+/** A promotion candidate of the project — what "a BLOCKED candidate" is a state of. */
+async function promotion(w: World, codebaseId: string, state = 'BLOCKED'): Promise<string> {
+  const row = await w.h.db.projectPromotion.create({
+    data: {
+      projectId: w.project.id, ownerId: w.ownerId, codebaseId,
+      sourceKind: 'PROJECT_BRANCH', sourceRef: `refs/heads/project/${randomUUID()}`,
+      upstreamRef: 'refs/heads/main', state,
+    },
+  });
+  return row.id;
+}
+
+/** One attempt of a landing subject: what later candidates and items of the round hang off. */
+async function landingJob(
+  w: World,
+  fields: { codebaseId: string; landingId: string; kind: string; taskId?: string; promotionId?: string },
+): Promise<string> {
+  const row = await w.h.db.projectIntegrationJob.create({
+    data: {
+      projectId: w.project.id, ownerId: w.ownerId, codebaseId: fields.codebaseId,
+      kind: fields.kind, taskId: fields.taskId ?? null, promotionId: fields.promotionId ?? null,
+      landingId: fields.landingId,
+      serialKey: `membership:${randomUUID()}`, targetRef: 'refs/heads/project/membership',
+      upstreamRef: 'refs/heads/main', sourceRef: `refs/heads/source/${randomUUID()}`,
+      idempotencyKey: `membership:${randomUUID()}`,
+    },
+  });
+  return row.id;
+}
+
+/**
+ * A landing subject and the LANDING session row it addresses (contract §2.9 LS1): the row exists
+ * once the first claim committed, and it is the row the project grouping lists with
+ * `includeLanding=1`. A settled one carries the container's terminal state as settlement writes it.
+ */
+async function landing(
+  w: World,
+  fields: { codebaseId: string; taskId?: string; promotionId?: string; settledAs?: string },
+): Promise<{ landingId: string; sessionId: string }> {
+  const settled = fields.settledAs !== undefined;
+  const sessionId = await session(w, {
+    title: 'Land this', sessionKind: 'LANDING', provider: 'orbit', providerBuiltin: true,
+    startsTaskWork: false,
+    status: settled ? (fields.settledAs === 'HANDLED' || fields.settledAs === 'DECLINED'
+      || fields.settledAs === 'CANCELLED' || fields.settledAs === 'DELETED' ? 'CANCELLED' : 'SUCCEEDED')
+      : 'AWAITING_INPUT',
+    ...(settled ? { completedAt: new Date() } : {}),
+  });
+  const row = await w.h.db.projectLanding.create({
+    data: {
+      id: randomUUID(),
+      projectId: w.project.id, ownerId: w.ownerId, codebaseId: fields.codebaseId,
+      subject: fields.promotionId ? 'PROMOTION' : 'TASK',
+      taskId: fields.promotionId ? null : fields.taskId!, promotionId: fields.promotionId ?? null,
+      episode: 1, sessionId,
+      settledAt: settled ? new Date() : null, settledAs: fields.settledAs ?? null,
+    },
+  });
+  return { landingId: row.id, sessionId };
+}
+
+/** An OPEN integration item about the segment — the other half of "awaiting a decision". */
+async function integrationItem(
+  w: World,
+  fields: { taskId?: string; promotionId?: string; integrationJobId?: string; kind?: string } = {},
+): Promise<void> {
+  const now = new Date();
+  await w.h.db.projectOpenItem.create({
+    data: {
+      projectId: w.project.id, ownerId: w.ownerId,
+      kind: fields.kind ?? 'INTEGRATION_CONFLICT', state: 'OPEN',
+      assignee: 'COORDINATOR', assigneeReason: 'DEFAULT',
+      taskId: fields.taskId ?? null, promotionId: fields.promotionId ?? null,
+      integrationJobId: fields.integrationJobId ?? null,
+      dedupeKey: `membership:${randomUUID()}`, title: 'Resolve the integration conflict', payload: {},
+      waitingSince: now, assignedAt: now,
     },
   });
 }
@@ -253,6 +353,186 @@ test('unrelated sessions, project-less tasks/context and children of unrelated r
   await assertEverywhere(w, await session(w, { taskId }), null);
   await assertEverywhere(w, await session(w, { contextTaskId: taskId }), null);
   await assertEverywhere(w, await session(w, { rootSessionId: unrelated, parentSessionId: unrelated }), null);
+});
+
+test('a LANDING session is never in a flat list and is a LANDING member of its subject\'s project', { skip }, async () => {
+  const w = await world('landing');
+  const { sessionId } = await landing(w, { codebaseId: await codebase(w), taskId: await task(w) });
+  const id = uuidToBase62(sessionId);
+  const projectId = uuidToBase62(w.project.id);
+
+  // LS6: every flat read is conversations, whatever the flag says without a project.
+  for (const path of ['/sessions', '/sessions?view=completed', '/sessions?includeLanding=1']) {
+    const rows = await read(w, path) as SessionRow[];
+    assert.equal(rows.some((row) => row.id === id), false, `${path} listed the landing`);
+  }
+  // The project grouping lists it only when asked — the read the project sessions page makes.
+  assert.deepEqual(await read(w, `/sessions?projectId=${projectId}`), []);
+  const listed = await read(w, `/sessions?projectId=${projectId}&includeLanding=1`) as SessionRow[];
+  assert.deepEqual(listed.map((row) => row.id), [id]);
+
+  const expected = addTwins({
+    projectId: w.project.id, projectTitle: w.project.title, projectStatus: w.project.status, role: 'LANDING',
+  }, true);
+  // §3.1: detail and the session.updated summary still carry the derived membership.
+  const detail = await read(w, `/sessions/${id}`) as SessionRow;
+  assert.deepEqual(detail.projectMembership, expected, 'detail membership');
+  // The legacy coordinator fields keep meaning only "the project this session coordinates".
+  assert.equal(detail.projectId, null);
+  assert.equal(detail.projectTitle, null);
+  const updated = firstValueFrom(w.h.realtime.streamForUser(w.ownerId).pipe(
+    filter((event) => event.type === ControlEventType.SESSION_UPDATED && event.sessionId === sessionId),
+    timeout(5_000),
+  ));
+  w.h.realtime.publishSessionUpdated(sessionId);
+  const pushed = addTwins((await updated).data, true) as SessionRow;
+  assert.deepEqual(pushed.projectMembership, expected, 'push membership');
+});
+
+test('a LANDING row carries the subject summary: in flight, awaiting a decision, settled', { skip }, async () => {
+  const w = await world('landing-summary');
+  const cb = await codebase(w);
+  const path = `/sessions?projectId=${uuidToBase62(w.project.id)}&includeLanding=1`;
+
+  const inFlight = await landing(w, { codebaseId: cb, taskId: await task(w) });
+  const awaitingTaskId = await task(w);
+  const awaitingTask = await landing(w, { codebaseId: cb, taskId: awaitingTaskId });
+  await integrationItem(w, { taskId: awaitingTaskId });
+  const awaitingPromotion = await landing(w, {
+    codebaseId: cb, promotionId: await promotion(w, cb),
+  });
+  // A decision that is not integration work is not this row's: only the INTEGRATION_* items and a
+  // BLOCKED candidate are what the Landings group says "needs a decision" about.
+  const notIntegrationTaskId = await task(w);
+  const notIntegration = await landing(w, { codebaseId: cb, taskId: notIntegrationTaskId });
+  await integrationItem(w, { taskId: notIntegrationTaskId, kind: 'DELIVERY_REVIEW' });
+  // An item can also name one of the segment's own attempts instead of its task: that is still a
+  // decision about this landing.
+  const viaJobTaskId = await task(w);
+  const viaJob = await landing(w, { codebaseId: cb, taskId: viaJobTaskId });
+  const jobId = await landingJob(w, {
+    codebaseId: cb, landingId: viaJob.landingId, kind: 'LAND_TASK', taskId: viaJobTaskId,
+  });
+  await integrationItem(w, { integrationJobId: jobId });
+  const settled = await landing(w, { codebaseId: cb, taskId: await task(w), settledAs: 'LANDED' });
+
+  const rows = [
+    ...(await read(w, `${path}&view=open`) as SessionRow[]),
+    ...(await read(w, `${path}&view=completed`) as SessionRow[]),
+  ];
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const summary = (sessionId: string) => byId.get(uuidToBase62(sessionId))?.landing;
+  assert.deepEqual(summary(inFlight.sessionId),
+    { subject: 'TASK', state: 'IN_FLIGHT', settledAs: null, settledAt: null });
+  assert.deepEqual(summary(awaitingTask.sessionId),
+    { subject: 'TASK', state: 'AWAITING_DECISION', settledAs: null, settledAt: null });
+  // A BLOCKED candidate is the promotion round's own "somebody has to decide this".
+  assert.deepEqual(summary(awaitingPromotion.sessionId),
+    { subject: 'PROMOTION', state: 'AWAITING_DECISION', settledAs: null, settledAt: null });
+  assert.deepEqual(summary(notIntegration.sessionId),
+    { subject: 'TASK', state: 'IN_FLIGHT', settledAs: null, settledAt: null });
+  assert.deepEqual(summary(viaJob.sessionId),
+    { subject: 'TASK', state: 'AWAITING_DECISION', settledAs: null, settledAt: null });
+  const ended = summary(settled.sessionId)!;
+  assert.equal(ended.subject, 'TASK');
+  assert.equal(ended.state, 'SETTLED');
+  assert.equal(ended.settledAs, 'LANDED');
+  assert.ok(ended.settledAt !== null && Number.isFinite(Date.parse(ended.settledAt)), 'settledAt is an instant');
+
+  // The views split on the container's own lifecycle: open while the subject is, completed once it
+  // settled — which is the row "Earlier · n landed" folds away.
+  const open = await read(w, `${path}&view=open`) as SessionRow[];
+  assert.deepEqual(
+    open.map((row) => row.id).sort(),
+    [inFlight, awaitingTask, awaitingPromotion, notIntegration, viaJob]
+      .map((entry) => uuidToBase62(entry.sessionId)).sort(),
+  );
+  const completed = await read(w, `${path}&view=completed`) as SessionRow[];
+  assert.deepEqual(completed.map((row) => row.id), [uuidToBase62(settled.sessionId)]);
+  assert.deepEqual(
+    (await read(w, `/sessions?projectId=${uuidToBase62(w.project.id)}&view=completed`) as SessionRow[]),
+    [],
+    'without includeLanding the settled landing is not in the completed view either',
+  );
+
+  // Closing the item is somebody deciding it: the row stops waiting on a decision.
+  await w.h.db.projectOpenItem.updateMany({
+    where: { taskId: awaitingTaskId }, data: { state: 'RESOLVED', resolvedAt: new Date() },
+  });
+  const after = await read(w, path) as SessionRow[];
+  assert.equal(after.find((row) => row.id === uuidToBase62(awaitingTask.sessionId))?.landing?.state, 'IN_FLIGHT');
+});
+
+test('a later candidate of the round, BLOCKED with no item, marks the round awaiting a decision', { skip }, async () => {
+  const w = await world('landing-later-candidate');
+  const cb = await codebase(w);
+  const path = `/sessions?projectId=${uuidToBase62(w.project.id)}&includeLanding=1`;
+  // A round is the FIRST candidate after the previous one settled (openPromotionRound); later
+  // candidates of it join only through a job whose landing_id is the round.
+  const first = await promotion(w, cb, 'SUPERSEDED');
+  const round = await landing(w, { codebaseId: cb, promotionId: first });
+  const state = async () => {
+    const rows = await read(w, path) as SessionRow[];
+    return rows.find((row) => row.id === uuidToBase62(round.sessionId))?.landing?.state;
+  };
+  assert.equal(await state(), 'IN_FLIGHT');
+  // The later candidate is blocked and no item names it — the row still needs a look.
+  const later = await promotion(w, cb, 'BLOCKED');
+  await landingJob(w, {
+    codebaseId: cb, landingId: round.landingId, kind: 'LAND_PROMOTION', promotionId: later,
+  });
+  assert.equal(await state(), 'AWAITING_DECISION');
+});
+
+test('an item that is no longer owed does not mark the segment awaiting a decision', { skip }, async () => {
+  const w = await world('landing-owed');
+  const cb = await codebase(w);
+  const path = `/sessions?projectId=${uuidToBase62(w.project.id)}&includeLanding=1`;
+  const state = async (sessionId: string) => {
+    const rows = [
+      ...(await read(w, `${path}&view=open`) as SessionRow[]),
+      ...(await read(w, `${path}&view=completed`) as SessionRow[]),
+    ] as SessionRow[];
+    return rows.find((row) => row.id === uuidToBase62(sessionId))?.landing?.state;
+  };
+
+  // An integration item left OPEN about a candidate that has left the live states is not owed
+  // (openItemOwed): the 10-02 incident was exactly such an item, and it must mark nothing.
+  const gone = await promotion(w, cb, 'SUPERSEDED');
+  const round = await landing(w, { codebaseId: cb, promotionId: gone });
+  await integrationItem(w, { promotionId: gone, kind: 'INTEGRATION_CHECK_FAILED' });
+  assert.equal(await state(round.sessionId), 'IN_FLIGHT');
+
+  // And an item in another project naming the same task is not this segment's: the bound keeps it
+  // from marking a row it has nothing to do with.
+  const other = await w.h.db.project.create({ data: { ownerId: w.ownerId, title: 'landing-owed other' } });
+  const taskId = await task(w);
+  const segment = await landing(w, { codebaseId: cb, taskId });
+  await integrationItem({ ...w, project: other }, { taskId, kind: 'INTEGRATION_CONFLICT' });
+  assert.equal(await state(segment.sessionId), 'IN_FLIGHT');
+  // The same item in the segment's own project does mark it, so the assertion above is not vacuous.
+  await integrationItem(w, { taskId, kind: 'INTEGRATION_CONFLICT' });
+  assert.equal(await state(segment.sessionId), 'AWAITING_DECISION');
+});
+
+test('a LANDING member is in no workspace tally', { skip }, async () => {
+  const w = await world('landing-counts');
+  const workspace = await w.h.db.workspace.create({ data: { ownerId: w.ownerId, name: 'landing workspace' } });
+  const { sessionId } = await landing(w, { codebaseId: await codebase(w), taskId: await task(w) });
+  // The container sits at AWAITING_INPUT with no turn and no approval; what the tally would count
+  // in an ordinary session is its row, and LS6 says a landing is in no workspace tally at all.
+  await w.h.db.session.update({
+    where: { id: sessionId },
+    data: { workspaceId: workspace.id, engineTurnActive: true, status: 'AWAITING_INPUT' },
+  });
+  const counts = await w.h.sessions.workspaceSessionCounts(w.ownerId);
+  const row = counts.find((entry) => entry.workspaceId === workspace.id);
+  assert.equal(row, undefined, `a landing counted in the workspace tally: ${JSON.stringify(row)}`);
+  // A conversation beside it is counted, so the assertion above is not vacuous.
+  await session(w, { workspaceId: workspace.id, engineTurnActive: true });
+  const withConversation = await w.h.sessions.workspaceSessionCounts(w.ownerId);
+  const counted = withConversation.find((entry) => entry.workspaceId === workspace.id);
+  assert.equal(counted?.running, 1, `the ordinary session was not counted: ${JSON.stringify(counted)}`);
 });
 
 for (const lowerRole of ['TASK', 'CONTEXT', 'JUDGMENT'] as const) {
@@ -418,20 +698,45 @@ async function filterBothWays(w: World, projectId: string): Promise<{ before: st
   };
 }
 
-interface Members { open: string[]; completed: string[]; deleted?: string[] }
+type Lifecycle = 'open' | 'completed' | 'deleted';
+
+interface Members {
+  open: string[];
+  completed: string[];
+  deleted?: string[];
+  /** The LANDING members among the above: listed only by `includeLanding=1`, in either view. */
+  landing?: { open: string[]; completed: string[] };
+}
 
 /** `projectId` selects exactly `expected` for `w`'s owner and the old and new filters agree; on the
- *  route, each view returns that view's own rows whose projectMembership names the project. */
+ *  route, each view returns that view's own rows whose projectMembership names the project, and
+ *  `includeLanding=1` adds exactly the LANDING members — with the role and the summary that read
+ *  is for. */
 async function assertProjectFilter(w: World, projectId: string, expected: Members): Promise<void> {
   const { before, now } = await filterBothWays(w, projectId);
   assert.deepEqual(now, before, 'sessionInProjectSql disagrees with the membership comparison it replaced');
   assert.deepEqual(now, [...expected.open, ...expected.completed, ...(expected.deleted ?? [])].sort(), 'members');
+  const landings = expected.landing ?? { open: [], completed: [] };
   for (const view of ['open', 'completed'] as const) {
     const ordinary = await read(w, `/sessions?view=${view}`) as SessionRow[];
     const byMembership = ordinary.filter((row) => row.projectMembership?.projectId === uuidToBase62(projectId));
-    const listed = await read(w, `/sessions?projectId=${uuidToBase62(projectId)}&view=${view}`) as SessionRow[];
+    const path = `/sessions?projectId=${uuidToBase62(projectId)}&view=${view}`;
+    const listed = await read(w, path) as SessionRow[];
     assert.deepEqual(listed, byMembership, `${view}: rows differ from the list's own projectMembership`);
-    assert.deepEqual(listed.map((row) => row.id).sort(), expected[view].map(uuidToBase62).sort(), `${view} members`);
+    // The flat list is conversations, so a landing member is the only difference the flag makes.
+    const conversations = expected[view].filter((id) => !landings[view].includes(id));
+    assert.deepEqual(listed.map((row) => row.id).sort(), conversations.map(uuidToBase62).sort(), `${view} members`);
+    const withLanding = await read(w, `${path}&includeLanding=1`) as SessionRow[];
+    assert.deepEqual(
+      withLanding.map((row) => row.id).sort(),
+      [...conversations, ...landings[view]].map(uuidToBase62).sort(),
+      `${view} members with includeLanding`,
+    );
+    for (const row of withLanding) {
+      const isLanding = landings[view].map(uuidToBase62).includes(row.id);
+      assert.equal(row.projectMembership?.role === 'LANDING', isLanding, `${view}: ${row.id} role`);
+      assert.equal(row.landing !== undefined, isLanding, `${view}: ${row.id} landing summary`);
+    }
   }
 }
 
@@ -440,6 +745,8 @@ async function assertNoProjectRows(w: World, projectId: string): Promise<void> {
   assert.deepEqual(await filterBothWays(w, projectId), { before: [], now: [] });
   for (const view of ['open', 'completed'] as const) {
     assert.deepEqual(await read(w, `/sessions?projectId=${uuidToBase62(projectId)}&view=${view}`), []);
+    assert.deepEqual(
+      await read(w, `/sessions?projectId=${uuidToBase62(projectId)}&view=${view}&includeLanding=1`), []);
   }
 }
 
@@ -490,17 +797,28 @@ test('projectId keeps every role and inheriting child, and leaves out sessions d
   const selfRooted = await session(w);
   await w.h.db.session.update({ where: { id: selfRooted }, data: { rootSessionId: selfRooted } });
 
+  // A LANDING member of each project: listed by the project route only when it is asked for, and
+  // never by the flat list.
+  const xLanding = await landing(w, { codebaseId: await codebase(w), taskId: await task(w) });
+  const yLanding = await landing({ ...w, project: y }, {
+    codebaseId: await codebase({ ...w, project: y }), taskId: await task({ ...w, project: y }),
+  });
+
   // Another owner's sessions whose membership names X, and that owner's own project.
   await wake(w, await session(stranger));
   await session(stranger, under(coordinator));
   const strangerCoordinator = await directSession(stranger, 'COORDINATOR');
 
   await assertProjectFilter(w, w.project.id, {
-    open: [coordinator, taskMember, contextMember, judgment, ...children],
+    open: [coordinator, taskMember, contextMember, judgment, ...children, xLanding.sessionId],
     completed: [completedChild],
     deleted: [deletedChild],
+    landing: { open: [xLanding.sessionId], completed: [] },
   });
-  await assertProjectFilter(w, y.id, { open: yMembers, completed: [] });
+  await assertProjectFilter(w, y.id, {
+    open: [...yMembers, yLanding.sessionId], completed: [],
+    landing: { open: [yLanding.sessionId], completed: [] },
+  });
   await assertProjectFilter(stranger, stranger.project.id, { open: [strangerCoordinator], completed: [] });
   await assertNoProjectRows(stranger, w.project.id);
   await assertNoProjectRows(w, stranger.project.id);
@@ -537,17 +855,50 @@ test('on random membership graphs projectId matches the old comparison and a ref
 
     // The reference model: what each session links to directly, and its root.
     const coordinatorOf = new Map<string, string>();
+    const landingOf = new Map<string, string>();
     const taskProjectOf = new Map<string, string | null>();
     const contextProjectOf = new Map<string, string | null>();
     const judgmentOf = new Map<string, string>();
     const rootOf = new Map<string, string>();
-    const lifecycleOf = new Map<string, keyof Members>();
+    const lifecycleOf = new Map<string, Lifecycle>();
     const contextTasks: Array<{ id: string; projectId: string | null }> = [];
     for (const projectId of [...projects.map((p) => p.id), null]) contextTasks.push({ id: await task(w, projectId), projectId });
 
     const ids: string[] = [];
+    // One binding per project (project_codebase_project_slot_key), shared by every landing.
+    const codebaseOf = new Map<string, string>();
+    const codebaseFor = async (project: World['project']): Promise<string> => {
+      const inProject = { ...w, project };
+      const known = codebaseOf.get(project.id);
+      if (known) return known;
+      const created = await codebase(inProject);
+      codebaseOf.set(project.id, created);
+      return created;
+    };
     for (let i = 0; i < 36; i++) {
       const fields: Partial<Prisma.SessionUncheckedCreateInput> = {};
+      // One in six is the platform-driven container of a landing subject: no root, no task or
+      // context link (contract §2.9 LS1 writes those NULL), and settled ones leave the Open view.
+      if (random() < 0.17) {
+        const project = pick(projects);
+        const inProject = { ...w, project };
+        const projectCodebaseId = await codebaseFor(project);
+        const subject = pick(['TASK', 'PROMOTION'] as const);
+        // One open PROMOTION round per line (project_landing_open_round_key), so a random
+        // promotion round has already settled; the TASK segments cover the open states.
+        const settled = subject === 'PROMOTION' || random() < 0.3;
+        const { sessionId } = await landing(inProject, {
+          codebaseId: projectCodebaseId,
+          ...(subject === 'TASK'
+            ? { taskId: await task(inProject) }
+            : { promotionId: await promotion(inProject, projectCodebaseId) }),
+          ...(settled ? { settledAs: subject === 'PROMOTION' ? 'MERGED' : 'LANDED' } : {}),
+        });
+        landingOf.set(sessionId, project.id);
+        lifecycleOf.set(sessionId, settled ? 'completed' : 'open');
+        ids.push(sessionId);
+        continue;
+      }
       const link = pick(['none', 'none', 'task', 'context'] as const);
       let taskProject: string | null | undefined;
       let contextProject: string | null | undefined;
@@ -579,7 +930,7 @@ test('on random membership graphs projectId matches the old comparison and a ref
     }
     for (const project of projects) {
       if (random() >= 0.85) continue;
-      const id = pick(ids.filter((candidate) => !coordinatorOf.has(candidate)));
+      const id = pick(ids.filter((candidate) => !coordinatorOf.has(candidate) && !landingOf.has(candidate)));
       await w.h.db.project.update({ where: { id: project.id }, data: { coordinatorSessionId: id } });
       coordinatorOf.set(id, project.id);
     }
@@ -596,20 +947,26 @@ test('on random membership graphs projectId matches the old comparison and a ref
     await session(stranger, under(pick(ids)));
 
     const direct = (id: string): string | null =>
-      coordinatorOf.get(id) ?? taskProjectOf.get(id) ?? contextProjectOf.get(id) ?? judgmentOf.get(id) ?? null;
+      coordinatorOf.get(id) ?? landingOf.get(id) ?? taskProjectOf.get(id)
+      ?? contextProjectOf.get(id) ?? judgmentOf.get(id) ?? null;
     const memberOf = (id: string): string | null => {
       const root = rootOf.get(id);
       return direct(id) ?? (root !== undefined && root !== id ? direct(root) : null);
     };
     for (const id of ids) {
       const own = direct(id);
-      const links = [coordinatorOf.get(id), taskProjectOf.get(id), contextProjectOf.get(id), judgmentOf.get(id)];
+      const links = [
+        coordinatorOf.get(id), landingOf.get(id), taskProjectOf.get(id),
+        contextProjectOf.get(id), judgmentOf.get(id),
+      ];
       if (new Set(links.filter(Boolean)).size > 1) tally('own links name two projects');
       if (own === null) {
         tally(memberOf(id) === null ? 'no project' : 'CHILD');
         continue;
       }
-      tally(coordinatorOf.has(id) ? 'COORDINATOR' : taskProjectOf.get(id) ? 'TASK' : contextProjectOf.get(id) ? 'CONTEXT' : 'JUDGMENT');
+      tally(coordinatorOf.has(id) ? 'COORDINATOR'
+        : landingOf.has(id) ? 'LANDING'
+          : taskProjectOf.get(id) ? 'TASK' : contextProjectOf.get(id) ? 'CONTEXT' : 'JUDGMENT');
       const root = rootOf.get(id);
       if (root !== undefined && root !== id && direct(root) !== null && direct(root) !== own) {
         tally('own project differs from the root\'s');
@@ -618,15 +975,18 @@ test('on random membership graphs projectId matches the old comparison and a ref
 
     for (const project of projects) {
       const members = ids.filter((id) => memberOf(id) === project.id);
-      const inLifecycle = (lifecycle: keyof Members) => members.filter((id) => lifecycleOf.get(id) === lifecycle);
+      const inLifecycle = (lifecycle: Lifecycle) => members.filter((id) => lifecycleOf.get(id) === lifecycle);
+      const landings = (lifecycle: Lifecycle) =>
+        members.filter((id) => landingOf.has(id) && lifecycleOf.get(id) === lifecycle);
       await assertProjectFilter(w, project.id, {
         open: inLifecycle('open'), completed: inLifecycle('completed'), deleted: inLifecycle('deleted'),
+        landing: { open: landings('open'), completed: landings('completed') },
       });
     }
     await assertNoProjectRows(stranger, pick(projects).id);
   }
   for (const key of [
-    'COORDINATOR', 'TASK', 'CONTEXT', 'JUDGMENT', 'CHILD', 'no project',
+    'COORDINATOR', 'LANDING', 'TASK', 'CONTEXT', 'JUDGMENT', 'CHILD', 'no project',
     'own links name two projects', 'own project differs from the root\'s',
   ]) {
     assert.ok((seen.get(key) ?? 0) > 0, `the random graphs never produced: ${key} (${JSON.stringify([...seen])})`);

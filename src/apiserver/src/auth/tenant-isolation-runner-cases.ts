@@ -67,6 +67,8 @@ export interface RunnerObjects {
   runtimeSessionId: string;
   /** An open session whose machine was deregistered: no runner at all. */
   orphanSessionId: string;
+  /** An OPEN landing session of this account: the platform's container, on no runner (§2.9 LS6). */
+  landingSessionId: string;
   /** RUNNING, no inbox lease. */
   takeoverSessionId: string;
   /** RUNNING, its inbox leased to `leaseOwner` at `leaseGeneration`. */
@@ -230,6 +232,21 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     as: RUNNER,
     request: (of) => ({ params: { jobId: of.runner.integrationJobId }, body: { claimGeneration: '1', leaseOwner: of.runner.leaseOwner, phase: 'CHECK' } }),
   },
+  // One chunk of a running check's output (contract §2.2 J-T4's output route, §2.9 LS2): fenced on
+  // the claim it names, so a machine that learned A's claim is still not A's. A's own chunk is taken.
+  'POST /runner/integration-jobs/:jobId/output': {
+    as: RUNNER,
+    request: (of) => ({
+      params: { jobId: of.runner.integrationJobId },
+      body: {
+        claimGeneration: '1',
+        leaseOwner: of.runner.leaseOwner,
+        check: { name: 'MERGE_CHECK', index: 1 },
+        seq: 0,
+        text: 'census\n',
+      },
+    }),
+  },
   // The claim given back, named as the result below names it. A's own release puts the job back in
   // the queue, after which the result is A's claim that moved on: both reach the job.
   'POST /runner/integration-jobs/:jobId/release': {
@@ -325,10 +342,14 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     as: RUNNER,
     request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { replaces: 'not its title', title: 'named by the census' } }),
   },
-  // A session not on a Cursor key: its own runner is answered `recorded: false`, and nothing is written.
+  // A session not on a Cursor key: its own runner is answered `recorded: false`, and nothing is
+  // written. This one names the account's OPEN LANDING session, which is what the route's own
+  // owner-scoped guard is held to: another account's runner must be answered exactly as it is for
+  // an id that names nothing (no 409 that would confirm the landing exists), while the owner's
+  // runner is answered SESSION_IS_PLATFORM_DRIVEN.
   'POST /runner/sessions/:id/cursor-key-check': {
     as: RUNNER,
-    request: (of) => ({ params: { id: of.runner.machineSessionId }, body: { state: 'INVALID', keyFingerprint: '0123456789abcdef' } }),
+    request: (of) => ({ params: { id: of.runner.landingSessionId }, body: { state: 'INVALID', keyFingerprint: '0123456789abcdef' } }),
   },
   'POST /runner/sessions/:id/turns/:turnId/suggestion': {
     as: RUNNER,
@@ -449,6 +470,16 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
     request: (of) => ({ params: { id: of.projectId }, body: { message: 'from the census' } }),
   },
   'GET /runner/projects/:id': { as: RUNNER, request: (of) => ({ params: { id: of.projectId } }) },
+  // The agent's read of the line. The header names a session of the project — the caller's own
+  // coordinator — so B's own request reaches the route; on A's project it is the project's 404 that
+  // answers first, exactly as an id that names nothing does.
+  'GET /runner/projects/:id/integration': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId },
+      headers: calling(mine.runner.coordinatorSessionId),
+    }),
+  },
   'POST /runner/projects/:id/acceptance/merge-evidence': {
     as: RUNNER,
     request: (of) => ({ params: { id: of.projectId }, body: { requirementId: 'census', targetBranch: 'refs/heads/main', contentHash: 'd'.repeat(64) } }),
@@ -521,6 +552,18 @@ export const RUNNER_ISOLATION_CASES: Readonly<Record<string, RunnerCase>> = {
       body: { reason: 'the census' },
     }),
     nested: ['promotionId'],
+  },
+  // The coordinator's abandon (J-T10). The acting session is the project's current coordinator, as
+  // on the retry doors above; the machine's own job is RUNNING and inside its lease, so the owner's
+  // own press reaches the gate and is answered "lease live" rather than an id that names nothing.
+  'POST /runner/projects/:id/integration/jobs/:jobId/abandon': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: of.projectId, jobId: of.runner.integrationJobId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      body: { reason: 'the census' },
+    }),
+    nested: ['jobId'],
   },
   'DELETE /runner/projects/:id': { as: RUNNER, request: (of) => ({ params: { id: of.spare.projectId } }) },
 
@@ -681,6 +724,10 @@ const coordinatorRequests: Readonly<Record<string, (mine: RunnerTenant) => Tenan
   }),
   'POST /runner/projects/:id/promotions/:promotionId/integration/retry': (mine) => ({
     params: { id: mine.projectId, promotionId: mine.promotionId },
+    body: { reason: 'the census' },
+  }),
+  'POST /runner/projects/:id/integration/jobs/:jobId/abandon': (mine) => ({
+    params: { id: mine.projectId, jobId: mine.runner.integrationJobId },
     body: { reason: 'the census' },
   }),
 };
@@ -991,6 +1038,23 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: SESSION,
     request: (of, mine) => ({ params: { id: mine.projectId }, body: { message: 'from the census', clientTurnId: openItemTurnKey(of) } }),
   },
+  // The job the read pages by: B reads its own project's line with A's job id in the query, and is
+  // answered as if it named nothing — the candidate is resolved within the project and nowhere else.
+  'GET /runner/projects/:id/integration query jobId': {
+    as: RUNNER,
+    request: (of, mine) => ({
+      params: { id: mine.projectId },
+      headers: calling(mine.runner.coordinatorSessionId),
+      query: { jobId: of.runner.integrationJobId },
+    }),
+  },
+  // The acting session itself: B reads its own project with A's coordinator in the header, and is
+  // answered as with a session that names nothing.
+  'GET /runner/projects/:id/integration header x-orbit-session-id': fromTheirSession(
+    RUNNER,
+    (mine) => ({ params: { id: mine.projectId } }),
+    (of) => of.runner.coordinatorSessionId,
+  ),
   'POST /runner/projects/:id/owner-questions body blocksTaskIds[]': {
     as: RUNNER,
     request: (of, mine) => ({
@@ -1081,6 +1145,10 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
     + 'answered is read back by (id, the caller\'s owner, the path\'s space, kind import), so another account\'s job '
     + 'under that id is neither read nor written (wiki-import-jobs.ts:115)',
   // ── the machine protocol: tokens the machine or the engine makes up, and the machine's own snapshots ──
+  'POST /runner/integration-jobs/:jobId/result body unknownPushes[].jobId':
+    'the earlier landing the control plane itself listed in this claim\'s command (J12), re-read only inside the '
+    + 'reporting account and on the claiming job\'s own serial key: another account\'s job under that id is not '
+    + 'found, and nothing of it is read or written (integration-job-relay.ts:1646)',
   'POST /runner/heartbeat body expiredCommitErrors[].operationId':
     'the commit attempt token the server minted for one of the machine\'s own sessions: compared only in the update '
     + 'scoped to that session on this runner (runner-api.controller.ts:1255)',
@@ -1094,6 +1162,10 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/heartbeat body engines[].accounts[].id':
     'an engine account\'s directory on that machine (`default` or eight hex digits), stored in its own engine health '
     + '(runner-api.controller.ts:1046)',
+  'POST /runner/heartbeat body modelCatalog.*[].parameters[].id':
+    'a Cursor CLI option id (`context`, `fast`, a model\'s effort) in the model catalogue the machine reports about '
+    + 'itself, not an Orbit row: stored on the reporting runner\'s own row and read back only through that runner '
+    + '(runner-api.controller.ts:1271)',
   'POST /runner/heartbeat body repos[].agentIds[]':
     'which of the machine\'s checkouts serve which workspace, kept as its own repo-health snapshot and read only '
     + 'through a workspace of its own (runner-api.controller.ts:1075)',

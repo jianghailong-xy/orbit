@@ -143,7 +143,7 @@ export const LOCK_ORDER = [
   },
   {
     rank: 60,
-    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_promotion, project_task_status_count, project_fuse_episode, project_fuse_held_action',
+    relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_task_status_count, project_fuse_episode, project_fuse_held_action',
     modes: 'INSERT/UPDATE/DELETE only',
     why:
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '
@@ -151,13 +151,26 @@ export const LOCK_ORDER = [
       + 'enqueue runs in the transaction that wrote a Task DONE (50) and locked the codebase row '
       + '(55), and inserts here last. The claim path (`integration-job-relay.ts#claimOne`) is one '
       + 'autocommit statement whose candidate CTE joins the job to its source `session` and that '
-      + 'session\'s `workspace` and takes FOR UPDATE SKIP LOCKED without `OF`, so it row-locks one '
-      + 'job (60), its session (30) and its workspace (15); SKIP LOCKED never waits — a candidate '
-      + 'any of whose rows is held is skipped, not waited for — so the statement adds no wait edge. '
-      + 'Contract revision 12 (§2.9 LS2) puts two requirements on code not written yet: no job gate '
-      + 'waits on a session lock, and the landing-session ensure runs in its own transaction after '
-      + 'the claim statement has committed, never inside it. Whether the claim narrows to '
-      + '`FOR UPDATE OF c` is left to the cancel-and-takeover task, with a race spec. '
+      + 'session\'s `workspace`, but takes `FOR UPDATE OF c SKIP LOCKED`: it row-locks ONE job (60) '
+      + 'and reads the session (30) and workspace (15) for their committed values, so a job gate '
+      + 'never waits on — or is skipped by — a session lock, which is the requirement §2.9 LS2 puts '
+      + 'on it. The narrowing was decided by the cancel-and-takeover task '
+      + '(`34bVVGb6S37cw25OkI7lN`), with `projects/integration-job-claim-race.pg.spec.ts`: a session '
+      + 'written concurrently can make the claim answer too early, never wrong, because the '
+      + 'authority for J-T1e is the result gate (`landingJudgedTooEarly`), which re-reads the '
+      + 'sessions against the claim\'s own instant before any too-early answer is written down. SKIP '
+      + 'LOCKED never waits, so the statement adds no wait edge. The other half of LS2 still stands: '
+      + 'the landing-session ensure runs in its own transaction after the claim statement has '
+      + 'committed, never inside it. `project_landing` (0436) is here for the same reason: the '
+      + 'enqueue that opens a subject runs inside the DONE transaction and writes only this row, '
+      + 'while a settlement takes the canonical `session` (30) → `project_landing` (60) order in '
+      + 'its own transaction after the landing/cancel fact committed — so no job gate ever waits '
+      + 'on a session lock. '
+      + '`project_integration_job_event` (0438) is the same shape: every fact is appended by the '
+      + 'transaction that already holds or has just written its job row (60), and the two facts '
+      + 'written after a claim statement commits — the claim and the takeover — are one more INSERT '
+      + 'from that committed row in their own transaction. It adds no wait edge of its own, and no '
+      + 'job gate ever waits on a session lock for it (§2.9 LS2). '
       + '`project_task_status_count` (0282) is the same shape one trigger over: the three '
       + '`project_task_status_count_sync` triggers fire on a Task write (50) and UPSERT it here, '
       + 'having already taken the project (40) through `task_project_id_fkey`. It is here rather '
@@ -167,7 +180,11 @@ export const LOCK_ORDER = [
       + '(project_id, status) in one statement, so two concurrent bulk writes over overlapping '
       + 'projects cannot take the same pair in opposite orders. No other taker exists: the detail '
       + 'read only SELECTs it, and the UPDATE branch nets inserted against deleted, so a statement '
-      + 'that moves no task between projects reaches this table not at all.',
+      + 'that moves no task between projects reaches this table not at all. '
+      + 'X-E5\'s clock (§4.6) is the same rank: one INSERT … SELECT that reads '
+      + '`project_integration_job` without a lock and writes one `project_open_item` child per claim '
+      + 'whose lease has expired for more than fifteen minutes, and the job gates that end such an '
+      + 'item write it inside their own rank-60 transactions — none of them waits on a session lock.',
   },
   {
     rank: 70,
