@@ -246,6 +246,8 @@ struct SessionProjectPage: View {
     @State private var startSheet: StartSheet?
     /// The jobs a landing row counts, opened by pressing that row on a server that lists them.
     @State private var showsLandingJobs = false
+    /// Whether the Landings group's `Earlier · …` fold is open.
+    @State private var landingsExpanded = false
 
     /// Which start card the start row opened over the page.
     private enum StartSheet: String, Identifiable {
@@ -258,8 +260,42 @@ struct SessionProjectPage: View {
     }
 
     /// This page's members — never what the model still holds for another address. Its first frame
-    /// comes before its load has begun, and the load opens on what the app already holds.
-    private var sessions: [Session] { app.projectSessionsAddress == address ? app.projectSessions : [] }
+    /// comes before its load has begun, and the load opens on what the app already holds. The
+    /// LANDING rows the same read carries are not members: they are the Landings group's.
+    private var sessions: [Session] {
+        (app.projectSessionsAddress == address ? app.projectSessions : []).filter { !$0.isLanding }
+    }
+    /// The landings this project's page lists in its Landings group (§2.9 LS6), under the
+    /// coordinator and above the timeline.
+    private var landingRows: [Session] {
+        (app.projectSessionsAddress == address ? app.projectSessions : []).filter(\.isLanding)
+    }
+    /// Who holds each landing that waits: the open items' facts about the same subject, joined by
+    /// `landingSessionId`. Only a landing that WAITS needs a holder named.
+    private var landingGroup: LandingGroup? {
+        guard !landingRows.isEmpty else { return nil }
+        var holders: [String: LandingHolder] = [:]
+        for row in (app.projectSessionsOpenItems?.needsYou ?? [])
+            + (app.projectSessionsOpenItems?.withCoordinator ?? []) {
+            guard let sessionID = row.landingSessionId, holders[sessionID] == nil else { continue }
+            holders[sessionID] = LandingHolder(reason: SessionProjectLandings.itemReason(row.kind),
+                                               assignee: row.assignee == .owner ? "OWNER"
+                                                   : row.assignee == .coordinator ? "COORDINATOR" : nil)
+        }
+        return SessionProjectLandings.group(landingRows, holders: holders)
+    }
+    /// The merge job in flight, if one is — its id, kind and the sentence where it stopped.
+    private var mergeJob: ProjectIntegrationJob? {
+        app.projectSessionsIntegration?.inFlightJobs?
+            .first { ProjectMergeCard.mergeJobKinds.contains($0.kind) }
+    }
+    private var mergeJobDetail: String? {
+        guard let integration = app.projectSessionsIntegration, let mergeJob else { return nil }
+        return ProjectPage.landingJobLines(
+            integration, now: Date(), updatedAt: app.projectSessionsIntegrationReadAt,
+            refreshFailed: app.projectSessionsIntegrationReadFailed)
+            .first { $0.jobId == mergeJob.jobId }?.detail
+    }
     /// Nothing has been read for this page until its own load has begun.
     private var loading: Bool { app.projectSessionsLoading || app.projectSessionsAddress != address }
     /// This project's merge into main — never another project's, which the model still holds for
@@ -325,6 +361,39 @@ struct SessionProjectPage: View {
                 .listRowSeparator(.hidden)
             if let coordinator {
                 Section(SessionProjectCopy.coordinatorSection) { sessionRow(coordinator) }
+            }
+            // The landings waiting on a decision and the ones that settled in the last day
+            // (owner 2026-10-19, board v4 04 c1): under the coordinator, above the timeline, and
+            // absent entirely when it has nothing to list.
+            if let landingGroup {
+                Section(SessionLandingsCopy.title) {
+                    ForEach(landingGroup.waiting) { row in landingGroupRow(row) }
+                    ForEach(landingGroup.settled) { row in landingGroupRow(row) }
+                    if let earlier = landingGroup.earlier {
+                        Button {
+                            PlatformHaptics.tap()
+                            withAnimation { landingsExpanded.toggle() }
+                        } label: {
+                            HStack(spacing: 8) {
+                                Text(landingsExpanded ? "◌" : "✓")
+                                    .font(.orbitMeta.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Text(SessionProjectLandings.earlierLine(landed: earlier.landed,
+                                                                        nothing: earlier.nothing))
+                                    .font(.orbitLabel).foregroundStyle(.secondary)
+                                Spacer(minLength: 8)
+                                Image(systemName: "chevron.right")
+                                    .font(.orbitMeta.weight(.semibold))
+                                    .foregroundStyle(.tertiary)
+                                    .rotationEffect(.degrees(landingsExpanded ? 90 : 0))
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        if landingsExpanded {
+                            ForEach(landingGroup.older) { row in landingGroupRow(row) }
+                        }
+                    }
+                }
             }
             ForEach(timeSections) { section in
                 Section {
@@ -648,10 +717,27 @@ struct SessionProjectPage: View {
                         }
                     },
                     now: context.date,
-                    // The merge job's row opens the same jobs the landing card's does — on a
-                    // server that lists them; on an older one it stays a row.
+                    // The merge job's row opens THIS ROUND's landing session (方案 A), or — on a
+                    // server that names none — the same jobs the landing card's row opens.
                     onLanding: app.projectSessionsIntegration?.inFlightJobs == nil
                         ? nil : { showsLandingJobs = true },
+                    roundLanding: ProjectMergeCard.roundLandingSessionId(
+                        merge.current, app.projectSessionsIntegration),
+                    mergeJobID: mergeJob?.jobId,
+                    mergeJobDetail: mergeJobDetail,
+                    mergeJobKind: mergeJob?.kind,
+                    jobCount: app.projectSessionsIntegration.map {
+                        $0.integratingCount + $0.queuedCount
+                    } ?? 0,
+                    abandon: { jobID in
+                        try await app.abandonIntegrationJob(address.projectID, jobID: jobID)
+                        await app.loadProjectIntegration(address)
+                    },
+                    rerunCheck: { promotionID in
+                        try await app.rerunPromotionCheck(address.projectID, promotionID: promotionID,
+                                                          reason: LandingPageCopy.rerunCheckReason)
+                        await app.loadProjectIntegration(address)
+                    },
                     onDetails: { promotionReview = PromotionReviewTarget(id: $0) },
                     onCoordinator: coordinator.map { coordinator in
                         { app.openProjectMember(coordinator, push: rowNavigation == .push) }
@@ -679,6 +765,58 @@ struct SessionProjectPage: View {
             Image(systemName: "square.grid.2x2")
         }
         .accessibilityLabel(SessionProjectCopy.openProject)
+    }
+
+    /// One landing in the Landings group: the mark that says how it stands, its title, its age and
+    /// one line under both — the whole row opens the landing session itself.
+    private func landingGroupRow(_ row: LandingGroupRow) -> some View {
+        Button {
+            PlatformHaptics.tap()
+            app.openFromConversation(.session(row.id), overConsole: rowNavigation == .push)
+        } label: {
+            HStack(alignment: .top, spacing: 11) {
+                Text(mark(row.tone))
+                    .font(.orbitGlyph.weight(.semibold))
+                    .foregroundStyle(ink(row.tone))
+                    .frame(width: 30, height: 30)
+                    .background(ink(row.tone).opacity(0.14), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text(row.title).fontWeight(.semibold).lineLimit(1)
+                        Spacer(minLength: 8)
+                        if !row.time.isEmpty {
+                            Text(row.time)
+                                .font(.orbitListSubtitle)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Text(row.detail)
+                        .font(.orbitListSubtitle)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func mark(_ tone: LandingGroupTone) -> String {
+        switch tone {
+        case .fail: return "✕"
+        case .ok: return "✓"
+        case .merge: return "⇢"
+        case .quiet: return "◌"
+        }
+    }
+
+    private func ink(_ tone: LandingGroupTone) -> Color {
+        switch tone {
+        case .fail: return .red
+        case .ok: return .green
+        case .merge: return .accentColor
+        case .quiet: return .secondary
+        }
     }
 
     @ViewBuilder private func sessionRow(_ session: Session) -> some View {
@@ -713,11 +851,27 @@ private struct ProjectMergeCardView: View {
     let now: Date
     /// Opens the jobs in flight from that line; nil from a server that does not list them.
     let onLanding: (() -> Void)?
+    /// The round's landing session (§2.9 LS6): the whole merge row opens it (方案 A), and the
+    /// CONFIRMED card's foot names it. Nil when the round recorded none — main's press then stays.
+    let roundLanding: String?
+    /// The merge job's own id, for the timed-out card's Abandon (J-T10).
+    let mergeJobID: String?
+    /// Where the timed-out runner stopped, in the job list's own sentence.
+    let mergeJobDetail: String?
+    /// The merge job's kind, which decides whether a timed-out check may be re-run.
+    let mergeJobKind: String?
+    /// Every job the round stands for, for the checking card's `+N job queued · All jobs ›`.
+    let jobCount: Int
+    /// One Abandon, through the page's own door; throws what the server answered.
+    let abandon: (String) async throws -> Void
+    /// One Re-run the check, through the page's own door.
+    let rerunCheck: (String) async throws -> Void
     let onDetails: (String) -> Void
     /// Opens the coordinator, for a blocked candidate; nil when the page has no coordinator row.
     let onCoordinator: (() -> Void)?
     @State private var acting = false
     @State private var actionError: String?
+    @Environment(\.openURL) private var openURL
 
     /// A merge job the server judged timed out turns the WHOLE card amber, as the landing card
     /// does (owner 2026-10-19), whichever moment it is in.
@@ -737,8 +891,17 @@ private struct ProjectMergeCardView: View {
             switch shape {
             case .checking:
                 if let landing { landingRow(landing) }
-                if let line = PromotionCards.onPassLine(merge.current) {
-                    Text(line).font(.orbitMeta).foregroundStyle(.secondary)
+                if timedOut {
+                    if let mergeJobDetail {
+                        Text(mergeJobDetail).font(.orbitMeta).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    timedOutDoors
+                } else {
+                    if let line = PromotionCards.onPassLine(merge.current) {
+                        Text(line).font(.orbitMeta).foregroundStyle(.secondary)
+                    }
+                    queuedFoot
                 }
             case .asking:
                 if let view = merge.current { asking(view) }
@@ -768,15 +931,95 @@ private struct ProjectMergeCardView: View {
 
     /// The merge job's live row — the merged line's own anatomy, so the check and the merge it
     /// becomes are one shape (owner decision 2026-10-11, board docs/mocks/project-merge-check-row).
-    /// A press opens the jobs in flight, where the server lists them.
+    /// Since 2026-10-19 (方案 A) the whole row opens THIS ROUND's landing session; a server that
+    /// names none keeps main's press, the jobs list.
     @ViewBuilder private func landingRow(_ line: ProjectPage.LandingLine) -> some View {
-        let head = ProjectLandingHead(title: line.word, head: line.head, running: line.running,
+        // A stop that has been asked for and not yet answered is the head's own clause (§3.3
+        // M-T10), before any of the card's other lines.
+        let shape = merge.current?.cancelRequested == true
+            ? ProjectPage.LandingHead(right: line.head.right, isClock: line.head.isClock,
+                                      detail: "\(line.head.detail) · \(PromotionCards.stopRequestedClause)")
+            : line.head
+        let head = ProjectLandingHead(title: line.word, head: shape, running: line.running,
                                       timedOut: line.timedOut)
-        if let onLanding {
+        if let roundLanding, let url = URL(string: "orbit-session:\(PublicID.toPublic(roundLanding))") {
+            Button { openURL(url) } label: { head.contentShape(Rectangle()) }
+                .buttonStyle(.plain)
+        } else if let onLanding {
             Button(action: onLanding) { head.contentShape(Rectangle()) }
                 .buttonStyle(.plain)
         } else {
             head
+        }
+    }
+
+    /// The other jobs the round stands for, kept out of sight by the card: their way in here, the
+    /// same line the checking and merging cards use — `+N job queued · All jobs ›` (方案 A).
+    @ViewBuilder private var queuedFoot: some View {
+        if jobCount > 1, onLanding != nil {
+            HStack(spacing: 8) {
+                if let more = LandingPageCopy.moreJobsQueued(jobCount) {
+                    Text(more).font(.orbitMeta).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Button(action: onLanding!) {
+                    HStack(spacing: 2) {
+                        Text(LandingPageCopy.allJobs)
+                        Image(systemName: "chevron.right")
+                    }
+                }
+                .font(.orbitMeta.weight(.semibold))
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+            }
+        }
+    }
+
+    /// The two doors a TIMED-OUT round offers (board v4 04 c5, c6): a check can be run again (the
+    /// candidate re-check door, J-T9 through revision 16), while a merge that stopped at the push
+    /// has no retry, only the end (J-T10). Both are the owner's; neither is drawn on a live card.
+    @ViewBuilder private var timedOutDoors: some View {
+        HStack(spacing: 8) {
+            if mergeJobKind == "CHECK_PROMOTION", let view = merge.current {
+                Button { act { await run(LandingPageCopy.rerunFailed) { try await rerunCheck(view.promotionId) } } } label: {
+                    Text(LandingPageCopy.rerunTheCheck)
+                }
+                .font(.orbitLabel.weight(.semibold))
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(acting)
+            }
+            Spacer(minLength: 8)
+            if let mergeJobID {
+                Button(role: .destructive) {
+                    act { await run(LandingPageCopy.abandonFailed) { try await abandon(mergeJobID) } }
+                } label: { Text(LandingPageCopy.abandon) }
+                    .font(.orbitLabel.weight(.semibold))
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(acting)
+            }
+        }
+    }
+
+    /// Run a page door that answers nothing, and turn its refusal into the server's own sentence.
+    private func run(_ label: String, _ press: () async throws -> Void) async -> String? {
+        do {
+            try await press()
+            return nil
+        } catch {
+            var reason = APIClient.failureReason(error)
+            while reason.hasSuffix(".") { reason.removeLast() }
+            return "\(label) — \(reason)."
+        }
+    }
+
+    /// The CONFIRMED card's foot names the round's landing beside Cancel (方案 A).
+    @ViewBuilder private var openLandingFoot: some View {
+        if let roundLanding {
+            LandingEntryLink(entry: LandingPageCopy.landingEntry(roundLanding))
+        } else {
+            LandingEntryLink(entry: .noPage)
         }
     }
 
@@ -850,17 +1093,46 @@ private struct ProjectMergeCardView: View {
     /// project page's Integrating mark, sitting beside the word `fetching`. A spinner here said
     /// "work is happening" a fourth time, in a mark neither this card nor this app uses elsewhere.
     @ViewBuilder private func merging(_ view: ProjectPromotionView) -> some View {
-        header(PromotionCards.pageTitle(view), symbol: "arrow.triangle.merge")
-        Text(PromotionCards.mergingStatusLine(view)).font(.orbitLabel)
+        // §3.3 M-T10: the owner asked a confirmed merge to stop. The ask is the server's fact
+        // (`cancelRequested`), and past the push boundary it can only come too late.
+        let cancelling = view.cancelRequested
+        let tooLate = view.pushBoundaryPassed
+        header(cancelling
+               ? (tooLate ? PromotionCards.tooLateToCancel : PromotionCards.cancellingTheMerge)
+               : PromotionCards.pageTitle(view),
+               symbol: "arrow.triangle.merge")
+        Text(cancelling && !tooLate
+             ? PromotionCards.cancelStopsSoon
+             : PromotionCards.mergingStatusLine(view))
+            .font(.orbitLabel)
         if let landing { landingRow(landing) }
-        Text(PromotionCards.pageNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)
-        HStack {
-            Spacer()
-            Button { act { await merge.cancelMergeToMain(view) } } label: {
-                Text(PromotionCards.cancel)
+        if timedOut {
+            if let mergeJobDetail {
+                Text(mergeJobDetail).font(.orbitMeta).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .buttonStyle(.bordered)
-            .disabled(acting || view.execution?.phase == "PUSH")
+            timedOutDoors
+        } else {
+            Text(cancelling ? PromotionCards.cancelMayStillMerge : PromotionCards.pageNothingToDo)
+                .font(.orbitMeta).foregroundStyle(.secondary)
+            if !cancelling { queuedFoot }
+            HStack(spacing: 8) {
+                // The round's landing, beside Cancel (方案 A): the CONFIRMED card's foot names it,
+                // and a server that names none says so in grey.
+                openLandingFoot
+                Spacer(minLength: 8)
+                if cancelling {
+                    Text(PromotionCards.cancelRequestedLabel)
+                        .font(.orbitLabel.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button { act { await merge.cancelMergeToMain(view) } } label: {
+                        Text(PromotionCards.cancel)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(acting || view.execution?.phase == "PUSH")
+                }
+            }
         }
     }
 

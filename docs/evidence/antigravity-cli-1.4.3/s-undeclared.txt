@@ -1,0 +1,5 @@
+case undeclared
+mock:tool run_command {"CommandLine":"echo with-cwd > @WS@/cwd.txt","Cwd":"@WS@","WaitMsBeforeAsync":5000,"toolSummary":"Run it"}
+mock:tool read_file {"Path":"@WS@/seed.txt","toolAction":"Reading"}
+mock:tool run_command {"CommandLine":"echo declared-only > @WS@/ok.txt","WaitMsBeforeAsync":5000,"toolSummary":"Run ok"}
+mock:text done

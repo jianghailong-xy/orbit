@@ -44,7 +44,9 @@ object PageBar {
         actions: (@Composable RowScope.() -> Unit)? = null) {
         DisposableEffect(route) {
             owner = route
-            onDispose { if (owner == route) { owner = null; this@PageBar.title = null; this@PageBar.subtitle = null
+            // Identity, not equality: a page pushed again with the same values (Back, then the same link) is a new bind,
+            // and the old page's disposal must not clear the bar the new one has already set.
+            onDispose { if (owner === route) { owner = null; this@PageBar.title = null; this@PageBar.subtitle = null
                 this@PageBar.actions = null; this@PageBar.folded = false } }
         }
         SideEffect { if (owner == route) { this.title = title; this.subtitle = subtitle; this.actions = actions; this.folded = folds } }

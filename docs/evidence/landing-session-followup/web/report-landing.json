@@ -1,0 +1,298 @@
+[
+  {
+    "theme": "light",
+    "frame": "a-live",
+    "title": "Land · 维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑，10-10 修）",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Landing2m 40s of 60m",
+    "detail": "checking · output 3s ago · usually ~18m · claim 1 · round 1 of 3 · updated just now",
+    "card": "Landing2m 40s of 60mchecking · output 3s ago · usually ~18m · claim 1 · round 1 of 3 · updated just nowMerge check 2m 40s of 60m · usually ~18mOutput 3s ago · Updated just now",
+    "sections": [
+      "Generation 2"
+    ],
+    "entries": [
+      "14:52≡Task marked done · queued to land on project/p1",
+      "14:52↻Claimed by runner workstation-gpu · claim 1",
+      "14:52↻Round 1 of 3",
+      "14:55✓Task acceptance passed · 2m 50sLog ›",
+      "14:55↻Merge check started · claim 1 · workstation-gpu"
+    ],
+    "abandon": [],
+    "footer": "Orbit runs this landing — nothing to type here. Decisions: the coordinator · Open coordinator ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "unhandled": []
+  },
+  {
+    "theme": "light",
+    "frame": "i-timeout",
+    "title": "Land · 维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑，10-10 修）",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "LandingTimed out",
+    "detail": "No report for 23m · limit 10m",
+    "card": "LandingTimed outNo report for 23m · limit 10mRunner workstation-gpu took it at 14:33 · stopped at rebasing · claim 1 · round 1 of 3Nothing was pushed — the runner reports before it pushes, and it never did.RetryAbandon",
+    "sections": [
+      "Generation 2"
+    ],
+    "entries": [
+      "14:20≡Task marked done again · queuedThe coordinator sent it back at 11:34 (task_reopen)",
+      "14:33↻Claimed by runner workstation-gpu · claim 1Reports every 30 s (v2)",
+      "14:33↻Round 1 of 3",
+      "14:34✓Fetched · synced main",
+      "14:35↻Rebasing onto project/34bmzOkov3xN2yLPrnsCkLast report"
+    ],
+    "abandon": [
+      "orbit-button orbit-button-default orbit-button-middle orbit-button-danger"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. Decisions: the coordinator · Open coordinator ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "unhandled": []
+  },
+  {
+    "theme": "light",
+    "frame": "d-merge",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #9",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Merge to main2m 40s of 60m",
+    "detail": "checking · output 3s ago · usually ~18m · claim 1 · round 1 · updated just now",
+    "card": "Merge to main2m 40s of 60mchecking · output 3s ago · usually ~18m · claim 1 · round 1 · updated just nowMerge check 2m 40s of 60m · usually ~18mOutput 3s ago · Updated just now",
+    "sections": [
+      "Merge to main · 1"
+    ],
+    "entries": [
+      "14:54≡Queued to merge into main",
+      "14:55↻Claimed by runner workstation-gpu · claim 1",
+      "14:55↻Round 1"
+    ],
+    "abandon": [],
+    "footer": "Orbit runs this landing — nothing to type here. Merging is decided on the merge card · Review Card ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "unhandled": []
+  },
+  {
+    "theme": "light",
+    "frame": "e-check-timeout",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #7",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Merge checkTimed out",
+    "detail": "No report for 56m · limit 10m",
+    "card": "Merge checkTimed outNo report for 56m · limit 10mRunner workstation-gpu took it at 14:02 · stopped at checking · claim 1 · round 1Re-run the checkAbandonRe-run ends this check and queues the next one on the same candidate. Abandon only ends it; the candidate goes back to you.",
+    "sections": [
+      "Merge check · 1"
+    ],
+    "entries": [
+      "14:02↻Claimed by runner workstation-gpu · claim 1",
+      "14:02↻Round 1"
+    ],
+    "abandon": [
+      "orbit-button orbit-button-default orbit-button-middle orbit-button-danger"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. A clean pass merges on its own · Review Card ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "unhandled": []
+  },
+  {
+    "theme": "light",
+    "frame": "f-marks",
+    "title": "Land · 维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑，10-10 修）",
+    "sub": "Run by Orbit · settled 14:57",
+    "head": "Landed14:57",
+    "detail": "Landed on project/34bmzOkov3xN2yLPrnsCk",
+    "card": "Landed14:57Landed on project/34bmzOkov3xN2yLPrnsCk",
+    "sections": [
+      "Generation 2"
+    ],
+    "entries": [
+      "14:40↻Claimed by runner workstation-gpu · claim 1",
+      "14:43✗Task acceptance passed its first half · exit 1 · 2m 10sLog ›$ npm test -w @orbit/apiserver\n ✔ wiki/wiki-daily-limit.spec.ts (412ms)\n ▶ projects/project-integration-line.spec.ts",
+      "14:56✓Merge check green · 17m 02sLog ›",
+      "14:57✓Put on project/p1 · 8ed0ea7"
+    ],
+    "abandon": [],
+    "footer": "This landing is complete — nothing to type here. ",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "unhandled": []
+  },
+  {
+    "theme": "light",
+    "frame": "c-merged",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #9",
+    "sub": "Run by Orbit · settled 09:51",
+    "head": "Merged into main09:51",
+    "detail": "8ed0ea7 · 2 tasks · automatically",
+    "card": "Merged into main09:518ed0ea7 · 2 tasks · automaticallyNow on main · 2 tasks维护每日轮数上限在服务端路径上没生效P10 · 本部署切换✓ Passed on the combined tree · 17m 41sLanded exactly the tested tree 5e5bfca · as a merge commit",
+    "sections": [
+      "Merge check · 1",
+      "Merge to main · 1"
+    ],
+    "entries": [
+      "09:14≡Merge check queued · project/34bmzOkov3xN2yLPrnsCk → main",
+      "09:31✓Merge check passed · 17m 02sLog ›",
+      "09:50↻Confirmed by Automatic",
+      "09:51✓Landed on main · 8ed0ea7"
+    ],
+    "abandon": [],
+    "footer": "This landing is complete — nothing to type here. The next merge into main opens a new landing (#10).",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "unhandled": []
+  },
+  {
+    "theme": "dark",
+    "frame": "a-live",
+    "title": "Land · 维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑，10-10 修）",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Landing2m 40s of 60m",
+    "detail": "checking · output 3s ago · usually ~18m · claim 1 · round 1 of 3 · updated just now",
+    "card": "Landing2m 40s of 60mchecking · output 3s ago · usually ~18m · claim 1 · round 1 of 3 · updated just nowMerge check 2m 40s of 60m · usually ~18mOutput 3s ago · Updated just now",
+    "sections": [
+      "Generation 2"
+    ],
+    "entries": [
+      "14:52≡Task marked done · queued to land on project/p1",
+      "14:52↻Claimed by runner workstation-gpu · claim 1",
+      "14:52↻Round 1 of 3",
+      "14:55✓Task acceptance passed · 2m 50sLog ›",
+      "14:55↻Merge check started · claim 1 · workstation-gpu"
+    ],
+    "abandon": [],
+    "footer": "Orbit runs this landing — nothing to type here. Decisions: the coordinator · Open coordinator ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "unhandled": []
+  },
+  {
+    "theme": "dark",
+    "frame": "i-timeout",
+    "title": "Land · 维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑，10-10 修）",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "LandingTimed out",
+    "detail": "No report for 23m · limit 10m",
+    "card": "LandingTimed outNo report for 23m · limit 10mRunner workstation-gpu took it at 14:33 · stopped at rebasing · claim 1 · round 1 of 3Nothing was pushed — the runner reports before it pushes, and it never did.RetryAbandon",
+    "sections": [
+      "Generation 2"
+    ],
+    "entries": [
+      "14:20≡Task marked done again · queuedThe coordinator sent it back at 11:34 (task_reopen)",
+      "14:33↻Claimed by runner workstation-gpu · claim 1Reports every 30 s (v2)",
+      "14:33↻Round 1 of 3",
+      "14:34✓Fetched · synced main",
+      "14:35↻Rebasing onto project/34bmzOkov3xN2yLPrnsCkLast report"
+    ],
+    "abandon": [
+      "orbit-button orbit-button-default orbit-button-middle orbit-button-danger"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. Decisions: the coordinator · Open coordinator ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "unhandled": []
+  },
+  {
+    "theme": "dark",
+    "frame": "d-merge",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #9",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Merge to main2m 40s of 60m",
+    "detail": "checking · output 3s ago · usually ~18m · claim 1 · round 1 · updated just now",
+    "card": "Merge to main2m 40s of 60mchecking · output 3s ago · usually ~18m · claim 1 · round 1 · updated just nowMerge check 2m 40s of 60m · usually ~18mOutput 3s ago · Updated just now",
+    "sections": [
+      "Merge to main · 1"
+    ],
+    "entries": [
+      "14:54≡Queued to merge into main",
+      "14:55↻Claimed by runner workstation-gpu · claim 1",
+      "14:55↻Round 1"
+    ],
+    "abandon": [],
+    "footer": "Orbit runs this landing — nothing to type here. Merging is decided on the merge card · Review Card ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "unhandled": []
+  },
+  {
+    "theme": "dark",
+    "frame": "e-check-timeout",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #7",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Merge checkTimed out",
+    "detail": "No report for 56m · limit 10m",
+    "card": "Merge checkTimed outNo report for 56m · limit 10mRunner workstation-gpu took it at 14:02 · stopped at checking · claim 1 · round 1Re-run the checkAbandonRe-run ends this check and queues the next one on the same candidate. Abandon only ends it; the candidate goes back to you.",
+    "sections": [
+      "Merge check · 1"
+    ],
+    "entries": [
+      "14:02↻Claimed by runner workstation-gpu · claim 1",
+      "14:02↻Round 1"
+    ],
+    "abandon": [
+      "orbit-button orbit-button-default orbit-button-middle orbit-button-danger"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. A clean pass merges on its own · Review Card ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "unhandled": []
+  },
+  {
+    "theme": "dark",
+    "frame": "f-marks",
+    "title": "Land · 维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑，10-10 修）",
+    "sub": "Run by Orbit · settled 14:57",
+    "head": "Landed14:57",
+    "detail": "Landed on project/34bmzOkov3xN2yLPrnsCk",
+    "card": "Landed14:57Landed on project/34bmzOkov3xN2yLPrnsCk",
+    "sections": [
+      "Generation 2"
+    ],
+    "entries": [
+      "14:40↻Claimed by runner workstation-gpu · claim 1",
+      "14:43✗Task acceptance passed its first half · exit 1 · 2m 10sLog ›$ npm test -w @orbit/apiserver\n ✔ wiki/wiki-daily-limit.spec.ts (412ms)\n ▶ projects/project-integration-line.spec.ts",
+      "14:56✓Merge check green · 17m 02sLog ›",
+      "14:57✓Put on project/p1 · 8ed0ea7"
+    ],
+    "abandon": [],
+    "footer": "This landing is complete — nothing to type here. ",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "unhandled": []
+  },
+  {
+    "theme": "dark",
+    "frame": "c-merged",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #9",
+    "sub": "Run by Orbit · settled 09:51",
+    "head": "Merged into main09:51",
+    "detail": "8ed0ea7 · 2 tasks · automatically",
+    "card": "Merged into main09:518ed0ea7 · 2 tasks · automaticallyNow on main · 2 tasks维护每日轮数上限在服务端路径上没生效P10 · 本部署切换✓ Passed on the combined tree · 17m 41sLanded exactly the tested tree 5e5bfca · as a merge commit",
+    "sections": [
+      "Merge check · 1",
+      "Merge to main · 1"
+    ],
+    "entries": [
+      "09:14≡Merge check queued · project/34bmzOkov3xN2yLPrnsCk → main",
+      "09:31✓Merge check passed · 17m 02sLog ›",
+      "09:50↻Confirmed by Automatic",
+      "09:51✓Landed on main · 8ed0ea7"
+    ],
+    "abandon": [],
+    "footer": "This landing is complete — nothing to type here. The next merge into main opens a new landing (#10).",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "unhandled": []
+  }
+]

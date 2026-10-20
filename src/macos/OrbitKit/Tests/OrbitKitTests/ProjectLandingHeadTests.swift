@@ -175,14 +175,52 @@ final class ProjectLandingHeadTests: XCTestCase {
     }
 
     func testEachKindSaysItsOwnWordAndOnlyAMergeCheckCarriesTheUsualDuration() {
+        // A merge check and a merge into main have one round per claim: no M, whatever the check's
+        // count (3 here) says (§7.2 V6).
         let check = v6(kind: "CHECK_PROMOTION", liveness: "LIVE", check: mergeCheck, typicalMs: 18 * 60_000)
         XCTAssertEqual(check.word, "Merge check")
-        XCTAssertEqual(check.head.detail, "checking · output 6s ago · usually ~18m · claim 1 · round 1 of 3")
+        XCTAssertEqual(check.head.detail, "checking · output 6s ago · usually ~18m · claim 1 · round 1")
         let merge = v6(kind: "LAND_PROMOTION", liveness: "LIVE", check: mergeCheck, typicalMs: 18 * 60_000)
         XCTAssertEqual(merge.word, "Merge to main")
+        XCTAssertEqual(merge.head.detail, "checking · output 6s ago · usually ~18m · claim 1 · round 1")
         // A task's own acceptance command has no usual duration.
         XCTAssertEqual(v6(liveness: "LIVE", check: acceptance).head.detail,
                        "checking · output 6s ago · claim 1 · round 1 of 3")
+    }
+
+    /// The M of "round N of M" is the kind's most rounds per claim, never the check's count: a task's
+    /// landing is "of 3" with one check in flight and with none, and a kind the client does not know
+    /// names no M.
+    func testTheRoundsMIsTheKindsNeverTheChecksCount() {
+        let one = ProjectIntegrationCheck(name: "TASK_ACCEPTANCE", index: 1, count: 1, budgetSeconds: 3600,
+                                          startedAt: iso(ago: 110.5, from: Date()))
+        XCTAssertEqual(v6(liveness: "LIVE", check: one, round: 2).head.detail,
+                       "checking · output 6s ago · claim 1 · round 2 of 3")
+        XCTAssertEqual(v6(liveness: "LIVE").head.detail, "checking · output 6s ago · claim 1 · round 1 of 3")
+        // With a check of 3 in flight, so the old rule (M = the check's count) would say "of 3" here.
+        XCTAssertEqual(v6(kind: "", liveness: "LIVE", check: acceptance).head.detail,
+                       "checking · output 6s ago · claim 1 · round 1")
+    }
+
+    /// The jobs sheet reads each job's own kind: the merge beside a landing names no M.
+    func testTheJobsSheetTakesEachJobsOwnKind() {
+        let now = Date()
+        let one = ProjectIntegrationCheck(name: "TASK_ACCEPTANCE", index: 1, count: 1, budgetSeconds: 3600,
+                                          startedAt: iso(ago: 110.5, from: now))
+        func job(_ id: String, kind: String, phase: String, check: ProjectIntegrationCheck?) -> ProjectIntegrationJob {
+            ProjectIntegrationJob(jobId: id, kind: kind, state: "RUNNING", phase: phase,
+                                  startedAt: iso(ago: 110.5, from: now), queuedAt: iso(ago: 140.5, from: now),
+                                  heartbeatAt: iso(ago: 0, from: now), runnerName: "wikova", claim: 1, round: 1,
+                                  check: check, stepStartedAt: iso(ago: 110.5, from: now),
+                                  outputMovedAt: iso(ago: 6.4, from: now), liveness: "LIVE")
+        }
+        let view = ProjectIntegrationView(
+            integratingCount: 2, queuedCount: 0, inFlight: nil,
+            inFlightJobs: [job("j-t", kind: "LAND_TASK", phase: "CHECK", check: one),
+                           job("j-m", kind: "LAND_PROMOTION", phase: "PUSH", check: nil)])
+        XCTAssertEqual(ProjectPage.landingJobLines(view, now: now, updatedAt: now).map(\.line.head.detail),
+                       ["checking · output 6s ago · claim 1 · round 1 of 3",
+                        "pushing · output 6s ago · claim 1 · round 1"])
     }
 
     func testATakeoverNamesTheFirstStartTheClaimRowStillCarries() {

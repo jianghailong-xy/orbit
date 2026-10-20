@@ -570,6 +570,8 @@ test('a LAND_TASK records enqueue, claim, round, check and landing, in order, in
       assert.match(claimed.text, /Claimed by runner timeline-task-runner · claim 1/);
       const [round] = events.filter((row) => row.kind === 'ROUND');
       assert.equal(round.round, 1);
+      // The relay names the M from the job's kind: a LAND_TASK's claim runs at most 3 rounds (J5).
+      assert.equal(round.text, 'Round 1 of 3');
       const [reportedStart] = events.filter((row) => row.kind === 'CHECK_STARTED');
       assert.equal(reportedStart.checkName, 'MERGE_CHECK');
       assert.ok(Math.abs(reportedStart.at.getTime() - startedAt.getTime()) < 2_000,
@@ -1098,6 +1100,7 @@ test('a stop or a timeout that ends round 2 is drawn after round 2\'s lines', { 
     const stoppedEntries = stoppedTimeline.sections[0].entries;
     const roundTwo = stoppedEntries.findIndex((entry) => entry.kind === 'ROUND' && entry.round === 2);
     assert.ok(roundTwo >= 0);
+    assert.equal(stoppedEntries[roundTwo].text, 'Round 2 of 3');
     assert.ok(stoppedEntries.findIndex((entry) => entry.kind === 'STOP_REQUESTED') > roundTwo);
     // The runner answers the ask, which frees the serial slot for the next case (J1).
     assert.equal((await report(stack, w, stopped, { state: 'CANCELLED', phase: 'CHECK', checks: [] })).accepted, true);
@@ -1131,6 +1134,28 @@ test('a stop or a timeout that ends round 2 is drawn after round 2\'s lines', { 
     const timedRoundTwo = timedEntries.findIndex((entry) => entry.kind === 'ROUND' && entry.round === 2);
     assert.ok(timedRoundTwo >= 0);
     assert.ok(timedEntries.findIndex((entry) => entry.kind === 'TIMED_OUT') > timedRoundTwo);
+  } finally {
+    await stack.db.$disconnect();
+  }
+});
+
+test('a merge check\'s ROUND line names no M: it has one round per claim', { skip, timeout: 240_000 }, async () => {
+  const stack = await connect();
+  try {
+    const w = await world(stack, 'timeline-check-round');
+    await doneTask(stack, w, 'timeline-check-round');
+    const landingJob = await claimLanding(stack, w, 'lease-1', 'LAND_TASK');
+    assert.equal((await report(stack, w, landingJob, { ...GREEN, checks: [GREEN_CHECK] })).accepted, true);
+    const check = await claimLanding(stack, w, 'lease-check', 'CHECK_PROMOTION');
+    assert.equal((await stack.api.integrationJobProgress({ id: w.runnerId }, check.jobId, {
+      claimGeneration: check.claimGeneration,
+      leaseOwner: check.leaseOwner,
+      phase: 'CHECK',
+      round: 1,
+    })).accepted, true);
+    const [round] = (await eventsOf(stack.db, check.jobId)).filter((row) => row.kind === 'ROUND');
+    assert.equal(round.round, 1);
+    assert.equal(round.text, 'Round 1');
   } finally {
     await stack.db.$disconnect();
   }

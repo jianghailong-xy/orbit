@@ -20,12 +20,16 @@ struct ProjectLandingHead: View {
     let head: ProjectPage.LandingHead
     let running: Bool
     let timedOut: Bool
+    /// A settled outcome that went the project's way: the board's green success card (mockup 05 c,
+    /// where the round MERGED). The head is otherwise the row's own anatomy.
+    var ok = false
 
     /// The head's ink, the landing row's own rule: the accent while the job runs, grey while it
     /// waits its turn or the app cannot read the server, and the amber a runner the server stopped
-    /// hearing from wears.
+    /// hearing from wears. A settled success is the one green.
     private var ink: Color {
-        timedOut ? ProjectPalette.warningInk : running ? Color.accentColor : Color.secondary
+        if ok { return .green }
+        return timedOut ? ProjectPalette.warningInk : running ? Color.accentColor : Color.secondary
     }
 
     var body: some View {
@@ -34,7 +38,7 @@ struct ProjectLandingHead: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
                     Text(title).fontWeight(.semibold)
-                        .foregroundStyle(timedOut ? ink : Color.primary)
+                        .foregroundStyle(ok ? ink : timedOut ? ink : Color.primary)
                         .lineLimit(1)
                     Spacer(minLength: 8)
                     // The live number, which is the one thing on the row that moves: tabular digits
@@ -53,7 +57,14 @@ struct ProjectLandingHead: View {
     /// The 30pt circle: the ring while the job waits or runs — its own spin, drawn by `LandingRing`
     /// — and the warning triangle where the ring was once the server judged the runner silent.
     @ViewBuilder private var mark: some View {
-        if timedOut {
+        if ok {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.orbitGlyph)
+                .foregroundStyle(ink)
+                .frame(width: 30, height: 30)
+                .background(Color.green.opacity(0.15), in: Circle())
+                .accessibilityHidden(true)
+        } else if timedOut {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.orbitGlyph)
                 .foregroundStyle(ink)

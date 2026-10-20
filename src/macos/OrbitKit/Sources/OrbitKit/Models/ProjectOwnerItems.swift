@@ -19,6 +19,10 @@ public enum ProjectOpenItemKind: String, Codable, Sendable {
     case promotionApproval = "PROMOTION_APPROVAL"
     case coordinatorQuestion = "COORDINATOR_QUESTION"
     case fusePaused = "FUSE_PAUSED"
+    /// A finished delivery whose landing needs a bounded decision (§4.8).
+    case deliveryReview = "DELIVERY_REVIEW"
+    /// §4.6 X-E5: a landing attempt whose runner stopped reporting, escalated at birth.
+    case landingLeaseExpired = "LANDING_LEASE_EXPIRED"
     case unknown = "UNKNOWN"
 
     public init(from decoder: Decoder) throws {
@@ -118,6 +122,10 @@ public enum ProjectOpenItemAction: String, Codable, Sendable {
     case askCoordinatorAgain = "ASK_COORDINATOR_AGAIN"
     case resume = "RESUME"
     case answer = "ANSWER"
+    /// The way into the landing session this item is about (§2.9 LS6) — a reading door.
+    case openLanding = "OPEN_LANDING"
+    /// End the timed-out landing attempt the item is about (§4.6 X-E5, J12).
+    case abandon = "ABANDON"
     case unknown = "UNKNOWN"
 
     public init(from decoder: Decoder) throws {
@@ -164,6 +172,62 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         }
     }
 
+    /// The claim an X-E5 item is about (§4.6 revision 23): the last report its runner made, the
+    /// limit it went past, and the two facts J12's verdict branches on.
+    public struct OpenItemLease: Codable, Equatable, Sendable {
+        public let lastReportAt: String?
+        /// When the claim's lease ran out — the last report plus the step's limit (§7.2 V6).
+        public let leaseExpiredAt: String?
+        /// `LAND_TASK`, `CHECK_PROMOTION` or `LAND_PROMOTION`: J12's verdict branches on it.
+        public let jobKind: String?
+        public let generation: Int?
+        public let phase: String?
+        public let step: String?
+        public let claimGeneration: Int?
+        public let round: Int?
+        public let checkCount: Int?
+        public let runner: String?
+        /// `'v2'` for a claim that reports periodically, nil for a legacy claim.
+        public let progressProtocol: String?
+        /// Whether the claim ever recorded a PUSH; false proves nothing was pushed on a v2 claim.
+        public let pushReported: Bool
+
+        public init(lastReportAt: String? = nil, leaseExpiredAt: String? = nil,
+                    jobKind: String? = nil, generation: Int? = nil, phase: String? = nil,
+                    step: String? = nil, claimGeneration: Int? = nil, round: Int? = nil,
+                    checkCount: Int? = nil, runner: String? = nil,
+                    progressProtocol: String? = nil, pushReported: Bool = false) {
+            self.lastReportAt = lastReportAt
+            self.leaseExpiredAt = leaseExpiredAt
+            self.jobKind = jobKind
+            self.generation = generation
+            self.phase = phase
+            self.step = step
+            self.claimGeneration = claimGeneration
+            self.round = round
+            self.checkCount = checkCount
+            self.runner = runner
+            self.progressProtocol = progressProtocol
+            self.pushReported = pushReported
+        }
+
+        public init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            lastReportAt = try? c.decodeIfPresent(String.self, forKey: .lastReportAt)
+            leaseExpiredAt = try? c.decodeIfPresent(String.self, forKey: .leaseExpiredAt)
+            jobKind = try? c.decodeIfPresent(String.self, forKey: .jobKind)
+            generation = try? c.decodeIfPresent(Int.self, forKey: .generation)
+            phase = try? c.decodeIfPresent(String.self, forKey: .phase)
+            step = try? c.decodeIfPresent(String.self, forKey: .step)
+            claimGeneration = try? c.decodeIfPresent(Int.self, forKey: .claimGeneration)
+            round = try? c.decodeIfPresent(Int.self, forKey: .round)
+            checkCount = try? c.decodeIfPresent(Int.self, forKey: .checkCount)
+            runner = try? c.decodeIfPresent(String.self, forKey: .runner)
+            progressProtocol = try? c.decodeIfPresent(String.self, forKey: .progressProtocol)
+            pushReported = try c.decodeIfPresent(Bool.self, forKey: .pushReported) ?? false
+        }
+    }
+
     public let itemId: String
     public let kind: ProjectOpenItemKind
     public let title: String
@@ -189,6 +253,16 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
     public let promotionId: String?
     /// The pause this item is, for a `FUSE_PAUSED`; nil for every other kind.
     public let fuseEpisodeId: String?
+    /// The landing session of the attempt this item is about (§2.9 LS1), when the row recorded one:
+    /// `OPEN_LANDING` opens it, and the transcript card links to it. Null for a row an older build
+    /// opened, and for a kind that lands nothing.
+    public let landingSessionId: String?
+    /// The landing attempt an X-E5 item is about (§4.6): the integration job whose claim stopped
+    /// reporting. `ABANDON` names that job in its route. Nil for every other kind.
+    public let integrationJobId: String?
+    /// The claim an X-E5 item is about, as the card's heading and its Abandon consequence read it
+    /// (§4.6, revision 23). Nil on every other kind and on a server that predates it.
+    public let lease: OpenItemLease?
     /// Where this item is on its way to the coordinator, or that it is not owed to one.
     public let delivery: Delivery?
     /// The presses the server offers on this item.
@@ -228,6 +302,8 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
                 escalateAt: String? = nil, escalatedAt: String? = nil, taskId: String? = nil,
                 sessionId: String? = nil, promotionId: String? = nil,
                 fuseEpisodeId: String? = nil, delivery: Delivery? = nil,
+                landingSessionId: String? = nil, integrationJobId: String? = nil,
+                lease: OpenItemLease? = nil,
                 actions: [ProjectOpenItemAction] = [], requiredAction: String? = nil,
                 primaryAction: ProjectOpenItemAction? = nil, handledBy: [OpenItemFixTask]? = nil,
                 question: CoordinatorQuestion? = nil,
@@ -247,6 +323,9 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         self.promotionId = promotionId
         self.fuseEpisodeId = fuseEpisodeId
         self.delivery = delivery
+        self.landingSessionId = landingSessionId
+        self.integrationJobId = integrationJobId
+        self.lease = lease
         self.actions = actions
         self.requiredAction = requiredAction
         self.primaryAction = primaryAction
@@ -274,6 +353,9 @@ public struct ProjectOpenItemRow: Codable, Equatable, Sendable, Identifiable {
         promotionId = try c.decodeIfPresent(String.self, forKey: .promotionId)
         fuseEpisodeId = try c.decodeIfPresent(String.self, forKey: .fuseEpisodeId)
         delivery = try c.decodeIfPresent(Delivery.self, forKey: .delivery)
+        landingSessionId = (try? c.decodeIfPresent(String.self, forKey: .landingSessionId)) ?? nil
+        integrationJobId = (try? c.decodeIfPresent(String.self, forKey: .integrationJobId)) ?? nil
+        lease = (try? c.decodeIfPresent(OpenItemLease.self, forKey: .lease)) ?? nil
         actions = try c.decodeIfPresent([ProjectOpenItemAction].self, forKey: .actions) ?? []
         // Read with `try?`: a field this build cannot read costs the card that field and never the
         // whole read that carried it — the same rule `startRequest` below is read under.
@@ -682,6 +764,20 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
     /// on the next poll (`@orbit/shared`'s `onPass`). Nil in every other state, and from a server older
     /// than the field — the checking card then says nothing about what comes next.
     public let onPass: String?
+    /// The landing session of this round of merging into main (§2.9 LS1), while there is one to
+    /// open: `CHECKING`, `CONFIRMED` and `RECHECKING` (the check line opens it), and `MERGED` (the
+    /// receipt's "Open landing ›"). Absent from a server that predates the field.
+    public let landingSessionId: String?
+    /// The active merge job has been asked to stop and has not ended yet: the card draws it as
+    /// "cancelling" (§3.3 M-T10). Absent from a server older than the field.
+    public let cancelRequested: Bool
+    /// That job's current claim has passed the push boundary (§2.2 J-T4): Cancel is no longer
+    /// accepted past it. Absent from a server older than the field.
+    public let pushBoundaryPassed: Bool
+    /// The tree the checks passed on, which is the tree that lands (M6). Nil before they have.
+    public let landsTreeSha: String?
+    /// The upstream tip the checks ran against; nil until a check has passed.
+    public let upstreamShaChecked: String?
 
     public struct Execution: Codable, Equatable, Sendable {
         public let state: String
@@ -712,7 +808,10 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
                 taskIds: [String] = [], tasks: [PromotionTask] = [], checks: [IntegrationCheckResult] = [],
                 conflicts: [String] = [], blockedReason: String? = nil, landsAs: String? = "MERGE_COMMIT",
                 askedAt: String? = nil, recheckedAt: String? = nil, decidedAt: String? = nil,
-                merged: Merged? = nil, execution: Execution? = nil, onPass: String? = nil) {
+                merged: Merged? = nil, execution: Execution? = nil, onPass: String? = nil,
+                landingSessionId: String? = nil, cancelRequested: Bool = false,
+                pushBoundaryPassed: Bool = false, landsTreeSha: String? = nil,
+                upstreamShaChecked: String? = nil) {
         self.promotionId = promotionId
         self.state = state
         self.sourceRef = sourceRef
@@ -732,6 +831,11 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         self.decidedAt = decidedAt
         self.merged = merged
         self.onPass = onPass
+        self.landingSessionId = landingSessionId
+        self.cancelRequested = cancelRequested
+        self.pushBoundaryPassed = pushBoundaryPassed
+        self.landsTreeSha = landsTreeSha
+        self.upstreamShaChecked = upstreamShaChecked
     }
 
     public init(from decoder: Decoder) throws {
@@ -755,6 +859,11 @@ public struct ProjectPromotionView: Codable, Equatable, Sendable {
         decidedAt = try c.decodeIfPresent(String.self, forKey: .decidedAt)
         merged = try c.decodeIfPresent(Merged.self, forKey: .merged)
         onPass = try c.decodeIfPresent(String.self, forKey: .onPass)
+        landingSessionId = try? c.decodeIfPresent(String.self, forKey: .landingSessionId)
+        cancelRequested = try c.decodeIfPresent(Bool.self, forKey: .cancelRequested) ?? false
+        pushBoundaryPassed = try c.decodeIfPresent(Bool.self, forKey: .pushBoundaryPassed) ?? false
+        landsTreeSha = try? c.decodeIfPresent(String.self, forKey: .landsTreeSha)
+        upstreamShaChecked = try? c.decodeIfPresent(String.self, forKey: .upstreamShaChecked)
     }
 }
 

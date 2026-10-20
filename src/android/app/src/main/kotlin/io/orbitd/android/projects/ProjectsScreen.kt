@@ -45,6 +45,7 @@ import io.orbitd.android.core.cards.*
 import io.orbitd.android.core.net.ApiError
 import io.orbitd.android.navigation.*
 import io.orbitd.android.cards.CardFocus
+import io.orbitd.android.reader.landingEntry
 import io.orbitd.android.taskprojects.*
 import io.orbitd.android.tasks.OfflineNote
 import io.orbitd.android.text.*
@@ -427,6 +428,13 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             "OPEN_COORDINATOR" -> row.obj("delivery")?.text("sessionId")?.let { session ->
                 card?.let { CardFocus.request(session, it) }; open(OrbitRoute(Destination.SESSION, session))
             } ?: openCoordinator(card)
+            // §2.9 LS6's reading door: the landing session this item is about, wherever the reader pressed it.
+            "OPEN_LANDING" -> row.text("landingSessionId")?.takeIf { it.isNotEmpty() }?.let { open(OrbitRoute(Destination.SESSION, it)) }
+            // J-T10's owner end of a timed-out attempt, through the same door the landing page's menu presses: it ends, and nothing
+            // is queued again. The page reads everything again when it answers (iOS `abandonIntegration`).
+            "ABANDON" -> row.text("integrationJobId")?.takeIf { it.isNotEmpty() }?.let { jobId ->
+                write("${ExceptionCards.notAbandoned} — ") { api.abandonJob(id, jobId) }
+            }
             else -> openCoordinator(card)
         }
     }
@@ -458,7 +466,8 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
             }
         }) }
         openItemsAttention(state, doc, enabled, openSheet = { dialog = ProjectDialog.OpenItems }, startOwn = { dialog = ProjectDialog.Start })
-        overviewSection(state, doc, now, openTask, retry = { retryJob(it) }) { dialog = ProjectDialog.LandingJobs }
+        overviewSection(state, doc, now, openTask, openLanding = { open(OrbitRoute(Destination.SESSION, it)) }, retry = { retryJob(it) }) {
+            dialog = ProjectDialog.LandingJobs }
         coordinatorSection(state, doc, now, enabled, openCoordinator = { openCoordinator() }, replace = { finished ->
             if (finished) replaceCoordinator() else dialog = ProjectDialog.Replace })
         if (started != false) item(key = "runs") {
@@ -586,7 +595,8 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
         // The jobs the landing card counts, read off the page's own integration read, which its polls keep current. Retry answers the
         // line read again, which the list redraws from at once; then the page reads everything again (iOS `retryIntegrationJob`).
         ProjectDialog.LandingJobs -> LandingJobsSheet(state.integration?.let { ProjectPage.landingJobLines(it, now, state.integrationReadAt, state.integrationReadFailed) }.orEmpty(),
-            retry = { retryJob(it) }, openTask = { taskId -> dialog = null; openTask(taskId) }, close = { dialog = null })
+            retry = { retryJob(it) }, openTask = { taskId -> dialog = null; openTask(taskId) },
+            openLanding = { sessionId -> dialog = null; open(OrbitRoute(Destination.SESSION, sessionId)) }, close = { dialog = null })
         ProjectDialog.OpenItems -> OpenItemsSheet(state, doc, now, enabled, startOwn = { dialog = ProjectDialog.Start }, recordDone = { dialog = ProjectDialog.Done },
             // Review on the coordinator's request to start: into its conversation, onto the start card.
             reviewStart = { row -> dialog = null; openCoordinator(row.text("itemId")?.let { "start:$it" }) }, perform = perform,
@@ -798,7 +808,7 @@ private fun OpenItemRow(row: JsonObject, now: Instant, enabled: Boolean, perform
 }
 
 private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObject, now: Instant, openTask: (String) -> Unit,
-    retry: suspend (String) -> String?, openJobs: () -> Unit) {
+    openLanding: (String) -> Unit, retry: suspend (String) -> String?, openJobs: () -> Unit) {
     val panorama = state.panorama ?: return
     val buckets = panorama.obj("buckets") ?: JsonObject(emptyMap())
     val status = ProjectDoc.status(doc)
@@ -813,7 +823,8 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
             // The same card the project's sessions page draws (iOS 22124bb0a): on a server that lists its jobs a press opens them; on an
             // older one the card is a read — there is no second door on the project's own page. Its Retry is the jobs list's.
             state.integration?.let { view -> ProjectPage.landingCard(view, now, state.integrationReadAt, state.integrationReadFailed)?.let {
-                ProjectLandingCardView(it, onOpenJobs = if (ProjectPage.inFlightJobs(view) != null) openJobs else null, onOpenProject = null, retry = retry) } }
+                ProjectLandingCardView(it, onOpenJobs = if (ProjectPage.inFlightJobs(view) != null) openJobs else null, onOpenProject = null,
+                    openLanding = openLanding, retry = retry) } }
             cells.chunked(2).forEach { pair -> Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 pair.forEach { cell -> Column(Modifier.weight(1f).testTag("overview:${cell.key}")) {
                     // The lane's shape carries its colour; the label stays the page's ink (`overviewCell`).
@@ -847,16 +858,26 @@ private fun LazyListScope.overviewSection(state: ProjectPageState, doc: JsonObje
 
 /** "2 jobs in flight" — what pressing a landing card opens (iOS `ProjectLandingJobsSheet`): every job it counts, one row each, wearing
  * the head every landing row wears (iOS 22124bb0a), then the task it lands and where its runner stopped. A task's row opens that task;
- * a job the server says can be retried offers Retry, and a Retry that did not go through says why under its row. */
+ * a job the server says can be retried offers Retry, and a Retry that did not go through says why under its row. Every row also names
+ * its own landing session beside Retry (方案 A) — a merge into main's row is no press, so that is its only way in. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun LandingJobsSheet(lines: List<LandingJobLine>, retry: suspend (String) -> String?, openTask: (String) -> Unit, close: () -> Unit) {
+internal fun LandingJobsSheet(lines: List<LandingJobLine>, retry: suspend (String) -> String?, openTask: (String) -> Unit, openLanding: (String) -> Unit,
+    close: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = close, modifier = Modifier.testTag("landing-jobs-sheet")) {
+        LandingJobsList(lines, retry, openTask, openLanding, close)
+    }
+}
+
+/** The sheet's content, drawn on its own by the shot tests as well. */
+@Composable
+internal fun LandingJobsList(lines: List<LandingJobLine>, retry: suspend (String) -> String?, openTask: (String) -> Unit, openLanding: (String) -> Unit,
+    close: () -> Unit) {
     // The jobs a Retry is on its way for take no second press; why one did not go through stays under its row.
     var retrying by remember { mutableStateOf<Set<String>>(emptySet()) }
     var failures by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val scope = rememberCoroutineScope()
-    ModalBottomSheet(onDismissRequest = close, modifier = Modifier.testTag("landing-jobs-sheet")) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
+    Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
             Box(Modifier.fillMaxWidth()) {
                 Text(ProjectPage.landingJobsTitle(lines.size), Modifier.align(Alignment.Center).semantics { heading() }.testTag("landing-jobs-title"),
                     style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -881,20 +902,23 @@ internal fun LandingJobsSheet(lines: List<LandingJobLine>, retry: suspend (Strin
                             Text("›", Modifier.alpha(if (row.taskId != null) 1f else 0f).clearAndSetSemantics { }, fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        if (row.retryable) OutlinedButton(onClick = {
-                            if (row.jobId !in retrying) {
-                                retrying = retrying + row.jobId; failures = failures - row.jobId
-                                scope.launch {
-                                    try { retry(row.jobId)?.let { failures = failures + (row.jobId to it) } } finally { retrying = retrying - row.jobId }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            if (row.retryable) OutlinedButton(onClick = {
+                                if (row.jobId !in retrying) {
+                                    retrying = retrying + row.jobId; failures = failures - row.jobId
+                                    scope.launch {
+                                        try { retry(row.jobId)?.let { failures = failures + (row.jobId to it) } } finally { retrying = retrying - row.jobId }
+                                    }
                                 }
-                            }
-                        }, enabled = row.jobId !in retrying, modifier = Modifier.testTag("landing-job:${row.jobId}:retry")) { Text(ProjectPage.landingRetry) }
+                            }, enabled = row.jobId !in retrying, modifier = Modifier.testTag("landing-job:${row.jobId}:retry")) { Text(ProjectPage.landingRetry) }
+                            // A sibling of Retry and of the row's task press; a server that names no landing says so in grey.
+                            LandingEntryLink(landingEntry(row.landingSessionId), "landing-job:${row.jobId}:open-landing", openLanding)
+                        }
                         failures[row.jobId]?.let { Text(it, Modifier.testTag("landing-job:${row.jobId}:failure"), style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.error) }
                     }
                 }
             }
-        }
     }
 }
 

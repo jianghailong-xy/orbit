@@ -215,6 +215,67 @@ func TestAntigravityContractApprovalTimesOut(t *testing.T) {
 	session.wait(t)
 }
 
+// The file tools, under whichever names this agy gives them (1.4.3 renamed view_file and
+// write_to_file to read_file and write_file, with a Path): reading the checkout runs without a
+// card, writing Orbit's own configuration is refused without one, and writing the checkout is
+// asked as a Write that carries the content.
+func TestAntigravityContractApprovalFileTools(t *testing.T) {
+	c := newAgyContract(t)
+	job := c.job("contract-approval-files", "default")
+	readme := filepath.Join(c.execDir, "README.md")
+	if err := os.WriteFile(readme, []byte("READ-WITHOUT-A-CARD\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	made := filepath.Join(c.execDir, "made.txt")
+	session := c.start(job)
+	hooksPath := filepath.Join(c.geminiDir(), "config", "hooks.json")
+	write := func(path, content string) string {
+		return agyToolCall("write_to_file|write_file", map[string]interface{}{"TargetFile": path, "Path": path,
+			"CodeContent": content, "Content": content, "Overwrite": true, "Description": "write a file"})
+	}
+	c.send(RunInboxResponse{TurnID: "t1", Kind: "message", Content: "use the files\n" +
+		agyToolCall("view_file|read_file", map[string]interface{}{"AbsolutePath": readme, "Path": readme}) + "\n" +
+		write(hooksPath, "{}") + "\n" + write(made, "MADE\n") + "\nmock:text done with the files"})
+	card := c.nextApproval()
+	input := mapValue(card.body["input"])
+	if card.body["toolName"] != "Write" || asString(input["file_path"]) != made || asString(input["content"]) != "MADE\n" {
+		t.Fatalf("card = %v, want the Write of %s with its content; events:\n%s", card.body, made, c.describeEvents())
+	}
+	requireGatedAgy(t, c)
+	c.decide(card.id, "ALLOWED", "")
+	turn := c.completion("t1")
+	if turn.Status != stSucceeded || strings.TrimSpace(turn.Result) != "done with the files" {
+		t.Fatalf("turn = %s/%s %q (%s); events:\n%s", turn.Status, turn.Subtype, turn.Result, turn.Error, c.describeEvents())
+	}
+	uses := c.eventsOf("t1", evToolUse)
+	if len(uses) != 3 {
+		t.Fatalf("tool_use = %v, want the read and two writes", uses)
+	}
+	for i, want := range []struct{ name, path string }{{"Read", readme}, {"Write", hooksPath}, {"Write", made}} {
+		if uses[i]["name"] != want.name || asString(mapValue(uses[i]["input"])["file_path"]) != want.path {
+			t.Fatalf("tool_use %d = %v, want %s %s", i, uses[i], want.name, want.path)
+		}
+	}
+	if result := c.toolResultFor("t1", asString(uses[0]["id"])); result["isError"] != false {
+		t.Fatalf("read tool_result = %v", result)
+	}
+	if !strings.Contains(c.lastModelRequest(), "READ-WITHOUT-A-CARD") {
+		t.Fatal("the file read never reached the model")
+	}
+	if result := c.toolResultFor("t1", asString(uses[1]["id"])); result["isError"] != true || !strings.Contains(asString(result["content"]), "Orbit's own configuration") {
+		t.Fatalf("hooks.json write tool_result = %v", result)
+	}
+	if body, err := os.ReadFile(made); err != nil || string(body) != "MADE\n" {
+		t.Fatalf("the approved write wrote %q (%v)", body, err)
+	}
+	if n := c.approvalCount(); n != 1 {
+		t.Fatalf("%d cards filed, want 1", n)
+	}
+	c.send(RunInboxResponse{TurnID: "end", Kind: "end"})
+	session.wait(t)
+	c.homeIsUntouched()
+}
+
 // agyWrapper puts a script named agy ahead of the real one on PATH, for an agy that does not run
 // Orbit's hooks. The script gets the real agy's path as $REAL_AGY and its own argv.
 func agyWrapper(t *testing.T, script string) {

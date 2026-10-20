@@ -20,6 +20,8 @@ import {
   LANDING_PAGE_COPY,
   landingAttemptCard,
   landingCheckLabel,
+  landingCheckPassed,
+  landingEntryOk,
   landingFooter,
   landingGates,
   landingHeaderSub,
@@ -45,7 +47,7 @@ import {
 } from '../lib/queries';
 import { encodeId } from '../lib/idCodec';
 import { projectTaskPath } from '../lib/projectTaskRoute';
-import { promotionOnPassLine } from '../lib/projectMerge';
+import { RERUN_LANDING_CHECK_REASON, promotionOnPassLine } from '../lib/projectMerge';
 import { mainBranchName } from '../lib/projectStart';
 import { LandingHead, landingClock } from './ProjectPanoramaHeader';
 import {
@@ -150,8 +152,9 @@ export function LandingSessionView({
   });
 
   const press = useMutation({
-    mutationFn: (press: { path: string; label: string }) =>
-      api(press.path, { method: 'POST' }).then((answer) => ({ answer, label: press.label })),
+    mutationFn: (press: { path: string; label: string; body?: Record<string, unknown> }) =>
+      api(press.path, { method: 'POST', ...(press.body ? { body: press.body } : {}) })
+        .then((answer) => ({ answer, label: press.label })),
     onSuccess: () => {
       setRefusal(null);
       if (projectId) {
@@ -167,7 +170,7 @@ export function LandingSessionView({
       setRefusal(`${variables.label} — ${error.message.replace(/[.\s]+$/, '')}.`);
     },
   });
-  const pressPath = (path: string, label: string): void => press.mutate({ path, label });
+  const pressPath = (path: string, label: string, body?: Record<string, unknown>): void => press.mutate({ path, label, body });
 
   if (!landing) {
     return (
@@ -228,9 +231,12 @@ export function LandingSessionView({
   };
   const recheck = (): void => {
     if (!projectId || !landing.promotionId) return;
+    // The owner route requires a reason (RetryIntegrationDto.reason), and the sentence names this page: the
+    // merge card's door records its own. A bodyless press was refused by the server, not by the queue.
     pressPath(
       `/projects/${encodeURIComponent(projectId)}/promotions/${encodeURIComponent(landing.promotionId)}/integration/retry`,
       LANDING_PAGE_COPY.RERUN_FAILED,
+      { reason: RERUN_LANDING_CHECK_REASON },
     );
   };
 
@@ -616,7 +622,7 @@ function LandingTimeline({
                     {/* A check that failed shows the tail it died on, inline (05 g); a passed one
                         keeps its Log › and stays one line. */}
                     {entry.kind === 'CHECK_FINISHED' && entry.check && section.jobId
-                      && !entry.text.includes('passed') ? (
+                      && !landingCheckPassed(entry) ? (
                         <LandingInlineOutput
                           key={`inline-${section.jobId}-${entry.claim}-${entry.round ?? 0}-${entry.check.index}`}
                           sessionId={sessionId}
@@ -664,9 +670,7 @@ function entryGlyph(
     case 'CHECK_FINISHED':
     case 'RESULT':
     case 'RESULT_FALLBACK':
-      return entry.text.includes('passed') || /^(Landed|Already|Nothing to push|Merged)/.test(entry.text)
-        ? { glyph: '✓', tone: 'ok' }
-        : { glyph: '✗', tone: 'failed' };
+      return landingEntryOk(entry) ? { glyph: '✓', tone: 'ok' } : { glyph: '✗', tone: 'failed' };
     case 'STOP_REQUESTED':
     case 'CANCELLED':
     case 'ABANDONED':

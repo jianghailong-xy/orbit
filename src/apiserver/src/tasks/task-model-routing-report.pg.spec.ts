@@ -123,6 +123,11 @@ test('model-routing report aggregates actual runs, first-run task cohorts and on
     workspaceId: laterAgent.id, provider: 'codex', model: CODEX, status: 'FAILED', error: "You've HIT YOUR USAGE LIMIT",
   });
   await tokens(quota.id, 400);
+  // The model at capacity says nothing about the task either: not a failure of this cohort's.
+  await run(retried, 450, 5, {
+    workspaceId: laterAgent.id, provider: 'codex', model: CODEX, status: 'FAILED',
+    error: 'Selected model is AT CAPACITY. Please try a different model.',
+  });
   const completed = await run(retried, 500, 15, { workspaceId: laterAgent.id, provider: 'codex', model: CODEX });
   await tokens(completed.id, 500);
   // Current task assignment cannot change which Agent ran the first sample.

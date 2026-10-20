@@ -390,9 +390,10 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
                'phase', j."phase",
                'step', j."step",
                'round', j."round",
-               -- The check the claim was on, for "round N of M" (0434's current_check column;
-               -- absent before a check starts and on a legacy claim). No backticks in here: this
-               -- whole statement is a JS template literal.
+               -- The check the claim was on: its index and how many checks the run has (0434's
+               -- current_check column; absent before a check starts and on a legacy claim). Not the
+               -- M of the Step row's round, which the card takes from jobKind (7.2 V6). No backticks
+               -- in here: this whole statement is a JS template literal.
                'checkIndex', NULLIF(j."current_check"->>'index', '')::int,
                'checkCount', NULLIF(j."current_check"->>'count', '')::int,
                'progressProtocol', j."progress_protocol",

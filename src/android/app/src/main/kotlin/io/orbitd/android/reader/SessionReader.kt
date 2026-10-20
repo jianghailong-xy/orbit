@@ -5,10 +5,12 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
@@ -25,10 +27,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.R
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.cards.CardFocus
@@ -50,6 +56,8 @@ import io.orbitd.android.watch.SessionWatches
 import io.orbitd.android.watch.rememberSessionTitles
 import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.core.auth.SessionHandle
+import io.orbitd.android.core.cards.obj
+import io.orbitd.android.core.cards.text
 import io.orbitd.android.core.cards.OwnerReview
 import io.orbitd.android.core.cards.AntigravityRepair
 import io.orbitd.android.core.cards.DshRuntime
@@ -60,6 +68,7 @@ import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
 import io.orbitd.android.navigation.*
 import io.orbitd.android.text.*
+import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.ui.typingFold
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -68,6 +77,11 @@ import kotlinx.serialization.json.*
 @Composable
 fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi,
     data: DirectoryData, open: (OrbitRoute) -> Unit, leave: () -> Unit = {}) {
+    // This page shows a conversation, and the store streams the one it shows: selecting it is the reader's own act, so a
+    // landing session — which SessionDestination never sends here — is never subscribed to (§2.9 LS6). A reader leaving
+    // clears the selection; a reader replacing another (a link to a second session) sets its own after the old one's.
+    LaunchedEffect(handle, route.id) { app.realtime.selectSession(route.id) }
+    DisposableEffect(handle, route.id) { onDispose { app.realtime.selectSession(null) } }
     var recordOpened by rememberSaveable { mutableStateOf(false) }
     val model = remember(handle, route.id, route.recordId) { SessionReaderModel(app.session, handle,
         app.realtime, route.id!!, app.processScope, route.recordId, recordOpened) }
@@ -417,6 +431,9 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 // The composer's send in flight holds Merge as a queued turn does (A06-14, iOS `console.sending`).
                 Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { Box(Modifier.padding(horizontal = 16.dp)) {
                     WorktreeBar(worktree, sending = composerState.waiting || composerState.busy, open = openLink) } }
+                // The landing this conversation's work fed, at the session's own bottom (owner 2026-10-19, board v4 06 e).
+                Box(Modifier.fillMaxWidth().typingFold(foldsChrome)) { SourceLandingChip(queuedDetail ?: detail) {
+                    open(OrbitRoute(Destination.SESSION, it)) } }
                 // Keep the composer and its activity-result launchers alive while card forms use the IME.
                 // The chip's Open task › pushes the task over this run, so Back returns to it.
                 Box(Modifier.heightIn(max = composerHeight).clipToBounds()) { SessionComposer(app, handle, route.id!!, state.session,
@@ -428,7 +445,7 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
         }
         if (!state.denied) CardReviewSheet(cards, reviewStates, openLink, discussCard)
-        if (!state.denied) CardReceiptSheet(cards)
+        if (!state.denied) CardReceiptSheet(cards, openLanding = { open(OrbitRoute(Destination.SESSION, it)) })
         if (details && !state.denied) SessionDetails(state.session, api, openLink) { details = false }
         action?.let { dialog -> DirectoryActionDialog(dialog, api, data.copy(fresh = data.fresh && state.session?.fresh == true), { action = it }) {
             app.realtime.refreshDirectory(); app.realtime.refreshSession()
@@ -475,6 +492,36 @@ internal fun Modifier.fadesIntoComposerBand(): Modifier = graphicsLayer { compos
         drawRect(Brush.verticalGradient(listOf(Color.Black, Color.Transparent), startY = size.height - fade, endY = size.height),
             topLeft = Offset(0f, size.height - fade), size = Size(size.width, fade), blendMode = BlendMode.DstIn)
     }
+
+/**
+ * The landing this conversation's work fed, at the session's own bottom (owner 2026-10-19, board v4 06 e): a derived label, not a
+ * turn — the source session did the work, the platform lands it, and the label opens the landing session where every attempt is read.
+ * `Landing · checking ›`, `On project/x ✓ ›`, `Landing · checks failed ›`. Absent from a session that produced no landing work, and
+ * from a server that predates the field.
+ */
+@Composable
+internal fun SourceLandingChip(detail: JsonObject?, open: (String) -> Unit) {
+    val source = detail?.obj("sourceLanding") ?: return
+    val summary = SessionProjectLandings.LandingSummary(source.text("landingSessionId").orEmpty(), subject = source.text("subject"),
+        state = source.text("state"), phase = source.text("phase"), settledAs = source.text("settledAs"), targetRef = source.text("targetRef"))
+    if (summary.landingSessionId.isEmpty()) return
+    val label = SessionProjectLandings.sourceLabel(summary) ?: return
+    val ink = when (label.tone) {
+        "run" -> MaterialTheme.colorScheme.primary
+        "landed" -> LocalOrbitColors.current.success
+        "failed" -> LocalOrbitColors.current.needsYou
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 4.dp)) {
+        Row(Modifier.background(ink.copy(alpha = 0.12f), RoundedCornerShape(50))
+            .clickable(role = Role.Button) { open(summary.landingSessionId) }.padding(horizontal = 10.dp, vertical = 5.dp)
+            .testTag("source-landing"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            // The moving state wears the ring (board 06 e; web's spinner Glyph, iOS's arrow.triangle.2.circlepath): static, and silent to TalkBack.
+            if (label.tone == "run") Icon(painterResource(R.drawable.ic_sync), null, Modifier.size(14.dp).testTag("source-landing:ring"), tint = ink)
+            Text("${label.text} ›", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1)
+        }
+    }
+}
 
 /** Every picture a reader can page through: image attachments, and `[label](orbit-attachment:id "name.png")` links. */
 internal fun sessionImages(events: List<RunEvent>): List<String> {

@@ -371,6 +371,64 @@ describe('the Landings group', () => {
     expect(group.older.map((row) => row.id)).toEqual(['old-landed', 'old-nothing', 'older-still']);
   });
 
+  it('leaves a segment whose count is 0 out of the fold’s line', () => {
+    expect(landingEarlierLine({ landed: 2, nothing: 0 })).toBe('Earlier · 2 landed');
+    expect(landingEarlierLine({ landed: 0, nothing: 1 })).toBe('Earlier · 1 nothing to land');
+    // Only landed: the fold says so, and still opens to every older row, the cancelled one too.
+    const landedOnly = landingGroup([
+      landing('old-landed', { state: 'SETTLED', settledAs: 'LANDED', settledAt: ago(26 * 60) }),
+      landing('old-again', { state: 'SETTLED', settledAs: 'ALREADY_LANDED', settledAt: ago(28 * 60) }),
+      landing('old-cancelled', { state: 'SETTLED', settledAs: 'CANCELLED', settledAt: ago(30 * 60) }),
+    ], { now: NOW })!;
+    expect(landedOnly.earlier).toEqual({ landed: 2, nothing: 0 });
+    expect(landingEarlierLine(landedOnly.earlier!)).toBe('Earlier · 2 landed');
+    expect(landedOnly.older.map((row) => row.id)).toEqual(['old-landed', 'old-again', 'old-cancelled']);
+    const nothingOnly = landingGroup([
+      landing('old-nothing', { state: 'SETTLED', settledAs: 'NOTHING_TO_LAND', settledAt: ago(26 * 60) }),
+    ], { now: NOW })!;
+    expect(landingEarlierLine(nothingOnly.earlier!)).toBe('Earlier · 1 nothing to land');
+  });
+
+  it('folds older landings neither count names under a bare Earlier, and opens to them', () => {
+    expect(landingEarlierLine({ landed: 0, nothing: 0 })).toBe('Earlier');
+    const old = [
+      landing('old-cancelled', { state: 'SETTLED', settledAs: 'CANCELLED', settledAt: ago(26 * 60) }),
+      landing('old-handled', { state: 'SETTLED', settledAs: 'HANDLED', settledAt: ago(30 * 60) }),
+      landing('old-declined', { state: 'SETTLED', settledAs: 'DECLINED', settledAt: ago(32 * 60) }),
+      landing('no-instant', { state: 'SETTLED', settledAs: 'CANCELLED', settledAt: null }),
+    ];
+    const group = landingGroup([landing('waiting', { state: 'AWAITING_DECISION' }), ...old], { now: NOW })!;
+    expect(group.waiting.map((row) => row.id)).toEqual(['waiting']);
+    expect(group.earlier).toEqual({ landed: 0, nothing: 0 });
+    expect(landingEarlierLine(group.earlier!)).toBe('Earlier');
+    expect(group.older.map((row) => [row.id, row.detail])).toEqual([
+      ['old-cancelled', 'Cancelled'], ['old-handled', 'Handled'], ['old-declined', 'Declined'], ['no-instant', 'Cancelled'],
+    ]);
+    // …and with nothing else to list, the group is still there: the fold is its one row.
+    const alone = landingGroup(old, { now: NOW })!;
+    expect(alone.waiting).toEqual([]);
+    expect(alone.settled).toEqual([]);
+    expect(landingEarlierLine(alone.earlier!)).toBe('Earlier');
+    expect(alone.older.map((row) => row.id)).toEqual(['old-cancelled', 'old-handled', 'old-declined', 'no-instant']);
+  });
+
+  it('has no fold with nothing older, and is no group with nothing else to list', () => {
+    const group = landingGroup([
+      landing('waiting', { state: 'AWAITING_DECISION' }),
+      landing('cancelled-now', { state: 'SETTLED', settledAs: 'CANCELLED', settledAt: ago(60) }),
+      // A round of merging that merged is never an older row, however old.
+      landing('old-round', { subject: 'PROMOTION', state: 'SETTLED', settledAs: 'MERGED', settledAt: ago(30 * 60) }),
+    ], { now: NOW })!;
+    expect(group.waiting.map((row) => row.id)).toEqual(['waiting']);
+    expect(group.settled.map((row) => row.id)).toEqual(['cancelled-now']);
+    expect(group.earlier).toBeNull();
+    expect(group.older).toEqual([]);
+    expect(landingGroup([
+      landing('moving', { state: 'IN_FLIGHT' }),
+      landing('old-round', { subject: 'PROMOTION', state: 'SETTLED', settledAs: 'MERGED', settledAt: ago(30 * 60) }),
+    ], { now: NOW })).toBeNull();
+  });
+
   it('never lists a round of merging that merged — the timeline has that row', () => {
     const group = landingGroup([
       landing('round', { subject: 'PROMOTION', state: 'SETTLED', settledAs: 'MERGED', settledAt: ago(30) }),

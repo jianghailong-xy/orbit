@@ -88,6 +88,7 @@ import {
   markPromotionRechecking,
   recoverPromotionPushReceipts,
   refileCandidateBehindTheWork,
+  upstreamReceiptSubjects,
 } from '../projects/project-promotion.service';
 import { ProjectOpenItemService } from '../projects/project-open-item.service';
 import {
@@ -108,6 +109,7 @@ import {
   takenOverText,
 } from '../projects/project-integration-event';
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
+import { orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 
 /**
@@ -902,10 +904,10 @@ export async function receiveIntegrationJobProgress(
   // match the id it just locked.
   await withTransactionRetry(prisma, async (tx) => {
     const [before] = await tx.$queryRaw<Array<{
-      phase: string | null; step: string | null; round: number | null; currentCheck: unknown;
+      kind: string; phase: string | null; step: string | null; round: number | null; currentCheck: unknown;
       sourceRef: string; upstreamRef: string; targetRef: string;
     }>>(Prisma.sql`
-      SELECT "phase", "step", "round", "current_check" AS "currentCheck",
+      SELECT "kind", "phase", "step", "round", "current_check" AS "currentCheck",
              "source_ref" AS "sourceRef", "upstream_ref" AS "upstreamRef", "target_ref" AS "targetRef"
         FROM "project_integration_job"
        WHERE "id" = ${jobId}::uuid
@@ -1097,7 +1099,7 @@ async function appendProgressEvents(
     runnerId: string;
     report: ReturnType<typeof progressReport>;
     before: {
-      phase: string | null; step: string | null; round: number | null; currentCheck: unknown;
+      kind: string; phase: string | null; step: string | null; round: number | null; currentCheck: unknown;
       sourceRef: string; upstreamRef: string; targetRef: string;
     };
   },
@@ -1113,7 +1115,7 @@ async function appendProgressEvents(
       round,
       phase: input.report.phase,
       data: { round },
-      text: roundText(round),
+      text: roundText(round, input.before.kind),
     });
   }
   if (input.report.phase !== input.before.phase || input.report.step !== input.before.step) {
@@ -1627,7 +1629,39 @@ export async function applyIntegrationJobResult(
     // even though abandoning never retries the abandoned generation itself.
     const stoppedLanding = job.kind === 'LAND_TASK' && job.taskId != null
       && (cancelRequested || platformEnd !== undefined);
+    // J12's repairs, found before anything is locked: the sessions and tasks their receipts name are
+    // locked with this result's own. Reads only, of rows this transaction does not write.
+    const repairs = await planUnknownPushRepairs(tx, {
+      ownerId: job.ownerId,
+      serialKey: job.serialKey,
+      checks: Array.isArray(body.unknownPushes) ? body.unknownPushes : [],
+    });
+    // Once a pre-lock below has run, the sessions it took FOR NO KEY UPDATE: every merge-recovery clear in
+    // this result is limited to them (`MergeReceiptService.lockLandedRecoveries`). Unset, a clear locks
+    // what it clears where its receipt is written.
+    let recoveryHeld: ReadonlySet<string> | undefined;
+    // A stopped LAND_TASK takes everything of a lower rank that it goes on to need BEFORE the binding, in
+    // rank order (common/lock-order.ts), because the transactions it meets there hold some of it already:
+    // turnComplete's DONE holds the session (its lease fence) and the task FOR UPDATE when it reaches the
+    // binding, and a project delete holds the project FOR UPDATE when its cascade does. A receipt's foreign
+    // keys take all three FOR KEY SHARE, which conflicts with FOR UPDATE, so taking them after the binding
+    // would leave each side waiting on the other. In order:
+    //   * the sessions its receipts name — its own and J12's — FOR NO KEY UPDATE when one still holds a
+    //     merge recovery with no merge in flight (the clear beside its receipt writes it), FOR KEY SHARE
+    //     otherwise;
+    //   * the project, FOR KEY SHARE;
+    //   * the tasks its receipts and comment name, FOR KEY SHARE;
+    //   * then the binding.
     if (stoppedLanding) {
+      recoveryHeld = await MergeReceiptService.lockLandedRecoveries(
+        tx, [job.sessionId, ...repairs.flatMap((repair) => repair.sessionIds)], true);
+      await tx.$queryRaw(Prisma.sql`
+        SELECT "id" FROM "project" WHERE "id" = ${job.projectId}::uuid FOR KEY SHARE`);
+      await tx.$queryRaw(Prisma.sql`
+        SELECT "id" FROM "task"
+         WHERE "id" = ANY(${orderedIds([job.taskId, ...repairs.flatMap((repair) => repair.taskIds)])}::uuid[])
+         ORDER BY "id"
+         FOR KEY SHARE`);
       await tx.$queryRaw(Prisma.sql`
         SELECT "id" FROM "project_codebase"
          WHERE "project_id" = ${job.projectId}::uuid AND "slot" = 'primary'
@@ -1881,6 +1915,20 @@ export async function applyIntegrationJobResult(
       }
     }
 
+    // A result that writes J12's receipts beside its own, or beside its promotion's, takes the sessions all
+    // of them clear in one statement, in id order, before the first of them — not each set's after the
+    // receipts written before it (rank 30 after rank 60). A stopped LAND_TASK took them above.
+    if (recoveryHeld === undefined && repairs.length > 0) {
+      const promotionSessions = job.kind === 'LAND_PROMOTION' && job.promotionId
+        && (state === 'LANDED' || state === 'ALREADY_LANDED')
+        ? (await upstreamReceiptSubjects(tx, job.promotionId)).sessionIds
+        : [];
+      recoveryHeld = await MergeReceiptService.lockLandedRecoveries(tx, [
+        ...(receiptState && session && !job.promotionId ? [session.id] : []),
+        ...repairs.flatMap((repair) => repair.sessionIds),
+        ...promotionSessions,
+      ]);
+    }
     const receiptIds = receiptState && session && !job.promotionId
       ? await MergeReceiptService.fromIntegrationJob(tx, {
         ownerId: job.ownerId,
@@ -1898,6 +1946,7 @@ export async function applyIntegrationJobResult(
         testedTreeSha: body.testedTreeSha ?? null,
         landedTreeSha: body.landedTreeSha ?? null,
         mainSyncSha: body.mainSyncSha ?? null,
+        recoveryHeld,
       })
       : [];
     // The visible signal J-T5 owes a person when the line says it was handed a branch carrying
@@ -1937,11 +1986,7 @@ export async function applyIntegrationJobResult(
     // J12: an earlier landing on this queue whose push outcome nobody could read, now found on the
     // target. Its receipt is written against THAT job — the row is terminal and must not be
     // rewritten (J4) — and this job's result transaction is where it happens.
-    const recoveredReceiptIds = await recoverUnknownPushReceipts(tx, {
-      ownerId: job.ownerId,
-      serialKey: job.serialKey,
-      checks: Array.isArray(body.unknownPushes) ? body.unknownPushes : [],
-    });
+    const recoveredReceiptIds = await recoverUnknownPushReceipts(repairs, recoveryHeld);
     // §4.7 H2 for a candidate: the coordinator's rerun of a blocked candidate's check passed, so the
     // items it was handling are HANDLED in its name — BEFORE the promotion is applied below, because
     // the Automatic setting's own rule counts every open integration item of the project (M-T11), and
@@ -1986,6 +2031,7 @@ export async function applyIntegrationJobResult(
         // transaction: an automatic landing that found main moved checks again (M-T12), and an
         // owner-confirmed one queues the next generation under the same confirmation (J-T13).
         movedCommits: upstreamMovedCommits,
+        recoveryHeld,
       })
       : null;
     const promotionReceiptIds = promotion?.receiptIds ?? [];
@@ -2696,14 +2742,21 @@ const SHA40 = /^[0-9a-f]{40}$/;
  * the J8 receipt; a promotion's writes the M9 receipts for the tasks it carried. Nothing is written
  * when the facts a receipt needs are missing (a purged session, a task whose branch tip was never
  * recorded), and a result that names a job this queue never listed is ignored.
+ *
+ * Found here, before the result transaction locks or writes anything, and written by
+ * `recoverUnknownPushReceipts`: the sessions and tasks each repair's receipts name are locked with the
+ * result's own (`applyIntegrationJobResult`). Reads only, of rows that transaction does not write. A job
+ * named twice is repaired once.
  */
-async function recoverUnknownPushReceipts(
+async function planUnknownPushRepairs(
   tx: Prisma.TransactionClient,
   input: { ownerId: string; serialKey: string; checks: { jobId?: unknown; landed?: unknown }[] },
-): Promise<string[]> {
-  const receiptIds: string[] = [];
+): Promise<UnknownPushRepair[]> {
+  const repairs: UnknownPushRepair[] = [];
+  const named = new Set<string>();
   for (const check of input.checks) {
-    if (check == null || check.landed !== true || typeof check.jobId !== 'string') continue;
+    if (check == null || check.landed !== true || typeof check.jobId !== 'string' || named.has(check.jobId)) continue;
+    named.add(check.jobId);
     const unknown = await tx.projectIntegrationJob.findFirst({
       where: {
         id: check.jobId,
@@ -2719,6 +2772,7 @@ async function recoverUnknownPushReceipts(
       },
     });
     if (!unknown || !unknown.testedSha) continue;
+    const testedSha = unknown.testedSha;
     const already = await tx.sessionMergeReceipt.findFirst({
       where: {
         ownerId: input.ownerId,
@@ -2734,41 +2788,69 @@ async function recoverUnknownPushReceipts(
       // The receipt's session is a foreign key; a purged one gets none, exactly as the ordinary
       // landing path writes one only for a session that is still there.
       if (!session || !unknown.sourceSha) continue;
+      const sourceSha = unknown.sourceSha;
       const task = unknown.taskId
         ? await tx.task.findFirst({ where: { id: unknown.taskId }, select: { id: true } })
         : null;
-      receiptIds.push(...await MergeReceiptService.fromIntegrationJob(tx, {
-        ownerId: input.ownerId,
-        sessionId: session.id,
-        taskId: task?.id ?? null,
-        projectId: unknown.projectId,
-        jobId: unknown.id,
-        // The push happened: the target holds the tested commit, and that is what landed.
-        state: 'LANDED',
-        sourceBranch: shortBranchName(unknown.sourceRef),
-        targetBranch: shortBranchName(unknown.targetRef),
-        sourceSha: unknown.sourceSha,
-        targetShaBefore: unknown.targetShaBefore,
-        landedSha: unknown.testedSha,
-        rebaseBaseSha: unknown.mainSyncSha ?? unknown.targetShaBefore,
-        testedTreeSha: unknown.testedTreeSha,
-        landedTreeSha: unknown.testedTreeSha,
-        mainSyncSha: unknown.mainSyncSha,
-        recoveredUnknownPush: true,
-      }));
+      repairs.push({
+        sessionIds: [session.id],
+        taskIds: task ? [task.id] : [],
+        write: (recoveryHeld) => MergeReceiptService.fromIntegrationJob(tx, {
+          ownerId: input.ownerId,
+          sessionId: session.id,
+          taskId: task?.id ?? null,
+          projectId: unknown.projectId,
+          jobId: unknown.id,
+          // The push happened: the target holds the tested commit, and that is what landed.
+          state: 'LANDED',
+          sourceBranch: shortBranchName(unknown.sourceRef),
+          targetBranch: shortBranchName(unknown.targetRef),
+          sourceSha,
+          targetShaBefore: unknown.targetShaBefore,
+          landedSha: testedSha,
+          rebaseBaseSha: unknown.mainSyncSha ?? unknown.targetShaBefore,
+          testedTreeSha: unknown.testedTreeSha,
+          landedTreeSha: unknown.testedTreeSha,
+          mainSyncSha: unknown.mainSyncSha,
+          recoveredUnknownPush: true,
+          recoveryHeld,
+        }),
+      });
       continue;
     }
     if (unknown.kind === 'LAND_PROMOTION' && unknown.promotionId) {
-      receiptIds.push(...await recoverPromotionPushReceipts(tx, {
-        promotionId: unknown.promotionId,
-        jobId: unknown.id,
-        testedSha: unknown.testedSha,
-        targetShaBefore: unknown.targetShaBefore,
-        testedTreeSha: unknown.testedTreeSha,
-        confirmedAutomatically: unknown.confirmedAutomatically,
-      }));
+      const promotionId = unknown.promotionId;
+      repairs.push({
+        ...await upstreamReceiptSubjects(tx, promotionId),
+        write: (recoveryHeld) => recoverPromotionPushReceipts(tx, {
+          promotionId,
+          jobId: unknown.id,
+          testedSha,
+          targetShaBefore: unknown.targetShaBefore,
+          testedTreeSha: unknown.testedTreeSha,
+          confirmedAutomatically: unknown.confirmedAutomatically,
+          recoveryHeld,
+        }),
+      });
     }
   }
+  return repairs;
+}
+
+/** One earlier landing J12 writes the receipts of: the sessions and tasks they name, and the write. */
+interface UnknownPushRepair {
+  sessionIds: string[];
+  taskIds: string[];
+  write: (recoveryHeld: ReadonlySet<string> | undefined) => Promise<string[]>;
+}
+
+/** J12's receipts, written in this job's result transaction as `planUnknownPushRepairs` found them. */
+async function recoverUnknownPushReceipts(
+  repairs: readonly UnknownPushRepair[],
+  recoveryHeld: ReadonlySet<string> | undefined,
+): Promise<string[]> {
+  const receiptIds: string[] = [];
+  for (const repair of repairs) receiptIds.push(...await repair.write(recoveryHeld));
   return receiptIds;
 }
 

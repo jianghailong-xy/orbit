@@ -242,6 +242,19 @@ test('a Claude account is signed in by name, on a runner that declares that', as
   assert.match((await h.state()).message ?? '', /too old to sign in another Claude account/);
 });
 
+test('the link a runner reports ends at its first control character', async () => {
+  const h = harness();
+  await h.post({ engine: 'claude', accountName: 'Account 3' });
+  const link = 'https://claude.com/cai/oauth/authorize?code=true&code_challenge_method=S256&state=TfMnbWeC-gnq1qDovtlxarkcYLmrhINIdQoGp3OVZ4s';
+  // What an older runner scraped from Claude Code 2.1.304's terminal output: the link with the escapes
+  // that close its colour and its hyperlink still on, or the hyperlink's alone with no TERM. The page
+  // copied them along — "…&state=…[39m]8;;" — and dropping only the control characters keeps that.
+  for (const reported of [`${link}\x1b[39m\x1b]8;;`, `${link}\x1b]8;;`, link]) {
+    await h.report({ status: 'awaiting_code', url: reported, attempt: attemptOf(h.row), account: ADDED_SLOT });
+    assert.equal((await h.state()).url, link, JSON.stringify(reported));
+  }
+});
+
 test('a Kimi account is signed in by name on the site it is added on, on a runner that declares that', async () => {
   const h = harness();
   await h.post({ engine: 'kimi', accountName: ' Work ', region: 'global' });

@@ -128,6 +128,38 @@ class ProjectLandingCardTest {
         assertNull(card.target); assertNull(card.retryJobId)
     }
 
+    /** A card led by a merge into main — a merge check, or the merge itself — says so, read off the lead's own kind on `inFlight`, so a
+     * server that lists no jobs says it too. That job lands no task, and the card holding only it draws no "Nothing to do" (board v4 04). */
+    @Test fun aCardLedByAMergeIntoMainSaysSoFromTheLeadsOwnKind() {
+        for (kind in listOf("CHECK_PROMOTION", "LAND_PROMOTION")) {
+            val lone = running(listOf(job("j-m", kind = kind, taskId = null, title = null)), landTasks = emptyList())
+            assertTrue(kind, ProjectPage.landingCard(lone, now, now, false)!!.mergeJob)
+            val older = buildJsonObject {
+                put("integratingCount", 1); put("queuedCount", 0)
+                putJsonObject("inFlight") { put("taskTitle", null as String?); put("state", "RUNNING"); put("startedAt", iso(66)); put("kind", kind)
+                    put("phase", "CHECK"); put("heartbeatAt", iso(0)) }
+            }
+            assertTrue(kind, ProjectPage.landingCard(older, now, now, false)!!.mergeJob)
+            // The same server counting two jobs: the card holds more than the merge job, so it keeps the sentence it says about them.
+            val olderTwo = buildJsonObject {
+                put("integratingCount", 1); put("queuedCount", 1)
+                putJsonObject("inFlight") { put("taskTitle", null as String?); put("state", "RUNNING"); put("startedAt", iso(66)); put("kind", kind)
+                    put("phase", "CHECK"); put("heartbeatAt", iso(0)) }
+            }
+            assertFalse(kind, ProjectPage.landingCard(olderTwo, now, now, false)!!.mergeJob)
+        }
+        // A task landing is none, even with a merge queued behind it, and nor is a job of no kind.
+        assertFalse(ProjectPage.landingCard(running(listOf(job("j-c5"))), now, now, false)!!.mergeJob)
+        val behind = running(listOf(job("j-c5"), job("j-m", kind = "LAND_PROMOTION", state = "QUEUED", phase = null, taskId = null, title = null,
+            heartbeat = null, runner = null, limit = null)))
+        assertFalse(ProjectPage.landingCard(behind, now, now, false)!!.mergeJob)
+        val unnamed = buildJsonObject {
+            put("integratingCount", 1); put("queuedCount", 0)
+            putJsonObject("inFlight") { put("taskTitle", null as String?); put("state", "RUNNING"); put("startedAt", iso(66)); put("heartbeatAt", iso(0)) }
+        }
+        assertFalse(ProjectPage.landingCard(unnamed, now, now, false)!!.mergeJob)
+    }
+
     /** The branch is the job's own landing, short — absent when the job is not one of the project's landings at all, and when the
      * landing names no ref. */
     @Test fun theBranchIsTheJobsOwnLandingAndAbsentWhenNothingNamesIt() {

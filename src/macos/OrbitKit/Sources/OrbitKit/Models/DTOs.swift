@@ -529,6 +529,17 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
     /// from an older server, which doesn't send the key. The list groups by it
     /// (`SessionFolderGrouping`).
     public let folderId: String?
+    /// What drives this session (contract §2.9 LS6): `LANDING` is platform work with no engine,
+    /// drawn as its own page rather than as a conversation. Absent from an older server, and nil
+    /// on every row that predates the column.
+    public let sessionKind: String?
+    /// What a LANDING row says about its subject, as `GET /sessions?projectId=&includeLanding=1`
+    /// carries it (`subject`, `state`, `settledAs`, `settledAt`). The same key carries the whole
+    /// landing view on `GET /sessions/:id`; the tolerant decode reads both. Nil everywhere else.
+    public let landing: SessionLandingView?
+
+    /// Whether this row is a landing session (platform work), not a conversation.
+    public var isLanding: Bool { sessionKind == "LANDING" }
 
     public var effectiveRunStatus: RunStatus { runStatus ?? status }
     public var effectiveRunState: SessionRunState {
@@ -660,6 +671,10 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         agent = try values.decodeIfPresent(SessionAgentRef.self, forKey: .agent)
         tags = try values.decodeIfPresent([SessionTag].self, forKey: .tags)
         folderId = try values.decodeIfPresent(String.self, forKey: .folderId)
+        // The landing's two fields are optional in both directions: an older server leaves them
+        // out, and a shape this build cannot read is that same absence rather than a failed read.
+        sessionKind = try? values.decodeIfPresent(String.self, forKey: .sessionKind)
+        landing = try? values.decodeIfPresent(SessionLandingView.self, forKey: .landing)
     }
 
     public init(id: String, title: String?, status: RunStatus, runStatus: RunStatus? = nil,
@@ -700,7 +715,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
                 folderId: String? = nil,
                 confirmationUnderReview: ConfirmationUnderReview? = nil,
                 projectMembership: SessionProjectMembership? = nil,
-                projectIntegrationRef: String? = nil) {
+                projectIntegrationRef: String? = nil,
+                sessionKind: String? = nil, landing: SessionLandingView? = nil) {
         self.id = id
         self.title = title
         self.status = status
@@ -770,6 +786,8 @@ public struct Session: Codable, Equatable, Sendable, Identifiable {
         self.currentTurnStartedAt = currentTurnStartedAt
         self.tags = tags
         self.folderId = folderId
+        self.sessionKind = sessionKind
+        self.landing = landing
     }
 }
 
@@ -1347,6 +1365,45 @@ public struct SessionChangedFile: Codable, Equatable, Sendable, Identifiable {
 /// remembered default merge target (set when the user last switched targets in the merge dropdown;
 /// nil = the runner's auto-detected default). Distinct from `SessionAgentRef` (list rows), which
 /// carries name/model instead of the merge target.
+/// The landing a code session's work fed (§2.9 LS1's derived `sourceLanding`): the label at the
+/// source session's own bottom opens it. Absent from a session that produced no landing work, and
+/// from a server that predates the field.
+public struct SessionSourceLanding: Codable, Equatable, Sendable {
+    /// The LANDING session's id, available before its row exists (it is pre-generated).
+    public let landingSessionId: String
+    /// `TASK` or `PROMOTION`.
+    public let subject: String
+    /// The newest attempt's job state.
+    public let state: String
+    /// The step the newest attempt last reported, or the one it stopped at.
+    public let phase: String?
+    /// `LANDED | ALREADY_LANDED | NOTHING_TO_LAND | MERGED | HANDLED | DECLINED | CANCELLED |
+    /// DELETED`, or nil while the subject is open.
+    public let settledAs: String?
+    /// The branch the attempt writes, as the job froze it.
+    public let targetRef: String
+
+    public init(landingSessionId: String, subject: String = "", state: String = "",
+                phase: String? = nil, settledAs: String? = nil, targetRef: String = "") {
+        self.landingSessionId = landingSessionId
+        self.subject = subject
+        self.state = state
+        self.phase = phase
+        self.settledAs = settledAs
+        self.targetRef = targetRef
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        landingSessionId = try c.decodeIfPresent(String.self, forKey: .landingSessionId) ?? ""
+        subject = try c.decodeIfPresent(String.self, forKey: .subject) ?? ""
+        state = try c.decodeIfPresent(String.self, forKey: .state) ?? ""
+        phase = try? c.decodeIfPresent(String.self, forKey: .phase)
+        settledAs = try? c.decodeIfPresent(String.self, forKey: .settledAs)
+        targetRef = try c.decodeIfPresent(String.self, forKey: .targetRef) ?? ""
+    }
+}
+
 public struct SessionDetailAgent: Codable, Equatable, Sendable {
     public let id: String
     public let defaultMergeTarget: String?
@@ -1462,6 +1519,19 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
     /// The routing decision this task run was planned with (docs/model-routing-design.md §7.5) —
     /// what marks the composer's model chip ✦. Nil on any other session.
     public let route: TaskRunRoute?
+    /// What drives this session (contract §2.9 LS6): `LANDING` is platform work with no engine,
+    /// drawn by the landing page instead of a transcript. Absent from an older server.
+    public let sessionKind: String?
+    /// A LANDING session's subject view (§2.9 LS1/LS6), present on a landing and on the
+    /// pre-generated id before its row exists. The same key carries the list row's summary; the
+    /// tolerant decode reads both, and nil is every other session.
+    public let landing: SessionLandingView?
+    /// The landing a code session's work fed (§2.9 LS1's derived field), or nil for a conversation
+    /// that produced no landing work.
+    public let sourceLanding: SessionSourceLanding?
+
+    /// Whether this detail is a landing session, which is what chooses its renderer.
+    public var isLanding: Bool { sessionKind == "LANDING" }
 
     public var effectiveRunStatus: RunStatus? { runStatus ?? status }
     public var effectiveRunState: SessionRunState? {
@@ -1514,6 +1584,10 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         retryAt = try values.decodeIfPresent(String.self, forKey: .retryAt)
         retryAttempts = try values.decodeIfPresent(Int.self, forKey: .retryAttempts)
         route = try values.decodeIfPresent(TaskRunRoute.self, forKey: .route)
+        sessionKind = try? values.decodeIfPresent(String.self, forKey: .sessionKind)
+        landing = try? values.decodeIfPresent(SessionLandingView.self, forKey: .landing)
+        sourceLanding = try? values.decodeIfPresent(SessionSourceLanding.self,
+                                                    forKey: .sourceLanding)
     }
 
     public init(id: String, status: RunStatus? = nil, runStatus: RunStatus? = nil,
@@ -1535,7 +1609,9 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
                 commitStatus: String? = nil, commitError: String? = nil,
                 commitResultMessage: String? = nil,
                 agent: SessionDetailAgent? = nil, shareToken: String? = nil,
-                retryAt: String? = nil, retryAttempts: Int? = nil, route: TaskRunRoute? = nil) {
+                retryAt: String? = nil, retryAttempts: Int? = nil, route: TaskRunRoute? = nil,
+                sessionKind: String? = nil, landing: SessionLandingView? = nil,
+                sourceLanding: SessionSourceLanding? = nil) {
         self.id = id
         self.status = status
         self.runStatus = runStatus
@@ -1572,6 +1648,9 @@ public struct SessionDetail: Codable, Equatable, Sendable, Identifiable {
         self.retryAt = retryAt
         self.retryAttempts = retryAttempts
         self.route = route
+        self.sessionKind = sessionKind
+        self.landing = landing
+        self.sourceLanding = sourceLanding
     }
 }
 

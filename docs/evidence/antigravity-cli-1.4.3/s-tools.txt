@@ -1,0 +1,7 @@
+case tools
+mock:tool run_command {"CommandLine":"echo out-line; exit 3","WaitMsBeforeAsync":5000,"toolSummary":"Run it"}
+mock:tool run_command {"CommandLine":"echo fine","WaitMsBeforeAsync":5000,"toolSummary":"Run fine"}
+mock:tool view_file|read_file {"Path":"@WS@/seed.txt","AbsolutePath":"@WS@/seed.txt"}
+mock:tool write_to_file|write_file {"Path":"@WS@/made.txt","Content":"made\n","TargetFile":"@WS@/made.txt","CodeContent":"made\n"}
+mock:tool replace_file_content|edit_file {"Path":"@WS@/made.txt","Target":"made","Replacement":"edited","TargetFile":"@WS@/made.txt","TargetContent":"made","ReplacementContent":"edited"}
+mock:text done

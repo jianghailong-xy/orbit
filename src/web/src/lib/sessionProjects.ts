@@ -316,10 +316,12 @@ export interface LandingGroupRow {
 export interface LandingGroup {
   waiting: LandingGroupRow[];
   settled: LandingGroupRow[];
-  /** Everything older than the window, folded into one row; null when there is none. */
+  /** Everything older than the window, folded into one row; null when there is none. Both counts
+   *  are 0 when every older one settled some other way (handled, cancelled, declined, deleted…):
+   *  the fold is still there, and reads a bare `Earlier`. */
   earlier: { landed: number; nothing: number } | null;
-  /** Those same older landings, newest first — what the fold opens to. Empty when it is shut for
-   *  good, which is the same case `earlier` is null in. */
+  /** Those same older landings, newest first — what the fold opens to. Empty exactly when
+   *  `earlier` is null. */
   older: LandingGroupRow[];
 }
 
@@ -417,6 +419,8 @@ export function landingGroup(
   waiting.sort((a, b) => a.at - b.at);
   settled.sort((a, b) => b.at - a.at);
   before.sort((a, b) => b.at - a.at);
+  // The fold is there whenever something older is, and opens to all of it; it counts only what
+  // landed and what had nothing to land, so with both at 0 it reads a bare `Earlier`.
   return {
     waiting: waiting.map(({ at: _at, ...row }) => row),
     settled: settled.map(({ at: _at, ...row }) => row),
@@ -439,10 +443,14 @@ export function landingItemReason(kind: string): string | null {
   }
 }
 
-/** `Earlier · 31 landed · 3 nothing to land` — the fold's one line. */
+/** `Earlier · 31 landed · 3 nothing to land` — the fold's one line. A segment whose count is 0 is
+ *  left out: `Earlier · 2 landed`, and with both at 0 the line is the bare `Earlier`. */
 export function landingEarlierLine(earlier: { landed: number; nothing: number }): string {
-  return `${SESSION_LANDINGS_COPY.EARLIER} · ${earlier.landed} ${SESSION_LANDINGS_COPY.LANDED}`
-    + ` · ${earlier.nothing} ${SESSION_LANDINGS_COPY.NOTHING_TO_LAND}`;
+  return [
+    SESSION_LANDINGS_COPY.EARLIER,
+    earlier.landed > 0 ? `${earlier.landed} ${SESSION_LANDINGS_COPY.LANDED}` : null,
+    earlier.nothing > 0 ? `${earlier.nothing} ${SESSION_LANDINGS_COPY.NOTHING_TO_LAND}` : null,
+  ].filter(Boolean).join(' · ');
 }
 
 const instant = (at: string | null | undefined): number => {

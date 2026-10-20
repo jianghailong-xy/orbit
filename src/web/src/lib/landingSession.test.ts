@@ -9,7 +9,9 @@ import type {
 import {
   LANDING_PAGE_COPY,
   landingAttemptCard,
+  landingCheckPassed,
   landingDuration,
+  landingEntryOk,
   landingFooter,
   landingGates,
   landingHeaderSub,
@@ -156,24 +158,26 @@ describe('§2.7a: the landing page’s polling cadence', () => {
 });
 
 describe('the status card: five livenesses, three job kinds', () => {
-  const kinds: Array<[SessionLandingAttempt['kind'], string]> = [
-    ['LAND_TASK', 'Landing'],
-    ['CHECK_PROMOTION', 'Merge check'],
-    ['LAND_PROMOTION', 'Merge to main'],
+  // §7.2 V6: the M is the kind's own most rounds per claim — three for a task's landing, none for
+  // the two kinds with one round — whatever the check's count (3 in this fixture) says.
+  const kinds: Array<[SessionLandingAttempt['kind'], string, string]> = [
+    ['LAND_TASK', 'Landing', 'round 1 of 3'],
+    ['CHECK_PROMOTION', 'Merge check', 'round 1'],
+    ['LAND_PROMOTION', 'Merge to main', 'round 1'],
   ];
 
-  it.each(kinds)('draws %s’s LIVE head and V6 rows', (kind, word) => {
+  it.each(kinds)('draws %s’s LIVE head and V6 rows', (kind, word, round) => {
     const card = landingAttemptCard(landing({ currentAttempt: attempt({ kind }) }), NOW, { updatedAt: NOW })!;
     expect(card.word).toBe(word);
     expect(card.state).toBe('checking');
     expect(card.right).toBe('1m 50s of 60m');
-    expect(card.detail).toBe('checking · output 6s ago · claim 1 · round 1 of 3 · updated just now');
+    expect(card.detail).toBe(`checking · output 6s ago · claim 1 · ${round} · updated just now`);
     expect(card.budget).toBe('Merge check 1m 50s of 60m');
     expect(card.live).toBe('Output 6s ago · Updated just now');
     expect(card.running).toBe(true);
   });
 
-  it.each(kinds)('QUIET for %s: the heartbeat is fresh and the output is not', (kind, word) => {
+  it.each(kinds)('QUIET for %s: the heartbeat is fresh and the output is not', (kind, word, round) => {
     const card = landingAttemptCard(
       landing({ currentAttempt: attempt({ kind, liveness: 'QUIET', outputMovedAt: at(14, 44, 30) }) }),
       NOW,
@@ -181,13 +185,13 @@ describe('the status card: five livenesses, three job kinds', () => {
     )!;
     expect(card.word).toBe(word);
     expect(card.detail).toBe(
-      'checking · no output for 14m · within its 60m budget · claim 1 · round 1 of 3 · updated just now',
+      `checking · no output for 14m · within its 60m budget · claim 1 · ${round} · updated just now`,
     );
     expect(card.live).toBe('No output for 14m · within its 60m budget · Updated just now');
     expect(card.running).toBe(true);
   });
 
-  it.each(kinds)('SILENT for %s: the clock freezes at the runner’s last word', (kind, word) => {
+  it.each(kinds)('SILENT for %s: the clock freezes at the runner’s last word', (kind, word, round) => {
     const card = landingAttemptCard(
       landing({
         currentAttempt: attempt({
@@ -202,12 +206,12 @@ describe('the status card: five livenesses, three job kinds', () => {
       { updatedAt: NOW },
     )!;
     expect(card.word).toBe(word);
-    expect(card.detail).toBe('checking · no word from runner wikova for 4m · claim 1 · round 1 of 3');
+    expect(card.detail).toBe(`checking · no word from runner wikova for 4m · claim 1 · ${round}`);
     expect(card.live).toBe('No word from runner wikova for 4m');
     expect(card.right).toBe('5m 0s of 60m');
   });
 
-  it.each(kinds)('LEGACY for %s: reports only between steps, and no silence is inferred', (kind, word) => {
+  it.each(kinds)('LEGACY for %s: reports only between steps, and no silence is inferred', (kind, word, round) => {
     const card = landingAttemptCard(
       landing({
         currentAttempt: attempt({ kind, liveness: 'LEGACY', heartbeatAt: at(14, 46, 30), progressProtocol: null }),
@@ -217,7 +221,7 @@ describe('the status card: five livenesses, three job kinds', () => {
     )!;
     expect(card.word).toBe(word);
     expect(card.detail).toBe(
-      'checking · reports only between steps · claim 1 · round 1 of 3 · updated 12m ago',
+      `checking · reports only between steps · claim 1 · ${round} · updated 12m ago`,
     );
     expect(card.live).toBe('Reports only between steps · Updated 12m ago');
   });
@@ -236,6 +240,18 @@ describe('the status card: five livenesses, three job kinds', () => {
     expect(card.rightIsClock).toBe(false);
     expect(card.detail).toBe('No report for 23m · limit 10m');
     expect(card.running).toBe(false);
+  });
+
+  it('a task’s landing is “of 3” whatever its check’s count, and with no check in flight', () => {
+    const detail = (over: Partial<SessionLandingAttempt>, now = NOW) =>
+      landingAttemptCard(landing({ currentAttempt: attempt(over) }), now, { updatedAt: now })!.detail;
+    expect(detail({ round: 2, check: { name: 'TASK_ACCEPTANCE', index: 1, count: 1, budgetSeconds: 3_600, startedAt: STEP } }))
+      .toBe('checking · output 6s ago · claim 1 · round 2 of 3 · updated just now');
+    expect(detail({ phase: 'REBASE', check: null }))
+      .toBe('rebasing · output 6s ago · claim 1 · round 1 of 3 · updated just now');
+    // A merge with no check in flight still names no M.
+    expect(detail({ kind: 'LAND_PROMOTION', phase: 'PUSH', check: null }))
+      .toBe('pushing · output 6s ago · claim 1 · round 1 · updated just now');
   });
 
   it('names the takeover and the first start the timeline still carries', () => {
@@ -345,6 +361,13 @@ describe('J12: what a timed-out attempt can say about the push', () => {
     const view = landing({ currentAttempt: timed });
     expect(landingTimeoutLine(view, timed))
       .toBe(`Runner wikova took it at ${landingClockTime(STEP)} · stopped at rebasing · claim 1 · round 1 of 3`);
+    // The M is the kind's, not the check's: a task's landing with one check is still "of 3", and a
+    // merge into main, which has one round per claim, names none.
+    const one = { ...timed, check: { name: 'TASK_ACCEPTANCE' as const, index: 1, count: 1, budgetSeconds: 3_600, startedAt: STEP } };
+    expect(landingTimeoutLine(landing({ currentAttempt: one }), one)).toMatch(/ · claim 1 · round 1 of 3$/);
+    const merge = { ...timed, kind: 'LAND_PROMOTION' as const, phase: 'PUSH' as const };
+    expect(landingTimeoutLine(landing({ subject: 'PROMOTION', currentAttempt: merge }), merge))
+      .toBe(`Runner wikova took it at ${landingClockTime(STEP)} · stopped at pushing · claim 1 · round 1`);
   });
 });
 
@@ -539,5 +562,62 @@ describe('the settled round is the outcome', () => {
   it('spells a duration in minutes and seconds at every length', () => {
     expect(landingDuration(17 * 60_000 + 41_000)).toBe('17m 41s');
     expect(landingDuration(3_600_000 + 5 * 60_000)).toBe('1h 05m');
+  });
+});
+
+describe('the timeline’s ✓ reads the line’s fields, not its sentence', () => {
+  const finished = (data: Record<string, unknown> | null, text = 'Merge check passed · 17m 02s') => entry({
+    kind: 'CHECK_FINISHED',
+    check: { name: 'MERGE_CHECK', index: 1 },
+    phase: 'CHECK',
+    data,
+    text,
+  });
+  const result = (state: string | null, text: string, kind: 'RESULT' | 'RESULT_FALLBACK' = 'RESULT') => entry({
+    kind,
+    data: state == null ? null : { state },
+    text,
+  });
+
+  it('a check passed when it exited with the code it expected and did not time out', () => {
+    expect(landingCheckPassed(finished({ exitCode: 0, expectedExitCode: 0, timedOut: false }))).toBe(true);
+    expect(landingCheckPassed(finished({ exitCode: 3, expectedExitCode: 3, timedOut: false }))).toBe(true);
+    expect(landingCheckPassed(finished({ exitCode: 1, expectedExitCode: 0, timedOut: false }))).toBe(false);
+    expect(landingCheckPassed(finished({ exitCode: 0, expectedExitCode: 0, timedOut: true }))).toBe(false);
+    // No exit code is not a pass, and neither is a line with no fields at all.
+    expect(landingCheckPassed(finished({ exitCode: null, expectedExitCode: 0, timedOut: false }))).toBe(false);
+    expect(landingCheckPassed(finished(null))).toBe(false);
+    expect(landingCheckPassed(finished({}))).toBe(false);
+  });
+
+  it('the wording changed, the ✓ did not', () => {
+    const green = finished({ exitCode: 0, expectedExitCode: 0, timedOut: false }, 'Merge check green · 17m 02s');
+    expect(landingCheckPassed(green)).toBe(true);
+    expect(landingEntryOk(green)).toBe(true);
+    const saysPassed = finished({ exitCode: 1, expectedExitCode: 0, timedOut: false }, 'Merge check passed · 3m 52s');
+    expect(landingCheckPassed(saysPassed)).toBe(false);
+    expect(landingEntryOk(saysPassed)).toBe(false);
+    expect(landingEntryOk(result('LANDED', 'Put on main · 8ed0ea7'))).toBe(true);
+    expect(landingEntryOk(result('ALREADY_LANDED', 'Was on main · 8ed0ea7'))).toBe(true);
+    expect(landingEntryOk(result('NOTHING_TO_LAND', 'No commits to push'))).toBe(true);
+    expect(landingEntryOk(result('NOTHING_TO_LAND', 'Nothing to push · the branch carried no commits', 'RESULT_FALLBACK')))
+      .toBe(true);
+  });
+
+  it('every other result is ✗, whatever a branch name in it says', () => {
+    expect(landingEntryOk(result('READY', 'Ready to merge into fix/passed-x'))).toBe(false);
+    expect(landingEntryOk(result('CONFLICT', 'Could not sync main into fix/passed-x · merge conflict'))).toBe(false);
+    expect(landingEntryOk(result('CHECK_FAILED', 'Check failed · nothing was pushed'))).toBe(false);
+    expect(landingEntryOk(result('ERROR', 'Stopped with an error · PUSH_FAILED'))).toBe(false);
+    expect(landingEntryOk(result('CANCELLED', 'Stopped · not landed'))).toBe(false);
+    expect(landingEntryOk(result('SUPERSEDED', 'Superseded · a newer attempt asks the same question'))).toBe(false);
+    expect(landingEntryOk(result(null, 'Landed on main · 8ed0ea7'))).toBe(false);
+    expect(landingEntryOk(result(null, 'Landed on main · 8ed0ea7', 'RESULT_FALLBACK'))).toBe(false);
+  });
+
+  it('no other kind of line is a check or a result', () => {
+    expect(landingCheckPassed(entry({ kind: 'RESULT', data: { exitCode: 0, expectedExitCode: 0, timedOut: false } })))
+      .toBe(false);
+    expect(landingEntryOk(entry({ kind: 'CLAIMED', data: { state: 'LANDED' }, text: 'Landed on main' }))).toBe(false);
   });
 });

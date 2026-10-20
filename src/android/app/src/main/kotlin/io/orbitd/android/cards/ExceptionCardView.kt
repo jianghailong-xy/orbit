@@ -86,6 +86,8 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
                         else submit(verb, CardInput(triggerId = if (verb == CardVerb.RETRY_TASK) UUID.randomUUID().toString() else null))
                     })
                     press.action == "OPEN_TASK_SESSION" -> ExceptionCards.openTaskSessionLink(row)?.let { link -> { open(link) } }
+                    // §2.9 LS6's reading door: the landing this item is about, opened where the reader is.
+                    press.action == "OPEN_LANDING" -> row.text("landingSessionId")?.takeIf { it.isNotEmpty() }?.let { id -> { open("orbit-session:$id") } }
                     press.action == "OPEN_COORDINATOR" -> row.obj("delivery")?.text("sessionId")?.let { id -> { open("orbit-session:$id") } }
                     press.action == "REVIEW" -> row.text("promotionId")?.let { id -> { review(id) } }
                     else -> null
@@ -94,7 +96,8 @@ internal fun ExceptionCard(card: InteractionCard, fresh: Boolean, result: CardAc
                 val tag = "${card.key}:${verb?.name ?: press.action}"
                 if (pressed != null) Door(tag, press.consequence) {
                     // The two ways onto the work and Review only look: they stay pressable while the card is being checked.
-                    Weighted(press.tier, press.label, if (verb == null) true else enabled, tag, pressed)
+                    // Abandon ends the attempt and is drawn in the alarm's ink, as every end is (iOS `.red` on the same door).
+                    Weighted(press.tier, press.label, if (verb == null) true else enabled, tag, danger = press.action == "ABANDON", onClick = pressed)
                 }
             }
             CardDiscussion.context(card)?.let { context ->
@@ -140,9 +143,10 @@ private fun Door(tag: String, consequence: String, button: @Composable () -> Uni
 
 /** A press in the weight the card gave it: the step it asks for filled, the other way to take it outlined, the rest a quiet link. */
 @Composable
-private fun Weighted(tier: ExceptionCards.PressTier, label: String, enabled: Boolean, tag: String, onClick: () -> Unit) {
+private fun Weighted(tier: ExceptionCards.PressTier, label: String, enabled: Boolean, tag: String, danger: Boolean = false, onClick: () -> Unit) {
     when (tier) {
-        ExceptionCards.PressTier.PRIMARY -> Button(onClick, Modifier.heightIn(min = 48.dp).testTag(tag), enabled = enabled) { Text(label) }
+        ExceptionCards.PressTier.PRIMARY -> Button(onClick, Modifier.heightIn(min = 48.dp).testTag(tag), enabled = enabled,
+            colors = if (danger) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) else ButtonDefaults.buttonColors()) { Text(label) }
         ExceptionCards.PressTier.SECONDARY -> OutlinedButton(onClick, Modifier.heightIn(min = 48.dp).testTag(tag), enabled = enabled) { Text(label) }
         ExceptionCards.PressTier.LINK -> TextButton(onClick, Modifier.testTag(tag), enabled = enabled,
             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)) {

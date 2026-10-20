@@ -124,6 +124,27 @@ func TestLatestLoginURLTakesTheLast(t *testing.T) {
 	}
 }
 
+const realLoginURL = "https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference+user%3Asessions%3Aclaude_code+user%3Amcp_servers+user%3Afile_upload+user%3Aplugins&code_challenge=m09h4x5GB4ZVgwCzpyDDcYhYlL1dHMhJdtfbsh_SAHg&code_challenge_method=S256&state=TfMnbWeC-gnq1qDovtlxarkcYLmrhINIdQoGp3OVZ4s"
+
+// Verbatim shape of what `claude auth login` writes to a pty since it stopped drawing a TUI (v2.1.304,
+// TERM=xterm-256color): one OSC 8 hyperlink whose visible label is the whole URL again, coloured —
+// ESC ] 8 ; ; <url> BEL ESC [ 94 m <url> ESC [ 39 m ESC ] 8 ; ; BEL. With no TERM the colour is left
+// out and the label runs straight into the ESC ] 8 ; ; that closes the link.
+const realColouredLoginOutput = "Opening browser to sign in…\r\n" +
+	"If the browser didn't open, visit: \x1b]8;;" + realLoginURL + "\x07\x1b[94m" + realLoginURL + "\x1b[39m\x1b]8;;\x07\r\n" +
+	"Paste code here if prompted > "
+
+// The label is the last URL printed, so it is the one published, and it ends where the label does.
+// Taking the escapes after it along handed the user a link ending in "[39m]8;;".
+func TestLatestLoginURLEndsWithTheLabel(t *testing.T) {
+	noColour := strings.NewReplacer("\x1b[94m", "", "\x1b[39m", "").Replace(realColouredLoginOutput)
+	for _, out := range []string{realColouredLoginOutput, noColour} {
+		if got := latestLoginURL(out); got != realLoginURL {
+			t.Errorf("latestLoginURL = %q, want %q", got, realLoginURL)
+		}
+	}
+}
+
 // Rejection detection keys on the CLI's actual behaviour, captured from a real bad paste:
 //
 //	Paste code here if prompted > Invalid code. Please make sure the full code was copied.
