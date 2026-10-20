@@ -293,6 +293,7 @@ final class LandingCopyParityTests: XCTestCase {
                             ("CANCEL_REQUESTED", PromotionCards.cancelRequestedLabel),
                             ("STOP_REQUESTED", PromotionCards.stopRequestedClause),
                             ("RERUN_THE_CHECK", PromotionCards.rerunTheCheck),
+                            ("RERUN_LANDING_CHECK_REASON", LandingPageCopy.rerunLandingCheckReason),
                             ("ABANDON", PromotionCards.abandon)] {
             assertSays(merge, "export const \(key) = '\(word)';", in: Self.projectMerge)
         }

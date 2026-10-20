@@ -99,6 +99,9 @@ public enum LandingPageCopy {
     public static let abandon = "Abandon"
     public static let retry = "Retry"
     public static let rerunTheCheck = "Re-run the check"
+    /// What this page's Re-run the check records as its reason (web's `RERUN_LANDING_CHECK_REASON`): the owner
+    /// route takes one (`RetryIntegrationDto.reason`), and the sentence names the page the door was pressed on.
+    public static let rerunLandingCheckReason = "Re-run the timed-out check from the landing page."
     public static let beforePushOnly = "Before the push only · nothing pushed yet"
     public static let cancelBeforePush = "Before the push only · stops at the runner’s next report"
     public static let endsNothingPushed = "Ends this attempt · nothing was pushed"

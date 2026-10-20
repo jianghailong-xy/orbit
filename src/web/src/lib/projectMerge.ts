@@ -71,6 +71,10 @@ export const RERUN_THE_CHECK = 'Re-run the check';
 export const ABANDON = 'Abandon';
 /** What the re-check records as its reason: the card's own door, not a decision made elsewhere. */
 export const RERUN_CHECK_REASON = 'Re-run the timed-out check from the merge card.';
+/** The landing page's own Re-run the check (§2.9 LS6): the same door and the same record, naming the page it
+ *  was pressed on. The owner route takes a reason (`RetryIntegrationDto.reason`), so a page that pressed it
+ *  without one was refused. */
+export const RERUN_LANDING_CHECK_REASON = 'Re-run the timed-out check from the landing page.';
 
 /** The owner's abandon of one running job (J-T10): it ends, and nothing is queued again. */
 export function abandonJob(projectId: string, jobId: string): Promise<unknown> {
