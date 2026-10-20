@@ -830,11 +830,13 @@ public final class APIClient: @unchecked Sendable {
     }
 
     /// Re-run a timed-out merge check on the same candidate (the landing page's Re-run the check,
-    /// revision 16): no new candidate, and no reason travels — the page presses the door the web
-    /// presses.
+    /// revision 16): no new candidate. The owner route takes a reason (`RetryIntegrationDto.reason`,
+    /// at least one character), so the page sends the sentence it records — the same one web and
+    /// Android send — naming the page the door was pressed on.
     public func rerunPromotionCheck(projectID: String, promotionID: String) async throws {
-        let _: JSONValue = try await postEmpty(
-            "projects/\(projectID)/promotions/\(promotionID)/integration/retry")
+        _ = try await postRaw(
+            "projects/\(projectID)/promotions/\(promotionID)/integration/retry",
+            body: ["reason": LandingPageCopy.rerunLandingCheckReason])
     }
 
     /// One page of a landing's check output (§2.2 J-T4, §2.9 LS2). Read only when a log is opened.

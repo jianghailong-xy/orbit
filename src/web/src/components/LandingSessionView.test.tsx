@@ -127,6 +127,8 @@ let logAnswer: () => Promise<unknown> = () => Promise.resolve({ jobId: 'job-1', 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 let opened: string | null = null;
+/** Every api() call the page made, with its options: the presses' bodies are what the owner routes read. */
+let calls: Array<{ path: string; options?: { method?: string; body?: unknown } }> = [];
 
 async function settle(): Promise<void> {
   for (let i = 0; i < 4; i += 1) {
@@ -182,11 +184,13 @@ beforeEach(() => {
   retryAnswer = () => Promise.resolve({});
   logAnswer = () => Promise.resolve({ jobId: 'job-1', entries: [], nextCursor: null });
   opened = null;
+  calls = [];
   vi.mocked(api).mockReset();
   vi.mocked(getSession).mockReset();
   vi.mocked(getSession).mockImplementation((() => sessionAnswer()) as never);
-  vi.mocked(api).mockImplementation(((path: string, options?: { method?: string }) => {
+  vi.mocked(api).mockImplementation(((path: string, options?: { method?: string; body?: unknown }) => {
     opened = path;
+    calls.push({ path, options });
     if (path === `/projects/${PROJECT}/integration`) return Promise.resolve(integration);
     if (path === `/projects/${PROJECT}/coordinator/status`) return Promise.resolve(coordinator);
     if (path === `/projects/${PROJECT}/promotions/current`) return Promise.resolve(currentPromotion);
@@ -445,6 +449,25 @@ describe('a timed-out landing', () => {
     expect(button('Re-run the check')).toBeTruthy();
     expect(button('Abandon')).toBeTruthy();
     expect(button('Retry')).toBeNull();
+  });
+
+  it('records a reason with Re-run the check, which the owner route requires', async () => {
+    view = landing({
+      subject: 'PROMOTION',
+      taskId: null,
+      promotionId: 'promo-1',
+      currentAttempt: attempt({
+        kind: 'CHECK_PROMOTION', phase: 'CHECK', liveness: 'LEASE_EXPIRED', timedOut: true,
+      }),
+    });
+    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    await click(button('Re-run the check'), 'Re-run the check');
+    // RetryIntegrationDto.reason is @MinLength(1): a bodyless press is refused before the queue sees it.
+    const press = calls.find((call) => call.path.endsWith('/promotions/promo-1/integration/retry'));
+    expect(press?.options).toEqual({
+      method: 'POST',
+      body: { reason: 'Re-run the timed-out check from the landing page.' },
+    });
   });
 });
 

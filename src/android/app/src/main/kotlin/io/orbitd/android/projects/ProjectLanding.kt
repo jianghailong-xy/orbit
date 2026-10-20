@@ -37,15 +37,18 @@ import kotlinx.coroutines.launch
  * the word, the live clock at the right of it, and one line under both with the state, the wait and the freshness. No chevron: the
  * whole row is the press wherever there is one. */
 @Composable
-internal fun ProjectLandingHead(title: String, head: LandingHead, running: Boolean, timedOut: Boolean, modifier: Modifier = Modifier) {
+internal fun ProjectLandingHead(title: String, head: LandingHead, running: Boolean, timedOut: Boolean, modifier: Modifier = Modifier,
+    detailLines: Int = 1, ok: Boolean = false) {
     val warning = LocalOrbitColors.current.needsYou
+    val success = LocalOrbitColors.current.success
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    // The landing row's ink: the accent while the job runs, grey while it waits its turn or the app cannot read the server, and the
-    // warning ink a runner the server stopped hearing from wears.
-    val ink = if (timedOut) warning else if (running) MaterialTheme.colorScheme.primary else muted
+    // The landing row's ink: the accent while the job runs, grey while it waits its turn or the app cannot read the server, the
+    // warning ink a runner the server stopped hearing from wears, and the success ink a settled landing that succeeded wears.
+    val ink = if (ok) success else if (timedOut) warning else if (running) MaterialTheme.colorScheme.primary else muted
     Row(modifier.fillMaxWidth().testTag("landing-head"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(11.dp)) {
         Box(Modifier.size(30.dp).background(ink.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
-            if (timedOut) Icon(painterResource(R.drawable.ic_warning), null, Modifier.size(16.dp).testTag("landing-head:timed-out"), tint = warning)
+            if (ok) Icon(painterResource(R.drawable.ic_check), null, Modifier.size(16.dp).testTag("landing-head:done"), tint = success)
+            else if (timedOut) Icon(painterResource(R.drawable.ic_warning), null, Modifier.size(16.dp).testTag("landing-head:timed-out"), tint = warning)
             else LandingRing(running, 15.dp)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -56,8 +59,8 @@ internal fun ProjectLandingHead(title: String, head: LandingHead, running: Boole
                 Text(head.right, Modifier.testTag("landing-head:right"), style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
                     fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1, softWrap = false)
             }
-            Text(head.detail, Modifier.testTag("landing-head:detail"), style = MaterialTheme.typography.bodyMedium, color = muted, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
+            Text(head.detail, Modifier.testTag("landing-head:detail"), style = MaterialTheme.typography.bodyMedium, color = muted,
+                maxLines = detailLines, overflow = TextOverflow.Ellipsis)
         }
     }
 }
