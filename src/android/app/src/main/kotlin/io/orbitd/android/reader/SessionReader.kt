@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
@@ -26,12 +27,14 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
+import io.orbitd.android.R
 import io.orbitd.android.composer.ProviderChoices
 import io.orbitd.android.composer.SessionComposer
 import io.orbitd.android.cards.CardFocus
@@ -510,9 +513,13 @@ internal fun SourceLandingChip(detail: JsonObject?, open: (String) -> Unit) {
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 4.dp)) {
-        Text("${label.text} ›", Modifier.background(ink.copy(alpha = 0.12f), RoundedCornerShape(50))
+        Row(Modifier.background(ink.copy(alpha = 0.12f), RoundedCornerShape(50))
             .clickable(role = Role.Button) { open(summary.landingSessionId) }.padding(horizontal = 10.dp, vertical = 5.dp)
-            .testTag("source-landing"), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1)
+            .testTag("source-landing"), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            // The moving state wears the ring (board 06 e; web's spinner Glyph, iOS's arrow.triangle.2.circlepath): static, and silent to TalkBack.
+            if (label.tone == "run") Icon(painterResource(R.drawable.ic_sync), null, Modifier.size(14.dp).testTag("source-landing:ring"), tint = ink)
+            Text("${label.text} ›", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1)
+        }
     }
 }
 

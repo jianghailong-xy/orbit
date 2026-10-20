@@ -195,14 +195,24 @@ abstract class LandingEntriesShots {
         shot("06-delivery-card")
     }
 
-    /** G · the source session's derived label (board 06 e): what the platform did with its work, opening the landing generation. */
+    /** G · the source session's derived label (board 06 e): what the platform did with its work, opening the landing generation. Only
+     *  the moving state wears the ring; a settled label and a stopped one draw none. */
     @Test fun theSourceSessionsLandingLabel() {
-        val detail = buildJsonObject { putJsonObject("sourceLanding") {
-            put("landingSessionId", landing); put("subject", "TASK"); put("state", "RUNNING"); put("phase", "CHECK")
-            put("settledAs", JsonNull); put("targetRef", "refs/heads/project/launch") } }
-        show { Column(Modifier.fillMaxWidth().padding(vertical = 12.dp)) { SourceLandingChip(detail) {} } }
-        compose.onNodeWithTag("source-landing", useUnmergedTree = true).assertTextEquals("Landing · checking ›")
+        fun detail(state: String, phase: String? = null, settledAs: String? = null) = buildJsonObject { putJsonObject("sourceLanding") {
+            put("landingSessionId", landing); put("subject", "TASK"); put("state", state); put("phase", phase)
+            put("settledAs", settledAs); put("targetRef", "refs/heads/project/launch") } }
+        fun chip(state: String, phase: String? = null, settledAs: String? = null) =
+            show { Column(Modifier.fillMaxWidth().padding(vertical = 12.dp)) { SourceLandingChip(detail(state, phase, settledAs)) {} } }
+        chip("RUNNING", phase = "CHECK")
+        compose.onNodeWithTag("source-landing").assertTextEquals("Landing · checking ›")
+        compose.onNodeWithTag("source-landing:ring", useUnmergedTree = true).assertExists()
         shot("07-source-label")
+        chip("SETTLED", settledAs = "LANDED")
+        compose.onNodeWithTag("source-landing").assertTextEquals("On project/launch ✓ ›")
+        compose.onNodeWithTag("source-landing:ring", useUnmergedTree = true).assertDoesNotExist()
+        chip("CHECK_FAILED")
+        compose.onNodeWithTag("source-landing").assertTextEquals("Landing · checks failed ›")
+        compose.onNodeWithTag("source-landing:ring", useUnmergedTree = true).assertDoesNotExist()
     }
 
     /** H · the Landings group (board 04 c1): waiting and settled rows under the Coordinator, the older ones folded. */

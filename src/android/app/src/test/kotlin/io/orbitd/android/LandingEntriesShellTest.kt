@@ -258,7 +258,8 @@ class LandingEntriesShellTest {
             "targetRef":"refs/heads/project/launch"}"""
         signIn(); open("orbit-session:${ProjectShell.WORKER}")
         await { exists(hasTestTag("source-landing")) }
-        compose.onNodeWithTag("source-landing", useUnmergedTree = true).assertTextEquals("Landing · checking ›").performClick()
+        compose.onNodeWithTag("source-landing:ring", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("source-landing").assertTextEquals("Landing · checking ›").performClick()
         await { exists(hasTestTag("landing-page")) }
     }
 
