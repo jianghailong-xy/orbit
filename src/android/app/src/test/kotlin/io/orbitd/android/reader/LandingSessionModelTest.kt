@@ -315,9 +315,9 @@ class LandingSessionModelTest {
         assertEquals(1, sections.sections[0].entries[1].data?.number("exitCode"))
         assertFalse(LandingSessionModel.checkPassed(sections.sections[0].entries[1]))
         assertEquals("LANDED", sections.sections[1].entries[0].data?.text("state"))
-        assertTrue(LandingSessionModel.entryOk(sections.sections[1].entries[0]))
+        assertTrue(LandingSessionModel.entryOk(sections.sections[1].entries[0], sections.sections[1].kind))
         assertNull(sections.sections[1].entries[1].data)
-        assertFalse(LandingSessionModel.entryOk(sections.sections[1].entries[1]))
+        assertFalse(LandingSessionModel.entryOk(sections.sections[1].entries[1], sections.sections[1].kind))
         assertEquals("Filed fix-1", sections.facts.single().text)
         assertTrue(sections.truncated)
         assertEquals("not landed · CHECK_FAILED", LandingSessionModel.sectionState("CHECK_FAILED"))
@@ -354,30 +354,46 @@ class LandingSessionModelTest {
     @Test fun theWordingChangedTheCheckmarkDidNot() {
         val green = finished("""{"exitCode":0,"expectedExitCode":0,"timedOut":false}""", "Merge check green · 17m 02s")
         assertTrue(LandingSessionModel.checkPassed(green))
-        assertTrue(LandingSessionModel.entryOk(green))
+        assertTrue(LandingSessionModel.entryOk(green, "LAND_TASK"))
         val saysPassed = finished("""{"exitCode":1,"expectedExitCode":0,"timedOut":false}""", "Merge check passed · 3m 52s")
         assertFalse(LandingSessionModel.checkPassed(saysPassed))
-        assertFalse(LandingSessionModel.entryOk(saysPassed))
-        assertTrue(LandingSessionModel.entryOk(result("LANDED", "Put on main · 8ed0ea7")))
-        assertTrue(LandingSessionModel.entryOk(result("ALREADY_LANDED", "Was on main · 8ed0ea7")))
-        assertTrue(LandingSessionModel.entryOk(result("NOTHING_TO_LAND", "No commits to push")))
-        assertTrue(LandingSessionModel.entryOk(result("NOTHING_TO_LAND", "Nothing to push · the branch carried no commits", "RESULT_FALLBACK")))
+        assertFalse(LandingSessionModel.entryOk(saysPassed, "LAND_TASK"))
+        assertTrue(LandingSessionModel.entryOk(result("LANDED", "Put on main · 8ed0ea7"), "LAND_TASK"))
+        assertTrue(LandingSessionModel.entryOk(result("ALREADY_LANDED", "Was on main · 8ed0ea7"), "LAND_TASK"))
+        assertTrue(LandingSessionModel.entryOk(result("NOTHING_TO_LAND", "No commits to push"), "LAND_TASK"))
+        assertTrue(LandingSessionModel.entryOk(result("NOTHING_TO_LAND", "Nothing to push · the branch carried no commits", "RESULT_FALLBACK"),
+            "LAND_TASK"))
     }
 
     @Test fun everyOtherResultIsACrossWhateverABranchNameInItSays() {
-        assertFalse(LandingSessionModel.entryOk(result("READY", "Ready to merge into fix/passed-x")))
-        assertFalse(LandingSessionModel.entryOk(result("CONFLICT", "Could not sync main into fix/passed-x · merge conflict")))
-        assertFalse(LandingSessionModel.entryOk(result("CHECK_FAILED", "Check failed · nothing was pushed")))
-        assertFalse(LandingSessionModel.entryOk(result("ERROR", "Stopped with an error · PUSH_FAILED")))
-        assertFalse(LandingSessionModel.entryOk(result("CANCELLED", "Stopped · not landed")))
-        assertFalse(LandingSessionModel.entryOk(result("SUPERSEDED", "Superseded · a newer attempt asks the same question")))
-        assertFalse(LandingSessionModel.entryOk(result(null, "Landed on main · 8ed0ea7")))
-        assertFalse(LandingSessionModel.entryOk(result(null, "Landed on main · 8ed0ea7", "RESULT_FALLBACK")))
+        assertFalse(LandingSessionModel.entryOk(result("READY", "Ready to merge into fix/passed-x"), "LAND_TASK"))
+        assertFalse(LandingSessionModel.entryOk(result("CONFLICT", "Could not sync main into fix/passed-x · merge conflict"), "LAND_TASK"))
+        assertFalse(LandingSessionModel.entryOk(result("CHECK_FAILED", "Check failed · nothing was pushed"), "LAND_TASK"))
+        assertFalse(LandingSessionModel.entryOk(result("ERROR", "Stopped with an error · PUSH_FAILED"), "LAND_TASK"))
+        assertFalse(LandingSessionModel.entryOk(result("CANCELLED", "Stopped · not landed"), "LAND_TASK"))
+        assertFalse(LandingSessionModel.entryOk(result("SUPERSEDED", "Superseded · a newer attempt asks the same question"), "LAND_TASK"))
+        assertFalse(LandingSessionModel.entryOk(result(null, "Landed on main · 8ed0ea7"), "LAND_TASK"))
+        assertFalse(LandingSessionModel.entryOk(result(null, "Landed on main · 8ed0ea7", "RESULT_FALLBACK"), "LAND_TASK"))
+    }
+
+    /** The section's job kind decides beside the line's state, never the sentence: a merge check that ends READY passed, and a merge
+     *  to main that answers READY handed the candidate back to be checked again (M-T12, J-T13). The web and Swift pin the same cases. */
+    @Test fun aMergeCheckThatEndsReadyPassedAndAMergeThatAnswersReadyDidNot() {
+        assertTrue(LandingSessionModel.entryOk(result("READY", "Ready to merge into main"), "CHECK_PROMOTION"))
+        assertTrue(LandingSessionModel.entryOk(result("READY", "Ready to merge into main", "RESULT_FALLBACK"), "CHECK_PROMOTION"))
+        assertTrue(LandingSessionModel.entryOk(result("READY", "Checked · the merge is yours to make"), "CHECK_PROMOTION"))
+        assertFalse(LandingSessionModel.entryOk(result("READY", "Ready to merge into main"), "LAND_PROMOTION"))
+        assertFalse(LandingSessionModel.entryOk(result("READY", "Ready to merge into main"), "LAND_TASK"))
+        assertTrue(LandingSessionModel.entryOk(result("ALREADY_LANDED", "Already on main · 8ed0ea7"), "CHECK_PROMOTION"))
+        assertFalse(LandingSessionModel.entryOk(result("CHECK_FAILED", "Check failed · nothing was pushed"), "CHECK_PROMOTION"))
+        assertFalse(LandingSessionModel.entryOk(result("CONFLICT", "Could not merge · conflict"), "CHECK_PROMOTION"))
+        assertFalse(LandingSessionModel.entryOk(result(null, "Ready to merge into main"), "CHECK_PROMOTION"))
     }
 
     @Test fun noOtherKindOfLineIsACheckOrAResult() {
         assertFalse(LandingSessionModel.checkPassed(line("RESULT", "Merge check passed", """{"exitCode":0,"expectedExitCode":0,"timedOut":false}""")))
-        assertFalse(LandingSessionModel.entryOk(line("CLAIMED", "Landed on main", """{"state":"LANDED"}""")))
+        assertFalse(LandingSessionModel.entryOk(line("CLAIMED", "Landed on main", """{"state":"LANDED"}"""), "LAND_TASK"))
+        assertFalse(LandingSessionModel.entryOk(line("CLAIMED", "Ready", """{"state":"READY"}"""), "CHECK_PROMOTION"))
     }
 
     // MARK: the doors and the menu

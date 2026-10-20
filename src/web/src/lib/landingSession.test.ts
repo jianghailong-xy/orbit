@@ -593,31 +593,53 @@ describe('the timeline’s ✓ reads the line’s fields, not its sentence', () 
   it('the wording changed, the ✓ did not', () => {
     const green = finished({ exitCode: 0, expectedExitCode: 0, timedOut: false }, 'Merge check green · 17m 02s');
     expect(landingCheckPassed(green)).toBe(true);
-    expect(landingEntryOk(green)).toBe(true);
+    expect(landingEntryOk(green, 'LAND_TASK')).toBe(true);
     const saysPassed = finished({ exitCode: 1, expectedExitCode: 0, timedOut: false }, 'Merge check passed · 3m 52s');
     expect(landingCheckPassed(saysPassed)).toBe(false);
-    expect(landingEntryOk(saysPassed)).toBe(false);
-    expect(landingEntryOk(result('LANDED', 'Put on main · 8ed0ea7'))).toBe(true);
-    expect(landingEntryOk(result('ALREADY_LANDED', 'Was on main · 8ed0ea7'))).toBe(true);
-    expect(landingEntryOk(result('NOTHING_TO_LAND', 'No commits to push'))).toBe(true);
-    expect(landingEntryOk(result('NOTHING_TO_LAND', 'Nothing to push · the branch carried no commits', 'RESULT_FALLBACK')))
-      .toBe(true);
+    expect(landingEntryOk(saysPassed, 'LAND_TASK')).toBe(false);
+    expect(landingEntryOk(result('LANDED', 'Put on main · 8ed0ea7'), 'LAND_TASK')).toBe(true);
+    expect(landingEntryOk(result('ALREADY_LANDED', 'Was on main · 8ed0ea7'), 'LAND_TASK')).toBe(true);
+    expect(landingEntryOk(result('NOTHING_TO_LAND', 'No commits to push'), 'LAND_TASK')).toBe(true);
+    expect(landingEntryOk(
+      result('NOTHING_TO_LAND', 'Nothing to push · the branch carried no commits', 'RESULT_FALLBACK'), 'LAND_TASK',
+    )).toBe(true);
   });
 
   it('every other result is ✗, whatever a branch name in it says', () => {
-    expect(landingEntryOk(result('READY', 'Ready to merge into fix/passed-x'))).toBe(false);
-    expect(landingEntryOk(result('CONFLICT', 'Could not sync main into fix/passed-x · merge conflict'))).toBe(false);
-    expect(landingEntryOk(result('CHECK_FAILED', 'Check failed · nothing was pushed'))).toBe(false);
-    expect(landingEntryOk(result('ERROR', 'Stopped with an error · PUSH_FAILED'))).toBe(false);
-    expect(landingEntryOk(result('CANCELLED', 'Stopped · not landed'))).toBe(false);
-    expect(landingEntryOk(result('SUPERSEDED', 'Superseded · a newer attempt asks the same question'))).toBe(false);
-    expect(landingEntryOk(result(null, 'Landed on main · 8ed0ea7'))).toBe(false);
-    expect(landingEntryOk(result(null, 'Landed on main · 8ed0ea7', 'RESULT_FALLBACK'))).toBe(false);
+    expect(landingEntryOk(result('READY', 'Ready to merge into fix/passed-x'), 'LAND_TASK')).toBe(false);
+    expect(landingEntryOk(result('CONFLICT', 'Could not sync main into fix/passed-x · merge conflict'), 'LAND_TASK'))
+      .toBe(false);
+    expect(landingEntryOk(result('CHECK_FAILED', 'Check failed · nothing was pushed'), 'LAND_TASK')).toBe(false);
+    expect(landingEntryOk(result('ERROR', 'Stopped with an error · PUSH_FAILED'), 'LAND_TASK')).toBe(false);
+    expect(landingEntryOk(result('CANCELLED', 'Stopped · not landed'), 'LAND_TASK')).toBe(false);
+    expect(landingEntryOk(result('SUPERSEDED', 'Superseded · a newer attempt asks the same question'), 'LAND_TASK'))
+      .toBe(false);
+    expect(landingEntryOk(result(null, 'Landed on main · 8ed0ea7'), 'LAND_TASK')).toBe(false);
+    expect(landingEntryOk(result(null, 'Landed on main · 8ed0ea7', 'RESULT_FALLBACK'), 'LAND_TASK')).toBe(false);
+  });
+
+  it('a merge check that ends READY passed; a merge to main that answers READY merged nothing', () => {
+    // The section's job kind decides, beside the line's state: never the sentence.
+    expect(landingEntryOk(result('READY', 'Ready to merge into main'), 'CHECK_PROMOTION')).toBe(true);
+    expect(landingEntryOk(result('READY', 'Ready to merge into main', 'RESULT_FALLBACK'), 'CHECK_PROMOTION'))
+      .toBe(true);
+    expect(landingEntryOk(result('READY', 'Checked · the merge is yours to make'), 'CHECK_PROMOTION')).toBe(true);
+    // A merge to main that answers READY handed the candidate back to be checked again (M-T12, J-T13).
+    expect(landingEntryOk(result('READY', 'Ready to merge into main'), 'LAND_PROMOTION')).toBe(false);
+    expect(landingEntryOk(result('READY', 'Ready to merge into main'), 'LAND_TASK')).toBe(false);
+    // The merge check's other answers keep their marks.
+    expect(landingEntryOk(result('ALREADY_LANDED', 'Already on main · 8ed0ea7'), 'CHECK_PROMOTION')).toBe(true);
+    expect(landingEntryOk(result('CHECK_FAILED', 'Check failed · nothing was pushed'), 'CHECK_PROMOTION')).toBe(false);
+    expect(landingEntryOk(result('CONFLICT', 'Could not merge · conflict'), 'CHECK_PROMOTION')).toBe(false);
+    expect(landingEntryOk(result(null, 'Ready to merge into main'), 'CHECK_PROMOTION')).toBe(false);
   });
 
   it('no other kind of line is a check or a result', () => {
     expect(landingCheckPassed(entry({ kind: 'RESULT', data: { exitCode: 0, expectedExitCode: 0, timedOut: false } })))
       .toBe(false);
-    expect(landingEntryOk(entry({ kind: 'CLAIMED', data: { state: 'LANDED' }, text: 'Landed on main' }))).toBe(false);
+    expect(landingEntryOk(entry({ kind: 'CLAIMED', data: { state: 'LANDED' }, text: 'Landed on main' }), 'LAND_TASK'))
+      .toBe(false);
+    expect(landingEntryOk(entry({ kind: 'CLAIMED', data: { state: 'READY' }, text: 'Ready' }), 'CHECK_PROMOTION'))
+      .toBe(false);
   });
 });

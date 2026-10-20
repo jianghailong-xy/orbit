@@ -11,6 +11,7 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import type {
+  IntegrationJobKind,
   IntegrationTimelineEntry,
   ProjectIntegrationLogPage,
   SessionLandingView,
@@ -577,7 +578,7 @@ function LandingTimeline({
               ) : null}
             </div>
             {section.entries.map((entry, index) => {
-              const mark = entryGlyph(entry, section.entries, index);
+              const mark = entryGlyph(entry, section.kind, section.entries, index);
               return (
                 <div className="landing-timeline-entry" key={entry.id ?? `${entry.kind}-${index}`}>
                   <span className="landing-timeline-time">{clockTime(entry.at)}</span>
@@ -661,6 +662,7 @@ type TimelineTone = 'queued' | 'running' | 'ok' | 'failed' | 'takeover';
 
 function entryGlyph(
   entry: IntegrationTimelineEntry,
+  kind: IntegrationJobKind,
   entries: readonly IntegrationTimelineEntry[],
   index: number,
 ): { glyph: string; tone: TimelineTone } {
@@ -670,7 +672,7 @@ function entryGlyph(
     case 'CHECK_FINISHED':
     case 'RESULT':
     case 'RESULT_FALLBACK':
-      return landingEntryOk(entry) ? { glyph: '✓', tone: 'ok' } : { glyph: '✗', tone: 'failed' };
+      return landingEntryOk(entry, kind) ? { glyph: '✓', tone: 'ok' } : { glyph: '✗', tone: 'failed' };
     case 'STOP_REQUESTED':
     case 'CANCELLED':
     case 'ABANDONED':

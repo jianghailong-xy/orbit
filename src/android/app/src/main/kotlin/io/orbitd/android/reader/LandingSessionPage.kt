@@ -472,7 +472,7 @@ private fun LandingTimelineSectionView(section: LandingSection, view: LandingVie
                         Text(ProjectPage.landingClockTime(it, zone), Modifier.testTag("landing:entry-time:$index"),
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = muted)
                     }
-                    val mark = landingMark(entry, section.entries, index)
+                    val mark = landingMark(entry, section.kind, section.entries, index)
                     Text(mark.first, Modifier.width(16.dp).testTag("landing:mark:$index"), style = MaterialTheme.typography.bodySmall,
                         color = mark.second)
                     Text(entry.text, Modifier.weight(1f).testTag("landing:entry:$index"), style = MaterialTheme.typography.bodyMedium)
@@ -505,10 +505,10 @@ private fun LandingTimelineSectionView(section: LandingSection, view: LandingVie
 }
 
 /** What a timeline mark says, and the ink it says it in (mockups 05 a/e/i). */
-private fun landingMark(entry: LandingEntry, entries: List<LandingEntry>, index: Int): Pair<String, Color> = when (entry.kind) {
+private fun landingMark(entry: LandingEntry, jobKind: String, entries: List<LandingEntry>, index: Int): Pair<String, Color> = when (entry.kind) {
     "TAKEN_OVER" -> "↗" to Color(0xFF0066BE)
     "CHECK_FINISHED", "RESULT", "RESULT_FALLBACK" ->
-        if (LandingSessionModel.entryOk(entry)) "✓" to Color(0xFF247344) else "✗" to Color(0xFFB3261E)
+        if (LandingSessionModel.entryOk(entry, jobKind)) "✓" to Color(0xFF247344) else "✗" to Color(0xFFB3261E)
     "STOP_REQUESTED", "CANCELLED", "ABANDONED", "TIMED_OUT", "PUSH_REFUSED" -> "✗" to Color(0xFFB3261E)
     "ENQUEUED", "REQUEUED", "NEXT_GENERATION", "SKIPPED_CHECK", "FIX_TASK" -> "≡" to Color.Unspecified
     "RELEASED" -> "↩" to Color.Unspecified

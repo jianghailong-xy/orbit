@@ -224,6 +224,21 @@ class LandingSessionShellTest {
         assertTrue(logs.none { it.contains("check=1") })
     }
 
+    /** A merge check that ends READY passed: its result line draws ✓. A merge to main that answers READY handed the candidate back
+     *  to be checked again (M-T12, J-T13) and keeps its ✗. The section's job kind decides, beside the line's state. */
+    @Test fun aMergeCheckThatEndsReadyDrawsACheckmark() {
+        ProjectShell.landing = view(kind = "CHECK_PROMOTION", subject = "PROMOTION", taskId = null, promotionId = "p-1", state = "READY",
+            timeline = """{"sections":[{"title":"Merge check · 1","jobId":"j-1","kind":"CHECK_PROMOTION","generation":1,"state":"READY",
+            "entries":[{"kind":"RESULT","at":"${ago(900)}","claim":1,"data":{"state":"READY"},"text":"Ready to merge into main"}]},
+            {"title":"Merge to main · 1","jobId":"j-2","kind":"LAND_PROMOTION","generation":1,"state":"READY",
+            "entries":[{"kind":"RESULT","at":"${ago(600)}","claim":1,"data":{"state":"READY"},"text":"Ready to merge into main"}]}],"facts":[]}""")
+        signIn(); open("orbit-session:$landing")
+        await { exists(hasTestTag("landing:section:j-2")) }
+        val marks = compose.onAllNodesWithTag("landing:mark:0", useUnmergedTree = true).fetchSemanticsNodes()
+            .map { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
+        assertEquals(listOf("✓", "✗"), marks)
+    }
+
     // MARK: the journey's hands and eyes
 
     private fun app() = compose.activity.application as OrbitApplication

@@ -118,13 +118,13 @@ final class LandingSessionDecodingTests: XCTestCase {
         XCTAssertEqual(entries[0].data?["expectedExitCode"]?.intValue, 0)
         XCTAssertEqual(entries[0].data?["timedOut"]?.boolValue, false)
         XCTAssertTrue(entries[0].checkPassed)
-        XCTAssertTrue(entries[0].succeeded)
+        XCTAssertTrue(entries[0].succeeded(in: "LAND_TASK"))
         XCTAssertEqual(entries[1].data?["state"]?.stringValue, "LANDED")
         XCTAssertEqual(entries[1].data?["errorCode"], .null)
-        XCTAssertTrue(entries[1].succeeded)
+        XCTAssertTrue(entries[1].succeeded(in: "LAND_TASK"))
         XCTAssertNil(entries[2].data)
         XCTAssertEqual(entries[2].text, "Landed on main · 8ed0ea7")
-        XCTAssertFalse(entries[2].succeeded, "no readable state is not a landing")
+        XCTAssertFalse(entries[2].succeeded(in: "LAND_TASK"), "no readable state is not a landing")
     }
 
     /// An older server sends neither field: the session still reads, as the conversation it was.

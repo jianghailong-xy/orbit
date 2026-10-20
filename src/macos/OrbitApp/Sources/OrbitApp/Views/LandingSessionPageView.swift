@@ -401,7 +401,7 @@ struct LandingSessionPageView: View {
                                         section: IntegrationTimelineSection,
                                         entries: [IntegrationTimelineEntry],
                                         index: Int) -> some View {
-        let mark = glyph(entry, entries: entries, index: index)
+        let mark = glyph(entry, jobKind: section.kind, entries: entries, index: index)
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 if let at = RelativeTime.parse(entry.at) {
@@ -458,13 +458,13 @@ struct LandingSessionPageView: View {
     }
 
     /// What a timeline mark says, and the ink it says it in (mockups 05 a/e/i).
-    private func glyph(_ entry: IntegrationTimelineEntry,
+    private func glyph(_ entry: IntegrationTimelineEntry, jobKind: String,
                        entries: [IntegrationTimelineEntry], index: Int) -> Mark {
         switch entry.kind {
         case "TAKEN_OVER":
             return Mark(glyph: "↗", color: .accentColor)
         case "CHECK_FINISHED", "RESULT", "RESULT_FALLBACK":
-            return entry.succeeded ? Mark(glyph: "✓", color: .green) : Mark(glyph: "✗", color: .red)
+            return entry.succeeded(in: jobKind) ? Mark(glyph: "✓", color: .green) : Mark(glyph: "✗", color: .red)
         case "STOP_REQUESTED", "CANCELLED", "ABANDONED", "TIMED_OUT", "PUSH_REFUSED":
             return Mark(glyph: "✗", color: .red)
         case "ENQUEUED", "REQUEUED", "NEXT_GENERATION", "SKIPPED_CHECK", "FIX_TASK":

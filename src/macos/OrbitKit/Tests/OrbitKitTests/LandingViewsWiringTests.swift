@@ -168,11 +168,15 @@ final class LandingViewsWiringTests: XCTestCase {
     }
 
     /// The timeline's marks read each line's structured fields, as web and Android do: the ✓ and
-    /// the inline output come from `checkPassed` / `succeeded`, never from the sentence's words.
+    /// the inline output come from `checkPassed` / `succeeded(in:)`, never from the sentence's
+    /// words, and a result's ✓ also reads the job kind of the section it is in (a merge check's
+    /// READY is a pass, a merge to main's is not).
     func testTheTimelinesMarksReadTheLinesFields() throws {
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
         XCTAssertTrue(page.contains("} else if entry.kind == \"CHECK_FINISHED\", let check = entry.check, !entry.checkPassed {"))
-        XCTAssertTrue(page.contains("return entry.succeeded ? Mark(glyph: \"✓\", color: .green) : Mark(glyph: \"✗\", color: .red)"))
+        XCTAssertTrue(page.contains("let mark = glyph(entry, jobKind: section.kind, entries: entries, index: index)"),
+                      "a line's mark is read with its section's job kind")
+        XCTAssertTrue(page.contains("return entry.succeeded(in: jobKind) ? Mark(glyph: \"✓\", color: .green) : Mark(glyph: \"✗\", color: .red)"))
         for words in ["contains(\"passed\")", "\"Nothing to push\"", "\"Already\"", "hasPrefix("] {
             XCTAssertFalse(page.contains(words), "the page still reads a line's words: \(words)")
         }

@@ -741,10 +741,14 @@ object LandingSessionModel {
     }
 
     /** A check or result line that ended well draws ✓, and one that did not draws ✗: a passed check, or a result whose
-     *  branch is on its target. Swift's `IntegrationTimelineEntry.succeeded`. */
-    fun entryOk(entry: LandingEntry): Boolean = when (entry.kind) {
+     *  branch is on its target. [jobKind] is the kind of the section the line is in: a merge check that ends READY passed,
+     *  and its round is ready to merge into main. A merge to main that answers READY handed the candidate back to be checked
+     *  again and merged nothing (M-T12, J-T13), so it keeps its ✗. Swift's `IntegrationTimelineEntry.succeeded(in:)`. */
+    fun entryOk(entry: LandingEntry, jobKind: String): Boolean = when (entry.kind) {
         "CHECK_FINISHED" -> checkPassed(entry)
-        "RESULT", "RESULT_FALLBACK" -> entry.data?.text("state") in setOf("LANDED", "ALREADY_LANDED", "NOTHING_TO_LAND")
+        "RESULT", "RESULT_FALLBACK" -> entry.data?.text("state").let { state ->
+            state in setOf("LANDED", "ALREADY_LANDED", "NOTHING_TO_LAND") || (jobKind == "CHECK_PROMOTION" && state == "READY")
+        }
         else -> false
     }
 }
