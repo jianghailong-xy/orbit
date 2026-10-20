@@ -126,9 +126,9 @@ async function job(
           claimGeneration?: number; round?: number | null; step?: string | null;
           stepStartedAt?: Date | null; outputMovedAt?: Date | null;
           currentCheck?: Prisma.InputJsonValue | null; serialKey?: string;
-          cancelRequestedAt?: Date | null; landingId?: string | null },
+          cancelRequestedAt?: Date | null; landingId?: string | null; id?: string },
 ): Promise<string> {
-  const id = randomUUID();
+  const id = spec.id ?? randomUUID();
   await db.projectIntegrationJob.create({
     data: {
       id,
@@ -1040,7 +1040,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           'the list row and the view agree, field by field');
       });
 
-      // (t)–(w): `typicalMs` is the middle of up to five passes among the project's newest 25
+      // (t)–(x): `typicalMs` is the middle of up to five passes among the project's newest 25
       // finished jobs. The helpers write finished jobs the way the queue and the runner do, and state
       // that rule in words from what was written: the jobs that were claimed and finished after their
       // claim, newest finish first with `id` breaking a tie the way uuid ordering does, the first 25
@@ -1062,7 +1062,7 @@ test('the landing line describes running work before the queue, on real PostgreS
       const failing = (i: number) => shapes[1 + (i % (shapes.length - 1))]!;
       interface Written { id: string; finishedAt: Date; ms: number; counted: boolean; passes: boolean }
       const finished = async (f: Fixture, label: string, i: number, spec: {
-        start: number; ms: number; shape: (typeof shapes)[number]; claimed?: boolean;
+        start: number; ms: number; shape: (typeof shapes)[number]; claimed?: boolean; id?: string;
       }): Promise<Written> => {
         const claimedAt = typicalAt(spec.start);
         const finishedAt = new Date(claimedAt.getTime() + spec.ms);
@@ -1071,7 +1071,7 @@ test('the landing line describes running work before the queue, on real PostgreS
           at: typicalAt(spec.start - 1), claimedAt: claimed ? claimedAt : undefined,
           startedAt: claimed ? claimedAt : null,
           finishedAt, state: spec.shape.state, checks: spec.shape.checks,
-          idempotency: `${label}-${i}`,
+          idempotency: `${label}-${i}`, id: spec.id,
         });
         const counted = claimed && spec.ms > 0;
         return { id, finishedAt, ms: spec.ms, counted, passes: counted && spec.shape.passes };
@@ -1291,6 +1291,81 @@ test('the landing line describes running work before the queue, on real PostgreS
           > Math.max(...quietWritten.map((row) => row.finishedAt.getTime())),
           'the busy project has a job no newer than the quiet one’s');
         await assertTypical([[busy, 5 * 60_000], [quiet, 9 * 60_000]]);
+      });
+
+      await t.test('(x) a finished_at tie on either cut is broken by id, newest id first: at the 25th '
+        + 'job of the window and at the fifth pass', async () => {
+        // (t)–(w) never put two jobs with one `finished_at` on a cut, so either ORDER BY could break
+        // its tie by `id` ASC and they would all stay green. Here every job has a literal id, and on
+        // each cut the job the id DESC rule keeps is the one whose duration moves the middle. Every
+        // id is `<8 hex>-0000-4000-8000-<12 hex>`, so two ids compare by their first group, and by
+        // the last where the first is the same: within each tie the `2…` id sorts after the `1…` one,
+        // and id DESC puts it first.
+        const fixedId = (head: string, n: number) => `${head}-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+        // The window's cut. Twenty-four jobs finished after minute 1000, newest first, two of them
+        // passes (3 and 9 minutes); then two that finished together at minute 1000: a 30-minute pass
+        // with id `2…` and a failure with id `1…`. Newest id first, the pass is the 25th job and the
+        // failure the 26th, so the window holds three passes and their middle is 9 minutes; `id` ASC
+        // would keep the failure, leave two passes and say their mean, 6 minutes.
+        const windowCut = await fixture(db, 'typical-tie-window');
+        const windowWritten: Written[] = [
+          await finished(windowCut, 'tie-window-pass', 0, {
+            start: 1000 - 30, ms: 30 * 60_000, shape: passing,
+            id: '20000000-0000-4000-8000-000000000025' }),
+          await finished(windowCut, 'tie-window-fail', 0, {
+            start: 1000 - 20, ms: 20 * 60_000, shape: failing(0),
+            id: '10000000-0000-4000-8000-000000000026' }),
+        ];
+        const windowPassAt = new Map([[8, 9], [20, 3]]);
+        for (let i = 0; i < 24; i += 1) {
+          const minutes = windowPassAt.get(i) ?? 20;
+          windowWritten.push(await finished(windowCut, 'tie-window-newer', i, {
+            start: 1010 + i * 10 - minutes, ms: minutes * 60_000,
+            shape: windowPassAt.has(i) ? passing : failing(i), id: fixedId('30000000', i) }));
+        }
+        const windowOrder = windowWritten.filter((row) => row.counted).sort(newestFirst);
+        const [keptByWindow, cutByWindow] = [windowOrder[24]!, windowOrder[25]!];
+        assert.equal(keptByWindow.finishedAt.getTime(), cutByWindow.finishedAt.getTime(),
+          'the 25th and 26th jobs of the window do not share a finished_at');
+        assert.deepEqual([keptByWindow.id, keptByWindow.passes, cutByWindow.id, cutByWindow.passes],
+          ['20000000-0000-4000-8000-000000000025', true, '10000000-0000-4000-8000-000000000026', false],
+          'the tie on the window’s cut is not the pass (newer id) against the failure (older id)');
+        assert.ok(windowOrder.slice(0, 24).every((row) => row.finishedAt > keptByWindow.finishedAt),
+          'a job of the window is no newer than the tie on its cut');
+        assert.equal(byRule(windowWritten), 9 * 60_000);
+
+        // The sample's cut. Four passes of 2, 4, 6 and 8 minutes, newest first, all newer than two
+        // passes that finished together: a 1-minute one with id `2…` and a 10-minute one with id `1…`.
+        // Newest id first, the 1-minute pass is the fifth and the middle of {1, 2, 4, 6, 8} is 4
+        // minutes; `id` ASC would take the 10-minute one and the middle of {2, 4, 6, 8, 10}, 6.
+        const sampleCut = await fixture(db, 'typical-tie-sample');
+        const sampleWritten: Written[] = [
+          await finished(sampleCut, 'tie-sample-short', 0, {
+            start: 1000 - 1, ms: 1 * 60_000, shape: passing,
+            id: '20000000-0000-4000-8000-000000000005' }),
+          await finished(sampleCut, 'tie-sample-long', 0, {
+            start: 1000 - 10, ms: 10 * 60_000, shape: passing,
+            id: '10000000-0000-4000-8000-000000000006' }),
+        ];
+        for (const [i, minutes] of [8, 6, 4, 2].entries()) {
+          sampleWritten.push(await finished(sampleCut, 'tie-sample-newer', i, {
+            start: 1010 + i * 10 - minutes, ms: minutes * 60_000, shape: passing,
+            id: fixedId('40000000', i) }));
+        }
+        const samplePasses = windowOf(sampleWritten).filter((row) => row.passes);
+        const [keptBySample, cutBySample] = [samplePasses[4]!, samplePasses[5]!];
+        assert.equal(keptBySample.finishedAt.getTime(), cutBySample.finishedAt.getTime(),
+          'the fifth and sixth passes do not share a finished_at');
+        assert.deepEqual([keptBySample.id, keptBySample.ms, cutBySample.id, cutBySample.ms],
+          ['20000000-0000-4000-8000-000000000005', 1 * 60_000, '10000000-0000-4000-8000-000000000006',
+            10 * 60_000], 'the tie on the sample’s cut is not the 1-minute pass (newer id) against the '
+            + '10-minute one (older id)');
+        assert.ok(samplePasses.slice(0, 4).every((row) => row.finishedAt > keptBySample.finishedAt),
+          'a pass of the sample is no newer than the tie on its cut');
+        assert.equal(byRule(sampleWritten), 4 * 60_000);
+
+        await assertTypical([[windowCut, 9 * 60_000], [sampleCut, 4 * 60_000]]);
       });
     } finally {
       await db.$disconnect();
