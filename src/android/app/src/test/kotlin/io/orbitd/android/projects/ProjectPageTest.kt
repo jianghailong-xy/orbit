@@ -307,14 +307,15 @@ class ProjectPageTest {
     private fun v6Job(liveness: String, kind: String = "LAND_TASK", title: String? = "C5 · 托管 runner",
         check: String = "TASK_ACCEPTANCE", claim: Int = 1, round: Int? = 1, typical: Int? = null, phase: String = "CHECK",
         stepStarted: Long = 110, heartbeat: Long = 0, outputMoved: Long = 6,
-        timedOut: Boolean = false, limit: Int? = null) = buildJsonObject {
-        put("jobId", "j"); put("kind", kind); put("state", "RUNNING"); put("phase", phase)
+        timedOut: Boolean = false, limit: Int? = null, checkCount: Int? = 3, jobId: String = "j") = buildJsonObject {
+        put("jobId", jobId); put("kind", kind); put("state", "RUNNING"); put("phase", phase)
         put("taskId", if (title == null) JsonNull else JsonPrimitive("t")); put("taskTitle", title)
         put("generation", 1); put("startedAt", iso(stepStarted)); put("queuedAt", iso(stepStarted + 30))
         put("heartbeatAt", iso(heartbeat)); put("runner", "wikova"); put("runnerName", "wikova"); put("retriedBy", null)
         put("timedOut", timedOut); put("limitSeconds", limit); put("retryable", false)
         put("progressProtocol", "v2"); put("claim", claim); put("round", round)
-        put("check", Json.parseToJsonElement("""{"name":"$check","index":1,"count":3,"budgetSeconds":3600,"startedAt":"${iso(stepStarted)}"}"""))
+        put("check", if (checkCount == null) JsonNull
+            else Json.parseToJsonElement("""{"name":"$check","index":1,"count":$checkCount,"budgetSeconds":3600,"startedAt":"${iso(stepStarted)}"}"""))
         put("stepStartedAt", iso(stepStarted)); put("outputMovedAt", iso(outputMoved))
         put("typicalMs", typical); put("liveness", liveness)
     }
@@ -348,15 +349,39 @@ class ProjectPageTest {
         val merge = ProjectPage.landingLine(v6View(v6Job("LIVE", kind = "CHECK_PROMOTION", title = null, check = "MERGE_CHECK", typical = 18 * 60_000)),
             now, now, false)!!
         assertEquals("Merge check", merge.word)
-        assertEquals("checking · output 6s ago · usually ~18m · claim 1 · round 1 of 3", merge.head.detail)
+        // A merge check and a merge into main have one round per claim: no M, whatever the check's count (3 here) says (§7.2 V6).
+        assertEquals("checking · output 6s ago · usually ~18m · claim 1 · round 1", merge.head.detail)
         val promotion = ProjectPage.landingLine(v6View(v6Job("LIVE", kind = "LAND_PROMOTION", title = null, check = "MERGE_CHECK", typical = 18 * 60_000)),
             now, now, false)!!
         assertEquals("Merge to main", promotion.word)
+        assertEquals("checking · output 6s ago · usually ~18m · claim 1 · round 1", promotion.head.detail)
         // A task's own acceptance command has no usual duration: the board gives it to merge checks only.
         assertEquals("checking · output 6s ago · claim 1 · round 1 of 3", liveDetail())
     }
 
     private fun liveDetail() = ProjectPage.landingLine(v6View(v6Job("LIVE")), now, now, false)!!.head.detail
+
+    /** The M of "round N of M" is the kind's most rounds per claim, never the check's count (iOS ProjectLandingHeadTests): a task's
+     * landing is "of 3" with one check in flight and with none, a kind this client does not know names no M, and the jobs sheet reads
+     * each job's own kind. */
+    @Test fun theRoundsMIsTheKindsNeverTheChecksCount() {
+        assertEquals("checking · output 6s ago · claim 1 · round 2 of 3",
+            ProjectPage.landingLine(v6View(v6Job("LIVE", round = 2, checkCount = 1)), now, now, false)!!.head.detail)
+        assertEquals("rebasing · output 6s ago · claim 1 · round 1 of 3",
+            ProjectPage.landingLine(v6View(v6Job("LIVE", phase = "REBASE", checkCount = null)), now, now, false)!!.head.detail)
+        assertEquals("checking · output 6s ago · claim 1 · round 1",
+            ProjectPage.landingLine(v6View(v6Job("LIVE", kind = "", title = null)), now, now, false)!!.head.detail)
+        val sheet = buildJsonObject {
+            put("integratingCount", 2); put("queuedCount", 0); put("inFlight", v6Job("LIVE", checkCount = 1))
+            put("inFlightJobs", JsonArray(listOf(v6Job("LIVE", checkCount = 1),
+                v6Job("LIVE", kind = "LAND_PROMOTION", title = null, phase = "PUSH", checkCount = null, jobId = "j-m"))))
+        }
+        assertEquals(listOf("checking · output 6s ago · claim 1 · round 1 of 3", "pushing · output 6s ago · claim 1 · round 1"),
+            ProjectPage.landingJobLines(sheet, now, now, false).map { it.line.head.detail })
+        assertEquals("round 2 of 3", ProjectPage.landingRoundClause(2, "LAND_TASK"))
+        assertEquals("round 1", ProjectPage.landingRoundClause(1, "CHECK_PROMOTION"))
+        assertEquals("round 1", ProjectPage.landingRoundClause(1, null))
+    }
 
     @Test fun aTakeoverNamesTheFirstStartTheClaimRowStillCarries() {
         val landTasks = JsonArray(listOf(Json.parseToJsonElement("""{"taskId":"t","taskTitle":"C5","integration":{"landTask":

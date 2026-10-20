@@ -187,19 +187,40 @@ final class LandingSessionPageTests: XCTestCase {
     // MARK: - the status card
 
     func testTheLiveHeadAndV6RowsForEachJobKind() {
-        for (kind, word) in [("LAND_TASK", "Landing"), ("CHECK_PROMOTION", "Merge check"),
-                             ("LAND_PROMOTION", "Merge to main")] {
+        // §7.2 V6: the M is the kind's own most rounds per claim — three for a task's landing, none
+        // for the two kinds with one round — whatever the check's count (3 here) says.
+        for (kind, word, round) in [("LAND_TASK", "Landing", "round 1 of 3"),
+                                    ("CHECK_PROMOTION", "Merge check", "round 1"),
+                                    ("LAND_PROMOTION", "Merge to main", "round 1")] {
             let view = landing { $0.currentAttempt = attempt { $0.kind = kind } }
             let card = LandingPageCopy.attemptCard(view, now: now, updatedAt: now)!
             XCTAssertEqual(card.word, word)
             XCTAssertEqual(card.state, "checking")
             XCTAssertEqual(card.right, "1m 50s of 60m")
             XCTAssertEqual(card.detail,
-                           "checking · output 6s ago · claim 1 · round 1 of 3 · updated just now")
+                           "checking · output 6s ago · claim 1 · \(round) · updated just now")
             XCTAssertEqual(card.budget, "Merge check 1m 50s of 60m")
             XCTAssertEqual(card.live, "Output 6s ago · Updated just now")
             XCTAssertTrue(card.running)
         }
+    }
+
+    func testATaskLandingIsOfThreeWhateverItsChecksCountAndWithNoCheck() {
+        func detail(_ over: @escaping (inout AttemptBuilder) -> Void) -> String {
+            LandingPageCopy.attemptCard(landing { $0.currentAttempt = attempt(over) },
+                                        now: now, updatedAt: now)!.detail
+        }
+        let step = self.step
+        XCTAssertEqual(detail {
+            $0.round = 2
+            $0.check = LandingAttemptCheck(name: "TASK_ACCEPTANCE", index: 1, count: 1,
+                                           budgetSeconds: 3_600, startedAt: step)
+        }, "checking · output 6s ago · claim 1 · round 2 of 3 · updated just now")
+        XCTAssertEqual(detail { $0.phase = "REBASE"; $0.check = nil },
+                       "rebasing · output 6s ago · claim 1 · round 1 of 3 · updated just now")
+        // A merge with no check in flight still names no M.
+        XCTAssertEqual(detail { $0.kind = "LAND_PROMOTION"; $0.phase = "PUSH"; $0.check = nil },
+                       "pushing · output 6s ago · claim 1 · round 1 · updated just now")
     }
 
     func testQuietSaysNoOutputWithinItsBudget() {
@@ -370,6 +391,22 @@ final class LandingSessionPageTests: XCTestCase {
         XCTAssertEqual(
             LandingPageCopy.timeoutLine(view, attempt: timed),
             "Runner wikova took it at \(ProjectPage.landingClockTime(date(14, 56, 40))) · stopped at rebasing · claim 1 · round 1 of 3")
+        // The M is the kind's, not the check's: a task's landing with one check is still "of 3", and a
+        // merge into main, which has one round per claim, names none.
+        let step = self.step
+        let one = attempt {
+            $0.liveness = "LEASE_EXPIRED"; $0.timedOut = true; $0.phase = "REBASE"
+            $0.check = LandingAttemptCheck(name: "TASK_ACCEPTANCE", index: 1, count: 1,
+                                           budgetSeconds: 3_600, startedAt: step)
+        }
+        XCTAssertTrue(LandingPageCopy.timeoutLine(landing { $0.currentAttempt = one }, attempt: one)
+            .hasSuffix(" · claim 1 · round 1 of 3"))
+        let merge = attempt {
+            $0.kind = "LAND_PROMOTION"; $0.liveness = "LEASE_EXPIRED"; $0.timedOut = true; $0.phase = "PUSH"
+        }
+        XCTAssertEqual(
+            LandingPageCopy.timeoutLine(landing { $0.subject = "PROMOTION"; $0.currentAttempt = merge }, attempt: merge),
+            "Runner wikova took it at \(ProjectPage.landingClockTime(date(14, 56, 40))) · stopped at pushing · claim 1 · round 1")
     }
 
     // MARK: - the owner doors (LS6)

@@ -285,6 +285,18 @@ public enum ProjectPage {
     public static let landingTakenOver = "Taken over"
     public static let landingFirstStarted = "first started"
     public static let landingUsually = "usually"
+    /// The most rounds one claim of a `LAND_TASK` can run: the M of "round N of M" (§7.2 V6). The
+    /// first round plus up to two refetches when the push loses a race (contract J5, appendix A-Q5;
+    /// runner-go `integrate.go` `integrationRefetchRounds + 1`). Web: `LAND_TASK_ROUNDS_PER_CLAIM`.
+    public static let landTaskRoundsPerClaim = 3
+
+    /// "round 2 of 3" for a task's landing, "round 1" for a merge check or a merge into main (web
+    /// `landingRoundClause`): the M is the kind's own most rounds per claim, never the check's
+    /// count, and a kind with one round — or one this client does not know — names no M.
+    public static func landingRoundClause(_ round: Int, kind: String?) -> String {
+        if kind == "LAND_TASK" { return "\(landingRound) \(round) \(landingOf) \(landTaskRoundsPerClaim)" }
+        return "\(landingRound) \(round)"
+    }
 
     public static let integrationJobWords = [
         "LAND_TASK": "Landing", "CHECK_PROMOTION": "Merge check", "LAND_PROMOTION": "Merge to main",
@@ -400,8 +412,8 @@ public enum ProjectPage {
         return liveLine(word: word, what: what, running: running, phase: inFlight.phase,
                         startedAt: inFlight.startedAt, heartbeatAt: inFlight.heartbeatAt, now: now,
                         updatedAt: updatedAt, unavailable: unavailable, main: main, silent: silent,
-                        wait: wait, runner: inFlight.runner, claim: inFlight.claim, round: inFlight.round,
-                        check: inFlight.check, stepStartedAt: inFlight.stepStartedAt,
+                        wait: wait, runner: inFlight.runner, kind: inFlight.kind, claim: inFlight.claim,
+                        round: inFlight.round, check: inFlight.check, stepStartedAt: inFlight.stepStartedAt,
                         outputMovedAt: inFlight.outputMovedAt, typicalMs: inFlight.typicalMs,
                         livenessWord: inFlight.liveness,
                         firstStartedAt: firstStartedAt(view, jobId: inFlight.jobId))
@@ -482,8 +494,8 @@ public enum ProjectPage {
                 : liveLine(word: word, what: what, running: job.state == "RUNNING", phase: job.phase,
                            startedAt: job.startedAt, heartbeatAt: job.heartbeatAt, now: now,
                            updatedAt: updatedAt, unavailable: unavailable, main: main,
-                           runner: job.runnerName, claim: job.claim, round: job.round, check: job.check,
-                           stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
+                           runner: job.runnerName, kind: job.kind, claim: job.claim, round: job.round,
+                           check: job.check, stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
                            typicalMs: job.typicalMs, livenessWord: job.liveness,
                            firstStartedAt: firstStartedAt(view, jobId: job.jobId))
             return LandingJobLine(
@@ -509,7 +521,7 @@ public enum ProjectPage {
     /// the read it came with. Nothing here infers a timeout: LEASE_EXPIRED is the server's word
     /// and the timed-out line draws it.
     private static func landingLiveness(liveness: String?, running: Bool, startedAt: String,
-                                        heartbeatAt: String?, claim: Int?, round: Int?,
+                                        heartbeatAt: String?, kind: String?, claim: Int?, round: Int?,
                                         check: ProjectIntegrationCheck?, stepStartedAt: String?,
                                         outputMovedAt: String?, typicalMs: Int?, runner: String?,
                                         firstStartedAt: String?, now: Date, updatedAt: Date?) -> LandingLiveness? {
@@ -561,11 +573,7 @@ public enum ProjectPage {
         }
         if let claim, claim >= 1 {
             clauses.append("\(landingClaim) \(claim)")
-            if let round {
-                var text = "\(landingRound) \(round)"
-                if let check { text += " \(landingOf) \(check.count)" }
-                clauses.append(text)
-            }
+            if let round { clauses.append(landingRoundClause(round, kind: kind)) }
         }
         if let claim, claim > 1, let claimedAt = RelativeTime.parse(startedAt) {
             if let first = firstStartedAt.flatMap(RelativeTime.parse) {
@@ -586,7 +594,7 @@ public enum ProjectPage {
     private static func liveLine(word: String, what: String?, running: Bool, phase: String?,
                                  startedAt: String, heartbeatAt: String?, now: Date, updatedAt: Date?,
                                  unavailable: Bool, main: String, silent: Bool = false,
-                                 wait: String? = nil, runner: String? = nil, claim: Int? = nil,
+                                 wait: String? = nil, runner: String? = nil, kind: String? = nil, claim: Int? = nil,
                                  round: Int? = nil, check: ProjectIntegrationCheck? = nil,
                                  stepStartedAt: String? = nil, outputMovedAt: String? = nil,
                                  typicalMs: Int? = nil, livenessWord: String? = nil,
@@ -610,7 +618,7 @@ public enum ProjectPage {
         }
         let v6 = unavailable ? nil : landingLiveness(
             liveness: livenessWord, running: running, startedAt: startedAt, heartbeatAt: heartbeatAt,
-            claim: claim, round: round, check: check, stepStartedAt: stepStartedAt,
+            kind: kind, claim: claim, round: round, check: check, stepStartedAt: stepStartedAt,
             outputMovedAt: outputMovedAt, typicalMs: typicalMs, runner: runner,
             firstStartedAt: firstStartedAt, now: now, updatedAt: updatedAt)
         return LandingLine(what: what,

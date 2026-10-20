@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { LAND_TASK_ROUNDS_PER_CLAIM } from '@orbit/shared';
 import type {
   IntegrationJobEventKind,
   IntegrationJobKind,
@@ -223,8 +224,10 @@ export function stepText(input: {
   }
 }
 
-export function roundText(round: number): string {
-  return `Round ${round}`;
+/** "Round 2 of 3" for a task's landing, "Round 1" for the two merge kinds, which have one round
+ *  per claim (§2.9, §7.2 V6): the M is the kind's own most rounds per claim, never a check count. */
+export function roundText(round: number, kind: string): string {
+  return kind === 'LAND_TASK' ? `Round ${round} of ${LAND_TASK_ROUNDS_PER_CLAIM}` : `Round ${round}`;
 }
 
 export function checkLabel(name: 'TASK_ACCEPTANCE' | 'MERGE_CHECK'): string {

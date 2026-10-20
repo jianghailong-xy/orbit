@@ -459,9 +459,7 @@ public extension LandingPageCopy {
         if attempt.claim >= 1 {
             clauses.append("\(ProjectPage.landingClaim) \(attempt.claim)")
             if let round = attempt.round {
-                var text = "\(ProjectPage.landingRound) \(round)"
-                if let check = attempt.check { text += " \(ProjectPage.landingOf) \(check.count)" }
-                clauses.append(text)
+                clauses.append(ProjectPage.landingRoundClause(round, kind: attempt.kind))
             }
         }
         if attempt.claim > 1 {
@@ -839,9 +837,7 @@ public extension LandingPageCopy {
             + "\(LandingPageCopy.stoppedAt) \(stopped)",
             "\(ProjectPage.landingClaim) \(attempt.claim)"]
         if let round = attempt.round {
-            var text = "\(ProjectPage.landingRound) \(round)"
-            if let check = attempt.check { text += " \(ProjectPage.landingOf) \(check.count)" }
-            parts.append(text)
+            parts.append(ProjectPage.landingRoundClause(round, kind: attempt.kind))
         }
         return parts.joined(separator: " · ")
     }

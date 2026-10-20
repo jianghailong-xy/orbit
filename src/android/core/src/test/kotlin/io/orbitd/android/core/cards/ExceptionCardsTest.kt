@@ -203,6 +203,18 @@ class ExceptionCardsTest {
         assertTrue("X-E5 is closed by hand like the other exceptions", ExceptionCards.markable(xe5()))
     }
 
+    /** The Step row's M is the job kind's most rounds per claim (§7.2 V6), never `checkCount`: a landing is "of 3" with two checks or
+     * one, the two merge kinds have one round and name none, and so does a kind this build does not know. */
+    @Test fun theXe5StepRowTakesTheRoundsMFromTheJobKind() {
+        fun step(lease: JsonObject) = (ExceptionCards.facts(xe5(lease = lease)) as ExceptionCards.Facts.Rows).rows
+            .first { it.label == ExceptionCards.stepFactLabel }.value
+        assertEquals("rebasing · claim 1 · round 2 of 3", step(lease(round = 2, checks = 2)))
+        assertEquals("rebasing · claim 1 · round 1 of 3", step(lease(checks = 1)))
+        assertEquals("checking · claim 1 · round 1", step(lease(jobKind = "CHECK_PROMOTION", phase = "CHECK")))
+        assertEquals("pushing · claim 1 · round 1", step(lease(jobKind = "LAND_PROMOTION", phase = "PUSH", checks = 1)))
+        assertEquals("rebasing · claim 1 · round 1", step(lease(jobKind = "SOMETHING_NEW")))
+    }
+
     // MARK: what the card opens with
 
     @Test fun theCardOpensWithWhatHasToHappenNextAndWhoIsOnIt() {
@@ -392,6 +404,9 @@ class ExceptionCardsTest {
         ).forEach { assertTrue("OwnerItemCards.swift no longer says $it", swift.contains(it)) }
         assertTrue(swift.contains("public static let foldedLines = ${ExceptionCards.CheckTail.foldedLines}"))
         assertTrue(swift.contains("public static let markHandledMaxLength = 2_000"))
+        val projectPage = File(root(), "src/macos/OrbitKit/Sources/OrbitKit/App/ProjectPage.swift").readText()
+        assertTrue("the rounds one LAND_TASK claim can run (iOS ProjectPage)",
+            projectPage.contains("public static let landTaskRoundsPerClaim = ${ExceptionCards.landTaskRoundsPerClaim}"))
         val needsYou = File(root(), "src/macos/OrbitKit/Sources/OrbitKit/App/NeedsYou.swift").readText()
         assertTrue("the session row's separator", needsYou.contains("public static let needSeparator = \" · \""))
     }

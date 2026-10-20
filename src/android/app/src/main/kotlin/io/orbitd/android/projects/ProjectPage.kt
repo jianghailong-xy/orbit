@@ -164,6 +164,11 @@ object ProjectPage {
     const val landingTakenOver = "Taken over"
     const val landingFirstStarted = "first started"
     const val landingUsually = "usually"
+    /** "round 2 of 3" for a task's landing, "round 1" for a merge check or a merge into main (iOS `landingRoundClause`): the M is the
+     * kind's own most rounds per claim (`ExceptionCards.landTaskRoundsPerClaim`), never the check's count, and a kind with one round —
+     * or one this client does not know — names no M. */
+    fun landingRoundClause(round: Int, kind: String?): String =
+        if (kind == "LAND_TASK") "$landingRound $round $landingOf ${ExceptionCards.landTaskRoundsPerClaim}" else "$landingRound $round"
     /** The state of a job whose runner has stopped reporting (iOS befc9694c): a fact about the REPORTS — never "timed out", which is
      * the job's own verdict and the server's to word, and never "Update unavailable", which is this app failing to read the server. */
     const val landingNoReport = "No report"
@@ -211,7 +216,7 @@ object ProjectPage {
         val lead = listed?.firstOrNull()
         if (!unavailable && lead != null && lead.flag("timedOut")) return timedOutLine(lead, word, what, now, wait)
         return liveLine(word, what, running, inFlight.text("phase"), inFlight.text("startedAt"), inFlight.text("heartbeatAt"), now, updatedAt, unavailable, main,
-            silent, wait, inFlight.text("runner"), inFlight.number("claim"), inFlight.number("round"), inFlight.obj("check"),
+            silent, wait, inFlight.text("runner"), inFlight.text("kind"), inFlight.number("claim"), inFlight.number("round"), inFlight.obj("check"),
             inFlight.text("stepStartedAt"), inFlight.text("outputMovedAt"), inFlight.number("typicalMs"), inFlight.text("liveness"),
             firstStartedAt(view, inFlight.text("jobId")))
     }
@@ -275,8 +280,8 @@ object ProjectPage {
             val what = if (mergeJob) null else job.text("taskTitle")
             val line = if (job.flag("timedOut") && !unavailable) timedOutLine(job, word, what, now)
                 else liveLine(word, what, (job.text("state") ?: "QUEUED") == "RUNNING", job.text("phase"), job.text("startedAt"),
-                    job.text("heartbeatAt"), now, updatedAt, unavailable, main, runner = job.text("runnerName"), claim = job.number("claim"),
-                    round = job.number("round"), check = job.obj("check"), stepStartedAt = job.text("stepStartedAt"),
+                    job.text("heartbeatAt"), now, updatedAt, unavailable, main, runner = job.text("runnerName"), kind = job.text("kind"),
+                    claim = job.number("claim"), round = job.number("round"), check = job.obj("check"), stepStartedAt = job.text("stepStartedAt"),
                     outputMovedAt = job.text("outputMovedAt"), typicalMs = job.number("typicalMs"), livenessWord = job.text("liveness"),
                     firstStartedAt = firstStartedAt(view, job.text("jobId")))
             LandingJobLine(job.text("jobId").orEmpty(), job.text("taskId"), line, landingJobDetail(job, zone, main), job.flag("retryable"),
@@ -291,7 +296,7 @@ object ProjectPage {
      * and LEASE_EXPIRED, which the timed-out line words). The main number is the CURRENT STEP's own clock — from `stepStartedAt`,
      * not the claim — against the check's budget: "2m 40s of 60m". The local clock runs only for LIVE and QUIET on a read no older
      * than 90 s; SILENT freezes it at the runner's last word, and LEGACY at the read it came with (iOS `landingLiveness`). */
-    private fun landingLiveness(liveness: String?, running: Boolean, startedAt: String?, heartbeatAt: String?, claim: Int?, round: Int?,
+    private fun landingLiveness(liveness: String?, running: Boolean, startedAt: String?, heartbeatAt: String?, kind: String?, claim: Int?, round: Int?,
         check: JsonObject?, stepStartedAt: String?, outputMovedAt: String?, typicalMs: Int?, runner: String?, firstStartedAt: String?,
         now: Instant, updatedAt: Instant?): LandingLiveness? {
         if (liveness == null || liveness == "LEASE_EXPIRED" || !running) return null
@@ -330,7 +335,7 @@ object ProjectPage {
         if (check?.text("name") == "MERGE_CHECK" && typicalMs != null) clauses += "$landingUsually ~${Math.round(typicalMs / 60_000.0)}m"
         if (claim != null && claim >= 1) {
             clauses += "$landingClaim $claim"
-            if (round != null) clauses += "$landingRound $round" + (check?.number("count")?.let { " $landingOf $it" } ?: "")
+            if (round != null) clauses += landingRoundClause(round, kind)
         }
         if (claim != null && claim > 1 && startedAt?.let(ProjectTime::parse) != null) {
             val claimedAt = ProjectTime.parse(startedAt)!!
@@ -346,7 +351,7 @@ object ProjectPage {
      * app's read — and the freshness slot then says where the reports stand rather than a false "Updated". */
     private fun liveLine(word: String, what: String?, running: Boolean, phase: String?, startedAt: String?, heartbeatAt: String?, now: Instant,
         updatedAt: Instant?, unavailable: Boolean, main: String, silent: Boolean = false, wait: String? = null, runner: String? = null,
-        claim: Int? = null, round: Int? = null, check: JsonObject? = null, stepStartedAt: String? = null, outputMovedAt: String? = null,
+        kind: String? = null, claim: Int? = null, round: Int? = null, check: JsonObject? = null, stepStartedAt: String? = null, outputMovedAt: String? = null,
         typicalMs: Int? = null, livenessWord: String? = null, firstStartedAt: String? = null): LandingLine {
         // A queued job's heartbeat and phase can be an earlier claim's: only a running job's count.
         val reported = heartbeatAt?.let(ProjectTime::parse)
@@ -357,7 +362,7 @@ object ProjectPage {
         val report = if (silent) (if (reported != null) age?.let { landingNoReportFor(it) } else null) ?: landingNoReportYet
             else age?.let { if (it == 0) "Updated just now" else "Updated ${it}m ago" }
         val state = when { unavailable -> "Update unavailable"; silent -> landingNoReport; running -> phaseWords(main)[phase] ?: "running"; else -> "queued" }
-        val v6 = if (unavailable) null else landingLiveness(livenessWord, running, startedAt, heartbeatAt, claim, round, check, stepStartedAt,
+        val v6 = if (unavailable) null else landingLiveness(livenessWord, running, startedAt, heartbeatAt, kind, claim, round, check, stepStartedAt,
             outputMovedAt, typicalMs, runner, firstStartedAt, now, updatedAt)
         // A legacy claim's runner reports only between steps, so its quiet is not a stall: the ring keeps turning and the line says
         // why. SILENT is the state that stops it.

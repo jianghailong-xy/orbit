@@ -229,6 +229,14 @@ export interface ProjectIntegrationCheck<Instant = string> {
 }
 
 /**
+ * The most rounds one claim of a `LAND_TASK` can run: the M of "round N of M" (§7.2 V6). The first
+ * round plus up to two refetches when the push loses a race (contract J5, appendix A-Q5; runner-go
+ * `integrate.go` `integrationRefetchRounds + 1`). `LAND_PROMOTION` and `CHECK_PROMOTION` have one
+ * round and write no M. A check's `count` is how many checks the run has, never this number.
+ */
+export const LAND_TASK_ROUNDS_PER_CLAIM = 3;
+
+/**
  * One RUNNING or QUEUED job on the project's integration view (`inFlightJobs`, §1.6).
  *
  * `timedOut` is decided where the job is read, never stored: a running job whose runner has said
@@ -1146,7 +1154,8 @@ export interface ProjectOpenItemRow<Instant = string> {
     /** The step the runner last reported, and its sub-step. */
     phase?: string | null;
     step?: string | null;
-    /** The claim the job is on, the round inside it, and how many rounds its check has. */
+    /** The claim the job is on, the round inside it, and how many checks the run has (`checkCount`
+     *  is not the M of "round N of M", which comes from `jobKind`: §7.2 V6). */
     claimGeneration?: number | null;
     round?: number | null;
     checkCount?: number | null;

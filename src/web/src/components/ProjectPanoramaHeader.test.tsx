@@ -28,6 +28,7 @@ import {
   landingJobsTitle,
   landingLimit,
   landingLine,
+  landingRoundClause,
   type ProjectPanorama,
 } from './ProjectPanoramaHeader';
 
@@ -996,11 +997,13 @@ describe('§7.2 V6: the head once the server derives the claim’s liveness', ()
     ...(landTasks ? { landTasks } : {}),
   });
 
-  const kinds: Array<[NonNullable<ProjectIntegrationInFlight['kind']>, string]> = [
-    ['LAND_TASK', 'Landing'], ['CHECK_PROMOTION', 'Merge check'], ['LAND_PROMOTION', 'Merge to main'],
+  // §7.2 V6: the M is the kind's own most rounds per claim, never the check's count (3 here).
+  const kinds: Array<[NonNullable<ProjectIntegrationInFlight['kind']>, string, string]> = [
+    ['LAND_TASK', 'Landing', 'round 1 of 3'], ['CHECK_PROMOTION', 'Merge check', 'round 1'],
+    ['LAND_PROMOTION', 'Merge to main', 'round 1'],
   ];
 
-  it.each(kinds)('draws %s’s head for each of the five readings', (kind, word) => {
+  it.each(kinds)('draws %s’s head for each of the five readings', (kind, word, round) => {
     const check = checkFor(kind);
     const typicalMs = kind === 'LAND_TASK' ? null : 18 * 60_000;
     const taskTitle = kind === 'LAND_TASK' ? TITLE : null;
@@ -1017,23 +1020,23 @@ describe('§7.2 V6: the head once the server derives the claim’s liveness', ()
     // LIVE: the step's clock against its budget, and output moving.
     expect(line({ liveness: 'LIVE' })).toEqual({
       right: '1m 50s of 60m', isClock: true,
-      detail: `checking · output 6s ago · ${usually}claim 1 · round 1 of 3`,
+      detail: `checking · output 6s ago · ${usually}claim 1 · ${round}`,
     });
     // QUIET: the heartbeat is fresh and the output is not — the clock still runs.
     expect(line({ liveness: 'QUIET', outputMovedAt: '2026-09-25T13:45:20Z' })).toEqual({
       right: '1m 50s of 60m', isClock: true,
-      detail: `checking · no output for 14m · within its 60m budget · ${usually}claim 1 · round 1 of 3`,
+      detail: `checking · no output for 14m · within its 60m budget · ${usually}claim 1 · ${round}`,
     });
     // SILENT: no word for four minutes; the clock is frozen at the runner's last word.
     expect(line({ liveness: 'SILENT', heartbeatAt: '2026-09-25T13:55:20Z', stepStartedAt: '2026-09-25T13:50:00Z' })).toEqual({
       right: '5m 20s of 60m', isClock: true,
-      detail: `checking · no word from runner wikova for 4m · ${usually}claim 1 · round 1 of 3`,
+      detail: `checking · no word from runner wikova for 4m · ${usually}claim 1 · ${round}`,
     });
     // LEGACY: reports only between steps; no freshness, and no silence inferred from 12 quiet minutes.
     const legacy = line({ liveness: 'LEGACY', heartbeatAt: '2026-09-25T13:47:20Z', stepStartedAt: '2026-09-25T13:47:20Z' });
     expect(legacy).toEqual({
       right: '12m 0s of 60m', isClock: true,
-      detail: `checking · reports only between steps · ${usually}claim 1 · round 1 of 3`,
+      detail: `checking · reports only between steps · ${usually}claim 1 · ${round}`,
     });
     expect(JSON.stringify(legacy)).not.toContain('Update unavailable');
     expect(JSON.stringify(legacy)).not.toContain('Updated 12m ago');
@@ -1042,6 +1045,33 @@ describe('§7.2 V6: the head once the server derives the claim’s liveness', ()
       [{ timedOut: true, limitSeconds: 600 }])).toEqual({
       right: 'Timed out', isClock: false, detail: 'No report for 24m · limit 10m',
     });
+  });
+
+  it('takes the M from the kind, on the head and on every job’s line, never from the check', () => {
+    // A task's landing is "of 3" with one check in flight, and with none (a git step).
+    const one = { ...checkFor('LAND_TASK'), count: 1 };
+    expect(landingHead(landingLine(view6(claimed({ round: 2, check: one }), [listed({ round: 2, check: one })]), V6_NOW)!).detail)
+      .toBe('checking · output 6s ago · claim 1 · round 2 of 3');
+    const rebasing = landingLine(view6(claimed({ phase: 'REBASE', check: null }), [listed({ phase: 'REBASE', check: null })]), V6_NOW)!;
+    expect(landingHead(rebasing).detail).toBe('rebasing · output 6s ago · claim 1 · round 1 of 3');
+    // The jobs sheet reads each job's own kind: the merge beside the landing names no M.
+    const lines = landingJobLines(view6(claimed(), [
+      listed({ check: one }),
+      listed({ jobId: 'job-m', kind: 'LAND_PROMOTION', taskId: null, taskTitle: null, phase: 'PUSH', check: null }),
+    ]), V6_NOW);
+    expect(landingHead(lines[0].line).detail).toBe('checking · output 6s ago · claim 1 · round 1 of 3');
+    expect(landingHead(lines[1].line).detail).toBe('pushing · output 6s ago · claim 1 · round 1');
+    // A server that does not say the kind leaves the M out rather than guessing one.
+    expect(landingHead(landingLine(view6(claimed({ kind: undefined }), []), V6_NOW)!).detail)
+      .toBe('checking · output 6s ago · claim 1 · round 1');
+  });
+
+  it('writes "round N of 3" only for a task’s landing', () => {
+    expect(landingRoundClause(2, 'LAND_TASK')).toBe('round 2 of 3');
+    expect(landingRoundClause(1, 'CHECK_PROMOTION')).toBe('round 1');
+    expect(landingRoundClause(1, 'LAND_PROMOTION')).toBe('round 1');
+    expect(landingRoundClause(1, null)).toBe('round 1');
+    expect(landingRoundClause(1, 'SOMETHING_NEW')).toBe('round 1');
   });
 
   it('names the takeover and the first start the claim row still carries', () => {

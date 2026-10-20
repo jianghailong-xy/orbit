@@ -10,6 +10,7 @@ import {
   jobWords,
   landingClock,
   landingClockTime,
+  landingRoundClause,
 } from '../components/ProjectPanoramaHeader';
 import { DEFAULT_MAIN_BRANCH, mainBranchName } from './projectStart';
 import { routeId } from './idCodec';
@@ -457,9 +458,7 @@ export function landingAttemptCard(
   }
   if (attempt.claim >= 1) {
     clauses.push(`claim ${attempt.claim}`);
-    if (attempt.round != null) {
-      clauses.push(`round ${attempt.round}${attempt.check ? ` of ${attempt.check.count}` : ''}`);
-    }
+    if (attempt.round != null) clauses.push(landingRoundClause(attempt.round, attempt.kind));
   }
   if (attempt.claim > 1) {
     const first = landingFirstStartedAt(landing, attempt.jobId);
@@ -878,9 +877,7 @@ export function landingTimeoutLine(
     `${who} ${LANDING_PAGE_COPY.TOOK_IT_AT} ${took} · ${LANDING_PAGE_COPY.STOPPED_AT} ${stopped}`,
     `claim ${attempt.claim}`,
   ];
-  if (attempt.round != null) {
-    parts.push(`round ${attempt.round}${attempt.check ? ` of ${attempt.check.count}` : ''}`);
-  }
+  if (attempt.round != null) parts.push(landingRoundClause(attempt.round, attempt.kind));
   return parts.join(' · ');
 }
 

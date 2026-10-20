@@ -904,10 +904,10 @@ export async function receiveIntegrationJobProgress(
   // match the id it just locked.
   await withTransactionRetry(prisma, async (tx) => {
     const [before] = await tx.$queryRaw<Array<{
-      phase: string | null; step: string | null; round: number | null; currentCheck: unknown;
+      kind: string; phase: string | null; step: string | null; round: number | null; currentCheck: unknown;
       sourceRef: string; upstreamRef: string; targetRef: string;
     }>>(Prisma.sql`
-      SELECT "phase", "step", "round", "current_check" AS "currentCheck",
+      SELECT "kind", "phase", "step", "round", "current_check" AS "currentCheck",
              "source_ref" AS "sourceRef", "upstream_ref" AS "upstreamRef", "target_ref" AS "targetRef"
         FROM "project_integration_job"
        WHERE "id" = ${jobId}::uuid
@@ -1099,7 +1099,7 @@ async function appendProgressEvents(
     runnerId: string;
     report: ReturnType<typeof progressReport>;
     before: {
-      phase: string | null; step: string | null; round: number | null; currentCheck: unknown;
+      kind: string; phase: string | null; step: string | null; round: number | null; currentCheck: unknown;
       sourceRef: string; upstreamRef: string; targetRef: string;
     };
   },
@@ -1115,7 +1115,7 @@ async function appendProgressEvents(
       round,
       phase: input.report.phase,
       data: { round },
-      text: roundText(round),
+      text: roundText(round, input.before.kind),
     });
   }
   if (input.report.phase !== input.before.phase || input.report.step !== input.before.step) {

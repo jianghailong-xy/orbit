@@ -65,12 +65,12 @@ abstract class LandingSessionFrames {
         state: String = "RUNNING", liveness: String? = "LIVE", timedOut: Boolean = false, retryable: Boolean = false, claim: Int = 1,
         round: Int? = 1, phase: String? = "CHECK", runner: String = "wikova", step: Long = 110, heartbeat: Long = 0,
         settledAt: String? = null, settledAs: String? = null, timeline: String? = null, checks: String = "[]",
-        check: Boolean = state == "RUNNING"): String {
+        check: Boolean = state == "RUNNING", checkCount: Int = 1): String {
         val attempt = """{"jobId":"j-1","kind":"$kind","state":"$state","generation":1,"phase":${phase?.let { "\"$it\"" } ?: "null"},
             "round":${round ?: "null"},"step":null,"claim":$claim,"runnerName":"$runner","sourceSessionId":"$landing",
             "targetRef":"refs/heads/project/launch","startedAt":"${ago(step)}","heartbeatAt":${if (heartbeat == 0L) "\"${ago(0)}\"" else "\"${ago(heartbeat)}\""},
             "outputMovedAt":"${ago(6)}","progressProtocol":"v2",
-            "check":${if (check) """{"name":"${if (kind == "CHECK_PROMOTION") "MERGE_CHECK" else "TASK_ACCEPTANCE"}","index":1,"count":3,"budgetSeconds":3600,"startedAt":"${ago(step)}"}""" else "null"},
+            "check":${if (check) """{"name":"${if (kind == "CHECK_PROMOTION") "MERGE_CHECK" else "TASK_ACCEPTANCE"}","index":1,"count":$checkCount,"budgetSeconds":3600,"startedAt":"${ago(step)}"}""" else "null"},
             "liveness":${liveness?.let { "\"$it\"" } ?: "null"},"blockingReason":null,"timedOut":$timedOut,"limitSeconds":600,
             "retryable":$retryable,"pushBoundaryPassed":false}"""
         return """{"sessionId":"$landing","projectId":"$launch","subject":"$subject","taskId":${taskId?.let { "\"$it\"" } ?: "null"},
@@ -125,6 +125,7 @@ abstract class LandingSessionFrames {
             Fact("CLAIMED", ago(180), "Claimed by runner wikova · claim 1"),
             Fact("CHECK_STARTED", ago(110), "Task acceptance started · claim 1 · wikova")))))
         await { text("landing-head:right")?.matches(Regex("1m 5\\ds of 60m")) == true }
+        // One check in flight and still "of 3": the M is the rounds one LAND_TASK claim can run, not the check's count (§7.2 V6).
         assertTrue(text("landing-head:detail")!!.matches(Regex("checking · output \\d+s ago · claim 1 · round 1 of 3 · updated just now")))
         assertTrue(text("landing:budget")!!.matches(Regex("Task acceptance 1m 5\\ds of 60m")))
         assertTrue(text("landing:live")!!.matches(Regex("Output \\d+s ago · Updated just now")))
@@ -231,6 +232,8 @@ abstract class LandingSessionFrames {
         assertTrue(exists(hasText("A clean pass merges on its own")))
         assertTrue(text("landing:budget")!!.matches(Regex("Merge check 2m 4\\ds of 60m")))
         assertTrue(text("landing:live")!!.matches(Regex("Output \\d+s ago · Updated just now")))
+        // A merge check has one round per claim: the head names the round and no M.
+        assertTrue(text("landing-head:detail")!!.endsWith(" · claim 1 · round 1 · updated just now"))
         assertTrue(exists(hasText("Merge check started · claim 1 · wikova")))
         shot("08-merge-checking")
     }

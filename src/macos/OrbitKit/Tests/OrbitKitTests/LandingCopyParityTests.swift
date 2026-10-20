@@ -14,6 +14,7 @@ final class LandingCopyParityTests: XCTestCase {
     private static let landTaskStatus = "src/web/src/components/LandTaskStatus.tsx"
     private static let deliveryCard = "src/web/src/components/OpenItemDeliveryCard.tsx"
     private static let projectMerge = "src/web/src/lib/projectMerge.ts"
+    private static let sharedProgress = "src/shared/src/project-progress.ts"
 
     private struct Missing: Error, CustomStringConvertible {
         let file: String
@@ -288,7 +289,8 @@ final class LandingCopyParityTests: XCTestCase {
         assertSays(web, "lease.runner ?? 'The runner'", in: Self.progressStatus)
         assertSays(web, "lease.claimGeneration != null ? `claim ${lease.claimGeneration}` : null",
                    in: Self.progressStatus)
-        assertSays(web, "`round ${lease.round}${lease.checkCount != null ? ` of ${lease.checkCount}` : ''}`",
+        // The round's M is the job kind's (§7.2 V6), never the lease's `checkCount`.
+        assertSays(web, "const round = lease.round != null ? landingRoundClause(lease.round, lease.jobKind) : null;",
                    in: Self.progressStatus)
         // The item is escalated at birth: the footer says the wait alone.
         assertSays(web, "if (row.kind === 'LANDING_LEASE_EXPIRED') return `Owner: you · ${waited}`;",
@@ -310,6 +312,24 @@ final class LandingCopyParityTests: XCTestCase {
                             ("ABANDON", PromotionCards.abandon)] {
             assertSays(merge, "export const \(key) = '\(word)';", in: Self.projectMerge)
         }
+    }
+
+    /// "round N of M": M is the most rounds one claim of the job's kind can run (§7.2 V6), the same
+    /// number on both ends, and only a task's landing names it.
+    func testTheRoundsPerClaimAreTheWebsOwn() throws {
+        let shared = try source(Self.sharedProgress)
+        assertSays(shared, "export const LAND_TASK_ROUNDS_PER_CLAIM = \(ProjectPage.landTaskRoundsPerClaim);",
+                   in: Self.sharedProgress)
+        XCTAssertEqual(ProjectPage.landTaskRoundsPerClaim, 3)
+        let panorama = try source(Self.panorama)
+        assertSays(panorama, "return kind === 'LAND_TASK' ? `${LANDING_LIVENESS_WORDS.ROUND} ${round} "
+                   + "${LANDING_LIVENESS_WORDS.OF} ${LAND_TASK_ROUNDS_PER_CLAIM}` : `${LANDING_LIVENESS_WORDS.ROUND} ${round}`;",
+                   in: Self.panorama)
+        XCTAssertEqual(ProjectPage.landingRoundClause(2, kind: "LAND_TASK"), "round 2 of 3")
+        XCTAssertEqual(ProjectPage.landingRoundClause(1, kind: "CHECK_PROMOTION"), "round 1")
+        XCTAssertEqual(ProjectPage.landingRoundClause(1, kind: "LAND_PROMOTION"), "round 1")
+        XCTAssertEqual(ProjectPage.landingRoundClause(1, kind: nil), "round 1")
+        XCTAssertEqual(ProjectPage.landingRoundClause(1, kind: ""), "round 1")
     }
 
     /// The delivery card's third link.

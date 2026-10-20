@@ -1251,10 +1251,8 @@ public enum ExceptionCards {
             .compactMap { $0 }.joined(separator: " · ")
         if !runner.isEmpty { rows.append(FactRow(label: runnerFactLabel, value: runner)) }
         let step = lease.phase.flatMap { ProjectPage.integrationPhaseWords[$0] } ?? lease.step
-        let round = lease.round.map {
-            "\(ProjectPage.landingRound) \($0)"
-                + (lease.checkCount.map { " \(ProjectPage.landingOf) \($0)" } ?? "")
-        }
+        // The M is the job kind's most rounds per claim (§7.2 V6), never `checkCount`.
+        let round = lease.round.map { ProjectPage.landingRoundClause($0, kind: lease.jobKind) }
         let stepRow = [step,
                        lease.claimGeneration.map { "\(ProjectPage.landingClaim) \($0)" },
                        round].compactMap { $0 }.joined(separator: " · ")

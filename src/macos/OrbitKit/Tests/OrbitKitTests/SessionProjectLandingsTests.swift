@@ -208,13 +208,14 @@ final class SessionProjectLandingsTests: XCTestCase {
 /// lead is the server's own ABANDON, and its consequence follows J12's two facts.
 final class LandingOpenItemDoorTests: XCTestCase {
     private func lease(protocol progressProtocol: String? = "v2",
-                       jobKind: String = "LAND_TASK",
-                       pushReported: Bool = false) -> ProjectOpenItemRow.OpenItemLease {
+                       jobKind: String? = "LAND_TASK",
+                       pushReported: Bool = false,
+                       round: Int = 1, checkCount: Int? = 3) -> ProjectOpenItemRow.OpenItemLease {
         ProjectOpenItemRow.OpenItemLease(
             lastReportAt: "2026-09-25T06:30:00.000Z",
             leaseExpiredAt: "2026-09-25T06:40:00.000Z",
             jobKind: jobKind, generation: 3, phase: "CHECK",
-            claimGeneration: 1, round: 1, checkCount: 3, runner: "wikova",
+            claimGeneration: 1, round: round, checkCount: checkCount, runner: "wikova",
             progressProtocol: progressProtocol, pushReported: pushReported)
     }
 
@@ -246,11 +247,25 @@ final class LandingOpenItemDoorTests: XCTestCase {
         let expired = ProjectPage.landingClockTime(RelativeTime.parse("2026-09-25T06:40:00.000Z")!)
         XCTAssertEqual(block.rows[1].value,
                        "wikova · last report \(reported) · lease expired \(expired)")
-        XCTAssertEqual(block.rows[2].value, "checking · claim 1 · round 1 of 3")
+        // A merge check has one round per claim: no M, whatever its `checkCount` (3) says (§7.2 V6).
+        XCTAssertEqual(block.rows[2].value, "checking · claim 1 · round 1")
         // An item that predates the lease facts keeps the sentence it always drew.
         guard case .detailLine = ExceptionCards.facts(row(nil)) else {
             return XCTFail("a row with no lease keeps its detail line")
         }
+    }
+
+    /// The Step row's M is the job kind's most rounds per claim, never `checkCount`.
+    func testTheXE5StepRowTakesTheRoundsMFromTheJobKind() {
+        func step(_ lease: ProjectOpenItemRow.OpenItemLease) -> String? {
+            guard case .rows(let block) = ExceptionCards.facts(row(lease)) else { return nil }
+            return block.rows.first { $0.label == ExceptionCards.stepFactLabel }?.value
+        }
+        XCTAssertEqual(step(lease(round: 2, checkCount: 2)), "checking · claim 1 · round 2 of 3")
+        XCTAssertEqual(step(lease(checkCount: nil)), "checking · claim 1 · round 1 of 3")
+        XCTAssertEqual(step(lease(jobKind: "CHECK_PROMOTION", round: 2)), "checking · claim 1 · round 2")
+        XCTAssertEqual(step(lease(jobKind: "LAND_PROMOTION", checkCount: 1)), "checking · claim 1 · round 1")
+        XCTAssertEqual(step(lease(jobKind: nil)), "checking · claim 1 · round 1")
     }
 
     /// X-E5 is escalated at birth, so the footer says the wait alone; and its cell is hand-closable.

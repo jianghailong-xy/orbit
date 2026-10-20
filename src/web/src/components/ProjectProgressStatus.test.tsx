@@ -1691,9 +1691,18 @@ describe('the X-E5 card — a landing whose runner stopped reporting', () => {
     expect(row.slice(0, 260)).not.toContain('UTC');
     // The step, the claim and the round it was on.
     expect(html).toContain('rebasing · claim 1');
-    // A row that carries a check's count says which round of how many.
-    expect(draw({ ...XE5, lease: lease({ phase: 'CHECK', round: 2, checkCount: 3 }) }))
+    // Which round of how many: the M is the job kind's most rounds per claim (§7.2 V6), never the
+    // check's count — a task's landing is "of 3" with two checks, and with no check at all.
+    expect(draw({ ...XE5, lease: lease({ phase: 'CHECK', round: 2, checkCount: 2 }) }))
       .toContain('checking · claim 1 · round 2 of 3');
+    expect(draw({ ...XE5, lease: lease({ round: 1 }) })).toContain('rebasing · claim 1 · round 1 of 3<');
+    // A merge check and a merge into main have one round per claim, and an unknown kind names no M.
+    expect(draw({ ...XE5, lease: lease({ jobKind: 'CHECK_PROMOTION', phase: 'CHECK', round: 2, checkCount: 3 }) }))
+      .toContain('checking · claim 1 · round 2<');
+    expect(draw({ ...XE5, lease: lease({ jobKind: 'LAND_PROMOTION', phase: 'PUSH', round: 1, checkCount: 1 }) }))
+      .toContain('pushing · claim 1 · round 1<');
+    expect(draw({ ...XE5, lease: lease({ jobKind: null, round: 1, checkCount: 3 }) }))
+      .toContain('rebasing · claim 1 · round 1<');
   });
 
   it('is closed by hand as well — the owner’s own ending, with its reason', () => {

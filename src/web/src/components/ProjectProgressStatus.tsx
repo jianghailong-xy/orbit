@@ -25,7 +25,7 @@ import {
   itemChat,
   type CoordinatorChatSubject,
 } from '../lib/coordinatorChat';
-import { JOB_PHASES, jobPhases, landingClockTime } from './ProjectPanoramaHeader';
+import { JOB_PHASES, jobPhases, landingClockTime, landingRoundClause } from './ProjectPanoramaHeader';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { encodeId } from '../lib/idCodec';
 import { abandonJob } from '../lib/projectMerge';
@@ -1367,9 +1367,7 @@ function LeaseFacts({
     expired ? `lease expired ${expired}` : null,
   ].filter(Boolean).join(' · ');
   const step = lease.phase ? jobPhases()[lease.phase as keyof typeof JOB_PHASES] ?? lease.step : lease.step;
-  const round = lease.round != null
-    ? `round ${lease.round}${lease.checkCount != null ? ` of ${lease.checkCount}` : ''}`
-    : null;
+  const round = lease.round != null ? landingRoundClause(lease.round, lease.jobKind) : null;
   const stepRow = [step, lease.claimGeneration != null ? `claim ${lease.claimGeneration}` : null, round]
     .filter(Boolean).join(' · ');
   return (

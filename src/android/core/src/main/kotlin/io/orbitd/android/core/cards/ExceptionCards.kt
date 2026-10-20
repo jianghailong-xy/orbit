@@ -347,6 +347,10 @@ object ExceptionCards {
     const val lastReportWord = "last report"
     const val leaseExpiredWord = "lease expired"
     const val theRunnerWord = "The runner"
+    /** The most rounds one claim of a `LAND_TASK` can run: the M of "round N of M" (§7.2 V6) — the first round plus up to two refetches
+     * when the push loses a race (contract J5, appendix A-Q5; runner-go `integrate.go` `integrationRefetchRounds + 1`). iOS
+     * `ProjectPage.landTaskRoundsPerClaim`. Here because core is what this card and the app's landing head and page both reach. */
+    const val landTaskRoundsPerClaim = 3
     const val checkLabel = "Check"
     const val branchLabel = "Branch"
     const val howLabel = "How"
@@ -402,7 +406,8 @@ object ExceptionCards {
             lease.text("lastReportAt")?.let(::clock)?.let { "$lastReportWord $it" },
             lease.text("leaseExpiredAt")?.let(::clock)?.let { "$leaseExpiredWord $it" }).joinToString(" · ")
         if (runner.isNotEmpty()) rows += FactRow(runnerFactLabel, runner)
-        val round = lease.number("round")?.let { n -> "round $n" + (lease.number("checkCount")?.let { " of $it" } ?: "") }
+        // The M is the job kind's most rounds per claim (§7.2 V6), never `checkCount`: the two merge kinds have one round and name none.
+        val round = lease.number("round")?.let { n -> "round $n" + (if (lease.text("jobKind") == "LAND_TASK") " of $landTaskRoundsPerClaim" else "") }
         // The step in the landing line's own words where the phase has one, else the server's step word (iOS `leaseFacts`).
         val step = listOfNotNull(lease.text("phase")?.let { phaseWords[it] } ?: lease.text("step"),
             lease.text("claimGeneration")?.let { "claim $it" }, round).joinToString(" · ")

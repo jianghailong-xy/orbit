@@ -26,8 +26,8 @@ class LandingSessionModelTest {
     private fun json(text: String): JsonObject = Json.parseToJsonElement(text).jsonObject
     private val project = "123e4567-e89b-12d3-a456-426614174000"
 
-    private fun checkJson(step: Long = 110, budget: Int = 3600, name: String = "TASK_ACCEPTANCE") =
-        """{"name":"$name","index":1,"count":3,"budgetSeconds":$budget,"startedAt":"${iso(step)}"}"""
+    private fun checkJson(step: Long = 110, budget: Int = 3600, name: String = "TASK_ACCEPTANCE", count: Int = 3) =
+        """{"name":"$name","index":1,"count":$count,"budgetSeconds":$budget,"startedAt":"${iso(step)}"}"""
 
     /** The landing view with one attempt; every field the server sends, so a test can drop the ones it is about. */
     private fun landingJson(
@@ -190,6 +190,17 @@ class LandingSessionModelTest {
         assertEquals("Merge to main", card(view(kind = "LAND_PROMOTION"))!!.word)
         // The job word names the branch: with the project's main read as `trunk`, the merge says so.
         assertEquals("Merge to trunk", card(view(kind = "LAND_PROMOTION"), facts = LandingFacts(main = "trunk"))!!.word)
+    }
+
+    /** §7.2 V6: the M of "round N of M" is the kind's most rounds per claim, never the check's count — a task's landing is "of 3" with
+     * one check in flight and with none, and the two merge kinds, which have one round per claim, name no M (iOS LandingSessionPageTests). */
+    @Test fun theRoundsMIsTheKindsNeverTheChecksCount() {
+        assertEquals("checking · output 6s ago · claim 1 · round 2 of 3 · updated just now",
+            card(view(round = 2, check = checkJson(count = 1)))!!.detail)
+        assertEquals("rebasing · output 6s ago · claim 1 · round 1 of 3 · updated just now", card(view(phase = "REBASE", check = null))!!.detail)
+        assertEquals("checking · output 6s ago · claim 1 · round 1 · updated just now", card(view(kind = "CHECK_PROMOTION"))!!.detail)
+        assertEquals("pushing · output 6s ago · claim 1 · round 1 · updated just now",
+            card(view(kind = "LAND_PROMOTION", phase = "PUSH", check = null))!!.detail)
     }
 
     /** Usually is the merge check's own fact: an acceptance check has no usual duration to name (design §3). */
@@ -480,6 +491,13 @@ class LandingSessionModelTest {
         val attempt = view(timedOut = true, step = 1380L, heartbeat = 1380L, claim = 1, round = 1).currentAttempt!!
         assertEquals("Runner wikova took it at 17:13 · stopped at checking · claim 1 · round 1 of 3",
             LandingSessionModel.timeoutLine(attempt, zone = ZoneOffset.UTC))
+        // The M is the kind's, not the check's: one check still reads "of 3", and a merge into main names none.
+        val one = view(timedOut = true, step = 1380L, heartbeat = 1380L, check = checkJson(step = 1380L, count = 1)).currentAttempt!!
+        assertTrue(LandingSessionModel.timeoutLine(one, zone = ZoneOffset.UTC).endsWith(" · claim 1 · round 1 of 3"))
+        val merge = view(subject = "PROMOTION", taskId = null, promotionId = "p-1", kind = "LAND_PROMOTION", timedOut = true,
+            step = 1380L, heartbeat = 1380L, phase = "PUSH").currentAttempt!!
+        assertEquals("Runner wikova took it at 17:13 · stopped at pushing · claim 1 · round 1",
+            LandingSessionModel.timeoutLine(merge, zone = ZoneOffset.UTC))
         val unnamed = view(timedOut = true, runner = "").currentAttempt!!
         assertTrue(LandingSessionModel.timeoutLine(unnamed, zone = ZoneOffset.UTC).startsWith("The runner took it at"))
     }

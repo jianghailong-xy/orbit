@@ -509,10 +509,7 @@ object LandingSessionModel {
         }
         if (attempt.claim >= 1) {
             clauses += "${ProjectPage.landingClaim} ${attempt.claim}"
-            if (attempt.round != null) {
-                clauses += "${ProjectPage.landingRound} ${attempt.round}" +
-                    (attempt.check?.let { " ${ProjectPage.landingOf} ${it.count}" } ?: "")
-            }
+            if (attempt.round != null) clauses += ProjectPage.landingRoundClause(attempt.round, attempt.kind)
         }
         if (attempt.claim > 1) {
             val started = instant(attempt.startedAt)?.let { ProjectPage.landingClockTime(it, zone) } ?: "--:--"
@@ -695,7 +692,7 @@ object LandingSessionModel {
         val stopped = attempt.phase?.let { ProjectPage.phaseWords(main)[it] ?: LandingSessionCopy.RUNNING } ?: LandingSessionCopy.RUNNING
         val parts = mutableListOf("$who ${LandingSessionCopy.TOOK_IT_AT} $took · ${LandingSessionCopy.STOPPED_AT} $stopped",
             "${ProjectPage.landingClaim} ${attempt.claim}")
-        if (attempt.round != null) parts += "${ProjectPage.landingRound} ${attempt.round}" + (attempt.check?.let { " ${ProjectPage.landingOf} ${it.count}" } ?: "")
+        if (attempt.round != null) parts += ProjectPage.landingRoundClause(attempt.round, attempt.kind)
         return parts.joinToString(" · ")
     }
 

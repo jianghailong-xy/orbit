@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import {
   INTEGRATION_CLAIM_STALE_MS,
+  LAND_TASK_ROUNDS_PER_CLAIM,
+  type IntegrationJobKind,
   type IntegrationJobPhase,
   type ProjectIntegrationJob,
   type ProjectIntegrationView,
@@ -388,6 +390,17 @@ export const LANDING_LIVENESS_WORDS = {
   USUALLY: 'usually',
 };
 
+/**
+ * "round 2 of 3" for a task's landing, "round 1" for a merge check or a merge into main (§7.2 V6):
+ * the M is the most rounds one claim of that kind can run (`LAND_TASK_ROUNDS_PER_CLAIM`), never the
+ * check's count, and a kind with one round — or one this client does not know — names no M.
+ */
+export function landingRoundClause(round: number, kind: string | null | undefined): string {
+  return kind === 'LAND_TASK'
+    ? `${LANDING_LIVENESS_WORDS.ROUND} ${round} ${LANDING_LIVENESS_WORDS.OF} ${LAND_TASK_ROUNDS_PER_CLAIM}`
+    : `${LANDING_LIVENESS_WORDS.ROUND} ${round}`;
+}
+
 /** The words above mid-sentence: "output 6s ago", "no word from runner …". */
 function lowerFirst(text: string): string {
   return text ? text[0].toLowerCase() + text.slice(1) : text;
@@ -519,6 +532,7 @@ interface LandingJobFacts {
   phase?: IntegrationJobPhase | null;
   startedAt: string;
   heartbeatAt?: string | null;
+  kind?: IntegrationJobKind | null;
   claim?: number;
   round?: number | null;
   check?: LandingCheck | null;
@@ -592,10 +606,7 @@ function landingLiveness(
   }
   if (typeof job.claim === 'number' && job.claim >= 1) {
     clauses.push(`${LANDING_LIVENESS_WORDS.CLAIM} ${job.claim}`);
-    if (job.round != null) {
-      clauses.push(`${LANDING_LIVENESS_WORDS.ROUND} ${job.round}`
-        + (job.check ? ` ${LANDING_LIVENESS_WORDS.OF} ${job.check.count}` : ''));
-    }
+    if (job.round != null) clauses.push(landingRoundClause(job.round, job.kind));
   }
   if (typeof job.claim === 'number' && job.claim > 1 && Number.isFinite(Date.parse(job.startedAt))) {
     const first = Date.parse(firstStartedAt ?? '');
