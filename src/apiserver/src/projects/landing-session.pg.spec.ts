@@ -1071,10 +1071,16 @@ test('a source work session reads the newest generation and its subject as sourc
 
     const detail = await stack.sessions.get(w.ownerId, task.sessionId);
     assert.equal(detail.sessionKind, 'CONVERSATION');
+    // The step the attempt last reported (`phase`) rides along: the label says "Landing · checking"
+    // from it, and a claim that has not reported yet sends null.
+    const stored = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+      where: { id: job.jobId }, select: { phase: true },
+    });
     assert.deepEqual(detail.sourceLanding, {
       landingSessionId: landing.sessionId,
       subject: 'TASK',
       state: 'RUNNING',
+      phase: stored.phase,
       settledAs: null,
       targetRef: job.targetRef,
     });

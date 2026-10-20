@@ -931,10 +931,18 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
     const w = await world(stack, 'read', 'PROJECT_BRANCH');
     await doneTask(stack, w, 'read');
     const job = await claim(stack, w);
+    // Where the runner had got to when it stopped reporting: the card's "Step" row is read off
+    // these, and its "round N of M" off the check in flight.
+    const CHECK = { name: 'MERGE_CHECK', index: 2, count: 3, budgetSeconds: 600, startedAt: new Date() };
+    await stack.db.projectIntegrationJob.update({
+      where: { id: job.jobId },
+      data: { phase: 'REBASE', round: 2, currentCheck: CHECK },
+    });
     const clock = new ProjectOpenItemEscalationService(stack.prisma, recordingPush().push as never);
     await ageClaim(stack, job.jobId, 26 * MINUTE);
     await tick(stack, clock, recordingPush().push);
     const [item] = await leaseItems(stack, w.projectId);
+    const stored = await stack.db.projectIntegrationJob.findUniqueOrThrow({ where: { id: job.jobId } });
 
     const listed = await stack.openItems.list(w.ownerId, w.projectId);
     const row = listed.needsYou.find((candidate) => candidate.itemId === item!.id);
@@ -948,6 +956,27 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
     assert.match(row!.detailLine, /No report from/);
     assert.equal(row!.delivery.state, 'NOT_REQUIRED', 'nothing is ever delivered to a conversation for it');
     assert.equal(row!.chat.stage, 'WITH_OWNER', 'chat is still offered, as on every owner row');
+
+    // The three rows the card draws (§4.6, board v4 06 c), pinned field by field: the landing's
+    // generation, the runner with its last report and the lease's expiry, and the step with the
+    // claim and the round — all of them the payload's own facts, none derived on the client.
+    assert.deepEqual(row!.lease, {
+      lastReportAt: item!.payload.lastReportAt,
+      leaseExpiredAt: item!.payload.leaseExpiredAt,
+      jobKind: 'LAND_TASK',
+      generation: stored.generation,
+      phase: 'REBASE',
+      step: null,
+      claimGeneration: Number(stored.claimGeneration),
+      round: 2,
+      checkCount: 3,
+      runner: item!.payload.runner,
+      progressProtocol: stored.progressProtocol,
+      pushReported: false,
+    });
+    assert.equal(row!.facts?.task?.title, stored.taskId ? (await stack.db.task.findUniqueOrThrow({
+      where: { id: stored.taskId! }, select: { title: true },
+    })).title : null, 'the card names the task whose landing stopped');
 
     // The owner closes it by hand (HANDLED), and return-to-coordinator refuses it: it is never
     // delivered to a conversation (X-D7).

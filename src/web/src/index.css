@@ -5062,10 +5062,76 @@ html[data-theme='dark'] .session-tag-chip {
 }
 .session-project-landing .spl-foot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
   margin-top: 2px;
+}
+/* What a foot pushes apart: the way in and the door sit together on the left, and what opens the
+   rest (All jobs ›, the disabled Cancel) takes the right. */
+.spl-spacer {
+  flex: 1;
+}
+/* `+1 job queued`, on the merge card's foot beside All jobs ›. */
+.session-project-merge-queued {
+  color: var(--text-3);
+}
+/* The two doors a timed-out merge round offers (§4.6 X-E5, J-T9): the re-check in the brand, and
+   the end of the attempt in the danger ink — both pills, because both are decisions. */
+/* Scoped past the foot's own button rule (a card button is a plain box), which would otherwise
+   paint these two white: the re-check wears the brand, and the end of the attempt the danger ink. */
+.session-project-merge .session-project-merge-foot > button.session-project-merge-rerun,
+.session-project-merge .session-project-merge-foot > button.session-project-merge-abandon {
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.session-project-merge .session-project-merge-foot > button.session-project-merge-rerun {
+  border: 1px solid var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+.session-project-merge .session-project-merge-foot > button.session-project-merge-abandon {
+  border: 1px solid var(--danger, #cf3b35);
+  background: var(--danger, #cf3b35);
+  color: #fff;
+}
+.session-project-merge .session-project-merge-foot > button.session-project-merge-rerun:disabled,
+.session-project-merge .session-project-merge-foot > button.session-project-merge-abandon:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* "Open landing ›" — the one thing on this card said in words rather than folded into a press
+   (owner 2026-10-19, 方案 A). A real link, so ⌘-click still opens its own tab. */
+.session-project-landing .spl-open,
+.landing-jobs-landing {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.session-project-landing .spl-open:hover,
+.landing-jobs-landing:hover {
+  text-decoration: underline;
+}
+/* The same slot on a server that names no landing session: a fact in the grey ink a reader takes
+   for "nothing here", and nothing to press. */
+.spl-open.is-none,
+.landing-jobs-landing.is-none,
+.landing-nopage {
+  color: var(--text-3);
+  font-weight: 400;
+  white-space: nowrap;
+}
+/* A job's row in the sheet: the way into its landing sits under the body, beside Retry — the web's
+   Retry is the row's full width, so "beside" is the line under it. */
+.landing-jobs-slot {
+  display: flex;
+  justify-content: flex-end;
+  font-size: 12.5px;
 }
 /* The one press the card carries, drawn as the merge card's primary: the same door the jobs list
    opens (POST …/integration/jobs/:jobId/retry), and only where the server offers it. */
@@ -5094,6 +5160,7 @@ html[data-theme='dark'] .session-tag-chip {
   cursor: pointer;
 }
 .session-project-landing .spl-error {
+  flex-basis: 100%;
   color: var(--error);
 }
 /* The merge into main on a project's sessions page, under the progress strip (owner decision
@@ -5315,6 +5382,150 @@ html[data-theme='dark'] .session-tag-chip {
 .session-project-merge-row-detail {
   color: var(--text-3);
   font-size: 12px;
+}
+/* The Landings group on a project's sessions page (owner 2026-10-19, board v4 04 c1): rows that
+   wear the merged line's head — one circle saying how it ended, the title, the age, and one line
+   under them — and never a session row's own anatomy. */
+.session-project-landings {
+  display: flex;
+  flex-direction: column;
+}
+.session-project-landing-row {
+  /* A session row's fixed 64px is a conversation's anatomy, not this one's: a landing's title is
+     the landing's (it names the subject, not a chat), and it takes the line it needs beside its
+     time, with the outcome under it. */
+  height: auto;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+.session-project-landing-row .session-project-merge-row-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.session-project-landing-row .session-time {
+  flex: none;
+}
+.session-project-landing-row:hover {
+  background: var(--bg-hover);
+}
+.session-project-landing-mark {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1;
+}
+.session-project-landing-mark.is-fail {
+  background: var(--error-bg, var(--warning-bg));
+  color: var(--error);
+}
+.session-project-landing-mark.is-ok {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.session-project-landing-mark.is-merge {
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.session-project-landing-fold {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.session-project-landing-fold:hover {
+  background: var(--bg-hover);
+}
+.session-project-landing-fold .session-project-landing-mark {
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+}
+.session-project-landing-fold-text {
+  flex: 1;
+}
+.session-project-landing-chev {
+  color: var(--text-4);
+  font-size: 11px;
+  transition: transform 120ms ease;
+}
+.session-project-landing-chev.open {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .session-project-landing-chev {
+    transition: none;
+  }
+}
+/* The landing the conversation's work fed, at the session's own bottom (owner 2026-10-19, board
+   v4 06 e): a derived label, in the integration line's words and inks — blue while it moves, green
+   once it landed, red where it stopped. */
+.session-source-landing {
+  display: flex;
+  justify-content: center;
+  margin: 4px 16px 10px;
+}
+.session-source-landing-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.session-source-landing-chip.is-run {
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+.session-source-landing-chip.is-landed {
+  background: var(--success-bg);
+  color: var(--success);
+}
+.session-source-landing-chip.is-failed {
+  background: var(--error-bg, var(--warning-bg));
+  color: var(--error);
+}
+.session-source-landing-chip.is-quiet {
+  color: var(--text-3);
+}
+/* The task page's way into the landing its section describes, under the facts. */
+.tdp-landing-open {
+  margin-top: 8px;
+}
+.tdp-landing-link {
+  color: var(--brand);
+  font-weight: 600;
+  text-decoration: none;
+}
+.tdp-landing-link:hover {
+  text-decoration: underline;
+}
+/* The receipt's own way into the round's landing (§2.9 LS6), at its bottom. */
+.project-promotion-landing {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
 }
 /* A merge in the coordinator conversation (owner decision 2026-10-06): one line where each moment
    happened, the card itself the review it opens. Orange only while it waits on the reader. */
@@ -24897,8 +25108,20 @@ button.agent-progress-agent:hover {
 .wt-recovery-repair-status-copy strong, .wt-recovery-repair-status-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wt-recovery-repair-status-copy small { color: var(--text-2); }
 .wt-recovery-repair-chevron { color: var(--text-2); font-size: 22px; line-height: 1; }
-.wt-recovery-repair-hint { margin: 5px 0 0 !important; font-size: 11px; }
-.wt-recovery-repair-error { color: var(--error) !important; }
+.wt-recovery-repair-icon { flex: none; font-size: 16px; color: var(--text-2); }
+.wt-recovery-repair-status.is-ready .wt-recovery-repair-icon, .wt-recovery-repair-status.is-ready .wt-recovery-repair-note { color: var(--success); }
+.wt-recovery-repair-status.is-conflict .wt-recovery-repair-icon, .wt-recovery-repair-status.is-conflict .wt-recovery-repair-note,
+.wt-recovery-repair-status.is-reply .wt-recovery-repair-icon, .wt-recovery-repair-status.is-reply .wt-recovery-repair-note { color: var(--warning); }
+.wt-recovery-repair-status.is-failed .wt-recovery-repair-icon, .wt-recovery-repair-status.is-failed .wt-recovery-repair-note { color: var(--error); }
+/* "Checked 14m ago · Check again", or "Checking the repair…" while Orbit checks what a repair left. */
+.wt-recovery-checked .anticon, .wt-recovery-actions .anticon { margin-right: 4px; }
+.wt-recovery-link { padding: 0; border: 0; background: none; color: var(--brand); font: inherit; cursor: pointer; }
+.wt-recovery-link:disabled { opacity: .55; cursor: default; }
+.wt-recovery-snapshot.is-stale { opacity: .45; }
+.wt-recovery-files { margin: 10px 0; }
+.wt-recovery-files ul { display: grid; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; }
+.wt-recovery-files code { font-size: 11px; }
+.wt-recovery-actions-note { margin: 6px 0 0 !important; font-size: 11px; }
 @media (max-width: 680px) { .wt-recovery-histories { grid-template-columns: 1fr; } }
 
 /* Timed pauses keep identity and quota visible while showing when the account returns. */

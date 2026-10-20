@@ -100,6 +100,11 @@ export const sharedCases = {
     'rejects landedCommits of the wrong shape',
     'relates the local target to origin only when a check has read both sides',
     'hands repairs the actual private checkout and forbids shared target writes',
+    'tells a repair that Orbit checks again when its turn ends, to commit, and to ask the owner directly',
+    'hands the repair session the next step of the same recovery, with where it stands now',
+    'lists what an unfinished repair left unresolved, and keeps to the repair it has when the check names none',
+    'asks the repair session for a PR candidate when one is being prepared',
+    'offers Done only on an ALREADY_LANDED check stored with a previewId and naming its source, and never as a candidate',
   ],
 };
 

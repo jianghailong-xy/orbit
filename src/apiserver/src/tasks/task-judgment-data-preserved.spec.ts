@@ -2333,6 +2333,21 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE: every stored mapping reads 'kubernetes'.
       '0430_managed_runner_backend',
+      // The recovery check a repair session's turn is owed (0431, S1 of the merge-recovery repair loop):
+      // one nullable TIMESTAMP(3) with no default and no constraint on `session`
+      // (`merge_repair_turn_ended_at`) — catalog-only. Only that table is altered: no `task`, `project`
+      // or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no
+      // function, trigger, type, index or constraint is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL.
+      '0431_session_merge_repair_turn_ended_at',
+      // The owner's Done on a recovery whose check found the session already on origin (0432, S3 of the
+      // merge-recovery repair loop): `session_merge_receipt_result_check` dropped and re-added with one more
+      // value, `MATCHED_BY_CONTENT`, which every stored receipt (one of 0128's four) satisfies — inside a DO
+      // block that replaces it only while it does not read that value yet. Only `session_merge_receipt` is
+      // named: no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions, and no function, trigger, type or index is created, replaced or dropped, so it is
+      // not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0432_session_merge_receipt_matched_by_content',
       // A QUEUED integration job never carries a stop request (0433, docs/project-integration-line-contract.md
       // §2.2 J-T8): the stored QUEUED rows with `cancel_requested_at` are backfilled to CANCELLED with
       // `finished_at` set, the CONFIRMED / RECHECKING promotions they were landing are settled the way
