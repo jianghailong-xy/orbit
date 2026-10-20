@@ -344,7 +344,7 @@ import {
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
 import { isLandingSessionDetail } from '../lib/landingSession';
-import { landingCard } from './ProjectPanoramaHeader';
+import { Glyph, landingCard } from './ProjectPanoramaHeader';
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { LandingLink } from './LandingLink';
 import { SessionProjectLandings } from './SessionProjectLandings';
@@ -10994,6 +10994,11 @@ export function WorkspaceView({
                 <div className="session-source-landing">
                   <LandingLink className={`session-source-landing-chip is-${sourceLanding.tone}`}
                     sessionId={sourceLanding.id}>
+                    {/* The ring the board draws on the pill (06 e): work in hand, the same mark the
+                        landing rows carry — and the words beside it say the same thing without it. */}
+                    {sourceLanding.tone === 'run'
+                      ? <Glyph shape="spinner" color="currentColor" size={11} />
+                      : null}
                     {`${sourceLanding.text} ›`}
                   </LandingLink>
                 </div>

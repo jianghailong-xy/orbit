@@ -5485,6 +5485,7 @@ html[data-theme='dark'] .session-tag-chip {
 .session-source-landing-chip {
   display: inline-flex;
   align-items: center;
+  gap: 5px;
   padding: 3px 10px;
   border-radius: 999px;
   background: var(--bg-hover);

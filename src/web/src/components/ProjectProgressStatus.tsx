@@ -25,6 +25,7 @@ import {
   itemChat,
   type CoordinatorChatSubject,
 } from '../lib/coordinatorChat';
+import { JOB_PHASES, jobPhases, landingClockTime } from './ProjectPanoramaHeader';
 import { decisionReceiptAnchor, type ReceiptPlacement } from '../lib/decisionReceipt';
 import { encodeId } from '../lib/idCodec';
 import { abandonJob } from '../lib/projectMerge';
@@ -220,6 +221,9 @@ export function waitingLabel(row: ProjectOpenItemRow, now: number): string {
 export function ownerLine(row: ProjectOpenItemRow, now: number): string {
   const waited = `waiting ${formatSpan(waitedMs(row, now))}`;
   if (row.assignee === 'OWNER') {
+    // §4.6 X-E5 is escalated at birth: there is no window it waited the coordinator through, so
+    // the footer says the wait alone — the heading above it says the fact the item is about.
+    if (row.kind === 'LANDING_LEASE_EXPIRED') return `Owner: you · ${waited}`;
     // An item a clock already moved says WHEN it moved, in the words the coordinator's own footer
     // uses for the same instant — it is the fact the escalation heading above it is about, and
     // without it the line said only that the item had been waiting, which the heading already said.
@@ -737,6 +741,9 @@ const HAND_CLOSABLE_KINDS: ReadonlySet<OpenItemKind> = new Set<OpenItemKind>([
   'INTEGRATION_ERROR',
   'TASK_FAILED',
   'DELIVERY_REVIEW',
+  // §4.6 X-E5: the owner's own ending for a claim whose job may already be gone — the silence is
+  // theirs to judge as dealt with, and the server's `HAND_CLOSABLE_RESOLUTIONS` takes the same kind.
+  'LANDING_LEASE_EXPIRED',
 ]);
 
 /**
@@ -1260,6 +1267,12 @@ function chainStanding(failure: NonNullable<OpenItemFacts['failure']>): string {
  */
 function ItemFactRows({ row }: { row: ProjectOpenItemRow }): JSX.Element | null {
   const facts = row.facts;
+  // §4.6 X-E5's card draws the claim it is about in three rows (board v4 06 c): which landing, on
+  // which runner and since when, and where the runner had got to. An item an older build opened
+  // carries none of it and keeps the sentence it always did.
+  if (row.kind === 'LANDING_LEASE_EXPIRED' && row.lease) {
+    return <LeaseFacts lease={row.lease} taskTitle={facts?.task?.title ?? null} />;
+  }
   if (!facts) {
     return row.detailLine ? <p className="project-open-item-detail">{row.detailLine}</p> : null;
   }
@@ -1324,6 +1337,46 @@ function ItemFactRows({ row }: { row: ProjectOpenItemRow }): JSX.Element | null 
           <span className="project-open-item-mono">{facts.errorCode}</span>
         </FactRow>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * The three rows X-E5's card is drawn from (§4.6, board v4 06 c): the landing that stopped and its
+ * generation, the runner with its last report and the lease's expiry — both on the reader's own
+ * clock, as every instant on these cards is — and the step, the claim and the round it was on.
+ *
+ * A field the row does not carry is left out rather than filled in: an item opened before the
+ * payload had it draws the rows it can, and one word in the wrong place would claim a fact the
+ * platform never recorded.
+ */
+function LeaseFacts({
+  lease,
+  taskTitle,
+}: {
+  lease: NonNullable<ProjectOpenItemRow['lease']>;
+  taskTitle: string | null;
+}): JSX.Element {
+  const generation = lease.generation != null ? `generation ${lease.generation}` : null;
+  const landing = [taskTitle, generation].filter(Boolean).join(' · ');
+  const reported = lease.lastReportAt ? landingClockTime(lease.lastReportAt) : null;
+  const expired = lease.leaseExpiredAt ? landingClockTime(lease.leaseExpiredAt) : null;
+  const runner = [
+    lease.runner ?? 'The runner',
+    reported ? `last report ${reported}` : null,
+    expired ? `lease expired ${expired}` : null,
+  ].filter(Boolean).join(' · ');
+  const step = lease.phase ? jobPhases()[lease.phase as keyof typeof JOB_PHASES] ?? lease.step : lease.step;
+  const round = lease.round != null
+    ? `round ${lease.round}${lease.checkCount != null ? ` of ${lease.checkCount}` : ''}`
+    : null;
+  const stepRow = [step, lease.claimGeneration != null ? `claim ${lease.claimGeneration}` : null, round]
+    .filter(Boolean).join(' · ');
+  return (
+    <div className="project-open-item-facts">
+      {landing ? <FactRow label="Landing">{landing}</FactRow> : null}
+      {runner ? <FactRow label="Runner">{runner}</FactRow> : null}
+      {stepRow ? <FactRow label="Step">{stepRow}</FactRow> : null}
     </div>
   );
 }

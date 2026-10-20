@@ -1137,8 +1137,21 @@ export interface ProjectOpenItemRow<Instant = string> {
    */
   lease?: {
     lastReportAt: Instant | null;
+    /** When the claim's lease ran out — the last report plus the step's limit (§7.2 V6). */
+    leaseExpiredAt?: Instant | null;
     /** `LAND_TASK`, `CHECK_PROMOTION` or `LAND_PROMOTION`: J12's verdict branches on it. */
     jobKind: string | null;
+    /** Which generation of the work the claim was on. */
+    generation?: number | null;
+    /** The step the runner last reported, and its sub-step. */
+    phase?: string | null;
+    step?: string | null;
+    /** The claim the job is on, the round inside it, and how many rounds its check has. */
+    claimGeneration?: number | null;
+    round?: number | null;
+    checkCount?: number | null;
+    /** The runner holding the claim, by name. */
+    runner?: string | null;
     progressProtocol: string | null;
     pushReported: boolean;
   } | null;

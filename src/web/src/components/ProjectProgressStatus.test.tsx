@@ -1621,7 +1621,9 @@ describe('the X-E5 card — a landing whose runner stopped reporting', () => {
   // The item opened two minutes ago, on a claim that last reported 29 minutes ago: 27 minutes of
   // silence, which is the number the heading is about.
   const lease = (over: Partial<NonNullable<ProjectOpenItemRow['lease']>> = {}) => ({
-    lastReportAt: at(29 * MINUTE), jobKind: 'LAND_TASK', progressProtocol: 'v2', pushReported: false,
+    lastReportAt: at(29 * MINUTE), leaseExpiredAt: at(19 * MINUTE), jobKind: 'LAND_TASK',
+    generation: 2, phase: 'REBASE', step: null, claimGeneration: 1, round: null, checkCount: null,
+    runner: 'workstation-gpu', progressProtocol: 'v2', pushReported: false,
     ...over,
   });
   const XE5 = item({
@@ -1641,7 +1643,7 @@ describe('the X-E5 card — a landing whose runner stopped reporting', () => {
     actions: ['ABANDON', 'OPEN_LANDING'],
     primaryAction: 'ABANDON',
     requiredAction: 'The runner stopped reporting; abandon this landing, or wait for the runner to come back.',
-    facts: null,
+    facts: facts({ task: { id: 'task-xe5', title: '维护每日轮数上限在服务端路径上没生效' } }),
     lease: lease(),
   });
   const draw = (row: ProjectOpenItemRow): string => paint(
@@ -1658,8 +1660,8 @@ describe('the X-E5 card — a landing whose runner stopped reporting', () => {
     expect(html).toContain('The runner stopped reporting; abandon this landing, or wait for the runner to come back.');
     const row = actionRow(html);
     expect(row[0]).toEqual({ label: 'Abandon', weight: 'primary' });
-    // Open landing is a way in, drawn after the press the card is asking for.
-    expect(row.slice(1).map((door) => door.label)).toEqual(['Open landing']);
+    // Then the way in, and — the owner's own ending — Mark as handled.
+    expect(row.slice(1).map((door) => door.label)).toEqual(['Open landing', 'Mark as handled']);
     expect(row[1]!.weight).toBe('link');
   });
 
@@ -1675,6 +1677,42 @@ describe('the X-E5 card — a landing whose runner stopped reporting', () => {
     // And a v2 claim that recorded a push proves nothing either way — say the cautious thing.
     expect(draw({ ...XE5, lease: lease({ pushReported: true }) }))
       .toContain('Ends this attempt. It may have been pushed, and nothing is queued again.');
+  });
+
+  it('draws the claim it is about in three rows, on the reader’s own clock', () => {
+    const html = draw(XE5);
+    // The landing that stopped, and which generation of its work.
+    expect(html).toContain('>Landing</span><span class="criteria-decision-v">');
+    expect(html).toContain('维护每日轮数上限在服务端路径上没生效 · generation 2');
+    // The runner, its last report and the lease's expiry — local wall clock, the card's own.
+    const row = html.slice(html.indexOf('>Runner</span>'));
+    expect(row.slice(0, 260)).toContain('workstation-gpu · last report');
+    expect(row.slice(0, 260)).toContain('lease expired');
+    expect(row.slice(0, 260)).not.toContain('UTC');
+    // The step, the claim and the round it was on.
+    expect(html).toContain('rebasing · claim 1');
+    // A row that carries a check's count says which round of how many.
+    expect(draw({ ...XE5, lease: lease({ phase: 'CHECK', round: 2, checkCount: 3 }) }))
+      .toContain('checking · claim 1 · round 2 of 3');
+  });
+
+  it('is closed by hand as well — the owner’s own ending, with its reason', () => {
+    const row = actionRow(draw(XE5));
+    expect(row.map((door) => door.label)).toContain('Mark as handled');
+    expect(draw(XE5)).toContain('Only if you dealt with it yourself. Your reason goes on the record.');
+  });
+
+  it('says the wait alone in the footer — the item never waited for anybody', () => {
+    expect(draw(XE5)).toContain('Owner: you · waiting 2m<');
+    expect(draw(XE5)).not.toContain('came to the owner at');
+  });
+
+  it('keeps the older item’s sentence and no invented rows', () => {
+    const old = { ...XE5, lease: null, facts: null } as ProjectOpenItemRow;
+    const html = draw(old);
+    // A row an older build opened: the sentence it always had, and none of the new rows.
+    expect(html).toContain('No report from runner workstation-gpu since 2026-10-19 14:35 UTC.');
+    expect(html).not.toContain('>Step</span>');
   });
 
   it('points Open landing at the landing session, and says so in the consequence line', () => {

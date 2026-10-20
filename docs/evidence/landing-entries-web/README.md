@@ -22,14 +22,15 @@
 | `merge-check-timeout` | 04 c5 · 检查超时 | 整张琥珀；`Re-run the check` + `Abandon`；整行仍进这一轮 |
 | `merge-timed-out` | 04 c6 · 合入超时 | 整张琥珀；只有 `Abandon`；推送一句 `may have been pushed` |
 | `landings-group` | 04 c1 · Landings 组 | 在 Coordinator 下面、Today 上面；等决定的行说结局和谁拿着（`Checks failed · with the coordinator`）；更早的折成 `Earlier · 5 landed · 1 nothing to land ›`；在途的与已合入的合入轮不列 |
+| `receipt` | 04 c7 · 已合入 | 「Merged into main」行照旧打开回执；回执底部 `Open landing ›`（浅色与深色各一张） |
 
 ### 06 列表 / 协调会话 / 任务页 / 写代码的会话
 
 | 帧 | 效果图 | 本分支画出的 |
 | --- | --- | --- |
-| `chat-xe5` | 06 c · X-E5 的 owner 卡 | 标题 `Now yours — no report from the runner for 25m`；`Abandon` 是领头的实心门，每扇门下一行后果（J12：`Nothing was pushed`）；`Open landing` 是看的门 |
+| `chat-xe5` | 06 c · X-E5 的 owner 卡 | 标题 `Now yours — no report from the runner for 25m`；`Abandon` 是领头的实心门，每扇门下一行后果（J12：`Nothing was pushed`）；`Open landing` 是看的门，`Mark as handled` 在门的末尾；三行事实（`Landing` P10 · generation 2、`Runner` workstation-gpu · last report 14:35 · lease expired 14:45、`Step` rebasing · claim 1 · round 1 of 3，均为本地时钟）；卡脚只有 `Owner: you · waiting 2m` |
 | `chat-delivery` | 06 b · 协调会话的转录卡 | `Open the task ↗`、**保留**的 `Open the failed session ↗`、后面新加 `Open the landing ↗` |
-| `source-session` | 06 e · 写代码的会话底部 | 派生标签 `Landing · checking ›`（蓝），指向这个任务段的落地会话 |
+| `source-session` | 06 e · 写代码的会话底部 | 派生标签 `↻ Landing · checking ›`（蓝，圆环与效果图一致），指向这个任务段的落地会话 |
 | `task-page` | 06 d · 任务页的 Landing 段 | 段末一个 `Open landing ›`（任务读口只给最新一代，一个链接） |
 
 对比要点（与效果图一致的取舍）：
@@ -38,8 +39,8 @@
 - 合入作业领头时 Landing 卡不画，排在后面的作业由合入卡的 `+N job queued · All jobs ›` 留住（`merge-check`）。
 - `BLOCKED` 的合入卡不加入口（单测 `LandingJobsSheet.test.tsx` 断言，画面不另出帧）。
 - 旧服务端（没有 `landingSessionId`）那一格写灰色 `No landing page on this server yet`，不可点（单测）。
-- 检查超时那一句：作业清单里的推送句沿用 main 的规则——`CHECK_PROMOTION` 不写推送句（效果图 c5 写
-  `a check pushes nothing`；本分支按已有的 `landingJobLines` 省略该句，其余一字不差）。
+- 检查超时那一句：`CHECK_PROMOTION` 不写推送句（owner 2026-10-19「检查作业超时不写推送一句」）——作业清单、
+  合入卡与落地会话页都只留事实那一行（会话页原先的 "A check pushes nothing — main is as it was." 在本次一并去掉）。
 
 ## 文件
 
@@ -48,5 +49,5 @@
 - `kit/check-swift-pins.py --against HEAD`：把 OrbitKit 五个 copy-parity 测试钉住的 web 字面量在
   工作树与 `HEAD`（项目线 tip）各扫一遍，比较两边找不到的集合——两边都是 9 个（多行 TSX、含转义引号
   的字面量超出这个粗糙读取器的能力），**没有一个钉住的字面量移动**；本任务的 Swift 一行未改。
-- `web/`：13 帧 × 浅色/深色 = 26 张 PNG，以及截图时读回的 `report.json`（每帧的链接文字与 href、
-  卡片文字、Landings 组的行、未处理的 fixture 请求）。
+- `web/`：14 帧 × 浅色/深色 = 28 张 PNG，以及截图时读回的 `report.json`（每帧的链接文字与 href、
+  卡片文字、Landings 组的行、回执、任务页、未处理的 fixture 请求）。

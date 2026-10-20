@@ -271,7 +271,15 @@ export interface OpenItemRow {
    *  for every other kind. */
   lease: {
     lastReportAt: string | null;
+    leaseExpiredAt: string | null;
     jobKind: string | null;
+    generation: number | null;
+    phase: string | null;
+    step: string | null;
+    claimGeneration: number | null;
+    round: number | null;
+    checkCount: number | null;
+    runner: string | null;
     progressProtocol: string | null;
     pushReported: boolean;
   } | null;

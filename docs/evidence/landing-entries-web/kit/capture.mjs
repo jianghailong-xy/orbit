@@ -134,6 +134,15 @@ const promotion = (o) => ({
   decidedAt: null, merged: null, onPass: 'MERGE', landingSessionId: LANDING_ROUND, ...o,
 });
 const landingSummary = (o) => ({ subject: 'TASK', state: 'SETTLED', settledAs: 'LANDED', settledAt: ago(HOUR), ...o });
+const mergedPromotion = promotion({
+  state: 'MERGED', onPass: null,
+  tasks: [{ taskId: 'a1', title: TASK }, { taskId: 'a2', title: TASK_2 }], taskIds: ['a1', 'a2'],
+  checks: [{ name: 'MERGE_CHECK', command: 'npm test', expectedExitCode: 0, exitCode: 0, timedOut: false,
+    durationMs: 17 * MIN + 41_000, outputTail: 'ok\n' }],
+  landsTreeSha: '5e5bfca' + '0'.repeat(33), landsAs: 'MERGE_COMMIT', askedAt: ago(30 * MIN),
+  merged: { sha: '8ed0ea7' + '0'.repeat(33), byUserId: null, at: ago(11 * MIN), automatic: true,
+    revert: 'git revert -m 1 8ed0ea7' },
+});
 const projectDoc = {
   id: PROJECT, title: PROJECT_TITLE, status: 'OPEN', createdAt: '2026-10-10T00:00:00.000Z',
   lastActivityAt: ago(2 * MIN),
@@ -152,8 +161,14 @@ const xe5 = {
   delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
   actions: ['ABANDON', 'OPEN_LANDING'], primaryAction: 'ABANDON',
   requiredAction: 'The runner stopped reporting; abandon this landing, or wait for the runner to come back.',
-  question: null, facts: null,
-  lease: { lastReportAt: ago(27 * MIN), jobKind: 'LAND_TASK', progressProtocol: 'v2', pushReported: false },
+  question: null,
+  facts: { task: { id: TASK_ID, title: TASK_3 }, targetRef: null, targetSha: null, files: [],
+    nothingLanded: false, check: null, branchUnchanged: false, errorCode: null, failure: null },
+  lease: {
+    lastReportAt: ago(27 * MIN), leaseExpiredAt: ago(17 * MIN), jobKind: 'LAND_TASK', generation: 2,
+    phase: 'REBASE', step: null, claimGeneration: 1, round: 1, checkCount: 3, runner: RUNNER,
+    progressProtocol: 'v2', pushReported: false,
+  },
   chat: { canMessage: true, sessionId: SESSION.id, refusal: null },
 };
 const checksFailedItem = {
@@ -276,6 +291,13 @@ const FRAMES = {
       execution: { state: 'RUNNING', phase: 'PUSH', startedAt: ago(30 * MIN) } }),
     items: { needsYou: [], withCoordinator: [] },
   },
+  // 04 c7 — the "Merged into main" row still opens its receipt; the receipt's bottom is the
+  // round's own way into its landing session.
+  'receipt': {
+    path: sessionsPath, clip: '.workspace-view', viewport: true, clickMerged: true,
+    sessions: [coordinator, TASK_SESSION], jobs: [], promotion: null,
+    items: { needsYou: [], withCoordinator: [] }, merged: [mergedPromotion],
+  },
   // 04 c1 — the Landings group: waiting, the day's outcomes, the fold.
   'landings-group': {
     path: sessionsPath, clip: '.session-col',
@@ -345,7 +367,7 @@ for (const theme of THEMES) {
       }
       if (p === `/api/projects/${PROJECT}/integration`) return json(integration(frame.jobs));
       if (p === `/api/projects/${PROJECT}/promotions/current`) return json(frame.promotion);
-      if (p === `/api/projects/${PROJECT}/promotions/merged`) return json([]);
+      if (p === `/api/projects/${PROJECT}/promotions/merged`) return json(frame.merged ?? []);
       if (p === `/api/projects/${PROJECT}/open-items`) {
         return json({ ...frame.items, startRequest: null, readAt: new Date(NOW).toISOString() });
       }
@@ -390,6 +412,10 @@ for (const theme of THEMES) {
     }
     await page.evaluate(() => document.fonts.ready);
     await page.waitForTimeout(900);
+    if (frame.clickMerged) {
+      const merged = page.locator('.session-project-merge-row').first();
+      if (await merged.count()) { await merged.click(); await page.waitForTimeout(600); }
+    }
     if (frame.openSheet) {
       const press = page.locator('.session-project-landing button.spl-press').first();
       if (await press.count()) { await press.click(); await page.waitForTimeout(600); }
@@ -414,6 +440,9 @@ for (const theme of THEMES) {
       sourceChipHref: document.querySelector('.session-source-landing-chip')?.getAttribute('href') ?? null,
       taskLanding: document.querySelector('.landing-section, section[aria-label="Task landing"]')?.textContent ?? null,
       taskLandingLink: [...document.querySelectorAll('section[aria-label="Task landing"] a')]
+        .map((a) => `${a.textContent} → ${a.getAttribute('href')}`),
+      receipt: document.querySelector('.project-promotion-receipt')?.textContent ?? null,
+      receiptLinks: [...document.querySelectorAll('.project-promotion-receipt a')]
         .map((a) => `${a.textContent} → ${a.getAttribute('href')}`),
     }));
     const file = `${OUT}/${theme}-${name}.png`;

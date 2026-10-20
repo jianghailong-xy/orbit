@@ -237,7 +237,9 @@ export function LandingSessionView({
   const menuRows = landingMenuItemList(landing, gates, {
     hasCoordinator: coordinatorId != null,
     hasReview: currentPromotion != null,
-    pushSentence,
+    // J12: a check never pushes, and a v2 claim that recorded no PUSH proves none happened.
+    nothingPushed: attempt?.kind === 'CHECK_PROMOTION'
+      || pushSentence === LANDING_PAGE_COPY.NOTHING_PUSHED_SENTENCE,
   });
   const run = (action: LandingMenuAction): void => {
     switch (action) {
@@ -372,17 +374,15 @@ export function LandingSessionView({
                 </div>
               ) : null}
               {timeoutLine ? <div className="landing-card-line">{timeoutLine}</div> : null}
+              {/* A timed-out check writes no push sentence at all (owner 2026-10-19): the line
+                  above already says where the runner stopped. */}
               {pushSentence ? (
-                pushSentence === LANDING_PAGE_COPY.CHECK_PUSHES_NOTHING_SENTENCE
-                  ? <div className="landing-card-line">{pushSentence}</div>
-                  : (
-                    <div className="landing-card-line">
-                      <b>{pushSentence.startsWith(LANDING_PAGE_COPY.NOTHING_WAS_PUSHED)
-                        ? LANDING_PAGE_COPY.NOTHING_WAS_PUSHED
-                        : LANDING_PAGE_COPY.MAY_HAVE_BEEN_PUSHED}</b>
-                      {pushSentence.slice(pushSentence.indexOf(' —'))}
-                    </div>
-                  )
+                <div className="landing-card-line">
+                  <b>{pushSentence.startsWith(LANDING_PAGE_COPY.NOTHING_WAS_PUSHED)
+                    ? LANDING_PAGE_COPY.NOTHING_WAS_PUSHED
+                    : LANDING_PAGE_COPY.MAY_HAVE_BEEN_PUSHED}</b>
+                  {pushSentence.slice(pushSentence.indexOf(' —'))}
+                </div>
               ) : null}
               {landing.subject === 'PROMOTION' && !landing.settledAt && card.running
                 && attempt?.kind === 'CHECK_PROMOTION' && promotionOnPassLine(currentPromotion) ? (

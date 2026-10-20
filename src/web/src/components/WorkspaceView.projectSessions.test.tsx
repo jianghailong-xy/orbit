@@ -1410,12 +1410,16 @@ describe('the source work session’s landing label', () => {
     // sessions page the `?project=` rides along (LandingLink).
     expect(chip()?.getAttribute('href')).toBe(`/sessions/${LANDING}`);
     expect(chip()?.className).toContain('is-run');
+    // The pill wears the ring the board draws on it (06 e); the words say the same thing.
+    expect(chip()?.querySelector('svg[data-glyph="spinner"]')).not.toBeNull();
   });
 
   it('says where it landed, and what stopped it', async () => {
     await openSource(at({ settledAs: 'LANDED' }));
     expect(chip()?.textContent).toBe('On project/alpha ✓ ›');
     expect(chip()?.className).toContain('is-landed');
+    // A landed label is not "in hand": no ring.
+    expect(chip()?.querySelector('svg[data-glyph="spinner"]')).toBeNull();
   });
 
   it('says checks failed in the failed ink, and draws nothing for no landing at all', async () => {
