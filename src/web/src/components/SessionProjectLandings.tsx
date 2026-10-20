@@ -29,6 +29,9 @@ export function SessionProjectLandings({
   onOpen: (landingSessionId: string) => void;
 }): JSX.Element {
   const [expanded, setExpanded] = useState(false);
+  // A closed fold that counts landings wears v4 04 c1's green ✓. A bare `Earlier`, over rows neither
+  // count names (cancelled, handled, declined…), wears it grey, as iOS and Android draw a closed fold.
+  const bare = group.earlier?.landed === 0 && group.earlier.nothing === 0;
   return (
     <section className="session-project-landings" aria-label={SESSION_LANDINGS_COPY.TITLE}
       data-landings={group.waiting.length + group.settled.length}>
@@ -43,7 +46,7 @@ export function SessionProjectLandings({
         <>
           <button type="button" className="session-project-landing-fold"
             aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
-            <span className={`session-project-landing-mark is-${expanded ? 'quiet' : 'ok'}`} aria-hidden="true">
+            <span className={`session-project-landing-mark is-${expanded || bare ? 'quiet' : 'ok'}`} aria-hidden="true">
               {expanded ? '◌' : '✓'}
             </span>
             <span className="session-project-landing-fold-text">{landingEarlierLine(group.earlier)}</span>

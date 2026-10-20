@@ -723,31 +723,51 @@ final class LandingSessionPageTests: XCTestCase {
     func testTheWordingChangedTheCheckmarkDidNot() {
         let green = finished(exitData(.int(0)), text: "Merge check green · 17m 02s")
         XCTAssertTrue(green.checkPassed)
-        XCTAssertTrue(green.succeeded)
+        XCTAssertTrue(green.succeeded(in: "LAND_TASK"))
         let saysPassed = finished(exitData(.int(1)), text: "Merge check passed · 3m 52s")
         XCTAssertFalse(saysPassed.checkPassed)
-        XCTAssertFalse(saysPassed.succeeded)
-        XCTAssertTrue(result("LANDED", "Put on main · 8ed0ea7").succeeded)
-        XCTAssertTrue(result("ALREADY_LANDED", "Was on main · 8ed0ea7").succeeded)
-        XCTAssertTrue(result("NOTHING_TO_LAND", "No commits to push").succeeded)
+        XCTAssertFalse(saysPassed.succeeded(in: "LAND_TASK"))
+        XCTAssertTrue(result("LANDED", "Put on main · 8ed0ea7").succeeded(in: "LAND_TASK"))
+        XCTAssertTrue(result("ALREADY_LANDED", "Was on main · 8ed0ea7").succeeded(in: "LAND_TASK"))
+        XCTAssertTrue(result("NOTHING_TO_LAND", "No commits to push").succeeded(in: "LAND_TASK"))
         XCTAssertTrue(result("NOTHING_TO_LAND", "Nothing to push · the branch carried no commits",
-                             kind: "RESULT_FALLBACK").succeeded)
+                             kind: "RESULT_FALLBACK").succeeded(in: "LAND_TASK"))
     }
 
     func testEveryOtherResultIsACrossWhateverABranchNameInItSays() {
-        XCTAssertFalse(result("READY", "Ready to merge into fix/passed-x").succeeded)
-        XCTAssertFalse(result("CONFLICT", "Could not sync main into fix/passed-x · merge conflict").succeeded)
-        XCTAssertFalse(result("CHECK_FAILED", "Check failed · nothing was pushed").succeeded)
-        XCTAssertFalse(result("ERROR", "Stopped with an error · PUSH_FAILED").succeeded)
-        XCTAssertFalse(result("CANCELLED", "Stopped · not landed").succeeded)
-        XCTAssertFalse(result("SUPERSEDED", "Superseded · a newer attempt asks the same question").succeeded)
-        XCTAssertFalse(result(nil, "Landed on main · 8ed0ea7").succeeded)
-        XCTAssertFalse(result(nil, "Landed on main · 8ed0ea7", kind: "RESULT_FALLBACK").succeeded)
+        XCTAssertFalse(result("READY", "Ready to merge into fix/passed-x").succeeded(in: "LAND_TASK"))
+        XCTAssertFalse(result("CONFLICT", "Could not sync main into fix/passed-x · merge conflict")
+            .succeeded(in: "LAND_TASK"))
+        XCTAssertFalse(result("CHECK_FAILED", "Check failed · nothing was pushed").succeeded(in: "LAND_TASK"))
+        XCTAssertFalse(result("ERROR", "Stopped with an error · PUSH_FAILED").succeeded(in: "LAND_TASK"))
+        XCTAssertFalse(result("CANCELLED", "Stopped · not landed").succeeded(in: "LAND_TASK"))
+        XCTAssertFalse(result("SUPERSEDED", "Superseded · a newer attempt asks the same question")
+            .succeeded(in: "LAND_TASK"))
+        XCTAssertFalse(result(nil, "Landed on main · 8ed0ea7").succeeded(in: "LAND_TASK"))
+        XCTAssertFalse(result(nil, "Landed on main · 8ed0ea7", kind: "RESULT_FALLBACK").succeeded(in: "LAND_TASK"))
+    }
+
+    /// The section's job kind decides beside the line's state, never the sentence: a merge check
+    /// that ends READY passed, and a merge to main that answers READY handed the candidate back to
+    /// be checked again (M-T12, J-T13). Web: `landingSession.test.ts`, the same cases.
+    func testAMergeCheckThatEndsReadyPassedAndAMergeThatAnswersReadyDidNot() {
+        XCTAssertTrue(result("READY", "Ready to merge into main").succeeded(in: "CHECK_PROMOTION"))
+        XCTAssertTrue(result("READY", "Ready to merge into main", kind: "RESULT_FALLBACK")
+            .succeeded(in: "CHECK_PROMOTION"))
+        XCTAssertTrue(result("READY", "Checked · the merge is yours to make").succeeded(in: "CHECK_PROMOTION"))
+        XCTAssertFalse(result("READY", "Ready to merge into main").succeeded(in: "LAND_PROMOTION"))
+        XCTAssertFalse(result("READY", "Ready to merge into main").succeeded(in: "LAND_TASK"))
+        XCTAssertTrue(result("ALREADY_LANDED", "Already on main · 8ed0ea7").succeeded(in: "CHECK_PROMOTION"))
+        XCTAssertFalse(result("CHECK_FAILED", "Check failed · nothing was pushed").succeeded(in: "CHECK_PROMOTION"))
+        XCTAssertFalse(result("CONFLICT", "Could not merge · conflict").succeeded(in: "CHECK_PROMOTION"))
+        XCTAssertFalse(result(nil, "Ready to merge into main").succeeded(in: "CHECK_PROMOTION"))
     }
 
     func testNoOtherKindOfLineIsACheckOrAResult() {
         XCTAssertFalse(entry(["kind": "RESULT", "data": exitData(.int(0))]).checkPassed)
         XCTAssertFalse(entry(["kind": "CLAIMED", "data": ["state": JSONValue.string("LANDED")],
-                              "text": "Landed on main"]).succeeded)
+                              "text": "Landed on main"]).succeeded(in: "LAND_TASK"))
+        XCTAssertFalse(entry(["kind": "CLAIMED", "data": ["state": JSONValue.string("READY")],
+                              "text": "Ready"]).succeeded(in: "CHECK_PROMOTION"))
     }
 }

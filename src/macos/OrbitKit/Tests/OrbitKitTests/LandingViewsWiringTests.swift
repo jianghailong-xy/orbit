@@ -168,14 +168,56 @@ final class LandingViewsWiringTests: XCTestCase {
     }
 
     /// The timeline's marks read each line's structured fields, as web and Android do: the ✓ and
-    /// the inline output come from `checkPassed` / `succeeded`, never from the sentence's words.
+    /// the inline output come from `checkPassed` / `succeeded(in:)`, never from the sentence's
+    /// words, and a result's ✓ also reads the job kind of the section it is in (a merge check's
+    /// READY is a pass, a merge to main's is not).
     func testTheTimelinesMarksReadTheLinesFields() throws {
         let page = code(try appSource("Views/LandingSessionPageView.swift"))
         XCTAssertTrue(page.contains("} else if entry.kind == \"CHECK_FINISHED\", let check = entry.check, !entry.checkPassed {"))
-        XCTAssertTrue(page.contains("return entry.succeeded ? Mark(glyph: \"✓\", color: .green) : Mark(glyph: \"✗\", color: .red)"))
+        XCTAssertTrue(page.contains("let mark = glyph(entry, jobKind: section.kind, entries: entries, index: index)"),
+                      "a line's mark is read with its section's job kind")
+        XCTAssertTrue(page.contains("return entry.succeeded(in: jobKind) ? Mark(glyph: \"✓\", color: .green) : Mark(glyph: \"✗\", color: .red)"))
         for words in ["contains(\"passed\")", "\"Nothing to push\"", "\"Already\"", "hasPrefix("] {
             XCTAssertFalse(page.contains(words), "the page still reads a line's words: \(words)")
         }
+    }
+
+    /// A failed check's tail is read by a task on a view that is there before it has lines (05 g).
+    /// The task used to hang on a `Group` holding only `if !lines.isEmpty`: with no lines that is
+    /// no view, so the task never ran, the log was never read and iOS/macOS never drew the tail.
+    func testAFailedChecksInlineOutputIsReadByAViewThatIsAlwaysThere() throws {
+        let page = code(try appSource("Views/LandingSessionPageView.swift"))
+        guard let start = page.range(of: "private struct LandingInlineOutput: View {"),
+              let end = page.range(of: "final class LandingPromotionSource",
+                                   range: start.upperBound..<page.endIndex) else {
+            return XCTFail("the landing page keeps its inline output")
+        }
+        let inline = String(page[start.upperBound..<end.lowerBound])
+        XCTAssertFalse(inline.contains("Group {"), "a Group holding only an `if` is no view: its task never runs")
+        let flat = inline.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        XCTAssertTrue(flat.contains("var body: some View { VStack(alignment: .leading, spacing: 0) { if !lines.isEmpty { "
+                                    + "LandingDarkOutput(text: lines.joined(separator: \"\\n\")) } } .task {"),
+                      "the read hangs on the stack, which is there before it has lines")
+        XCTAssertTrue(flat.contains("guard let api, let page = try? await api.landingLog(sessionID: sessionID, "
+                                    + "selectors) else { return }"),
+                      "a read that fails draws nothing inline, as on web")
+    }
+
+    /// The sessions page's Earlier fold is a plain-style button whose label has a Spacer in the
+    /// middle, and a plain button answers only where it draws: its label's content shape makes the
+    /// whole row the target, so a press on the empty middle opens the fold too.
+    func testTheEarlierFoldAnswersAcrossItsWholeRow() throws {
+        let page = code(try appSource("Views/SessionProjectPage.swift"))
+        guard let start = page.range(of: "if let earlier = landingGroup.earlier {"),
+              let end = page.range(of: "if landingsExpanded {", range: start.upperBound..<page.endIndex) else {
+            return XCTFail("the Landings group keeps its Earlier fold")
+        }
+        let fold = String(page[start.upperBound..<end.lowerBound])
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        XCTAssertTrue(fold.contains("Spacer(minLength: 8)"))
+        XCTAssertTrue(fold.contains(".rotationEffect(.degrees(landingsExpanded ? 90 : 0)) } .contentShape(Rectangle()) } "
+                                    + ".buttonStyle(.plain)"),
+                      "the label's shape, not only what it draws, takes the press")
     }
 
     /// The page's own reads: `includeLanding=1` on the project list, the landing's own cadence, and

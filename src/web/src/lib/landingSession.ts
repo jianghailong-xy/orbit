@@ -1,4 +1,5 @@
 import type {
+  IntegrationJobKind,
   IntegrationTimelineEntry,
   IntegrationTimelineSection,
   ProjectPromotionView,
@@ -972,14 +973,21 @@ export function landingCheckPassed(entry: IntegrationTimelineEntry): boolean {
     && data.exitCode === data.expectedExitCode;
 }
 
-/** A check or result line that ended well draws ✓, and one that did not draws ✗ (05 a/e/g). */
-export function landingEntryOk(entry: IntegrationTimelineEntry): boolean {
+/**
+ * A check or result line that ended well draws ✓, and one that did not draws ✗ (05 a/e/g). `kind`
+ * is the job kind of the section the line is in: a merge check that ends READY passed, and its
+ * round is ready to merge into main. A merge to main that answers READY handed the candidate back
+ * to be checked again and merged nothing (M-T12, J-T13), so it keeps its ✗.
+ */
+export function landingEntryOk(entry: IntegrationTimelineEntry, kind: IntegrationJobKind): boolean {
   switch (entry.kind) {
     case 'CHECK_FINISHED':
       return landingCheckPassed(entry);
     case 'RESULT':
-    case 'RESULT_FALLBACK':
-      return LANDING_OK_STATES.has(String(entry.data?.state));
+    case 'RESULT_FALLBACK': {
+      const state = String(entry.data?.state);
+      return LANDING_OK_STATES.has(state) || (kind === 'CHECK_PROMOTION' && state === 'READY');
+    }
     default:
       return false;
   }

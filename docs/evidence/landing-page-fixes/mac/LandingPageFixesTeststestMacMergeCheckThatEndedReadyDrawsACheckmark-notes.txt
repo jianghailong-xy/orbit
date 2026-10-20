@@ -1,0 +1,4 @@
+mac-ready: no window after launch; pressing ⌘N
+mac-ready: 1 window(s)
+mac-ready: in view after 0 move(s) at (379.0, 395.0, 145.0, 15.0)
+mac-ready: result line mark ✓, check line mark ✓

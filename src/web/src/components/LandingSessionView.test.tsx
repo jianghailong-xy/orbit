@@ -417,6 +417,49 @@ describe('the landing session page', () => {
     expect(inline.sort()).toEqual(['2', '3']);
     expect(page().querySelectorAll('.landing-live-output')).toHaveLength(2);
   });
+
+  it('a merge check that ends READY draws ✓; a merge to main that answers READY keeps its ✗', async () => {
+    const line = (id: string, kind: 'CHECK_FINISHED' | 'RESULT', text: string, data: Record<string, unknown>,
+      check: number | null = null): IntegrationTimelineEntry => ({
+      id, seq: Number(id.slice(1)), kind, at: at(14, 58), claim: 1, round: 1,
+      check: check == null ? null : { name: 'MERGE_CHECK', index: check }, phase: 'CHECK',
+      step: null, actor: { type: 'RUNNER' }, reason: null, data, text,
+    });
+    const passed = { exitCode: 0, expectedExitCode: 0, timedOut: false };
+    // The round as it goes: checked and ready, handed back by a merge whose main moved, checked again.
+    view = landing({
+      subject: 'PROMOTION',
+      taskId: null,
+      promotionId: 'promo-1',
+      currentAttempt: attempt({ jobId: 'job-3', kind: 'CHECK_PROMOTION', state: 'READY', check: null }),
+      timeline: {
+        sections: [{
+          title: 'Merge check · 1', jobId: 'job-1', kind: 'CHECK_PROMOTION', generation: 1, state: 'READY',
+          entries: [
+            line('r1', 'CHECK_FINISHED', 'Merge check passed · 17m 02s', passed, 1),
+            line('r2', 'RESULT', 'Ready to merge into main', { state: 'READY' }),
+          ],
+        }, {
+          title: 'Merge to main · 1', jobId: 'job-2', kind: 'LAND_PROMOTION', generation: 1, state: 'READY',
+          entries: [line('r3', 'RESULT', 'Ready to merge into main', { state: 'READY' })],
+        }, {
+          title: 'Merge check · 2', jobId: 'job-3', kind: 'CHECK_PROMOTION', generation: 2, state: 'READY',
+          entries: [
+            line('r4', 'CHECK_FINISHED', 'Merge check passed · 16m 40s', passed, 1),
+            line('r5', 'RESULT', 'Ready to merge into main', { state: 'READY' }),
+          ],
+        }],
+        facts: [], truncated: false,
+      },
+    });
+    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    const marks = (job: string) => [
+      ...page().querySelectorAll<HTMLElement>(`section[data-job="${job}"] .landing-timeline-glyph`),
+    ].map((mark) => `${mark.textContent}:${mark.className.replace('landing-timeline-glyph ', '')}`);
+    expect(marks('job-1')).toEqual(['✓:is-ok', '✓:is-ok']);
+    expect(marks('job-2')).toEqual(['✗:is-failed']);
+    expect(marks('job-3')).toEqual(['✓:is-ok', '✓:is-ok']);
+  });
 });
 
 describe('the check in hand', () => {

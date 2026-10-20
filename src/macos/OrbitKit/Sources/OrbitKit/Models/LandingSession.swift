@@ -299,14 +299,18 @@ public struct IntegrationTimelineEntry: Codable, Equatable, Sendable {
     }
 
     /// A check or result line that ended well draws ✓, and one that did not draws ✗: a passed
-    /// check, or a result whose branch is on its target. Web: `landingEntryOk`.
-    public var succeeded: Bool {
+    /// check, or a result whose branch is on its target. `jobKind` is the kind of the section the
+    /// line is in: a merge check that ends READY passed, and its round is ready to merge into main.
+    /// A merge to main that answers READY handed the candidate back to be checked again and merged
+    /// nothing (M-T12, J-T13), so it keeps its ✗. Web: `landingEntryOk`.
+    public func succeeded(in jobKind: String) -> Bool {
         switch kind {
         case "CHECK_FINISHED":
             return checkPassed
         case "RESULT", "RESULT_FALLBACK":
             guard let state = data?["state"]?.stringValue else { return false }
             return ["LANDED", "ALREADY_LANDED", "NOTHING_TO_LAND"].contains(state)
+                || (jobKind == "CHECK_PROMOTION" && state == "READY")
         default:
             return false
         }
