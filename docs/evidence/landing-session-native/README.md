@@ -24,6 +24,9 @@ the words and the door conditions on Linux.
     Abandon and the server's Retry / Re-run the check once the lease expired). No Copy Link.
   - Reduce Motion stops the head's ring and nothing else: `LandingRing` reads
     `accessibilityReduceMotion`, and the page adds no motion of its own.
+  - the frame offers nothing of a conversation's own: the console's session menu (iOS) and
+    Share button (macOS) are not drawn for a landing session, so the page's ⋯ is the only
+    menu — as LS6 requires.
   - a read this device cannot make freezes the card at `Update unavailable` and opens no door; the
     last `inFlight` snapshot the app held draws the page when nothing else can be read.
 - **04 — the entrances.** A one-job Landing card carries `Open landing ›` at its foot (beside
@@ -85,7 +88,8 @@ workflow that ran on `probe/landing-session-native`; its pictures land in
 
 ## What is not covered here
 
-- The X-E5 owner card and the delivery card are exercised by the OrbitKit tests above but not
-  photographed: the probe's coordinator conversation would need the whole owner-item delivery
-  projection to render the card.
+- The delivery card's `Open the landing ↗` is exercised by the OrbitKit tests but not
+  photographed: the probe would have to seed a `user` event carrying the delivery payload.
+- The Landing card's own foot/row entries are exercised by `LandingEntranceTests` but not
+  photographed: the probe's in-flight job is a merge round, whose card is the merge card.
 - The Android client's screenshots belong to the Android tasks that depend on this one.
