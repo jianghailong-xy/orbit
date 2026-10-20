@@ -1222,9 +1222,10 @@ type ClaimedSession struct {
 	WT              *Worktree `json:"-"`
 	IsolationStatus string    `json:"-"`
 	// SourceRefusal is why a pinned run may not start: setupWorktree could not stand a checkout on the
-	// pinned commit (docs/project-integration-line-contract.md §1.5 L10). Non-nil means no checkout
-	// was created and nothing runs in the workDir; runSessionProcess ends the run FAILED with it
-	// instead of starting an engine. Runner-internal.
+	// pinned commit (docs/project-integration-line-contract.md §1.5 L10). On a managed runner it is
+	// also why a run may not start in a damaged repository (managed_repo_recovery.go). Non-nil means
+	// no checkout was created and nothing runs in the workDir; runSessionProcess ends the run FAILED
+	// with it instead of starting an engine. Runner-internal.
 	SourceRefusal *SourcePinRefusal `json:"-"`
 	// Naming asks this runner to name the session through the engine running it, once its opening
 	// turn is underway (session_naming.go). The control plane sends it only while the session still

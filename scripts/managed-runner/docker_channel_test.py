@@ -924,6 +924,119 @@ class RestartTest(ChannelFixture):
         self.assertEqual(restarted.read_volume(f"mr-data-{RUNNER}")["uid"], volume["uid"])
 
 
+class FirewallGateTest(ChannelFixture):
+    """Where the managed runners' host firewall is configured (firewall/config.json beside the channel's configuration,
+    as scripts/install-server.sh writes it), no runner container is created or started unless the firewall service's
+    status says its rules are in force: fresh, from this boot, for the bridge the configured network has now."""
+
+    NETWORK_ID = "0078ad95b9cc" + "f" * 52
+
+    def setUp(self):
+        super().setUp()
+        self.firewall = Path(self.scratch.name) / "firewall"
+        self.firewall.mkdir()
+        (self.firewall / "config.json").write_text("{}")
+        self.docker.networks["orbit-mr-test"].update(Id=self.NETWORK_ID, IPAM={"Config": [{"Subnet": "172.19.0.0/16", "Gateway": "172.19.0.1"}]})
+        self.server.channel = self.channel = self.ch.Channel(self.config, self.docker, TOKEN, firewall_dir=self.firewall)
+        self.channel.prepare()
+
+    def status(self, **change):
+        now = int(self.channel.clock())
+        record = {"schemaVersion": 1, "state": "enforced", "network": "orbit-mr-test", "bridge": "br-0078ad95b9cc",
+                  "gateway": "172.19.0.1", "apiPort": 2086, "backend": "nft", "checkedAt": now, "validUntil": now + 30,
+                  "bootId": self.ch.boot_id()}
+        record.update(change)
+        (self.firewall / "status.json").write_text(json.dumps(record))
+
+    def create(self):
+        volume = self.volume()
+        self.credential()
+        return self.call("POST", "/v1/containers", self.request(volume["uid"]))
+
+    def assert_refused(self, needle):
+        status, body = self.create()
+        self.assertEqual((status, body["code"]), (503, "FIREWALL_NOT_ENFORCED"), body)
+        self.assertIn(needle, body["message"])
+        self.assertFalse([c for c in self.docker.calls if c[0] in ("create_container", "start_container")], "nothing made or started")
+
+    def test_with_the_rules_in_force_a_runner_container_starts(self):
+        self.status()
+        status, body = self.create()
+        self.assertEqual(status, 201, body)
+        self.assertTrue(body["running"])
+
+    def test_without_a_status_nothing_starts(self):
+        self.assert_refused("no status from the firewall service")
+
+    def test_a_status_that_is_not_enforced_stale_or_from_before_the_boot_starts_nothing(self):
+        for change, needle in (
+                ({"state": "failing", "reason": "Docker's chains are in neither iptables backend"}, "neither iptables backend"),
+                ({"state": "stopped", "reason": "the firewall service stopped; its rules stay"}, "'stopped'"),
+                ({"state": "starting"}, "'starting'"),
+                ({"validUntil": int(self.channel.clock()) - 1}, "has not confirmed its rules since"),
+                ({"bootId": "a-boot-before-this-one"}, "before this host last started"),
+                ({"schemaVersion": 2}, "not one this channel reads"),
+        ):
+            with self.subTest(change=change):
+                self.status(**change)
+                self.assert_refused(needle)
+
+    def test_rules_for_another_bridge_or_gateway_start_nothing(self):
+        # The network was removed and made again: a new ID, so a new bridge the rules do not match.
+        self.status()
+        self.docker.networks["orbit-mr-test"]["Id"] = "feedfacecafe" + "0" * 52
+        self.assert_refused("network orbit-mr-test has br-feedfacecafe now")
+        self.docker.networks["orbit-mr-test"]["Id"] = self.NETWORK_ID
+        self.docker.networks["orbit-mr-test"]["IPAM"] = {"Config": [{"Subnet": "172.20.0.0/16", "Gateway": "172.20.0.1"}]}
+        self.assert_refused("which network orbit-mr-test does not have")
+        # A bridge named by the network's options is the one the rules must name.
+        self.docker.networks["orbit-mr-test"].update(Options={"com.docker.network.bridge.name": "orbit-mr0"},
+                                                     IPAM={"Config": [{"Gateway": "172.19.0.1"}]})
+        self.status(bridge="orbit-mr0")
+        self.assertEqual(self.create()[0], 201)
+
+    def test_the_single_container_guard_s_dry_run_answers_whatever_the_firewall(self):
+        volume = self.volume()
+        self.credential()
+        status, body = self.call("POST", "/v1/containers", self.request(volume["uid"], name=f"mr-{RUNNER}-guard-probe", dryRun=True))
+        self.assertEqual((status, body["code"]), (409, "SINGLE_CONTAINER_GUARD"))
+
+    def test_a_container_created_and_never_started_waits_for_the_firewall(self):
+        self.status()
+        volume = self.volume()
+        self.credential()
+        spec = self.ch.container_spec(self.config, self.request(volume["uid"]), str(uuid.uuid4()))
+        self.docker.create_container(f"mr-{RUNNER}", spec)  # the channel stopped right after Docker's create
+        (self.firewall / "status.json").unlink()
+        restarted = self.ch.Channel(self.config, self.docker, TOKEN, firewall_dir=self.firewall)
+        restarted.prepare()
+        self.assertEqual(self.docker.containers_by_name[f"mr-{RUNNER}"]["State"]["Status"], "created", "left for the manager")
+        self.server.channel = restarted
+        self.assertEqual(self.call("POST", "/v1/containers", self.request(volume["uid"]))[1]["code"], "FIREWALL_NOT_ENFORCED")
+        self.status()
+        status, body = self.call("POST", "/v1/containers", self.request(volume["uid"]))
+        self.assertEqual((status, body["running"]), (200, True))
+
+    def test_without_the_firewall_s_configuration_there_is_no_gate(self):
+        (self.firewall / "config.json").unlink()
+        self.assertEqual(self.create()[0], 201)
+
+    def test_a_running_container_is_read_stopped_and_removed_whatever_the_firewall(self):
+        self.status()
+        volume, created = self.running_container()
+        (self.firewall / "status.json").unlink()
+        self.assertEqual(self.call("GET", f"/v1/containers/mr-{RUNNER}")[0], 200)
+        stopped = threading.Event()
+        self.docker.stop_hook = stopped.set
+        self.assertEqual(self.call("POST", f"/v1/containers/mr-{RUNNER}/stop?uid={created['uid']}")[0], 202)
+        self.assertTrue(stopped.wait(5))
+        for _ in range(100):
+            if self.call("GET", f"/v1/containers/mr-{RUNNER}")[1]["status"] == "exited":
+                break
+            threading.Event().wait(0.02)
+        self.assertEqual(self.call("DELETE", f"/v1/containers/mr-{RUNNER}?uid={created['uid']}")[0], 204)
+
+
 class ImageSwitchTest(ChannelFixture):
     """An upgrade restarts the channel on a new image (channel.json's `image`) while containers made from the
     previous one still run: those are this instance's as before — read, stopped and removed by UID — and every

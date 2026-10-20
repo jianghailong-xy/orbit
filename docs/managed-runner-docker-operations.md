@@ -12,7 +12,11 @@ deployment in an isolated Docker host, and on the HPC host's own Docker
 ([evidence](evidence/managed-runner-docker-security/2026-10-17/README.md)). The container cap, volume removal, the
 disk the storage budget measures and the executable `/tmp` were checked later the same day, in an isolated Docker host
 whose checkout and Docker data root are on different filesystems
-([evidence](evidence/managed-runner-docker-hardening/2026-10-17/README.md)).
+([evidence](evidence/managed-runner-docker-hardening/2026-10-17/README.md)). The managed runners' host firewall was
+checked on 2026-10-19 in an isolated Docker host
+([evidence](evidence/managed-runner-docker-firewall/2026-10-19/README.md)). What the runners' volume syncs cost the
+host's disk was measured on 2026-10-20 in an isolated Docker host on one spinning disk
+([evidence](evidence/managed-runner-docker-volume-sync/2026-10-20/README.md)).
 
 ## What there is to keep
 
@@ -24,6 +28,7 @@ whose checkout and Docker data root are on different filesystems
 | A generation's bootstrap volume `mr-boot-<runner uuid>-g<generation>` | Docker volume | Nothing to keep: each generation gets a new one, removed with its container. |
 | The channel's disk probe: an empty anonymous volume, mounted read-only in `docker-channel` at `/var/lib/orbit-docker-volumes` | Docker volume | Nothing to keep: Compose makes it with the channel's container and keeps it when it recreates the channel. Once the channel has been recreated, `docker compose down -v` leaves it behind, empty: `docker volume rm` it. |
 | The managed runner image | Local image, named by its ID in `channel.json` and `profile.json` | Rebuild it from the commit (`docker build -f deploy/managed-runner/image/Dockerfile …`), or keep a `docker save` of it. |
+| The managed runners' firewall: its `config.json` and the `status.json` its service keeps | `data/managed-runners/firewall` | `config.json` goes with the rest of `data/managed-runners`. `status.json` is nothing to keep: the service writes it every 10 seconds. |
 
 A data volume backup holds what the account signed in with (engine credentials) and the runner's credential. Treat
 it like the Postgres backups: private, and off this host.
@@ -368,6 +373,13 @@ Bring it back with `docker compose up -d apiserver`. Nothing else is needed.
 The Compose services come back by their restart policy. Managed runner containers do not: their restart policy is
 `no`, so that each generation starts only through the manager.
 
+- **The firewall.** Docker's own restart leaves the managed runners' firewall rules where they are: Docker never
+  flushes `DOCKER-USER` and never touches `INPUT`. A host restart takes them away, and `managed-runner-firewall`, which
+  Docker starts again with the rest of the stack, writes them again within seconds. Until it reports them in force
+  for this boot, the Docker channel refuses every runner container (`503 FIREWALL_NOT_ENFORCED`), and the manager waits
+  without spending the runner's attempts, so no runner starts before its rules. Measured on 2026-10-19 (task D9) for both restarts, and with the
+  firewall service stopped on purpose ([The managed runners' firewall](#the-managed-runners-firewall)).
+
 - **A runner that was running** is started again by itself once the apiserver is back. The manager records Docker's
   own report of the old container's exit (its exit code and `FinishedAt`) as the proof that it stopped, and logs it
   (`POD_TERMINATED … with exit code 255, not out of memory; starting generation …`). After a short backoff it removes
@@ -438,6 +450,65 @@ one is gone.
    fails the runner.
 3. The next generation then starts by itself. Delete the receipt afterwards.
 
+## Volume syncs and the host's disk
+
+A managed runner keeps what it reports through a power loss. Before it tells the server that a turn was answered or a
+session ended, or that it made a checkout, a commit, a merge, a landing or a cleanup, it syncs its volume (`syncfs`),
+and the report waits for the sync. On this backend a runner's volume is a directory of this host's filesystem, so the
+sync writes back everything not yet written on that filesystem: every runner's volume, Postgres's data in
+`data/postgres` when the checkout is on the same filesystem, Docker's logs. (A runner on Kubernetes also syncs behind
+every tool its engine runs, in the background; on Docker it does not, because those syncs cost the others too much.)
+Each runner says which at start:
+
+```bash
+docker logs mr-<runner uuid> 2>&1 | grep 'volume syncs:'
+```
+
+```text
+volume syncs: before reports only; the volume is a directory of /dev/sdb (ext4), which it shares, so a sync behind every tool would write back the whole filesystem
+```
+
+What it costs, measured on one spinning disk holding Docker's data root and the checkout. Runners of 1 CPU and 1 GiB
+each ran an engine's tool loop of edits, commits and builds at once, out of step with one another, and committed after
+every turn. Each cell is with the syncs / without them (the same load on a runner that syncs nothing), from the rounds
+that outside memory pressure on the test host left alone:
+
+| Runners at work at once | 1 | 4 | 8 |
+| --- | --- | --- | --- |
+| Syncs a minute | 4 | 20 | 37 |
+| The API's p99, as an account sees it | 33 / 34 ms | 54 / 49 ms | 95 / 52 ms |
+| Postgres's commit p99 | 27 / 39 ms | 93 / 156 ms | 184 / 59 ms |
+| Postgres commits over 100 ms, a minute | 0 / 0.5 | 2.7 / 3.5 | 12.8 / 0.2 |
+| The runner's own commit, asked to done, p50 | 731 / 623 ms | 773 / 679 ms | 846 / 671 ms |
+
+Up to four runners at work, the cost is within the bound the
+[design record](managed-runner-design.md#implementation-record-volume-syncs-on-a-shared-docker-host) sets. With eight
+at work on one spinning disk, Postgres's commits wait noticeably longer while those syncs run: every commit over 100 ms
+in those rounds ran during one.
+
+What a sync keeps: a commit, merge or checkout a runner reported, and a turn that was answered, survive this host's
+power loss. What a tool writes in the middle of a turn waits for the next sync on the disk, this turn's end or any
+runner's report, or for the kernel's own writeback about 30 s later. Measured: half of it was on the disk within
+2 to 12 s, and nearly all within 9 to 30 s, the sooner the more runners are at work.
+
+What an operator can change:
+
+- **Postgres and the runners' volumes on different disks.** Docker's data root (`data-root` in
+  `/etc/docker/daemon.json`, `/var/lib/docker` by default) holds the volumes, and the checkout's `data/postgres` holds
+  Postgres. On separate disks a runner's sync writes back only runners' data, and Postgres's commits do not queue
+  behind it. Decide it before the first runner exists: moving Docker's data root later moves every volume with it. Not
+  measured.
+- **An SSD.** A sync on a spinning disk pays its seeks. T02c timed a 200-file commit followed by a sync at 129 ms on the
+  HPC host's spinning disk and 26 ms on its NVMe.
+- **Fewer runners at work on one disk.** The runner's resources in `profile.json` decide how many runners the budget
+  admits: with the default 2 CPUs and 4 GiB a runner, four need a host of about 11 CPUs and 22 GiB. `limits.maxContainers`
+  in `channel.json` caps them whatever the budget ([Runners wait though the host has room](#runners-wait-though-the-host-has-room)).
+- **The kernel's writeback.** `vm.dirty_expire_centisecs` (3000, 30 s, by default) is the longest a tool's work waits
+  for the kernel. Lowering it shortens that window and writes more often. A setting of the whole host; not measured.
+- **Not a setting: the syncs before reports.** They are what keeps reported work through a power loss, and nothing
+  turns them off. A runner whose volume is a filesystem of its own, as a volume driver that gives each volume one would
+  make it, syncs behind its tools again by itself, as on Kubernetes.
+
 ## Plain HTTP to the server: only on this host's container network
 
 The runner's server address is `runner.serverUrl` in `profile.json`. Each runner sends its credential with every
@@ -450,7 +521,8 @@ address.
 
 **Point `serverUrl` only at this host's own address on the managed runners' network: the gateway of
 `orbit-managed-runners`, where the gateway's published port 2086 answers. Use `https://` for anything else.** The
-install writes exactly that (`http://<gateway of orbit-managed-runners>:2086`). To check a deployment:
+install writes exactly that (`http://<gateway of orbit-managed-runners>:2086`), and it is the one address and port of
+this host the managed runners' firewall leaves a runner (its `gateway` and `apiPort`). To check a deployment:
 
 ```bash
 docker network inspect orbit-managed-runners -f '{{range .IPAM.Config}}{{.Gateway}} {{end}}'
@@ -459,33 +531,150 @@ grep '"serverUrl"' data/managed-runners/profile.json      # http://<that gateway
 
 ## What a managed runner can reach
 
-Measured from inside runner containers, both on the HPC host's Docker and in a default deployment.
+Measured from inside runner containers, as the runner's user, on an isolated Docker host on 2026-10-19 (task D9,
+[evidence](evidence/managed-runner-docker-firewall/2026-10-19/README.md)), with the firewall a new deployment has and
+without it (`--no-managed-runner-firewall`, and every deployment installed before the firewall existed). D5's
+measurements of 2026-10-17, on the HPC host's own Docker and in a default deployment, are the "without" column.
 
-**Unreachable:**
+| From a runner | With the firewall | Without it |
+| --- | --- | --- |
+| The gateway's published port 2086 at the network's gateway (how it reaches this deployment) | reached | reached |
+| The internet: public HTTPS (a Git host, a model's endpoint) and DNS | reached | reached |
+| Every other port of this host, on any of its addresses: the network's gateway, docker0, other networks' gateways, its LAN address (sshd, rpcbind, a UDP service) | refused | **reached** |
+| The private network behind this host: other machines' services (another host's sshd, a model endpoint) | refused, unless [allowed](#let-runners-reach-an-internal-model-endpoint) | **reached** |
+| The cloud metadata address (169.254.169.254) and the rest of 169.254/16, 100.64/10, 10/8, 172.16/12, 192.168/16 | refused | where something answers, reached |
+| Anything over IPv6 | refused (the network is IPv4-only, and IPv6 is off on the runner's interface) | none (the same) |
+| Another account's runner (the network's inter-container traffic is off) | unreachable | unreachable |
+| The stack's own containers (apiserver, Postgres, web; another network, and their names do not resolve) | unreachable | unreachable |
+| The channel (it has no network at all), Docker's API (no socket inside, nothing on TCP 2375/2376) | unreachable | unreachable |
+| This host's loopback-only services (the runner's 127.0.0.1 is its own) | unreachable | unreachable |
 
-- another account's runner (the network's inter-container traffic is off);
-- the stack's own containers (apiserver, Postgres, web; a different network, and their names do not resolve);
-- containers on other Docker networks;
-- the channel (it has no network at all);
-- Docker's API (no socket inside; nothing on TCP 2375/2376);
-- the host's loopback-only services;
-- the cloud metadata address.
+"Refused" is immediate: the connection fails with "No route to host" (`EHOSTUNREACH`), which is the firewall
+answering. Everything here holds with Docker's userland proxy on or off, through Docker and host restarts, and on the
+nft and the legacy iptables backends.
 
-**Reachable:**
+Every account can run code in its runner, and on a deployment open to sign-up that means anyone. Keep the firewall on,
+or firewall the managed runners' network yourself: `INPUT` from its bridge except port 2086 at its gateway, and its
+traffic to private ranges (`DOCKER-USER`). Keep host services bound to loopback either way.
 
-- the internet, which a runner needs for its model and Git hosts;
-- the gateway's published port, which is how it reaches the apiserver;
-- **every service the host listens to on its other addresses**. On the HPC host that was sshd (22) and rpcbind (111)
-  through the network's gateway, docker0 and the host's LAN address. Through the host's routing, the LAN behind it is
-  reachable too.
+## The managed runners' firewall
 
-Every account can run code in its runner. On a deployment open to sign-up, decide what a runner may reach:
+A new deployment firewalls its managed runners' network on this host (`managed-runner-firewall`,
+[deploy/managed-runner/firewall](../deploy/managed-runner/firewall/README.md)): from that network a runner reaches the
+gateway's published port at the network's gateway address, DNS, and public addresses. Every other port of this host,
+on any of its addresses, and every private, shared, link-local and reserved address behind it is refused, the cloud
+metadata address among them. The rules match only traffic from the network's bridge and nothing else on this host.
+The service checks them every 10 seconds and writes again what changed, and the Docker channel starts no runner
+container while it does not report them in force.
 
-- keep host services bound to loopback, or firewall them for the managed runners' bridge (`INPUT` from its
-  interface, except port 2086);
-- and drop its traffic to private ranges you do not want reached (`DOCKER-USER`).
+### See that it is in force
 
-Orbit does not change the host's firewall.
+```bash
+docker compose ps managed-runner-firewall                         # healthy: its status says the rules are in force
+docker compose run --rm --no-deps managed-runner-firewall check   # {"enforced": true, ...}, exit 0
+docker compose run --rm --no-deps managed-runner-firewall show    # the rules as they stand, IPv4 and IPv6
+```
+
+And from the network itself, without privilege, as the install checks it:
+
+```bash
+GW="$(docker network inspect orbit-managed-runners -f '{{range .IPAM.Config}}{{.Gateway}}{{end}}')"
+docker run --rm --network orbit-managed-runners --user 65534:65534 orbit-managed-runner-firewall:local \
+  probe --reach "$GW:2086" --blocked "$GW:22" --blocked 169.254.169.254:80 --blocked 10.255.255.1:9 --resolve github.com
+```
+
+Every line says `"ok": true`. A refused connection reads `EHOSTUNREACH` ("No route to host"): the firewall answered.
+`ECONNREFUSED` means the packet reached the host's own stack, and `CONNECTED` that it reached the service: either is
+the firewall not in force. On the host, `iptables -S ORBIT-MR-INPUT`, `iptables -S ORBIT-MR-FORWARD`, and the first
+rule of `iptables -S INPUT` and `iptables -S DOCKER-USER` show the same rules.
+
+### Let runners reach an internal model endpoint
+
+A model endpoint (or any service) on this host or on the private network behind it is refused until it is allowed.
+Add it to `allow` in `data/managed-runners/firewall/config.json`, one entry per address (or network) and port:
+
+```json
+  "allow": [
+    { "to": "192.168.1.12", "protocol": "tcp", "port": 8000 }
+  ],
+```
+
+then `docker compose restart managed-runner-firewall`, and check as above (`--reach 192.168.1.12:8000`). Runners then
+reach exactly that address and port; everything else private stays refused. A network (`"to": "10.20.0.0/16"`) allows
+every address in it on that port, and nothing wider than a /8 is accepted. The account's model key names the same
+address. A service of this host listening on 127.0.0.1 only stays out of a runner's reach whatever the firewall says:
+loopback is the runner's own. Bind it to an address the runners can reach, such as this host's address on their
+network (the gateway above), and allow that.
+
+### Add it to a deployment that has managed runners without it
+
+A deployment installed before the firewall existed, or with `--no-managed-runner-firewall`. Upgrade it first, then,
+from its checkout:
+
+```bash
+scripts/install-server.sh --enable-managed-runner-firewall
+```
+
+It checks this host as an install does, writes the firewall's configuration, applies the rules once and checks them
+from the network, adds `managed-runner-firewall` to `COMPOSE_PROFILES` in `.env` (every other line kept), and starts the
+service. A runner already running is filtered from then on; a connection it had open before is not cut.
+
+### Turn it off
+
+Turning it off is the deployer's call: every account's runner can then reach every service this host listens to on
+an address other than loopback, and the private networks behind it ([Isolation and its
+limits](self-hosting.md#isolation-and-its-limits)).
+
+```bash
+docker compose --profile managed-runner-firewall rm -sf managed-runner-firewall   # stops it; its rules stay
+mv data/managed-runners/firewall/config.json data/managed-runners/firewall/config.json.off   # the channel stops waiting for it
+sed -i 's/^COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall$/COMPOSE_PROFILES=managed-runners-docker/' .env
+```
+
+The rules stay in force until they are removed (below) or the host restarts: nothing writes them again. To turn it on
+again, `scripts/install-server.sh --enable-managed-runner-firewall`. That is also how a deployment takes a newer
+firewall program after an upgrade, which never rebuilds or restarts it: off, then on again, from the upgraded checkout.
+
+### Remove its rules
+
+```bash
+docker compose --profile managed-runner-firewall run --rm --no-deps managed-runner-firewall remove
+```
+
+Stop the service first ([Turn it off](#turn-it-off)), or it writes them again within 10 seconds. `remove` takes every
+jump and chain of the firewall off both iptables backends and both address families, whatever bridge they name. On a
+host without the image, by hand (or restart the host once the service is gone):
+
+```bash
+for t in iptables ip6tables; do
+  $t -S | grep -E -- '-j ORBIT-MR-(INPUT|FORWARD)$' | sed 's/^-A /-D /' | while read -r rule; do $t $rule; done
+  for chain in ORBIT-MR-INPUT ORBIT-MR-FORWARD; do $t -F "$chain" 2>/dev/null; $t -X "$chain" 2>/dev/null; done
+done
+```
+
+### When it is not in force
+
+Runners do not start, and wait: their owners read "The Docker host's firewall for managed runners is not in force, so
+this runner is not started yet. It starts by itself once an operator has the firewall running again." The channel logs
+`no runner container is started: the managed runners' host firewall is not in force (...)` (`docker compose logs
+docker-channel`), the apiserver logs `FIREWALL_NOT_ENFORCED` once per runner, and `docker compose ps` shows
+`managed-runner-firewall` unhealthy. A runner waiting there spends none of its attempts, and is asked again every
+`lifecycle.capacityRetrySeconds` (60 seconds): once the firewall reports its rules in force, it starts by itself. The
+firewall's log says what is wrong (`docker compose logs managed-runner-firewall`):
+
+- **It is stopped:** `docker compose up -d managed-runner-firewall`.
+- **"Docker's chains are in neither iptables backend":** Docker was switched to its nftables backend, or to
+  `"iptables": false`. Switch it back, or turn the firewall off.
+- **"the bridge … is not in this network namespace", or the channel's "its rules are for the bridge …, and network
+  orbit-managed-runners has … now":** the network was removed and made again. Its gateway may have changed too, and with
+  it `runner.serverUrl` ([Plain HTTP to the server](#plain-http-to-the-server-only-on-this-hosts-container-network)).
+  Set `bridge` (`br-` and the first 12 characters of the network's ID) and `gateway` in `config.json` from
+  `docker network inspect orbit-managed-runners -f '{{.Id}} {{json .IPAM.Config}}'`, then
+  `docker compose restart managed-runner-firewall`.
+- **Runners resolve no names after Docker's `dns` setting (daemon.json) changed:** read the servers Docker now forwards
+  to from the network, `docker run --rm --network orbit-managed-runners orbit-managed-runner-firewall:local docker-dns`,
+  into `dnsServers`, and restart the service. With the host's own resolv.conf the list is empty: Docker forwards those
+  queries from the host's namespace, which the rules do not see.
 
 ## Where each setting lives
 
@@ -500,3 +689,7 @@ Orbit does not change the host's firewall.
 | How often volumes are measured | `channel.json` `diskCheckSeconds` | `docker-channel` recreated |
 | How long a stop waits before SIGKILL | `channel.json` `stopGraceSeconds` | `docker-channel` recreated |
 | When an idle runner sleeps; retries and backoff | `profile.json` `lifecycle` | apiserver recreated |
+| Private destinations runners may reach (an internal model endpoint) | `firewall/config.json` `allow` | `docker compose restart managed-runner-firewall` |
+| DNS servers reached from the runners' own namespace | `firewall/config.json` `dnsServers` | `docker compose restart managed-runner-firewall` |
+| How often the firewall checks its rules | `firewall/config.json` `intervalSeconds` | `docker compose restart managed-runner-firewall` |
+| Whether the firewall runs, and the channel waits for it | `.env` `COMPOSE_PROFILES` (`managed-runner-firewall`), and `firewall/config.json` being there | [Turn it off](#turn-it-off), [add it](#add-it-to-a-deployment-that-has-managed-runners-without-it) |

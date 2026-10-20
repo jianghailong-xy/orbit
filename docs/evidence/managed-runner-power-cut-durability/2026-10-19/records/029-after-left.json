@@ -1,0 +1,420 @@
+{
+ "checks": [
+  {
+   "check": "the copy was read from the snapshot, on the first node",
+   "ok": true,
+   "value": {
+    "fstype": "ext4",
+    "options": "rw,relatime",
+    "source": "/dev/rbd1",
+    "superOptions": "rw,stripe=1024"
+   }
+  },
+  {
+   "check": "the copy, its claim, PV and image, and the snapshot are gone",
+   "ok": true,
+   "value": "[]\n"
+  },
+  {
+   "check": "bob: every repository reads: HEAD and its branch valid",
+   "ok": true,
+   "value": {}
+  },
+  {
+   "check": "bob: git fsck finds no error in any of them",
+   "ok": true,
+   "value": {}
+  },
+  {
+   "check": "bob: every commit that had returned is there, on its branch",
+   "ok": true,
+   "value": {}
+  },
+  {
+   "check": "bob: the last turn, its message and its final answer, is in the engine's transcript",
+   "ok": true,
+   "value": {
+    "T02C-BOB-LAST": 1,
+    "T02C-BOB-S1": 4,
+    "T08-WROTE-BOBLAST": 3,
+    "tool result received: T08-WROTE-BOBLAST": 1
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T17:23:35.966+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "after",
+ "result": {
+  "asked": {
+   "commits": [
+    {
+     "label": "s1 first engine commit",
+     "ref": "HEAD",
+     "repo": "01a1552f-ac1e-73a8-aeb2-45920d1cddcd",
+     "sha": "f4c67bf183aecbd24a1c4fa53338556c4b679c57"
+    },
+    {
+     "label": "s1 last engine commit (returned: the turn ended)",
+     "ref": "HEAD",
+     "repo": "01a1552f-ac1e-73a8-aeb2-45920d1cddcd",
+     "sha": "88ea88cc8d83df1911ab1f824162d3ae272972a2"
+    },
+    {
+     "label": "s2 engine commit",
+     "ref": "HEAD",
+     "repo": "01a1552f-bd8a-7779-9fb4-236fba6273fa",
+     "sha": "7a3a0d7c554293abdeb81318afe0b873a8426707"
+    },
+    {
+     "label": "s2 runner commit (returned: the merge took it)",
+     "ref": "HEAD",
+     "repo": "01a1552f-bd8a-7779-9fb4-236fba6273fa",
+     "sha": "9ff3e729a49460a78e2252d8ac1862b221fed6df"
+    },
+    {
+     "label": "runner merge into the workspace (returned)",
+     "ref": "HEAD",
+     "repo": "workspace",
+     "sha": "9ff3e729a49460a78e2252d8ac1862b221fed6df"
+    },
+    {
+     "label": "s3 engine commit (its turn still running)",
+     "ref": "HEAD",
+     "repo": "01a1552f-d390-744b-83de-b4ef8ce7023e",
+     "sha": "d29da6953933380c8e5be5566432f69fb3390368"
+    }
+   ],
+   "markers": [
+    "T02C-BOB-S1",
+    "T02C-BOB-LAST",
+    "T08-WROTE-BOBLAST",
+    "tool result received: T08-WROTE-BOBLAST"
+   ],
+   "sessions": [
+    "01a1552f-ac1e-73a8-aeb2-45920d1cddcd",
+    "01a1552f-bd8a-7779-9fb4-236fba6273fa",
+    "01a1552f-d390-744b-83de-b4ef8ce7023e"
+   ],
+   "transcript": "146baecb-230d-47e3-b76d-51069abe8a93"
+  },
+  "copy": {
+   "claim": "t02c-after-cut-172317",
+   "image": "orbit-mr-rbd/csi-vol-5f431682-2a7a-4212-ad39-62c5e2b4c32f",
+   "info": "{\"name\":\"csi-vol-5f431682-2a7a-4212-ad39-62c5e2b4c32f\",\"id\":\"4a413b09a9210\",\"size\":2147483648,\"objects\":512,\"order\":22,\"object_size\":4194304,\"snapshot_count\":1,\"block_name_prefix\":\"rbd_data.4a413b09a9210\",\"format\":2,\"features\":[\"layering\"],\"op_features\":[],\"flags\":[],\"create_timestamp\":\"Mon Oct 19 17:23:17 2026\",\"access_timestamp\":\"Mon Oct 19 17:23:17 2026\",\"modify_timestamp\":\"Mon Oct 19 17:23:17 2026\"}\n"
+  },
+  "cutAt": "2026-10-19T17:22:46.722+00:00",
+  "snapshot": {
+   "createdAt": "Mon Oct 19 17:23:16 2026",
+   "listed": [
+    {
+     "id": 6,
+     "name": "t02c-after-cut",
+     "protected": "false",
+     "size": 2147483648,
+     "timestamp": "Mon Oct 19 17:23:16 2026"
+    }
+   ],
+   "name": "orbit-mr-rbd/csi-vol-13d59d87-da8a-4ef3-bc11-cc96169545be@t02c-after-cut"
+  },
+  "summary": {
+   "emptyGitFiles": {},
+   "fsckErrors": [],
+   "lastTurnInTheTranscript": {
+    "answer": 1,
+    "message": 1
+   },
+   "locks": {},
+   "returnedCommitsMissing": [],
+   "s3": {
+    "s3 engine commit (its turn still running)": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "d29da6953933380c8e5be5566432f69fb3390368"
+    }
+   },
+   "unreadable": []
+  },
+  "view": {
+   "commits": {
+    "runner merge into the workspace (returned)": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "9ff3e729a49460a78e2252d8ac1862b221fed6df"
+    },
+    "s1 first engine commit": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "f4c67bf183aecbd24a1c4fa53338556c4b679c57"
+    },
+    "s1 last engine commit (returned: the turn ended)": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "88ea88cc8d83df1911ab1f824162d3ae272972a2"
+    },
+    "s2 engine commit": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "7a3a0d7c554293abdeb81318afe0b873a8426707"
+    },
+    "s2 runner commit (returned: the merge took it)": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "9ff3e729a49460a78e2252d8ac1862b221fed6df"
+    },
+    "s3 engine commit (its turn still running)": {
+     "branchCheck": "",
+     "object": "commit",
+     "onTheBranch": true,
+     "ref": "HEAD",
+     "sha": "d29da6953933380c8e5be5566432f69fb3390368"
+    }
+   },
+   "ext4Options": [
+    "rw",
+    "bsddf",
+    "nogrpid",
+    "block_validity",
+    "dioread_nolock",
+    "nodiscard",
+    "delalloc",
+    "nowarn_on_error",
+    "journal_checksum",
+    "barrier",
+    "auto_da_alloc",
+    "user_xattr",
+    "acl",
+    "noquota",
+    "resuid=0",
+    "resgid=0",
+    "errors=continue",
+    "commit=5",
+    "min_batch_time=0",
+    "max_batch_time=15000",
+    "i_version",
+    "stripe=1024",
+    "data=ordered",
+    "inode_readahead_blks=32",
+    "init_itable=10",
+    "max_dir_size_kb=0",
+    "prefetch_block_bitmaps"
+   ],
+   "git": "git version 2.47.3",
+   "kernel": "7.0.0-34-generic",
+   "mount": {
+    "fstype": "ext4",
+    "options": "rw,relatime",
+    "source": "/dev/rbd1",
+    "superOptions": "rw,stripe=1024"
+   },
+   "repos": {
+    "01a1552f-ac1e-73a8-aeb2-45920d1cddcd": {
+     "branch": {
+      "loose": "88ea88cc8d83df1911ab1f824162d3ae272972a2",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-bob-s1-a-session-t03-secret-bobs1-f-9eccba"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a1552f-ac1e-73a8-aeb2-45920d1cddcd",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a1552f-ac1e-73a8-aeb2-45920d1cddcd",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-bob-s1-a-session-t03-secret-bobs1-f-9eccba"
+     },
+     "indexBytes": 305,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "88ea88cc8d83df1911ab1f824162d3ae272972a2 T08 boblast\nf4c67bf183aecbd24a1c4fa53338556c4b679c57 T08 bobs1\nb8ec3bfe0744ddfa643ad163f41fdd469361ade0 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "810153679a2d5c0e20f4e923d30196a87e920fd5"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    },
+    "01a1552f-bd8a-7779-9fb4-236fba6273fa": {
+     "branch": {
+      "loose": "9ff3e729a49460a78e2252d8ac1862b221fed6df",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-bob-s2-a-session-t03-secret-bobs2-f-d6ae68"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a1552f-bd8a-7779-9fb4-236fba6273fa",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a1552f-bd8a-7779-9fb4-236fba6273fa",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-bob-s2-a-session-t03-secret-bobs2-f-d6ae68"
+     },
+     "indexBytes": 313,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "9ff3e729a49460a78e2252d8ac1862b221fed6df Update t02c-runner-bob.txt\n7a3a0d7c554293abdeb81318afe0b873a8426707 T08 bobs2\nb8ec3bfe0744ddfa643ad163f41fdd469361ade0 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "aa4f7e05dce929136bff27a353aa32fd2c19253a"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    },
+    "01a1552f-d390-744b-83de-b4ef8ce7023e": {
+     "branch": {
+      "loose": "d29da6953933380c8e5be5566432f69fb3390368",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-bob-hold-a-turn-still-running-at-th-70c316"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a1552f-d390-744b-83de-b4ef8ce7023e",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a1552f-d390-744b-83de-b4ef8ce7023e",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-bob-hold-a-turn-still-running-at-th-70c316"
+     },
+     "indexBytes": 225,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "d29da6953933380c8e5be5566432f69fb3390368 T08 bobheld\nb8ec3bfe0744ddfa643ad163f41fdd469361ade0 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "9163791735a58dee6db1ff579756582443e0b745"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    },
+    "workspace": {
+     "branch": {
+      "loose": "9ff3e729a49460a78e2252d8ac1862b221fed6df",
+      "looseBytes": 41,
+      "ref": "refs/heads/master"
+     },
+     "checkout": "/var/lib/orbit/home/orbit-repos/default",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+     "headFile": {
+      "bytes": 23,
+      "content": "ref: refs/heads/master"
+     },
+     "indexBytes": 313,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "9ff3e729a49460a78e2252d8ac1862b221fed6df Update t02c-runner-bob.txt\n7a3a0d7c554293abdeb81318afe0b873a8426707 T08 bobs2\nb8ec3bfe0744ddfa643ad163f41fdd469361ade0 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "aa4f7e05dce929136bff27a353aa32fd2c19253a"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    }
+   },
+   "transcripts": {
+    ".claude/projects/-tmp-orbit-cmsg-2100099208/e88a5d36-15f0-4190-906c-1ac88d540a42.jsonl": {
+     "bytes": 80266,
+     "lines": 22,
+     "markers": {
+      "T02C-BOB-LAST": 0,
+      "T02C-BOB-S1": 0,
+      "T08-WROTE-BOBLAST": 0,
+      "tool result received: T08-WROTE-BOBLAST": 0
+     }
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1552f-ac1e-73a8-aeb2-45920d1cddcd/146baecb-230d-47e3-b76d-51069abe8a93.jsonl": {
+     "bytes": 742039,
+     "lines": 41,
+     "markers": {
+      "T02C-BOB-LAST": 1,
+      "T02C-BOB-S1": 4,
+      "T08-WROTE-BOBLAST": 3,
+      "tool result received: T08-WROTE-BOBLAST": 1
+     }
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1552f-bd8a-7779-9fb4-236fba6273fa/c76db99a-105c-4414-95a9-a5e4f484d1ad.jsonl": {
+     "bytes": 731895,
+     "lines": 29,
+     "markers": {
+      "T02C-BOB-LAST": 0,
+      "T02C-BOB-S1": 0,
+      "T08-WROTE-BOBLAST": 0,
+      "tool result received: T08-WROTE-BOBLAST": 0
+     }
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1552f-d390-744b-83de-b4ef8ce7023e/ef5a182a-a6be-4edb-87ba-5c5ccb58ae2d.jsonl": {
+     "bytes": 730699,
+     "lines": 28,
+     "markers": {
+      "T02C-BOB-LAST": 0,
+      "T02C-BOB-S1": 0,
+      "T08-WROTE-BOBLAST": 0,
+      "tool result received: T08-WROTE-BOBLAST": 0
+     }
+    }
+   },
+   "uid": 10001
+  }
+ },
+ "seconds": 48.1,
+ "startedAt": "2026-10-19T17:22:47.915+00:00",
+ "step": "left"
+}

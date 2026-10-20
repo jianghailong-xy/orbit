@@ -1,0 +1,138 @@
+{
+ "checks": [
+  {
+   "check": "the message is accepted",
+   "ok": true,
+   "value": 201
+  },
+  {
+   "check": "the wake fails PVC_MISSING, not retryable",
+   "ok": true,
+   "value": {
+    "code": "PVC_MISSING",
+    "detail": "PVC mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95 (be5549db-33bc-4e32-af48-cae1f6758b4d) is gone",
+    "message": "This runner's recorded data volume is gone. No empty volume is created in its place; an operator has to review it.",
+    "retryable": false
+   }
+  },
+  {
+   "check": "no empty claim in its place",
+   "ok": true
+  },
+  {
+   "check": "the mapping still records the lost volume",
+   "ok": true,
+   "value": "be5549db-33bc-4e32-af48-cae1f6758b4d"
+  },
+  {
+   "check": "the message waits for the runner",
+   "ok": true,
+   "value": [
+    {
+     "status": "PENDING"
+    }
+   ]
+  }
+ ],
+ "endedAt": "2026-10-18T15:24:45.568+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "loss",
+ "result": {
+  "display": {
+   "acceptsWork": false,
+   "detail": "This runner's recorded data volume is gone. No empty volume is created in its place; an operator has to review it.",
+   "ensure": false,
+   "kind": "failed",
+   "moving": false,
+   "retry": false,
+   "signIn": false,
+   "startsNewSession": false,
+   "title": "Managed runner failed"
+  },
+  "enabled": {
+   "answer": {
+    "disabledAt": null,
+    "email": "t08b-ann@lab.invalid",
+    "id": "34i7W1Pcy2TrsvLwGgFVW"
+   },
+   "at": "2026-10-18T15:24:44.727+00:00",
+   "disabled": false,
+   "owner": "ann",
+   "status": 200
+  },
+  "reason": {
+   "code": "PVC_MISSING",
+   "detail": "PVC mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95 (be5549db-33bc-4e32-af48-cae1f6758b4d) is gone",
+   "message": "This runner's recorded data volume is gone. No empty volume is created in its place; an operator has to review it.",
+   "retryable": false
+  },
+  "signIn": {
+   "at": "2026-10-18T15:24:44.738+00:00",
+   "ms": 55.4,
+   "status": 201
+  },
+  "status": {
+   "actions": {
+    "canDelete": false,
+    "canEnsure": false,
+    "canRetry": false,
+    "canSleep": false,
+    "canWake": false
+   },
+   "managementState": "FAILED",
+   "reason": {
+    "code": "PVC_MISSING",
+    "message": "This runner's recorded data volume is gone. No empty volume is created in its place; an operator has to review it.",
+    "retryable": false
+   }
+  },
+  "turn": {
+   "answer": {
+    "code": null,
+    "id": null,
+    "message": null,
+    "seq": 3,
+    "status": null
+   },
+   "at": "2026-10-18T15:24:44.804+00:00",
+   "kind": "turn",
+   "session": "34i7Wp9JTQ2gicVUMiahK",
+   "status": 201
+  },
+  "until": {
+   "at": "2026-10-18T15:24:45.419+00:00",
+   "changes": [
+    {
+     "at": "2026-10-18T15:24:44.878+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 2,
+      "management_state": "PROVISIONING",
+      "pod": null,
+      "reason": null,
+      "revision": 20
+     }
+    },
+    {
+     "at": "2026-10-18T15:24:45.419+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 2,
+      "management_state": "FAILED",
+      "pod": null,
+      "reason": "PVC_MISSING",
+      "revision": 21
+     }
+    }
+   ],
+   "reached": "FAILED",
+   "seconds": 0.6
+  }
+ },
+ "seconds": 0.9,
+ "startedAt": "2026-10-18T15:24:44.710+00:00",
+ "step": "failed-wake"
+}

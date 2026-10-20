@@ -344,6 +344,45 @@ services:
       retries: 6
       start_period: 10s
 
+  # The managed runners' host firewall (docs/self-hosting.md, "Isolation and its limits"; deploy/managed-runner/firewall):
+  # rules on this host's iptables that leave a managed runner the gateway's published port, DNS and public addresses, and
+  # nothing else of this host or of the private networks behind it. It runs in the host's network namespace with
+  # NET_ADMIN and NET_RAW, never with the Docker socket; it checks the rules every 10 s, repairs what changed, and leaves
+  # them in place when it stops. The Docker channel starts no runner container while it does not report them in force.
+  # It runs only under the managed-runner-firewall profile, which a fresh install switches on in .env beside the Docker
+  # backend's (scripts/install-server.sh; --no-managed-runner-firewall leaves it off), and an upgrade never does.
+  managed-runner-firewall:
+    profiles: [managed-runner-firewall]
+    build:
+      context: .
+      dockerfile: deploy/managed-runner/firewall/Dockerfile
+    image: orbit-managed-runner-firewall:local
+    container_name: orbit-managed-runner-firewall
+    restart: unless-stopped
+    logging: *logging
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    volumes:
+      # Its configuration, and the status the Docker channel reads.
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-managed-runner-firewall"
+      # The legacy iptables backend's lock, which Docker's own iptables calls take too; the install names it only where
+      # the host's iptables is legacy. Never made on the host: a directory there would break the host's iptables.
+      - type: bind
+        source: "${ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK:-/dev/null}"
+        target: /run/xtables.lock
+        bind:
+          create_host_path: false
+    healthcheck:
+      # Healthy while its status says the rules are in force: what the Docker channel reads before it starts a runner.
+      test: ["CMD", "python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
 volumes:
   # Only the Postgres socket directory: the archive itself is a bind mount under ./data
   # so backups are visible (and copyable off the host) without docker.

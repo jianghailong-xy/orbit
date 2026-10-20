@@ -1,0 +1,47 @@
+{
+ "checks": [
+  {
+   "check": "ann: the probe writer commits rows in the runner container on orbit-mr-lab-2",
+   "ok": true,
+   "value": [
+    107,
+    "orbit-mr-lab-2"
+   ]
+  },
+  {
+   "check": "bob: the probe writer commits rows in the runner container on orbit-mr-lab-2",
+   "ok": true,
+   "value": [
+    109,
+    "orbit-mr-lab-2"
+   ]
+  }
+ ],
+ "endedAt": "2026-10-19T14:29:28.257+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "duplicate",
+ "result": {
+  "ann": {
+   "at": "2026-10-19T14:28:17.046+00:00",
+   "committedRows": 107,
+   "generation": 2,
+   "hundredRowsAt": "2026-10-19T14:29:21.090+00:00",
+   "node": "orbit-mr-lab-2",
+   "pod": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+   "podUid": "ce76c2ac-ea02-4634-b184-eb801d09b751"
+  },
+  "bob": {
+   "at": "2026-10-19T14:28:17.354+00:00",
+   "committedRows": 109,
+   "generation": 2,
+   "hundredRowsAt": "2026-10-19T14:29:24.872+00:00",
+   "node": "orbit-mr-lab-2",
+   "pod": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+   "podUid": "c575d98b-33a5-4895-88b5-87f2832ea889"
+  }
+ },
+ "seconds": 71.7,
+ "startedAt": "2026-10-19T14:28:16.606+00:00",
+ "step": "writers"
+}

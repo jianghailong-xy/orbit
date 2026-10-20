@@ -25108,8 +25108,20 @@ button.agent-progress-agent:hover {
 .wt-recovery-repair-status-copy strong, .wt-recovery-repair-status-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wt-recovery-repair-status-copy small { color: var(--text-2); }
 .wt-recovery-repair-chevron { color: var(--text-2); font-size: 22px; line-height: 1; }
-.wt-recovery-repair-hint { margin: 5px 0 0 !important; font-size: 11px; }
-.wt-recovery-repair-error { color: var(--error) !important; }
+.wt-recovery-repair-icon { flex: none; font-size: 16px; color: var(--text-2); }
+.wt-recovery-repair-status.is-ready .wt-recovery-repair-icon, .wt-recovery-repair-status.is-ready .wt-recovery-repair-note { color: var(--success); }
+.wt-recovery-repair-status.is-conflict .wt-recovery-repair-icon, .wt-recovery-repair-status.is-conflict .wt-recovery-repair-note,
+.wt-recovery-repair-status.is-reply .wt-recovery-repair-icon, .wt-recovery-repair-status.is-reply .wt-recovery-repair-note { color: var(--warning); }
+.wt-recovery-repair-status.is-failed .wt-recovery-repair-icon, .wt-recovery-repair-status.is-failed .wt-recovery-repair-note { color: var(--error); }
+/* "Checked 14m ago · Check again", or "Checking the repair…" while Orbit checks what a repair left. */
+.wt-recovery-checked .anticon, .wt-recovery-actions .anticon { margin-right: 4px; }
+.wt-recovery-link { padding: 0; border: 0; background: none; color: var(--brand); font: inherit; cursor: pointer; }
+.wt-recovery-link:disabled { opacity: .55; cursor: default; }
+.wt-recovery-snapshot.is-stale { opacity: .45; }
+.wt-recovery-files { margin: 10px 0; }
+.wt-recovery-files ul { display: grid; gap: 4px; margin: 6px 0 0; padding: 0; list-style: none; }
+.wt-recovery-files code { font-size: 11px; }
+.wt-recovery-actions-note { margin: 6px 0 0 !important; font-size: 11px; }
 @media (max-width: 680px) { .wt-recovery-histories { grid-template-columns: 1fr; } }
 
 /* Timed pauses keep identity and quota visible while showing when the account returns. */

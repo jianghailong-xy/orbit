@@ -1,0 +1,8 @@
+23:14:16Z node orbit-mr-lab-2: cordoned
+unit orbit-mr-lab-2: memory.current 1335 MiB, memory.peak 1346 MiB, swap 0 MiB, memory.max 3758096384
+23:14:16Z orbit-mr-lab-2: ACPI shutdown requested; waiting up to 600 s
+23:14:22Z orbit-mr-lab-2 stopped after 6 s
+unit orbit-mr-lab: memory.current 2294 MiB, memory.peak 4979 MiB, swap 1017 MiB, memory.max 6979321856
+23:14:22Z orbit-mr-lab: ACPI shutdown requested; waiting up to 600 s
+23:14:40Z orbit-mr-lab stopped after 18 s
+host: MemAvailable 10119 MiB

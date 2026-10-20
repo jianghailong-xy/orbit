@@ -1,0 +1,811 @@
+{
+ "checks": [
+  {
+   "check": "samples were taken through the whole window",
+   "ok": true,
+   "value": 166
+  },
+  {
+   "check": "orbit-mr-lab-2 went Unknown",
+   "ok": true,
+   "value": [
+    "True",
+    "Unknown"
+   ]
+  },
+  {
+   "check": "ann: the mapping kept its generation and its recorded Pod: nothing was replaced",
+   "ok": true,
+   "value": {
+    "generations": [
+     2
+    ]
+   }
+  },
+  {
+   "check": "ann: READY throughout, as the coordinator's decision of 2026-10-19 keeps it (no FENCING before the taint)",
+   "ok": true,
+   "value": [
+    "READY"
+   ]
+  },
+  {
+   "check": "ann: only the old Pod object ever referenced the claim",
+   "ok": true,
+   "value": [
+    "ce76c2ac-ea02-4634-b184-eb801d09b751"
+   ]
+  },
+  {
+   "check": "ann: the VolumeAttachment stayed on orbit-mr-lab-2",
+   "ok": true
+  },
+  {
+   "check": "ann: the owner's status said the runner is not usable",
+   "ok": true
+  },
+  {
+   "check": "ann: the message sent meanwhile was accepted",
+   "ok": true,
+   "value": 201
+  },
+  {
+   "check": "ann: the owner's retry did not start anything",
+   "ok": true,
+   "value": {
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A READY managed runner is not retried."
+    },
+    "status": 409
+   }
+  },
+  {
+   "check": "ann: the message is still waiting at the end of the window",
+   "ok": true,
+   "value": [
+    {
+     "status": "PENDING"
+    }
+   ]
+  },
+  {
+   "check": "bob: the mapping kept its generation and its recorded Pod: nothing was replaced",
+   "ok": true,
+   "value": {
+    "generations": [
+     2
+    ]
+   }
+  },
+  {
+   "check": "bob: READY throughout, as the coordinator's decision of 2026-10-19 keeps it (no FENCING before the taint)",
+   "ok": true,
+   "value": [
+    "READY"
+   ]
+  },
+  {
+   "check": "bob: only the old Pod object ever referenced the claim",
+   "ok": true,
+   "value": [
+    "c575d98b-33a5-4895-88b5-87f2832ea889"
+   ]
+  },
+  {
+   "check": "bob: the VolumeAttachment stayed on orbit-mr-lab-2",
+   "ok": true
+  },
+  {
+   "check": "bob: the owner's status said the runner is not usable",
+   "ok": true
+  },
+  {
+   "check": "bob: the message sent meanwhile was accepted",
+   "ok": true,
+   "value": 201
+  },
+  {
+   "check": "bob: the owner's retry did not start anything",
+   "ok": true,
+   "value": {
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A READY managed runner is not retried."
+    },
+    "status": 409
+   }
+  },
+  {
+   "check": "bob: the message is still waiting at the end of the window",
+   "ok": true,
+   "value": [
+    {
+     "status": "PENDING"
+    }
+   ]
+  },
+  {
+   "check": "the contenders were tried while the node was down",
+   "ok": true
+  },
+  {
+   "check": "ann: unlabelled Pod on the claim, on orbit-mr-lab, by the cluster admin: refused by the admission guard, NOT_THE_MANAGER",
+   "ok": true,
+   "value": " creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_MANAGER: only the managed runner manager may create a Pod that uses a managed runner volume"
+  },
+  {
+   "check": "ann: copy of the stale Pod under another name, on orbit-mr-lab, by the manager: refused by the admission guard, NOT_THE_FIXED_NAME",
+   "ok": true,
+   "value": "error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: the one Pod of this volume is mr-01a1548e-0f66-719f-aa98-e3ed285e4e91"
+  },
+  {
+   "check": "ann: copy of the stale Pod under its fixed name, same generation, on orbit-mr-lab, by the manager: refused by the admission guard, NOT_RESERVED",
+   "ok": true,
+   "value": " from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_RESERVED: generation 2 has no Pod creation reserved (READY)"
+  },
+  {
+   "check": "ann: the fixed name for the next generation, with no receipt, on orbit-mr-lab, by the manager: refused by the admission guard, NOT_THE_RESERVED_GENERATION",
+   "ok": true,
+   "value": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_RESERVED_GENERATION: the reserved generation is 2"
+  },
+  {
+   "check": "ann: still only the stale Pod on the claim after the contenders",
+   "ok": true,
+   "value": [
+    {
+     "deleting": false,
+     "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+     "node": "orbit-mr-lab-2",
+     "phase": "Running",
+     "uid": "ce76c2ac-ea02-4634-b184-eb801d09b751"
+    }
+   ]
+  },
+  {
+   "check": "bob: unlabelled Pod on the claim, on orbit-mr-lab, by the cluster admin: refused by the admission guard, NOT_THE_MANAGER",
+   "ok": true,
+   "value": " creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_MANAGER: only the managed runner manager may create a Pod that uses a managed runner volume"
+  },
+  {
+   "check": "bob: copy of the stale Pod under another name, on orbit-mr-lab, by the manager: refused by the admission guard, NOT_THE_FIXED_NAME",
+   "ok": true,
+   "value": "error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: the one Pod of this volume is mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9"
+  },
+  {
+   "check": "bob: copy of the stale Pod under its fixed name, same generation, on orbit-mr-lab, by the manager: refused by the admission guard, NOT_RESERVED",
+   "ok": true,
+   "value": " from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_RESERVED: generation 2 has no Pod creation reserved (READY)"
+  },
+  {
+   "check": "bob: the fixed name for the next generation, with no receipt, on orbit-mr-lab, by the manager: refused by the admission guard, NOT_THE_RESERVED_GENERATION",
+   "ok": true,
+   "value": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_RESERVED_GENERATION: the reserved generation is 2"
+  },
+  {
+   "check": "bob: still only the stale Pod on the claim after the contenders",
+   "ok": true,
+   "value": [
+    {
+     "deleting": false,
+     "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+     "node": "orbit-mr-lab-2",
+     "phase": "Running",
+     "uid": "c575d98b-33a5-4895-88b5-87f2832ea889"
+    }
+   ]
+  },
+  {
+   "check": "the gate saw no Pod create, Secret create or admission probe from the manager (beforeContenders)",
+   "ok": true,
+   "value": {
+    "other (reads, patches, deletes)": 252
+   }
+  },
+  {
+   "check": "the gate saw no Pod create, Secret create or admission probe from the manager (afterContenders)",
+   "ok": true,
+   "value": {
+    "other (reads, patches, deletes)": 252
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T14:43:46.754+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "takeover",
+ "result": {
+  "contenders": {
+   "endedAt": "2026-10-19T14:40:15.641+00:00",
+   "owners": {
+    "ann": {
+     "attempts": [
+      {
+       "admitted": false,
+       "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_MANAGER: only the managed runner manager may create a Pod that uses a managed runner volume",
+       "at": "2026-10-19T14:40:14.718+00:00",
+       "case": "ann: unlabelled Pod on the claim, on orbit-mr-lab, by the cluster admin",
+       "code": "NOT_THE_MANAGER",
+       "expected": "NOT_THE_MANAGER",
+       "identity": "lab cluster-admin",
+       "name": "t08x-ann-outage-admin",
+       "node": "orbit-mr-lab"
+      },
+      {
+       "admitted": false,
+       "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: the one Pod of this volume is mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+       "at": "2026-10-19T14:40:14.814+00:00",
+       "case": "ann: copy of the stale Pod under another name, on orbit-mr-lab, by the manager",
+       "code": "NOT_THE_FIXED_NAME",
+       "expected": "NOT_THE_FIXED_NAME",
+       "identity": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+       "name": "t08x-ann-outage-copy",
+       "node": "orbit-mr-lab"
+      },
+      {
+       "admitted": false,
+       "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_RESERVED: generation 2 has no Pod creation reserved (READY)",
+       "at": "2026-10-19T14:40:14.942+00:00",
+       "case": "ann: copy of the stale Pod under its fixed name, same generation, on orbit-mr-lab, by the manager",
+       "code": "NOT_RESERVED",
+       "expected": "NOT_RESERVED",
+       "identity": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+       "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+       "node": "orbit-mr-lab"
+      },
+      {
+       "admitted": false,
+       "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_RESERVED_GENERATION: the reserved generation is 2",
+       "at": "2026-10-19T14:40:15.039+00:00",
+       "case": "ann: the fixed name for the next generation, with no receipt, on orbit-mr-lab, by the manager",
+       "code": "NOT_THE_RESERVED_GENERATION",
+       "expected": "NOT_THE_RESERVED_GENERATION",
+       "identity": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+       "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+       "node": "orbit-mr-lab"
+      }
+     ],
+     "podsOnTheClaimAfter": [
+      {
+       "deleting": false,
+       "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+       "node": "orbit-mr-lab-2",
+       "phase": "Running",
+       "uid": "ce76c2ac-ea02-4634-b184-eb801d09b751"
+      }
+     ]
+    },
+    "bob": {
+     "attempts": [
+      {
+       "admitted": false,
+       "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_MANAGER: only the managed runner manager may create a Pod that uses a managed runner volume",
+       "at": "2026-10-19T14:40:15.231+00:00",
+       "case": "bob: unlabelled Pod on the claim, on orbit-mr-lab, by the cluster admin",
+       "code": "NOT_THE_MANAGER",
+       "expected": "NOT_THE_MANAGER",
+       "identity": "lab cluster-admin",
+       "name": "t08x-bob-outage-admin",
+       "node": "orbit-mr-lab"
+      },
+      {
+       "admitted": false,
+       "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: the one Pod of this volume is mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+       "at": "2026-10-19T14:40:15.328+00:00",
+       "case": "bob: copy of the stale Pod under another name, on orbit-mr-lab, by the manager",
+       "code": "NOT_THE_FIXED_NAME",
+       "expected": "NOT_THE_FIXED_NAME",
+       "identity": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+       "name": "t08x-bob-outage-copy",
+       "node": "orbit-mr-lab"
+      },
+      {
+       "admitted": false,
+       "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_RESERVED: generation 2 has no Pod creation reserved (READY)",
+       "at": "2026-10-19T14:40:15.424+00:00",
+       "case": "bob: copy of the stale Pod under its fixed name, same generation, on orbit-mr-lab, by the manager",
+       "code": "NOT_RESERVED",
+       "expected": "NOT_RESERVED",
+       "identity": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+       "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+       "node": "orbit-mr-lab"
+      },
+      {
+       "admitted": false,
+       "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_RESERVED_GENERATION: the reserved generation is 2",
+       "at": "2026-10-19T14:40:15.518+00:00",
+       "case": "bob: the fixed name for the next generation, with no receipt, on orbit-mr-lab, by the manager",
+       "code": "NOT_THE_RESERVED_GENERATION",
+       "expected": "NOT_THE_RESERVED_GENERATION",
+       "identity": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+       "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+       "node": "orbit-mr-lab"
+      }
+     ],
+     "podsOnTheClaimAfter": [
+      {
+       "deleting": false,
+       "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+       "node": "orbit-mr-lab-2",
+       "phase": "Running",
+       "uid": "c575d98b-33a5-4895-88b5-87f2832ea889"
+      }
+     ]
+    }
+   },
+   "startedAt": "2026-10-19T14:40:14.650+00:00"
+  },
+  "demand": {
+   "ann": {
+    "answer": {
+     "code": null,
+     "id": null,
+     "message": null,
+     "seq": 4,
+     "status": null
+    },
+    "at": "2026-10-19T14:39:12.958+00:00",
+    "kind": "turn",
+    "session": "34ifX1UizebwFShwLfstK",
+    "status": 201
+   },
+   "bob": {
+    "answer": {
+     "code": null,
+     "id": null,
+     "message": null,
+     "seq": 4,
+     "status": null
+    },
+    "at": "2026-10-19T14:39:12.992+00:00",
+    "kind": "turn",
+    "session": "34ifX3ZCiSUsMligh4Ixe",
+    "status": 201
+   }
+  },
+  "errors": [],
+  "first": {
+   "at": "2026-10-19T14:36:49.529+00:00",
+   "gateConnections": 881,
+   "node": {
+    "name": "orbit-mr-lab-2",
+    "ready": "True",
+    "readySince": "2026-10-19T13:10:45Z",
+    "reason": "KubeletReady",
+    "taints": [],
+    "uid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+    "unschedulable": false
+   },
+   "owners": {
+    "ann": {
+     "mapping": {
+      "attempt": 0,
+      "desired": "RUNNING",
+      "generation": 2,
+      "podUid": "ce76c2ac-ea02-4634-b184-eb801d09b751",
+      "proof": "OBSERVED_STOP",
+      "reason": null,
+      "state": "READY"
+     },
+     "ownerStatus": {
+      "heartbeatStatus": "ONLINE",
+      "managementState": "READY",
+      "reason": null,
+      "usable": true
+     },
+     "pod": {
+      "containers": [
+       {
+        "exitCode": 0,
+        "name": "private-volume-directories",
+        "reason": "Completed",
+        "state": "terminated"
+       },
+       {
+        "exitCode": null,
+        "name": "runner",
+        "reason": null,
+        "state": "running"
+       }
+      ],
+      "deletionTimestamp": null,
+      "disruptionTarget": null,
+      "finalizers": [
+       "orbit.dev/managed-runner-stop-report"
+      ],
+      "generation": "2",
+      "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+      "node": "orbit-mr-lab-2",
+      "phase": "Running",
+      "ready": "True",
+      "uid": "ce76c2ac-ea02-4634-b184-eb801d09b751"
+     },
+     "podsOnTheClaim": [
+      {
+       "deleting": false,
+       "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+       "node": "orbit-mr-lab-2",
+       "phase": "Running",
+       "uid": "ce76c2ac-ea02-4634-b184-eb801d09b751"
+      }
+     ],
+     "runner": {
+      "last_heartbeat_at": "2026-10-19T14:36:17.805",
+      "status": "ONLINE"
+     },
+     "volumeAttachments": [
+      {
+       "attached": true,
+       "deleting": false,
+       "detachError": null,
+       "name": "csi-55d2fb91583f2dfb3dd9b4d6f4575a569f3bca7a566acf78b083992fc7b0cac4",
+       "node": "orbit-mr-lab-2"
+      }
+     ],
+     "watchers": [
+      {
+       "address": "10.77.0.2:0/2125168574",
+       "client": 294186,
+       "cookie": 18446462598732840962
+      }
+     ]
+    },
+    "bob": {
+     "mapping": {
+      "attempt": 0,
+      "desired": "RUNNING",
+      "generation": 2,
+      "podUid": "c575d98b-33a5-4895-88b5-87f2832ea889",
+      "proof": "OBSERVED_STOP",
+      "reason": null,
+      "state": "READY"
+     },
+     "ownerStatus": {
+      "heartbeatStatus": "ONLINE",
+      "managementState": "READY",
+      "reason": null,
+      "usable": true
+     },
+     "pod": {
+      "containers": [
+       {
+        "exitCode": 0,
+        "name": "private-volume-directories",
+        "reason": "Completed",
+        "state": "terminated"
+       },
+       {
+        "exitCode": null,
+        "name": "runner",
+        "reason": null,
+        "state": "running"
+       }
+      ],
+      "deletionTimestamp": null,
+      "disruptionTarget": null,
+      "finalizers": [
+       "orbit.dev/managed-runner-stop-report"
+      ],
+      "generation": "2",
+      "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+      "node": "orbit-mr-lab-2",
+      "phase": "Running",
+      "ready": "True",
+      "uid": "c575d98b-33a5-4895-88b5-87f2832ea889"
+     },
+     "podsOnTheClaim": [
+      {
+       "deleting": false,
+       "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+       "node": "orbit-mr-lab-2",
+       "phase": "Running",
+       "uid": "c575d98b-33a5-4895-88b5-87f2832ea889"
+      }
+     ],
+     "runner": {
+      "last_heartbeat_at": "2026-10-19T14:36:17.805",
+      "status": "ONLINE"
+     },
+     "volumeAttachments": [
+      {
+       "attached": true,
+       "deleting": false,
+       "detachError": null,
+       "name": "csi-7e13271af0161992f564c1f4288cfcccbf11f61864b0dfa972c709702916ad34",
+       "node": "orbit-mr-lab-2"
+      }
+     ],
+     "watchers": [
+      {
+       "address": "10.77.0.2:0/2125168574",
+       "client": 294186,
+       "cookie": 18446462598732840961
+      }
+     ]
+    }
+   },
+   "secondsSinceCut": 1.3
+  },
+  "firstUnknownSeconds": 55.6,
+  "gate": {
+   "afterContenders": {
+    "at": "2026-10-19T14:43:43.659+00:00",
+    "byKind": {
+     "other (reads, patches, deletes)": 252
+    },
+    "connections": 252,
+    "largestRecordSizes": {
+     "1136": 84,
+     "1147": 84,
+     "1170": 84
+    },
+    "since": "2026-10-19T14:40:15.641+00:00",
+    "until": null
+   },
+   "beforeContenders": {
+    "at": "2026-10-19T14:43:43.653+00:00",
+    "byKind": {
+     "other (reads, patches, deletes)": 252
+    },
+    "connections": 252,
+    "largestRecordSizes": {
+     "1136": 84,
+     "1147": 84,
+     "1170": 84
+    },
+    "since": "2026-10-19T14:36:42.510+00:00",
+    "until": "2026-10-19T14:40:14.650+00:00"
+   },
+   "contenders": {
+    "at": "2026-10-19T14:43:43.656+00:00",
+    "byKind": {
+     "other (reads, patches, deletes)": 6
+    },
+    "connections": 6,
+    "largestRecordSizes": {
+     "3445": 2,
+     "3464": 4
+    },
+    "since": "2026-10-19T14:40:14.650+00:00",
+    "until": "2026-10-19T14:40:15.641+00:00"
+   }
+  },
+  "last": {
+   "at": "2026-10-19T14:43:41.554+00:00",
+   "gateConnections": 1373,
+   "node": {
+    "name": "orbit-mr-lab-2",
+    "ready": "Unknown",
+    "readySince": "2026-10-19T14:37:36Z",
+    "reason": "NodeStatusUnknown",
+    "taints": [
+     "node.kubernetes.io/unreachable:NoSchedule",
+     "node.kubernetes.io/unreachable:NoExecute"
+    ],
+    "uid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+    "unschedulable": false
+   },
+   "owners": {
+    "ann": {
+     "mapping": {
+      "attempt": 0,
+      "desired": "RUNNING",
+      "generation": 2,
+      "podUid": "ce76c2ac-ea02-4634-b184-eb801d09b751",
+      "proof": "OBSERVED_STOP",
+      "reason": null,
+      "state": "READY"
+     },
+     "ownerStatus": {
+      "heartbeatStatus": "ONLINE",
+      "managementState": "READY",
+      "reason": null,
+      "usable": false
+     },
+     "pod": {
+      "containers": [
+       {
+        "exitCode": 0,
+        "name": "private-volume-directories",
+        "reason": "Completed",
+        "state": "terminated"
+       },
+       {
+        "exitCode": null,
+        "name": "runner",
+        "reason": null,
+        "state": "running"
+       }
+      ],
+      "deletionTimestamp": "2026-10-19T14:46:36Z",
+      "disruptionTarget": {
+       "lastTransitionTime": "2026-10-19T14:42:36Z",
+       "reason": "DeletionByTaintManager",
+       "status": "True"
+      },
+      "finalizers": [
+       "orbit.dev/managed-runner-stop-report"
+      ],
+      "generation": "2",
+      "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+      "node": "orbit-mr-lab-2",
+      "phase": "Running",
+      "ready": "False",
+      "uid": "ce76c2ac-ea02-4634-b184-eb801d09b751"
+     },
+     "podsOnTheClaim": [
+      {
+       "deleting": true,
+       "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+       "node": "orbit-mr-lab-2",
+       "phase": "Running",
+       "uid": "ce76c2ac-ea02-4634-b184-eb801d09b751"
+      }
+     ],
+     "runner": {
+      "last_heartbeat_at": "2026-10-19T14:36:17.805",
+      "status": "ONLINE"
+     },
+     "volumeAttachments": [
+      {
+       "attached": true,
+       "deleting": false,
+       "detachError": null,
+       "name": "csi-55d2fb91583f2dfb3dd9b4d6f4575a569f3bca7a566acf78b083992fc7b0cac4",
+       "node": "orbit-mr-lab-2"
+      }
+     ],
+     "watchers": null
+    },
+    "bob": {
+     "mapping": {
+      "attempt": 0,
+      "desired": "RUNNING",
+      "generation": 2,
+      "podUid": "c575d98b-33a5-4895-88b5-87f2832ea889",
+      "proof": "OBSERVED_STOP",
+      "reason": null,
+      "state": "READY"
+     },
+     "ownerStatus": {
+      "heartbeatStatus": "ONLINE",
+      "managementState": "READY",
+      "reason": null,
+      "usable": false
+     },
+     "pod": {
+      "containers": [
+       {
+        "exitCode": 0,
+        "name": "private-volume-directories",
+        "reason": "Completed",
+        "state": "terminated"
+       },
+       {
+        "exitCode": null,
+        "name": "runner",
+        "reason": null,
+        "state": "running"
+       }
+      ],
+      "deletionTimestamp": "2026-10-19T14:46:36Z",
+      "disruptionTarget": {
+       "lastTransitionTime": "2026-10-19T14:42:36Z",
+       "reason": "DeletionByTaintManager",
+       "status": "True"
+      },
+      "finalizers": [
+       "orbit.dev/managed-runner-stop-report"
+      ],
+      "generation": "2",
+      "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+      "node": "orbit-mr-lab-2",
+      "phase": "Running",
+      "ready": "False",
+      "uid": "c575d98b-33a5-4895-88b5-87f2832ea889"
+     },
+     "podsOnTheClaim": [
+      {
+       "deleting": true,
+       "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+       "node": "orbit-mr-lab-2",
+       "phase": "Running",
+       "uid": "c575d98b-33a5-4895-88b5-87f2832ea889"
+      }
+     ],
+     "runner": {
+      "last_heartbeat_at": "2026-10-19T14:36:17.805",
+      "status": "ONLINE"
+     },
+     "volumeAttachments": [
+      {
+       "attached": true,
+       "deleting": false,
+       "detachError": null,
+       "name": "csi-7e13271af0161992f564c1f4288cfcccbf11f61864b0dfa972c709702916ad34",
+       "node": "orbit-mr-lab-2"
+      }
+     ],
+     "watchers": null
+    }
+   },
+   "secondsSinceCut": 418.7
+  },
+  "memory": {
+   "at": "2026-10-19T14:43:43.685Z",
+   "host": {
+    "MemAvailable": 6874,
+    "MemTotal": 15357,
+    "SwapFree": 31728,
+    "SwapTotal": 44285
+   },
+   "label": "t08x second node down",
+   "vms": {
+    "orbit-mr-lab": {
+     "guest": {
+      "stat-available-memory": 3690,
+      "stat-disk-caches": 868,
+      "stat-free-memory": 3021,
+      "stat-total-memory": 5920
+     },
+     "unit": {
+      "currentMiB": 1801,
+      "peakMiB": 3409,
+      "swapMiB": 1648
+     }
+    },
+    "orbit-mr-lab-2": "off"
+   }
+  },
+  "owners": {
+   "ann": {
+    "firstEvictedSeconds": 354.2,
+    "firstUnusableSeconds": 95.2,
+    "statesSeen": [
+     "READY"
+    ],
+    "watcherGoneSeconds": 37.8
+   },
+   "bob": {
+    "firstEvictedSeconds": 354.2,
+    "firstUnusableSeconds": 95.2,
+    "statesSeen": [
+     "READY"
+    ],
+    "watcherGoneSeconds": 37.8
+   }
+  },
+  "retry": {
+   "ann": {
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A READY managed runner is not retried."
+    },
+    "before": {
+     "desiredState": "RUNNING",
+     "managementState": "READY",
+     "revision": 30
+    },
+    "status": 409
+   },
+   "bob": {
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A READY managed runner is not retried."
+    },
+    "before": {
+     "desiredState": "RUNNING",
+     "managementState": "READY",
+     "revision": 30
+    },
+    "status": 409
+   }
+  },
+  "samples": 166,
+  "timeline": "/mnt/data/tmp/t08x-cross-node/run/records/takeover-heartbeat-loss-timeline.jsonl",
+  "windowSeconds": 420
+ },
+ "seconds": 423.2,
+ "startedAt": "2026-10-19T14:36:43.557+00:00",
+ "step": "heartbeat-loss"
+}

@@ -1,0 +1,138 @@
+{
+  "kernel": "7.0.0-34-generic",
+  "os": "Ubuntu 26.04.1 LTS",
+  "rbdModule": "/lib/modules/7.0.0-34-generic/kernel/drivers/block/rbd.ko.zst",
+  "rbdLoaded": "1",
+  "k3s": "k3s version v1.36.5+k3s1 (3dd98cc5)",
+  "podman": "podman version 5.7.0",
+  "cephadmSHA256": "5b78c8d5772ef7c5c8619dac6ee0b36716b829338ea7a11c9f2b896626ab354f",
+  "fsid": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+  "cephVersions": {
+    "mon": {
+      "ceph version 20.2.4 (7f793731f1b39eb4f465e960113d2363c311b964) tentacle (stable - RelWithDebInfo)": 1
+    },
+    "mgr": {
+      "ceph version 20.2.4 (7f793731f1b39eb4f465e960113d2363c311b964) tentacle (stable - RelWithDebInfo)": 1
+    },
+    "osd": {
+      "ceph version 20.2.4 (7f793731f1b39eb4f465e960113d2363c311b964) tentacle (stable - RelWithDebInfo)": 3
+    },
+    "overall": {
+      "ceph version 20.2.4 (7f793731f1b39eb4f465e960113d2363c311b964) tentacle (stable - RelWithDebInfo)": 5
+    }
+  },
+  "mons": [
+    {
+      "name": "orbit-mr-lab",
+      "public_addrs": {
+        "addrvec": [
+          {
+            "type": "v2",
+            "addr": "10.77.0.1:3300",
+            "nonce": 0
+          },
+          {
+            "type": "v1",
+            "addr": "10.77.0.1:6789",
+            "nonce": 0
+          }
+        ]
+      }
+    }
+  ],
+  "allowedCiphers": "auth_service_cipher aes256k\nauth_allowed_ciphers aes256k\nauth_preferred_cipher aes256k",
+  "osds": [
+    {
+      "name": "osd.0",
+      "status": "up",
+      "device_class": "hdd"
+    },
+    {
+      "name": "osd.1",
+      "status": "up",
+      "device_class": "hdd"
+    },
+    {
+      "name": "osd.2",
+      "status": "up",
+      "device_class": "hdd"
+    }
+  ],
+  "pool": {
+    "pool": "orbit-mr-rbd",
+    "size": 3,
+    "min_size": 2,
+    "pg_num": 32,
+    "crush_rule": "replicated_rule"
+  },
+  "crushRuleChoose": [
+    {
+      "op": "choose_firstn",
+      "num": 0,
+      "type": "osd"
+    }
+  ],
+  "csiUser": [
+    {
+      "entity": "client.orbit-mr-csi",
+      "caps": {
+        "mgr": "profile rbd pool=orbit-mr-rbd",
+        "mon": "profile rbd",
+        "osd": "profile rbd pool=orbit-mr-rbd"
+      }
+    }
+  ],
+  "keyTypeIds": {
+    "csi": "2",
+    "admin": "2"
+  },
+  "memoryTargets": {
+    "osd": "939524096",
+    "mon": "536870912"
+  },
+  "publicNetwork": "10.77.0.0/24",
+  "osdAddrs": [
+    {
+      "osd": 0,
+      "public": [
+        "10.77.0.1:6802",
+        "10.77.0.1:6803"
+      ],
+      "cluster": [
+        "10.77.0.1:6804",
+        "10.77.0.1:6805"
+      ]
+    },
+    {
+      "osd": 1,
+      "public": [
+        "10.77.0.1:6810",
+        "10.77.0.1:6811"
+      ],
+      "cluster": [
+        "10.77.0.1:6812",
+        "10.77.0.1:6813"
+      ]
+    },
+    {
+      "osd": 2,
+      "public": [
+        "10.77.0.1:6818",
+        "10.77.0.1:6819"
+      ],
+      "cluster": [
+        "10.77.0.1:6820",
+        "10.77.0.1:6821"
+      ]
+    }
+  ],
+  "link": {
+    "ifname": "lablink0",
+    "mac": null,
+    "operstate": "UP",
+    "mtu": 1500,
+    "addresses": [
+      "10.77.0.1/24"
+    ]
+  }
+}

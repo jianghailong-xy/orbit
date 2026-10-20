@@ -1,0 +1,15 @@
+{"n": 1, "phase": "again", "step": "host", "startedAt": "2026-10-19T23:07:07.915+00:00", "seconds": 6.1, "ok": true, "error": null, "checks": 3, "failed": []}
+{"n": 2, "phase": "again", "step": "cluster", "startedAt": "2026-10-19T23:07:14.042+00:00", "seconds": 0.2, "ok": true, "error": null, "checks": 3, "failed": []}
+{"n": 3, "phase": "again", "step": "ceph", "startedAt": "2026-10-19T23:07:14.263+00:00", "seconds": 4.1, "ok": true, "error": null, "checks": 1, "failed": []}
+{"n": 4, "phase": "again", "step": "start", "startedAt": "2026-10-19T23:07:18.371+00:00", "seconds": 117.6, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 5, "phase": "again", "step": "ready", "startedAt": "2026-10-19T23:09:15.982+00:00", "seconds": 52.3, "ok": true, "error": null, "checks": 8, "failed": []}
+{"n": 6, "phase": "again", "step": "syncs", "startedAt": "2026-10-19T23:10:08.244+00:00", "seconds": 0.4, "ok": true, "error": null, "checks": 2, "failed": []}
+{"n": 7, "phase": "again", "step": "sessions", "startedAt": "2026-10-19T23:10:08.652+00:00", "seconds": 5.5, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 8, "phase": "again", "step": "last", "startedAt": "2026-10-19T23:10:14.120+00:00", "seconds": 6.6, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 9, "phase": "again", "step": "left", "startedAt": "2026-10-19T23:10:20.723+00:00", "seconds": 51.2, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 10, "phase": "again", "step": "s3", "startedAt": "2026-10-19T23:11:11.892+00:00", "seconds": 0.0, "ok": true, "error": null, "checks": 1, "failed": []}
+{"n": 11, "phase": "again", "step": "fence", "startedAt": "2026-10-19T23:11:11.892+00:00", "seconds": 29.7, "ok": true, "error": null, "checks": 17, "failed": []}
+{"n": 12, "phase": "again", "step": "resume", "startedAt": "2026-10-19T23:11:41.622+00:00", "seconds": 1.7, "ok": true, "error": null, "checks": 8, "failed": []}
+{"n": 13, "phase": "again", "step": "rejoin", "startedAt": "2026-10-19T23:11:43.351+00:00", "seconds": 118.0, "ok": true, "error": null, "checks": 16, "failed": []}
+{"n": 14, "phase": "again", "step": "checks", "startedAt": "2026-10-19T23:13:41.347+00:00", "seconds": 2.3, "ok": true, "error": null, "checks": 6, "failed": []}
+{"n": 15, "phase": "again", "step": "teardown", "startedAt": "2026-10-19T23:13:43.651+00:00", "seconds": 1.0, "ok": true, "error": null, "checks": 1, "failed": []}

@@ -225,6 +225,7 @@ import {
   type ContextSeedState,
 } from '../lib/contextSeed';
 import { SessionOutputs } from './SessionOutputs';
+import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
@@ -301,6 +302,7 @@ import {
   renameSessionFolder,
   restoreSession,
   resumeSession,
+  type SessionDetail,
   type SessionFolder,
   type SessionListItem,
   sendTurn,
@@ -3019,10 +3021,9 @@ export function WorkspaceView({
         (detail.mergeStatus === 'pending' || detail.commitStatus === 'pending')
       )
         return 3000;
-      const repairState = detail?.mergeRepairSession?.runState
-        ?? detail?.mergeRepairSession?.runStatus
-        ?? detail?.mergeRepairSession?.status;
-      if (['PENDING', 'QUEUED', 'RUNNING'].includes(String(repairState).toUpperCase())) return 3000;
+      // A merge recovery's repair loop: from the repair session running, through it stopping, until the check the
+      // server runs after it has answered. Then it goes quiet.
+      if (detail && mergeRepairLoopLive(detail)) return 3000;
       // A deep-linked/Completed ENDING row may already be absent from the Open list. Keep polling
       // its own current detail until terminal instead of relying solely on selectedFromList.
       return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? 5000 : false;
@@ -6983,6 +6984,9 @@ export function WorkspaceView({
       return createMergeRepairSession(selectedId, preparePr);
     },
     onSuccess: (session) => {
+      // The server hands the next step to the repair session already attached when it can go on (S2).
+      const continued = !!selectedId
+        && qc.getQueryData<SessionDetail>(['session', selectedId])?.mergeRepairSession?.id === session.id;
       if (selectedId) {
         qc.setQueryData<any>(['session', selectedId], (old: any) =>
           old ? { ...old, mergeRepairSession: session } : old,
@@ -6990,7 +6994,8 @@ export function WorkspaceView({
         void qc.invalidateQueries({ queryKey: ['session', selectedId], exact: true });
       }
       message.sessionNotice({ sessionId: session.id, sessionTitle: session.title ?? 'Merge repair', event: 'merge-repair',
-        headline: 'Repair session started', detail: 'Opening the repair session.', tone: 'info' });
+        headline: continued ? 'Handed to the existing repair session' : 'Repair session started',
+        detail: 'Opening the repair session.', tone: 'info' });
       navigate(`/sessions/${encodeId(session.id)}`);
       void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
