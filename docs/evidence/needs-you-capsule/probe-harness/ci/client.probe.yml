@@ -1,0 +1,136 @@
+# TEMPORARY evidence probe workflow (never merged to main; it lives on `probe/needs-you-capsule` as
+# `.github/workflows/client.yml`). Copied from docs/evidence/landing-session-followup/probe-harness.
+# On the commit under test it runs client.yml's two compile gates — the Mac app (`swift build` of
+# OrbitApp) and the iOS app (XcodeGen + xcodebuild for the simulator) — and photographs the needs-you
+# capsule (owner board 2026-10-21, docs/mocks/needs-you-capsule, A) on an iPhone, light and dark.
+name: Needs-you capsule probe (gates + iPhone shots)
+
+on:
+  push:
+    branches: ["probe/needs-you-capsule"]
+  workflow_dispatch:
+
+jobs:
+  macos:
+    name: macOS (build OrbitApp)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Toolchain
+        run: swift --version && xcodebuild -version
+      - name: Build OrbitApp
+        working-directory: src/macos/OrbitApp
+        run: swift build
+
+  ios:
+    name: iOS (generate + build)
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version
+      - name: Generate Xcode project
+        working-directory: src/ios
+        run: xcodegen generate
+      - name: Build for iOS Simulator
+        working-directory: src/ios
+        run: |
+          xcodebuild \
+            -project Orbit.xcodeproj \
+            -scheme Orbit \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build
+
+  shots:
+    name: Needs-you capsule shots (iPhone)
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Stage the harness at the repository root
+        run: |
+          mkdir -p .ny-probe
+          cp -R docs/evidence/needs-you-capsule/probe-harness/. .ny-probe/
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .ny-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .ny-probe/shots
+          cp run-output.log .ny-probe/shots/run-output.log 2>/dev/null || true
+          for log in .ny-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".ny-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".ny-probe/shots/tail-$base.txt" || true
+          done
+          find .ny-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          echo "capture=${{ steps.capture.outcome }}" > .ny-probe/shots/outcomes.txt
+          echo "run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> .ny-probe/shots/outcomes.txt
+          echo "sha=${{ github.sha }}" >> .ny-probe/shots/outcomes.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: needs-you-capsule-shots
+          path: .ny-probe/shots
+          include-hidden-files: true
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
+
+  publish:
+    name: Push the shots where a clone can read them
+    needs: [macos, ios, shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/needs-you-capsule-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p out && cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "macos: ${{ needs.macos.result }}"
+            echo "ios: ${{ needs.ios.result }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "needs-you capsule probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/needs-you-capsule-results
