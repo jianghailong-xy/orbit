@@ -37,9 +37,10 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * The landing session page as drawn, in the frames the board's v4 07/05 name (A-1; contract §2.9 LS1/LS6, §7.2 V6):
  * checking, a timed-out LAND_TASK, a timed-out Merge to main, after a takeover, settled, a merge round checking, the
- * task segment's ⋮ menu and the merge round's ⋮ menu. Each frame is written to
- * `docs/evidence/landing-session-android/<theme>/` beside its semantics tree, light and dark, so the pictures a
- * reader checks against 07/05 are the evidence itself and not a build directory.
+ * task segment's ⋮ menu and the merge round's ⋮ menu. Each frame is written beside its semantics tree, light and
+ * dark, under `src/android/build/evidence/landing-session-android/<theme>/`, which is not committed. With
+ * `ORBIT_WRITE_EVIDENCE=1` in the environment they go to the committed `docs/evidence/landing-session-android/<theme>/`
+ * instead, so a plain test run never rewrites the pictures a reader checks against 07/05.
  */
 abstract class LandingSessionFrames {
     @get:Rule(order = 0)
@@ -246,7 +247,8 @@ abstract class LandingSessionFrames {
     private val output: File by lazy {
         val root = generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
             .first { File(it, "src/android/settings.gradle.kts").isFile }
-        File(root, "docs/evidence/landing-session-android/$theme").also { it.mkdirs() }
+        val base = if (System.getenv("ORBIT_WRITE_EVIDENCE") == "1") "docs/evidence" else "src/android/build/evidence"
+        File(root, "$base/landing-session-android/$theme").also { it.mkdirs() }
     }
 
     /** The window as drawn, written beside its semantics tree; a menu's popup is drawn where DropdownMenu put it. */

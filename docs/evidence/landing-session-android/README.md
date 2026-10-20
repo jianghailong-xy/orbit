@@ -5,7 +5,9 @@ boards `docs/mocks/landing-session/v4/` (07 Android; the page's states are the s
 for iOS and web). The pictures here are the evidence: each one is written by the Robolectric test
 `LandingSessionViewTest` / `LandingSessionViewDarkTest` under `@GraphicsMode(NATIVE)`, from the real
 `MainActivity` over the controlled `ProjectShell` HTTP fixture, and committed beside the semantics
-tree it was drawn from. A build directory is not durable; this is.
+tree it was drawn from. A plain test run writes its frames to
+`src/android/build/evidence/landing-session-android/{light,dark}/` and leaves these alone; they are
+refreshed only by the opt-in run under Reproduce. A build directory is not durable; this is.
 
 ## How the frames are made
 
@@ -28,10 +30,13 @@ tree it was drawn from. A build directory is not durable; this is.
   picture were read from.
 
 Reproduce (the same kit the task used; `JAVA_HOME` and `ANDROID_HOME` must point at Java 21 and
-the Android SDK):
+the Android SDK). `ORBIT_WRITE_EVIDENCE=1` writes the frames here; without it the same run writes
+them to `src/android/build/evidence/landing-session-android/{light,dark}/`. Gradle does not track
+environment variables as test inputs, so `--rerun` keeps an up-to-date test task from skipping the
+run and writing nothing:
 
 ```
-bash src/android/gradlew -p src/android --no-daemon :app:testDebugUnitTest \
+ORBIT_WRITE_EVIDENCE=1 bash src/android/gradlew -p src/android --no-daemon :app:testDebugUnitTest --rerun \
   --tests "io.orbitd.android.reader.LandingSessionViewTest" \
   --tests "io.orbitd.android.reader.LandingSessionViewDarkTest"
 ```
