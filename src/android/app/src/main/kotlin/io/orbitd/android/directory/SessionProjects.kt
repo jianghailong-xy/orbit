@@ -86,20 +86,24 @@ object SessionProjectGrouping {
         coordinators: List<DirectorySession> = emptyList(), contentSessions: List<DirectorySession>? = null,
         watching: Map<String, WatchSessionSummary> = emptyMap(), recaps: Boolean = true,
         line: ((DirectorySession) -> SessionLine)? = null): SessionProjectListing {
-        if (!listShowsProjects(view, byTag, searching)) return SessionProjectListing(sessions, emptyList(), sessions, sessions.map { SessionProjectEntry.Session(it) })
+        // A LANDING row is platform work with no engine (LS6): it is never a project row's member, and it never counts among the
+        // row's needs-you, running or background jobs, should a flat read ever carry one.
+        val conversations = sessions.filterNot { it.isLanding }
+        if (!listShowsProjects(view, byTag, searching))
+            return SessionProjectListing(conversations, emptyList(), conversations, conversations.map { SessionProjectEntry.Session(it) })
         fun watch(session: DirectorySession) = watching[watchKey(session.id)]
         val sessionLine = line ?: { session -> SessionLine.make(session, live = true, watching = watch(session), recaps = recaps, now = now) }
         val coordinatorByProject = mutableMapOf<String, DirectorySession>()
-        for (session in coordinators + sessions) session.projectMembership?.takeIf { it.isCoordinator }?.let { coordinatorByProject[key(it.projectId)] = session }
+        for (session in coordinators + conversations) session.projectMembership?.takeIf { it.isCoordinator }?.let { coordinatorByProject[key(it.projectId)] = session }
         val groups = linkedMapOf<String, MutableList<DirectorySession>>()
-        for (session in sessions) session.projectMembership?.let { groups.getOrPut(key(it.projectId)) { mutableListOf() } += session }
+        for (session in conversations) session.projectMembership?.let { groups.getOrPut(key(it.projectId)) { mutableListOf() } += session }
         // Folder rows count every local member under its coordinator's folder, whatever folder the member itself is in.
-        val assigned = sessions.map { session -> session.projectMembership?.let { session.copy(folderId = coordinatorByProject[key(it.projectId)]?.folderId) } ?: session }
+        val assigned = conversations.map { session -> session.projectMembership?.let { session.copy(folderId = coordinatorByProject[key(it.projectId)]?.folderId) } ?: session }
         fun inScope(id: String?): Boolean = if (folderId != null) ObjectId.same(id, folderId) else id == null || folders.none { ObjectId.same(it.id, id) }
-        val loose = sessions.filter { it.projectMembership == null && inScope(it.folderId) }
+        val loose = conversations.filter { it.projectMembership == null && inScope(it.folderId) }
         if (groups.isEmpty()) return SessionProjectListing(assigned, emptyList(), loose, loose.map { SessionProjectEntry.Session(it) })
         // Each project's share of the content list, split once.
-        val contentByProject = contentSessions?.filter { it.projectMembership != null }?.groupBy { key(it.projectMembership!!.projectId) }
+        val contentByProject = contentSessions?.filter { it.projectMembership != null && !it.isLanding }?.groupBy { key(it.projectMembership!!.projectId) }
         val rows = mutableListOf<SessionProjectRow>()
         for ((project, members) in groups) {
             val coordinator = coordinatorByProject[project]
@@ -273,15 +277,26 @@ object SessionProjectMembers {
     /** How long a poll leaves the Completed members as last read while nothing says they moved (the web's `PROJECT_SESSION_REFRESH_MS`). */
     const val completedRefreshMs = 60_000L
 
-    /** [projectId]'s members out of [sessions], in either spelling of the id, never Trash. The first copy of a session wins, so the
-     * freshest list goes first; newest activity first. */
+    /** [projectId]'s members out of [sessions], in either spelling of the id, never Trash and never a LANDING row — those are the
+     * page's Landings group, not its timeline (§2.9 LS6). The first copy of a session wins, so the freshest list goes first; newest
+     * activity first. */
     fun members(projectId: String, sessions: List<DirectorySession>): List<DirectorySession> {
         val key = SessionProjectGrouping.key(projectId)
         val seen = mutableSetOf<String>()
         return sessions.filter { session ->
             val membership = session.projectMembership ?: return@filter false
-            session.effectiveLifecycleState != "TRASH" && SessionProjectGrouping.key(membership.projectId) == key && seen.add(session.id)
+            !session.isLanding && session.effectiveLifecycleState != "TRASH" && SessionProjectGrouping.key(membership.projectId) == key && seen.add(session.id)
         }.sortedByDescending { it.lastTurnAt ?: it.createdAt ?: "" }
+    }
+
+    /** [projectId]'s landing sessions out of [sessions] — never Trash, which cannot take one (LS6). */
+    fun landings(projectId: String, sessions: List<DirectorySession>): List<DirectorySession> {
+        val key = SessionProjectGrouping.key(projectId)
+        val seen = mutableSetOf<String>()
+        return sessions.filter { session ->
+            val membership = session.projectMembership ?: return@filter false
+            session.isLanding && session.effectiveLifecycleState != "TRASH" && SessionProjectGrouping.key(membership.projectId) == key && seen.add(session.id)
+        }
     }
 
     /** One poll of the page without asking for either list again: the Open members are the app's Open list's, the Completed ones

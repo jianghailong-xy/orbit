@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
 import io.orbitd.android.core.cards.*
 import io.orbitd.android.directory.ProjectMergeCard
+import io.orbitd.android.projects.LandingEntryLink
+import io.orbitd.android.reader.landingEntry
 import io.orbitd.android.ui.LocalOrbitColors
 import java.time.Instant
 import kotlinx.serialization.json.JsonObject
@@ -94,7 +96,7 @@ internal fun PromotionReceiptLine(promotion: JsonObject, lineTag: String, modifi
  * row, never off the candidate the branch is offering now. Opened from the conversation's line and the sessions page's timeline. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun PromotionReceiptSheet(promotion: JsonObject, close: () -> Unit) {
+internal fun PromotionReceiptSheet(promotion: JsonObject, openLanding: ((String) -> Unit)? = null, close: () -> Unit) {
     ModalBottomSheet(onDismissRequest = close, modifier = Modifier.testTag("promotion-receipt")) {
         SheetHead(PromotionCards.title(promotion), "promotion-receipt", close)
         HorizontalDivider()
@@ -108,6 +110,11 @@ internal fun PromotionReceiptSheet(promotion: JsonObject, close: () -> Unit) {
                 PromotionRow("Landed", PromotionCards.landsLine(promotion))
                 PromotionCards.changesLine(promotion)?.let { PromotionRow("Changes", it) }
                 PromotionCards.revertLine(promotion)?.let { PromotionRow("Undo", it) }
+                // The receipt's foot still opens the round's landing (方案 A): the merge happened, and every attempt is still read
+                // there. A payload an older server recorded names none and draws nothing, as on iOS.
+                if (openLanding != null) ProjectMergeCard.receiptLandingSessionId(promotion)?.let { sessionId ->
+                    LandingEntryLink(landingEntry(sessionId), "promotion-receipt:open-landing", openLanding)
+                }
             }
         }
     }

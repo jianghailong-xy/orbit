@@ -45,12 +45,17 @@ object ExceptionCards {
     data class CardPress(val action: String, val tier: PressTier, val label: String, val consequence: String)
 
     const val openTaskSession = "Open task session"
+    /** The two landing doors (board v4 06, §4.6 X-E5): the way into the landing this item is about, and the press that ends a
+     * timed-out attempt. */
+    const val openLanding = "Open landing"
+    const val abandon = "Abandon"
     /** RETRY's two names: a task's landing (or a failed task's run) again, and a merge candidate's check again. */
     const val retry = "Retry"
     const val rerunCheck = "Re-run the check"
     private val actionLabels = mapOf("REVIEW" to "Review", "ANSWER" to "Answer", "RESUME" to "Resume",
         "OPEN_COORDINATOR" to "Open coordinator", "OPEN_TASK_SESSION" to openTaskSession, "RETRY" to retry,
-        "CANCEL_TASK" to "Cancel task", "ASK_COORDINATOR_AGAIN" to "Ask the coordinator again")
+        "CANCEL_TASK" to "Cancel task", "ASK_COORDINATOR_AGAIN" to "Ask the coordinator again",
+        "OPEN_LANDING" to openLanding, "ABANDON" to abandon)
     private val actionConsequences = mapOf(
         "REVIEW" to "Open the current merge card.",
         "ANSWER" to "Record your answer on the coordinator question.",
@@ -59,9 +64,18 @@ object ExceptionCards {
         "OPEN_TASK_SESSION" to "Open the task session to repair the branch.",
         "RETRY" to "A new integration attempt is queued with your reason.",
         "CANCEL_TASK" to "The task is cancelled and its open item closes.",
-        "ASK_COORDINATOR_AGAIN" to "It goes back to the coordinator with a fresh escalation clock.")
+        "ASK_COORDINATOR_AGAIN" to "It goes back to the coordinator with a fresh escalation clock.",
+        "OPEN_LANDING" to "Open the landing: every attempt, step by step.",
+        "ABANDON" to "Ends this attempt. Nothing was pushed, and nothing is queued again.")
     const val promotionRetryConsequence = "The current candidate is checked again with your reason."
     const val taskRunAgainConsequence = "The task runs again and this item closes with it."
+    /** J12's other half, for a claim Orbit cannot prove never pushed (a legacy claim, a v2 one that recorded a push, or a row that
+     * predates the facts) — the browser's `ABANDON_MAY_HAVE_PUSHED`. */
+    const val abandonMayHavePushed = "Ends this attempt. It may have been pushed, and nothing is queued again."
+    /** J12's rule (contract §4.6 revision 23 E1): a `CHECK_PROMOTION` never pushes, and a v2 claim that never recorded a PUSH proves
+     * none happened. A legacy claim reports only between steps, so its silence proves nothing — nor does a row without facts. */
+    fun pushIsImpossible(lease: JsonObject?): Boolean =
+        lease?.text("jobKind") == "CHECK_PROMOTION" || (lease?.text("progressProtocol") == "v2" && lease?.flag("pushReported") == false)
     /** The reason a RETRY carries when the row has no `requiredAction`: the door requires one. */
     const val retryReasonFallback = "Retry the integration after the failed check."
     const val markHandledConsequence = "Only if you dealt with it yourself. Your reason goes on the record."
@@ -71,20 +85,23 @@ object ExceptionCards {
     /** The next step a kind asks for where the design names one; any other kind keeps the server's order. */
     private val kindNextStep = mapOf("INTEGRATION_CONFLICT" to "OPEN_TASK_SESSION", "INTEGRATION_CHECK_FAILED" to "OPEN_TASK_SESSION",
         "TASK_FAILED" to "RETRY")
-    /** The kinds the owner closes by hand (the server's `HAND_CLOSABLE_RESOLUTIONS`). */
-    private val handClosableKinds = setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED")
+    /** The kinds the owner closes by hand (the server's `HAND_CLOSABLE_RESOLUTIONS`); X-E5's silence is theirs to judge as dealt
+     * with (§4.6). */
+    private val handClosableKinds = setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "LANDING_LEASE_EXPIRED")
 
     /** What one door is called: a RETRY on a row that names a merge candidate re-runs that candidate's check. Null for a door the
      * browser has no label for, which is never drawn. */
     fun actionLabel(row: JsonObject, action: String): String? =
         if (action == "RETRY" && row.text("promotionId") != null) rerunCheck else actionLabels[action]
 
-    /** The line under a door: for a RETRY, the candidate's re-check, a failed task's run again, or a landing queued again. */
+    /** The line under a door: for a RETRY, the candidate's re-check, a failed task's run again, or a landing queued again; for an
+     * ABANDON, J12's verdict on whether a push can be ruled out. */
     fun actionConsequence(row: JsonObject, action: String): String {
         if (action == "RETRY") {
             if (row.text("promotionId") != null) return promotionRetryConsequence
             if (row.text("kind") == "TASK_FAILED") return taskRunAgainConsequence
         }
+        if (action == "ABANDON") return if (pushIsImpossible(row.obj("lease"))) actionConsequences.getValue("ABANDON") else abandonMayHavePushed
         return actionConsequences[action].orEmpty()
     }
 
@@ -113,6 +130,11 @@ object ExceptionCards {
         "REVIEW" -> row.text("promotionId") != null && row.text("promotionId") == mergeCard
         "OPEN_COORDINATOR" -> row.obj("delivery")?.text("sessionId") != null
         "OPEN_TASK_SESSION" -> row.text("sessionId") != null || row.text("taskId") != null
+        // A reading door: the landing this item is about, which a row an older build opened names nowhere — then the door is not
+        // drawn rather than pointed at nothing.
+        "OPEN_LANDING" -> !row.text("landingSessionId").isNullOrEmpty()
+        // The one job the item is about; a row that names none draws no Abandon.
+        "ABANDON" -> !row.text("integrationJobId").isNullOrEmpty()
         else -> false
     }
 
@@ -123,6 +145,12 @@ object ExceptionCards {
     /** The doors a card leads with, in order: the server's `primaryAction` when it lists it, else the step the kind asks for — or,
      * on an item that has become the owner's, the way back to the coordinator — then the same step taken another way. */
     fun leadingDoors(row: JsonObject, actions: List<String>): List<String> {
+        // §4.6 X-E5 is escalated at birth with ABANDON as its lead: a server that sends no primaryAction (an older build) still
+        // leads with the one press that ends the attempt, and with nothing else.
+        if (row.text("kind") == "LANDING_LEASE_EXPIRED") {
+            val ending = actions.filter { it == "ABANDON" }
+            if (ending.isNotEmpty()) return ending + actions.filter { it != "ABANDON" }
+        }
         row.text("primaryAction")?.takeIf { it in actions }?.let { primary -> return listOf(primary) + actions.filter { it != primary } }
         val leading = actions.filter { it in leadingActions }
         val next = if (row.text("assignee") == "OWNER") "ASK_COORDINATOR_AGAIN" else kindNextStep[row.text("kind")]
@@ -155,6 +183,8 @@ object ExceptionCards {
         "RETRY" -> retryVerb(row)
         "CANCEL_TASK" -> CardVerb.CANCEL_TASK
         "RESUME" -> CardVerb.RESUME
+        // OPEN_LANDING only looks (it opens a session), so it has no verb: the card opens it where it is pressed.
+        "ABANDON" -> CardVerb.ABANDON
         else -> null
     }
 
@@ -182,6 +212,7 @@ object ExceptionCards {
     const val notRunAgain = "The task was not run again"
     const val notReturned = "That item was not sent back"
     const val notResumed = "The coordinator was not resumed"
+    const val notAbandoned = "The attempt was not ended"
 
     /** The headline a refusal of [verb] is said under, ahead of the server's reason; null for a verb this card does not press. */
     fun refusalHeadline(verb: CardVerb): String? = when (verb) {
@@ -191,13 +222,25 @@ object ExceptionCards {
         CardVerb.RETRY_TASK -> notRunAgain
         CardVerb.RETURN_COORDINATOR -> notReturned
         CardVerb.RESUME -> notResumed
+        CardVerb.ABANDON -> notAbandoned
         else -> null
     }
 
     // MARK: the heading and the footer
 
     /** How the item became the owner's, one sentence per way; null for an item that was the owner's from the start. */
-    fun heading(row: JsonObject, now: Instant = Instant.now()): String? = when (row.text("assigneeReason")) {
+    fun heading(row: JsonObject, now: Instant = Instant.now()): String? {
+        // §4.6 X-E5 (revision 23): the item is escalated at birth, so `waitedBeforeEscalation` would only ever say "1s". Its heading
+        // is the fact it is about — how long the claim has been silent, counted from the last report the runner made (board v4 06).
+        if (row.text("kind") == "LANDING_LEASE_EXPIRED") {
+            val silent = leaseSilentMinutes(row)
+            return if (silent == null) "Now yours — no report from the runner"
+            else "Now yours — no report from the runner for ${silent}m"
+        }
+        return headingByReason(row, now)
+    }
+
+    private fun headingByReason(row: JsonObject, now: Instant): String? = when (row.text("assigneeReason")) {
         "ESCALATED" -> "Now yours — no one acted on this for ${waitedBeforeEscalation(row)}"
         "COORDINATOR_ENDED" -> "Now yours — the coordinator conversation ended"
         "CHAIN_LIMIT" -> "Now yours — the 3rd failure in this chain"
@@ -211,6 +254,15 @@ object ExceptionCards {
 
     /** What escalated, under a heading that is not the title; null when the heading is the title. */
     fun subject(row: JsonObject, now: Instant = Instant.now()): String? = if (heading(row, now) == null) null else row.text("title")
+
+    /** The minutes the claim had been silent when the item was opened — the server's own count, off the two instants the row carries.
+     * Nil when the row predates the facts. */
+    fun leaseSilentMinutes(row: JsonObject): Int? {
+        val lease = row.obj("lease") ?: return null
+        val reported = lease.text("lastReportAt")?.let(::parse) ?: return null
+        val opened = (row.text("escalatedAt") ?: row.text("waitingSince"))?.let(::parse) ?: return null
+        return maxOf(1, Duration.between(reported, opened).seconds.toInt() / 60)
+    }
 
     /** How long the coordinator had it before the clock took it away; "a while" when the read does not say. */
     fun waitedBeforeEscalation(row: JsonObject): String {
@@ -229,7 +281,9 @@ object ExceptionCards {
     /** "Owner: you · waiting 2h 10m", and when a clock moved it, how long the coordinator had it first. */
     fun ownerLine(row: JsonObject, now: Instant = Instant.now()): String {
         val waiting = "$ownerPrefix · waiting ${waited(row, now)}"
-        return if (row.text("escalatedAt") == null) waiting else waiting + cameToOwnerAt + waitedBeforeEscalation(row)
+        // §4.6 X-E5 is escalated at birth: there is no window it waited the coordinator through, so the footer says the wait alone.
+        if (row.text("kind") == "LANDING_LEASE_EXPIRED" || row.text("escalatedAt") == null) return waiting
+        return waiting + cameToOwnerAt + waitedBeforeEscalation(row)
     }
 
     private fun span(duration: Duration) = BackgroundWakeCard.duration(duration.seconds)
@@ -282,6 +336,17 @@ object ExceptionCards {
     const val intoLabel = "Into"
     const val filesLabel = "Files"
     const val afterAFixLabel = "After a fix"
+    // §4.6 X-E5's lease block (board v4 06 c): the claim the item is about, in three rows.
+    const val landingFactLabel = "Landing"
+    const val runnerFactLabel = "Runner"
+    const val stepFactLabel = "Step"
+    /** The landing line's phase words, which `ProjectPage.phaseWords` names too; a lease row wears the same ones. */
+    private val phaseWords = mapOf("FETCH" to "fetching", "MAIN_SYNC" to "syncing main", "REBASE" to "rebasing", "MERGE" to "merging",
+        "CHECK" to "checking", "VERIFY" to "verifying", "PUSH" to "pushing")
+    const val generationWord = "generation"
+    const val lastReportWord = "last report"
+    const val leaseExpiredWord = "lease expired"
+    const val theRunnerWord = "The runner"
     const val checkLabel = "Check"
     const val branchLabel = "Branch"
     const val howLabel = "How"
@@ -291,8 +356,10 @@ object ExceptionCards {
     const val afterAFix = "push to the task branch — Orbit re-integrates and re-checks on its own"
     const val branchUnchanged = "unchanged — the task passed on its own branch; it fails only on the combined tree"
 
-    /** The rows of the item's payload, in the browser's order (`ItemFactRows`), field for field. */
+    /** The rows of the item's payload, in the browser's order (`ItemFactRows`), field for field. X-E5 draws the claim it is about in
+     * three rows instead of the item's sentence; an item an older build opened carries no lease and keeps that sentence. */
     fun facts(row: JsonObject): Facts {
+        if (row.text("kind") == "LANDING_LEASE_EXPIRED") row.obj("lease")?.let { return Facts.Rows(leaseFacts(row, it)) }
         val facts = row.obj("facts") ?: return Facts.DetailLine(row.text("detailLine").orEmpty())
         val rows = mutableListOf<FactRow>()
         val task = facts.obj("task")
@@ -319,6 +386,28 @@ object ExceptionCards {
         }
         facts.text("errorCode")?.let { rows += FactRow(errorLabel, it, mono = true) }
         return Facts.Rows(rows)
+    }
+
+    /** §4.6 X-E5's three rows: which landing on which runner and since when, and where the runner had got to (board v4 06 c). */
+    private fun leaseFacts(row: JsonObject, lease: JsonObject): List<FactRow> {
+        val rows = mutableListOf<FactRow>()
+        val generation = lease.number("generation")?.let { "$generationWord $it" }
+        val landing = listOfNotNull(row.obj("facts")?.obj("task")?.text("title"), generation).joinToString(" · ")
+        if (landing.isNotEmpty()) rows += FactRow(landingFactLabel, landing)
+        fun clock(at: String?): String? = parse(at)?.let { instant ->
+            val time = instant.atZone(java.time.ZoneId.systemDefault())
+            "%02d:%02d".format(time.hour, time.minute)
+        }
+        val runner = listOfNotNull(lease.text("runner") ?: theRunnerWord,
+            lease.text("lastReportAt")?.let(::clock)?.let { "$lastReportWord $it" },
+            lease.text("leaseExpiredAt")?.let(::clock)?.let { "$leaseExpiredWord $it" }).joinToString(" · ")
+        if (runner.isNotEmpty()) rows += FactRow(runnerFactLabel, runner)
+        val round = lease.number("round")?.let { n -> "round $n" + (lease.number("checkCount")?.let { " of $it" } ?: "") }
+        // The step in the landing line's own words where the phase has one, else the server's step word (iOS `leaseFacts`).
+        val step = listOfNotNull(lease.text("phase")?.let { phaseWords[it] } ?: lease.text("step"),
+            lease.text("claimGeneration")?.let { "claim $it" }, round).joinToString(" · ")
+        if (step.isNotEmpty()) rows += FactRow(stepFactLabel, step)
+        return rows
     }
 
     /** How a check ended: the code it returned, or that its budget ran out. */
