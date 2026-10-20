@@ -35,7 +35,7 @@ printf 'module rawmock\n\ngo 1.24\n' > /tmp/rawmock/go.mod
 | `s-*.txt` | 各场景的剧本（`@WS@` 换成工作区路径） |
 | `results/*.json` | `summarize.py` 的输出 |
 | `results/agy-binary.txt` | 两个二进制的 `--version` 与 sha512，以及 1.4.3 里 `RunPersistent` / `RequestedTerminalID` 的字符串（`RunPersistent` 字段标着 `jsonschema:"-"`） |
-| `results/contract-tests.log` | 同日在这个 agy 上跑 `TestAntigravityContract*` 的 `go test -v` 输出 |
+| `results/contract-tests.txt` | 同日在这个 agy 上跑 `TestAntigravityContract*` 的 `go test -v` 输出 |
 
 ## 场景
 
@@ -62,4 +62,4 @@ for r in decls tools undeclared default-write default-edit default-command mcp; 
 | `mcp` | 配一个 MCP 服务器，`call_mcp_tool` 调一次 | 声明 15 个；`call_mcp_tool`、`list_resources`、`read_resource` 的参数不变，同样 `additionalProperties: false`；调用经过 hook |
 
 `ORBIT_REQUIRE_REAL_AGY=1 go test -count=1 -run TestAntigravityContract -v .`（`src/runner-go`）同日在这个 agy 上 11 条全部通过，
-输出在 `results/contract-tests.log`。
+输出在 `results/contract-tests.txt`。

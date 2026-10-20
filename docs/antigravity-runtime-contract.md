@@ -1093,7 +1093,7 @@ runner 上的 `/root/.local/bin/agy` 在 2026-10-20 从 1.4.2 自升级到 1.4.3
   同样是 `additionalProperties: false`；`call_mcp_tool` 经过 PreToolUse，名字不变（`results/mcp.json`）。
 - **展示子集**：流里每个工具只给展示用的那几个参数（§2.2），只是换了新名字。
 - 2026-10-20 在本机用 1.4.3 跑 `ORBIT_REQUIRE_REAL_AGY=1 go test -count=1 -run TestAntigravityContract -v .`（`src/runner-go`）：
-  11 个 `TestAntigravityContract*` 全部通过，没有跳过（`results/contract-tests.log`）。
+  11 个 `TestAntigravityContract*` 全部通过，没有跳过（`results/contract-tests.txt`）。
 
 ### 17.3 runner 与 mock（main 上的 350ab8c8e）
 
