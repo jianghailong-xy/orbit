@@ -53,6 +53,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from './coordinator-pg-test-safety';
 import { readProjectIntegrationLines, readProjectIntegrationView } from './project-integration-line';
+import { medianMs } from './project-promotion';
 
 const URL = process.env.COORDINATOR_PG_URL;
 
@@ -1037,6 +1038,259 @@ test('the landing line describes running work before the queue, on real PostgreS
           'an in-flight job did not state its landing session at all');
         assert.deepEqual(await listInFlight(db, f), view.inFlight,
           'the list row and the view agree, field by field');
+      });
+
+      // (t)–(w): `typicalMs` is the middle of up to five passes among the project's newest 25
+      // finished jobs. The helpers write finished jobs the way the queue and the runner do, and state
+      // that rule in words from what was written: the jobs that were claimed and finished after their
+      // claim, newest finish first with `id` breaking a tie the way uuid ordering does, the first 25
+      // of them, the first five of those that passed, their middle.
+      const typicalBase = new Date('2026-10-01T10:00:00Z');
+      const typicalAt = (n: number) => new Date(typicalBase.getTime() + n * 60_000);
+      // Every shape a finished job's checks take: a pass, a failure, a timeout, a pass of the task's
+      // own command beside no merge check, no checks at all, and checks that are not an array. Only
+      // the first is a sample.
+      const shapes: Array<{ state: string; checks: Prisma.InputJsonValue; passes: boolean }> = [
+        { state: 'ALREADY_LANDED', checks: [check(0)], passes: true },
+        { state: 'CHECK_FAILED', checks: [check(1)], passes: false },
+        { state: 'CHECK_FAILED', checks: [{ ...check(0), exitCode: null, timedOut: true }], passes: false },
+        { state: 'ALREADY_LANDED', checks: [{ ...check(0), name: 'TASK_ACCEPTANCE' }], passes: false },
+        { state: 'ALREADY_LANDED', checks: [], passes: false },
+        { state: 'ALREADY_LANDED', checks: { MERGE_CHECK: check(0) }, passes: false },
+      ];
+      const passing = shapes[0]!;
+      const failing = (i: number) => shapes[1 + (i % (shapes.length - 1))]!;
+      interface Written { id: string; finishedAt: Date; ms: number; counted: boolean; passes: boolean }
+      const finished = async (f: Fixture, label: string, i: number, spec: {
+        start: number; ms: number; shape: (typeof shapes)[number]; claimed?: boolean;
+      }): Promise<Written> => {
+        const claimedAt = typicalAt(spec.start);
+        const finishedAt = new Date(claimedAt.getTime() + spec.ms);
+        const claimed = spec.claimed !== false;
+        const id = await job(db, f, {
+          at: typicalAt(spec.start - 1), claimedAt: claimed ? claimedAt : undefined,
+          startedAt: claimed ? claimedAt : null,
+          finishedAt, state: spec.shape.state, checks: spec.shape.checks,
+          idempotency: `${label}-${i}`,
+        });
+        const counted = claimed && spec.ms > 0;
+        return { id, finishedAt, ms: spec.ms, counted, passes: counted && spec.shape.passes };
+      };
+      const newestFirst = (a: Written, b: Written) => b.finishedAt.getTime() - a.finishedAt.getTime()
+        || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+      const windowOf = (written: Written[]) => written.filter((row) => row.counted).sort(newestFirst)
+        .slice(0, 25);
+      const byRule = (written: Written[]) => medianMs(windowOf(written)
+        .filter((row) => row.passes).slice(0, 5).map((row) => row.ms));
+      /** What the list row says, every project read in one call, and what the page says, one project
+       *  at a time — each while the project's merge check is running. */
+      const assertTypical = async (want: Array<[Fixture, number | null]>) => {
+        const running = new Map<string, string>();
+        for (const [f] of want) {
+          running.set(f.projectId, await job(db, f, {
+            at: minutesAgo(2), claimedAt: minutesAgo(1), state: 'RUNNING', kind: 'LAND_PROMOTION',
+            progressProtocol: 'v2', heartbeatAt: minutesAgo(0.5),
+            currentCheck: { name: 'MERGE_CHECK', index: 1, count: 1, budgetSeconds: 3600,
+              startedAt: minutesAgo(1).toISOString() },
+            idempotency: 'running',
+          }));
+        }
+        const lines = await readProjectIntegrationLines(db, want.map(([f]) => f.projectId));
+        for (const [f, ms] of want) {
+          assert.equal(lines.get(f.projectId)?.inFlight?.typicalMs ?? null, ms,
+            `${f.projectId}: the list row's usual duration`);
+          const entry = ((await read(db, f)).inFlightJobs ?? [])
+            .find((job) => job.jobId === running.get(f.projectId));
+          assert.ok(entry, `${f.projectId}: the running merge check is not in the job list`);
+          assert.equal(entry.typicalMs ?? null, ms, `${f.projectId}: the page's usual duration`);
+        }
+      };
+
+      await t.test('(t) typicalMs answers what the full scan of every finished job answered whenever '
+        + 'the newest 25 finished jobs hold five passes', async () => {
+        // The read before it was bounded, verbatim: every finished job of the project opened, the
+        // passes numbered newest first, the newest five kept. Wherever the window holds five passes
+        // those are the same five, so it is the oracle here rather than a second copy of the rule.
+        const fullScan = async (projectIds: string[]) => {
+          const ids = Prisma.join(projectIds.map((id) => Prisma.sql`${id}::uuid`));
+          const rows = await db.$queryRaw<Array<{ projectId: string; ms: number }>>(Prisma.sql`
+            WITH passed AS (
+              SELECT j."project_id" AS "projectId",
+                     (EXTRACT(EPOCH FROM (j."finished_at" - j."claimed_at")) * 1000)::float8 AS "ms",
+                     row_number() OVER (
+                       PARTITION BY j."project_id" ORDER BY j."finished_at" DESC, j."id" DESC) AS "rn"
+                FROM "project_integration_job" j
+               WHERE j."project_id" IN (${ids})
+                 AND j."finished_at" IS NOT NULL AND j."claimed_at" IS NOT NULL
+                 AND j."finished_at" > j."claimed_at"
+                 AND EXISTS (
+                   SELECT 1
+                     FROM jsonb_array_elements(
+                            CASE WHEN jsonb_typeof(j."checks") = 'array' THEN j."checks" ELSE '[]'::jsonb END) c
+                    WHERE c->>'name' = 'MERGE_CHECK'
+                      AND c->>'timedOut' = 'false'
+                      AND (c->>'exitCode') ~ '^[0-9]+$'
+                      AND (c->>'expectedExitCode') ~ '^[0-9]+$'
+                      AND (c->>'exitCode')::int = (c->>'expectedExitCode')::int)
+            )
+            SELECT "projectId", "ms" FROM passed WHERE "rn" <= 5`);
+          const durations = new Map<string, number[]>();
+          for (const row of rows) {
+            durations.set(row.projectId, [...(durations.get(row.projectId) ?? []), Number(row.ms)]);
+          }
+          return new Map(projectIds.map((id) => [id, medianMs(durations.get(id) ?? [])]));
+        };
+
+        // A fixed sequence, so a red names the same rows every run.
+        let seed = 20261020;
+        const next = (n: number) => {
+          seed = (seed * 48271) % 2147483647;
+          return seed % n;
+        };
+        // Two projects of one owner and one of another, each with 40 finished jobs in a mixed
+        // order: finishes on whole minutes so some tie, claims that end at or before they began,
+        // and a few that were never claimed at all.
+        const mixed = [await fixture(db, 'typical-mixed-a')];
+        mixed.push(await projectOn(db, mixed[0]!.ownerId, 'typical-mixed-b'));
+        mixed.push(await fixture(db, 'typical-mixed-c'));
+        const writtenOf = new Map<string, Written[]>();
+        for (const f of mixed) {
+          const written: Written[] = [];
+          for (let i = 0; i < 40; i += 1) {
+            const roll = next(20);
+            written.push(await finished(f, 'mixed', i, {
+              start: next(600),
+              ms: roll === 0 ? 0 : roll === 1 ? -60_000 : (1 + next(45)) * 60_000,
+              shape: next(3) === 0 ? passing : shapes[next(shapes.length)]!,
+              claimed: roll !== 2,
+            }));
+          }
+          writtenOf.set(f.projectId, written);
+        }
+
+        // Exactly five passes in the window, the oldest of them its 25th job, behind twenty failures
+        // and four jobs that are not in it at all: two never claimed and two that ended at or before
+        // their claim, each newer than the five. Eight older passes lie past the window.
+        const edge = await fixture(db, 'typical-edge');
+        const edgeWritten: Written[] = [];
+        for (let i = 0; i < 8; i += 1) {
+          edgeWritten.push(await finished(edge, 'edge-old', i, {
+            start: i * 60, ms: (40 + i) * 60_000, shape: passing }));
+        }
+        for (const [i, ms] of [30, 6, 5, 4, 3].entries()) {
+          edgeWritten.push(await finished(edge, 'edge-pass', i, {
+            start: 1000 + i * 60, ms: ms * 60_000, shape: passing }));
+        }
+        for (let i = 0; i < 20; i += 1) {
+          edgeWritten.push(await finished(edge, 'edge-fail', i, {
+            start: 2000 + i * 60, ms: 20 * 60_000, shape: failing(i) }));
+        }
+        for (const [i, spec] of [{ ms: 5 * 60_000, claimed: false }, { ms: 0 }, { ms: -60_000 },
+          { ms: 5 * 60_000, claimed: false }].entries()) {
+          edgeWritten.push(await finished(edge, 'edge-outside', i, {
+            start: 2000 + i * 300 + 30, shape: passing, ...spec }));
+        }
+        assert.equal(windowOf(edgeWritten).at(-1)?.ms, 30 * 60_000,
+          'the oldest of the five passes is not the 25th job of the window');
+        assert.equal(byRule(edgeWritten), 5 * 60_000);
+        writtenOf.set(edge.projectId, edgeWritten);
+
+        const all = [...mixed, edge];
+        for (const f of all) {
+          // The fixture has to tell the window from the full history: five passes inside it, older
+          // passes outside it, and a middle of every pass that is not the answer.
+          const written = writtenOf.get(f.projectId)!;
+          const inWindow = new Set(windowOf(written).map((row) => row.id));
+          const passes = written.filter((row) => row.passes);
+          assert.ok(passes.filter((row) => inWindow.has(row.id)).length >= 5,
+            `${f.projectId}: fewer than five passes in the newest 25 finished jobs`);
+          assert.ok(passes.some((row) => !inWindow.has(row.id)),
+            `${f.projectId}: no pass older than the newest 25 finished jobs`);
+          assert.notEqual(medianMs(passes.map((row) => row.ms)), byRule(written),
+            `${f.projectId}: the middle of every pass is the answer too`);
+        }
+        const oracle = await fullScan(all.map((f) => f.projectId));
+        for (const f of all) {
+          assert.equal(oracle.get(f.projectId), byRule(writtenOf.get(f.projectId)!),
+            `${f.projectId}: the full scan and the rule in words disagree`);
+        }
+        await assertTypical(all.map((f) => [f, oracle.get(f.projectId) ?? null]));
+      });
+
+      await t.test('(u) typicalMs with three passes in the newest 25 finished jobs is the middle of '
+        + 'those three, not of older passes', async () => {
+        // Six older passes of 20 through 25 minutes; then 25 jobs of which three passed, in 50, 6 and
+        // 4 minutes, the 50 the oldest of the window. The middle of those three is 6; the newest five
+        // passes ever (4, 6, 50, 25, 24) would say 24.
+        const f = await fixture(db, 'typical-three');
+        const written: Written[] = [];
+        for (let i = 0; i < 6; i += 1) {
+          written.push(await finished(f, 'three-old', i, {
+            start: i * 60, ms: (20 + i) * 60_000, shape: passing }));
+        }
+        const passAt = new Map([[0, 50], [12, 6], [23, 4]]);
+        for (let i = 0; i < 25; i += 1) {
+          const ms = passAt.get(i);
+          written.push(await finished(f, 'three-window', i, ms === undefined
+            ? { start: 1000 + i * 60, ms: 30 * 60_000, shape: failing(i) }
+            : { start: 1000 + i * 60, ms: ms * 60_000, shape: passing }));
+        }
+        assert.equal(byRule(written), 6 * 60_000);
+        await assertTypical([[f, 6 * 60_000]]);
+      });
+
+      await t.test('(v) typicalMs is absent when the newest 25 finished jobs hold no pass, however '
+        + 'many passed before them', async () => {
+        // Six passes of 7 through 12 minutes, then 25 jobs that failed or skipped the check in every
+        // way a job can. The newest five passes ever (8 through 12) would say 10 minutes.
+        const f = await fixture(db, 'typical-stale');
+        const written: Written[] = [];
+        for (let i = 0; i < 6; i += 1) {
+          written.push(await finished(f, 'stale-pass', i, {
+            start: i * 60, ms: (7 + i) * 60_000, shape: passing }));
+        }
+        for (let i = 0; i < 25; i += 1) {
+          written.push(await finished(f, 'stale-fail', i, {
+            start: 1000 + i * 60, ms: 30 * 60_000, shape: failing(i) }));
+        }
+        assert.equal(byRule(written), null);
+        await assertTypical([[f, null]]);
+      });
+
+      await t.test('(w) one call reads each project’s own newest 25 finished jobs: a busy project does '
+        + 'not crowd out a quiet one', async () => {
+        // The quiet project finished four jobs, three of them passes (5, 9 and 30 minutes: middle 9),
+        // all before the busy one finished any of its 60. A window shared by the call would hold
+        // only the busy project's jobs and leave the quiet one with none.
+        const quiet = await fixture(db, 'typical-quiet');
+        const quietWritten: Written[] = [];
+        for (const [i, ms] of [5, 9, 30].entries()) {
+          quietWritten.push(await finished(quiet, 'quiet-pass', i, {
+            start: i * 60, ms: ms * 60_000, shape: passing }));
+        }
+        quietWritten.push(await finished(quiet, 'quiet-fail', 0, {
+          start: 200, ms: 2 * 60_000, shape: failing(0) }));
+        // The busy project, an hour between claims: its older 35 jobs pass every other time, in 40
+        // minutes; its newest 25 hold seven passes, the newest five of them 3 through 7 minutes
+        // (middle 5).
+        const busy = await projectOn(db, quiet.ownerId, 'typical-busy');
+        const busyWritten: Written[] = [];
+        const passAt = new Map([[36, 20], [40, 21], [44, 3], [48, 4], [52, 5], [56, 6], [59, 7]]);
+        for (let i = 0; i < 60; i += 1) {
+          const ms = i < 35 && i % 2 === 0 ? 40 : passAt.get(i);
+          busyWritten.push(await finished(busy, 'busy', i, ms === undefined
+            ? { start: 1000 + i * 60, ms: 10 * 60_000, shape: failing(i) }
+            : { start: 1000 + i * 60, ms: ms * 60_000, shape: passing }));
+        }
+        assert.equal(byRule(quietWritten), 9 * 60_000);
+        assert.equal(byRule(busyWritten), 5 * 60_000);
+        assert.deepEqual(windowOf(busyWritten).map((row) => row.finishedAt),
+          busyWritten.slice(35).map((row) => row.finishedAt).reverse(),
+          'the busy project’s window is not its newest 25 jobs');
+        assert.ok(Math.min(...busyWritten.map((row) => row.finishedAt.getTime()))
+          > Math.max(...quietWritten.map((row) => row.finishedAt.getTime())),
+          'the busy project has a job no newer than the quiet one’s');
+        await assertTypical([[busy, 5 * 60_000], [quiet, 9 * 60_000]]);
       });
     } finally {
       await db.$disconnect();
