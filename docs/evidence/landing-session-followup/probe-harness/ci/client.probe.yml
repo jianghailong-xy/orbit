@@ -1,0 +1,96 @@
+# TEMPORARY evidence probe workflow (never merged to main; it lives on `probe/landing-session-followup`
+# as `.github/workflows/client.yml`). Copied from docs/evidence/landing-session-native/probe-harness
+# for task 34jBwFmcEPK012TsNL0Lc: builds the iPhone and Mac probe apps from the real shared sources and
+# photographs what that task changed: the Landings group's Earlier row (v4 04), the round line by job
+# kind on the landing page, the sessions page and the X-E5 card (05, 04, 06), the landing page's
+# Abandon (05), and the Work overview's Landing card for a lone merge job (04).
+name: Landing session follow-up probe (iPhone + Mac shots)
+
+on:
+  push:
+    branches: ["probe/landing-session-followup"]
+  workflow_dispatch:
+
+jobs:
+  shots:
+    name: Landing session shots (Mac window + iPhone)
+    runs-on: macos-26
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select latest Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Toolchain
+        run: swift --version && xcodebuild -version && xcodegen --version && sw_vers
+      - name: Stage the harness at the repository root
+        run: |
+          mkdir -p .ls-probe
+          cp -R docs/evidence/landing-session-followup/probe-harness/. .ls-probe/
+      - name: Build, drive and capture
+        id: capture
+        continue-on-error: true
+        run: |
+          bash .ls-probe/run.sh 2>&1 | tee run-output.log
+          exit "${PIPESTATUS[0]}"
+      - name: Keep the build's errors and the run's output beside the shots
+        if: always()
+        run: |
+          mkdir -p .ls-probe/shots
+          cp run-output.log .ls-probe/shots/run-output.log 2>/dev/null || true
+          for log in .ls-probe/build-*.log; do
+            [ -f "$log" ] || continue
+            base=$(basename "$log" .log)
+            grep -E "error:|Test Case|Executed|\*\* TEST|\*\* BUILD" "$log" | head -400 > ".ls-probe/shots/summary-$base.txt" || true
+            tail -300 "$log" > ".ls-probe/shots/tail-$base.txt" || true
+          done
+          find .ls-probe/shots -name 'xcodebuild-*.log' -size +20M -exec gzip -9 {} \;
+          echo "capture=${{ steps.capture.outcome }}" > .ls-probe/shots/outcomes.txt
+          echo "run=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> .ls-probe/shots/outcomes.txt
+          echo "sha=${{ github.sha }}" >> .ls-probe/shots/outcomes.txt
+          { echo "== displays =="; system_profiler SPDisplaysDataType 2>/dev/null | head -40
+            osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>&1
+          } >> .ls-probe/shots/outcomes.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: landing-session-shots
+          path: .ls-probe/shots
+          include-hidden-files: true
+      - name: Fail as the capture did
+        if: steps.capture.outcome != 'success'
+        run: exit 1
+
+  publish:
+    name: Push the shots where a clone can read them
+    needs: [shots]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+      - name: Push to probe/landing-session-followup-results
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd out
+          {
+            echo "run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            echo "sha: ${{ github.sha }}"
+            echo "shots: ${{ needs.shots.result }}"
+          } > RESULTS.txt
+          cat RESULTS.txt
+          git init -q
+          git config user.name "orbit-probe"
+          git config user.email "probe@orbit.invalid"
+          git checkout -q -b results
+          git add -A
+          git commit -q -m "landing session follow-up probe results for ${{ github.sha }} (run ${{ github.run_id }})"
+          git push -q -f "https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git" \
+            results:refs/heads/probe/landing-session-followup-results

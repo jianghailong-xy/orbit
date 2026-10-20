@@ -1,0 +1,11 @@
+// Evidence kit (task 34jBwFmcEPK012TsNL0Lc): compile LandingFollowupShotsTest.kt into the app's unit tests without adding it to the
+// tree. Pass it as an extra init script, from the repository root:
+//   bash src/android/gradlew -p src/android -I docs/evidence/landing-session-followup/android-kit/kit.gradle \
+//     :app:testDebugUnitTest --rerun --tests 'io.orbitd.android.LandingFollowup*'
+// The frames land in src/android/build/evidence/landing-session-followup/{light,dark}/.
+allprojects {
+    plugins.withId('com.android.application') {
+        // rootDir is src/android; this directory is docs/evidence/landing-session-followup/android-kit.
+        android.sourceSets.test.java.srcDir(new File(rootDir, '../../docs/evidence/landing-session-followup/android-kit'))
+    }
+}
