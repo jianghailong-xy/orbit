@@ -748,6 +748,10 @@ public enum ProjectPage {
         public let detail: String?
         /// The job Retry takes, when the server says a retry takes one.
         public let retryJobId: String?
+        /// The lead job is a round of merging into main (a merge check, or the merge itself). It
+        /// lands no task, so a card holding only it says no "Nothing to do" (board v4 04 draws no
+        /// body under that head). Read off `inFlight`, so a server that lists no jobs says it too.
+        public let mergeJob: Bool
 
         /// The head's two slots (`landingHead`) — the card's head is the landing row's: the same
         /// word, the same clock, the same state and freshness, in the merged row's anatomy.
@@ -794,7 +798,8 @@ public enum ProjectPage {
             clock: line.clock, clockLabel: line.clockLabel, wait: line.wait, updated: line.updated,
             liveness: line.liveness,
             detail: line.timedOut ? lead?.detail : nil,
-            retryJobId: lead?.retryable == true ? lead?.jobId : nil)
+            retryJobId: lead?.retryable == true ? lead?.jobId : nil,
+            mergeJob: ProjectMergeCard.isMergeJob(view.inFlight))
     }
 
     /// The branch a job lands on, short, from the project's own landings — the field the task page's

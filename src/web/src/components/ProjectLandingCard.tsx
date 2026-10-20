@@ -69,9 +69,10 @@ export function ProjectLandingCard({
         timedOut={card.timedOut} />
       {!several && card.what ? <span className="spl-what">{card.what}</span> : null}
       {!several && card.target ? <span className="spl-ref">{landingOnto(card.target)}</span> : null}
+      {/* A lone merge job lands no task: the board draws nothing under its head. */}
       {!several && (card.timedOut
         ? (card.detail ? <span className="spl-det">{card.detail}</span> : null)
-        : <span className="spl-note">{LANDING_NOTHING_TO_DO}</span>)}
+        : card.mergeJob ? null : <span className="spl-note">{LANDING_NOTHING_TO_DO}</span>)}
     </>
   );
   const press = onPress ? (

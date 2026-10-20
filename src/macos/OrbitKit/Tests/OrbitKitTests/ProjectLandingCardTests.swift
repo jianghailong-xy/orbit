@@ -167,6 +167,30 @@ final class ProjectLandingCardTests: XCTestCase {
         XCTAssertNil(card.retryJobId)
     }
 
+    /// A card led by a merge into main — a merge check, or the merge itself — says so, read off
+    /// the lead's own kind on `inFlight`, so a server that lists no jobs says it too. That job
+    /// lands no task, and the card holding only it draws no "Nothing to do" (board v4 04).
+    func testACardLedByAMergeIntoMainSaysSoFromTheLeadsOwnKind() throws {
+        for kind in ["CHECK_PROMOTION", "LAND_PROMOTION"] {
+            let lone = running([job("j-m", kind: kind, taskId: nil, title: nil)], landTasks: [])
+            XCTAssertTrue(try XCTUnwrap(ProjectPage.landingCard(lone, now: now, updatedAt: now)).mergeJob, kind)
+            let older = ProjectIntegrationView(
+                integratingCount: 1,
+                inFlight: .init(taskTitle: nil, state: "RUNNING", startedAt: iso(66),
+                                kind: kind, phase: "CHECK", heartbeatAt: iso(0)))
+            XCTAssertTrue(try XCTUnwrap(ProjectPage.landingCard(older, now: now, updatedAt: now)).mergeJob, kind)
+        }
+        // A task landing is none, even with a merge queued behind it, and nor is a job of no kind.
+        XCTAssertFalse(try XCTUnwrap(ProjectPage.landingCard(running([job("j-c5")]), now: now, updatedAt: now)).mergeJob)
+        let behind = running([job("j-c5"), job("j-m", kind: "LAND_PROMOTION", state: "QUEUED", phase: nil,
+                                                taskId: nil, title: nil, heartbeat: nil, runner: nil, limit: nil)])
+        XCTAssertFalse(try XCTUnwrap(ProjectPage.landingCard(behind, now: now, updatedAt: now)).mergeJob)
+        let unnamed = ProjectIntegrationView(
+            integratingCount: 1,
+            inFlight: .init(taskTitle: nil, state: "RUNNING", startedAt: iso(66), heartbeatAt: iso(0)))
+        XCTAssertFalse(try XCTUnwrap(ProjectPage.landingCard(unnamed, now: now, updatedAt: now)).mergeJob)
+    }
+
     /// The branch is the job's own landing, short — and absent when the job is not one of the
     /// project's landings at all: a merge check lands no task and names no branch here.
     func testTheBranchIsTheJobsOwnLandingAndAbsentWhenNothingNamesIt() throws {

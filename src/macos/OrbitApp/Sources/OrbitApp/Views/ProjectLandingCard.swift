@@ -132,12 +132,15 @@ struct ProjectLandingCardView: View {
             .lineLimit(1).truncationMode(.middle)
     }
 
+    /// Where a timed-out runner stopped, or the sentence that takes the reader off the hook — which
+    /// a card holding only a merge job does not say: that job lands no task, and board v4 04 draws
+    /// nothing under its head.
     @ViewBuilder private var sentence: some View {
         if card.timedOut, let detail = card.detail {
             Text(detail).font(.orbitMeta).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-        } else if !card.timedOut {
+        } else if !card.timedOut && (several || !card.mergeJob) {
             Text(ProjectPage.landingNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)
         }
     }

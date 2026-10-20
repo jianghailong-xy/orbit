@@ -527,6 +527,65 @@ describe('the landing card', () => {
     expect(refused).not.toContain('Nothing to do');
   });
 
+  it('says nothing under the head of a card whose only job is a merge into main', () => {
+    // Board v4 04 draws no body under a merge job's head: it lands no task, so "Nothing to do —
+    // it lands on its own." would be about a task that is not there.
+    const check = renderAt(
+      seeded(integration({
+        inFlight: { taskTitle: null, state: 'RUNNING', kind: 'CHECK_PROMOTION', phase: 'CHECK',
+          startedAt: '2026-09-25T13:58:00Z', heartbeatAt: '2026-09-25T13:58:00Z' },
+        inFlightJobs: [cardJob({ jobId: 'job-check', kind: 'CHECK_PROMOTION', taskId: null, taskTitle: null })],
+      })),
+      '2026-09-25T13:59:20Z',
+    );
+    expect(check).toContain('class="landing-head-title">Merge check<');
+    expect(check).not.toContain('spl-what');
+    expect(check).not.toContain('spl-note');
+    expect(check).not.toContain('Nothing to do');
+
+    const toMain = renderAt(
+      seeded(integration({
+        integratingCount: 0,
+        queuedCount: 1,
+        inFlight: { taskTitle: null, state: 'QUEUED', kind: 'LAND_PROMOTION', phase: null,
+          startedAt: '2026-09-25T13:58:40Z' },
+        inFlightJobs: [cardJob({ jobId: 'job-merge', kind: 'LAND_PROMOTION', state: 'QUEUED', phase: null,
+          taskId: null, taskTitle: null, startedAt: '2026-09-25T13:58:40Z', heartbeatAt: null })],
+      })),
+      '2026-09-25T13:59:20Z',
+    );
+    expect(toMain).toContain('class="landing-head-title">Merge to main<');
+    expect(toMain).not.toContain('spl-note');
+    expect(toMain).not.toContain('Nothing to do');
+
+    // A server that does not list its jobs names the kind on `inFlight`, and that is enough.
+    const older = renderAt(
+      seeded(integration({
+        inFlight: { taskTitle: null, state: 'RUNNING', kind: 'CHECK_PROMOTION', phase: 'CHECK',
+          startedAt: '2026-09-25T13:58:00Z', heartbeatAt: '2026-09-25T13:58:00Z' },
+        inFlightJobs: undefined,
+      })),
+      '2026-09-25T13:59:20Z',
+    );
+    expect(older).toContain('class="landing-head-title">Merge check<');
+    expect(older).not.toContain('spl-note');
+  });
+
+  it('still says where a lone merge job’s runner stopped once it timed out', () => {
+    const html = renderAt(
+      seeded(integration({
+        inFlight: { taskTitle: null, state: 'RUNNING', kind: 'CHECK_PROMOTION', phase: 'CHECK',
+          startedAt: 'not a date', heartbeatAt: null },
+        inFlightJobs: [cardJob({ jobId: 'job-check', kind: 'CHECK_PROMOTION', taskId: null, taskTitle: null,
+          startedAt: 'not a date', heartbeatAt: null, timedOut: true, limitSeconds: 600 })],
+      })),
+      '2026-09-25T13:59:20Z',
+    );
+    expect(html).toContain('class="session-project-landing is-timed-out"');
+    expect(html).toContain('class="spl-det">The runner took it at --:-- · stopped at checking<');
+    expect(html).not.toContain('Nothing to do');
+  });
+
   it('counts a job the server cannot date from zero rather than printing NaN', () => {
     const html = renderAt(
       seeded(integration({ inFlight: { taskTitle: null, state: 'RUNNING', startedAt: 'not a date',
@@ -1065,6 +1124,7 @@ describe('landingCard', () => {
       updated: 'Updated just now',
       detail: null,
       retryJobId: null,
+      mergeJob: false,
     });
   });
 
@@ -1105,6 +1165,22 @@ describe('landingCard', () => {
       { updatedAt: NOW })!.target).toBe('main');
     expect(landingCard(listing([job({ timedOut: false })], [landed('job-c5', '')]), NOW,
       { updatedAt: NOW })!.target).toBeNull();
+  });
+
+  it('marks a card led by a merge into main, from the lead’s own kind', () => {
+    // Both merge kinds, listed or not: the flag is read off `inFlight`, so an older server that
+    // lists no jobs says it too.
+    for (const kind of ['CHECK_PROMOTION', 'LAND_PROMOTION'] as const) {
+      expect(landingCard(listing([merge({ kind })], []), NOW, { updatedAt: NOW })!.mergeJob).toBe(true);
+      const older = integration({ inFlight: { taskTitle: null, state: 'QUEUED', kind, startedAt: instant(NOW - 5_000) },
+        inFlightJobs: undefined, landTasks: undefined });
+      expect(landingCard(older, NOW, { updatedAt: NOW })!.mergeJob).toBe(true);
+    }
+    // A task landing is none, even with a merge queued behind it, and nor is a job of no kind.
+    expect(landingCard(listing([job()]), NOW, { updatedAt: NOW })!.mergeJob).toBe(false);
+    expect(landingCard(listing([job({ timedOut: false }), merge()]), NOW, { updatedAt: NOW })!.mergeJob).toBe(false);
+    expect(landingCard(integration({ inFlight: { taskTitle: null, state: 'RUNNING', startedAt: instant(NOW - 5_000) } }),
+      NOW, { updatedAt: NOW })!.mergeJob).toBe(false);
   });
 
   it('is no card while nothing is landing, and what it can be from an older server', () => {

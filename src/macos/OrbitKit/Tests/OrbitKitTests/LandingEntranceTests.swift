@@ -125,5 +125,7 @@ final class LandingEntranceTests: XCTestCase {
         XCTAssertEqual(card?.jobs.first?.mergeJob, true)
         XCTAssertEqual(card?.jobs.first?.title, "Merge check")
         XCTAssertEqual(card?.word, "Merge check")
+        // And the card knows its lead is one, so it says no "Nothing to do" under that head.
+        XCTAssertEqual(card?.mergeJob, true)
     }
 }

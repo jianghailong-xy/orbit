@@ -171,10 +171,12 @@ private fun TargetLine(target: String?) {
         color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.MiddleEllipsis) }
 }
 
-/** What a timed-out runner did before it stopped, or the sentence that takes the reader off the hook while it lands. */
+/** What a timed-out runner did before it stopped, or the sentence that takes the reader off the hook while it lands — which a card
+ * holding only a merge job does not say: that job lands no task, and board v4 04 draws nothing under its head. */
 @Composable
 private fun Sentence(card: LandingCard) {
     if (card.timedOut) card.detail?.let { Text(it, Modifier.testTag("landing-card:detail"), style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    else Text(ProjectPage.landingNothingToDo, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    else if (card.jobs.size > 1 || !card.mergeJob) Text(ProjectPage.landingNothingToDo, style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant)
 }

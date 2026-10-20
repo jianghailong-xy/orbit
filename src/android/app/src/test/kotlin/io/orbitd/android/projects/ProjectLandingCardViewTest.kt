@@ -186,6 +186,34 @@ class ProjectLandingCardViewTest {
         shot("8-many-jobs-open-landing")
     }
 
+    /** A card whose only job is a merge into main — a merge check running, or the merge itself queued — draws its head and nothing
+     * under it: that job lands no task, so "Nothing to do" would be about a task that is not there (board v4 04). A task's card keeps it. */
+    @Test fun aLoneMergeJobsCardSaysNothingUnderItsHead() {
+        for ((kind, word) in listOf("CHECK_PROMOTION" to "Merge check", "LAND_PROMOTION" to "Merge to main")) {
+            val queued = kind == "LAND_PROMOTION"
+            val merge = buildJsonObject {
+                put("jobId", "j-m"); put("kind", kind); put("state", if (queued) "QUEUED" else "RUNNING"); put("phase", if (queued) null else "CHECK")
+                put("taskId", null as String?); put("taskTitle", null as String?); put("generation", 1); put("startedAt", iso(66))
+                put("queuedAt", iso(100)); put("heartbeatAt", if (queued) null else iso(0)); put("runnerName", null as String?)
+                put("timedOut", false); put("limitSeconds", 600); put("retryable", false); put("landingSessionId", "L-m")
+            }
+            val lone = buildJsonObject {
+                put("integratingCount", if (queued) 0 else 1); put("queuedCount", if (queued) 1 else 0)
+                putJsonObject("inFlight") {
+                    put("taskTitle", null as String?); put("state", merge["state"]!!); put("startedAt", merge["startedAt"]!!); put("kind", kind)
+                    put("jobId", "j-m"); put("phase", merge["phase"]!!); put("heartbeatAt", merge["heartbeatAt"]!!)
+                }
+                put("inFlightJobs", JsonArray(listOf(merge)))
+            }
+            draw(ProjectPage.landingCard(lone, now, now, false)!!)
+            says("landing-head:title", word)
+            compose.onNodeWithTag("landing-card:what", useUnmergedTree = true).assertDoesNotExist()
+            compose.onNodeWithText(ProjectPage.landingNothingToDo, useUnmergedTree = true).assertDoesNotExist()
+        }
+        draw(ProjectPage.landingCard(view(job("j-1")), now, now, false)!!)
+        compose.onNodeWithText(ProjectPage.landingNothingToDo, useUnmergedTree = true).assertExists()
+    }
+
     private val output: File by lazy {
         val root = generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
             .first { File(it, "src/android/settings.gradle.kts").isFile }
