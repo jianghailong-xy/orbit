@@ -4857,12 +4857,13 @@ func getOptionalPriority(args map[string]interface{}, key string) (*int, error) 
 	return &n, nil
 }
 
-// getNumberAsString reads a numeric argument that travels on as a query value, spelled the way
-// the caller wrote it. JSON numbers decode to float64, and an agent sends a claim generation or a
-// round as a number as often as a quoted one, so both reach the server as the same digits: 3 and
-// "3" are "3", and a large integer keeps every digit rather than an exponent. Nothing is judged
-// here — a negative or fractional number is spelled out ("-1", "2.5") exactly as a bad string is
-// passed on, and the server refuses both with the one message it gives for that field.
+// getNumberAsString reads a numeric argument that travels on as a query value. An agent sends a
+// claim generation or a round as a number as often as a quoted one, so both reach the server as
+// plain digits: 3 and "3" are "3", and an integral number is written out in full rather than as
+// the exponent the server's digits-only check would refuse. A JSON number has already been decoded
+// to a float64 by the time it gets here, so above 2^53 only a quoted value keeps every digit. Nothing
+// is judged here — a negative or fractional number is spelled out ("-1", "2.5") exactly as a bad
+// string is passed on, and the server refuses both with the one message it gives for that field.
 func getNumberAsString(args map[string]interface{}, key string) string {
 	switch v := args[key].(type) {
 	case string:

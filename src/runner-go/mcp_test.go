@@ -366,9 +366,10 @@ func TestMCPProjectIntegrationGetSendsNumericSelectorsAsTheirDigits(t *testing.T
 }
 
 // A claim generation is a bigint on the server. A JSON number decodes to float64, whose default
-// spelling turns a large integer into an exponent the server's digits-only check refuses, so every
-// digit is written out. A negative or fractional number is spelled as it is and left to that same
-// check, exactly as a bad string is.
+// spelling turns a large integer into an exponent the server's digits-only check refuses, so an
+// integral float64 is written out in full (every digit only up to 2^53: past it the decode has
+// already rounded, and a quoted value is the exact form). A negative or fractional number is
+// spelled as it is and left to that same check, exactly as a bad string is.
 func TestMCPProjectIntegrationGetSpellsLargeAndInvalidNumbersOut(t *testing.T) {
 	var gotClaim string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
