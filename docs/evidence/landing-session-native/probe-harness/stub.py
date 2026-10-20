@@ -262,6 +262,20 @@ def integration(mode):
             "landTasks": [land]}
 
 
+X5 = {"itemId": "OI5", "kind": "LANDING_LEASE_EXPIRED",
+      "title": "Merge check stopped reporting",
+      "detailLine": "The runner stopped reporting while checking the combined tree.",
+      "waitingSince": ago(28), "assignee": "OWNER", "assigneeReason": "ESCALATED",
+      "escalateAt": None, "escalatedAt": ago(0),
+      "taskId": "T1", "sessionId": "S4", "promotionId": "PM1",
+      "landingSessionId": "L1", "integrationJobId": "jL",
+      "actions": ["ABANDON", "OPEN_LANDING"], "primaryAction": "ABANDON",
+      "requiredAction": "The runner stopped reporting; abandon this landing, or wait for the runner to come back.",
+      "lease": {"lastReportAt": ago(27), "leaseExpiredAt": ago(17), "jobKind": "CHECK_PROMOTION",
+                "generation": 3, "phase": "CHECK", "step": None, "claimGeneration": 1,
+                "round": 1, "checkCount": 3, "runner": "wikova", "progressProtocol": "v2",
+                "pushReported": False}}
+
 OPEN_ITEM = {"itemId": "OI1", "kind": "INTEGRATION_CHECK_FAILED",
              "title": "Merge check failed", "detailLine": "",
              "waitingSince": ago(25), "assignee": "COORDINATOR",
@@ -384,6 +398,10 @@ class Handler(BaseHTTPRequestHandler):
                 if rest[1:] == ["tasks", "page"]:
                     return self.send(200, {"items": [], "nextCursor": None})
                 if rest[1:] == ["open-items"]:
+                    # The owner's own card reads `needsYou`; the group's holder read is the
+                    # coordinator's item. The "lease" mode opens X-E5 in the coordinator console.
+                    if MODE["name"] == "lease":
+                        return self.send(200, {"needsYou": [X5], "withCoordinator": []})
                     return self.send(200, {"needsYou": [], "withCoordinator": [OPEN_ITEM]})
                 if rest[1:] == ["handoffs"]:
                     return self.send(200, [])

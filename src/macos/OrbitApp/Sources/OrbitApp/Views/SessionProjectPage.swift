@@ -366,7 +366,7 @@ struct SessionProjectPage: View {
             // (owner 2026-10-19, board v4 04 c1): under the coordinator, above the timeline, and
             // absent entirely when it has nothing to list.
             if let landingGroup {
-                Section(SessionProjectLandingsCopy.title) {
+                Section(SessionLandingsCopy.title) {
                     ForEach(landingGroup.waiting) { row in landingGroupRow(row) }
                     ForEach(landingGroup.settled) { row in landingGroupRow(row) }
                     if let earlier = landingGroup.earlier {

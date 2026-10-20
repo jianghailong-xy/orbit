@@ -57,6 +57,17 @@ final class LandingSessionShotTests: ProbeCase {
         app.terminate()
     }
 
+    func testIPhoneOwnersXE5LandingCard() {
+        setMode("lease")
+        let app = launch(until: "Now yours", extra: ["-probe.page", "owner"], "owner-card")
+        XCTAssertTrue(appears(app, "no report from the runner", timeout: 20),
+                      "the X-E5 heading never showed")
+        XCTAssertTrue(appears(app, "Abandon", timeout: 20), "the lead door never showed")
+        XCTAssertTrue(appears(app, "Open landing", timeout: 20), "the reading door never showed")
+        shot(app, "ios-06-xe5-card")
+        app.terminate()
+    }
+
     func testIPhoneSourceConversationsLabel() {
         setMode("live")
         let app = launch(until: "Landing · checking", extra: ["-probe.page", "chat"], "source-label")

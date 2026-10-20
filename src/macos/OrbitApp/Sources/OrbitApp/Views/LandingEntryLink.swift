@@ -1,13 +1,6 @@
 import SwiftUI
 import OrbitKit
 
-/// "Open landing ›" — the explicit way into the landing session a piece of work belongs to (contract
-/// §2.9 LS6, owner 2026-10-19: 方案 A). The presses main already had are untouched: a Landing card
-/// and a Work overview card still open the jobs in flight, and a job's row still opens its task.
-/// This is the one thing said in words, drawn beside them.
-///
-/// On a server that names no landing session the same slot says so in grey, and nothing presses: the
-/// reader learns why the way in is missing rather than hunting for it.
 /// The landing a code session's work fed, at that session's own bottom (owner 2026-10-19, board v4
 /// 06 e): a derived label, not a turn — the source session did the work, the platform lands it, and
 /// the label opens the landing session where every attempt is read. Absent from a session that
@@ -61,6 +54,13 @@ struct SourceLandingChip: View {
     }
 }
 
+/// "Open landing ›" — the explicit way into the landing session a piece of work belongs to (contract
+/// §2.9 LS6, owner 2026-10-19: 方案 A). The presses main already had are untouched: a Landing card
+/// and a Work overview card still open the jobs in flight, and a job's row still opens its task.
+/// This is the one thing said in words, drawn beside them.
+///
+/// On a server that names no landing session the same slot says so in grey, and nothing presses: the
+/// reader learns why the way in is missing rather than hunting for it.
 struct LandingEntryLink: View {
     let entry: LandingEntry
     /// The quieter size a job row or a card foot wears.

@@ -2438,8 +2438,8 @@ final class AppModel {
                 taskId: job.taskId, promotionId: job.promotionId, runner: job.runnerName,
                 claim: job.claim, round: job.round, check: job.check,
                 stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
-                progressProtocol: job.progressProtocol, typicalMs: job.typicalMs,
-                liveness: job.liveness, blockingReason: job.blockingReason)
+                typicalMs: job.typicalMs, liveness: job.liveness,
+                blockingReason: job.blockingReason)
         }
     }
 

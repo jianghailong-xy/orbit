@@ -22,6 +22,8 @@ the words and the door conditions on Linux.
   - the ⋯ menu is the web's: ways to look (Open Task, Open Source Session, Open Coordinator, Review
     Card), then the doors the view's facts open (Stop Landing / Cancel Merge before the push,
     Abandon and the server's Retry / Re-run the check once the lease expired). No Copy Link.
+  - Reduce Motion stops the head's ring and nothing else: `LandingRing` reads
+    `accessibilityReduceMotion`, and the page adds no motion of its own.
   - a read this device cannot make freezes the card at `Update unavailable` and opens no door; the
     last `inFlight` snapshot the app held draws the page when nothing else can be read.
 - **04 — the entrances.** A one-job Landing card carries `Open landing ›` at its foot (beside

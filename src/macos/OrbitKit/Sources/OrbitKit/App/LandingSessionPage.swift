@@ -146,7 +146,7 @@ public enum LandingPageCopy {
     }
 }
 
-extension LandingPageCopy {
+public extension LandingPageCopy {
     /// §2.7a's cadence for a landing page: a RUNNING attempt four seconds, a queued one (or a
     /// stopped one waiting for its next attempt) fifteen, and nothing once the subject has settled.
     public static func refetchInterval(_ landing: SessionLandingView?) -> TimeInterval? {

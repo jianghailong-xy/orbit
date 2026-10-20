@@ -515,8 +515,15 @@ struct LandingSessionPageView: View {
     private func run() async {
         while !Task.isCancelled {
             await refresh()
-            guard let landing, LandingPageCopy.refetchInterval(landing) != nil else { return }
-            let interval = LandingPageCopy.refetchInterval(landing) ?? 15
+            // §2.7a's cadence once there is an attempt to read; a page with nothing yet, or a read
+            // that failed, asks again every 15 s; a settled subject stops.
+            let interval: TimeInterval?
+            if let landing {
+                interval = LandingPageCopy.refetchInterval(landing)
+            } else {
+                interval = 15
+            }
+            guard let interval else { return }
             do { try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000)) }
             catch { return }
         }

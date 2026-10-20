@@ -44,6 +44,9 @@ enum ProbeArgs {
                 model.route(to: .task("T1"))
             case "chat":
                 model.route(to: .session("S4"))
+            case "owner":
+                // The project's coordinator conversation, where the owner's X-E5 card is drawn.
+                model.route(to: .session("C1"))
             case "overview":
                 model.openProject("P1")
             default:
