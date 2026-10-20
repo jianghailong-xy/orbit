@@ -424,6 +424,16 @@ export const CURSOR_LOGIN_RELAY_TIMEOUT_MS = 30 * 60_000;
 export function loginRelayTimeoutMs(engine: string | null | undefined): number {
   return engine === 'cursor' ? CURSOR_LOGIN_RELAY_TIMEOUT_MS : LOGIN_RELAY_TIMEOUT_MS;
 }
+
+/**
+ * The sign-in link a runner reports, up to its first control character. A URL never holds one raw,
+ * yet an older runner reported claude's link with the escapes that close it in the CLI's terminal
+ * output still on — `…&state=…\x1b[39m\x1b]8;;` — and the Providers page copied them along. Dropping
+ * only the control characters would keep the `[39m]8;;` they begin.
+ */
+function reportedLoginUrl(url: unknown): string | null {
+  return typeof url === 'string' ? url.split(/\p{Cc}/u)[0] : null;
+}
 // Same contract for installs, against the runner's engineInstallTimeout (10 min) plus the
 // heartbeat it takes to pick the request up.
 const INSTALL_RELAY_TIMEOUT_MS = 12 * 60_000;
@@ -2603,8 +2613,8 @@ export class RunnerApiController {
       data: {
         loginStatus: status,
         // A retry after a rejected code republishes the same still-valid URL, so just take
-        // whatever the runner reported; clear any code still queued behind it either way.
-        loginUrl: waiting ? (body.url ?? null) : null,
+        // what the runner reported (reportedLoginUrl); clear any code still queued behind it either way.
+        loginUrl: waiting ? reportedLoginUrl(body.url) : null,
         // Only the device flow carries one, and it dies with the attempt it belongs to.
         loginUserCode: status === 'awaiting_approval' ? (body.userCode ?? null) : null,
         loginCode: null,
