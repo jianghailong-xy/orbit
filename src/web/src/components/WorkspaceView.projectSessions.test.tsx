@@ -1293,6 +1293,11 @@ describe('the project sessions page — the Landings group', () => {
   const landingRows = (): HTMLElement[] =>
     [...(group()?.querySelectorAll<HTMLElement>('.session-project-landing-row') ?? [])];
   const sectionHead = (): string => group()?.querySelector('.session-section-head')?.textContent ?? '';
+  /** The fold's mark as `glyph:tone`, e.g. `✓:is-ok`. */
+  const foldMark = (fold: HTMLElement | null | undefined): string => {
+    const mark = fold?.querySelector<HTMLElement>('.session-project-landing-mark');
+    return `${mark?.textContent}:${mark?.className.replace('session-project-landing-mark ', '')}`;
+  };
 
   it('lists the landings under the coordinator and above the page’s timeline', async () => {
     rows = [LOOSE, COORDINATOR, TASK, LANDING(820, 'Land · Build the package', awaiting())];
@@ -1356,9 +1361,12 @@ describe('the project sessions page — the Landings group', () => {
       .toEqual(['Land · checks failed', 'Land · landed today', 'Land · nothing today']);
     const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
     expect(fold?.textContent).toContain('Earlier · 1 landed · 1 nothing to land');
+    // A fold that counts landings wears v4 04 c1's green ✓ while closed.
+    expect(foldMark(fold)).toBe('✓:is-ok');
     expect(landingRows()).toHaveLength(3);
     // Open it: the folded ones are the rows the count named.
     await click(fold, 'the fold');
+    expect(foldMark(fold)).toBe('◌:is-quiet');
     expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
       .toEqual(expect.arrayContaining(['Land · landed long ago', 'Land · nothing long ago']));
   });
@@ -1375,6 +1383,7 @@ describe('the project sessions page — the Landings group', () => {
 
     const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
     expect(fold?.querySelector('.session-project-landing-fold-text')?.textContent).toBe('Earlier · 1 landed');
+    expect(foldMark(fold)).toBe('✓:is-ok');
     await click(fold, 'the fold');
     expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
       .toEqual(['Land · checks failed', 'Land · landed long ago', 'Land · cancelled long ago']);
@@ -1395,10 +1404,13 @@ describe('the project sessions page — the Landings group', () => {
     expect(fold).not.toBeNull();
     expect(fold?.querySelector('.session-project-landing-fold-text')?.textContent).toBe('Earlier');
     expect(fold?.getAttribute('aria-expanded')).toBe('false');
+    // A bare fold is no success: its closed ✓ is grey, as iOS and Android draw a closed fold.
+    expect(foldMark(fold)).toBe('✓:is-quiet');
     expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
       .toEqual(['Land · checks failed']);
     await click(fold, 'the fold');
     expect(fold?.getAttribute('aria-expanded')).toBe('true');
+    expect(foldMark(fold)).toBe('◌:is-quiet');
     expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
       .toEqual(['Land · checks failed', 'Land · cancelled long ago', 'Land · handled long ago', 'Land · declined long ago']);
     expect(landingRows().slice(1).map((row) => row.querySelector('.session-project-merge-row-detail')?.textContent))
@@ -1418,6 +1430,7 @@ describe('the project sessions page — the Landings group', () => {
     expect(landingRows()).toEqual([]);
     const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
     expect(fold?.querySelector('.session-project-landing-fold-text')?.textContent).toBe('Earlier');
+    expect(foldMark(fold)).toBe('✓:is-quiet');
     await click(fold, 'the fold');
     expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
       .toEqual(['Land · cancelled long ago', 'Land · handled long ago']);
