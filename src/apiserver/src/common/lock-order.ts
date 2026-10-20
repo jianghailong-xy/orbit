@@ -112,7 +112,7 @@ export const LOCK_ORDER = [
   {
     rank: 40,
     relation: 'project',
-    modes: 'FOR NO KEY UPDATE (session capacity fence, verdict gate, reconcile, unit L3 scope fence) · FOR KEY SHARE (task/session FK, project_event outbox, the X-E5 tick\'s pre-lock)',
+    modes: 'FOR NO KEY UPDATE (session capacity fence, verdict gate, reconcile, unit L3 scope fence) · FOR KEY SHARE (task/session FK, project_event outbox, the X-E5 tick\'s SKIP LOCKED hold)',
     why:
       'Above `task` because that is the order every live taker of these two rows takes them in: ' +
       'session_admission_lock_order (0130) reaches the project row FOR NO KEY UPDATE from the same ' +
@@ -127,7 +127,7 @@ export const LOCK_ORDER = [
   {
     rank: 50,
     relation: 'task',
-    modes: 'FOR UPDATE (delete) · FOR NO KEY UPDATE (update) · FOR SHARE (the admission and authority re-read: SessionsService.resume, taskWorkRefusalFor, ProjectHandoffService.declare, TasksService.assertPlanAuthorityUnchanged) · FOR KEY SHARE (edge + session.task_id FK, the X-E5 tick\'s pre-lock)',
+    modes: 'FOR UPDATE (delete) · FOR NO KEY UPDATE (update) · FOR SHARE (the admission and authority re-read: SessionsService.resume, taskWorkRefusalFor, ProjectHandoffService.declare, TasksService.assertPlanAuthorityUnchanged) · FOR KEY SHARE (edge + session.task_id FK, the X-E5 tick\'s SKIP LOCKED hold)',
     why: 'Multi-row selections are always taken sorted by id (orderedIds).',
   },
   {
@@ -144,7 +144,7 @@ export const LOCK_ORDER = [
   {
     rank: 60,
     relation: 'task_dependency, task_comment, task_progress, task_completion_evidence, task_completion_evidence_idempotency, task_evidence_decision, conversation_turn, background_job_wake, session_scheduled_wakeup, session_request, session_message_charge, run_event, tool_call, attachment, project_event, project_handoff_approval, project_coordinator_wake, project_blocker, project_convergence_decision, project_standard_set_confirmation, project_open_item, project_open_item_delivery, project_integration_job, project_integration_job_log, project_integration_job_event, project_landing, project_promotion, project_task_status_count, project_fuse_episode, project_fuse_held_action',
-    modes: 'INSERT/UPDATE/DELETE · on `project_integration_job` also FOR UPDATE SKIP LOCKED (the claim, one job), FOR NO KEY UPDATE (the progress, release and output gates) and FOR SHARE (the X-E5 insert, jobs in id order)',
+    modes: 'INSERT/UPDATE/DELETE · on `project_integration_job` also FOR UPDATE SKIP LOCKED (the claim, one job), FOR NO KEY UPDATE (the progress, release and output gates) and FOR SHARE SKIP LOCKED (the X-E5 insert)',
     why:
       'Child rows whose FK parents are already held by this point, so they add no wait edge of their '
       + 'own. `project_integration_job` is here rather than at a rank of its own for that reason: '
@@ -188,19 +188,30 @@ export const LOCK_ORDER = [
       + 'projects cannot take the same pair in opposite orders. No other taker exists: the detail '
       + 'read only SELECTs it, and the UPDATE branch nets inserted against deleted, so a statement '
       + 'that moves no task between projects reaches this table not at all. '
-      + 'X-E5\'s clock (§4.6) is the same rank, and its item is a child whose parents the clock takes '
-      + 'itself, since nothing else holds them: the INSERT … SELECT reads `project_integration_job` FOR '
-      + 'SHARE — so a report committing under it is waited for and seen — and writes one '
-      + '`project_open_item` per claim whose lease has expired for more than fifteen minutes, whose '
-      + 'foreign keys take the project (40) and the task (50) FOR KEY SHARE. Left to the insert, those '
-      + 'came after the job and closed a cycle with J-T8\'s stop (`task_reopen` holds the task FOR '
-      + 'UPDATE and then ends the same job) and with a project delete (the project FOR UPDATE, then the '
-      + 'job through its cascade); `landing-lease-expired.pg.spec.ts` (19) and (21) force both. So the '
-      + 'tick is a transaction of its own that takes the due claims\' projects and then their tasks FOR '
-      + 'KEY SHARE, each sorted in one statement, before the insert takes the jobs FOR SHARE in id order; '
-      + 'the promotion its key takes at this rank is held FOR UPDATE by nothing but that delete\'s '
-      + 'cascade, after the project. It takes no session lock — the item\'s `session_id` is history, not '
-      + 'a key — and the job gates that end such an item write it inside their own rank-60 transactions.',
+      + 'X-E5\'s clock (§4.6) is the same rank: one autocommit INSERT … SELECT that writes one '
+      + '`project_open_item` per claim whose lease has expired for more than fifteen minutes, and that '
+      + 'takes every row the item\'s foreign keys check before the keys do, all of it SKIP LOCKED — the '
+      + 'due claims\' projects (40), then their tasks (50), then their candidates (60) FOR KEY SHARE, '
+      + 'each set sorted by id, in one CTE whose UNION ALL PostgreSQL runs branch by branch and which is '
+      + 'read whole before the first job, and then the jobs FOR SHARE, in id order. That is the claim '
+      + 'path\'s argument at the same rank: SKIP LOCKED does not queue for a lock held on the row '
+      + 'version it reads, so neither J-T8\'s stop (`task_reopen` holds the task FOR UPDATE and then '
+      + 'ends the same job) nor a project delete (the project FOR UPDATE, then the job through its '
+      + 'cascade) holds the tick at a version of a row it reads — the two cycles the item\'s keys closed '
+      + 'when they took the project and the task after the job, which `landing-lease-expired.pg.spec.ts` '
+      + '(19) and (21) force. The cost is a deferral: a claim whose job another transaction is writing, '
+      + 'or one of whose parents is held FOR UPDATE, being deleted or having a key changed, is the next '
+      + 'tick\'s, a minute later. SKIP LOCKED does not cover a row\'s newer versions: PostgreSQL\'s FOR '
+      + 'KEY SHARE also locks those an UPDATE made without changing a key, and waits for one held FOR '
+      + 'UPDATE, being deleted or re-keyed by an open transaction. That wait comes before the statement '
+      + 'holds any job or has written any item ((24)), with only parents taken in this rank order held, '
+      + 'so it closes no cycle with a transaction that keeps the order. The tick also waits at the unique '
+      + 'index, for another tick\'s uncommitted insert of the same key, and every tick inserts in job id '
+      + 'order. What would break this is a lock the alarm waits for — a parent or a job taken '
+      + 'without SKIP LOCKED, a key on the item naming a row the CTE does not take, or a parent taken '
+      + 'after the first job — and (19) and (21) are the cycles such a wait closed. It takes no session '
+      + 'lock — the item\'s `session_id` is history, not a key — and the job gates that end such an item '
+      + 'write it inside their own rank-60 transactions.',
   },
   {
     rank: 70,
@@ -248,10 +259,18 @@ export const LOCK_ORDER_EXCEPTIONS = [
     where: 'project_event outbox inserts — project (40) after the task/session write (50/30)',
     why:
       'An outbox insert takes FOR KEY SHARE on the project through project_event_project_id_fkey, ' +
-      'and FOR KEY SHARE conflicts with exactly one mode: FOR UPDATE. The only holders of project ' +
-      'FOR UPDATE are ProjectAcceptanceService.lockProject(FOR UPDATE) and ProjectsService, and ' +
-      'neither waits on a task or session row while holding it (both only write project-scoped ' +
-      'child tables), so the inversion has no counterpart to close a cycle with.',
+      'and FOR KEY SHARE conflicts with exactly one mode: FOR UPDATE. The holders of project FOR ' +
+      'UPDATE are ProjectsService.remove (FOR UPDATE, then the DELETE), the coordinator pointer swap ' +
+      'in ProjectsService.coordinator and a coordinator session\'s delete (SessionsService.purge, ' +
+      'ReaperService.purgeTrash): `coordinator_session_id` is a key column, under ' +
+      'project_coordinator_session_id_key, so the swap\'s UPDATE of it and the ON DELETE SET NULL of ' +
+      'project_coordinator_session_id_fkey lock the row FOR UPDATE, while ' +
+      'ProjectAcceptanceService.lockProject takes FOR NO KEY UPDATE, which FOR KEY SHARE does not ' +
+      'conflict with. The swap takes both of its sessions before the project and no task or session ' +
+      'row it does not already hold after it, but the two deletes can reach task rows while they hold ' +
+      'the project, through ON DELETE SET NULL (the tasks discovered from a removed project, the tasks ' +
+      'a deleted session created), so that is not what keeps this inversion out of a cycle. It has no ' +
+      'taker: 0164 dropped project_event.',
   },
   {
     where: 'task_list_task_count_sync (0280) — task_list (20) after the task write (50)',

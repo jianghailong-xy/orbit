@@ -3,8 +3,6 @@ import { Prisma } from '@prisma/client';
 
 import { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
 
-import { orderedIds } from '../common/lock-order';
-import { loggedRetry, type TransactionRetryOptions, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../push/push.service';
 import { DEFAULT_CHECK_TIMEOUT_SECONDS, INTEGRATION_PROGRESS_V2_PROTOCOL } from './project-integration-job';
@@ -52,7 +50,7 @@ const LANDING_LEASE_GRACE_SECONDS = 15 * 60;
 const LEASE_SECONDS = INTEGRATION_CLAIM_STALE_MS / 1_000;
 
 /**
- * §7.2 V6's limit as SQL, over the aliases `openLeaseExpiredItems` joins: the job as `j`, its
+ * §7.2 V6's limit as SQL, over the aliases `leaseExpiredClaims` joins: the job as `j`, its
  * codebase as `cb`, the task of the session the job names as `acceptance_task`, and its candidate
  * as `p`. The same rule `integrationJobLimitSeconds` states in TypeScript (`checksFor` decides
  * which checks a job runs, and each one's budget is its timeout):
@@ -82,10 +80,10 @@ function leaseLimitSeconds(alias: string): Prisma.Sql {
 }
 
 /**
- * §4.6 X-E5's fact as SQL: the FROM and WHERE through which both of `openLeaseExpiredItems`'
- * statements find the claims that are due, over the aliases `leaseLimitSeconds` reads. One spelling,
- * so the claims the tick takes the parents of and the claims it then writes items for are chosen by
- * the same predicate.
+ * §4.6 X-E5's fact as SQL: the FROM and WHERE through which `openLeaseExpiredItems`' one statement
+ * finds the claims that are due, over the aliases `leaseLimitSeconds` reads. The statement spells it
+ * twice — in its `due` CTE, whose claims' parents it takes, and in the SELECT that writes the items,
+ * which re-checks each job on its newest version — so both are chosen by the same predicate.
  */
 function leaseExpiredClaims(): Prisma.Sql {
   return Prisma.sql`
@@ -316,10 +314,11 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
 
   onModuleInit(): void {
     this.timer = setInterval(() => {
-      // Three writes, each with its own failure: the backstop first, so what the sweep then
-      // hands over is only what somebody still owes (and a backstop that failed does not cost the
-      // sweep, which asks `openItemOwed` itself); then the sweep; then X-E5's lease alarm, which a
-      // sweep that threw must not skip — a silent runner's card is the only warning there is.
+      // Three writes, each one statement with its own failure: the backstop first, so what the
+      // sweep then hands over is only what somebody still owes (and a backstop that failed does
+      // not cost the sweep, which asks `openItemOwed` itself); then the sweep; then X-E5's lease
+      // alarm, which a sweep that threw must not skip — a silent runner's card is the only warning
+      // there is.
       void this.reconcile()
         .catch((e) => this.logger.error(`reconcile failed: ${(e as Error).message}`))
         .then(() => this.sweep())
@@ -383,68 +382,89 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
    * fifteen minutes. A job waiting its turn on its runner's local lock is not timed out, exactly as
    * `readInFlightJobs` decides it, so that queue is never mistaken for silence.
    *
-   * THE SHAPE. The write is one `INSERT … SELECT … ON CONFLICT DO NOTHING RETURNING`, like the sweep:
-   * a statement that is its own compare-and-set. The partial unique index over OPEN items is the
-   * conflict target, so two apiservers ticking at the same moment open each item once, a tick a
-   * minute for an hour opens nothing after the first, and the caller therefore pushes once. A key
-   * already written and since settled is left alone too: one claim is one card, ever (§4.2), and a
-   * takeover writes a new generation's key. The SELECT reads each candidate job FOR SHARE, so a report
-   * or a result committing between its snapshot and the insert is waited for and then seen: a claim
-   * that is talking again does not get a card about its silence.
+   * THE SHAPE. One `INSERT … SELECT … ON CONFLICT DO NOTHING RETURNING`, like the sweep: a statement
+   * that is its own compare-and-set. The partial unique index over OPEN items is the conflict
+   * target, so two apiservers ticking at the same moment open each item once, a tick a minute for an
+   * hour opens nothing after the first, and the caller therefore pushes once. A key already written
+   * and since settled is left alone too: one claim is one card, ever (§4.2), and a takeover writes a
+   * new generation's key. The SELECT locks each job it writes about, and READ COMMITTED locks a row's
+   * newest version and checks the WHERE again on it, so a report or a result that committed after
+   * the statement's snapshot is seen and its claim dropped: a claim that is talking again does not
+   * get a card about its silence (`landing-lease-expired.pg.spec.ts` (20)).
    *
-   * THE LOCK ORDER (`common/lock-order.ts`). The item's foreign keys take its project (rank 40) and
-   * its task (rank 50) FOR KEY SHARE, and inside the insert they take them last — at the end of the
-   * statement, after the job (rank 60) is already held FOR SHARE. That is the one order J-T8's stop
-   * meets head-on: `task_reopen` holds the task FOR UPDATE and then ends the same job, so each side
-   * waited for the other until PostgreSQL aborted one (`landing-lease-expired.pg.spec.ts` (19) forces
-   * both orders), and a project delete — the project FOR UPDATE, then the job through its cascade — is
-   * the same cycle one rank up ((21)). So the insert has a transaction of its own: it reads which
-   * claims are due without a lock, takes those claims' projects and then their tasks FOR KEY SHARE,
-   * each sorted in one statement — the mode the keys take anyway, moved ahead of the job, as I2 moves
-   * a creator session ahead of a task write — and only then inserts, reading the jobs FOR SHARE in id
-   * order and only the claims whose parents it holds; one that came due in between is the next
-   * tick's. The promotion the item names (rank 60) is left to its key: nothing holds a candidate FOR
-   * UPDATE but that same project delete's cascade, which holds the project first. Retried whole on a
-   * conflict, since every read is inside the closure and the insert is its own compare-and-set;
-   * `retry` is where a caller watches that.
+   * THE LOCK ORDER (`common/lock-order.ts`). The item's foreign keys check its project (rank 40),
+   * its task (50), its candidate and its job (60) FOR KEY SHARE at the end of the statement, and a
+   * key waits for a row it cannot lock. Left to the keys, the project and the task came after the
+   * job — the order J-T8's stop and a project delete met head-on: `task_reopen` holds the task FOR
+   * UPDATE and then ends the same job, a delete holds the project FOR UPDATE and then deletes the
+   * job through its cascade, and PostgreSQL aborted one side ((19), (21)). Taking them first in a
+   * transaction of the tick's own held the task for as long as the insert then waited on the job,
+   * and a task-side FOR UPDATE NOWAIT (a supersession, a MOVE_TASK approval) was refused against it
+   * ((23)). So the statement takes every one of those rows itself, before its keys do and SKIP
+   * LOCKED: the `held` CTE takes the due claims' projects, then their tasks, then their candidates
+   * FOR KEY SHARE — the mode the keys take, each set sorted by id, in a UNION ALL that PostgreSQL
+   * runs branch by branch — and the SELECT takes the jobs FOR SHARE, in id order, and writes only
+   * the claims whose every parent the CTE holds. A claim whose job another transaction is writing
+   * (a report, a chunk or a result in flight), or one of whose parents is held FOR UPDATE, being
+   * deleted or having a key changed, is left out: it is the next tick's, a minute later ((22)). The
+   * keys then find every row they check already held by this statement, and are granted it at
+   * once. No session row is locked: the item's `session_id` is a history column, not a key.
+   *
+   * WHAT IT CAN STILL WAIT FOR. SKIP LOCKED does not queue for a lock held on the row version it
+   * reads, and it does not cover that row's newer versions: PostgreSQL's FOR KEY SHARE, the
+   * parents' mode, also locks the versions an UPDATE made without changing a key, and waits for one
+   * held FOR UPDATE, being deleted or re-keyed by a transaction that is still open. The first of the
+   * three arrays the SELECT reads takes the whole `held` CTE, before any job row is locked or any
+   * item written, so that wait holds only parents taken in rank order and closes no cycle with a
+   * transaction that keeps the order ((24)). The unique index waits too, for another tick's
+   * uncommitted insert of the same key — and the ticks insert in job id order, so no two of them
+   * can each be waiting on a key the other has written.
    *
    * WHAT IT WRITES. The item and nothing else: `OWNER` / `ESCALATED` from birth, `escalated_at` at
    * the opening instant, and `escalate_at` / `remind_at` NULL (it is already the owner's, and there
    * is no second reminder). Its title is §4.2's, `No word from the runner: <task>` — with
    * `Merge check` / `Merge to main` for the promotion jobs — while "Now yours — no report from the
    * runner for <N>m" is the push's own heading (§4.6, revision 23). No delivery to a coordinator
-   * conversation (X-D7), no turn, session, wake or job write — the abandon door (J-T10) is the only
-   * thing that ends the job, and a person is the only one who presses it.
+   * conversation (X-D7), and no turn, session, wake or job write: the tick never ends, releases or
+   * abandons a job — a result, a stop, a retry door and the abandon doors (J-T10, the owner's and
+   * the coordinator's) do that, each in its own transaction.
    *
    * WHAT ENDS IT. Every edge in the transaction that moves the claim on (`resolveLeaseExpiredItems`):
    * a report, a release, a takeover's first report, any terminal state. A generation that changed
    * without one of those edges leaves an item `reconcile` closes as not owed.
    */
-  async openLeaseExpiredItems(
-    retry: TransactionRetryOptions = loggedRetry(this.logger, 'openItemEscalation.openLeaseExpiredItems'),
-  ): Promise<OpenedLeaseItem[]> {
-    const opened = await withTransactionRetry(this.prisma, async (tx) => {
-      // Which claims are due, read without a lock: what the parents below are taken for.
-      const due = await tx.$queryRaw<Array<{ jobId: string; projectId: string; taskId: string | null }>>(Prisma.sql`
-        SELECT j."id" AS "jobId", j."project_id" AS "projectId", live_task."id" AS "taskId"
-        ${leaseExpiredClaims()}`);
-      if (due.length === 0) return [];
-      // The parents the item's foreign keys take, in rank order and before the job: the projects
-      // (40), then the tasks that are still there (50), each sorted in one statement.
-      await tx.$queryRaw(Prisma.sql`
-        SELECT "id" FROM "project"
-         WHERE "id" = ANY(${orderedIds(due.map((claim) => claim.projectId))}::uuid[])
-         ORDER BY "id"
-           FOR KEY SHARE`);
-      const taskIds = orderedIds(due.map((claim) => claim.taskId));
-      if (taskIds.length > 0) {
-        await tx.$queryRaw(Prisma.sql`
-          SELECT "id" FROM "task"
-           WHERE "id" = ANY(${taskIds}::uuid[])
-           ORDER BY "id"
-             FOR KEY SHARE`);
-      }
-      return tx.$queryRaw<OpenedLeaseItem[]>(Prisma.sql`
+  async openLeaseExpiredItems(): Promise<OpenedLeaseItem[]> {
+    const opened = await this.prisma.$queryRaw<OpenedLeaseItem[]>(Prisma.sql`
+      WITH due AS MATERIALIZED (
+        -- The claims that are due, read without a lock: what the parents below are taken for.
+        SELECT j."id" AS "jobId", j."project_id" AS "projectId", live_task."id" AS "taskId",
+               j."promotion_id" AS "promotionId"
+        ${leaseExpiredClaims()}),
+      -- The rows the item's foreign keys check, taken before the keys check them and in rank order:
+      -- the projects (40), then the tasks that are still there (50), then the candidates (60), each
+      -- set sorted by id, FOR KEY SHARE (the keys' own mode) and SKIP LOCKED, which leaves a row out
+      -- instead of waiting when another transaction holds it FOR UPDATE, is deleting it or is
+      -- changing its key (what PostgreSQL still waits for is under WHAT IT CAN STILL WAIT FOR above).
+      -- PostgreSQL runs the branches of a UNION ALL in the order they are written, and
+      -- MATERIALIZED keeps the CTE a scan of its own rather than folded into a reader.
+      held AS MATERIALIZED (
+        SELECT 'project' AS "parent", held_project."id"
+          FROM (SELECT pr."id" FROM "project" pr
+                 WHERE pr."id" IN (SELECT "projectId" FROM due)
+                 ORDER BY pr."id"
+                   FOR KEY SHARE SKIP LOCKED) held_project
+        UNION ALL
+        SELECT 'task', held_task."id"
+          FROM (SELECT t."id" FROM "task" t
+                 WHERE t."id" IN (SELECT "taskId" FROM due)
+                 ORDER BY t."id"
+                   FOR KEY SHARE SKIP LOCKED) held_task
+        UNION ALL
+        SELECT 'promotion', held_promotion."id"
+          FROM (SELECT c."id" FROM "project_promotion" c
+                 WHERE c."id" IN (SELECT "promotionId" FROM due)
+                 ORDER BY c."id"
+                   FOR KEY SHARE SKIP LOCKED) held_promotion)
       INSERT INTO "project_open_item" (
         "id", "project_id", "owner_id", "kind", "assignee", "assignee_reason",
         "task_id", "session_id", "integration_job_id", "promotion_id",
@@ -490,17 +510,24 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
                'landingSessionId', landing."session_id"::text),
              now(), now(), now(), NULL, NULL
         ${leaseExpiredClaims()}
-         -- Only the claims whose parents this transaction holds.
-         AND j."id" = ANY(${due.map((claim) => claim.jobId)}::uuid[])
-      -- A report or a result that commits between this statement's snapshot and its insert must not
-      -- leave a card about a claim that is talking again: the job row is read FOR SHARE, which waits
-      -- for the report transaction (it holds the row FOR NO KEY UPDATE), and under READ COMMITTED
-      -- the re-check sees the renewed heartbeat and drops the row. In id order, like the parents.
+         -- Only the claims whose every parent the CTE holds. A job's project is never NULL, so no
+         -- row reaches the lock below before the first of these arrays is read, and each of them
+         -- reads the whole CTE: every parent is held before the first job is.
+         AND j."project_id" = ANY(ARRAY(SELECT "id" FROM held WHERE "parent" = 'project'))
+         AND (live_task."id" IS NULL
+              OR live_task."id" = ANY(ARRAY(SELECT "id" FROM held WHERE "parent" = 'task')))
+         AND (j."promotion_id" IS NULL
+              OR j."promotion_id" = ANY(ARRAY(SELECT "id" FROM held WHERE "parent" = 'promotion')))
+      -- The job FOR SHARE SKIP LOCKED: a transaction writing it (a report, a chunk or a result in
+      -- flight) holds it in a mode FOR SHARE conflicts with, and that claim is the next tick's
+      -- rather than a wait. A report that committed after this statement's snapshot is not missed:
+      -- READ COMMITTED locks the job's newest version and checks the WHERE again on it, which sees
+      -- the renewed heartbeat and drops the row. In id order, so every tick inserts its keys in the
+      -- same order.
       ORDER BY j."id"
-      FOR SHARE OF j
+      FOR SHARE OF j SKIP LOCKED
       ON CONFLICT ("project_id", "dedupe_key") WHERE "state" = 'OPEN' DO NOTHING
       RETURNING "id" AS "itemId", "project_id" AS "projectId", "owner_id" AS "ownerId"`);
-    }, retry);
     for (const item of opened) {
       this.logger.warn(`opened ${LANDING_LEASE_EXPIRED_KIND} ${item.itemId} of project `
         + `${item.projectId}: the runner stopped reporting`);
