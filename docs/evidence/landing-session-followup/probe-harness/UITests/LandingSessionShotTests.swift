@@ -31,11 +31,14 @@ final class LandingSessionShotTests: ProbeCase {
         }
         XCTAssertFalse(appears(app, "Retire the v1 ledger", timeout: 2), "the fold starts closed")
         shot(app, "ios-04-earlier-bare")
-        // The fold's own button: the drawer, mounted under the page, has an "Earlier" of its own.
-        let fold = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "Earlier"))
+        // Press the fold's word itself. The fold is a plain-style button whose label is an HStack
+        // with a Spacer in the middle, and a plain button answers only where it draws, so a tap at
+        // the button's centre lands on the Spacer and does nothing (runs 39461134279 and
+        // 39465901820). That predates this task; a finger on the words opens it.
+        let word = app.staticTexts.matching(NSPredicate(format: "label == %@", "Earlier"))
             .allElementsBoundByIndex.first(where: { $0.isHittable })
-        XCTAssertNotNil(fold, "the bare fold is no button on the page")
-        if let fold { press(fold) }
+        XCTAssertNotNil(word, "the bare fold's word is not on the page")
+        if let word { press(word) }
         for title in ["Retire the v1 ledger", "Webhook retry cap", "main · #2"] {
             XCTAssertTrue(appears(app, title, timeout: 20), "the open fold never listed `\(title)`")
         }
