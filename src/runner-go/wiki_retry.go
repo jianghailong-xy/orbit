@@ -30,19 +30,17 @@ import (
 // every other 4xx among them, goes back to the caller as it came.
 //
 // AND ONLY WHAT MAY LAND TWICE. Every read is sent again, and a write only when the server records it at most
-// once however many times it lands: a proposal or a plan draft under an idempotency key, or a dry run
-// (wikiRecordsOnce), a run's report of success (wikiReportsSuccess), and the writes whose routes say why they
-// may. A failed or truncated run's report counts one more failure each time it lands, so it is sent once.
+// once however many times it lands: a proposal under an idempotency key, or a dry run (wikiRecordsOnce), and
+// the writes whose routes say why they may.
 //
 // HOW LONG. From about 2 seconds, doubling, each wait jittered and none longer than 30 seconds, until the call
 // has gone on for 5 minutes — a deploy's switch is some 20 seconds of 502s. Each send waits for its answer as
-// long as its call's timeout says — 20 seconds for the door's light calls; 2 minutes for its heavy ones (a
-// dossier page, an article's input or write, an anchor report), which is past the 100 seconds the edge waits
-// for the server before it answers 524 itself — and never past the budget's end, and a retry is sent only
-// while the budget has time left after its wait: the whole call is over within the 5 minutes. A send that
-// failed on its way is sent again on a new connection (wiki_conn.go). Then the last failure goes back to the
-// caller exactly as the transport returned it, so what a caller did with a failure before, it still does.
-// Each wait is one line on stderr: stdout is `orbit mcp`'s protocol and `--json`'s document.
+// long as its call's timeout says — 20 seconds for each of the door's calls — and never past the budget's end,
+// and a retry is sent only while the budget has time left after its wait: the whole call is over within the
+// 5 minutes. A send that failed on its way is sent again on a new connection (wiki_conn.go). Then the last
+// failure goes back to the caller exactly as the transport returned it, so what a caller did with a failure
+// before, it still does. Each wait is one line on stderr: stdout is `orbit mcp`'s protocol and `--json`'s
+// document.
 
 // wikiRetryPolicy is the backoff a wiki call waits by. wikiRetry is the one every call uses; a test gives it
 // a clock of its own.
@@ -191,24 +189,10 @@ func wikiRetryAfter(value string, now time.Time) (time.Duration, bool) {
 
 // wikiRecordsOnce reports a proposal the server records at most once however many times it lands: one under
 // an idempotency key, which a second landing is answered from (UNIQUE (owner_id, idempotency_key), and
-// submitChangeset's replay), or a dry run, which records nothing. A plan draft under a key is one too: the
-// server answers its second landing with the version the first stored (contract `plan.idempotency`).
+// submitChangeset's replay), or a dry run, which records nothing.
 func wikiRecordsOnce(body interface{}) bool {
-	if draft, ok := body.(wikiPlanDraftRequest); ok {
-		return strings.TrimSpace(draft.IdempotencyKey) != ""
-	}
 	fields, _ := body.(map[string]interface{})
 	key, _ := fields["idempotencyKey"].(string)
 	dryRun, _ := fields["dryRun"].(bool)
 	return strings.TrimSpace(key) != "" || dryRun
-}
-
-// wikiReportsSuccess reports a run's report of success, which may land any number of times: a cursor that
-// stands at its token already moves nothing, and the run's row says succeeded again. A failed or truncated
-// run's report counts one more consecutive failure each time it lands — and the third tells the owner — so
-// it is sent once.
-func wikiReportsSuccess(body interface{}) bool {
-	fields, _ := body.(map[string]interface{})
-	outcome, _ := fields["outcome"].(string)
-	return outcome == "" || outcome == "succeeded"
 }

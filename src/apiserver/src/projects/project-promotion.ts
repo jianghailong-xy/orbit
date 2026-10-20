@@ -232,6 +232,22 @@ export function automaticAuthorizationRefusal(
 export const AUTOMATIC_MERGE_ATTEMPTS = 3;
 
 /**
+ * How many generations of one owner-confirmed candidate may end on a refused push before it is
+ * BLOCKED instead of re-queued (J-T13, owner decision 2026-10-19, option B). One refused push ends
+ * that landing only: the candidate keeps the owner's confirmation, and the next generation —
+ * the same frozen source — re-checks and merges on the new main (M5). Three in a row says the main
+ * is moving faster than a check keeps up with, and the coordinator stops it.
+ *
+ * Counted the way `AUTOMATIC_MERGE_ATTEMPTS` is: the landings of THIS confirmation (claimed at or
+ * after `confirmed_at`, so a candidate confirmed again after a block starts over) that ended
+ * `ERROR / TARGET_MOVED`. The claim is the boundary rather than the row's `created_at` because that
+ * column is the database's transaction start, which is earlier than the instant the app writes
+ * `confirmed_at` in the transaction that creates the first landing. The one being applied is
+ * counted by hand, because its row is not terminal yet when this decision is made.
+ */
+export const PROMOTION_LAND_ATTEMPTS = 3;
+
+/**
  * What a candidate still being checked will lead to when the check passes (§3.6 `onPass`): merged
  * into main by the Automatic setting (M-T11), or put in front of the owner as the card (M-T2) — said
  * while the check runs, so the checking card can tell the owner which of the two to expect.
@@ -363,7 +379,14 @@ export interface PromotionFacts {
   upstreamSyncedAt: Date | null;
   /** The re-check in flight (state B), or null when none is. */
   recheck: { upstreamMovedBy: number | null; startedAt: Date; typicalMs: number | null } | null;
+  /** The landing session of this round (§2.9 LS1), on the states the check line and the receipt
+   *  open it from; null on every other state and when the round recorded none. */
+  landingSessionId?: string | null;
   execution?: ProjectPromotionView['execution'];
+  /** The landing has been asked to stop and has not ended (M-T10): the card draws "cancelling". */
+  cancelRequested?: boolean;
+  /** That landing's current claim is past the push boundary (J-T4): Cancel is no longer accepted. */
+  pushBoundaryPassed?: boolean;
   /** What the check in flight leads to (`promotionOnPass`), or null when none is. */
   onPass?: ProjectPromotionView['onPass'];
 }
@@ -392,8 +415,11 @@ export function promotionView(row: PromotionRow, facts: PromotionFacts): Project
     askedAt: row.state === 'CHECKING' ? null : row.updatedAt,
     recheckedAt: row.recheckedAt,
     recheck: facts.recheck,
+    landingSessionId: facts.landingSessionId ?? null,
     onPass: facts.onPass ?? null,
     execution: facts.execution ?? null,
+    cancelRequested: facts.cancelRequested ?? false,
+    pushBoundaryPassed: facts.pushBoundaryPassed ?? false,
     decidedAt: row.decidedAt,
     merged: row.mergedSha && row.mergedAt
       ? {

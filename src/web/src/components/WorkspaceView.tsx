@@ -145,9 +145,13 @@ import {
   type SessionFolderRow,
 } from '../lib/sessionFolders';
 import {
+  SESSION_LANDINGS_COPY,
   SESSION_PROJECT_COPY,
+  landingGroup,
+  landingItemReason,
   listShowsProjects,
   sessionProjectListing,
+  sourceLandingLabel,
   type SessionProjectRow,
   type SessionProjectEntry,
 } from '../lib/sessionProjects';
@@ -161,6 +165,7 @@ import {
 import {
   type ConfiguredProvider,
   clampPermissionModeForModel,
+  fallbackPermissionMode,
   permissionModeSupported,
   contextWindowFor,
   DEFAULT_MODEL,
@@ -195,7 +200,20 @@ import {
   type ComposerSlashItem,
   type LocalStatusRow,
 } from '../lib/slashCommands';
-import { sessionPlanUsage } from '../lib/planUsage';
+import { accountIsPaused } from '../lib/accountPause';
+import { cursorUsageLimit, sessionPlanUsage } from '../lib/planUsage';
+import {
+  CURSOR_AUTO_NOTE,
+  CURSOR_CONTEXT_UNAVAILABLE,
+  CURSOR_MOVE_BLOCKED_NOTE,
+  CURSOR_QUEUE_NOTE,
+  CURSOR_RUNNING_PLACEHOLDER,
+  cursorChipSettings,
+  cursorConversationStarted,
+  cursorModelPick,
+  cursorSettingRows,
+  type CursorRunnerFacts,
+} from '../lib/cursorRuntime';
 import { PROVIDER_GLYPHS } from '../lib/providerGlyphs';
 import { accountNameOf, accountPlanUsage, ANTIGRAVITY_ACCOUNT_LOGIN_CAPABILITY } from '../lib/engineAccounts';
 import { poolAccountHelp, poolsAsProviders, providerPoolsQuery, sessionPoolAccount } from '../lib/providerPools';
@@ -302,7 +320,7 @@ import {
   type NeverStartedSession,
 } from './RunNeverStartedCard';
 import { approvalRememberOffered, DSH_RUNNER_CAPABILITY, dshRepair } from '../lib/dshRuntime';
-import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, SteerWithdrawCtx, type SteerWithdrawHandle, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnAttachmentRef, type TurnImage, UndeliveredCtx, type UnreadSteer, unreadSteersOf } from './Transcript';
+import { AntigravityRepairCard, antigravityRepair, AttachmentImage, AuthErrorCtx, type AuthErrorHelp, AutoRetryCtx, type AutoRetryHelp, type CursorQuotaHelp, EventFullCtx, LiveToolOutputsCtx, QueuedUserTurn, SessionNavCtx, SteerWithdrawCtx, type SteerWithdrawHandle, StreamingDraftsCtx, TaskActivityCtx, type TaskActivity, Transcript, type TurnAttachmentRef, type TurnImage, UndeliveredCtx, type UnreadSteer, unreadSteersOf } from './Transcript';
 import { PendingTray, type PendingTrayRow } from './PendingTray';
 import { PROVIDERS_BASE, PROVIDERS_LIST_KEY, type ProviderRow } from '../lib/providerAdmin';
 import { ApprovalPanel, DECLINE_PLACEHOLDER, decliningPrefix } from './ApprovalPanel';
@@ -341,8 +359,12 @@ import {
 } from './ProjectPromotionCard';
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
-import { landingCard } from './ProjectPanoramaHeader';
+import { isLandingSessionDetail } from '../lib/landingSession';
+import { Glyph, landingCard } from './ProjectPanoramaHeader';
 import { LandingJobsSheet } from './LandingJobsSheet';
+import { LandingLink } from './LandingLink';
+import { SessionProjectLandings } from './SessionProjectLandings';
+import { LandingSessionView } from './LandingSessionView';
 import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectStartDialog } from './StartProjectCard';
 import {
@@ -424,6 +446,7 @@ import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
 import type {
+  SessionSourceLanding,
   SessionTurnIntent,
   SessionTurnPlacement,
   WatchView,
@@ -435,6 +458,7 @@ import {
   CONTINUE_MESSAGE,
   ENGINE_CLI_NAMES,
   derivePermissionSemantics,
+  encodeCursorModel,
   fastModeAvailable,
   isAccountEngine,
   MAX_PROMPT_CHARS,
@@ -748,8 +772,9 @@ function lastContextReading(events: RunEvent[]): { tokens: number; window?: numb
 
 // Donut gauge for the context pill — a distinct silhouette from the linear plan-usage bar so the
 // session-local context metric doesn't read as "another usage bar". Brand blue until it
-// fills, then ramps amber (≥75%) → red (≥90%) as the window fills.
-function ContextRing({ pct, tier }: { pct: number; tier: 'neutral' | 'warn' | 'danger' }) {
+// fills, then ramps amber (≥75%) → red (≥90%) as the window fills. Dashed and empty for an engine
+// that never reports one (`unavailable`), apart from the solid empty ring of a reading still to come.
+function ContextRing({ pct, tier, unavailable }: { pct: number; tier: 'neutral' | 'warn' | 'danger'; unavailable?: boolean }) {
   const r = 5.5;
   const circ = 2 * Math.PI * r;
   const frac = Math.min(100, Math.max(0, pct)) / 100;
@@ -761,19 +786,29 @@ function ContextRing({ pct, tier }: { pct: number; tier: 'neutral' | 'warn' | 'd
       viewBox="0 0 14 14"
       aria-hidden="true"
     >
-      <circle className="context-ring-track" cx="7" cy="7" r={r} fill="none" strokeWidth="2.5" />
       <circle
-        className="context-ring-fill"
+        className="context-ring-track"
         cx="7"
         cy="7"
         r={r}
         fill="none"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeDasharray={circ}
-        strokeDashoffset={circ * (1 - frac)}
-        transform="rotate(-90 7 7)"
+        strokeWidth={unavailable ? 1.5 : 2.5}
+        strokeDasharray={unavailable ? '2.2 2.2' : undefined}
       />
+      {!unavailable && (
+        <circle
+          className="context-ring-fill"
+          cx="7"
+          cy="7"
+          r={r}
+          fill="none"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeDasharray={circ}
+          strokeDashoffset={circ * (1 - frac)}
+          transform="rotate(-90 7 7)"
+        />
+      )}
     </svg>
   );
 }
@@ -788,6 +823,7 @@ function ContextWindowIndicator({
   provider,
   modelCatalog,
   configured,
+  unavailable,
 }: {
   tokens: number;
   /** The window this session reported alongside its tokens, when it did. */
@@ -796,7 +832,37 @@ function ContextWindowIndicator({
   provider?: string;
   modelCatalog?: Runner['modelCatalog'];
   configured?: ConfiguredProvider[];
+  /** Why there will never be a reading: an engine that does not report context use (Cursor CLI over
+   *  ACP, docs/cursor-runtime-contract.md §4.1), in a sentence. Never a 0% or a token count then. */
+  unavailable?: string;
 }) {
+  if (unavailable) {
+    return (
+      <Popover
+        title="Context"
+        side="top"
+        align="end"
+        openOnHover
+        nativeButton={false}
+        trigger={
+          <span className="composer-pill composer-usage" aria-label="Context window unavailable">
+            <ContextRing pct={0} tier="neutral" unavailable />
+            <span className="composer-usage-pct">—</span>
+          </span>
+        }
+      >
+        <div className="cu-pop">
+          <div className="cu-row">
+            <div className="cu-head">
+              <span className="cu-label">Context window</span>
+              <span className="cu-pct">Unavailable</span>
+            </div>
+            <div className="cu-reset">{unavailable}</div>
+          </div>
+        </div>
+      </Popover>
+    );
+  }
   const windowTokens = reportedWindow ?? contextWindowFor(model, modelCatalog, configured, provider);
   // Two things can be missing, and they are not the same thing. Occupancy is missing until the
   // engine reports it — a fresh session, or a first turn still running; "0%" would claim the
@@ -2027,10 +2093,14 @@ const lastSessionByWorkspace = new Map<string, string>();
 export function WorkspaceView({
   runner,
   managed = null,
+  fleet = null,
 }: {
   runner: Runner;
   /** The managed runner, when this console's runner is it (WorkspaceConsole decides). */
   managed?: ManagedRunner | null;
+  /** Every runner of the account, which decides whether the New Session hero offers Cursor CLI at all
+   *  (webShowsEngine); this console's runner alone without them. */
+  fleet?: readonly CursorRunnerFacts[] | null;
 }) {
   // The confirmations this view asks, drawn by the holder at the foot of the view.
   const [confirm, confirmation] = useConfirm();
@@ -2943,6 +3013,9 @@ export function WorkspaceView({
     // or "commit" is pending, for the runner's outcome (≤1 heartbeat away) to land. Idle else.
     refetchInterval: (q) => {
       const detail = q.state.data;
+      // A landing session polls on its own cadence (§2.7a: RUNNING 4 s, QUEUED 15 s, nothing once
+      // settled), which `LandingSessionView` owns. The conversation's 5 s sweep is not it.
+      if (detail?.id === selectedId && detail.sessionKind === 'LANDING') return false;
       if (
         detail?.id === selectedId &&
         (detail.mergeStatus === 'pending' || detail.commitStatus === 'pending')
@@ -2957,6 +3030,15 @@ export function WorkspaceView({
     },
   });
   const detailForSelected = sessionDetailQ.data?.id === selectedId ? sessionDetailQ.data : null;
+  // The renderer is chosen by the DETAIL's answer, never by `kind` on a list row: a session row is
+  // `kind: 'session'` there, and a landing's own flag is `sessionKind` (§2.9 LS6). A landing whose
+  // row has not been inserted yet answers the same way through its pre-generated id (LS1), so the
+  // page draws in both cases.
+  const landingDetail = isLandingSessionDetail(detailForSelected) ? detailForSelected : null;
+  // A landing is platform work with no transcript: it opens no event stream and reads no event
+  // page (contract §2.9 LS1/LS6). The boolean, not the detail object, is what the stream effect
+  // depends on — the detail is re-read on the page's own cadence, and the stream must not.
+  const landingSession = landingDetail != null;
   const selectedFromDetail = useMemo(() => {
     const d = detailForSelected as any;
     // A freshly-created session primes only id/runner/workspace into this cache; keep the
@@ -3216,13 +3298,15 @@ export function WorkspaceView({
     sessions: visibleSessions, view: effectiveView, enabled: projectsShown && !openProjectId,
     controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
   });
+  // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
+  // read ever sees one (§2.9 LS6).
   const projectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open' }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open', includeLanding: !!openProjectId }),
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
   const completedProjectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed' }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed', includeLanding: !!openProjectId }),
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
@@ -3234,10 +3318,21 @@ export function WorkspaceView({
     refetchInterval: 60_000,
   });
   const pageMerges = useMemo(() => (Array.isArray(pageMergesQ.data) ? pageMergesQ.data : []), [pageMergesQ.data]);
-  const projectMembers = useMemo(() => [...new Map(
+  const allProjectMembers = useMemo(() => [...new Map(
     [...(projectSessionsQ.data ?? []), ...(completedProjectSessionsQ.data ?? [])].map((s) => [s.id, s]),
   ).values()].sort((a, b) => (Date.parse(b.lastTurnAt ?? b.createdAt ?? '') || 0) -
     (Date.parse(a.lastTurnAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
+  // A project's LANDING sessions are its subject's, not conversations: they are counted nowhere on
+  // this page — not in "Project · N sessions", not in the running count, not among the status dots,
+  // not in the timeline — and are drawn once, in the Landings group below the coordinator.
+  const projectMembers = useMemo(
+    () => allProjectMembers.filter((s) => s.sessionKind !== 'LANDING'),
+    [allProjectMembers],
+  );
+  const landingMembers = useMemo(
+    () => allProjectMembers.filter((s) => s.sessionKind === 'LANDING'),
+    [allProjectMembers],
+  );
   const pageCoordinator = projectMembers.find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null;
   const pageMenuCoordinator = pageCoordinator;
   const pageProject = projectsQ.data?.find((p) => p.id === openProjectId);
@@ -3281,6 +3376,34 @@ export function WorkspaceView({
   const pageStart = pageNotStarted
     ? startPageRow(pageStarted, pageOpenItemsQ.isError ? undefined : pageOpenItemsQ.data)
     : null;
+  // Who is holding each landing that waits (§4.7): the group's rows say the outcome and the holder,
+  // and both are the open items' facts about the same subject — `landingSessionId` is the join.
+  const pageLandingItemsQ = useQuery({
+    ...projectOpenItemsQuery(openProjectId ?? ''),
+    // Only a landing that WAITS needs a holder named, so a project with none pays for no read — and
+    // the page shares this key with the start row's own read, so it is one request either way.
+    enabled: !!openProjectId && landingMembers.some((s) => s.landing?.state === 'AWAITING_DECISION'),
+    refetchInterval: controlLive ? 20_000 : 4000,
+  });
+  const landingHolders = useMemo(() => {
+    const holders = new Map<string, { reason: string | null; assignee: 'OWNER' | 'COORDINATOR' | null }>();
+    const items = pageLandingItemsQ.data;
+    for (const row of [...(items?.needsYou ?? []), ...(items?.withCoordinator ?? [])]) {
+      if (!row.landingSessionId || holders.has(row.landingSessionId)) continue;
+      holders.set(row.landingSessionId, {
+        reason: landingItemReason(row.kind),
+        assignee: row.assignee === 'OWNER' ? 'OWNER' : row.assignee === 'COORDINATOR' ? 'COORDINATOR' : null,
+      });
+    }
+    return holders;
+  }, [pageLandingItemsQ.data]);
+  // The group: waiting first, then the last day's, then one folded line (§2.9 LS6, board v4 04).
+  const landingGroupView = useMemo(
+    () => (openProjectId && landingMembers.length > 0
+      ? landingGroup(landingMembers, { holders: landingHolders })
+      : null),
+    [openProjectId, landingMembers, landingHolders],
+  );
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
   // shows folders at all.
@@ -3399,34 +3522,41 @@ export function WorkspaceView({
   // On a project's page the merges into main it has made sit among its sessions at their own
   // instant (`projectTimelineSections`): rows of their own kind, never sessions.
   const sections = useMemo<Array<{ key: string; title: string; tag: SessionTagRef | null; sessions: Array<SessionProjectEntry<SessionListItem> | ProjectPageMerge> }>>(
-    () =>
-      openProjectId
-        ? [
-            ...(pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
-              sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : []),
-            ...projectTimelineSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), pageMerges)
-              .map((s) => ({ key: s.title, title: s.title, tag: null, sessions: s.items.map((item) =>
-                item.kind === 'merge'
-                  ? { kind: 'merge' as const, id: item.id, promotion: item.promotion }
-                  : { ...item.session, kind: 'session' as const }) })),
-          ]
-        : groupByTag
-        ? sessionTagSections(folderListing.entries).map((s) => ({
-            key: s.tag?.id ?? '__untagged__',
-            tag: s.tag,
-            title: s.tag?.name ?? 'Untagged',
-            sessions: s.sessions,
-          }))
-        : sessionTimeSections(folderListing.entries, {
-            pinnedFirst: view === 'open' && !tagFilter,
-          }).map((s) => ({
-            key: s.title,
-            tag: null as SessionTagRef | null,
-            ...s,
-            // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
-            sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
-          })),
-    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers, pageMerges],
+    () => {
+      if (!openProjectId) {
+        return groupByTag
+          ? sessionTagSections(folderListing.entries).map((s) => ({
+              key: s.tag?.id ?? '__untagged__',
+              tag: s.tag,
+              title: s.tag?.name ?? 'Untagged',
+              sessions: s.sessions,
+            }))
+          : sessionTimeSections(folderListing.entries, {
+              pinnedFirst: view === 'open' && !tagFilter,
+            }).map((s) => ({
+              key: s.title,
+              tag: null as SessionTagRef | null,
+              ...s,
+              // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
+              sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
+            }));
+      }
+      const coordinator = pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
+        sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : [];
+      const timeline = projectTimelineSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), pageMerges)
+        .map((s) => ({ key: s.title, title: s.title, tag: null, sessions: s.items.map((item) =>
+          item.kind === 'merge'
+            ? { kind: 'merge' as const, id: item.id, promotion: item.promotion }
+            : { ...item.session, kind: 'session' as const }) }));
+      // The Landings group sits below the coordinator and above the timeline, and only when it has
+      // something to list; its rows never enter `sessions`, so no count or arrow key sees one.
+      const landings = landingGroupView
+        ? [{ key: 'Landings', title: SESSION_LANDINGS_COPY.TITLE, tag: null,
+            sessions: [] as Array<SessionProjectEntry<SessionListItem> | ProjectPageMerge> }]
+        : [];
+      return [...coordinator, ...landings, ...timeline];
+    },
+    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers, pageMerges, landingGroupView],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
@@ -3613,6 +3743,7 @@ export function WorkspaceView({
   const draftClaudeAccount = draftPickHere?.engine === 'claude' ? draftPickHere.account : null;
   const draftAntigravityAccount = draftPickHere?.engine === 'antigravity' ? draftPickHere.account : null;
   const draftKimiAccount = draftPickHere?.engine === 'kimi' ? draftPickHere.account : null;
+  const draftCursorAccount = draftPickHere?.engine === 'cursor' ? draftPickHere.account : null;
   /** The draft's pick for one engine's account. */
   const draftAccountOf = (engine: AccountEngine): string | null =>
     draftPickHere?.engine === engine ? draftPickHere.account : null;
@@ -3795,8 +3926,9 @@ export function WorkspaceView({
       antigravity: runner.antigravity,
       antigravityKeyAvailable,
       dshRunner: runner,
+      fleet,
     }),
-    [configuredProviders, runner, accountPools, antigravityKeyAvailable],
+    [configuredProviders, runner, accountPools, antigravityKeyAvailable, fleet],
   );
   // The New Session hero's engines, each landing on the draft's pick when it is that engine's, else on
   // what this workspace last ran there. The current one is the pick's own engine on the pick's own
@@ -3952,7 +4084,8 @@ export function WorkspaceView({
       ((mode === 'Auto' && !supportsAuto(model, shownEngine, shownProvider, configuredProviders, runner.modelCatalog)) ||
         !permissionModeSupported(MODE_TO_PERMISSION[mode], shownEngine))
     ) {
-      setMode('Default');
+      // Default, except where the engine has none: Cursor CLI starts in Accept Edits (D6).
+      setMode(PERMISSION_TO_MODE[fallbackPermissionMode(shownEngine)] ?? 'Default');
     }
   }, [
     configuredProviders,
@@ -4274,7 +4407,7 @@ export function WorkspaceView({
     pendingRecordRef.current = null;
     setDetached(false);
     setLoadingNewer(false);
-    if (!selectedId) {
+    if (!selectedId || landingSession) {
       accRef.current = [];
       setEvents([]);
       seen.current = new Set();
@@ -4952,7 +5085,7 @@ export function WorkspaceView({
       clearTimeout(start);
       stop();
     };
-  }, [selectedId]);
+  }, [selectedId, landingSession]);
 
   // A link to a record of the session already open — a footnote, a link in a message, back and
   // forward through them. The session effect above followed the record the session opened with.
@@ -6102,6 +6235,7 @@ export function WorkspaceView({
           ? { antigravityAccount: draftAntigravityAccount }
           : {}),
         ...(draftKimiAccount && pickedProvider === 'kimi' ? { kimiAccount: draftKimiAccount } : {}),
+        ...(draftCursorAccount && pickedProvider === 'cursor' ? { cursorAccount: draftCursorAccount } : {}),
         attachmentIds,
         // A `!cmd` draft seeds the session's first turn as a shell command, not a message.
         shell,
@@ -7883,6 +8017,10 @@ export function WorkspaceView({
   // only thing that can be inheriting here is nothing.
   const effectiveFastMode: boolean = selected?.fastMode === true;
   const shownModel: string = live ? effectiveModel : model;
+  // A Cursor CLI model value names the model's context and fast lane beside it (shared cursorModels.ts):
+  // the model rows check the model, and its Context and Speed rows read the rest.
+  const shownCursorPick = shownEngine === AgentProvider.CURSOR ? cursorModelPick(shownModel, runner.modelCatalog) : null;
+  const shownModelName = shownCursorPick?.model ?? shownModel;
   // The models of the pair the composer is on: a key brings its own table to every engine that runs
   // it, OpenCode included, and DeepSeek Harness lists its runner's catalogue.
   const catalogModelOptions = shownProviderCapabilitiesResolved
@@ -7891,13 +8029,13 @@ export function WorkspaceView({
   // Runtime configuration can name a valid model that is not in the reported catalog yet. Keep
   // that effective default/selectable session value visible in the picker instead of rendering a
   // value the user cannot return to after trying another model.
-  const shownModelOptions = catalogModelOptions.some((option) => option.value === shownModel)
+  const shownModelOptions = catalogModelOptions.some((option) => option.value === shownModelName)
     ? catalogModelOptions
     : [
         {
-          value: shownModel,
+          value: shownModelName,
           label:
-            !shownProviderCapabilitiesResolved && !selected ? 'Runtime default' : shownModel,
+            !shownProviderCapabilitiesResolved && !selected ? 'Runtime default' : shownModelName,
         },
         ...catalogModelOptions,
       ];
@@ -7953,6 +8091,7 @@ export function WorkspaceView({
   const claudeAutoOffered = automaticOfferedOn('claude', pickedWorkspace);
   const antigravityAutoOffered = automaticOfferedOn('antigravity', pickedWorkspace);
   const kimiAutoOffered = automaticOfferedOn('kimi', pickedWorkspace);
+  const cursorAutoOffered = automaticOfferedOn('cursor', pickedWorkspace);
   const codexAutoAccount = codexAutoOffered ? accountToStartOn('codex', codexAccountsHere, runner.planUsage, new Date()) : null;
   const claudeAutoAccount = claudeAutoOffered
     ? accountToStartOn('claude', accountsOf(runner, 'claude'), runner.planUsage, new Date())
@@ -7962,6 +8101,9 @@ export function WorkspaceView({
     : null;
   const kimiAutoAccount = kimiAutoOffered
     ? accountToStartOn('kimi', accountsOf(runner, 'kimi'), runnerUsage, new Date())
+    : null;
+  const cursorAutoAccount = cursorAutoOffered
+    ? accountToStartOn('cursor', accountsOf(runner, 'cursor'), runnerUsage, new Date())
     : null;
   // Where an ended session's held switch onto `engine` resumes, as the server decides it
   // (accountOnProviderSwitch): the account it names; else, unless the session is pinned there,
@@ -8008,6 +8150,14 @@ export function WorkspaceView({
         : (detailForSelected?.kimiAccount ?? detailForSelected?.workspace?.kimiAccount)
       : (draftKimiAccount ?? pickedWorkspace?.kimiAccount ?? kimiAutoAccount),
   );
+  const shownCursorAccount = accountOnThisRunner(
+    'cursor',
+    selectedId
+      ? pendingResumeProvider === 'cursor'
+        ? pendingEngineAccount('cursor')
+        : (detailForSelected?.cursorAccount ?? detailForSelected?.workspace?.cursorAccount)
+      : (draftCursorAccount ?? pickedWorkspace?.cursorAccount ?? cursorAutoAccount),
+  );
   const shownAccount =
     shownProvider === 'codex'
       ? shownCodexAccount
@@ -8017,7 +8167,9 @@ export function WorkspaceView({
           ? shownAntigravityAccount
           : shownProvider === 'kimi'
             ? shownKimiAccount
-            : 'default';
+            : shownProvider === 'cursor'
+              ? shownCursorAccount
+              : 'default';
   // The engine whose account the composer names — Codex, Claude, Antigravity or Kimi on its own sign-in
   // on the runner, never a key or an account pool: accounts are the sign-in's alone — and the account
   // it names in the quota gauge's popover, once the runner has more than one to tell apart.
@@ -8377,9 +8529,45 @@ export function WorkspaceView({
   // failed, so a card about claude's spent window read as deepseek's. `detailForSelected` first,
   // because a pick just made is the stale thing here, not the detail.
   const outageProvider = detailForSelected?.provider ?? selected?.provider ?? 'claude';
+  // A Cursor CLI session's quota card speaks of the account it ran on — or the key — by its name, with
+  // the plan Cursor reported and when its usage comes back, and offers another signed-in account with
+  // room for a new session: the conversation can't move there yet (D5).
+  const startCursorSessionOn = (account: string): void => {
+    const target = scopeWorkspaceId ?? selected?.workspace?.id;
+    if (!target) return;
+    setDraftPick({ workspaceId: target, engine: AgentProvider.CURSOR, provider: AgentProvider.CURSOR });
+    setDraftAccountPick({ workspaceId: target, engine: AgentProvider.CURSOR, account });
+    goNew();
+  };
+  // The card holds its press across renders (autoRetryHelp is memoized): it calls the latest.
+  const startCursorSession = useRef(startCursorSessionOn);
+  startCursorSession.current = startCursorSessionOn;
+  const cursorQuotaHelp: CursorQuotaHelp | null = (() => {
+    if (selectedEngine !== AgentProvider.CURSOR || !selected) return null;
+    if (outageProvider !== AgentProvider.CURSOR) {
+      return { account: configuredProviders.find((p) => p.slug === outageProvider)?.label ?? outageProvider };
+    }
+    const accounts = accountsOf(runner, 'cursor');
+    const account = accounts.find((entry) => entry.id === shownCursorAccount) ?? { id: shownCursorAccount };
+    const snapshot = accountPlanUsage(runnerUsage, 'cursor', account.id);
+    const elsewhere = accounts.find(
+      (entry) =>
+        entry.id !== account.id &&
+        entry.auth === 'yes' &&
+        !accountIsPaused(entry.pausedUntil) &&
+        !cursorUsageLimit(accountPlanUsage(runnerUsage, 'cursor', entry.id)),
+    );
+    return {
+      account: accountNameOf(account),
+      plan: snapshot?.planName ?? null,
+      resetsAt: snapshot?.includedUsage?.resetsAt ?? null,
+      elsewhere: elsewhere ? { label: accountNameOf(elsewhere), start: () => startCursorSession.current(elsewhere.id) } : null,
+    };
+  })();
   const autoRetryHelp: AutoRetryHelp = useMemo(
     () => ({
       provider: outageProvider,
+      cursor: cursorQuotaHelp,
       runnerName: runner.name,
       retryAt: detailForSelected?.retryAt ?? null,
       attempts: detailForSelected?.retryAttempts ?? 0,
@@ -8450,6 +8638,9 @@ export function WorkspaceView({
     }),
     [
       outageProvider,
+      // Rebuilt each render, so compared by what it says; its press only opens a draft.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      JSON.stringify(cursorQuotaHelp),
       runner.name,
       detailForSelected?.retryAt,
       detailForSelected?.retryAttempts,
@@ -8878,7 +9069,7 @@ export function WorkspaceView({
     // and otherwise take that one's default. Mode and effort follow the model, exactly as a model
     // switch makes them.
     const nextModel = modelOptionsFor(shownEngine, v, runner.modelCatalog, configuredProviders).some(
-      (option) => option.value === shownModel,
+      (option) => option.value === shownModelName,
     )
       ? shownModel
       : defaultModelFor(shownEngine, v, runner.modelCatalog, configuredProviders, runner.runtimeDefaultModels);
@@ -9028,7 +9219,7 @@ export function WorkspaceView({
       } : prev,
     );
     modelPreferenceMut.mutate({ engine: shownEngine, provider: shownProvider, model: v });
-    if (v === shownModel) {
+    if (v === shownModelName) {
       modelSeedState.current = dirtyContextSeed(modelContextKey);
       return;
     }
@@ -9095,8 +9286,25 @@ export function WorkspaceView({
     if (live) configMut.mutate({ fastMode: next });
     else setFastMode(next);
   };
-  const shownModelLabel = shownModelOptions.find((o) => o.value === shownModel)?.label ?? shownModel;
+  const shownModelLabel = shownModelOptions.find((o) => o.value === shownModelName)?.label ?? shownModelName;
   const shownEffortLabel = shownEffortOptions.find((o) => o.value === shownEffort)?.label ?? shownEffort;
+  // Cursor CLI on Auto — its catalogue's `default`, or no model named at all, which runs as Auto.
+  const cursorAuto = shownEngine === AgentProvider.CURSOR && (!shownModelName || shownModelName === 'default');
+  // A Cursor model's context size and fast lane, where its row in the runner's catalogue lists them.
+  const cursorSettings = cursorAuto ? [] : cursorSettingRows(shownCursorPick);
+  // A setting picked is written into the model value, and one back at the model's own default is taken
+  // out of it, which the runner sets as the default (contract §10). It moves the model value only, as a
+  // model pick does.
+  const pickCursorSetting = (id: string, value: string): void => {
+    if (!shownCursorPick || cursorSettings.find((row) => row.id === id)?.value === value) return;
+    const next = encodeCursorModel(shownCursorPick.model, { ...shownCursorPick.parameters, [id]: value }, shownCursorPick.row);
+    if (live) {
+      configMut.mutate({ model: next });
+      return;
+    }
+    modelSeedState.current = dirtyContextSeed(modelContextKey);
+    setModel(next);
+  };
   const menuValue = (value: string): ReactNode => (
     <span className="scope-menu-value">
       <span className="scope-menu-value-text">{value}</span>
@@ -9107,8 +9315,18 @@ export function WorkspaceView({
   // the New Session picker lists them. Only with two or more (one is nothing to choose), and for a session
   // only on a runner that carries a conversation from one account to another: an older one would resume
   // it where it was. A draft has no conversation to carry, so it starts on any of them.
+  // A Cursor CLI session moves the way the server lets it (P6b, D5): one that has not talked to any
+  // account or key, on every runner; one that has, only on a runner that carries its conversation —
+  // until then its other accounts and keys are listed but can't be picked, and the menu says why.
+  const cursorMoveBlocked =
+    shownEngine === AgentProvider.CURSOR &&
+    !!selected &&
+    cursorConversationStarted(selectedSession) &&
+    !runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY.cursor);
+  const accountsMove = (engine: AccountEngine): boolean =>
+    !selected || engine === AgentProvider.CURSOR || !!runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[engine]);
   const accountRows =
-    shownAccountEngine && (!selected || runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[shownAccountEngine]))
+    shownAccountEngine && accountsMove(shownAccountEngine)
       ? (providerSwitchChoices.find((choice) => choice.slug === shownAccountEngine)?.accounts ?? [])
       : [];
   const accountsOffered = accountRows.length > 1;
@@ -9128,7 +9346,7 @@ export function WorkspaceView({
   // onto that engine can land on any of them. For a session, on a runner that carries a conversation
   // between them.
   const accountRowsFor = (engine: AccountEngine) => {
-    const rows = !selected || runner.capabilities?.includes(ACCOUNT_MOVE_CAPABILITY[engine])
+    const rows = accountsMove(engine)
       ? (providerSwitchChoices.find((choice) => choice.slug === engine)?.accounts ?? [])
       : [];
     return rows.length > 1 ? rows : [];
@@ -9191,6 +9409,7 @@ export function WorkspaceView({
         : [
             {
               key: `provider:${choice.slug}`,
+              disabled: cursorMoveBlocked && choice.slug !== shownProvider,
               // Distinguishable at a glance from a credential that is ready to run, without being
               // inert: the identity is dimmed, the call to action is not.
               className: blocked ? 'composer-provider-fix' : undefined,
@@ -9213,6 +9432,7 @@ export function WorkspaceView({
         ? [
             {
               key: `${choice.slug}-account:automatic`,
+              disabled: cursorMoveBlocked,
               className: 'composer-account-row',
               label: (
                 <span className="scope-menu-row">
@@ -9227,6 +9447,7 @@ export function WorkspaceView({
         : []),
       ...accounts.map((account) => ({
         key: `${choice.slug}-account:${account.id}`,
+        disabled: cursorMoveBlocked,
         className: `composer-account-row${account.nearLimit ? ' near-limit' : ''}${
           account.unavailable ? ' composer-provider-fix' : ''
         }`,
@@ -9298,6 +9519,15 @@ export function WorkspaceView({
     ),
     ...providerGroup('pools', 'Account pools', listedChoices.filter((c) => c.kind === 'pool')),
     ...providerGroup('keys', 'API keys', listedChoices.filter((c) => c.kind === 'key')),
+    ...(cursorMoveBlocked
+      ? [
+          {
+            key: 'provider-foot-cursor',
+            type: 'group' as const,
+            label: <span className="composer-provider-foot">{CURSOR_MOVE_BLOCKED_NOTE}</span>,
+          },
+        ]
+      : []),
     ...(subscriptionOnly.length > 0
       ? [
           {
@@ -9323,7 +9553,12 @@ export function WorkspaceView({
       className: 'composer-engine-title',
       label: (
         <span className="composer-engine-title-row">
-          <span className="composer-engine-title-glyph" style={{ color: engineTitle.brand.from }}>
+          {/* In the brand's colour — except Cursor's, which is black and would vanish on a dark menu:
+              the text's own colour carries its cube. */}
+          <span
+            className="composer-engine-title-glyph"
+            style={{ color: shownEngine === AgentProvider.CURSOR ? 'var(--text-1)' : engineTitle.brand.from }}
+          >
             {engineTitleGlyph ? (
               <svg
                 viewBox="0 0 24 24"
@@ -9394,31 +9629,69 @@ export function WorkspaceView({
       label: (
         <span className="scope-menu-row">
           {option.label}
-          {checkSlot(option.value === shownModel)}
+          {checkSlot(option.value === shownModelName)}
         </span>
       ),
       onSelect: () => pickModel(option.value),
     })),
     { key: 'effort-divider', type: 'separator' as const },
-    {
-      key: 'effort',
+    // Cursor CLI's Auto takes no parameters (contract §10): no Effort to offer, and a line on what it
+    // does instead. Every other Cursor model offers the efforts it takes, by their own values.
+    ...(cursorAuto
+      ? [
+          {
+            key: 'cursor-auto-note',
+            type: 'group' as const,
+            label: (
+              <div className="composer-route-note">
+                <div className="composer-route-reason">{CURSOR_AUTO_NOTE}</div>
+              </div>
+            ),
+          },
+        ]
+      : [
+          {
+            key: 'effort',
+            label: (
+              <span className="scope-menu-row">
+                Effort
+                {menuValue(shownEffortLabel)}
+              </span>
+            ),
+            children: shownEffortOptions.map((option) => ({
+              key: `effort:${option.value}`,
+              label: (
+                <span className="scope-menu-row">
+                  {option.label}
+                  {checkSlot(option.value === shownEffort)}
+                </span>
+              ),
+              onSelect: () => pickEffort(option.value),
+            })),
+          },
+        ]),
+    // A Cursor model's own settings (board Web 5 ① ③ ④): its context size, and Speed, its fast lane —
+    // a setting of the model, unlike the engine-level fast mode below, which Cursor CLI does not have.
+    // Each row offers the values the runner's catalogue lists for the model, under their own names.
+    ...cursorSettings.map((setting) => ({
+      key: `cursor-setting:${setting.id}`,
       label: (
         <span className="scope-menu-row">
-          Effort
-          {menuValue(shownEffortLabel)}
+          {setting.title}
+          {menuValue(setting.label)}
         </span>
       ),
-      children: shownEffortOptions.map((option) => ({
-        key: `effort:${option.value}`,
+      children: setting.values.map((option) => ({
+        key: `cursor-setting:${setting.id}:${option.value}`,
         label: (
           <span className="scope-menu-row">
             {option.label}
-            {checkSlot(option.value === shownEffort)}
+            {checkSlot(option.value === setting.value)}
           </span>
         ),
-        onSelect: () => pickEffort(option.value),
+        onSelect: () => pickCursorSetting(setting.id, option.value),
       })),
-    },
+    })),
     // Fast mode, and only where there is one to offer: Claude's `/fast` and Codex's "Fast" tier
     // both exist on some models and not others. A row offered to a session that cannot have it
     // would be a control whose only outcome is being ignored — the server clamps it at dispatch
@@ -9582,6 +9855,15 @@ export function WorkspaceView({
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
     : '';
   const headRunWord = selected ? statusLabel(selectedSession ?? selected, selectedWatchingWord) : '';
+  // The landing this conversation's work fed (§2.9 LS1's derived field), for the label at the
+  // session's bottom, and the label itself — one read of one helper, so the words and the ink are
+  // not decided twice.
+  const selectedSourceLanding = (selectedSession as { sourceLanding?: SessionSourceLanding | null } | null)
+    ?.sourceLanding ?? null;
+  const sourceLandingLabelView = sourceLandingLabel(selectedSourceLanding);
+  const sourceLanding = sourceLandingLabelView && selectedSourceLanding
+    ? { ...sourceLandingLabelView, id: selectedSourceLanding.landingSessionId }
+    : null;
   const headLifecycleWord = selectedLifecycleState
     ? sessionLifecycleLabel(selectedLifecycleState)
     : null;
@@ -9612,7 +9894,10 @@ export function WorkspaceView({
           : replyTo
             ? replyTo.placeholder
             : selectedId
-              ? 'Reply…'
+              ? // Cursor CLI takes no message mid-turn: one written now waits for the turn to end.
+                selectedEngine === AgentProvider.CURSOR && selectedRunStatus === 'RUNNING'
+                ? CURSOR_RUNNING_PLACEHOLDER
+                : 'Reply…'
               : 'Send this workspace a task…';
   // The engine's guess at the next message (lib/promptSuggestion): offered in an idle, empty
   // composer as a grey line where "Reply…" would be, taken with Tab (a double-tap on a touch
@@ -9895,6 +10180,12 @@ export function WorkspaceView({
             folderEdit?.id === row.folder.id ? folderEditRow(row.folder.id) : folderRowView(row),
           )}
           {sections.map((sec) => (
+            sec.key === 'Landings' && landingGroupView ? (
+              <SessionProjectLandings key={sec.key} group={landingGroupView}
+                onOpen={(landingSessionId) => navigateWithPaneSlide('push', () => navigate(
+                  sessionPath(landingSessionId), { state: stampFromList() },
+                ))} />
+            ) : (
             <section key={sec.key} className={openProjectId && sec.key === 'Coordinator' ? 'session-project-coordinator' : undefined}>
               {sec.key === 'Pinned' ? (
                 <button
@@ -10201,6 +10492,7 @@ export function WorkspaceView({
                 );
               })}
             </section>
+            )
           ))}
           {/* Foot of the loaded window while a page is in flight, so a scroll that outruns the
               fetch (or a switch to a workspace not yet cached) shows progress rather than an
@@ -10222,17 +10514,28 @@ export function WorkspaceView({
 
       <div
         className="workspace-view"
-        onDragEnter={onSessionDragEnter}
-        onDragOver={onSessionDragOver}
-        onDragLeave={onSessionDragLeave}
-        onDrop={onSessionDrop}
+        // A landing takes no files: it has no engine and no composer to attach one to (LS6).
+        onDragEnter={landingDetail ? undefined : onSessionDragEnter}
+        onDragOver={landingDetail ? undefined : onSessionDragOver}
+        onDragLeave={landingDetail ? undefined : onSessionDragLeave}
+        onDrop={landingDetail ? undefined : onSessionDrop}
       >
         {/* Drop-to-upload hint covering the whole session pane while files are dragged over it. */}
-        {dragging && (
+        {dragging && !landingDetail && (
           <div className="workspace-dropzone">
             <PaperClipOutlined /> Drop files to upload
           </div>
         )}
+        {landingDetail ? (
+          <LandingSessionView
+            sessionId={selectedId!}
+            detail={landingDetail}
+            onOpenCoordinator={(id) =>
+              navigateWithPaneSlide('push', () =>
+                navigate(sessionPath(id), { state: stampFromList() }))}
+          />
+        ) : (
+        <>
         <div className="workspace-header">
           {isMobile && (
             <button
@@ -10894,6 +11197,24 @@ export function WorkspaceView({
                   waitingKind={selectedSession?.waitingKind ?? null}
                 />
               )}
+              {/* The landing this conversation's work fed, at the session's own bottom (owner
+                  2026-10-19, board v4 06 e): a derived label, not a turn — the source session did
+                  the work, the platform lands it, and the label opens the landing session where
+                  every attempt is read. Absent from a session that produced no landing work, and
+                  from a server that predates the field. */}
+              {selected && !selectedTrashed && sourceLanding ? (
+                <div className="session-source-landing">
+                  <LandingLink className={`session-source-landing-chip is-${sourceLanding.tone}`}
+                    sessionId={sourceLanding.id}>
+                    {/* The ring the board draws on the pill (06 e): work in hand, the same mark the
+                        landing rows carry — and the words beside it say the same thing without it. */}
+                    {sourceLanding.tone === 'run'
+                      ? <Glyph shape="spinner" color="currentColor" size={11} />
+                      : null}
+                    {`${sourceLanding.text} ›`}
+                  </LandingLink>
+                </div>
+              ) : null}
               {selected &&
                 !selectedTrashed &&
                 showQueuedNotice &&
@@ -11245,7 +11566,10 @@ export function WorkspaceView({
           </div>
         )}
         {/* The reader's messages nothing has read yet, tucked behind the composer's top edge. */}
-        <PendingTray rows={pendingTrayRows} />
+        <PendingTray
+          rows={pendingTrayRows}
+          note={selectedEngine === AgentProvider.CURSOR ? CURSOR_QUEUE_NOTE : null}
+        />
         <div className={shellMode ? 'composer-box composer-box-shell' : 'composer-box'}>
           {/* Drag to set an explicit height (overrides auto-grow); double-click to reset.
               Only shown once the box has hit its auto-grow cap or the user set a manual
@@ -11833,9 +12157,15 @@ export function WorkspaceView({
                         </span>
                       )}
                       <span className="composer-model-name">{shownModelLabel}</span>
-                      <span className="composer-model-effort">
-                        {fastModeUsable && shownFastMode ? `${shownEffortLabel} · Fast` : shownEffortLabel}
-                      </span>
+                      {/* Auto on Cursor CLI has no effort to name; a Cursor model names its context and fast
+                          lane after it ("Claude Opus 5.5 High · 1M · Fast", board Web 5 ⑤). */}
+                      {!cursorAuto && (
+                        <span className="composer-model-effort">
+                          {fastModeUsable && shownFastMode
+                            ? `${shownEffortLabel} · Fast`
+                            : [shownEffortLabel, ...cursorChipSettings(cursorSettings)].join(' · ')}
+                        </span>
+                      )}
                     </button>
                   }
                 />
@@ -11888,6 +12218,7 @@ export function WorkspaceView({
                 provider={shownProvider}
                 modelCatalog={runner.modelCatalog}
                 configured={configuredProviders}
+                unavailable={shownEngine === AgentProvider.CURSOR ? CURSOR_CONTEXT_UNAVAILABLE : undefined}
               />
             )}
             {showStop ? (
@@ -11958,6 +12289,8 @@ export function WorkspaceView({
           </div>
         </div>
       </div>
+        </>
+        )}
       </div>
       {confirmation}
     </div>

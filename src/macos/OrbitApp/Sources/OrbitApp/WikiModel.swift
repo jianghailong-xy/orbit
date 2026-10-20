@@ -375,16 +375,10 @@ final class WikiModel {
         }
     }
 
-    /// The System model while the server executes this account's wiki: what the settings page draws instead of the
-    /// provider. Nil under runner, and before the read is in.
+    /// The System model while the read says the server executes this account's wiki (contract `jobs.executor.read`):
+    /// what the settings page draws. Nil before the read is in, and from a control plane that does not say so.
     var serverModel: WikiSystemModelStatus? {
         systemModel?.executor?.serverExecutes == true ? systemModel : nil
-    }
-
-    /// Whether the server executes this account's wiki (contract `jobs.executor.read`): the plan's empty card
-    /// names the System model instead of the provider while it does. False under runner, and before the read is in.
-    var serverExecutes: Bool {
-        systemModel?.executor?.serverExecutes == true
     }
 
     /// Every space's queue, which is what the drawer's number and the banner count.
@@ -653,7 +647,7 @@ final class WikiModel {
         case failed(String)
     }
 
-    /// Draft plan, or Redraft… with the owner's words: a task of the maintenance list. Nil on success
+    /// Draft plan, or Redraft… with the owner's words: a wiki-worker job. Nil on success
     /// (with whether a job was made, or one already on its way answered), else the sentence to show.
     func redraftPlan(instructions: String?) async -> (created: Bool, refusal: String?) {
         guard let space = currentSpace else { return (false, WikiCopy.noSpaces) }

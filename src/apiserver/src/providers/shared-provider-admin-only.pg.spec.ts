@@ -9,8 +9,8 @@
  *
  *  (1) Every door that takes a provider slug refuses a member who names a shared one, with the sentence that
  *      says who can use it, and writes nothing: a new session (named, inherited from the agent's last session,
- *      or an OpenCode model on the key), a provider switch, a revive, a task (create, update, batch), an
- *      agent's mention, a Wiki space's maintenance pin.
+ *      or an OpenCode model on the key), a provider switch, a revive, a task (create, update, batch), and an
+ *      agent's mention.
  *  (2) No door that builds an engine hands a member's session the key: the claim, which leaves the session
  *      PENDING and says why; a restarted runner's reclaim; a provider-switch reload; an OpenCode model naming
  *      the key. A member's own provider still runs, on their own key.
@@ -52,7 +52,6 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { ADMIN_ONLY_PROVIDER_ERROR } from '../runner-api/runner-provider-support';
 import { SessionsService } from '../sessions/sessions.service';
 import { TasksService } from '../tasks/tasks.service';
-import { wikiMaintenanceProviderProblem } from '../wiki/wiki-maintenance-settings';
 import { openCodeKeyRows, providerSlugsOn } from './custom-provider';
 import { sessionEngine } from './session-engine';
 import { ProviderPlanUsageService } from './plan-usage.service';
@@ -383,14 +382,6 @@ suite('a shared model provider runs an admin\'s sessions only, on real PostgreSQ
     const answered = await delivery(toAdmin.id);
     assert.equal(answered.status, 'SESSION_CREATED', JSON.stringify(answered));
     assert.equal((await recorded(answered.targetSessionId!)).provider, sharedClaude.slug);
-  });
-
-  await t.test('(1) a Wiki space pins a shared provider for its maintenance for an admin, and not for a member', async () => {
-    assert.deepEqual(
-      await wikiMaintenanceProviderProblem(prisma, member.id, sharedClaude.slug),
-      { why: adminOnly(sharedClaude.slug), unavailable: false },
-    );
-    assert.equal(await wikiMaintenanceProviderProblem(prisma, admin.id, sharedClaude.slug), null);
   });
 
   await t.test("(2) the claim hands a member's session on a shared provider nothing and holds it, saying why; the admin's runs on the key, the member's own on theirs", async () => {

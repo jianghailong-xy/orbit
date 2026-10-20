@@ -1279,6 +1279,13 @@ public final class APIClient: @unchecked Sendable {
         try await get("providers/mine/\(id)/balance", query: refresh ? [URLQueryItem(name: "refresh", value: "1")] : [])
     }
 
+    /// Check Again on one of the account's own Cursor keys (POST /api/providers/mine/:id/key-check): one
+    /// of its runners asks Cursor CLI's `agent models` with the key, which never comes here, and the
+    /// answer is kept on the key when it can be.
+    public func recheckCursorKey(_ id: String) async throws -> CursorKeyRecheckAnswer {
+        try await post("providers/mine/\(id)/key-check", body: Empty())
+    }
+
     /// The caller's account pools (GET /api/providers/pools), which the catalogue above doesn't
     /// list: each with its members, their own quota and where each stands. A pool this build can't
     /// read is left out rather than failing the list.

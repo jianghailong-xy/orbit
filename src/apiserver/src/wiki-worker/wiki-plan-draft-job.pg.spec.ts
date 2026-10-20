@@ -24,12 +24,8 @@
  *      stores one version — and a snapshot that moved under it makes it start over;
  *   8. a job runs only as its own: one whose plan job ended asks nothing, and a revision without the owner's
  *      words ends failed;
- *   9. where the switch puts a plan job: a wiki_job at the owner's priority under server and for a listed canary
- *      account, a task under runner and for an account canary does not list — and a job that never started is
- *      cancelled when the switch moves back;
- *  10. the runner door hands no session a plan job when the server drafts (WIKI_SERVER_EXECUTES), so an `orbit
- *      wiki plan draft` that predates this asks no model — a build job's session too, the documents being the
- *      server's as well since P7; under runner it answers exactly as it always has.
+ *   9. a revision is a plan_revise wiki_job at the owner's priority, its instructions kept on the plan job, and a space
+ *      with no maintenance workspace holds a draft without making one.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-plan-draft-job.pg.spec.ts
  *
@@ -56,11 +52,8 @@ import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { encryptSecret } from '../providers/provider-crypto';
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
-import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { RunnerWikiPlanController } from '../runner-api/runner-wiki-plan.controller';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiPlanController } from '../wiki/wiki-plan.controller';
 import { WikiRetrieval } from '../wiki/wiki-retrieval';
@@ -76,7 +69,6 @@ import { readWikiSystemModel, type WikiSystemModelConfig } from './wiki-system-m
 
 const URL_ = process.env.COORDINATOR_PG_URL;
 const skip = !URL_;
-process.env.PROVIDER_SECRET_KEY ??= 'wiki-plan-draft-job-spec';
 
 const KEY = `sk-spec-${randomUUID()}`;
 const MODEL = 'qwen3.8-27b-fp8';
@@ -238,13 +230,12 @@ function boot(): Promise<Harness> {
     const plans = new WikiPlans(prisma as unknown as PrismaService, hub);
 
     @Module({
-      controllers: [WikiController, WikiPlanController, RunnerWikiPlanController],
+      controllers: [WikiController, WikiPlanController],
       providers: [
         { provide: WikiService, useValue: service },
         { provide: WikiPlans, useValue: plans },
         { provide: WikiRetrieval, useValue: new WikiRetrieval(prisma as unknown as PrismaService) },
         { provide: PrismaService, useValue: prisma },
-        RunnerAuthGuard,
         JwtAuthGuard,
         Reflector,
         {
@@ -274,8 +265,6 @@ function boot(): Promise<Harness> {
 after(async () => {
   if (!harness) return;
   const { app, prisma, sql, model } = await harness;
-  delete process.env.ORBIT_WIKI_EXECUTOR;
-  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
   await sql.query('DELETE FROM "wiki_model_status"').catch(() => undefined);
   await app.close().catch(() => undefined);
   await prisma.$disconnect().catch(() => undefined);
@@ -326,9 +315,7 @@ function worker(h: Harness): Worker {
   return { queue, executor };
 }
 
-async function reset(h: Harness, mode: 'server' | 'canary' | 'runner' = 'server', canary: string[] = []): Promise<void> {
-  process.env.ORBIT_WIKI_EXECUTOR = mode;
-  process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS = canary.join(',');
+async function reset(h: Harness): Promise<void> {
   h.model.hits.length = 0;
   h.model.script = {};
   h.model.skeletons = 0;
@@ -374,14 +361,12 @@ function expectStatus(answer: Answer, status: number, why: string): void {
 
 // ── fixtures ─────────────────────────────────────────────────────────────────────────────────────────
 
-/** The owner, their machine (capable, online), a workspace with a working directory, a provider, and a space. */
+/** The owner, their machine (capable, online), a workspace with a working directory, and a space. */
 interface Owner {
   id: string;
   bearer: string;
   runnerId: string;
-  runnerToken: string;
   workspaceId: string;
-  slug: string;
   spaceId: string;
 }
 
@@ -399,27 +384,20 @@ async function owner(h: Harness): Promise<Owner> {
   );
   const workspaceId = randomUUID();
   await h.sql.query(`INSERT INTO "workspace"("id","name","owner_id","env","runner_id","work_dir") VALUES ($1,'app',$2,'{}',$3,'~/app')`, [workspaceId, id, runnerId]);
-  const slug = `local-vllm-${randomUUID().slice(0, 8)}`;
-  await h.prisma.modelProvider.create({
-    data: {
-      slug, label: 'Local vLLM', runtime: 'claude', baseUrl: 'http://127.0.0.1:8000', apiKeyEnc: encryptSecret(`vllm-key-${randomUUID()}`),
-      models: [{ value: MODEL, label: 'Qwen', contextWindow: 131072 }], defaultModel: MODEL, enabled: true, ownerId: id,
-    },
-  });
   for (const title of ['App 项目', '同名项目', '同名项目']) {
     await h.sql.query(`INSERT INTO "project"("id","title","owner_id","updated_at") VALUES ($1,$2,$3,now())`, [randomUUID(), title, id]);
   }
   const made = await call(h, { bearer }, 'POST', '/wiki/spaces', {
     title: 'App',
     repoUrl: `https://github.com/spec/app-${randomUUID().slice(0, 8)}`,
-    maintenance: { workspaceId, provider: slug },
+    maintenance: { workspaceId },
   });
   expectStatus(made, 201, 'the owner creates a space with its maintenance set up');
   const spaceId = toUuid(made.body.id as string);
   await h.sql.query('INSERT INTO "wiki_topic"("id","space_id","owner_id","slug","title","category","path_prefixes") VALUES ($1,$2,$3,$4,$5,$6,$7)', [
     randomUUID(), spaceId, id, 'storage-topic', '存储', 'data', ['src/app/'],
   ]);
-  return { id, bearer, runnerId, runnerToken, workspaceId, slug, spaceId };
+  return { id, bearer, runnerId, workspaceId, spaceId };
 }
 
 /** The space's plan jobs, oldest first. */
@@ -723,10 +701,6 @@ test('a draft is written in four steps through the queue, gated on the snapshot,
   const { rows: [counts] } = await h.sql.query(
     `SELECT (SELECT count(*)::int FROM "task" WHERE "owner_id" = $1) AS "tasks", (SELECT count(*)::int FROM "session" WHERE "owner_id" = $1) AS "sessions"`, [o.id]);
   assert.deepEqual(counts, { tasks: 0, sessions: 0 });
-  // The plan's check reads the job as a task's acceptance command would.
-  const check = await call(h, { runner: o.runnerToken }, 'GET', `/runner/wiki/spaces/${o.spaceId}/plan/check?jobId=${planJobId}`);
-  expectStatus(check, 200, 'the check of a server-run job');
-  assert.equal(check.body.ok, true);
 });
 
 /** An id in the spelling the doors answer it (PublicIdInterceptor). */
@@ -1047,38 +1021,12 @@ test('a job runs only as its own: one whose plan job ended asks nothing, and one
   assert.equal(n, 0, 'nor the repository');
 });
 
-// ── 9. where the switch puts a plan job ──────────────────────────────────────────────────────────────
+// ── 9. a revision, and a space with no workspace ─────────────────────────────────────────────────────
 
-test('the switch decides: a wiki_job under server and for a listed canary account, a task under runner and for one not listed', { skip, timeout: 120_000 }, async () => {
+test('a revision is a plan_revise wiki_job at the owner\'s priority, its instructions kept, and a space with no workspace holds a draft', { skip, timeout: 120_000 }, async () => {
   const h = await boot();
-  // canary, listed: a wiki_job.
-  await reset(h, 'canary', []);
-  const listed = await owner(h);
-  await reset(h, 'canary', [listed.id]);
-  await clearJobs(h, listed.spaceId);
-  const listedJob = await redraft(h, listed);
-  const [one] = await planJobs(h, listed.spaceId);
-  assert.equal(one.id, listedJob);
-  assert.equal(one.task_id, null);
-  assert.equal((await wikiJobOf(h, listedJob)).kind, 'plan_draft');
-  // canary, not listed: a task, exactly as under runner.
-  const other = await owner(h);
-  const [otherJob] = await planJobs(h, other.spaceId);
-  assert.equal(otherJob.state, 'made');
-  assert.ok(otherJob.task_id, 'an account canary does not list gets the task it always got');
-  assert.equal(otherJob.job_id, null);
-  const { rows: [task] } = await h.sql.query('SELECT "provider", "acceptance_command" FROM "task" WHERE "id" = $1', [otherJob.task_id]);
-  assert.equal(task.provider, other.slug);
-  assert.ok(String(task.acceptance_command).startsWith('orbit wiki plan check'));
-  // runner: a task for everyone; the worker claims nothing.
-  await reset(h, 'runner');
-  const plain = await owner(h);
-  const [plainJob] = await planJobs(h, plain.spaceId);
-  assert.ok(plainJob.task_id && plainJob.job_id === null);
-  const { rows: [{ n }] } = await h.sql.query('SELECT count(*)::int AS "n" FROM "wiki_job" WHERE "owner_id" = $1', [plain.id]);
-  assert.equal(n, 0);
-  // A revision under server: plan_revise, at the owner's priority, with the instructions kept on the plan job.
-  await reset(h, 'server');
+  await reset(h);
+  // A revision: plan_revise, at the owner's priority, with the instructions kept on the plan job, and no task.
   const reviser = await owner(h);
   await clearJobs(h, reviser.spaceId);
   await baseVersion(h, reviser, { min: 3, max: 3 }, PLAN_BASE);
@@ -1086,118 +1034,13 @@ test('the switch decides: a wiki_job under server and for a listed canary accoun
   const reviseJob = await wikiJobOf(h, revise);
   assert.equal(reviseJob.kind, 'plan_revise');
   assert.equal(reviseJob.priority, WIKI_PLAN_SERVER_JOB.priority);
-  // No workspace: held, as on the runner's path.
+  const [revised] = await planJobs(h, reviser.spaceId);
+  assert.deepEqual([revised.instructions, revised.state, revised.task_id], ['合并存储。', 'made', null]);
+  // No workspace: held, and no wiki_job is made.
   const held = await owner(h);
   await clearJobs(h, held.spaceId);
   await h.sql.query(`UPDATE "wiki_space" SET "settings" = jsonb_set("settings", '{maintenance,workspaceId}', 'null') WHERE "id" = $1`, [held.spaceId]);
   await redraft(h, held);
   const [heldJob] = await planJobs(h, held.spaceId);
-  assert.equal(heldJob.state, 'held');
-  // The switch moves back to runner while a server job has not started: the owner's next request cancels it and
-  // is made on the runner's path.
-  await reset(h, 'runner');
-  const back = await redraft(h, listed);
-  assert.notEqual(back, listedJob);
-  const { rows: [cancelled] } = await h.sql.query('SELECT "state" FROM "wiki_job" WHERE "id" = $1', [(await wikiJobOf(h, listedJob)).id]);
-  assert.equal(cancelled.state, 'cancelled');
-  const rows = await planJobs(h, listed.spaceId);
-  assert.equal(rows[0].state, 'ended');
-  assert.ok(String(rows[0].error).includes('no longer executes'));
-  assert.equal(rows[1].job_id, null, 'the next draft is the runner\'s again');
-  assert.ok(['queued', 'made'].includes(rows[1].state), `the next draft is ${rows[1].state}`);
+  assert.deepEqual([heldJob.state, heldJob.job_id], ['held', null]);
 });
-
-// ── 10. the runner door ──────────────────────────────────────────────────────────────────────────────
-
-test('the runner door hands no session a plan job when the server drafts it — a build\'s session included — and under runner it answers as it always has', { skip, timeout: 120_000 }, async () => {
-  const h = await boot();
-  // Under runner: the job's task, its session, and the door as it always was.
-  await reset(h, 'runner');
-  const o = await owner(h);
-  const [job] = await planJobs(h, o.spaceId);
-  const session = randomUUID();
-  await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","task_id","status","dispatch_origin","updated_at")
-     VALUES ($1,'a plan job session','p',$2,$2,$3,$4,$5,'RUNNING'::run_status,'USER',now())`,
-    [session, o.id, o.workspaceId, o.runnerId, job.task_id],
-  );
-  const as = { runner: o.runnerToken, session };
-  const context = await call(h, as, 'GET', `/runner/wiki/spaces/${o.spaceId}/plan/job`);
-  expectStatus(context, 200, 'under runner the job\'s session reads its job');
-  assert.equal(toUuid(context.body.job.id), job.id);
-  expectStatus(await call(h, as, 'GET', `/runner/wiki/spaces/${o.spaceId}/plan/materials`), 200, 'and its materials');
-  expectStatus(await call(h, as, 'POST', `/runner/wiki/spaces/${o.spaceId}/plan/job/progress`, { attempt: 1 }), 200, 'and says its round');
-  const stranger = await call(h, { runner: o.runnerToken, session: await strangerSession(h, o) }, 'GET', `/runner/wiki/spaces/${o.spaceId}/plan/job`);
-  assert.equal(stranger.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
-  const build = await buildJobSession(h, o, job.task_id);
-  const asBuild = { runner: o.runnerToken, session: build.session };
-  const ownJob = await call(h, asBuild, 'GET', `/runner/wiki/spaces/${o.spaceId}/plan/job`);
-  expectStatus(ownJob, 200, 'under runner a build job\'s session reads its job');
-  assert.equal(toUuid(ownJob.body.job.id), build.planJobId);
-
-  // Under server (and for a listed canary account): every route a run of `orbit wiki plan draft` reaches is the
-  // server's, whoever asks — so a command that predates this stops at its first call, before any model.
-  for (const [mode, canary] of [['server', []], ['canary', [o.id]]] as const) {
-    await reset(h, mode, [...canary]);
-    for (const [method, route, body] of [
-      ['GET', 'plan/job', undefined], ['GET', 'plan/materials', undefined], ['POST', 'plan/job/progress', { attempt: 1 }],
-      ['POST', 'plan/job/finish', { outcome: 'failed', error: 'x' }], ['POST', 'plan/drafts', { baseVersion: null, plan: {}, repoCheck: { sha: SHA, checked: 0, missing: [] } }],
-    ] as const) {
-      const answer = await call(h, as, method, `/runner/wiki/spaces/${o.spaceId}/${route}`, body);
-      expectStatus(answer, 409, `${mode}: ${method} ${route}`);
-      assert.equal(answer.body.code, 'WIKI_SERVER_EXECUTES');
-    }
-    // What a maintenance run still reads of the plan is unchanged; another owner's space is still a 404.
-    expectStatus(await call(h, as, 'GET', `/runner/wiki/spaces/${o.spaceId}/plan`), 200, `${mode}: a maintenance run reads the plan`);
-    const theirs = await owner(h);
-    expectStatus(await call(h, as, 'GET', `/runner/wiki/spaces/${theirs.spaceId}/plan/job`), 404, `${mode}: another owner's space`);
-    // The documents are the server's too (P7, docs.build.server): a build task made before the switch is refused at
-    // its first call like any other session, so its `orbit wiki docs build` asks no model either.
-    for (const [method, route, body] of [
-      ['GET', 'plan/job', undefined], ['POST', 'plan/job/progress', { docs: { done: 0, total: 3 }, current: null }],
-      ['POST', 'plan/job/finish', { outcome: 'failed', error: 'x' }], ['GET', 'plan/materials', undefined],
-      ['POST', 'plan/drafts', { baseVersion: null, plan: {}, repoCheck: { sha: SHA, checked: 0, missing: [] } }],
-    ] as const) {
-      const answer = await call(h, asBuild, method, `/runner/wiki/spaces/${o.spaceId}/${route}`, body);
-      expectStatus(answer, 409, `${mode}: a build job's session, ${method} ${route}`);
-      assert.equal(answer.body.code, 'WIKI_SERVER_EXECUTES');
-    }
-  }
-  // Under canary, an account the list does not name is the runner's: the door answers it as before.
-  await reset(h, 'canary', [randomUUID()]);
-  expectStatus(await call(h, as, 'GET', `/runner/wiki/spaces/${o.spaceId}/plan/job`), 200, 'canary, not listed: as before');
-});
-
-/**
- * A build job made on the runner's path, as a confirmation makes one: its task in the space's hidden list (the one
- * the draft job's task is in), the confirmed version it writes, and the task's session on the owner's machine.
- */
-async function buildJobSession(h: Harness, o: Owner, draftTaskId: string): Promise<{ planJobId: string; session: string }> {
-  await baseVersion(h, o, { min: 3, max: 3 });
-  const [{ list_id: listId }] = (await h.sql.query('SELECT "list_id" FROM "task" WHERE "id" = $1', [draftTaskId])).rows;
-  const taskId = randomUUID();
-  await h.prisma.task.create({
-    data: { id: taskId, title: 'Wiki documents: App', ownerId: o.id, creatorType: 'USER', creatorId: o.id, listId, completionCriterion: 'OWNER_CONFIRMED' },
-  });
-  const planJob = await h.prisma.wikiPlanJob.create({
-    data: { spaceId: o.spaceId, ownerId: o.id, kind: 'build', trigger: 'owner', state: 'made', taskId, madeAt: new Date(), version: 1 },
-    select: { id: true },
-  });
-  const session = randomUUID();
-  await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","task_id","status","dispatch_origin","updated_at")
-     VALUES ($1,'a build job session','p',$2,$2,$3,$4,$5,'RUNNING'::run_status,'USER',now())`,
-    [session, o.id, o.workspaceId, o.runnerId, taskId],
-  );
-  return { planJobId: planJob.id, session };
-}
-
-async function strangerSession(h: Harness, o: Owner): Promise<string> {
-  const id = randomUUID();
-  await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","status","dispatch_origin","updated_at")
-     VALUES ($1,'a session','p',$2,$2,$3,$4,'RUNNING'::run_status,'USER',now())`,
-    [id, o.id, o.workspaceId, o.runnerId],
-  );
-  return id;
-}

@@ -1,4 +1,4 @@
-import type { AgentProvider } from '@orbit/shared';
+import type { AgentProvider, CursorKeyCheckState } from '@orbit/shared';
 
 // The provider *management* surface shared by the list page and the connect page: the row shape
 // the API returns, and where that list lives.
@@ -40,6 +40,11 @@ export interface ProviderRow {
   /** Why this key may not join an account pool — the server's own admission test, since the key
    *  itself never reaches the browser — or null when it may. */
   poolRefusal?: { reason: string; message: string } | null;
+  /** A Cursor key only: what Cursor CLI on one of the owner's runners last answered when asked with the
+   *  key it holds now (`agent models`, CursorKeyCheckState), and when. Both null until a runner has
+   *  checked it, and absent on every other key. */
+  keyCheckState?: CursorKeyCheckState | null;
+  keyCheckedAt?: string | null;
 }
 
 /** The signed-in user's own (BYOK) provider list — the only one the UI manages. */

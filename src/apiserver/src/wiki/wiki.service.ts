@@ -2,7 +2,6 @@ import { ConflictException, HttpException, Injectable, Logger, NotFoundException
 import { Prisma } from '@prisma/client';
 import {
   KIND_SPECS,
-  RunEventType,
   WIKI_CHALLENGE_ANSWERS,
   WIKI_DEFAULT_SPACE_SETTINGS,
   WIKI_KINDS,
@@ -86,7 +85,7 @@ import {
   type NeighbourLookups,
   type NeighbourRow,
 } from './wiki-neighbours';
-import { checkWikiMaintenanceInput, isWikiMaintenanceSession, setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
+import { checkWikiMaintenanceInput, setWikiMaintenance, type WikiMaintenanceInput } from './wiki-maintenance-settings';
 import { requestWikiPlanJob, resumeWikiPlanJobs } from './wiki-plan-job';
 import { wikiPlanWaitingOfSpaces } from './wiki-plan-waiting';
 import { isOrbitAuthoredTurn } from '../sessions/orbit-authored-turn';
@@ -97,7 +96,6 @@ import { PushService } from '../push/push.service';
 import { RealtimeService } from '../realtime/realtime.service';
 import { approvalText, evidenceOf, readBeforeRevision4, runEventText, toolCallText, verifierText } from './wiki-verify-evidence';
 import { enqueueWikiVerifyJob, wikiVerifyJobNeeded } from './wiki-verify-jobs';
-import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
 import { entryAppliedBy } from './wiki-run-reads';
 
 /** `Prisma.TransactionClient`, named once: every write below takes one, never the unmanaged client. */
@@ -131,7 +129,7 @@ type Tx = Prisma.TransactionClient;
  * anywhere below could name another owner.
  *
  * WHAT THIS FILE DOES NOT DO YET, and who owns it: the `<orbit_wiki_context>` delivery (T6),
- * the git half of the anchors' re-verification, which runs on a runner (`orbit wiki anchors verify`;
+ * the git half of the anchors' re-verification, which runs on a runner (the `anchors` repository operation;
  * what it found is recorded here, `recordAnchorChecks`), and the review queue's 14-day
  * expiry sweep, which the contract gives an `expires_at` and no worker yet. Of the writes the contract has announce a change
  * (`realtime.publishedWhen`), the two below do: a recorded changeset, and a decided one. A space
@@ -212,7 +210,6 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
   WIKI_REVIEW_QUEUE_FULL: 429,
   WIKI_PROBE_REFUSED: 422,
   WIKI_OWNER_CHANNEL_ONLY: 403,
-  WIKI_NOT_MAINTENANCE_SESSION: 403,
   WIKI_SESSION_EXCLUDED: 403,
   WIKI_IDEMPOTENCY_KEY_REUSED: 409,
   WIKI_CURSOR_BEHIND: 409,
@@ -222,9 +219,7 @@ const WIKI_HTTP_STATUS: Readonly<Record<WikiRefusalCode, number>> = {
   WIKI_PLAN_GATE: 422,
   WIKI_PLAN_STALE: 409,
   WIKI_PLAN_UNCONFIRMED: 409,
-  WIKI_PLAN_NO_JOB: 409,
   WIKI_DOC_INVALID: 422,
-  WIKI_RUNNER_EXECUTES: 409,
 };
 
 /** A refusal carrying a contract code, thrown out of the service and answered by the door. */
@@ -250,21 +245,6 @@ function refuse(code: WikiRefusalCode, message: string, errors?: WikiFieldError[
 export function answerFor(result: Record<string, unknown>): Record<string, unknown> {
   const status = submissionStatus(result);
   if (status !== 200) throw new HttpException(result, status);
-  return result;
-}
-
-/**
- * The status a verification report is served with (contract `reviewModes.verification.report`), on
- * the same rule as a submission's: a report that recorded a verdict — or found one already recorded
- * the same way — is a 200, and one none of whose verdicts was recorded answers with the status of its
- * first refusal, every outcome in the body.
- */
-export function answerForVerifications<T extends { outcomes: WikiVerificationOutcome[] }>(result: T): T {
-  const refused = result.outcomes.filter((outcome) => outcome.status === 'refused');
-  if (result.outcomes.length > 0 && refused.length === result.outcomes.length) {
-    const first = refused[0] as Extract<WikiVerificationOutcome, { status: 'refused' }>;
-    throw new HttpException(result, first.httpStatus);
-  }
   return result;
 }
 
@@ -450,10 +430,10 @@ interface VerificationTrip {
   window: number;
 }
 
-/** One verdict as the service reads it, from the runner door's body or the import's own call. */
+/** One verdict as the service reads it, from the server's verify and maintain jobs or the import's own call. */
 type VerdictInput = Pick<WikiVerdictInput, 'opId' | 'verdict' | 'reason' | 'model' | 'duplicateOf'>;
 
-/** A verdict the service will not record, with the status the runner door answers it with. */
+/** A verdict the service will not record, with the status its outcome carries (the runner door's answer before P11). */
 class VerdictRefusal extends Error {
   constructor(
     readonly httpStatus: number,
@@ -892,30 +872,24 @@ export class WikiService {
 
   /**
    * A space was created (contract `plan.jobs.trigger`, criterion 11): its plan's first draft is asked
-   * for — made at once as a task of its maintenance list, or queued, or held with why. After the space's
-   * own write committed, and never failing it: a draft not asked for now is asked for by the owner.
+   * for — made at once as the wiki-worker's job, or held with why. After the space's own write committed,
+   * and never failing it: a draft not asked for now is asked for by the owner.
    */
   private async spaceCreated(ownerId: string, spaceId: string, requestedByUserId: string | null): Promise<void> {
-    await this.planJobFact(ownerId, async () => {
-      const answer = await requestWikiPlanJob(this.prisma, {
-        ownerId,
-        spaceId,
-        kind: 'draft',
-        instructions: null,
-        trigger: 'space_created',
-        requestedByUserId,
-      });
-      return answer.madeTaskId ? [answer.madeTaskId] : [];
-    });
+    await this.planJobFact(() => requestWikiPlanJob(this.prisma, {
+      ownerId,
+      spaceId,
+      kind: 'draft',
+      instructions: null,
+      trigger: 'space_created',
+      requestedByUserId,
+    }));
   }
 
-  /** A fact about a space's plan jobs, taken; the tasks it made published. Logged, never thrown. */
-  private async planJobFact(ownerId: string, take: () => Promise<string[]>): Promise<void> {
+  /** A fact about a space's plan jobs, taken. Logged, never thrown. */
+  private async planJobFact(take: () => Promise<unknown>): Promise<void> {
     try {
-      const made = await take();
-      if (made.length > 0 && typeof this.realtime?.publishForUser === 'function') {
-        this.realtime.publishForUser(ownerId, RunEventType.TASK_CHANGED, { taskIds: made, resync: false });
-      }
+      await take();
     } catch (error) {
       this.logger.warn(`a plan job of a space was not moved on: ${(error as Error).message}`);
     }
@@ -1020,7 +994,7 @@ export class WikiService {
    * The owner creating a space outright: a codebase, or a wiki with no repository behind it — with its
    * maintenance from the start when the request names it, which is the owner channel's alone, as the
    * PATCH that sets it later is. The maintenance a request names is checked before the space is made
-   * (the workspace is the owner's, the provider one a run could start on), so a refused one makes nothing.
+   * (the workspace is the owner's), so a refused one makes nothing.
    * A personal access token is refused it the same way, by `credential` (docs/personal-access-token-design.md §5).
    */
   async createSpace(
@@ -1132,13 +1106,13 @@ export class WikiService {
       automaticSpotChecks: input.automaticSpotChecks,
     });
     const current = await this.requireSpace(ownerId, spaceId);
-    // Maintenance is written by its own unit, under the space row's lock and with the hidden list it
+    // Maintenance is written by its own unit, under the space row's lock and with the cursor start it
     // may need (`setWikiMaintenance`); every other key below is merged over the row as it stands, so
     // neither write can put back what the other just changed.
     if (input.maintenance !== undefined) {
       await setWikiMaintenance(this.prisma, ownerId, spaceId, input.maintenance);
       // The settings a held plan job waited for may be here now (contract `plan.jobs.held`).
-      await this.planJobFact(ownerId, () => resumeWikiPlanJobs(this.prisma, ownerId, { spaceId }));
+      await this.planJobFact(() => resumeWikiPlanJobs(this.prisma, ownerId, { spaceId }));
     }
     const { maintenance: _maintenance, ...settings }: Record<string, unknown> = { ...current.settings };
     if (input.push !== undefined) settings.push = input.push;
@@ -1235,22 +1209,18 @@ export class WikiService {
     }
     await this.queueVerification(principal, space.id, answer);
     // Who verifies the ops this answer left waiting, told to the caller (contract
-    // `reviewModes.verification.servedBy`): the runner's own verifier where it is the one that runs, the
-    // server's worker otherwise. A caller that reads it does not ask a model of its own.
-    return (await this.serverVerifiesOps(principal, space.id)) ? { ...answer, servedBy: 'server' } : answer;
+    // `reviewModes.verification.servedBy`): the server's worker. A caller that reads it asks no model of its own.
+    return this.serverVerifiesOps(principal) ? { ...answer, servedBy: 'server' } : answer;
   }
 
   /**
    * The verification a submission owes (contract `jobs.kindRuns.verify`, design §2.2): an op an Automatic
-   * space recorded `verifying` is verified by the server's own worker, when the executor switch says the
-   * server runs for this account — and there the session does not run `orbit wiki verify` at all, because
-   * the verdict comes to it.
+   * space recorded `verifying` is verified by the server's own worker, and the session does not ask a model
+   * of its own, because the verdict comes to it.
    *
-   * WHO IS EXEMPT. Nothing is queued for a maintenance run: the pipeline that proposed its ops is the one
-   * that verifies them, in its own process, and on the runner until P8 moves it (contract
-   * `reviewModes.verification.cli`); under the default `runner` mode nothing is queued for anyone, which is
-   * the behaviour every deployment has had. A headless call (no session) has no identity to report a verdict
-   * under, and the owner's own writes apply at once.
+   * WHO IS EXEMPT. Nothing is queued for the server's maintenance run: the job that proposed its ops is the
+   * one that verifies them (contract `maintenance.job.server`). A headless call (no session) has no identity
+   * to report a verdict under, and the owner's own writes apply at once.
    *
    * AFTER THE COMMIT, never inside it: a job row is a fact about a write that has landed, and a transaction
    * that retried would queue the verification once per attempt. A failure here is logged and swallowed — the
@@ -1260,38 +1230,25 @@ export class WikiService {
   private async queueVerification(principal: WikiPrincipal, spaceId: string, answer: Record<string, unknown>): Promise<void> {
     if (principal.sessionId === null) return;
     if (typeof answer.changesetId !== 'string' || !wikiVerifyJobNeeded((answer.ops ?? []) as WikiOpOutcome[])) return;
-    if (!(await this.serverVerifiesOps(principal, spaceId))) return;
+    if (!this.serverVerifiesOps(principal)) return;
     await this.queueVerificationsFor(principal.ownerId, spaceId, [principal.sessionId]);
   }
 
   /**
-   * Whether the server's own worker verifies about to be recorded/waiting ops of this caller in this space
-   * (contract `reviewModes.verification.servedBy`, P3): true where the executor switch says the server runs
-   * for the account, and the caller is not a maintenance run — a run verifies its own ops in its own process
-   * until P8 moves it (`reviewModes.verification.cli`), so nothing about its path changes.
-   *
-   * WHAT THIS IS THE ONLY SOURCE OF: the `servedBy` a submission's answer and the runner door's
-   * verification list carry, and whether a submission queues a job. The door does not verify for itself
-   * (the runner's own verifier and the server's job must not both ask a model about one op) and the CLI
-   * that ships with the next runner release waits for the verdict this says is coming.
+   * Whether the server's own worker verifies the ops this caller leaves waiting (contract
+   * `reviewModes.verification.servedBy`): every caller's but the server's maintenance run's, which verifies
+   * the ops it proposed in its own job. The one source of the `servedBy` a submission's answer carries, and
+   * of whether a submission queues a job.
    */
-  async serverVerifiesOps(principal: WikiPrincipal, spaceId: string): Promise<boolean> {
-    if (principal.origin === 'maintenance') return false;
-    if (!wikiExecutorServes(currentWikiExecutorSwitch(), principal.ownerId)) return false;
-    if (principal.sessionId === null) return true;
-    return !(await isWikiMaintenanceSession(this.prisma, {
-      ownerId: principal.ownerId, sessionId: principal.sessionId, spaceId,
-    }));
+  private serverVerifiesOps(principal: WikiPrincipal): boolean {
+    return principal.origin !== 'maintenance';
   }
 
   /**
    * One verify job per session whose ops wait for their verdict (contract `jobs.make`): the submission that
-   * recorded them, and the owner reopening what a verdict should not have decided. Nothing is queued where
-   * the executor switch says the server does not run for this account — under the default `runner` the
-   * session's own verifier answers this, exactly as it always has.
+   * recorded them, and the owner reopening what a verdict should not have decided.
    */
   private async queueVerificationsFor(ownerId: string, spaceId: string, sessionIds: Iterable<string>): Promise<void> {
-    if (!wikiExecutorServes(currentWikiExecutorSwitch(), ownerId)) return;
     for (const sessionId of sessionIds) {
       try {
         await enqueueWikiVerifyJob(this.prisma, { ownerId, spaceId, sessionId });
@@ -2161,7 +2118,7 @@ export class WikiService {
 
   /**
    * The ops that wait for their verification in one space, for the verifier that will judge them:
-   * the runner door's read, and the import's own (contract `reviewModes.verification.list`).
+   * the server's verify and maintain jobs' read, and the import's own (contract `reviewModes.verification.list`).
    *
    * ONLY THE PROPOSER'S. A session sees the ops its own changesets hold, and the one-off import (no
    * session, origin import) the ops of the import changesets that name none — never anybody else's,
@@ -2175,12 +2132,11 @@ export class WikiService {
    * Automatic, and a verifier that reads it can stop before it asks a model anything.
    *
    * `adopt` is a maintenance run's read instead (contract `reviewModes.verification.adoption`): the ops
-   * ended sessions left waiting in the space, which no proposer will verify now — and, for the server's
-   * own run (`maintenance.job.server.verify`), those its ended jobs left waiting too ({@link adoptedByJob}),
-   * in the one list, in the order they were recorded. The caller — a maintenance run of the space, which
-   * its door has checked, or the space's maintain job — never proposed them, so each is handed with the
-   * neighbours its draft has NOW beside the ones recorded: a later op may have made the same knowledge
-   * live while it waited.
+   * ended sessions left waiting in the space, which no proposer will verify now, and those the space's
+   * ended jobs left waiting (`maintenance.job.server.verify`, {@link adoptedByJob}), in the one list, in the
+   * order they were recorded. The caller — the space's maintain job — never proposed them, so each is handed
+   * with the neighbours its draft has NOW beside the ones recorded: a later op may have made the same
+   * knowledge live while it waited.
    */
   async listVerifications(
     principal: WikiPrincipal,
@@ -2375,9 +2331,9 @@ export class WikiService {
    *
    * WHAT THE SERVER'S OWN VERIFICATION HANDS BACK (contract `reviewModes.verification.servedBy`): a session
    * the server verifies for is given an empty list and this number, so a caller that waits for the verdict
-   * (the command that ships with the next runner release) can see what it is waiting for and is done when
-   * the count reaches zero. Counted over the same scope the list would read (`proposerScope`), so the two
-   * cannot disagree about whose ops they are.
+   * (the runner's `orbit wiki verify`) can see what it is waiting for and is done when the count reaches
+   * zero. Counted over the same scope the list would read (`proposerScope`), so the two cannot disagree
+   * about whose ops they are.
    */
   async countWaitingVerifications(principal: WikiPrincipal, spaceId: string): Promise<number> {
     return this.prisma.wikiChangesetOp.count({
@@ -2416,9 +2372,9 @@ export class WikiService {
 
   /**
    * What the server's own maintenance run adopts in the space (contract `reviewModes.verification.adoption.who`,
-   * `maintenance.job.server.verify`): the ops of the space's ended sessions, as a session's run adopts, and the ops of
-   * its ended jobs ({@link adoptableJobs}) — what a server run's two passes left without a verdict, which no job is
-   * left to verify once its run has ended. Nothing at all for a job that is not the space's maintain job.
+   * `maintenance.job.server.verify`): the ops of the space's ended sessions, as a session's run adopted them before
+   * P11, and the ops of its ended jobs ({@link adoptableJobs}) — what a server run's two passes left without a verdict,
+   * which no job is left to verify once its run has ended. Nothing at all for a job that is not the space's maintain job.
    */
   private async adoptedByJob(principal: WikiPrincipal, spaceId: string): Promise<Prisma.WikiChangesetWhereInput> {
     if (!(await this.adoptingJob(this.prisma as unknown as Tx, principal, spaceId))) return { id: { in: [] } };
@@ -2511,19 +2467,19 @@ export class WikiService {
 
   /**
    * Record verdicts, and apply each as its verdict says (contract `reviewModes.verification.verdicts`):
-   * the runner door's report, and the import's own.
+   * the server's verify and maintain jobs' report, and the import's own.
    *
    * EACH VERDICT ON ITS OWN, IN A TRANSACTION OF ITS OWN: what one verifier call decided is not undone
    * because the next one in the same request was refused, and a verifier that reports as it goes
-   * loses nothing when it stops half way. The answer carries every verdict's outcome; the door
-   * answers the status of the first refusal when none was recorded.
+   * loses nothing when it stops half way. The answer carries every verdict's outcome, with the status
+   * of the first refusal when none was recorded.
    *
    * WHO MAY: the proposer (`proposerScope`), and nobody else's op is even found — a 404, as another
    * owner's is. WHEN: while the space is Automatic, and only then (`verification.notAutomatic`).
    *
    * `adopt` is a maintenance run's report for what it adopted (`verification.adoption`): then the ops
-   * found are those of the space's ended sessions — and, for the server's run, of its ended jobs other than
-   * the run's own (`adoptableByJob`) — and nobody's still running.
+   * found are those of the space's ended sessions and of its ended jobs other than the run's own
+   * (`adoptableByJob`), and nobody's still running.
    */
   async recordVerifications(
     principal: WikiPrincipal,
@@ -2594,7 +2550,7 @@ export class WikiService {
   ): Promise<{ outcome: WikiVerificationOutcome; trip: VerificationTrip | null; wrote: boolean }> {
     const ownerId = principal.ownerId;
     const opId = toUuid(verdict.opId);
-    // What an adoption finds: an op a session proposed, as a session's run has always found it — and, for the server's
+    // What an adoption finds: an op a session proposed, as a session's run found it before P11 — and, for the server's
     // own run, one a job proposed too (`adoptableByJob` then says which of them it may verify).
     const adopted: Prisma.WikiChangesetWhereInput = adoptsAsJob(principal)
       ? { OR: [{ sessionId: { not: null } }, { jobId: { not: null } }] }
@@ -2687,7 +2643,7 @@ export class WikiService {
       changesetOpId: op.id,
     };
     // What the verifier could read decides how far its verdict reaches, and the server reads it here
-    // rather than taking the runner's word (contract `reviewModes.verification.evidence`): with no
+    // rather than taking the verifier's word (contract `reviewModes.verification.evidence`): with no
     // source readable, whatever it said leaves the op no more than unreviewed and is not counted; and a
     // tainted op is never more than unreviewed, its duplicate adding nothing (`floors.taintedWaits`).
     const { evidence } = await this.verifierSources(tx, ownerId, op.changeset.sessionId, payload, literals);
@@ -2866,11 +2822,12 @@ export class WikiService {
   // ── Anchor re-verification: what a maintenance run found (contract `anchorRules.verify`) ───────
 
   /**
-   * Record what a Wiki maintenance run's `orbit wiki anchors verify` found on origin/main, and what it
-   * means for each entry (contract `anchorRules.verify.report`).
+   * Record what a maintenance run's anchor check found on origin/main — the runner's `anchors` repository
+   * operation, which the server's maintain job asked for — and what it means for each entry (contract
+   * `anchorRules.verify.report`).
    *
-   * THE CALLER IS A MAINTENANCE RUN OF THE SPACE: the runner door asks `isWikiMaintenanceSession`
-   * before it calls this, and nothing else calls it.
+   * THE CALLER IS THE SERVER'S MAINTENANCE RUN OF THE SPACE (`maintenance.job.server`): its wiki job, and
+   * nothing else calls this.
    *
    * EACH ENTRY ON ITS OWN, IN A TRANSACTION OF ITS OWN, as a verdict is: what one entry's check
    * recorded stands whatever the next one meets. An entry that moved since the list handed it out — a
@@ -2894,7 +2851,7 @@ export class WikiService {
    * again (`maintenance.job.server.failureKinds`).
    */
   async recordAnchorChecks(
-    caller: { ownerId: string; sessionId: string | null; jobId?: string | null },
+    caller: { ownerId: string; jobId: string },
     spaceId: string,
     report: unknown,
   ): Promise<WikiAnchorReportResult> {
@@ -2934,7 +2891,7 @@ export class WikiService {
   /** One entry's report, inside its own transaction: see {@link recordAnchorChecks}. */
   private async applyAnchorCheck(
     tx: Tx,
-    caller: { ownerId: string; sessionId: string | null; jobId?: string | null },
+    caller: { ownerId: string; jobId: string },
     space: { id: string; settings: unknown },
     ref: string,
     at: string,
@@ -2991,10 +2948,8 @@ export class WikiService {
       if (open === 0) {
         const system: WikiPrincipal = { origin: 'maintenance', ownerId, userId: null, sessionId: null, toolCallId: null, authorKind: 'system' };
         const ops = [{ op: 'challenge', entryId: entry.id, reason: anchorChallengeReason(checked, ref) }];
-        // Whose run checked it: a session's, or the server's wiki job (P8) — the challenge names the one.
-        const who = caller.sessionId
-          ? `maintenance session ${uuidToBase62(caller.sessionId)}`
-          : `the server's maintenance run${caller.jobId ? ` (job ${uuidToBase62(caller.jobId)})` : ''}`;
+        // Whose run checked it: the challenge names the server's wiki job (P8).
+        const who = `the server's maintenance run (job ${uuidToBase62(caller.jobId)})`;
         const rationale = `Anchor re-verification on origin/main at ${ref.slice(0, 12)}, reported by ${who}: `
           + "this entry's anchors no longer hold as recorded.";
         const recorded = await this.recordChangeset(tx, system, space, ops, { ops, rationale }, null, literals);
@@ -3085,8 +3040,8 @@ export class WikiService {
     const literals = await this.envLiterals(this.prisma, ownerId);
     const reader = this.prisma as unknown as Tx;
     const result: WikiReopenResult = { spaceId: space.id, mode: space.settings.reviewMode, reopened: [], toVerification: [], skipped: [] };
-    // The sessions whose ops this call leaves waiting: each is queued a verification where the server runs
-    // for this account, since a session that ended long ago is nobody's to verify on the runner (jobs.make).
+    // The sessions whose ops this call leaves waiting: each is queued a verification by the server, since a
+    // session that ended long ago verifies nothing itself (jobs.make).
     const waiting = new Set<string>();
     const move = async (step: (tx: Tx) => Promise<string | null>): Promise<string | null> => {
       try {
@@ -5068,7 +5023,7 @@ const ENDED_JOB = ['succeeded', 'failed', 'cancelled'] as const;
 
 /**
  * Whether the caller adopts as the server's own maintenance run — a wiki job's principal, with no session — rather
- * than as a session's run on the runner door, whose adoption takes ended sessions' ops alone, as it always has.
+ * than as a session's run on the runner door before P11, whose adoption took ended sessions' ops alone.
  */
 function adoptsAsJob(principal: WikiPrincipal): boolean {
   return principal.sessionId === null && !!principal.jobId;

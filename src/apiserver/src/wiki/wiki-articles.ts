@@ -31,8 +31,6 @@ import {
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { RealtimeService } from '../realtime/realtime.service';
-import { currentWikiExecutorSwitch, wikiExecutorServes } from './wiki-executor-switch';
-import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
 import { ENTRY_SELECT, entryView, WikiRefusalError, type WikiPrincipal } from './wiki.service';
 
 /**
@@ -53,15 +51,13 @@ import { ENTRY_SELECT, entryView, WikiRefusalError, type WikiPrincipal } from '.
  * `wiki_entry` and nothing else, so an article reaches no agent. A topic's rows are replaced together,
  * and only when its entry set changed — no clock rewrites one (hard constraint 5).
  *
- * WHO WRITES. A Wiki maintenance run of the space (`isWikiMaintenanceSession`, the one test criterion
- * 2 exported) through the runner door, the wiki worker's `articles` job (origin `maintenance`, no
- * session, no user: `wikiArticlesJobPrincipal`), and an import the API server's container runs itself
- * for a preview space (origin `import`, no session, no user). No door builds the last two: they exist
- * only for code running in the server's own processes. The owner reads, on the user door, and writes
- * nothing here — an article is the model's summary of what the owner can edit, the entries.
+ * WHO WRITES. The wiki worker's `articles` job (origin `maintenance`, no session, no user:
+ * `wikiArticlesJobPrincipal`), and an import the API server's container runs itself for a preview space
+ * (origin `import`, no session, no user). No door builds either: they exist only for code running in the
+ * server's own processes. The owner reads, on the user door, and writes nothing here — an article is the
+ * model's summary of what the owner can edit, the entries.
  *
- * NOT A SESSIONS OR PROJECTS DEPENDENCY: this reads the wiki's rows and one session row, through
- * Prisma, like the maintenance routes beside it.
+ * NOT A SESSIONS OR PROJECTS DEPENDENCY: this reads the wiki's rows through Prisma.
  */
 
 // ── Paths ───────────────────────────────────────────────────────────────────────────────────────
@@ -768,43 +764,14 @@ export class WikiArticles {
   }
 
   /**
-   * The writers (contract `articles.who.write`): a maintenance run of this space, asked the one test
-   * criterion 2 exported, the server's own `articles` job, or the import the server's own container
-   * runs. The space is found first, so another owner's is a 404 before it is anything else.
+   * The writers (contract `articles.who.write`): the server's own `articles` job and the import the server's own
+   * container runs — origin `maintenance` or `import`, with no session and no user, which no door builds. The space
+   * is found first, so another owner's is a 404 before it is anything else.
    */
   async assertWriter(principal: WikiPrincipal, spaceId: string): Promise<void> {
     await this.requireSpace(principal.ownerId, spaceId);
-    if (principal.origin === 'import' && principal.sessionId === null && principal.userId === null) return;
-    // The server's articles job (`wikiArticlesJobPrincipal`): maintenance with no session and no user,
-    // which no door builds — the runner door refuses a headless call before it names a principal.
-    if (principal.origin === 'maintenance' && principal.sessionId === null && principal.userId === null) return;
-    if (
-      principal.origin === 'maintenance'
-      && principal.sessionId !== null
-      && (await isWikiMaintenanceSession(this.prisma, { ownerId: principal.ownerId, sessionId: principal.sessionId, spaceId }))
-    ) {
-      // An account the executor switch gives the server has its articles written by the wiki worker, with
-      // the deployment's System model (contract `articles.serverExecution`): its maintenance session is
-      // handed nothing to write from and writes nothing, so no session's provider is asked. Under the
-      // default runner this is never true, and the session writes exactly as it always has.
-      const executor = currentWikiExecutorSwitch();
-      if (wikiExecutorServes(executor, principal.ownerId)) {
-        throw new WikiRefusalError({
-          code: 'WIKI_SERVER_EXECUTES',
-          message:
-            `the Orbit server writes this account's wiki articles (ORBIT_WIKI_EXECUTOR=${executor.mode}): its wiki worker `
-              + "writes them after a maintenance run, with the deployment's System model, so this session's provider is not "
-              + 'asked. Nothing was read or written.',
-        });
-      }
-      return;
-    }
-    throw new WikiRefusalError({
-      code: 'WIKI_NOT_MAINTENANCE_SESSION',
-      message:
-        "only a Wiki maintenance run of this space writes its articles — a session whose task is in the space's hidden "
-          + '«Wiki maintenance» list — or an import the server runs itself. This caller is neither.',
-    });
+    if ((principal.origin === 'maintenance' || principal.origin === 'import') && principal.sessionId === null && principal.userId === null) return;
+    throw new Error("a wiki article is written by the server's own articles job or import, and this caller is neither");
   }
 
   // ── What the space holds ──────────────────────────────────────────────────────────────────────
@@ -893,12 +860,13 @@ export class WikiArticles {
     return new Map(rows.map((row) => [row.topicId, { sha: row.entrySetSha256, generatedAt: row.generatedAt }]));
   }
 
-  // ── The writer's three routes ─────────────────────────────────────────────────────────────────
+  // ── The writer's plan, input and write ────────────────────────────────────────────────────────
 
   /**
-   * Which topics need their articles written (contract `articles.routes.plan`): every topic with its
-   * entries' fingerprint beside the one its article was written from. A space with no topic yet is
-   * given the default ones first (`articles.seeding`), which is why this is a POST.
+   * Which topics need their articles written (contract `articles.serverExecution`, its plan step): every topic
+   * with its entries' fingerprint beside the one its article was written from. A space with no topic yet is
+   * given the default ones first (`articles.seeding`), which is why the runner door's route for it was a POST
+   * before P11.
    */
   async plan(principal: WikiPrincipal, spaceId: string): Promise<WikiArticlePlan> {
     await this.assertWriter(principal, spaceId);
@@ -946,9 +914,9 @@ export class WikiArticles {
   }
 
   /**
-   * What one topic's articles are written from (contract `articles.routes.input`): its entries, the
-   * best supported first — the sources on each one's current revision, then the newest — with the
-   * paths the grouping weighs and the fingerprint a write must name.
+   * What one topic's articles are written from (contract `articles.serverExecution`, its topic step): its
+   * entries, the best supported first — the sources on each one's current revision, then the newest — with
+   * the paths the grouping weighs and the fingerprint a write must name.
    */
   async input(principal: WikiPrincipal, spaceId: string, slug: string): Promise<WikiArticleInput> {
     await this.assertWriter(principal, spaceId);
@@ -1011,7 +979,7 @@ export class WikiArticles {
   }
 
   /**
-   * Write one topic's articles (contract `articles.routes.write`, `articles.validation`,
+   * Write one topic's articles (contract `articles.serverExecution`, `articles.validation`,
    * `articles.regeneration`).
    *
    * The fingerprint the parts were written from decides whether anything is written: the one the

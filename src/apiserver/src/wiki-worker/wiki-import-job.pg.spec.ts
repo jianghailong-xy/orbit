@@ -24,11 +24,11 @@
  *  10. the anchors are held to a fresh snapshot when the space's runner can take one, and to the one the space
  *      holds when it cannot;
  *  11. a worker that dies mid-import: the next one finishes it, asking nothing twice and proposing once;
- *  12. the door: which path an import takes, a job made once under its id, the notes the space's own, nothing for
- *      an account the runner serves, and another owner's job is not there;
- *  13. the session's own model is out of it: when the server reads, the note route refuses a command that would
- *      read the note itself (WIKI_SERVER_EXECUTES) and hands the text to none, and the proposal route takes no
- *      entries a session's model wrote — and under the default runner both answer exactly as they always have.
+ *  12. the door: which path an import takes, a job made once under its id, the notes the space's own, and another
+ *      owner's job is not there;
+ *  13. the session's own model is out of it: the note route refuses a command that would read the note itself
+ *      (WIKI_SERVER_EXECUTES) and hands the text to none, and the door has no route that takes entries a session's
+ *      model wrote.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-import-job.pg.spec.ts
  *
@@ -175,7 +175,6 @@ interface Harness {
 let harness: Promise<Harness> | undefined;
 
 function boot(): Promise<Harness> {
-  process.env.ORBIT_WIKI_EXECUTOR = 'server';
   harness ??= (async () => {
     assertCoordinatorPgUrlIsIsolated(URL_);
     const sql = new Client({ connectionString: URL_, connectionTimeoutMillis: 5_000 });
@@ -229,7 +228,6 @@ function boot(): Promise<Harness> {
 after(async () => {
   if (!harness) return;
   const { app, prisma, sql, model } = await harness;
-  delete process.env.ORBIT_WIKI_EXECUTOR;
   await sql.query('DELETE FROM "wiki_model_status"').catch(() => undefined);
   await app.close().catch(() => undefined);
   await prisma.$disconnect().catch(() => undefined);
@@ -937,7 +935,7 @@ test('a worker that dies mid-import: the next one finishes it, asking nothing tw
 
 // ── 12. the door ─────────────────────────────────────────────────────────────────────────────────────
 
-test('the door: which path an import takes, a job made once under its id, the notes the space\'s own, nothing for a runner account', { skip, timeout: 90_000 }, async () => {
+test('the door: which path an import takes, a job made once under its id, the notes the space\'s own', { skip, timeout: 90_000 }, async () => {
   const h = await boot();
   await reset(h);
   const who = await importer(h, 'tiered');
@@ -991,22 +989,6 @@ test('the door: which path an import takes, a job made once under its id, the no
     'attempts', 'createdAt', 'endedAt', 'error', 'failureKind', 'id', 'model', 'progress', 'report', 'spaceId', 'startedAt', 'state', 'waitingFor',
   ]);
 
-  // An account the runner serves: the command reads with its own model, and the server makes no job for it.
-  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
-  try {
-    const runnerPath = await call(h, who.as, 'GET', `/runner/wiki/spaces/${who.spaceId}/import`);
-    expectStatus(runnerPath, 200, 'the command asks under runner');
-    assert.equal(runnerPath.body.executor, 'runner');
-    expectStatus(await call(h, who.as, 'POST', `/runner/wiki/spaces/${who.spaceId}/import-jobs`, { ...body, id: randomUUID() }), 409, 'no job under runner');
-    process.env.ORBIT_WIKI_EXECUTOR = 'canary';
-    process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS = other.ownerId;
-    assert.equal((await call(h, who.as, 'GET', `/runner/wiki/spaces/${who.spaceId}/import`)).body.executor, 'runner', 'a canary list without this account');
-    process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS = `${other.ownerId},${who.ownerId}`;
-    assert.equal((await call(h, who.as, 'GET', `/runner/wiki/spaces/${who.spaceId}/import`)).body.executor, 'server', 'the canary account');
-  } finally {
-    process.env.ORBIT_WIKI_EXECUTOR = 'server';
-    delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
-  }
   expectStatus(await call(h, other.as, 'GET', `/runner/wiki/spaces/${who.spaceId}/import`), 404, "another owner's space");
 });
 
@@ -1024,8 +1006,8 @@ test("when the server reads, no session's model does: the note's text is handed 
     sources: [{ kind: 'note', ref: noteId }],
   });
 
-  // Server: a registration that does not say the server reads it — an orbit wiki import that predates the
-  // server's, which would read the text with the session's own provider — is refused, and nothing is kept.
+  // A registration that does not say the server reads it — an orbit wiki import that predates the server's,
+  // which would read the text with the session's own provider — is refused, and nothing is kept.
   const before = await notesOf();
   const old = await call(h, who.as, 'POST', `/runner/wiki/spaces/${who.spaceId}/notes`, { path: 'memory/old.md', text: 'an old runner reads this' });
   expectStatus(old, 409, 'a command that would read the note itself');
@@ -1037,27 +1019,12 @@ test("when the server reads, no session's model does: the note's text is handed 
   expectStatus(kept, 200, 'a command whose notes the server reads');
   assert.deepEqual(Object.keys(kept.body).filter((key) => !key.endsWith('PublicId') && key !== 'publicId').sort(),
     ['chars', 'contentSha256', 'created', 'id', 'path', 'redacted', 'spaceId']);
-  // And entries a session's own model wrote are not taken.
+  // And entries a session's own model wrote are not taken: the runner door has no route for them.
   const proposedBySession = await call(h, who.as, 'POST', `/runner/wiki/spaces/${who.spaceId}/imports`, {
     rationale: 'orbit wiki import: what the local model found', ops: [op(kept.body.id)],
   });
-  expectStatus(proposedBySession, 409, "a session's own entries");
-  assert.equal(proposedBySession.body.code, 'WIKI_SERVER_EXECUTES');
+  expectStatus(proposedBySession, 404, "a session's own entries");
   assert.equal(await changesetsOf(), 0, 'nothing was proposed');
-
-  // Runner, the default: both routes answer as they always have — the text handed back, the entries taken.
-  process.env.ORBIT_WIKI_EXECUTOR = 'runner';
-  try {
-    const registered = await call(h, who.as, 'POST', `/runner/wiki/spaces/${who.spaceId}/notes`, { path: 'memory/runner.md', text: 'the session reads this' });
-    expectStatus(registered, 200, 'a registration under runner');
-    assert.equal(registered.body.text, 'the session reads this');
-    expectStatus(await call(h, who.as, 'POST', `/runner/wiki/spaces/${who.spaceId}/imports`, {
-      rationale: 'orbit wiki import: what the local model found', ops: [op(registered.body.id)],
-    }), 200, 'a proposal under runner');
-    assert.equal(await changesetsOf(), 1);
-  } finally {
-    process.env.ORBIT_WIKI_EXECUTOR = 'server';
-  }
 });
 
 async function waitFor(ok: () => Promise<boolean>, what: string, seconds = 10): Promise<void> {

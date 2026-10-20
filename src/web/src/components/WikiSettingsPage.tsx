@@ -1,10 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ExclamationCircleOutlined, RightOutlined } from '@ant-design/icons';
 import {
-  AgentProvider,
-  WIKI_DEFAULT_MAINTENANCE_SETTINGS,
   WIKI_MAINTENANCE_DAILY_RUN_LIMIT,
   WIKI_MAINTENANCE_LOOKBACK_DAYS,
   wikiSpaceSettings,
@@ -12,7 +10,7 @@ import {
   type WikiReviewMode,
   type WikiSystemModelStatus,
 } from '@orbit/shared';
-import { providersQuery, wikiSystemModelQuery, workspacesQuery } from '../lib/queries';
+import { wikiSystemModelQuery, workspacesQuery } from '../lib/queries';
 import { useToast } from '../lib/toast';
 import { WIKI_SETTINGS_SAVED, WIKI_TITLE, wikiSpacePath, type WikiSpaceRow } from '../lib/wiki';
 import {
@@ -29,19 +27,16 @@ import {
   WIKI_MAINTENANCE,
   WIKI_MAINTENANCE_EDIT,
   WIKI_MAINTENANCE_NAME,
-  WIKI_MAINTENANCE_NOTE,
   WIKI_MAINTENANCE_NOTE_SERVER,
   WIKI_MODE_DEFAULT,
   WIKI_MODE_LABELS,
+  WIKI_MODE_NOTES,
   WIKI_MODE_ORDER,
   WIKI_MODEL,
   WIKI_MODEL_NOTE,
   WIKI_NO_WORKSPACE,
   WIKI_OFF,
   WIKI_ON,
-  WIKI_PINNED_NO_FALLBACK,
-  WIKI_PROVIDER,
-  WIKI_PROVIDER_NOTE,
   WIKI_REPO_FROM,
   WIKI_REPO_FROM_NOTE,
   WIKI_REVIEW_MODE,
@@ -58,15 +53,11 @@ import {
   WIKI_STATUS,
   WIKI_TURN_OFF,
   WIKI_TURN_ON,
-  WIKI_WORKSPACE,
-  WIKI_WORKSPACE_NOTE,
   wikiLookbackChoice,
   wikiLookbackDays,
   wikiLookbackDaysOffered,
   wikiLookbackLabel,
   wikiModeFallback,
-  wikiModeNote,
-  wikiProviderLabel,
   wikiRunsADay,
   wikiWorkspaceLabel,
   type WikiLookbackChoice,
@@ -80,7 +71,6 @@ import { NumberInput } from './ui/NumberInput';
 import { Radio, RadioGroup } from './ui/Radio';
 import { Select } from './ui/Select';
 import { Switch } from './ui/Switch';
-import { providerEngines, type ConfiguredProvider } from '../lib/workspaceDefaults';
 
 /**
  * Wiki settings (criterion 8, mocks 19–20): which review mode the space runs in, whether Automatic
@@ -94,10 +84,11 @@ import { providerEngines, type ConfiguredProvider } from '../lib/workspaceDefaul
  * request that carries a session header — the mode that decides what an agent's writes do is never an
  * agent's to set. The page then reads the space again, so what it shows is what the server kept.
  *
- * WHILE THE SERVER EXECUTES THE ACCOUNT'S WIKI (`GET /wiki/system-model`'s `executor`, mock 35 ①②) there is
- * no provider to pick: maintenance names the deployment's System model, read-only with its state; the
- * workspace is where the repository is read from; and one sentence says where the wiki's material goes. Under
- * runner — or from a control plane that predates the read — the page is what it always was.
+ * THE SERVER EXECUTES THE WIKI (mock 35 ①②), so there is no provider to pick: the workspace is where the repository
+ * is read from, and while `GET /wiki/system-model`'s `executor` says the server executes the account's wiki,
+ * maintenance names the deployment's System model, read-only with its state, and one sentence says where the
+ * wiki's material goes. A read that does not say so — still loading, or a control plane from before it — draws
+ * neither.
  */
 export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
   const settings = wikiSpaceSettings(space.settings);
@@ -156,7 +147,7 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
                 <span className="wk-mode-t">{WIKI_MODE_LABELS[value]}</span>
                 {value === WIKI_DEFAULT_REVIEW_MODE && <span className="wk-mode-tag">{WIKI_MODE_DEFAULT}</span>}
               </Radio>
-              <div className="wk-mode-d">{wikiModeNote(value, server !== null)}</div>
+              <div className="wk-mode-d">{WIKI_MODE_NOTES[value]}</div>
               {value === 'automatic' && (
                 <div className={`wk-spot${mode === 'automatic' ? '' : ' off'}`}>
                   <div>
@@ -193,7 +184,7 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
             <div className="wk-maint-off">
               <div>
                 <div className="wk-maint-t">{WIKI_MAINTENANCE_NAME}</div>
-                <div className="wk-maint-d">{server ? WIKI_MAINTENANCE_NOTE_SERVER : WIKI_MAINTENANCE_NOTE}</div>
+                <div className="wk-maint-d">{WIKI_MAINTENANCE_NOTE_SERVER}</div>
               </div>
               <span className="wk-maint-state">
                 <span className="wk-dot proposed" aria-hidden="true" /> {WIKI_OFF}
@@ -222,8 +213,8 @@ export function WikiSettingsPage({ space }: { space: WikiSpaceRow }) {
 }
 
 /**
- * Maintenance once it is on: where it runs, on what, and how often it may — then Edit and Turn off. While
- * the server runs the wiki, where it reads the repository from and the System model, with the privacy note.
+ * Maintenance once it is on: where it reads the repository from, the System model, and how often it may — then
+ * Edit and Turn off, with the privacy note.
  */
 function MaintenanceOn({
   maintenance,
@@ -243,27 +234,18 @@ function MaintenanceOn({
   const where = workspace ? wikiWorkspaceLabel(workspace) : (maintenance.workspaceId ?? '—');
   return (
     <>
-      <div className={`wk-maint-rows${server ? ' server' : ''}`}>
+      <div className="wk-maint-rows">
         <span className="k">{WIKI_STATUS}</span>
         <span className="v">
           <span className="wk-dot on" aria-hidden="true" /> {WIKI_ON}
         </span>
-        {server ? (
+        <span className="k">{WIKI_REPO_FROM}</span>
+        <span className="v">{where}</span>
+        {server && (
           <>
-            <span className="k">{WIKI_REPO_FROM}</span>
-            <span className="v">{where}</span>
             <span className="k">{WIKI_MODEL}</span>
             <span className="v">
               <WikiModelLine model={server} />
-            </span>
-          </>
-        ) : (
-          <>
-            <span className="k">{WIKI_WORKSPACE}</span>
-            <span className="v">{where}</span>
-            <span className="k">{WIKI_PROVIDER}</span>
-            <span className="v">
-              {maintenance.provider} <span className="dim">· {WIKI_PINNED_NO_FALLBACK}</span>
             </span>
           </>
         )}
@@ -286,19 +268,12 @@ function MaintenanceOn({
 }
 
 /**
- * Set up maintenance: the workspace it runs in, the provider it is pinned to, how many runs a day it
- * may start and how far back it starts reading — then Turn on (or Save, for one already on).
+ * Set up maintenance: the workspace it reads the repository from, the System model, how many runs a day it may
+ * start and how far back it starts reading — then Turn on (or Save, for one already on).
  *
- * THE PROVIDERS ARE THE ONES THE SERVER TAKES: the keys Claude Code runs, by the compatibility table
- * (each key's `engines`, docs/provider-engine-contract.md §3.5), since a maintenance run starts a clean
- * Claude Code (contract `space.settings.maintenance.provider`) — a DeepSeek key included, which Claude
- * Code runs as well as DeepSeek Harness does. The one the space already names stays in the list even
- * when this account has not configured it yet — the server takes a name it does not know, and refuses
- * the run that finds it still missing.
- *
- * WHILE THE SERVER RUNS THE WIKI there is no provider to pin (mock 35 ②): the System model is shown,
- * read-only, nothing writes `provider` — whatever the space names stays as it was, for a return to runner
- * — and the form ends on where the wiki's material goes.
+ * THERE IS NO PROVIDER TO PIN (mock 35 ②): the System model is shown, read-only, nothing writes `provider` —
+ * whatever a space named before server execution stays as it was, and the server drops it from any write
+ * (contract `space.settings.maintenance.keys.provider`) — and the form ends on where the wiki's material goes.
  */
 function MaintenanceSetUp({
   maintenance,
@@ -314,32 +289,18 @@ function MaintenanceSetUp({
   onSubmit: (maintenance: NonNullable<WikiSpaceUpdate['maintenance']>) => Promise<void>;
 }) {
   const workspaces = useQuery(workspacesQuery());
-  const providers = useQuery({ ...providersQuery(), enabled: server === null });
   const rows = (workspaces.data ?? []) as Array<{ id: string; name?: string; runner?: { name?: string; displayName?: string } }>;
   // A space names a codebase, and so does a workspace's name more often than not: the one called
   // what the space is called is where its runs most likely belong, so it is the first offered.
   const [workspaceId, setWorkspaceId] = useState<string | null>(
     () => maintenance.workspaceId ?? rows.find((row) => row.name === spaceSlug)?.id ?? null,
   );
-  const [provider, setProvider] = useState(maintenance.provider || WIKI_DEFAULT_MAINTENANCE_SETTINGS.provider);
   const [limit, setLimit] = useState(maintenance.dailyRunLimit);
   const [lookback, setLookback] = useState(() => wikiLookbackChoice(maintenance.lookbackDays));
   const [days, setDays] = useState(() => wikiLookbackDaysOffered(maintenance.lookbackDays));
   const [saving, setSaving] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const chosen = workspaceId ?? rows.find((row) => row.name === spaceSlug)?.id ?? null;
-
-  const providerOptions = useMemo(() => {
-    const claude = ((providers.data ?? []) as ConfiguredProvider[]).filter((row) =>
-      providerEngines(row.slug, [row]).includes(AgentProvider.CLAUDE),
-    );
-    const options = claude.map((row) => ({
-      value: row.slug,
-      label: wikiProviderLabel(row.slug, row.defaultModel ?? row.models[0]?.value ?? null),
-    }));
-    if (!options.some((option) => option.value === provider)) options.unshift({ value: provider, label: provider });
-    return options;
-  }, [providers.data, provider]);
 
   const submit = async () => {
     if (!chosen) return;
@@ -349,7 +310,6 @@ function MaintenanceSetUp({
       await onSubmit({
         enabled: true,
         workspaceId: chosen,
-        ...(server ? {} : { provider }),
         dailyRunLimit: limit,
         lookbackDays: wikiLookbackDays(lookback, days),
       });
@@ -375,10 +335,10 @@ function MaintenanceSetUp({
         </>
       }
     >
-      <p className="wk-modal-note">{server ? WIKI_MAINTENANCE_NOTE_SERVER : WIKI_MAINTENANCE_NOTE}</p>
+      <p className="wk-modal-note">{WIKI_MAINTENANCE_NOTE_SERVER}</p>
       <div className="wk-setup">
         <label className="wk-setup-k" htmlFor="wk-setup-workspace">
-          {server ? WIKI_REPO_FROM : WIKI_WORKSPACE}
+          {WIKI_REPO_FROM}
         </label>
         <Select
           id="wk-setup-workspace"
@@ -388,31 +348,15 @@ function MaintenanceSetUp({
           options={rows.map((row) => ({ value: row.id, label: wikiWorkspaceLabel(row) }))}
           loading={workspaces.isLoading}
         />
-        <div className="wk-setup-d">{server ? WIKI_REPO_FROM_NOTE : WIKI_WORKSPACE_NOTE}</div>
+        <div className="wk-setup-d">{WIKI_REPO_FROM_NOTE}</div>
 
-        {server ? (
+        {server && (
           <>
             <span className="wk-setup-k">{WIKI_MODEL}</span>
             <div className="wk-setup-model">
               <WikiModelLine model={server} />
             </div>
             <div className="wk-setup-d">{WIKI_MODEL_NOTE}</div>
-          </>
-        ) : (
-          <>
-            <label className="wk-setup-k" htmlFor="wk-setup-provider">
-              {WIKI_PROVIDER}
-            </label>
-            <Select
-              id="wk-setup-provider"
-              value={provider}
-              onValueChange={(value) => {
-                if (value !== null) setProvider(value);
-              }}
-              options={providerOptions}
-              loading={providers.isLoading}
-            />
-            <div className="wk-setup-d">{WIKI_PROVIDER_NOTE}</div>
           </>
         )}
 

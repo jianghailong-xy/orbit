@@ -302,6 +302,60 @@ final class ProjectPageTests: XCTestCase {
             word: "Landing", updated: "Updated just now"))
     }
 
+    /// §7.2 V6 (contract :1579-1610, board docs/mocks/landing-session/v4/05): once the server derives
+    /// the claim's liveness, the head's two slots carry the step's clock against its budget, the
+    /// claim and round, and the liveness sentence — and the card and the job rows carry the same
+    /// head. A server that sends none keeps the line above, word for word (the tests above it).
+    func testTheV6FieldsDrawTheStepClockTheClaimAndTheLiveness() {
+        let check = ProjectIntegrationCheck(name: "TASK_ACCEPTANCE", index: 1, count: 3, budgetSeconds: 3600,
+                                            startedAt: iso(110.5))
+        let inFlight = ProjectIntegrationInFlight(
+            taskTitle: "C5", state: "RUNNING", startedAt: iso(110.5), kind: "LAND_TASK", phase: "CHECK",
+            heartbeatAt: iso(0), jobId: "j1", taskId: "t1", runner: "wikova", claim: 1, round: 1,
+            check: check, stepStartedAt: iso(110.5), outputMovedAt: iso(6.4), progressProtocol: "v2",
+            liveness: "LIVE")
+        let job = ProjectIntegrationJob(
+            jobId: "j1", kind: "LAND_TASK", state: "RUNNING", phase: "CHECK", taskId: "t1", taskTitle: "C5",
+            startedAt: iso(110.5), queuedAt: iso(140.5), heartbeatAt: iso(0), runnerName: "wikova",
+            claim: 1, round: 1, check: check, stepStartedAt: iso(110.5), outputMovedAt: iso(6.4),
+            liveness: "LIVE")
+        let view = ProjectIntegrationView(
+            integratingCount: 1, queuedCount: 0, inFlight: inFlight,
+            landTasks: [ProjectLandTask(taskId: "t1", taskTitle: "C5", landTask: LandTaskIntegrationView(
+                jobId: "j1", state: "RUNNING", phase: "CHECK", targetRef: "refs/heads/project/p",
+                startedAt: iso(110.5)))],
+            inFlightJobs: [job])
+        let line = ProjectPage.landingLine(view, now: Self.now, updatedAt: Self.now)!
+        let head = ProjectPage.LandingHead(right: "1m 50s of 60m", isClock: true,
+                                           detail: "checking · output 6s ago · claim 1 · round 1 of 3")
+        XCTAssertEqual(line.head, head)
+        let card = ProjectPage.landingCard(view, now: Self.now, updatedAt: Self.now)!
+        XCTAssertEqual(card.head, head)
+        XCTAssertEqual(card.clock, "1m 50s of 60m")
+        XCTAssertEqual(ProjectPage.landingJobLines(view, now: Self.now, updatedAt: Self.now).first?.line.head, head)
+        // The three readings that change the shape: a quiet check still runs, SILENT stops the ring,
+        // and LEGACY says why its quiet is not a stall with no freshness to misread.
+        func read(_ liveness: String, step: TimeInterval = 110.5, heartbeat: TimeInterval = 0,
+                  output: TimeInterval = 6.4) -> ProjectPage.LandingLine {
+            let flight = ProjectIntegrationInFlight(
+                taskTitle: "C5", state: "RUNNING", startedAt: iso(step), kind: "LAND_TASK", phase: "CHECK",
+                heartbeatAt: iso(heartbeat), jobId: "j1", taskId: "t1", runner: "wikova", claim: 1, round: 1,
+                check: check, stepStartedAt: iso(step), outputMovedAt: iso(output), progressProtocol: "v2",
+                liveness: liveness)
+            return ProjectPage.landingLine(ProjectIntegrationView(integratingCount: 1, inFlight: flight),
+                                           now: Self.now, updatedAt: Self.now)!
+        }
+        XCTAssertEqual(read("QUIET", output: 840.5).head.detail,
+                       "checking · no output for 14m · within its 60m budget · claim 1 · round 1 of 3")
+        let silent = read("SILENT", step: 600.5, heartbeat: 240.5)
+        XCTAssertEqual(silent.head.detail, "checking · no word from runner wikova for 4m · claim 1 · round 1 of 3")
+        XCTAssertFalse(silent.running)
+        let legacy = read("LEGACY", step: 720.5, heartbeat: 720.5)
+        XCTAssertEqual(legacy.head.detail, "checking · reports only between steps · claim 1 · round 1 of 3")
+        XCTAssertFalse(legacy.head.detail.contains("Updated"))
+        XCTAssertTrue(legacy.running)
+    }
+
     func testTheLandingLineIsQueuedAndStillWhileTheJobWaitsItsTurn() {
         let view = ProjectIntegrationView(
             integratingCount: 0, queuedCount: 1,
@@ -830,12 +884,17 @@ final class ProjectPageTests: XCTestCase {
         let page = try JSONDecoder().decode(ProjectTaskPage.self, from: Data("""
         {"items":[{"id":"t1","title":"A","status":"OPEN","parentTaskId":null,"createdAt":"x","updatedAt":"y",
           "childCount":0,"unmetCount":1,"blocksCount":2,"topoLevel":1,"dependencyState":"BLOCKED",
-          "workState":"BLOCKED","integration":{"state":"NOT_APPLICABLE","since":null,"handler":null,
-          "openItemId":null,"jobId":null,"checksRunningForMs":null},"landingWaitCount":0}],
+          "workState":"BLOCKED","integration":{"state":"QUEUED","since":null,"handler":null,
+          "openItemId":null,"jobId":"j1","checksRunningForMs":null,
+          "landTask":{"jobId":"j1","state":"QUEUED","phase":null,"targetRef":"refs/heads/project/p",
+                      "blockingReason":{"code":"WAITING_DISPATCH","summary":"Waiting to land: next for the runner"}}},
+          "landingWaitCount":0}],
          "nextCursor":"c2"}
         """.utf8))
         XCTAssertEqual(page.items.first?.blocksCount, 2)
-        XCTAssertEqual(page.items.first?.integration?.state, "NOT_APPLICABLE")
+        XCTAssertEqual(page.items.first?.integration?.state, "QUEUED")
+        XCTAssertEqual(page.items.first?.integration?.landTask?.jobId, "j1")
+        XCTAssertEqual(page.items.first?.integration?.landTask?.blockingReason?.code, "WAITING_DISPATCH")
         XCTAssertEqual(page.nextCursor, "c2")
 
         let panorama = try JSONDecoder().decode(ProjectPanorama.self, from: Data("""
@@ -854,24 +913,52 @@ final class ProjectPageTests: XCTestCase {
         {"line":"PROJECT_BRANCH","ref":"project/runner","upstreamRef":"main","integratingCount":1,"queuedCount":1,
          "mergeCheckOnTip":"PASSING",
          "inFlight":{"taskTitle":"C5","kind":"LAND_TASK","phase":"FETCH","state":"RUNNING",
-           "startedAt":"2026-10-07T12:07:04.000Z","heartbeatAt":"2026-10-07T12:07:13.000Z"},
+           "startedAt":"2026-10-07T12:07:04.000Z","heartbeatAt":"2026-10-07T12:07:13.000Z",
+           "jobId":"j-c5","taskId":"t-c5","runner":"workstation-gpu","claim":1,"progressProtocol":"v2",
+           "round":1,"stepStartedAt":"2026-10-07T12:12:00.000Z",
+           "outputMovedAt":"2026-10-07T12:13:04.000Z","typicalMs":2280000,"liveness":"LIVE",
+           "check":{"name":"MERGE_CHECK","index":1,"count":2,"budgetSeconds":3600,
+                    "startedAt":"2026-10-07T12:12:00.000Z"}},
          "inFlightJobs":[
            {"jobId":"j-c5","kind":"LAND_TASK","state":"RUNNING","phase":"FETCH","taskId":"t-c5","taskTitle":"C5",
             "generation":1,"startedAt":"2026-10-07T12:07:04.000Z","queuedAt":"2026-10-07T12:06:58.000Z",
             "heartbeatAt":"2026-10-07T12:07:13.000Z","runnerName":"workstation-gpu","retriedBy":null,
-            "timedOut":true,"limitSeconds":600,"retryable":true},
+            "timedOut":true,"limitSeconds":600,"retryable":true,
+            "promotionId":null,"claim":2,"round":1,"progressProtocol":"v2",
+            "check":{"name":"MERGE_CHECK","index":1,"count":2,"budgetSeconds":3600,
+                     "startedAt":"2026-10-07T12:12:00.000Z"},
+            "stepStartedAt":"2026-10-07T12:12:00.000Z","outputMovedAt":"2026-10-07T12:13:04.000Z",
+            "typicalMs":2280000,"liveness":"LIVE","landingSessionId":"s-landing",
+            "blockingReason":{"code":"WAITING_LOCAL_LOCK",
+                              "summary":"Waiting for another job on this runner"}},
            {"jobId":"j-merge","kind":"LAND_PROMOTION","state":"QUEUED","phase":null,"taskId":null,"taskTitle":null,
             "generation":2,"startedAt":"2026-10-07T13:16:00.000Z","queuedAt":"2026-10-07T13:16:00.000Z",
             "heartbeatAt":null,"runnerName":null,"retriedBy":"COORDINATOR","timedOut":false,"limitSeconds":null,
             "retryable":false,"somethingNewer":1}]}
         """.utf8))
         XCTAssertEqual(view.inFlight?.taskTitle, "C5")
+        XCTAssertEqual(view.inFlight?.jobId, "j-c5")
+        XCTAssertEqual(view.inFlight?.runner, "workstation-gpu")
+        XCTAssertEqual(view.inFlight?.claim, 1)
+        XCTAssertEqual(view.inFlight?.check?.name, "MERGE_CHECK")
+        XCTAssertEqual(view.inFlight?.typicalMs, 2_280_000)
+        XCTAssertEqual(view.inFlight?.liveness, "LIVE")
         XCTAssertEqual(view.inFlightJobs, [
             ProjectIntegrationJob(jobId: "j-c5", kind: "LAND_TASK", state: "RUNNING", phase: "FETCH", taskId: "t-c5",
                                   taskTitle: "C5", generation: 1, startedAt: "2026-10-07T12:07:04.000Z",
                                   queuedAt: "2026-10-07T12:06:58.000Z", heartbeatAt: "2026-10-07T12:07:13.000Z",
                                   runnerName: "workstation-gpu", retriedBy: nil, timedOut: true, limitSeconds: 600,
-                                  retryable: true),
+                                  retryable: true, promotionId: nil, claim: 2, round: 1,
+                                  check: ProjectIntegrationCheck(name: "MERGE_CHECK", index: 1, count: 2,
+                                                                 budgetSeconds: 3600,
+                                                                 startedAt: "2026-10-07T12:12:00.000Z"),
+                                  stepStartedAt: "2026-10-07T12:12:00.000Z",
+                                  outputMovedAt: "2026-10-07T12:13:04.000Z", typicalMs: 2_280_000,
+                                  liveness: "LIVE",
+                                  blockingReason: LandTaskBlockingReason(
+                                    code: "WAITING_LOCAL_LOCK",
+                                    summary: "Waiting for another job on this runner"),
+                                  landingSessionId: "s-landing"),
             ProjectIntegrationJob(jobId: "j-merge", kind: "LAND_PROMOTION", state: "QUEUED", generation: 2,
                                   startedAt: "2026-10-07T13:16:00.000Z", queuedAt: "2026-10-07T13:16:00.000Z",
                                   retriedBy: "COORDINATOR"),

@@ -44,6 +44,9 @@ export interface Tenant {
   agentRuleId: string;
   workspaceRuleId: string;
   sessionId: string;
+  /** A LANDING session of the account's project, with its landing subject: the address a landing
+   *  page and its check log are read through (`GET /sessions/:id/landing/log`). */
+  landingSessionId: string;
   /** A session of the account working on `evidenceTaskId`, which its evidence names as its source. */
   evidenceSessionId: string;
   approvalId: string;
@@ -352,6 +355,18 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.projectId, jobId: of.integrationJobId } }),
     nested: ['jobId'],
   },
+  // The owner's abandon (J-T10) and stop (J-T8) doors. Another account's project is a 404; on the
+  // owner's own project the abandon names a QUEUED job (answered "not running") and the stop names
+  // the task whose queued landing that job is (answered by the stop itself), so neither is refused
+  // as an id that names nothing.
+  'POST /projects/:id/integration/jobs/:jobId/abandon': {
+    request: (of) => ({ params: { id: of.projectId, jobId: of.integrationJobId } }),
+    nested: ['jobId'],
+  },
+  'POST /projects/:id/tasks/:taskId/integration/stop': {
+    request: (of) => ({ params: { id: of.projectId, taskId: of.projectTaskId } }),
+    nested: ['taskId'],
+  },
   'POST /projects/:id/promotions/:promotionId/integration/retry': {
     request: (of) => ({ params: { id: of.projectId, promotionId: of.promotionId }, body: { reason: 'the census' } }),
     nested: ['promotionId'],
@@ -481,6 +496,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── sessions ─────────────────────────────────────────────────────────────────────────────────
   'GET /sessions/:id': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/compact': { request: (of) => ({ params: { id: of.sessionId } }) },
+  // A landing session's check output (contract §2.9 LS2): the subject the session belongs to is the
+  // account's, and another account's session is the same 404 as one that does not exist.
+  'GET /sessions/:id/landing/log': { request: (of) => ({ params: { id: of.landingSessionId } }) },
   'PATCH /sessions/:id': { request: (of) => ({ params: { id: of.sessionId }, body: { title: 'renamed by the census' } }) },
   'DELETE /sessions/:id': { request: (of) => ({ params: { id: of.spare.sessionId } }) },
   'DELETE /sessions/:id/purge': { request: (of) => ({ params: { id: of.spare.purgedSessionId } }) },
@@ -912,6 +930,11 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'GET /sessions query agentId': { request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }) },
   'GET /sessions query workspaceId': { request: (of) => ({ params: {}, query: { workspaceId: of.workspaceId } }) },
   'GET /sessions query runnerId': { request: (of) => ({ params: {}, query: { runnerId: of.runnerId } }) },
+  // The attempt a landing page names: B reads its own landing with A's job in the query, and is
+  // answered as if it named nothing — the job is resolved within that landing and nowhere else.
+  'GET /sessions/:id/landing/log query jobId': {
+    request: (of, mine) => ({ params: { id: mine.landingSessionId }, query: { jobId: of.integrationJobId } }),
+  },
   'GET /sessions/:id/events/page query around': {
     request: (of, mine) => ({ params: { id: mine.sessionId }, query: { around: of.eventId } }),
   },

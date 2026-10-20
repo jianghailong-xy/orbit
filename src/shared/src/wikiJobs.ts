@@ -123,31 +123,27 @@ export function wikiJobRetryDelaySeconds(attempts: number): number {
   return schedule[Math.min(Math.max(attempts, 0), schedule.length - 1)];
 }
 
-/** What the executor switch's environment names are called (contract `jobs.executor.*`). */
-export const WIKI_EXECUTOR_ENV = {
-  /** runner | canary | server. */
-  mode: 'ORBIT_WIKI_EXECUTOR',
-  canaryOwners: 'ORBIT_WIKI_EXECUTOR_CANARY_OWNERS',
-} as const;
-
 /**
- * How far the server-side execution is switched on (contract `jobs.executor.modes`): `runner` is the
- * default and the path that has always run — nothing the server executes; `canary` gives it only to the
- * accounts the canary list names; `server` gives it to every account.
+ * What a read's executor mode can name (contract `jobs.executor.modes`). A server since P11 says `server` alone:
+ * it executes every account's wiki, and there is no switch (`jobs.executor.removed`). `runner` and `canary` are
+ * what a control plane from before could say — its switch's default, and the accounts its canary list named —
+ * and the clients still read them as they did.
  */
 export const WIKI_EXECUTOR_MODES = ['runner', 'canary', 'server'] as const;
 export type WikiExecutorMode = (typeof WIKI_EXECUTOR_MODES)[number];
 
 /**
- * What a read tells an account about the switch (contract `jobs.executor.read`): the mode the deployment runs,
- * and whether the server executes THIS account's wiki — the server mode, or canary with the account listed.
- * Never who else the canary list names. The clients draw the server's settings, Runs and reasons only while
- * `serverExecutes` holds; under runner they are what they always were.
+ * What a read tells an account about who executes its wiki (contract `jobs.executor.read`): the mode, and whether
+ * the server executes THIS account's wiki. The clients draw the server's settings, Runs and reasons only while
+ * `serverExecutes` holds; from a control plane that left the account on the runner they are what they always were.
  */
 export interface WikiExecutorView {
   mode: WikiExecutorMode;
   serverExecutes: boolean;
 }
+
+/** What every read says since P11 (contract `jobs.executor.read`): the server executes every account's wiki. */
+export const WIKI_EXECUTOR_READ: WikiExecutorView = { mode: 'server', serverExecutes: true };
 
 /** `GET /api/wiki/spaces/:id/jobs` (contract `jobs.read`): what Activity's Runs card and a run's page read. */
 export const WIKI_JOBS_READ = {

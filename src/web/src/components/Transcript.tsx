@@ -37,9 +37,11 @@ import { quotaWindowKind } from '../lib/quotaWindow';
 import { Fragment, createContext, isValidElement, memo, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import {
+  AgentProvider,
   apiErrorRetryAt,
   askedQuestions,
   CONTINUE_MESSAGE,
+  ENGINE_CLI_NAMES,
   isApiErrorText,
   isAuthErrorText,
   isBenignEngineStderr,
@@ -2255,9 +2257,29 @@ export type AutoRetryVariant = 'quota' | 'apiError';
  * how to take it over. WorkspaceView supplies this; the shared/public page leaves it null, so the
  * card there degrades to the diagnosis alone (a logged-out viewer can neither retry nor disarm).
  */
+/**
+ * A Cursor CLI session's quota card, in Orbit's words for the account rather than the engine's slug
+ * (the board's Web 5 ④): Cursor says only "Upgrade your plan to continue" (contract §12), so the card
+ * names whose plan that is and until when, and — since a conversation that has started can't move to
+ * another account yet (D5) — where a new session could go instead.
+ */
+export interface CursorQuotaHelp {
+  /** The account (or key) the session ran on, by its name in Orbit. */
+  account: string;
+  /** Its plan, as Cursor names it, when the runner read one. */
+  plan?: string | null;
+  /** When its included usage comes back, when Cursor said. */
+  resetsAt?: string | null;
+  /** Another of the runner's Cursor CLI accounts with room, by name, and how a new session on it
+   *  starts. Absent when there is none. */
+  elsewhere?: { label: string; start: () => void } | null;
+}
+
 export interface AutoRetryHelp {
   /** Session's provider slug, for naming whose quota ran out / whose API failed. */
   provider: string;
+  /** Set for a session on Cursor CLI (CursorQuotaHelp). */
+  cursor?: CursorQuotaHelp | null;
   /** Runner display name, so the card names the machine whose account this is. */
   runnerName?: string;
   /** When the armed retry fires (ISO), or null when nothing is armed. */
@@ -2334,6 +2356,12 @@ function quotaWindow(message: string): { title: string; what: string } {
   if (kind === 'WEEKLY')
     return { title: 'Weekly limit reached', what: 'The weekly quota' };
   return { title: 'Usage limit reached', what: 'The quota' };
+}
+
+/** "Oct 24": the day a plan's usage comes back. */
+function formatDay(iso: string): string {
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? iso : at.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 /** "6:20 PM" today, "Wed, Aug 6, 1:00 PM" beyond it — a bare time on another day misleads. */
@@ -2416,6 +2444,9 @@ function AutoRetryCard({
   // through the switch. Read once: the body, the countdown and the two controls all branch on it.
   const continues = live && !!help?.nothingToResend;
   const window = quotaWindow(message);
+  // Cursor CLI's card names the account and quotes Cursor; its sentence comes after the runner's lead.
+  const cursor = quota && live ? help?.cursor : null;
+  const cursorSaid = /Cursor said: "(.+?)\.?"/.exec(message)?.[1] ?? 'Upgrade your plan to continue';
   // The instant a re-armed retry would fire, re-derived from the same two things the server used
   // when it armed the first one: the reply's own "resets 8:20pm" (quota) or the next step of the
   // backoff ladder (provider error). Null when the runtime named no time — Codex quota messages
@@ -2448,7 +2479,7 @@ function AutoRetryCard({
             ? `Tried ${help?.attempts} times — the quota still reports as spent. Over to you.`
             : `Tried ${help?.attempts} times — the API is still failing. Over to you.`
           : quota
-            ? `${window.what} for ${help?.provider ?? 'this provider'}${
+            ? `${window.what} for ${cursor ? `${cursor.account} (${ENGINE_CLI_NAMES[AgentProvider.CURSOR]})` : (help?.provider ?? 'this provider')}${
                 help?.runnerName ? ` on “${help.runnerName}”` : ''
               } is used up.${continues
                 ? ` Nothing to re-send — the limit landed on a turn that wasn’t yours.`
@@ -2458,6 +2489,25 @@ function AutoRetryCard({
                  ? ` Nothing to re-send — the failure landed on a turn that wasn’t yours.`
                  : needsYou ? ' Auto-retry is off.' : ''}`}
       </div>
+      {cursor && (
+        <div className="chat-quota-msg">
+          Cursor answered “{cursorSaid}”
+          {cursor.plan || cursor.resetsAt
+            ? `: ${cursor.account}’s ${cursor.plan ? `${cursor.plan} plan` : 'plan'} has no ${
+                cursor.plan === 'Free' ? 'requests' : 'included usage'
+              } left${cursor.resetsAt ? ` until ${formatDay(cursor.resetsAt)}` : ''}.`
+            : '.'}
+          {cursor.elsewhere && (
+            <>
+              {' '}This conversation can’t move to {cursor.elsewhere.label} yet —{' '}
+              <button type="button" className="chat-quota-link" onClick={cursor.elsewhere.start}>
+                start a new session on {cursor.elsewhere.label}
+              </button>
+              .
+            </>
+          )}
+        </div>
+      )}
       {/* The error verbatim. Which one it was is the only actionable detail if it keeps
           recurring, and unlike a quota's sentence it is not restated by anything above. */}
       {!quota && <div className="chat-quota-err">{message}</div>}

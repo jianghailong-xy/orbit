@@ -172,9 +172,6 @@ interface Harness {
 let harness: Promise<Harness> | undefined;
 
 function boot(): Promise<Harness> {
-  // The switch the specs run under: `server`, so the queue this spec drives claims its rows (the default
-  // `runner` claims nothing at all, which the job spec holds it to).
-  process.env.ORBIT_WIKI_EXECUTOR = 'server';
   harness ??= (async () => {
     assertCoordinatorPgUrlIsIsolated(URL_);
     const sql = new Client({ connectionString: URL_, connectionTimeoutMillis: 5_000 });

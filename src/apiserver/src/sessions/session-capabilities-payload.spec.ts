@@ -107,6 +107,8 @@ test('UI list and detail payloads include the same derived capabilities', async 
     // OWNER_CONFIRMED run is waiting on it, so the second half is empty and the capabilities below
     // are unaffected either way.
     project: { findMany: async () => [] },
+    // The derived landing label (0436): these rows produced no landing work.
+    projectIntegrationJob: { findFirst: async () => null },
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     // …the evidence of tasks it dispatched outside any project (`tasks/evidence-review.ts`), none…
     task: { findMany: async () => [] },
@@ -180,6 +182,8 @@ test('the session list and detail carry the SOURCE snapshot the never-started ca
       findMany: async () => [],
     },
     project: { findMany: async () => [] },
+    // The derived landing label (0436): these rows produced no landing work.
+    projectIntegrationJob: { findFirst: async () => null },
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     task: { findMany: async () => [] },
     sessionRequest: noSessionRequests(),
@@ -225,6 +229,8 @@ test('a session that resolves no SOURCE reports UNBOUND with null refusal keys',
       findMany: async () => [],
     },
     project: { findMany: async () => [] },
+    // The derived landing label (0436): these rows produced no landing work.
+    projectIntegrationJob: { findFirst: async () => null },
     taskOwnerConfirmationRequest: { findMany: async () => [] },
     task: { findMany: async () => [] },
     sessionRequest: noSessionRequests(),
@@ -250,6 +256,7 @@ test('merge recovery is offered only by a capable assigned runner', async () => 
     const service = new SessionsService({
       $queryRaw: async () => [{ projectMembership: null }],
       session: { findFirst: async () => row },
+      projectIntegrationJob: { findFirst: async () => null },
     } as never, {} as never, {} as never);
     const detail = await service.get('owner-1', row.id);
     assert.equal(detail.mergeRecoverySupported, capabilities.length > 0);
@@ -258,6 +265,7 @@ test('merge recovery is offered only by a capable assigned runner', async () => 
   const service = new SessionsService({
     $queryRaw: async () => [{ projectMembership: null }],
     session: { findFirst: async () => ({ ...row, assignedRunner: null }) },
+    projectIntegrationJob: { findFirst: async () => null },
   } as never, {} as never, {} as never);
   assert.equal((await service.get('owner-1', row.id)).mergeRecoverySupported, false);
 });
@@ -272,6 +280,7 @@ test('session detail resolves the embedded workspace key against its actual runn
   const service = new SessionsService({
     $queryRaw: async () => [{ projectMembership: null }],
     session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) },
+    projectIntegrationJob: { findFirst: async () => null },
   } as never, {} as never, {} as never);
   let detail = await service.get('owner-1', row.id);
   assert.deepEqual(detail.workspace?.antigravityKeyAvailableByRunner, { [runner.id]: false });
@@ -298,6 +307,7 @@ test('session detail says which credential the runner runs built-in Antigravity 
   const service = new SessionsService({
     $queryRaw: async () => [{ projectMembership: null }],
     session: { findFirst: async () => ({ ...row, assignedRunner: runner, workspace }) },
+    projectIntegrationJob: { findFirst: async () => null },
   } as never, {} as never, {} as never);
   const detail = await service.get('owner-1', row.id);
   // Signed in with Google and no key anywhere: the engine is offered, labelled by its source.

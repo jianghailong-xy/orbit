@@ -123,7 +123,10 @@ export function wikiMaintenanceParts(health: WikiMaintenanceHealth, now: number)
   }
 }
 
-/** The server's reason, when there is one to say (see `WIKI_REASON_*`); null under runner and while nothing holds. */
+/**
+ * The server's reason, when there is one to say (see `WIKI_REASON_*`); null while nothing holds, and for a read that
+ * does not say the server executes the account's wiki.
+ */
 export function wikiServerReason(health: Pick<WikiSpaceHealth, 'executor' | 'systemModel' | 'repo' | 'maintenance'>): WikiStatusPart | null {
   if (!health.executor?.serverExecutes) return null;
   const reason = (text: string, tone: 'warn' | 'error') => part(text, { tone, mark: 'dot', strong: true });

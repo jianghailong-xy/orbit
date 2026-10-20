@@ -122,6 +122,16 @@ final class SessionProjectCopyParityTests: XCTestCase {
         XCTAssertEqual(SessionProjectCopy.landingSilentWord(minutes: 11), "no report for 11m")
     }
 
+    /// §7.2 V6's two words on this row: the server's timeout and its SILENT claim, held to the
+    /// web's own constants.
+    func testTheLivenessWordsAreTheWebsOwn() throws {
+        let web = try web()
+        XCTAssertTrue(web.contains("export const SESSION_PROJECT_TIMED_OUT = '\(SessionProjectCopy.landingTimedOut)';"),
+                      "the row's timeout word drifted")
+        XCTAssertTrue(web.contains("export const SESSION_PROJECT_NO_WORD = '\(SessionProjectCopy.landingNoWordFromRunner)';"),
+                      "the row's silent word drifted")
+    }
+
     func testAllFiveCoordinatorLeadPhrasesAreTheWebsOwn() throws {
         let web = try web()
         let kinds: [CoordinatorLeadKind] = [

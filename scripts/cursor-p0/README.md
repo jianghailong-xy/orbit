@@ -1,8 +1,10 @@
-# P0a、P0c：真 Cursor CLI 的 ACP 实测脚本（Linux）
+# P0：真 Cursor CLI 的 ACP 实测脚本（Linux + macOS）
 
-固定 Cursor CLI `2026.10.14-941492e`（tarball SHA-256 `6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d`）。
+固定 Cursor CLI `2026.10.14-941492e`（Linux x64 tarball SHA-256 `6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d`，
+macOS arm64 tarball SHA-256 `c6d9e2eaa1b1e24221517e0b4206b1f1593792e6f0d8a52e9b507bbe7ab0cc77`，P0b 在 orbit-macos 上测得）。
 结论和接口约定见[运行时契约](../../docs/cursor-runtime-contract.md)，录制和每个场景的断言见
-[`docs/evidence/cursor-cli/2026.10.14-941492e/`](../../docs/evidence/cursor-cli/2026.10.14-941492e/)（P0a）和其下的 `p0c/`（P0c），
+[`docs/evidence/cursor-cli/2026.10.14-941492e/`](../../docs/evidence/cursor-cli/2026.10.14-941492e/)（P0a）和其下的 `p0c/`（P0c），以及
+[`docs/evidence/cursor-cli/macos-2026.10.14-941492e/`](../../docs/evidence/cursor-cli/macos-2026.10.14-941492e/)（P0b，macOS），
 回放用的单进程样本见 [`src/runner-go/testdata/cursor/`](../../src/runner-go/testdata/cursor/)（P0c 的在其下 `p0c/`）。
 
 ## 准备
@@ -18,12 +20,17 @@
    ```
 
    位置可用 `CURSOR_P0_ROOT`、`CURSOR_P0_CLI` 改。脚本启动时核对 `--version`，不是要测的版本（默认是固定版本）就退出。
-2. Cursor User API Key 放在 `/root/.config/orbit-secrets/cursor-api-key`（0600；`CURSOR_P0_KEY_FILE` 可改）。
-3. 系统需要 Node 22.5+（用 `node:sqlite` 读会话库）、`git`、`strace`、`unshare`（root 或 user namespace）、`systemd-run`（可选）。
+
+   macOS（darwin/arm64）同样步骤，URL 换成 `…/darwin/arm64/agent-cli-package.tar.gz`，哈希见上。
+
+2. Cursor User API Key 放在 `<home>/.config/orbit-secrets/cursor-api-key`（0600；`CURSOR_P0_KEY_FILE` 可改）。
+   没有 key 时用 `--no-key-ok` 只跑 `needsKey:false` 的场景，需要 key 的被跳过并计入非零退出码。
+3. 系统需要 Node 22.5+（用 `node:sqlite` 读会话库）、`git`。Linux 另需 `strace`、`unshare`（root 或 user namespace）、`systemd-run`（可选）。
+   macOS 没有 strace/unshare：相关断言以「skipped」记录，`startup-processes-and-network` 改读 worker 日志和 netlog。
 
 ## 运行
 
-在仓库根目录执行，重负载放进 systemd scope（runner 服务 OOMPolicy=stop，一个子进程 OOM 会停掉整个 runner）：
+在仓库根目录执行（Linux 重负载放进 systemd scope；macOS 直接跑）：
 
 ```sh
 systemd-run --scope --quiet -p MemoryMax=6G node scripts/cursor-p0/reproduce.mjs --zero        # 不发 prompt 的场景
@@ -31,9 +38,14 @@ systemd-run --scope --quiet -p MemoryMax=6G node scripts/cursor-p0/reproduce.mjs
 systemd-run --scope --quiet -p MemoryMax=6G node scripts/cursor-p0/reproduce.mjs              # 全部场景
 node scripts/cursor-p0/reproduce.mjs --list                                                    # 场景名和各自花几次真实 prompt
 node scripts/cursor-p0/reproduce.mjs --selftest                                                # 只用假 agent 检查脚本流程，不发真实 prompt
+node scripts/cursor-p0/reproduce.mjs --no-key-ok --only <无 key 也能跑的场景>                  # key 还没到时（macOS）
 ```
 
-退出码非零表示：选中的场景有断言失败、固定版本不对、缺 key、或者这次选择会超出真实 prompt 预算。
+退出码非零表示：选中的场景有断言失败、固定版本不对、缺 key（或跳过）、或者这次选择会超出真实 prompt 预算。
+
+macOS 专属场景：`macos-keychain-store`（Keychain 条目名与不变性）、`macos-quarantine`（quarantine 属性）、
+`macos-launchd-keychain`（launchd Aqua 会话里的 Keychain 行为）。`macos-keychain-store` 会短暂读写真实 HOME 的
+`~/.cursor`（keychain 按 HOME 解析）并在场景内恢复原状。
 
 ## 真实 prompt 预算
 
@@ -87,6 +99,8 @@ node scripts/cursor-p0/reproduce.mjs --selftest                                 
 | `test-mcp.mjs` | stdio MCP 测试服务器：`record`（有副作用）、`echo` |
 | `scenarios/zero-*.mjs` | 不发 prompt 的场景 |
 | `scenarios/real.mjs` | 发真实 prompt 的场景 |
+| `scenarios/macos.mjs` | darwin 专属场景：Keychain 条目与 launchd 行为、quarantine |
+| `probe/` | P0b 的手工探针（dummy 凭据，非场景断言），支撑契约 §18.3/§18.4 |
 | `selftest-fake-agent.mjs` | 只给 `--selftest` 用的假 agent，不是证据 |
 | `compare-builds.mjs` | 两个版本同名场景的对比 |
 | `turn-endings.mjs` | 每一轮怎么结束、轮外有哪些更新 |

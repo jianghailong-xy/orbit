@@ -183,6 +183,11 @@ test('tenant isolation: past the runner gate and through the share links, anothe
     const runtimeSessionId = randomUUID();
     const machineSessionId = await open('machine session', { status: 'RUNNING', runtimeSessionId });
     const orphanSessionId = await open('orphan session', { assignedRunnerId: null });
+    // An open LANDING container exactly as LS1 writes it: no engine, no runner, provider `orbit`.
+    const landingSessionId = await open('landing session', {
+      sessionKind: 'LANDING', status: 'AWAITING_INPUT', provider: 'orbit', providerBuiltin: true,
+      engine: null, assignedRunnerId: null, startsTaskWork: false,
+    });
     const takeoverSessionId = await open('takeover session', { status: 'RUNNING' });
     const leaseOwner = randomUUID();
     const leaseGeneration = randomUUID();
@@ -325,54 +330,13 @@ test('tenant isolation: past the runner gate and through the share links, anothe
       },
     });
 
-    // ── the wiki: a workspace bound to the space, and the space's maintenance ──
+    // ── the wiki: a workspace bound to the space, a session in it, and an import job of the space's ──
     ok(await as('POST', `/wiki/spaces/${of.wikiSpaceId}/workspaces`, { workspaceId: of.workspaceId }), 'binding the space');
     const wikiSessionId = await open('wiki session');
-    const maintenanceListId = idOf(await as('POST', '/task-lists', { title: `${name} wiki maintenance` }), 'a maintenance list');
-    const maintenanceTaskId = await task('wiki maintenance', { listId: maintenanceListId });
-    await sql.query(
-      `UPDATE "wiki_space" SET "settings" = "settings" || jsonb_build_object('maintenance', jsonb_build_object('listId', $1::text)) WHERE "id" = $2`,
-      [maintenanceListId, of.wikiSpaceId],
-    );
-    const wikiMaintainerSessionId = await open('wiki maintainer', { taskId: maintenanceTaskId });
-    // The draft the space asked for when it was made, made now into the maintainer's task.
-    const draft = await db.wikiPlanJob.findFirst({
-      where: { spaceId: of.wikiSpaceId, kind: { in: ['draft', 'revise'] }, state: { in: ['queued', 'held', 'made'] } },
-      select: { id: true },
-    });
-    const wikiPlanJobId = draft?.id ?? randomUUID();
-    await db.wikiPlanJob.upsert({
-      where: { id: wikiPlanJobId },
-      update: { state: 'made', taskId: maintenanceTaskId, madeAt: new Date(), heldReason: null, heldAt: null },
-      create: { id: wikiPlanJobId, spaceId: of.wikiSpaceId, ownerId, kind: 'draft', trigger: 'owner', state: 'made', taskId: maintenanceTaskId, madeAt: new Date() },
-    });
     const wikiImportJobId = randomUUID();
     await db.wikiJob.create({
       data: { id: wikiImportJobId, ownerId, spaceId: of.wikiSpaceId, kind: 'import', input: {}, state: 'succeeded', report: {}, endedAt: new Date() },
     });
-    const confirmedDoc = await db.wikiPlanDoc.findFirstOrThrow({ where: { ownerId, slug: of.wikiDocSlug, plan: { status: 'confirmed' } }, select: { id: true } });
-    await db.wikiPlanSection.create({
-      data: {
-        docId: confirmedDoc.id, ownerId, position: 0, key: 'intro', title: 'Introduction', kind: 'overview', covers: 'what the census holds',
-        length: 200, sources: { docs: [], code: [], contracts: [], sessions: null },
-      },
-    });
-    const opOf = async (sessionId: string) => {
-      const changesetId = randomUUID();
-      await db.wikiChangeset.create({
-        data: { id: changesetId, ownerId, spaceId: of.wikiSpaceId, origin: 'agent', sessionId, status: 'pending', expiresAt: new Date(Date.now() + 7 * 86_400_000) },
-      });
-      const opId = randomUUID();
-      await db.wikiChangesetOp.create({
-        data: {
-          id: opId, changesetId, ownerId, seq: 0, op: 'add', decision: 'verifying',
-          payload: { kind: 'concept', title: 'A census concept', summary: 'From the census.', fields: { definition: 'x', boundaries: 'y' } },
-        },
-      });
-      return opId;
-    };
-    const wikiVerifyingOpId = await opOf(wikiSessionId);
-    const wikiAdoptableOpId = await opOf(await open('ended wiki session', { status: 'SUCCEEDED', completedAt: new Date() }));
 
     // ── what the account shares: a session, a task and a project, each with something under it ──
     const sharedSessionId = await open('shared session');
@@ -393,13 +357,14 @@ test('tenant isolation: past the runner gate and through the share links, anothe
 
     return {
       callingSessionId, coordinatorSessionId, newCoordinatorSessionId, machineSessionId, runtimeSessionId, orphanSessionId,
+      landingSessionId,
       takeoverSessionId, activateSessionId, leaseOwner, leaseGeneration, inboxSessionId, turnSessionId, shellTurnId,
       finalizeSessionId, completeSessionId, sessionAttachmentId, allowedApprovalId, artifactRequestId, integrationJobId, landingTaskId,
       codexOperationId, wikiRepoOpId, spareServiceTokenId, replyRequestId, interruptSessionId, endSessionId, completedSessionId,
       deletedSessionId, archivedSessionId, coordinatorItemId, handOverItemId, failedTaskId, watchId, verifierTaskId, verifiedTaskId,
       providerSlug: await slugOf(of.providerId), spareProviderSlug: await slugOf(of.spare.providerId), listTaskId,
-      confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId, wikiMaintainerSessionId,
-      wikiPlanJobId, wikiImportJobId, wikiVerifyingOpId, wikiAdoptableOpId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
+      confirmTaskId, confirmRunSessionId, confirmRequestId, reviewerSessionId, wikiSessionId,
+      wikiImportJobId, sharedSessionId, sharedSessionAttachmentId, sharedTaskId,
       sharedTaskRunSessionId, sharedTaskAttachmentId, sharedProjectId, sharedProjectTaskId, sharedProjectRunSessionId,
       sharedProjectAttachmentId,
     };

@@ -3,13 +3,17 @@ import { test } from 'node:test';
 import { AgentProvider } from '@orbit/shared';
 import { decryptSecret } from './provider-crypto';
 import { COMPATIBILITY_GUARD_SLUGS, ProvidersService } from './providers.service';
+import { LANDING_PROVIDER_SLUG } from './provider-slug';
 
-test('the guard rows are the OpenCode, Antigravity and Cursor CLI compatibility fences, and only those', () => {
-  // Migrations 0080, 0367 and 0426 each park one on the slug that became a built-in runtime.
-  assert.deepEqual(COMPATIBILITY_GUARD_SLUGS, [AgentProvider.OPENCODE, AgentProvider.ANTIGRAVITY, AgentProvider.CURSOR]);
+test('the guard rows are the OpenCode, Antigravity, Cursor CLI and Orbit compatibility fences, and only those', () => {
+  // Migrations 0080, 0367, 0426 and 0436 each park one on a reserved slug: three built-in runtimes
+  // and the LANDING session's provider.
+  assert.deepEqual(COMPATIBILITY_GUARD_SLUGS, [
+    AgentProvider.OPENCODE, AgentProvider.ANTIGRAVITY, AgentProvider.CURSOR, LANDING_PROVIDER_SLUG,
+  ]);
 });
 
-test('provider catalogs hide the OpenCode, Antigravity and Cursor CLI rolling-compatibility rows', async () => {
+test('provider catalogs hide the OpenCode, Antigravity, Cursor CLI and Orbit rolling-compatibility rows', async () => {
   const whereClauses: unknown[] = [];
   const prisma = {
     // An admin, whose picker lists the shared rows too (usableProviderScope) — the guard rows among them.
@@ -33,7 +37,7 @@ test('provider catalogs hide the OpenCode, Antigravity and Cursor CLI rolling-co
   assert.equal(whereClauses.length, 3);
   for (const where of whereClauses) {
     assert.deepEqual((where as { slug?: unknown }).slug, {
-      notIn: [AgentProvider.OPENCODE, AgentProvider.ANTIGRAVITY, AgentProvider.CURSOR],
+      notIn: [AgentProvider.OPENCODE, AgentProvider.ANTIGRAVITY, AgentProvider.CURSOR, LANDING_PROVIDER_SLUG],
     });
   }
 });

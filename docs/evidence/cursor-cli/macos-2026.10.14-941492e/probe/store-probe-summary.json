@@ -1,0 +1,219 @@
+{
+ "note": "store-probe.mjs: credential-store probe against the pinned real CLI on macOS with a DUMMY token (never a real credential). No scenario-level assertion: these hand measurements back contract §18.3/§18.4 until the key-required scenario runs (macos-keychain-store, credential-stores). session/new fails with -32603 Internal error because the dummy token is not a valid credential.",
+ "runs": {
+  "default": {
+   "init": 1,
+   "newSession": {
+    "code": -32603,
+    "msg": "Internal error"
+   },
+   "keychainCursorEntries": [],
+   "slotTree": {
+    "home": [
+     ".cursor/",
+     ".cursor/agent-cli-state.json 59",
+     ".cursor/auth.json 267",
+     "Library/Caches/cursor-compile-cache/",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/1d8c5fd7 10420",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/399ac552 1004",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/5c37a59e 3492",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/707c2679 12684",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/8e9469e6 989580",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/b414ec1f 1708",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/cbc54fbb 442172",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/db2b8a42 10948",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/e647887f 5948",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/e76fb4dd 6276",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/f700e77f 3892",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/f9e2befd 3844",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/fdafcb6f 1124"
+    ],
+    "config": [
+     "cli-config.json 837"
+    ],
+    "data": [],
+    "xdgConfig": []
+   },
+   "stderr": "",
+   "authJson": {
+    "mode": "600",
+    "fields": [
+     "accessToken",
+     "refreshToken"
+    ]
+   }
+  },
+  "file": {
+   "store": "file",
+   "init": 1,
+   "newSession": {
+    "code": -32603,
+    "msg": "Internal error"
+   },
+   "keychainCursorEntries": [],
+   "slotTree": {
+    "home": [
+     ".cursor/",
+     ".cursor/agent-cli-state.json 59",
+     ".cursor/auth.json 267",
+     "Library/Caches/cursor-compile-cache/",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/1d8c5fd7 10420",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/399ac552 1004",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/5c37a59e 3492",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/707c2679 12676",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/8e9469e6 989580",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/b414ec1f 1708",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/cbc54fbb 442172",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/db2b8a42 10948",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/e647887f 5948",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/e76fb4dd 6276",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/f700e77f 3892",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/f9e2befd 3844",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/fdafcb6f 1124"
+    ],
+    "config": [
+     "cli-config.json 837"
+    ],
+    "data": [],
+    "xdgConfig": []
+   },
+   "stderr": "",
+   "authJson": {
+    "mode": "600",
+    "fields": [
+     "accessToken",
+     "refreshToken"
+    ]
+   }
+  },
+  "memory": {
+   "store": "memory",
+   "init": 1,
+   "newSession": {
+    "code": -32603,
+    "msg": "Internal error"
+   },
+   "keychainCursorEntries": [],
+   "slotTree": {
+    "home": [
+     ".cursor/",
+     ".cursor/agent-cli-state.json 59",
+     "Library/Caches/cursor-compile-cache/",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/1d8c5fd7 10420",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/399ac552 1004",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/5c37a59e 3492",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/707c2679 12684",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/8e9469e6 989580",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/b414ec1f 1708",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/cbc54fbb 442172",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/db2b8a42 10948",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/e647887f 5948",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/e76fb4dd 6276",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/f700e77f 3892",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/f9e2befd 3844",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/fdafcb6f 1124"
+    ],
+    "config": [
+     "cli-config.json 837"
+    ],
+    "data": [],
+    "xdgConfig": []
+   },
+   "stderr": "",
+   "authJson": null
+  },
+  "file-xdg": {
+   "store": "file",
+   "init": 1,
+   "newSession": {
+    "code": -32603,
+    "msg": "Internal error"
+   },
+   "keychainCursorEntries": [],
+   "slotTree": {
+    "home": [
+     ".cursor/",
+     ".cursor/agent-cli-state.json 59",
+     ".cursor/auth.json 267",
+     ".cursor/projects/",
+     ".cursor/projects/U-fd8b063/",
+     "Library/Caches/cursor-compile-cache/",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/1d8c5fd7 10420",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/399ac552 1004",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/5c37a59e 3492",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/707c2679 12668",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/8e9469e6 989580",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/b414ec1f 1708",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/cbc54fbb 442172",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/db2b8a42 10948",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/e647887f 5948",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/e76fb4dd 6276",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/f700e77f 3892",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/f9e2befd 3844",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/fdafcb6f 1124"
+    ],
+    "config": [],
+    "data": [],
+    "xdgConfig": [
+     "cursor/cli-config.json 837"
+    ]
+   },
+   "stderr": "",
+   "authJson": {
+    "mode": "600",
+    "fields": [
+     "accessToken",
+     "refreshToken"
+    ]
+   }
+  },
+  "default-xdg": {
+   "init": 1,
+   "newSession": {
+    "code": -32603,
+    "msg": "Internal error"
+   },
+   "keychainCursorEntries": [],
+   "slotTree": {
+    "home": [
+     ".cursor/",
+     ".cursor/Users-l-369ca3d/",
+     ".cursor/agent-cli-state.json 59",
+     ".cursor/auth.json 267",
+     "Library/Caches/cursor-compile-cache/",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/1d8c5fd7 10420",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/399ac552 1004",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/5c37a59e 3492",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/707c2679 12692",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/8e9469e6 989580",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/b414ec1f 1708",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/cbc54fbb 442172",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/db2b8a42 10948",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/e647887f 5948",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/e76fb4dd 6276",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/f700e77f 3892",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/f9e2befd 3844",
+     "Library/Caches/cursor-compile-cache/v26.8.1-arm64-8d7ad2ee-501/fdafcb6f 1124"
+    ],
+    "config": [],
+    "data": [],
+    "xdgConfig": [
+     "cursor/cli-config.json 837"
+    ]
+   },
+   "stderr": "",
+   "authJson": {
+    "mode": "600",
+    "fields": [
+     "accessToken",
+     "refreshToken"
+    ]
+   }
+  }
+ }
+}

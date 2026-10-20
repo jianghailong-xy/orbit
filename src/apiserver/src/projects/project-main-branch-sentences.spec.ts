@@ -108,7 +108,7 @@ function waiting(blockingJobKind: string, mainBranch: string | null): Integratio
     jobId: 'landing', jobState: 'QUEUED', jobPhase: null, jobGeneration: 1,
     jobTargetRef: 'refs/heads/project/example',
     jobStartedAt: null, jobClaimedAt: null, jobHeartbeatAt: null, jobCreatedAt: queuedAt, jobFinishedAt: null,
-    jobErrorCode: null, jobConflictCount: 0, jobFailedCheck: null,
+    jobErrorCode: null, jobConflictCount: 0, jobFailedCheck: null, jobLandingSessionId: null,
     queueBlockCode: 'WAITING_SERIAL_SLOT', runnerWait: null, runnerName: null,
     blockingJobId: 'busy', blockingJobKind, blockingTaskTitle: null, blockingOpenItemId: null,
     syncHandlingGeneration: null,

@@ -4,7 +4,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ProjectIntegrationJob, ProjectIntegrationView, ProjectLandTask } from '@orbit/shared';
+import type {
+  ProjectIntegrationInFlight,
+  ProjectIntegrationJob,
+  ProjectIntegrationView,
+  ProjectLandTask,
+} from '@orbit/shared';
 import {
   JOB_PHASES,
   JOB_WORDS,
@@ -812,6 +817,7 @@ describe('landingJobLines', () => {
     });
     expect(landingJobLines(listing([running]), NOW, { updatedAt: NOW })).toEqual([{
       jobId: 'job-t2', taskId: 'task-t2', detail: null, retryable: false,
+      landingSessionId: null, mergeJob: false,
       line: { word: 'Landing', what: 'T2', running: true, timedOut: false, state: 'checking', clock: '1m 20s',
         clockLabel: 'Elapsed', updated: 'Updated just now', wait: null },
     }]);
@@ -826,6 +832,8 @@ describe('landingJobLines', () => {
   it('draws a promotion, which lands no task, as its word, state and wait alone', () => {
     expect(landingJobLines(listing([merge()]), NOW, { updatedAt: NOW })).toEqual([{
       jobId: 'job-merge', taskId: null, detail: null, retryable: false,
+      // A round of merging, and a server that names no landing session for it.
+      landingSessionId: null, mergeJob: true,
       line: { word: 'Merge to main', what: null, running: false, timedOut: false, state: 'queued', clock: '41m 8s',
         clockLabel: 'Queued for', updated: 'Updated just now', wait: null },
     }]);
@@ -852,6 +860,9 @@ describe('landingJobLines', () => {
   ] as const)('says where a job that timed out at %s stopped, and whether it may have pushed', (phase, stopped, push) => {
     expect(landingJobLines(listing([job({ phase })]), NOW, { updatedAt: NOW })).toEqual([{
       jobId: 'job-c5', taskId: 'task-c5', retryable: true,
+      // A server that names no landing session for the job: the row draws the sentence instead of
+      // a link, and the job's own word is not a merge's.
+      landingSessionId: null, mergeJob: false,
       line: { word: 'Landing', what: C5, running: false, timedOut: true, state: 'Timed out', clock: '110m',
         clockLabel: 'No report for', updated: 'limit 10m', wait: null },
       detail: `Runner workstation-gpu took it at 20:07 · stopped at ${stopped} · ${push}`,
@@ -888,6 +899,152 @@ describe('landingJobLines', () => {
   });
 });
 
+/**
+ * §7.2 V6 (contract :1579-1610, board docs/mocks/landing-session/v4/05): once the server derives
+ * the claim's liveness and sends the step, claim and output facts, the head's two slots say them.
+ * A server that sends none keeps every word it had — the block after this one is that server.
+ */
+describe('§7.2 V6: the head once the server derives the claim’s liveness', () => {
+  const V6_NOW = Date.parse('2026-09-25T13:59:20Z');
+  const V6_STEP = '2026-09-25T13:57:30Z';
+  const checkFor = (kind: ProjectIntegrationInFlight['kind']) => ({
+    name: (kind === 'LAND_TASK' ? 'TASK_ACCEPTANCE' : 'MERGE_CHECK') as 'TASK_ACCEPTANCE' | 'MERGE_CHECK',
+    index: 1, count: 3, budgetSeconds: 3600, startedAt: V6_STEP,
+  });
+
+  /** A v2 claim as the server reports it: LIVE by default, one claim, one round. */
+  const claimed = (over: Partial<ProjectIntegrationInFlight> = {}): ProjectIntegrationInFlight => ({
+    taskTitle: TITLE, state: 'RUNNING', kind: 'LAND_TASK', phase: 'CHECK',
+    startedAt: V6_STEP, heartbeatAt: '2026-09-25T13:59:20Z',
+    jobId: 'job-t2', taskId: 'task-t2', runner: 'wikova', claim: 1, round: 1,
+    check: checkFor('LAND_TASK'), stepStartedAt: V6_STEP, outputMovedAt: '2026-09-25T13:59:14Z',
+    progressProtocol: 'v2', typicalMs: null, liveness: 'LIVE',
+    ...over,
+  });
+
+  const listed = (over: Partial<ProjectIntegrationJob> = {}): ProjectIntegrationJob => cardJob({
+    jobId: 'job-t2', taskId: 'task-t2', taskTitle: TITLE, kind: 'LAND_TASK', phase: 'CHECK',
+    startedAt: V6_STEP, queuedAt: '2026-09-25T13:57:00Z', heartbeatAt: '2026-09-25T13:59:20Z',
+    runnerName: 'wikova', claim: 1, round: 1, check: checkFor('LAND_TASK'),
+    stepStartedAt: V6_STEP, outputMovedAt: '2026-09-25T13:59:14Z', typicalMs: null, liveness: 'LIVE',
+    ...over,
+  });
+
+  /** Both halves of the read the head and the card draw from, kept in step. */
+  const view6 = (lead: ProjectIntegrationInFlight, jobs: ProjectIntegrationJob[] = [listed()],
+                 landTasks?: ProjectLandTask[]): ProjectIntegrationView => integration({
+    inFlight: lead, inFlightJobs: jobs, integratingCount: 1, queuedCount: 0,
+    ...(landTasks ? { landTasks } : {}),
+  });
+
+  const kinds: Array<[NonNullable<ProjectIntegrationInFlight['kind']>, string]> = [
+    ['LAND_TASK', 'Landing'], ['CHECK_PROMOTION', 'Merge check'], ['LAND_PROMOTION', 'Merge to main'],
+  ];
+
+  it.each(kinds)('draws %s’s head for each of the five readings', (kind, word) => {
+    const check = checkFor(kind);
+    const typicalMs = kind === 'LAND_TASK' ? null : 18 * 60_000;
+    const taskTitle = kind === 'LAND_TASK' ? TITLE : null;
+    const usually = kind === 'LAND_TASK' ? '' : 'usually ~18m · ';
+    const line = (over: Partial<ProjectIntegrationInFlight>, jobs?: Partial<ProjectIntegrationJob>[],
+                  observation = { updatedAt: V6_NOW }) => landingHead(landingLine(view6(
+                    claimed({ kind, taskTitle, check, typicalMs, ...over }),
+                    [listed({ kind, taskTitle, taskId: taskTitle ? 'task-t2' : null, check, typicalMs, ...over, ...(jobs?.[0] ?? {}) })],
+                  ), V6_NOW, observation)!);
+
+    expect(landingLine(view6(claimed({ kind, taskTitle, check, typicalMs }),
+      [listed({ kind, taskTitle, check, typicalMs })]), V6_NOW)!.word).toBe(word);
+
+    // LIVE: the step's clock against its budget, and output moving.
+    expect(line({ liveness: 'LIVE' })).toEqual({
+      right: '1m 50s of 60m', isClock: true,
+      detail: `checking · output 6s ago · ${usually}claim 1 · round 1 of 3`,
+    });
+    // QUIET: the heartbeat is fresh and the output is not — the clock still runs.
+    expect(line({ liveness: 'QUIET', outputMovedAt: '2026-09-25T13:45:20Z' })).toEqual({
+      right: '1m 50s of 60m', isClock: true,
+      detail: `checking · no output for 14m · within its 60m budget · ${usually}claim 1 · round 1 of 3`,
+    });
+    // SILENT: no word for four minutes; the clock is frozen at the runner's last word.
+    expect(line({ liveness: 'SILENT', heartbeatAt: '2026-09-25T13:55:20Z', stepStartedAt: '2026-09-25T13:50:00Z' })).toEqual({
+      right: '5m 20s of 60m', isClock: true,
+      detail: `checking · no word from runner wikova for 4m · ${usually}claim 1 · round 1 of 3`,
+    });
+    // LEGACY: reports only between steps; no freshness, and no silence inferred from 12 quiet minutes.
+    const legacy = line({ liveness: 'LEGACY', heartbeatAt: '2026-09-25T13:47:20Z', stepStartedAt: '2026-09-25T13:47:20Z' });
+    expect(legacy).toEqual({
+      right: '12m 0s of 60m', isClock: true,
+      detail: `checking · reports only between steps · ${usually}claim 1 · round 1 of 3`,
+    });
+    expect(JSON.stringify(legacy)).not.toContain('Update unavailable');
+    expect(JSON.stringify(legacy)).not.toContain('Updated 12m ago');
+    // LEASE_EXPIRED: the server's one timeout, worded as main words it.
+    expect(line({ liveness: 'LEASE_EXPIRED', heartbeatAt: '2026-09-25T13:35:20Z' },
+      [{ timedOut: true, limitSeconds: 600 }])).toEqual({
+      right: 'Timed out', isClock: false, detail: 'No report for 24m · limit 10m',
+    });
+  });
+
+  it('names the takeover and the first start the claim row still carries', () => {
+    const first = { ...landed('job-t2'), integration: { ...landed('job-t2').integration!, landTask: {
+      ...landed('job-t2').integration!.landTask!, startedAt: '2026-09-25T13:52:00Z',
+    } } };
+    const head = landingHead(landingLine(view6(claimed({ claim: 2 }), [listed({ claim: 2 })], [first]), V6_NOW)!);
+    expect(head.detail).toContain(`Taken over ${landingClockTime(V6_STEP)} · `
+      + `first started ${landingClockTime('2026-09-25T13:52:00Z')}`);
+    // No task row (a promotion) means no first start to name; the takeover itself is still said.
+    const promotion = landingHead(landingLine(view6(
+      claimed({ kind: 'CHECK_PROMOTION', taskTitle: null, check: checkFor('CHECK_PROMOTION'), typicalMs: 18 * 60_000, claim: 2 }),
+      [listed({ kind: 'CHECK_PROMOTION', taskTitle: null, taskId: null, check: checkFor('CHECK_PROMOTION'),
+        typicalMs: 18 * 60_000, claim: 2 })],
+    ), V6_NOW)!);
+    expect(promotion.detail).toContain(`Taken over ${landingClockTime(V6_STEP)}`);
+    expect(promotion.detail).not.toContain('first started');
+  });
+
+  it('carries the same head into the card, which the sessions page and the Work overview draw', () => {
+    const card = landingCard(view6(claimed()), V6_NOW, { updatedAt: V6_NOW })!;
+    expect(landingHead(card)).toEqual(landingHead(landingLine(view6(claimed()), V6_NOW)!));
+    expect(card).toMatchObject({
+      word: 'Landing', title: 'Landing', state: 'checking', running: true, timedOut: false,
+      clock: '1m 50s of 60m', liveness: { clock: '1m 50s of 60m', ticking: true },
+    });
+    // The jobs list's own row says the same two slots.
+    expect(landingHead(landingJobLines(view6(claimed()), V6_NOW)[0].line))
+      .toEqual(landingHead(landingLine(view6(claimed()), V6_NOW)!));
+  });
+
+  it('never writes a push sentence for a merge check that timed out', () => {
+    const lines = landingJobLines(view6(claimed(), [listed({
+      kind: 'CHECK_PROMOTION', taskId: null, taskTitle: null, phase: 'CHECK', timedOut: true, limitSeconds: 600,
+      runnerName: 'wikova', heartbeatAt: '2026-09-25T13:35:20Z', liveness: 'LEASE_EXPIRED',
+    })]), V6_NOW);
+    expect(lines[0].detail).toBe(`Runner wikova took it at ${landingClockTime(V6_STEP)} · stopped at checking`);
+    // A landing still says whether it may have pushed.
+    const landing = landingJobLines(view6(claimed(), [listed({
+      phase: 'PUSH', timedOut: true, limitSeconds: 600, heartbeatAt: '2026-09-25T13:35:20Z', liveness: 'LEASE_EXPIRED',
+    })]), V6_NOW);
+    expect(landing[0].detail).toBe(`Runner wikova took it at ${landingClockTime(V6_STEP)} · stopped at pushing · may have been pushed`);
+  });
+
+  it('does not fall back to the claim-lease silence when the server sends liveness without a job list', () => {
+    const read = integration({
+      inFlight: claimed({ liveness: 'LEGACY', heartbeatAt: '2026-09-25T13:47:20Z',
+        stepStartedAt: '2026-09-25T13:47:20Z', check: checkFor('LAND_TASK') }),
+      inFlightJobs: undefined,
+    });
+    const head = landingHead(landingLine(read, V6_NOW, { updatedAt: V6_NOW })!);
+    expect(head.detail).toBe('checking · reports only between steps · claim 1 · round 1 of 3');
+    expect(JSON.stringify(head)).not.toContain('Update unavailable');
+  });
+
+  it('is the server it was before these fields existed when they are absent', () => {
+    const old = landingLine(integration(), V6_NOW)!;
+    expect('liveness' in old).toBe(false);
+    expect(landingHead(old)).toEqual({ right: '1m 20s', isClock: true, detail: 'checking · updated 1m ago' });
+  });
+});
+
 describe('landingCard', () => {
   it('is the row plus the branch, the job rows and the sentence', () => {
     const running = job({ timedOut: false, retryable: false, heartbeatAt: instant(NOW - 10_000) });
@@ -898,7 +1055,8 @@ describe('landingCard', () => {
       running: true,
       timedOut: false,
       what: C5,
-      jobs: [{ jobId: 'job-c5', taskId: 'task-c5', title: C5, state: 'fetching', running: true,
+      jobs: [{ jobId: 'job-c5', taskId: 'task-c5', word: 'Landing', landingSessionId: null,
+        mergeJob: false, title: C5, state: 'fetching', running: true,
         timedOut: false, retryable: false, detail: null }],
       target: `project/${PROJECT}`,
       clock: '110m 26s',
@@ -914,7 +1072,9 @@ describe('landingCard', () => {
     const card = landingCard(listing([job({ timedOut: false, retryable: false }), merge()]), NOW, { updatedAt: NOW })!;
     expect(card.title).toBe('Landing 2 jobs');
     expect(card.what).toBeNull();
-    expect(card.jobs.map((entry) => [entry.title, entry.state])).toEqual([[C5, 'fetching'], [null, 'queued']]);
+    expect(card.jobs.map((entry) => [entry.title, entry.state])).toEqual([[C5, 'fetching'], ['Merge to main', 'queued']]);
+    // The merge job's own row is a merge's, not a task landing's: its way in is the merge card's.
+    expect(card.jobs.map((entry) => entry.mergeJob)).toEqual([false, true]);
     // The head is the lead's, and a promotion lands no single task.
     expect(card.state).toBe('fetching');
     expect(card.running).toBe(true);
@@ -1008,7 +1168,8 @@ describe('the landing card, from a server that lists its jobs', () => {
     // spins, and the row says it in the same word the head does.
     expect(html).toContain('class="spl-jobs"');
     expect(html).toContain(`<span>${C5}</span><span class="st">Timed out</span>`);
-    expect(html).toContain('<span></span><span class="st">queued</span>');
+    // The merge job lands no single task, so its row is named by its word — never left blank.
+    expect(html).toContain('<span>Merge to main</span><span class="st">queued</span>');
   });
 
   it('makes the card a press that opens the list, and keeps it a card to read from an older server', () => {

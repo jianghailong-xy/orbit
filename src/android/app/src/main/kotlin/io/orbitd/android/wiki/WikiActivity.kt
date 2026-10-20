@@ -121,7 +121,7 @@ internal fun WikiActivityPage(content: WikiHomeContent, banners: List<WikiSpaceL
                         WikiBannerRow(banner.text, banner.amber,
                             if (banner.band == WikiLogic.ActivityBand.REVIEW_BANNER) "wiki-review-banner" else "wiki-activity-banner:${banner.id}") { openBanner(banner) }
                     }
-                WikiLogic.ActivityBand.RUNS -> if (WikiRunsLogic.shown(content.health?.serverExecutes == true, jobs)) {
+                WikiLogic.ActivityBand.RUNS -> if (content.health?.serverExecutes == true) {
                     item(key = "runs-head") { RunsBandHead(content.health?.systemModel) }
                     if (jobs.isNullOrEmpty()) item(key = "runs-empty") { WikiEmptyLine(WikiRunsCopy.none) }
                     else items(jobs, key = { "job:${it.id}" }) { job ->

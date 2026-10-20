@@ -180,6 +180,11 @@ func TestMCPExposesExactlyTheProjectTools(t *testing.T) {
 		want := []string{
 			"project_get", "project_create",
 			"project_update", "project_delete",
+			// The agent's read of the integration line: the queue, the generations, the blocking
+			// reasons and each candidate's check and merge. Ungated for project_get's reason — it is
+			// a READ, and the door that replaces a coordinator querying the production database — and
+			// it needs only a session of the project, which is the header the server checks.
+			"project_integration_get",
 			// What a target branch was observed to contain. Migration 0229 removed the project
 			// acceptance JUDGMENT — `project_acceptance`, `project_acceptance_run` and
 			// `project_acceptance_verdict` went with the runs and conclusions they read and wrote,

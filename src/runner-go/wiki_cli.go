@@ -13,15 +13,9 @@ import (
 // composition inside a session. Like the MCP tools they act for the session they run in — what a
 // session may read is what its bound workspace shares, and a proposal is recorded against it — so
 // there is no headless form: at a terminal outside a session there is nowhere to read from and
-// nobody to propose as. Eight verbs have no tool beside them: `orbit wiki verify` (wiki_verify.go) and
-// `orbit wiki import` (wiki_import.go) run a model, which is a runner's work rather than a tool call's,
-// and `orbit wiki dossier`, `orbit wiki cursor advance` (wiki_dossier.go), `orbit wiki anchors
-// verify` (wiki_anchors.go), `orbit wiki articles` (wiki_articles.go), `orbit wiki docs build`
-// (wiki_docs_build.go) and `orbit wiki maintain` (wiki_maintain.go) are a Wiki maintenance run's, and no
-// other session's. `orbit wiki check`
-// (wiki_maintain.go) is the one with a headless form: it is a maintenance task's acceptance command,
-// which runs after the session's turn in a shell with no session. `orbit wiki plan draft|revise|check`
-// (wiki_plan_cli.go) are a plan job's run and its task's acceptance command, in the same two shapes.
+// nobody to propose as. Two verbs have no tool beside them: `orbit wiki verify` (wiki_verify.go) and
+// `orbit wiki import` (wiki_import.go) hand the session's work to the Orbit server, whose model does
+// it, and wait for it, which is a command's wait rather than a tool call's.
 
 const wikiHelp = `orbit wiki — read the Orbit wiki and propose to it
 
@@ -31,37 +25,12 @@ Usage:
   orbit wiki propose (--ops JSON | --ops-file -) [--rationale TEXT | --rationale-file -]
                      [--idempotency-key KEY] [--dry-run] [--json]
   orbit wiki import --from <dir|file> --space ID [--max-ops N] [--concurrency N] [--json]
-  orbit wiki verify --space ID [--model MODEL] [--max N] [--json]
-  orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]
-  orbit wiki cursor advance --space <id> --to <token> [--outcome succeeded|failed|truncated]
-                            [--error TEXT] [--json]
-  orbit wiki anchors verify --space <id> [--repo <path>] [--json]
-  orbit wiki articles --space <id> [--topic <slug>] [--model MODEL] [--json]
-  orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <path>]
-                        [--model MODEL] [--json]
-  orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]
-  orbit wiki check --space <id> --expect-cursor <token> [--json]
-  orbit wiki plan draft --space <id> [--target MIN-MAX] [--model MODEL] [--concurrency N] [--work-dir DIR] [--json]
-  orbit wiki plan revise --space <id> [--instructions <file>] [--target MIN-MAX] [...] [--json]
-  orbit wiki plan check --space <id> --job <id> [--json]
+  orbit wiki verify --space ID [--json]
 
 The wiki is this codebase's own knowledge: decisions and what they rejected, pitfalls and their
 fixes, conventions, recipes. You READ it and you PROPOSE to it; you never decide. An agent's write
 is a proposal that waits for the owner in Review — or, in an automatic space, for its verification,
-which 'orbit wiki verify' runs with the local model — so never report one as saved.
-
-'orbit wiki dossier', 'orbit wiki cursor advance', 'orbit wiki anchors verify', 'orbit wiki
-articles', 'orbit wiki docs build' and 'orbit wiki maintain' are a Wiki maintenance run's, and no
-other session's: the run reads what happened in its space since the cursor, proposes what it
-learned citing the records behind it, re-verifies the anchors of its space's entries on
-origin/main, advances the cursor once it has processed a page, and writes again the sections of the
-documents of the plan its owner confirmed that its entries and origin/main's changes touched,
-proposing a change to the plan for what fits no section. 'orbit wiki maintain' does all of it in one
-run ('orbit wiki articles' is the topic articles' command, which it no longer runs); 'orbit wiki check'
-is its task's acceptance command, and needs no session. 'orbit wiki plan draft' and 'orbit wiki
-plan revise' are a plan job's run — the task the server makes for a draft of the space's plan — and
-'orbit wiki plan check' is that task's acceptance command; 'orbit wiki docs build' is also the run of
-the build job the owner's confirmation of a plan version makes.
+which the Orbit server runs and 'orbit wiki verify' waits for — so never report one as saved.
 
 These commands act for the session they run in (ORBIT_SESSION_ID): what it may read is what that
 session's workspace is bound to, and its proposal is recorded against it.
@@ -71,59 +40,6 @@ Run 'orbit wiki <command> --help' for options.
 var wikiActionHelp = map[string]string{
 	// Written beside the command it documents (wiki_import.go), as its capability is.
 	"import": wikiImportHelp,
-	// The plan job's three verbs, written beside them (wiki_plan_cli.go).
-	"plan": wikiPlanHelp,
-	"maintain": `orbit wiki maintain — run a space's Wiki maintenance, whole, as its maintenance run
-
-Usage:
-  orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]
-
-Options:
-  --space ID               The space this maintenance run maintains. Required
-  --model MODEL            The model to extract with. Default: ANTHROPIC_MODEL, the model this
-                           session's provider names, at its ANTHROPIC_BASE_URL
-  --concurrency N          Model calls in flight at once while extracting, 1 to 16. Default: ` + fmt.Sprint(wikiMaintainExtractConcurrency) + `
-  --json                   Print the run's summary as JSON
-
-` + wikiMaintainPrecondition + `
-
-It reads where the run starts, fetches the maintenance workspace's checkout (a clone of the space's
-repository, or the run fails), reads the dossiers from the space's cursor up to the position its
-task expects, and has the local model extract at most ` + fmt.Sprint(wikiMaintainEntriesPerSession) + ` entries from each through a clean
-Claude Code (--bare, no tools, an empty HOME and CLAUDE_CONFIG_DIR, the token through an
-apiKeyHelper, thinking off). Each entry is checked against its dossier (every source a line of it,
-its quote copied from that line) and the checkout (anchors that exist on origin/main); a session
-about something else than the repository gives none. The entries are proposed by topic, with dryRun
-first; the ops the review mode would apply may change at most the circuit breaker's share of the
-active entries. Then, in an automatic space, the run's ops are verified; the anchors are
-re-verified; only the sections of the confirmed plan's documents that the run touched are written
-again — the ones an entry that changed fits, the ones whose design documents, code or contracts
-changed on origin/main (a cited file gone withdraws the sentences citing it), and, with no build
-waiting, the ones never written — and one change to the plan is proposed at most for what fits no
-section, a new design document under docs/ among it; with no confirmed plan no document is written;
-and the cursor advances. Any step before the documents that fails ends the run failed and moves
-nothing; the documents' step reports what it could not do and fails nothing. Nor does an op the
-verification gets no verdict for: it is asked about once more — told, when its answer was not a
-verdict, why, and which ids a duplicate may name — and one still without a verdict is not live and
-keeps waiting; the next run adopts it. A 401 from the model's endpoint still fails the run. It
-prints what it did, the token spend included, and exits non-zero when the run failed.
-`,
-	"check": `orbit wiki check — whether a Wiki maintenance run did what its task expected
-
-Usage:
-  orbit wiki check --space <id> --expect-cursor <token> [--json]
-
-Options:
-  --space ID               The space the maintenance task maintains. Required
-  --expect-cursor TOKEN    The cursor token the task was made with. Required
-  --json                   Print the server's answer as JSON
-
-` + wikiCheckPrecondition + `
-
-It exits 0 when the space's cursor is at or past the position the token names, and the run of the
-task that expects it ended succeeded with none of its ops refused; otherwise it prints each reason
-and exits non-zero. It reads and changes nothing else, and needs no session.
-`,
 	"search": `orbit wiki search — what the wiki already knows about this codebase
 
 Usage:
@@ -191,177 +107,24 @@ A source is {"kind": KIND, "ref": REF, "quote": TEXT}, and what REF is depends o
                    cannot be cited yet
 A ref that names nothing is refused, naming the source as ops[i].sources[j].ref.
 `,
-	"verify": `orbit wiki verify — have the local model verify what this session proposed into an automatic space
+	"verify": `orbit wiki verify — have the Orbit server verify what this session proposed into an automatic space
 
 Usage:
-  orbit wiki verify --space ID [--model MODEL] [--effort LEVEL] [--max N] [--json]
+  orbit wiki verify --space ID [--json]
 
 Options:
   --space ID               The automatic space this session proposed into. Required
-  --model MODEL            The model to verify with. Default: ANTHROPIC_MODEL, the model this
-                           session's provider names, at its ANTHROPIC_BASE_URL
-  --effort LEVEL           Have the model think, with this effort: low, medium, high, xhigh or max.
-                           Default: it does not think, whatever effort the provider declares
-  --max N                  Verify at most N ops in this run; the rest keep waiting for the next
   --json                   Print the run's summary as JSON
 
 ` + wikiVerifyPrecondition + `
 
-Each op this session proposed that waits for its verification is handed, with the text of every
-record it cites, to a clean Claude Code (--bare, no tools, no MCP server, an empty HOME and
-CLAUDE_CONFIG_DIR, the token from ANTHROPIC_AUTH_TOKEN through an apiKeyHelper), and the model
-answers supported, partial, unsupported or duplicate. Each verdict is reported as soon as it is
-read. An answer that is not exactly a verdict reports nothing and counts as a failure; the command
-stops at the first 401 from the model's endpoint and when the space is no longer automatic, and
-exits non-zero when any op it looked at was left without a verdict. A Wiki maintenance run does not
-go by that exit: what its verification leaves without a verdict waits for the next run, and fails
-nothing.
-`,
-	"dossier": `orbit wiki dossier — read what happened in a space since its cursor, as its Wiki maintenance run
-
-Usage:
-  orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]
-
-Options:
-  --space ID               The space this maintenance run maintains. Required
-  --after TOKEN            A cursor token an earlier page printed: this page starts after it, or
-                           after the space's cursor when that is further. Default: the cursor
-  --limit N                The sessions a page carries at most, 1 to ` + fmt.Sprint(wikiDossierPageSessionsMax) + `. Default: ` + fmt.Sprint(wikiDossierPageSessionsDefault) + `
-  --json                   Print the page as the server's JSON
-
-` + wikiDossierPrecondition + `
-
-A page is the facts after its start — sessions that came to rest, tasks that finished, questions
-answered, merge receipts, criteria revised — oldest first, and a dossier for each session they
-name: its timeline compressed, redacted and cut to a token budget, each line led by its short name
-(L1, L2 and so on), with sources naming the record behind each line. A batch project's sessions
-are counted instead, and tool errors several sessions share are listed as error clusters. The page
-ends with its cursor token and the 'orbit wiki cursor advance' that takes it; with more facts past
-the page, --after the token reads the next one. Any session but a maintenance run of the space is
-refused WIKI_NOT_MAINTENANCE_SESSION.
-`,
-	"cursor": `orbit wiki cursor — report how a Wiki maintenance run ended, and move the space's cursor
-
-Usage:
-  orbit wiki cursor advance --space <id> --to <token> [--outcome succeeded|failed|truncated]
-                            [--error TEXT] [--json]
-
-Commands:
-  advance                  Report the run's outcome; a succeeded run moves the cursor to --to
-
-Options:
-  --space ID               The space this maintenance run maintains. Required
-  --to TOKEN               The cursor token of the last page this run processed, as 'orbit wiki
-                           dossier' printed it. Required when the run succeeded
-  --outcome OUTCOME        How the run ended: ` + strings.Join(wikiCursorOutcomes, ", ") + `. Default: ` + wikiCursorOutcomes[0] + `
-  --error TEXT             Why a failed or truncated run did not succeed; it is redacted and kept
-                           as the space's last error
-  --json                   Print the server's answer as JSON
-
-` + wikiCursorPrecondition + `
-
-Only a succeeded run moves the cursor, and only forward. A token behind it — another run went
-further — is refused WIKI_CURSOR_BEHIND, and a token no page of this space handed out
-WIKI_CURSOR_INVALID: both change nothing, and the command exits non-zero. A token the cursor already
-stands at is a success that moves nothing. A failed or truncated run moves nothing either: it is
-recorded, one more of the space's consecutive failures, and the command exits 0.
-`,
-	"anchors": `orbit wiki anchors — re-verify the anchors of a space's entries on origin/main, as its Wiki maintenance run
-
-Usage:
-  orbit wiki anchors verify --space <id> [--repo <path>] [--json]
-
-Commands:
-  verify                   Fetch origin's main, check every path, symbol and commit anchor, and report
-
-Options:
-  --space ID               The space this maintenance run maintains. Required
-  --repo PATH              The checkout of the space's repository to re-verify in. Default: the work
-                           directory of the space's workspace on this runner (a leading ~ is this
-                           runner's home)
-  --json                   Print the run's summary as JSON
-
-` + wikiAnchorsVerifyPrecondition + `
-
-It fetches origin's main into origin/main and checks each anchor of the space's live entries on the
-commit origin/main then names: a path with git cat-file -e, a symbol by hashing the ` + fmt.Sprint(wikiAnchorSymbolRegionLines) + ` lines from
-the first line git grep -w finds it on, a commit with git merge-base --is-ancestor (a sha that is not
-an ancestor of origin/main is missing). Each page of entries is reported as it is checked. An entry
-whose anchor changed or went missing is out of the push at once, with one system challenge in the
-owner's Review. It exits non-zero when the fetch failed, when git could not check an anchor, or when
-the server refused an entry; an entry that moved since the list was read is stale, and read again by
-the next run. Any session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION.
-`,
-	"docs": `orbit wiki docs — write a space's documents from the plan its owner confirmed, as its Wiki maintenance run
-
-Usage:
-  orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <path>] [--model MODEL] [--json]
-
-Commands:
-  build                    Gather each section's material, merge it, write it, check its quotes, and write it
-
-Options:
-  --space ID               The space this maintenance run maintains. Required
-  --doc SLUG               Only this document of the confirmed plan. Default: every document of it
-  --section KEY            Only this section of --doc
-  --repo PATH              The checkout of the space's repository to read at origin/main. Default: the
-                           working directory's checkout
-  --model MODEL            The model to write with. Default: ANTHROPIC_MODEL, the model this
-                           session's provider names, at its ANTHROPIC_BASE_URL
-  --json                   Print the run's summary as JSON
-
-` + wikiDocsBuildPrecondition + `
-
-It fetches origin's main into the checkout and reads the confirmed plan. For each section it gathers the
-material the plan names: design-document sections, code symbols (with the comment above them) and
-contracts at the commit origin/main names, and — for a section with a session condition — the records
-the server finds by it, redacted and placed. The platform's template messages and repeated texts are
-taken out, and the rest cut to ` + fmt.Sprint(wikiDocMaterialMaxChars) + ` characters. A section whose fingerprint (its plan definition and
-that material) is the one the server holds, and from which nothing was withdrawn, is left as it is,
-without asking the model. Otherwise a clean Claude Code (--bare, no tools, no MCP server, an empty HOME
-and CLAUDE_CONFIG_DIR, the token from ANTHROPIC_AUTH_TOKEN through an apiKeyHelper, thinking off) merges
-the material — adopt, merge into another, or drop, each with a reason, sent with the section — and
-writes the section, a verbatim quote for every footnote. A repository quote is looked for in the file at
-the commit, and its lines are where it was found; the server checks a record's quote itself. A
-document's overview is written last, from its other sections as they are written. The command stops at
-the first 401 from the model's endpoint, and exits non-zero when any section it took up was left
-unwritten. Any session but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION.
-
-For an account the Orbit server runs the wiki for (ORBIT_WIKI_EXECUTOR server, or canary with the
-account on its list) the server answers WIKI_SERVER_EXECUTES instead: its wiki worker builds the
-documents when the owner confirms a plan, with the deployment's System model. The command then asks no
-model, says so and exits 0 — a build task's run too, made before the switch: its job ends with its task.
-`,
-	"articles": `orbit wiki articles — have the local model write the articles of a space's changed topics, as its Wiki maintenance run
-
-Usage:
-  orbit wiki articles --space <id> [--topic <slug>] [--model MODEL] [--json]
-
-Options:
-  --space ID               The space this maintenance run maintains. Required
-  --topic SLUG             Only this topic, and only if its entries changed. Default: every topic whose
-                           entries changed since its articles were written
-  --model MODEL            The model to write with. Default: ANTHROPIC_MODEL, the model this
-                           session's provider names, at its ANTHROPIC_BASE_URL
-  --json                   Print the run's summary as JSON
-
-` + wikiArticlesPrecondition + `
-
-The server's plan names the topics whose entry set changed; a space with no topic is given the
-default ones first. Each such topic's entries are read, and a topic of more than ` + fmt.Sprint(wikiArticleSplitAbove) + ` entries is
-grouped into subtopics by their anchor paths and words. A clean Claude Code (--bare, no tools, no
-MCP server, an empty HOME and CLAUDE_CONFIG_DIR, the token from ANTHROPIC_AUTH_TOKEN through an
-apiKeyHelper, thinking off) names each group and writes each article — ` + fmt.Sprint(wikiArticleMinChars) + ` to ` + fmt.Sprint(wikiArticleMaxChars) + ` characters,
-every sentence footnoted — from the entries alone. The server keeps a footnote only when it names an
-entry of the topic, deletes a sentence left without one, cuts what passes ` + fmt.Sprint(wikiArticleMaxChars) + ` characters, and
-writes nothing for a topic whose entries did not change. The command stops at the first 401 from
-the model's endpoint, and exits non-zero when any topic it took up was left unwritten. Any session
-but a maintenance run of the space is refused WIKI_NOT_MAINTENANCE_SESSION.
-
-For an account the Orbit server runs the wiki for (ORBIT_WIKI_EXECUTOR server, or canary with the
-account on its list) the server answers WIKI_SERVER_EXECUTES instead: its wiki worker writes the
-articles after a maintenance run, with the deployment's System model. The command then asks no model,
-says so and exits 0.
+It asks the Orbit server to verify each op this session proposed that waits for its verification,
+and waits for the verdicts: the server's own worker hands each op, with the text of every record it
+cites, to the deployment's System model, which answers supported, partial, unsupported or duplicate,
+and applies the answer. No model of this session's is asked. It waits up to ` + fmt.Sprint(int(wikiVerifyServerWait.Minutes())) + ` minutes, and exits
+non-zero when any op is still without a verdict then: those ops keep waiting, and the next run asks
+for them again. A server that does not verify on its own is too old for this command, which says so
+and verifies nothing.
 `,
 }
 
@@ -408,201 +171,25 @@ var wikiCLICapabilities = []cliCapabilitySpec{
 		SessionOnly: true,
 	},
 	{
-		// A verb with no MCP tool beside it (contract `agentSurface.verify.tool`): it runs a model,
-		// which is a runner's work, so its description is its own rather than a descriptor's.
+		// A verb with no MCP tool beside it (contract `agentSurface.verify.tool`): it waits for the server's
+		// verdicts, which is a command's wait, so its description is its own rather than a descriptor's.
 		Tool:  "wiki_verify",
 		Argv:  []string{"orbit", "wiki", "verify"},
-		Usage: "orbit wiki verify --space ID [--model MODEL] [--effort LEVEL] [--max N] [--json]",
+		Usage: "orbit wiki verify --space ID [--json]",
 		Arguments: []string{
 			"--space <id> (required; the automatic space this session proposed into)",
-			"--model <model> (default ANTHROPIC_MODEL, the model this session's provider names)",
-			"--effort <" + strings.Join(wikiVerifyEfforts, "|") + "> (default: the model does not think)",
-			"--max <n> (verify at most n ops this run)",
 			"--json",
 		},
 		Description: wikiVerifyDescription,
 		InputSchema: map[string]interface{}{
 			"type": "object",
 			"properties": map[string]interface{}{
-				"space":  map[string]interface{}{"type": "string", "description": "The automatic space this session proposed into."},
-				"model":  map[string]interface{}{"type": "string", "description": "The model to verify with; ANTHROPIC_MODEL, the one this session's provider names, when left out."},
-				"effort": map[string]interface{}{"type": "string", "enum": wikiVerifyEfforts, "description": "Have the model think, with this effort. Left out, it does not think, whatever effort the session's provider declares."},
-				"max":    map[string]interface{}{"type": "integer", "minimum": 1, "description": "Verify at most this many ops in this run; the rest keep waiting."},
+				"space": map[string]interface{}{"type": "string", "description": "The automatic space this session proposed into."},
 			},
 			"required": []string{"space"},
 		},
 		Mutates:     true,
 		SessionOnly: true,
-	},
-	{
-		// A Wiki maintenance run's two verbs, with no MCP tool beside them either (contract
-		// `maintenance.cli.tool`): each is one kind of session's work, so each schema is its own.
-		Tool:  "wiki_dossier",
-		Argv:  []string{"orbit", "wiki", "dossier"},
-		Usage: "orbit wiki dossier --space <id> [--after <token>] [--limit N] [--json]",
-		Arguments: []string{
-			"--space <id> (required; the space this maintenance run maintains)",
-			"--after <token> (a cursor token an earlier page printed; default the space's cursor)",
-			"--limit <n> (1-" + fmt.Sprint(wikiDossierPageSessionsMax) + " sessions a page carries; default " + fmt.Sprint(wikiDossierPageSessionsDefault) + ")",
-			"--json",
-		},
-		Description: wikiDossierDescription,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"space": map[string]interface{}{"type": "string", "description": "The space this maintenance run maintains."},
-				"after": map[string]interface{}{"type": "string", "description": "A cursor token an earlier page printed: the page starts after it, or after the space's cursor when that is further."},
-				"limit": map[string]interface{}{"type": "integer", "minimum": 1, "maximum": wikiDossierPageSessionsMax, "description": "The sessions the page carries at most; " + fmt.Sprint(wikiDossierPageSessionsDefault) + " when left out."},
-			},
-			"required": []string{"space"},
-		},
-		SessionOnly: true,
-	},
-	{
-		Tool:  "wiki_cursor_advance",
-		Argv:  []string{"orbit", "wiki", "cursor", "advance"},
-		Usage: "orbit wiki cursor advance --space <id> --to <token> [--outcome succeeded|failed|truncated] [--error TEXT] [--json]",
-		Arguments: []string{
-			"--space <id> (required; the space this maintenance run maintains)",
-			"--to <token> (required when the run succeeded; the cursor token of the last page it processed)",
-			"--outcome <" + strings.Join(wikiCursorOutcomes, "|") + "> (default " + wikiCursorOutcomes[0] + "; only a succeeded run moves the cursor)",
-			"--error <text> (why a failed or truncated run did not succeed)",
-			"--json",
-		},
-		Description: wikiCursorAdvanceDescription,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"space":   map[string]interface{}{"type": "string", "description": "The space this maintenance run maintains."},
-				"to":      map[string]interface{}{"type": "string", "description": "The cursor token of the last page this run processed. Required unless the outcome is failed or truncated."},
-				"outcome": map[string]interface{}{"type": "string", "enum": wikiCursorOutcomes, "description": "How the run ended; " + wikiCursorOutcomes[0] + " when left out. Only a succeeded run moves the cursor."},
-				"error":   map[string]interface{}{"type": "string", "description": "Why a failed or truncated run did not succeed."},
-			},
-			"required": []string{"space"},
-		},
-		Mutates:     true,
-		SessionOnly: true,
-	},
-	{
-		// The anchor re-verification (contract `anchorRules.verify`): a maintenance run's verb like the two
-		// above, and one that runs git in a checkout, which is a runner's work rather than a tool call's.
-		Tool:  "wiki_anchors_verify",
-		Argv:  []string{"orbit", "wiki", "anchors", "verify"},
-		Usage: "orbit wiki anchors verify --space <id> [--repo <path>] [--json]",
-		Arguments: []string{
-			"--space <id> (required; the space this maintenance run maintains)",
-			"--repo <path> (the checkout to re-verify in; default the work directory of the space's workspace on this runner)",
-			"--json",
-		},
-		Description: wikiAnchorsVerifyDescription,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"space": map[string]interface{}{"type": "string", "description": "The space this maintenance run maintains."},
-				"repo":  map[string]interface{}{"type": "string", "description": "The checkout of the space's repository to re-verify in; the work directory of the space's workspace on this runner when left out."},
-			},
-			"required": []string{"space"},
-		},
-		Mutates:     true,
-		SessionOnly: true,
-	},
-	{
-		// The maintenance run's articles (contract `articles.cli`): CLI only, like the three above, and a
-		// model's work like verify.
-		Tool:  "wiki_articles",
-		Argv:  []string{"orbit", "wiki", "articles"},
-		Usage: "orbit wiki articles --space <id> [--topic <slug>] [--model MODEL] [--json]",
-		Arguments: []string{
-			"--space <id> (required; the space this maintenance run maintains)",
-			"--topic <slug> (only this topic; default every topic whose entries changed)",
-			"--model <model> (default ANTHROPIC_MODEL, the model this session's provider names)",
-			"--json",
-		},
-		Description: wikiArticlesDescription,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"space": map[string]interface{}{"type": "string", "description": "The space this maintenance run maintains."},
-				"topic": map[string]interface{}{"type": "string", "description": "Only this topic's articles, and only if its entries changed; every changed topic when left out."},
-				"model": map[string]interface{}{"type": "string", "description": "The model to write with; ANTHROPIC_MODEL, the one this session's provider names, when left out."},
-			},
-			"required": []string{"space"},
-		},
-		Mutates:     true,
-		SessionOnly: true,
-	},
-	{
-		// The maintenance run's documents (contract `docs.build`): CLI only like the articles, a model's
-		// work, with a sub-command named like the anchors' re-verification.
-		Tool:  "wiki_docs_build",
-		Argv:  []string{"orbit", "wiki", "docs", "build"},
-		Usage: "orbit wiki docs build --space <id> [--doc <slug>] [--section <key>] [--repo <path>] [--model MODEL] [--json]",
-		Arguments: []string{
-			"--space <id> (required; the space this maintenance run maintains)",
-			"--doc <slug> (only this document of the confirmed plan; default every document)",
-			"--section <key> (only this section of the --doc document)",
-			"--repo <path> (the checkout to read at origin/main; default the working directory's)",
-			"--model <model> (default ANTHROPIC_MODEL, the model this session's provider names)",
-			"--json",
-		},
-		Description: wikiDocsBuildDescription,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"space":   map[string]interface{}{"type": "string", "description": "The space this maintenance run maintains."},
-				"doc":     map[string]interface{}{"type": "string", "description": "Only this document of the confirmed plan, by its slug; every document when left out."},
-				"section": map[string]interface{}{"type": "string", "description": "Only this section of the document doc names, by its key."},
-				"repo":    map[string]interface{}{"type": "string", "description": "The checkout of the space's repository to read at origin/main; the working directory's when left out."},
-				"model":   map[string]interface{}{"type": "string", "description": "The model to write with; ANTHROPIC_MODEL, the one this session's provider names, when left out."},
-			},
-			"required": []string{"space"},
-		},
-		Mutates:     true,
-		SessionOnly: true,
-	},
-	{
-		// The maintenance job's run (contract `maintenance.job.cli`): the whole pipeline in one command.
-		Tool:  "wiki_maintain",
-		Argv:  []string{"orbit", "wiki", "maintain"},
-		Usage: "orbit wiki maintain --space <id> [--model MODEL] [--concurrency N] [--json]",
-		Arguments: []string{
-			"--space <id> (required; the space this maintenance run maintains)",
-			"--model <model> (default ANTHROPIC_MODEL, the model this session's provider names)",
-			"--concurrency <n> (1-16 model calls in flight while extracting; default " + fmt.Sprint(wikiMaintainExtractConcurrency) + ")",
-			"--json",
-		},
-		Description: wikiMaintainDescription,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"space":       map[string]interface{}{"type": "string", "description": "The space this maintenance run maintains."},
-				"model":       map[string]interface{}{"type": "string", "description": "The model to extract with; ANTHROPIC_MODEL, the one this session's provider names, when left out."},
-				"concurrency": map[string]interface{}{"type": "integer", "minimum": 1, "maximum": 16, "description": "Model calls in flight at once while extracting."},
-			},
-			"required": []string{"space"},
-		},
-		Mutates:     true,
-		SessionOnly: true,
-	},
-	{
-		// The maintenance task's acceptance command: headless, since that command runs with no session.
-		Tool:  "wiki_check",
-		Argv:  []string{"orbit", "wiki", "check"},
-		Usage: "orbit wiki check --space <id> --expect-cursor <token> [--json]",
-		Arguments: []string{
-			"--space <id> (required; the space the maintenance task maintains)",
-			"--expect-cursor <token> (required; the cursor token the task was made with)",
-			"--json",
-		},
-		Description: wikiCheckDescription,
-		InputSchema: map[string]interface{}{
-			"type": "object",
-			"properties": map[string]interface{}{
-				"space":         map[string]interface{}{"type": "string", "description": "The space the maintenance task maintains."},
-				"expect-cursor": map[string]interface{}{"type": "string", "description": "The cursor token the maintenance task was made with."},
-			},
-			"required": []string{"space", "expect-cursor"},
-		},
 	},
 }
 
@@ -652,60 +239,11 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		_, err := fmt.Fprint(out, h)
 		return err
 	}
-	command := "orbit wiki " + action
-	if action == "cursor" {
-		// The cursor's one command is named rather than implied: a bare `orbit wiki cursor` is asking
-		// what there is, and a word that is not `advance` is a command this build does not have.
-		if len(args) == 1 {
-			_, err := fmt.Fprint(out, h)
-			return err
-		}
-		if args[1] != "advance" {
-			return fmt.Errorf("unknown cursor command %q: its one command is advance, as in "+
-				"'orbit wiki cursor advance --space <id> --to <token>'\n\n%s", args[1], h)
-		}
-		command += " advance"
-	}
-	if action == "anchors" {
-		// Like the cursor, a verb named rather than implied: its one command is verify.
-		if len(args) == 1 {
-			_, err := fmt.Fprint(out, h)
-			return err
-		}
-		if args[1] != "verify" {
-			return fmt.Errorf("unknown anchors command %q: its one command is verify, as in "+
-				"'orbit wiki anchors verify --space <id>'\n\n%s", args[1], h)
-		}
-		command += " verify"
-	}
-	if action == "docs" {
-		// Like the anchors, a verb named rather than implied: its one command is build.
-		if len(args) == 1 {
-			_, err := fmt.Fprint(out, h)
-			return err
-		}
-		if args[1] != "build" {
-			return fmt.Errorf("unknown docs command %q: its one command is build, as in "+
-				"'orbit wiki docs build --space <id>'\n\n%s", args[1], h)
-		}
-		command += " build"
-	}
-	if action == "check" {
-		// A maintenance task's acceptance command: it runs after the session's turn, with no session.
-		return cliWikiCheck(args[1:], out)
-	}
-	if action == "plan" {
-		// Three verbs, one of them — check, a plan job's acceptance command — with no session: each
-		// asks for the session context itself when it needs one.
-		return cliWikiPlan(args[1:], in, out)
-	}
-	ctx, err := wikiCLIContext(command)
+	ctx, err := wikiCLIContext("orbit wiki " + action)
 	if err != nil {
 		return err
 	}
 	switch action {
-	case "maintain":
-		return cliWikiMaintain(args[1:], out, ctx)
 	case "import":
 		return cliWikiImport(args[1:], out, ctx)
 	case "search":
@@ -716,16 +254,6 @@ func cmdWikiCLI(args []string, in io.Reader, out io.Writer) error {
 		return cliWikiPropose(args[1:], in, out, ctx)
 	case "verify":
 		return cliWikiVerify(args[1:], out, ctx)
-	case "dossier":
-		return cliWikiDossier(args[1:], out, ctx)
-	case "cursor":
-		return cliWikiCursorAdvance(args[2:], out, ctx)
-	case "anchors":
-		return cliWikiAnchorsVerify(args[2:], out, ctx)
-	case "articles":
-		return cliWikiArticles(args[1:], out, ctx)
-	case "docs":
-		return cliWikiDocsBuild(args[2:], out, ctx)
 	default:
 		panic("unreachable wiki command")
 	}

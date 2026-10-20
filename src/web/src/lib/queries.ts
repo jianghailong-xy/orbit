@@ -3,6 +3,7 @@ import type {
   EventSearchResponse,
   LinkPreviewRef,
   LinkPreviewsResponse,
+  ProjectIntegrationLogPage,
   ProjectIntegrationView,
   ProjectManualReady,
   ProjectPromotionView,
@@ -309,11 +310,24 @@ export const sessionsQuery = (
  *  session events cannot re-read every project's full member list. */
 export const PROJECT_SESSION_REFRESH_MS = 60_000;
 
-export const projectSessionsQuery = (opts: { projectId: string; view: SessionListView }) =>
+/**
+ * A project's members across workspaces.
+ *
+ * `includeLanding` asks the server for the project's LANDING sessions beside the conversations
+ * (contract §2.9 LS6; `GET /sessions?projectId=&includeLanding=1`). Only the project's sessions page
+ * asks: the flat list, its counts and its search never see a landing, and no other read should pay
+ * for one.
+ */
+export const projectSessionsQuery = (opts: {
+  projectId: string;
+  view: SessionListView;
+  includeLanding?: boolean;
+}) =>
   queryOptions({
-    queryKey: ['project-sessions', opts.projectId, opts.view] as const,
+    queryKey: ['project-sessions', opts.projectId, opts.view, opts.includeLanding === true] as const,
     queryFn: () => {
       const qs = new URLSearchParams({ projectId: opts.projectId, view: opts.view });
+      if (opts.includeLanding) qs.set('includeLanding', '1');
       return api<SessionListItem[]>(`/sessions?${qs}`);
     },
     staleTime: 15_000,
@@ -895,6 +909,39 @@ export const projectIntegrationQuery = (projectId: string) =>
     refetchInterval: 30_000,
   });
 
+/** The selectors one page of a landing's check output is read by (contract §2.2 J-T4, §2.9 LS2). */
+export interface LandingLogSelectors {
+  jobId: string;
+  claim?: number;
+  round?: number;
+  check?: number;
+  cursor?: string;
+}
+
+/**
+ * One page of a landing session's check output (`GET /sessions/:id/landing/log`, contract §2.9
+ * LS2). Read only when a log is opened: the page loads the chunk behind the `Log ›` a check's
+ * timeline line carries, and continues the same narrowed read with the cursor it answers.
+ */
+export const landingLogQuery = (sessionId: string, selectors: LandingLogSelectors) =>
+  queryOptions({
+    queryKey: [
+      'session', sessionId, 'landing-log',
+      selectors.jobId, selectors.claim ?? null, selectors.round ?? null,
+      selectors.check ?? null, selectors.cursor ?? null,
+    ] as const,
+    queryFn: () => {
+      const query = new URLSearchParams({ jobId: selectors.jobId });
+      if (selectors.claim != null) query.set('claim', String(selectors.claim));
+      if (selectors.round != null) query.set('round', String(selectors.round));
+      if (selectors.check != null) query.set('check', String(selectors.check));
+      if (selectors.cursor) query.set('cursor', selectors.cursor);
+      return api<ProjectIntegrationLogPage>(
+        `/sessions/${encodeURIComponent(sessionId)}/landing/log?${query.toString()}`,
+      );
+    },
+  });
+
 /**
  * The owner's watches, newest first, as one list. `GET /watches` answers with the 100 newest of any
  * state, so a long history would push a live watch out of it, and a failure nobody has seen yet with
@@ -1041,10 +1088,9 @@ export const wikiHealthQuery = (spaceId: string | null) =>
   });
 
 /**
- * The deployment's System model and the executor switch as it stands for this account (`GET /api/wiki/system-model`,
- * contracts `systemModel.read` and `jobs.executor.read`): what the wiki settings page reads to draw the System model
- * instead of the provider. `null` is a control plane from before the read (a 404 that is not the wiki being off),
- * which runs nothing on the server — the page is then what it always was.
+ * The deployment's System model and who executes this account's wiki (`GET /api/wiki/system-model`, contracts
+ * `systemModel.read` and `jobs.executor.read`): what the wiki settings page reads to draw the System model. `null` is
+ * a control plane from before the read (a 404 that is not the wiki being off): the page then draws no System model.
  */
 export const wikiSystemModelQuery = () =>
   queryOptions({

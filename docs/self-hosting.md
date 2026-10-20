@@ -349,8 +349,9 @@ The address must be reachable from inside the container, whose `127.0.0.1` is th
 the Docker host, use the host's LAN or tunnel address. The worker probes `{base}/health` every 10 seconds (200 or 404
 counts as up) and records the result. The wiki settings and health line show the model's name and its state, never
 its address or key; if the endpoint refuses the key, correct it and recreate the worker. See the
-[configuration reference](configuration.md#wiki-worker-and-system-model) for every variable. Until the wiki's jobs
-move to the server, the worker only probes the model and reports its state.
+[configuration reference](configuration.md#wiki-worker-and-system-model) for every variable. The worker runs every
+account's wiki jobs with this model. To pause them, stop it with `docker compose stop wiki-worker`: the jobs wait in
+the queue until it is started again.
 
 ## Managed runners
 

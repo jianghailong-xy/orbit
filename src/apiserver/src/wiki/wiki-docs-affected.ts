@@ -22,10 +22,10 @@ import { wikiPlanTopics } from './wiki-plan';
  * WHAT IS WRITTEN AGAIN. A written section is written again when an entry that fits it changed after the
  * section was generated — a maintenance run's own ops, and every other applied op since, so a run that
  * failed, or the owner's acceptance of a waiting op, loses nothing — and when a sentence of it was
- * withdrawn (stale). Whether its material really changed is the fingerprint's to say, on the runner: a
+ * withdrawn (stale). Whether its material really changed is the fingerprint's to say, in the run: a
  * section whose fingerprint is the stored one is left as it is. The repository's half — the design
  * documents, code and contracts a section cites, changed on origin/main since its repoSha — is the run's
- * to find in its checkout: the server has none.
+ * to find through the repository operations the space's runner answers: the server holds no checkout.
  *
  * WHAT HAS NO PLACE. An entry changed since the plan was first drafted that fits no section of the
  * confirmed plan, and that no proposal names — accepted, rejected or pending — is new knowledge the plan
@@ -79,8 +79,8 @@ function docPathsOf(sections: ReadonlyArray<{ sources?: unknown }>): string[] {
 }
 
 /**
- * The runner door's read of what a maintenance run writes again because of the entries, and what it may
- * propose (contract `docs.reads.affected`). The caller has been found a maintenance run of the space.
+ * The read of what a maintenance run writes again because of the entries, and what it may propose (contract
+ * `docs.reads.affected`), which the runner door answered before P11. The caller is the space's maintain job.
  */
 export async function wikiDocsAffected(db: Db, ownerId: string, spaceId: string): Promise<WikiDocsAffected> {
   const [confirmed, build, proposals, topics] = await Promise.all([
@@ -121,7 +121,7 @@ export async function wikiDocsAffected(db: Db, ownerId: string, spaceId: string)
   }
 
   // The commit the plan's references were last checked at: the confirmed version's, or the newest of the
-  // versions it was made from (an owner's edit or an accepted proposal checks nothing on a runner).
+  // versions it was made from (an owner's edit or an accepted proposal checks nothing of the repository).
   let repoSha = confirmed.repoSha;
   for (let base = confirmed.baseVersion, hops = 0; !repoSha && base !== null && hops < 1_000; hops += 1) {
     const earlier = await db.wikiPlan.findFirst({ where: { ownerId, spaceId, version: base }, select: { repoSha: true, baseVersion: true } });

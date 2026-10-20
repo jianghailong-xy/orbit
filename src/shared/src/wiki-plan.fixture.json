@@ -1,6 +1,6 @@
 {
-  "why": "The plan's deterministic half on the runner (src/runner-go/wiki_plan_*.go) and on the server (src/apiserver/src/wiki-worker/wiki-plan-*.ts): the same repository, materials and answers give the same reading, the same prompts, the same draft and the same gate errors (contract plan.jobs.server).",
-  "write": "ORBIT_WIKI_PLAN_FIXTURE=write go test -run TestWikiPlanFixtureIsTheServersToo . (in src/runner-go)",
+  "why": "Frozen since P11 (2026-10-19), when the runner's Go code was deleted: the plan's deterministic half as the runner's src/runner-go/wiki_plan_*.go gave it, which the server's (src/apiserver/src/wiki-worker/wiki-plan-*.ts) is held to: the same repository, materials and answers give the same reading, the same prompts, the same draft and the same gate errors (contract plan.jobs.server.deterministic). src/runner-go/wiki_plan_fixture_test.go still holds the runner's snapshot of `files` to `index`.",
+  "write": "nothing: frozen since P11 (2026-10-19), when its Go writer (TestWikiPlanFixtureIsTheServersToo) was deleted",
   "date": "2026-10-08",
   "files": {
     "README.md": "# App\n\nApp is the spec's small service: it serves what its store keeps, and its tests run on fixtures.\n",

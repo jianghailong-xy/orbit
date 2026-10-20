@@ -64,7 +64,7 @@ export function wikiModelRequestSha256(call: WikiModelRequestCall): string {
  * system or its prompt has a U+0000, which jsonb cannot hold — both as their UTF-8 bytes in base64, with
  * `encoding: 'base64'` saying so. A prompt carries the repository's text (a code piece is a file's lines), and a
  * source file can have a NUL: the call the model is sent is the one the pipeline made, byte for byte, as the
- * runner path's is. The digest is the call's, not the column's.
+ * runner path's was. The digest is the call's, not the column's.
  */
 export function wikiModelRequestStored(call: WikiModelRequestCall): Record<string, unknown> {
   if (wikiTextIsStorable(call.system) && wikiTextIsStorable(call.prompt)) {
@@ -236,7 +236,7 @@ export async function succeedWikiModelRequest(
   prisma: PrismaService,
   input: { id: string; generation: string; answer: string; inputTokens?: number | null; outputTokens?: number | null; httpStatus?: number | null },
 ): Promise<boolean> {
-  // The answer as the model sent it, a NUL and all (answerEncoding): the job parses what the runner path's would.
+  // The answer as the model sent it, a NUL and all (answerEncoding): the job parses what the runner path's did.
   const answer = wikiStoredModelText(input.answer);
   const updated = await prisma.$executeRaw`
     UPDATE "wiki_model_request"

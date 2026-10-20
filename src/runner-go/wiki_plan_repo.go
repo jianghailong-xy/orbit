@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
@@ -16,28 +15,22 @@ import (
 	"time"
 )
 
-// What the drafting job reads of the repository, and how it checks what the plan says of it
-// (contracts/wiki.contract.json `plan.jobs.run`, the sample's prep_repo.py and symbols.py).
+// What the snapshot repository operation reads of a checkout's origin/main (wikiRepoOpSnapshot,
+// contracts/wiki.contract.json `repoOps`, the sample's prep_repo.py and symbols.py): every path with its
+// size, every document's headings and every source file's symbols, which the server's plan job reads in
+// place of a checkout (src/apiserver/src/wiki-worker/wiki-plan-repo.ts).
 //
 // EVERYTHING AT ONE SHA. The checkout is fetched, origin/main is read once — the file list, then every
 // document's and source file's blob in one `git cat-file --batch` — and nothing of the working tree is
-// looked at. The materials the model drafts from and the references the gate checks are the same tree,
-// and the sha goes into the draft's repoCheck.
-//
-// A REFERENCE IS FOUND OR IT IS NOT. A file is a path of the tree (or a directory, or a glob that
-// matches one); a docs section is one of that document's headings, read outside its code fences; a symbol
-// is one of that file's indexed declarations — or, since the index is regex-level, an identifier every
-// part of which that file spells as a word. Anything else is missing, and the gate says where.
+// looked at, so everything the index says is said of the one commit it names.
 
-// wikiPlanRepo is origin/main of the maintenance workspace's checkout, as the drafting job reads it.
+// wikiPlanRepo is origin/main of the space's checkout, as the snapshot reads it.
 type wikiPlanRepo struct {
-	root    string
-	sha     string
-	date    string
-	files   []string
-	fileSet map[string]bool
-	dirs    map[string]bool
-	sizes   map[string]int64
+	root  string
+	sha   string
+	date  string
+	files []string
+	sizes map[string]int64
 	// headings of every Markdown file; symbols and text of every source file; the text of every doc.
 	headings map[string][]wikiPlanHeading
 	symbols  map[string][]string
@@ -91,8 +84,7 @@ func loadWikiPlanRepo(root, ref string) (*wikiPlanRepo, error) {
 		return nil, fmt.Errorf("git ls-tree %s in %s: %w", shortWikiHash(sha), root, err)
 	}
 	repo := &wikiPlanRepo{
-		root: root, sha: sha, date: date,
-		fileSet: map[string]bool{}, dirs: map[string]bool{}, sizes: map[string]int64{},
+		root: root, sha: sha, date: date, sizes: map[string]int64{},
 		headings: map[string][]wikiPlanHeading{}, symbols: map[string][]string{}, blobs: map[string]string{},
 	}
 	var wanted []string
@@ -110,11 +102,7 @@ func loadWikiPlanRepo(root, ref string) (*wikiPlanRepo, error) {
 		file := string(entry[tab+1:])
 		size, _ := strconv.ParseInt(fields[3], 10, 64)
 		repo.files = append(repo.files, file)
-		repo.fileSet[file] = true
 		repo.sizes[file] = size
-		for dir := path.Dir(file); dir != "." && dir != "/"; dir = path.Dir(dir) {
-			repo.dirs[dir] = true
-		}
 		if wikiPlanIsDoc(file) || wikiPlanIsSource(file) || strings.HasPrefix(file, "contracts/") {
 			wanted = append(wanted, file)
 			oids[file] = fields[2]
@@ -329,135 +317,7 @@ func wikiPlanSymbols(file, text string) []string {
 	return out
 }
 
-// ── The materials ───────────────────────────────────────────────────────────────────────────────
-
-// wikiPlanPackage is a directory under src/ (or the root) whose files make one program.
-func wikiPlanPackageOf(file string) string {
-	parts := strings.Split(file, "/")
-	if len(parts) >= 3 && parts[0] == "src" {
-		return parts[0] + "/" + parts[1]
-	}
-	if len(parts) >= 2 {
-		return parts[0]
-	}
-	return "."
-}
-
-var wikiPlanEntryNames = map[string]bool{
-	"main.go": true, "main.ts": true, "main.tsx": true, "App.tsx": true, "app.module.ts": true, "index.ts": true,
-	"package.json": true, "Package.swift": true, "project.yml": true, "schema.prisma": true, "go.mod": true,
-}
-
-// layoutText is the repository's structure: its top level, each package with its entry points, and each
-// directory with its source files — tests and fixtures left out (the sample's repo.md, for any repository).
-func (r *wikiPlanRepo) layoutText(maxChars int) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "# Repository structure (origin/main %s, committed %s)\n\nSource files only (tests and fixtures left out); paths are relative "+
-		"to the repository root.\n\n## Top level\n\n", shortWikiHash(r.sha), r.date)
-	top := map[string]int{}
-	var topFiles []string
-	for _, file := range r.files {
-		if i := strings.IndexByte(file, '/'); i > 0 {
-			top[file[:i]]++
-		} else {
-			topFiles = append(topFiles, file)
-		}
-	}
-	names := make([]string, 0, len(top))
-	for name := range top {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		fmt.Fprintf(&b, "- `%s/` (%s)\n", name, wikiCount(top[name], "file", "files"))
-	}
-	if len(topFiles) > 0 {
-		fmt.Fprintf(&b, "- Top-level files: %s\n", strings.Join(topFiles, ", "))
-	}
-	packages := map[string][]string{}
-	entries := map[string][]string{}
-	for _, file := range r.files {
-		pkg := wikiPlanPackageOf(file)
-		if wikiPlanEntryNames[path.Base(file)] && !strings.Contains(file, "node_modules/") && strings.Count(strings.TrimPrefix(file, pkg+"/"), "/") <= 2 {
-			entries[pkg] = append(entries[pkg], file)
-		}
-		if wikiPlanIsSource(file) {
-			packages[pkg] = append(packages[pkg], file)
-		}
-	}
-	pkgs := make([]string, 0, len(packages))
-	for pkg := range packages {
-		pkgs = append(pkgs, pkg)
-	}
-	sort.Strings(pkgs)
-	b.WriteString("\n## Packages and entry points\n\n")
-	for _, pkg := range pkgs {
-		line := fmt.Sprintf("- `%s` (%s)", pkg, wikiCount(len(packages[pkg]), "source file", "source files"))
-		if len(entries[pkg]) > 0 {
-			line += "; entry points and wiring: " + strings.Join(entries[pkg], ", ")
-		}
-		b.WriteString(line + "\n")
-	}
-	b.WriteString("\n## Source files by directory\n")
-	for _, pkg := range pkgs {
-		fmt.Fprintf(&b, "\n### %s\n", pkg)
-		byDir := map[string][]string{}
-		for _, file := range packages[pkg] {
-			byDir[path.Dir(file)] = append(byDir[path.Dir(file)], path.Base(file))
-		}
-		dirs := make([]string, 0, len(byDir))
-		for dir := range byDir {
-			dirs = append(dirs, dir)
-		}
-		sort.Strings(dirs)
-		for _, dir := range dirs {
-			files := byDir[dir]
-			if len(files) <= 40 {
-				fmt.Fprintf(&b, "- %s/ (%d): %s\n", dir, len(files), strings.Join(files, ", "))
-				continue
-			}
-			// A flat directory of many files, as a Go package is: grouped by the prefix of their names.
-			groups := map[string][]string{}
-			for _, file := range files {
-				key := strings.FieldsFunc(strings.TrimSuffix(file, path.Ext(file)), func(c rune) bool { return c == '_' || c == '-' || c == '.' })
-				prefix := file
-				if len(key) > 0 {
-					prefix = key[0]
-				}
-				groups[prefix] = append(groups[prefix], file)
-			}
-			prefixes := make([]string, 0, len(groups))
-			for prefix := range groups {
-				prefixes = append(prefixes, prefix)
-			}
-			sort.Slice(prefixes, func(i, j int) bool {
-				if len(groups[prefixes[i]]) != len(groups[prefixes[j]]) {
-					return len(groups[prefixes[i]]) > len(groups[prefixes[j]])
-				}
-				return prefixes[i] < prefixes[j]
-			})
-			fmt.Fprintf(&b, "- %s/ (%d, by file name prefix):\n", dir, len(files))
-			for _, prefix := range prefixes {
-				fmt.Fprintf(&b, "  - %s: %s\n", prefix, strings.Join(groups[prefix], ", "))
-			}
-		}
-	}
-	for _, file := range r.files {
-		if path.Base(file) != "schema.prisma" {
-			continue
-		}
-		schema := r.blobOf(file)
-		models := regexp.MustCompile(`(?m)^model (\w+) \{`).FindAllStringSubmatch(schema, -1)
-		var names []string
-		for _, m := range models {
-			names = append(names, m[1])
-		}
-		if len(names) > 0 {
-			fmt.Fprintf(&b, "\n## Data model (%s)\n\n%s: %s\n", file, wikiCount(len(names), "model", "models"), strings.Join(names, ", "))
-		}
-	}
-	return wikiPlanCut(b.String(), maxChars)
-}
+// ── What the snapshot reads of the tree ─────────────────────────────────────────────────────────
 
 // blobOf is a file's text at the sha, read now if it was not read with the rest.
 func (r *wikiPlanRepo) blobOf(file string) string {
@@ -489,220 +349,7 @@ func (r *wikiPlanRepo) docFiles() []string {
 	return append(docs, others...)
 }
 
-// docsTreeText is every document with its title and its second- and third-level headings (docs-tree.md).
-func (r *wikiPlanRepo) docsTreeText(maxChars int) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "# Document heading tree (origin/main %s)\n\nScope: the design, contract and operations documents under docs/ "+
-		"(not docs/mocks or docs/evidence), and the repository's other Markdown files. Each document lists its H1 title and its second- "+
-		"and third-level headings; [size] is in bytes.\n\n", shortWikiHash(r.sha))
-	for _, file := range r.docFiles() {
-		b.WriteString(r.docBlock(file, 3))
-	}
-	return wikiPlanCut(b.String(), maxChars)
-}
-
-// docBlock is one document's heading tree, to depth.
-func (r *wikiPlanRepo) docBlock(file string, depth int) string {
-	var b strings.Builder
-	headings := r.headings[file]
-	h1 := ""
-	for _, h := range headings {
-		if h.Level == 1 {
-			h1 = h.Text
-			break
-		}
-	}
-	title := ""
-	if h1 != "" {
-		title = " — " + h1
-	}
-	fmt.Fprintf(&b, "### %s [%d]%s\n", file, r.sizes[file], title)
-	for _, h := range headings {
-		if h.Level == 1 && h.Text == h1 {
-			continue
-		}
-		if h.Level >= 2 && h.Level <= depth {
-			fmt.Fprintf(&b, "%s- %s\n", strings.Repeat("  ", h.Level-2), h.Text)
-		}
-	}
-	b.WriteString("\n")
-	return b.String()
-}
-
-// docIndexText is one line a document: its path, size and title.
-func (r *wikiPlanRepo) docIndexText() string {
-	var b strings.Builder
-	for _, file := range r.docFiles() {
-		title := ""
-		for _, h := range r.headings[file] {
-			if h.Level == 1 {
-				title = " — " + h.Text
-				break
-			}
-		}
-		fmt.Fprintf(&b, "- %s [%d]%s\n", file, r.sizes[file], title)
-	}
-	return b.String()
-}
-
-// contractsText is the contracts/ inventory: each file with its top-level keys (contracts.md).
-func (r *wikiPlanRepo) contractsText() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "# contracts/ inventory (origin/main %s)\n\n", shortWikiHash(r.sha))
-	n := 0
-	for _, file := range r.files {
-		if !strings.HasPrefix(file, "contracts/") {
-			continue
-		}
-		n++
-		desc := "(not JSON)"
-		var value interface{}
-		if json.Unmarshal([]byte(r.blobOf(file)), &value) == nil {
-			switch v := value.(type) {
-			case map[string]interface{}:
-				keys := make([]string, 0, len(v))
-				for key := range v {
-					keys = append(keys, key)
-				}
-				sort.Strings(keys)
-				if len(keys) > 14 {
-					keys = append(keys[:14], "…")
-				}
-				desc = "top-level keys: " + strings.Join(keys, ", ")
-			case []interface{}:
-				desc = "an array of " + wikiCount(len(v), "item", "items")
-			}
-		}
-		fmt.Fprintf(&b, "- `%s` [%d] %s\n", file, r.sizes[file], desc)
-	}
-	if n == 0 {
-		b.WriteString("(this repository has no contracts/)\n")
-	}
-	return b.String()
-}
-
-// overviewText is what tells the model what the repository is: docs/README.md and docs/architecture.md
-// when it has them, else its README.
-func (r *wikiPlanRepo) overviewText(maxChars int) string {
-	var parts []string
-	for _, file := range []string{"docs/README.md", "docs/architecture.md"} {
-		if r.fileSet[file] {
-			parts = append(parts, fmt.Sprintf("<%s full text>\n%s\n</%s>", file, strings.TrimSpace(r.blobOf(file)), file))
-		}
-	}
-	if len(parts) == 0 && r.fileSet["README.md"] {
-		parts = append(parts, fmt.Sprintf("<README.md full text>\n%s\n</README.md>", strings.TrimSpace(r.blobOf("README.md"))))
-	}
-	return wikiPlanCut(strings.Join(parts, "\n\n"), maxChars)
-}
-
-// codeFiles are the source files a list of paths, directories or globs names.
-func (r *wikiPlanRepo) codeFiles(patterns []string) []string {
-	var out []string
-	seen := map[string]bool{}
-	for _, raw := range patterns {
-		pattern := strings.Trim(strings.TrimSpace(raw), "`")
-		if pattern == "" {
-			continue
-		}
-		for _, file := range r.files {
-			if seen[file] || r.symbols[file] == nil {
-				continue
-			}
-			if wikiPlanPathMatches(pattern, file) {
-				seen[file] = true
-				out = append(out, file)
-			}
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-// codeExcerpt is the symbols of the files the patterns name, one file a line, within maxChars.
-func (r *wikiPlanRepo) codeExcerpt(patterns []string, maxChars int) string {
-	files := r.codeFiles(patterns)
-	var b strings.Builder
-	for i, file := range files {
-		symbols := r.symbols[file]
-		if len(symbols) > 36 {
-			symbols = symbols[:36]
-		}
-		line := file + ": " + strings.Join(symbols, ", ") + "\n"
-		if b.Len()+len(line) > maxChars {
-			fmt.Fprintf(&b, "… (%s left out)\n", wikiCount(len(files)-i, "more file", "more files"))
-			break
-		}
-		b.WriteString(line)
-	}
-	if b.Len() == 0 {
-		return "(no source file with symbols matched)\n"
-	}
-	return b.String()
-}
-
-func wikiPlanCut(text string, maxChars int) string {
-	if maxChars <= 0 || len([]rune(text)) <= maxChars {
-		return text
-	}
-	return string([]rune(text)[:maxChars]) + "\n… (rest omitted)\n"
-}
-
-// ── The references ──────────────────────────────────────────────────────────────────────────────
-
-// wikiPlanPathMatches is a file named by a path, a directory (with or without its slash) or a glob.
-func wikiPlanPathMatches(pattern, file string) bool {
-	pattern = strings.TrimPrefix(pattern, "./")
-	if strings.ContainsAny(pattern, "*?[") {
-		if ok, _ := path.Match(pattern, file); ok {
-			return true
-		}
-		// `dir/**/x.ts` and `dir/**`: any depth.
-		if i := strings.Index(pattern, "**"); i >= 0 {
-			prefix := pattern[:i]
-			rest := strings.TrimPrefix(pattern[i+2:], "/")
-			if !strings.HasPrefix(file, prefix) {
-				return false
-			}
-			if rest == "" {
-				return true
-			}
-			tail := strings.TrimPrefix(file, prefix)
-			for {
-				if ok, _ := path.Match(rest, tail); ok {
-					return true
-				}
-				j := strings.IndexByte(tail, '/')
-				if j < 0 {
-					return false
-				}
-				tail = tail[j+1:]
-			}
-		}
-		return false
-	}
-	return file == pattern || strings.HasPrefix(file, strings.TrimSuffix(pattern, "/")+"/")
-}
-
-// hasPath reports whether a path names anything at the sha: a file, a directory, or what a glob matches.
-func (r *wikiPlanRepo) hasPath(raw string) bool {
-	pattern := strings.TrimPrefix(strings.Trim(strings.TrimSpace(raw), "`"), "./")
-	if pattern == "" {
-		return false
-	}
-	if r.fileSet[pattern] || r.dirs[strings.TrimSuffix(pattern, "/")] {
-		return true
-	}
-	if !strings.ContainsAny(pattern, "*?[") {
-		return false
-	}
-	for _, file := range r.files {
-		if wikiPlanPathMatches(pattern, file) {
-			return true
-		}
-	}
-	return false
-}
+// ── A heading, as two spellings of it compare ───────────────────────────────────────────────────
 
 var (
 	wikiPlanHeadingNumber = regexp.MustCompile(`^(?:§\s*)?(?:第\s*\d+\s*[章节部分]\s*|\d+(?:\.\d+)*[.、)]?\s+|[A-Z]\d*[.、)]\s+)`)
@@ -721,139 +368,5 @@ func wikiPlanHeadingKey(text string) string {
 	return strings.ToLower(strings.TrimSpace(wikiPlanSpaces.ReplaceAllString(text, " ")))
 }
 
-// hasDocSection reports whether a document of the sha has a heading that reads as section.
-func (r *wikiPlanRepo) hasDocSection(file, section string) bool {
-	return wikiPlanFindSection(r.headings[strings.TrimPrefix(strings.TrimSpace(file), "./")], section)
-}
-
 // wikiPlanHeadingPath is how a model names a subsection by the heading it sits under: «parent - child».
 var wikiPlanHeadingPath = regexp.MustCompile(`\s+(?:-|—|–|>|›|/)\s+`)
-
-// wikiPlanFindSection reports whether one of headings reads as section — or, when section names one by the
-// heading it sits under, «parent - child», whether one inside a heading that reads as parent reads as child.
-// A heading's own text may hold « - », so every place the name can be cut is tried.
-func wikiPlanFindSection(headings []wikiPlanHeading, section string) bool {
-	if want := wikiPlanHeadingKey(section); want != "" {
-		for _, h := range headings {
-			if wikiPlanHeadingKey(h.Text) == want {
-				return true
-			}
-		}
-	}
-	for _, cut := range wikiPlanHeadingPath.FindAllStringIndex(section, -1) {
-		parent := wikiPlanHeadingKey(section[:cut[0]])
-		if parent == "" {
-			continue
-		}
-		for i, h := range headings {
-			if wikiPlanHeadingKey(h.Text) != parent {
-				continue
-			}
-			end := i + 1
-			for end < len(headings) && headings[end].Level > h.Level {
-				end++
-			}
-			if wikiPlanFindSection(headings[i+1:end], section[cut[1]:]) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-var (
-	wikiPlanSymbolSuffix = regexp.MustCompile(`\s*(\[.*\]|（.*）|\(.*\))\s*$`)
-	wikiPlanIdentifier   = regexp.MustCompile(`[A-Za-z_$][A-Za-z0-9_$]*`)
-)
-
-// wikiPlanSymbolKey is a symbol as the index and the model both spell it: no route, no parentheses.
-func wikiPlanSymbolKey(symbol string) string {
-	symbol = strings.Trim(strings.TrimSpace(symbol), "`")
-	symbol = strings.TrimPrefix(symbol, "ext ")
-	for {
-		next := wikiPlanSymbolSuffix.ReplaceAllString(symbol, "")
-		if next == symbol {
-			break
-		}
-		symbol = strings.TrimSpace(next)
-	}
-	return strings.TrimSuffix(symbol, "()")
-}
-
-// hasSymbol reports whether a file — or a file under a directory, or one a glob matches — declares the
-// symbol at the sha: in the index, or failing that, with every part of its name a word of that file.
-func (r *wikiPlanRepo) hasSymbol(where, symbol string) bool {
-	key := wikiPlanSymbolKey(symbol)
-	if key == "" {
-		return false
-	}
-	parts := wikiPlanIdentifier.FindAllString(key, -1)
-	if len(parts) == 0 {
-		return false
-	}
-	for _, file := range r.filesUnder(where) {
-		for _, indexed := range r.symbols[file] {
-			if wikiPlanSymbolKey(indexed) == key {
-				return true
-			}
-		}
-		text := r.blobs[file]
-		if text == "" {
-			continue
-		}
-		all := true
-		for _, part := range parts {
-			if !regexp.MustCompile(`(^|[^A-Za-z0-9_$])` + regexp.QuoteMeta(part) + `($|[^A-Za-z0-9_$])`).MatchString(text) {
-				all = false
-				break
-			}
-		}
-		if all {
-			return true
-		}
-	}
-	return false
-}
-
-// filesUnder are the source files a path, a directory or a glob names.
-func (r *wikiPlanRepo) filesUnder(where string) []string {
-	pattern := strings.TrimPrefix(strings.Trim(strings.TrimSpace(where), "`"), "./")
-	if r.fileSet[pattern] {
-		return []string{pattern}
-	}
-	var out []string
-	for _, file := range r.files {
-		if _, ok := r.blobs[file]; ok && wikiPlanIsSource(file) && wikiPlanPathMatches(pattern, file) {
-			out = append(out, file)
-		}
-	}
-	return out
-}
-
-// symbolsOf is what a file declares, as the gate offers it to a model that named one it does not have.
-func (r *wikiPlanRepo) symbolsOf(where string, max int) []string {
-	var out []string
-	for _, file := range r.filesUnder(where) {
-		for _, symbol := range r.symbols[file] {
-			out = append(out, symbol)
-			if len(out) >= max {
-				return out
-			}
-		}
-	}
-	return out
-}
-
-// headingsOf is a document's headings, as the gate offers them to a model that named one it does not have.
-func (r *wikiPlanRepo) headingsOf(file string, max int) []string {
-	var out []string
-	for _, h := range r.headings[strings.TrimPrefix(strings.TrimSpace(file), "./")] {
-		if h.Level >= 2 {
-			out = append(out, h.Text)
-		}
-		if len(out) >= max {
-			break
-		}
-	}
-	return out
-}

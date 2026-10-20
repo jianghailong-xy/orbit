@@ -309,9 +309,4 @@ public enum WikiRunsLogic {
                            waited: waited, ran: ran, tokens: tokens, line: line,
                            error: call.state == .succeeded || call.state == .cancelled ? nil : firstLine(call.error))
     }
-
-    /// Whether Activity draws the Runs band: the server runs this account's wiki, or ran something for the space.
-    public static func shown(serverExecutes: Bool, jobs: [WikiJob]?) -> Bool {
-        serverExecutes || !(jobs ?? []).isEmpty
-    }
 }

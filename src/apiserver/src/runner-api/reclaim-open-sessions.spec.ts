@@ -42,6 +42,7 @@ test('runner restart reclaims every open session so cold checkouts remain protec
     assignedRunnerId: '11111111-1111-4111-8111-111111111111',
     ownerId: '22222222-2222-4222-8222-222222222222',
     status: { in: OPEN_SESSION_STATUSES },
+    sessionKind: 'CONVERSATION',
   });
 });
 

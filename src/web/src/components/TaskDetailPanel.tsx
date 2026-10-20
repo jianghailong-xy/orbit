@@ -81,6 +81,7 @@ import {
 import { QUEUED_LABEL } from '../lib/runnerSlots';
 import { refreshTaskScheduleViews, scheduledStart } from '../lib/taskSchedule';
 import { MD } from './Transcript';
+import { LandingLink } from './LandingLink';
 import { TaskAttributionCard } from './TaskAttributionCard';
 import { TaskDependencyList } from './TaskDependencyList';
 import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
@@ -1206,6 +1207,8 @@ export function TaskDetailPanel({
   // Named by the project's main branch, which the task read carries beside its landing.
   const mainBranch = mainBranchName(q.data?.integration?.mainBranch);
   const landing = landingBadge(q.data?.integration, mainBranch);
+  // The landing session of the task's newest generation (§2.9 LS6), which its Landing section opens.
+  const landingSessionId = q.data?.integration?.landTask?.landingSessionId ?? null;
   const supersession = supersessionNote(task);
   const comments = q.data?.comments ?? [];
   const sessions = q.data?.sessions ?? [];
@@ -1535,11 +1538,18 @@ export function TaskDetailPanel({
       ) : (
         <div className="tdp-body">
           {/* Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it
-              waits or where it stopped, apart from the status above. Nothing to press here. */}
+              waits or where it stopped, apart from the status above. The one press is the way into
+              that segment's landing session — one link, because the task's read gives the newest
+              generation and the same segment's attempts share one session (§2.9 LS6, board v4 06). */}
           {landing ? (
             <section className="tdp-section" aria-label="Task landing">
               <div className="tdp-section-title">Landing</div>
               <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} />
+              {landingSessionId ? (
+                <div className="tdp-landing-open">
+                  <LandingLink className="tdp-landing-link" sessionId={landingSessionId} />
+                </div>
+              ) : null}
             </section>
           ) : null}
           {/* The check that settles this row, under the row it checks — the relation the database
@@ -1640,7 +1650,14 @@ export function TaskDetailPanel({
                 matchTriggerWidth={false}
                 options={[
                   { value: '', label: "Assignee's" },
-                  { label: '', options: ALL_ENGINES.filter(webShowsEngine).map((engine) => ({ value: engine, label: ENGINE_CLI_NAMES[engine] })) },
+                  {
+                    label: '',
+                    // Cursor CLI once a runner of the account knows it (webShowsEngine).
+                    options: ALL_ENGINES.filter((engine) => webShowsEngine(engine, runnersQ.data)).map((engine) => ({
+                      value: engine,
+                      label: ENGINE_CLI_NAMES[engine],
+                    })),
+                  },
                 ]}
                 renderOption={(option) =>
                   option.value ? (

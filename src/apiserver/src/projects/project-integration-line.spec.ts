@@ -45,6 +45,14 @@ test('a running job may stay silent for the lease, or for its check budgets plus
     state: 'RUNNING', phase: 'CHECK',
   }), 900 + 600);
   assert.equal(integrationJobLimitSeconds({ ...landing, state: 'QUEUED', phase: null }), null);
+  // A v2 claim reports every 30 seconds whatever it is doing, so the lease bounds every phase —
+  // checking included (§2.2 J-T4).
+  for (const phase of [null, 'FETCH', 'CHECK', 'PUSH'] as const) {
+    assert.equal(
+      integrationJobLimitSeconds({ ...landing, progressProtocol: 'v2', state: 'RUNNING', phase }),
+      600, `v2 ${phase}`,
+    );
+  }
 });
 
 test('project default line checks dependency endpoints by project without large ID lists', async () => {

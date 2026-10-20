@@ -281,6 +281,92 @@ class ProjectPageTest {
         assertNull(ProjectPage.inFlightJobs(j("""{"inFlightJobs":"later"}""")))
     }
 
+    // MARK: §7.2 V6 — the claim's liveness and the step's own clock
+
+    /** A v2 claim as the server sends it once it derives liveness: stepStart/heartbeat/outputMoved in seconds before `now`. */
+    private fun v6Job(liveness: String, kind: String = "LAND_TASK", title: String? = "C5 · 托管 runner",
+        check: String = "TASK_ACCEPTANCE", claim: Int = 1, round: Int? = 1, typical: Int? = null, phase: String = "CHECK",
+        stepStarted: Long = 110, heartbeat: Long = 0, outputMoved: Long = 6,
+        timedOut: Boolean = false, limit: Int? = null) = buildJsonObject {
+        put("jobId", "j"); put("kind", kind); put("state", "RUNNING"); put("phase", phase)
+        put("taskId", if (title == null) JsonNull else JsonPrimitive("t")); put("taskTitle", title)
+        put("generation", 1); put("startedAt", iso(stepStarted)); put("queuedAt", iso(stepStarted + 30))
+        put("heartbeatAt", iso(heartbeat)); put("runner", "wikova"); put("runnerName", "wikova"); put("retriedBy", null)
+        put("timedOut", timedOut); put("limitSeconds", limit); put("retryable", false)
+        put("progressProtocol", "v2"); put("claim", claim); put("round", round)
+        put("check", Json.parseToJsonElement("""{"name":"$check","index":1,"count":3,"budgetSeconds":3600,"startedAt":"${iso(stepStarted)}"}"""))
+        put("stepStartedAt", iso(stepStarted)); put("outputMovedAt", iso(outputMoved))
+        put("typicalMs", typical); put("liveness", liveness)
+    }
+    private fun v6View(job: JsonObject) = buildJsonObject {
+        put("integratingCount", 1); put("queuedCount", 0); put("inFlight", job); put("inFlightJobs", JsonArray(listOf(job)))
+    }
+
+    @Test fun theHeadDrawsTheStepClockAgainstItsBudgetAndTheServersLiveness() {
+        // LIVE and QUIET: the local clock runs; the step's own clock against its budget is the main number.
+        val live = ProjectPage.landingLine(v6View(v6Job("LIVE")), now, now, false)!!
+        assertEquals(LandingHead("1m 50s of 60m", true, "checking · output 6s ago · claim 1 · round 1 of 3"), live.head)
+        val quiet = ProjectPage.landingLine(v6View(v6Job("QUIET", outputMoved = 840)), now, now, false)!!
+        assertEquals("1m 50s of 60m", quiet.head.right)
+        assertEquals("checking · no output for 14m · within its 60m budget · claim 1 · round 1 of 3", quiet.head.detail)
+        // SILENT: the clock freezes at the runner's last word, and the line says how long it has been.
+        val silent = ProjectPage.landingLine(v6View(v6Job("SILENT", stepStarted = 600, heartbeat = 240)), now, now, false)!!
+        assertEquals(LandingHead("6m 0s of 60m", true, "checking · no word from runner wikova for 4m · claim 1 · round 1 of 3"), silent.head)
+        assertFalse(silent.running)
+        // LEGACY: reports only between steps — twelve quiet minutes are not a stall, and there is no freshness to misread.
+        val legacy = ProjectPage.landingLine(v6View(v6Job("LEGACY", stepStarted = 720, heartbeat = 720)), now, now, false)!!
+        assertEquals(LandingHead("12m 0s of 60m", true, "checking · reports only between steps · claim 1 · round 1 of 3"), legacy.head)
+        assertFalse(legacy.head.detail.contains("Updated"))
+        assertTrue(legacy.running)
+        // LEASE_EXPIRED: the server's one timeout, worded as main words it.
+        val expired = ProjectPage.landingLine(v6View(v6Job("LEASE_EXPIRED", heartbeat = 1_380, timedOut = true, limit = 600)), now, now, false)!!
+        assertEquals(LandingHead("Timed out", false, "No report for 23m · limit 10m"), expired.head)
+        assertTrue(expired.timedOut)
+    }
+
+    @Test fun theKindsSayTheirOwnWordsAndOnlyAMergeCheckCarriesTheUsualDuration() {
+        val merge = ProjectPage.landingLine(v6View(v6Job("LIVE", kind = "CHECK_PROMOTION", title = null, check = "MERGE_CHECK", typical = 18 * 60_000)),
+            now, now, false)!!
+        assertEquals("Merge check", merge.word)
+        assertEquals("checking · output 6s ago · usually ~18m · claim 1 · round 1 of 3", merge.head.detail)
+        val promotion = ProjectPage.landingLine(v6View(v6Job("LIVE", kind = "LAND_PROMOTION", title = null, check = "MERGE_CHECK", typical = 18 * 60_000)),
+            now, now, false)!!
+        assertEquals("Merge to main", promotion.word)
+        // A task's own acceptance command has no usual duration: the board gives it to merge checks only.
+        assertEquals("checking · output 6s ago · claim 1 · round 1 of 3", liveDetail())
+    }
+
+    private fun liveDetail() = ProjectPage.landingLine(v6View(v6Job("LIVE")), now, now, false)!!.head.detail
+
+    @Test fun aTakeoverNamesTheFirstStartTheClaimRowStillCarries() {
+        val landTasks = JsonArray(listOf(Json.parseToJsonElement("""{"taskId":"t","taskTitle":"C5","integration":{"landTask":
+            {"jobId":"j","state":"RUNNING","phase":"CHECK","targetRef":"refs/heads/project/p","startedAt":"${iso(470)}"}}}""")))
+        val view = buildJsonObject {
+            put("integratingCount", 1); put("queuedCount", 0)
+            put("inFlight", v6Job("LIVE", claim = 2)); put("inFlightJobs", JsonArray(listOf(v6Job("LIVE", claim = 2))))
+            put("landTasks", landTasks)
+        }
+        val detail = ProjectPage.landingLine(view, now, now, false)!!.head.detail
+        assertTrue(detail, detail.contains("Taken over ${ProjectPage.landingClockTime(Instant.parse(iso(110)))} · first started ${ProjectPage.landingClockTime(Instant.parse(iso(470)))}"))
+    }
+
+    @Test fun aTimedOutMergeCheckSaysNoPushSentence() {
+        val detail = ProjectPage.landingJobLines(v6View(v6Job("LEASE_EXPIRED", kind = "CHECK_PROMOTION", title = null, check = "MERGE_CHECK",
+            heartbeat = 1_380, timedOut = true, limit = 600)), now, now, false).single().detail
+        assertEquals("Runner wikova took it at ${ProjectPage.landingClockTime(Instant.parse(iso(110)))} · stopped at checking", detail)
+        // A landing still says whether it may have pushed.
+        val landing = ProjectPage.landingJobLines(v6View(v6Job("LEASE_EXPIRED", phase = "PUSH", heartbeat = 1_380, timedOut = true,
+            limit = 600)), now, now, false).single().detail
+        assertTrue(landing!!.endsWith("stopped at pushing · may have been pushed"))
+    }
+
+    @Test fun aServerWithoutTheFieldsIsWordForWordTheOlderOne() {
+        val old = ProjectPage.landingLine(j("""{"integratingCount":1,"inFlight":{"taskTitle":"T","state":"RUNNING","startedAt":"${iso(80)}","kind":"LAND_TASK","phase":"CHECK","heartbeatAt":"${iso(0)}"}}"""),
+            now, now, false)!!
+        assertNull(old.liveness)
+        assertEquals(LandingHead("1m 20s", true, "checking · updated just now"), old.head)
+    }
+
     // MARK: criteria
 
     @Test fun criterionWorkSaysWhereMetWorkIsAndNamesWhatHoldsUnmetWork() {

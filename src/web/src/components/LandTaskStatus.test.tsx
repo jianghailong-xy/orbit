@@ -113,3 +113,55 @@ describe('where a landing’s work is, by the project’s main branch', () => {
       .toContain('Its work is on master by an existing receipt.');
   });
 });
+
+/**
+ * §7.2 V6 on the task page: a landing that carries the server's liveness is read from that
+ * verdict, not from this page's own ten-minute heartbeat rule — a legacy claim's healthy long
+ * check must not be painted as a stall, and a timeout is the server's word.
+ */
+describe('a landing that carries §7.2 V6’s liveness', () => {
+  const NOW = Date.parse('2026-10-08T06:00:00Z');
+  const at = (minutesAgo: number) => new Date(NOW - minutesAgo * 60_000).toISOString();
+
+  const view = (liveness: string, over: Record<string, unknown> = {}): TaskIntegrationView => ({
+    state: 'RUNNING', since: at(9), handler: null, openItemId: null, jobId: 'j1', checksRunningForMs: null,
+    landTask: {
+      jobId: 'j1', state: 'RUNNING', phase: 'CHECK', generation: '2', queuedAt: at(9), startedAt: at(9),
+      heartbeatAt: at(0), finishedAt: null, targetRef: 'refs/heads/project/p', waitMs: 0, blockingReason: null,
+      // The shared read model does not require these yet; a server that sends them is read here.
+      ...({ liveness, runnerName: 'wikova', ...over } as object),
+    } as NonNullable<TaskIntegrationView['landTask']>,
+  });
+  const html = (liveness: string, over: Record<string, unknown> = {}) =>
+    renderToStaticMarkup(<LandTaskStatus integration={view(liveness, over)} now={NOW} />);
+
+  it('leaves a LIVE or QUIET check alone', () => {
+    for (const liveness of ['LIVE', 'QUIET']) {
+      expect(html(liveness), liveness).not.toContain('No report');
+      expect(html(liveness), liveness).not.toMatch(/timed? ?out/i);
+    }
+  });
+
+  it('says how long a SILENT runner has been quiet — never a timeout', () => {
+    const silent = html('SILENT', { heartbeatAt: at(4) });
+    expect(silent).toContain('No word from runner wikova for 4m');
+    expect(silent).not.toMatch(/timed? ?out/i);
+    expect(silent).not.toContain('No report');
+  });
+
+  it('prints LEASE_EXPIRED as the timeout it is', () => {
+    expect(html('LEASE_EXPIRED', { heartbeatAt: at(23) })).toContain('No report for 23m');
+  });
+
+  it('does not infer silence from a legacy claim, however long its check has run', () => {
+    const legacy = html('LEGACY', { heartbeatAt: at(12), startedAt: at(12) });
+    expect(legacy).toContain('Reports only between steps');
+    expect(legacy).not.toContain('No report');
+    expect(legacy).not.toMatch(/timed? ?out/i);
+  });
+
+  it('keeps the page’s own rule only for a landing that carries no liveness', () => {
+    // The older server: eleven quiet minutes past the claim lease still read as no report.
+    expect(html('SILENT', { liveness: undefined, heartbeatAt: at(11) })).toContain('No report for 11m');
+  });
+});

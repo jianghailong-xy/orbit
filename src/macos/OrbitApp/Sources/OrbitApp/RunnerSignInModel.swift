@@ -113,6 +113,9 @@ final class RunnerSignInModel {
     var userCode: String? { mine ? relay?.userCode : nil }
     /// The runner's own last word — a rejected code, or why an attempt failed.
     var relayMessage: String? { mine ? relay?.message : nil }
+    /// Cursor CLI: when the sign-in link at `url` stops working, as the runner reported it — what the
+    /// card counts down from (contract §9: about 23 minutes after it was printed).
+    var expiresAt: Date? { mine ? relay?.expiresAt.flatMap(RelativeTime.parse) : nil }
 
     /// Kimi: the site of the login this card signs in again, marked on the choice — that account's own,
     /// Default's being the engine's; none on a card adding an account (`KimiSite.current(on:account:adding:)`).

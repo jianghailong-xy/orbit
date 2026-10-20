@@ -66,6 +66,7 @@ fun settingsTitle(page: String?, record: String? = null): String = when (page) {
     // A pool's page and a DeepSeek key's are titled by its name once read, as iOS titles them.
     "infrastructure" -> when {
         record?.startsWith("key:") == true -> providerKeyTitle(record.removePrefix("key:"))
+        record?.startsWith("cursor-key:") == true -> providerKeyTitle(record.removePrefix("cursor-key:"))
         record != null -> poolTitle(record.substringAfter(':'))
         else -> null
     } ?: Infrastructure.TITLE
