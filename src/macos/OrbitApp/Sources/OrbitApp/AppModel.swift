@@ -2419,6 +2419,30 @@ final class AppModel {
         toasts.dismiss(id)
     }
 
+    /// Each landing session's job, as the last integration read described it — what a landing page
+    /// opened while the server cannot be reached draws its frozen placeholder from instead of a
+    /// blank page. Filled by every successful integration read, on both shells.
+    private(set) var landingInFlightCache: [String: ProjectIntegrationInFlight] = [:]
+
+    /// Keep each landing job's last description from an integration read, so a landing page opened
+    /// with no server to read draws it, frozen, rather than an empty page. The project page's own
+    /// poll calls it on both shells; a landing page's own read calls it too, so a Mac has the
+    /// snapshot after the first answer.
+    func rememberLandingJobs(_ integration: ProjectIntegrationView) {
+        for job in integration.inFlightJobs ?? [] {
+            guard let landingSessionId = job.landingSessionId, !landingSessionId.isEmpty else { continue }
+            landingInFlightCache[landingSessionId] = ProjectIntegrationInFlight(
+                taskTitle: job.taskTitle, state: job.state, startedAt: job.startedAt,
+                kind: job.kind, phase: job.phase, heartbeatAt: job.heartbeatAt,
+                jobId: job.jobId, landingSessionId: landingSessionId,
+                taskId: job.taskId, promotionId: job.promotionId, runner: job.runnerName,
+                claim: job.claim, round: job.round, check: job.check,
+                stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
+                progressProtocol: job.progressProtocol, typicalMs: job.typicalMs,
+                liveness: job.liveness, blockingReason: job.blockingReason)
+        }
+    }
+
     // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
 
     #if os(iOS)
@@ -2448,10 +2472,6 @@ final class AppModel {
     /// (`ProjectPage.drawsEnding`): the criteria document's own subject, the same read the
     /// conversation's settled card keeps.
     private(set) var projectSessionsDone: ProjectDoneSubject?
-    /// Each landing session's job, as the last integration read described it — what a landing page
-    /// opened while the server cannot be reached draws its frozen placeholder from instead of a
-    /// blank page. Filled by every successful integration read.
-    private(set) var landingInFlightCache: [String: ProjectIntegrationInFlight] = [:]
 
     var projectSessionsColumn: SessionProjectAddress? { nav.projectSessionsColumn }
 
@@ -2640,18 +2660,7 @@ final class AppModel {
             projectSessionsIntegrationReadFailed = false
             // Keep each landing job's last description: a landing page opened with no server to
             // read draws it, frozen, rather than an empty page (§2.9 LS6's read-failure rule).
-            for job in integration.inFlightJobs ?? [] {
-                guard let landingSessionId = job.landingSessionId, !landingSessionId.isEmpty else { continue }
-                landingInFlightCache[landingSessionId] = ProjectIntegrationInFlight(
-                    taskTitle: job.taskTitle, state: job.state, startedAt: job.startedAt,
-                    kind: job.kind, phase: job.phase, heartbeatAt: job.heartbeatAt,
-                    jobId: job.jobId, landingSessionId: landingSessionId,
-                    taskId: job.taskId, promotionId: job.promotionId, runner: job.runnerName,
-                    claim: job.claim, round: job.round, check: job.check,
-                    stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
-                    progressProtocol: job.progressProtocol, typicalMs: job.typicalMs,
-                    liveness: job.liveness, blockingReason: job.blockingReason)
-            }
+            rememberLandingJobs(integration)
         } else {
             projectSessionsIntegrationReadFailed = true
         }

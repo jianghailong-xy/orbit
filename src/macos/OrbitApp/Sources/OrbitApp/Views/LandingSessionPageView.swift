@@ -528,7 +528,7 @@ struct LandingSessionPageView: View {
         do {
             let detail = try await api.sessionDetail(sessionID)
             landing = detail.landing ?? landing
-            rowTitle = detail.title ?? rowTitle
+            if let title = app.session(id: sessionID)?.title { rowTitle = title }
             readAt = Date()
             readFailed = false
         } catch {
@@ -538,6 +538,7 @@ struct LandingSessionPageView: View {
         let projectID = landing.projectId
         if !projectID.isEmpty, landing.settledAt == nil {
             integration = try? await api.projectIntegration(projectID)
+            if let integration { app.rememberLandingJobs(integration) }
             coordinator = try? await api.projectCoordinatorStatus(projectID)
             if landing.subject == "PROMOTION" {
                 promotion = try? await api.currentPromotion(projectID: projectID)
@@ -785,7 +786,7 @@ final class LandingPromotionSource: PromotionReviewSource {
         if let integration = try? await api.projectIntegration(projectID) {
             landings = integration.landTasks
         }
-        openItems = try? await api.projectOpenItems(projectID)
+        openItems = try? await api.projectOpenItems(projectID: projectID)
     }
 
     func confirmMergeToMain(_ view: ProjectPromotionView) async -> String? {
