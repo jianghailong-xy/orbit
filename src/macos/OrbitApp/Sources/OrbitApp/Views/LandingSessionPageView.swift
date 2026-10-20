@@ -168,7 +168,7 @@ struct LandingSessionPageView: View {
                     title: outcome.title,
                     head: ProjectPage.LandingHead(right: outcome.right, isClock: false,
                                                   detail: outcome.detail ?? ""),
-                    running: false, timedOut: false)
+                    running: false, timedOut: false, ok: outcome.ok)
                 if let heading = outcome.tasksHeading {
                     Text(heading).font(.orbitLabel.weight(.semibold))
                     ForEach(outcome.tasks, id: \.self) { title in
@@ -204,6 +204,13 @@ struct LandingSessionPageView: View {
                         Text(live).font(.orbitMeta).foregroundStyle(.secondary)
                     }
                 }
+                // What the running check leads to, said while it runs (mockup 05 a): the reader
+                // learns now whether to wait for a question or walk away. Web: `promotionOnPassLine`.
+                if landing.subject == "PROMOTION", landing.settledAt == nil, card.running,
+                   landing.currentAttempt?.kind == "CHECK_PROMOTION",
+                   let onPass = PromotionCards.onPassLine(currentPromotion(landing)) {
+                    Text(onPass).font(.orbitMeta).foregroundStyle(.secondary)
+                }
                 if card.timedOut, let attempt = landing.currentAttempt {
                     Text(LandingPageCopy.timeoutLine(landing, attempt: attempt,
                                                      main: facts(landing).mainBranch))
@@ -224,20 +231,27 @@ struct LandingSessionPageView: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(background(for: card), in: RoundedRectangle(cornerRadius: 14))
+        .background(background(for: card, outcome: outcome),
+                    in: RoundedRectangle(cornerRadius: 14))
         .overlay {
             RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(stroke(for: card), lineWidth: 1)
+                .strokeBorder(stroke(for: card, outcome: outcome), lineWidth: 1)
         }
     }
 
-    private func background(for card: LandingAttemptCard?) -> Color {
+    private func background(for card: LandingAttemptCard?,
+                            outcome: LandingOutcomeCard?) -> Color {
+        // A settled success is the board's green card (mockup 05 c); a timed-out attempt amber;
+        // everything else the neutral wash the row wears.
+        if outcome?.ok == true { return Color.green.opacity(0.08) }
         if card?.timedOut == true { return Color.orange.opacity(0.08) }
         return Color.secondary.opacity(0.1)
     }
 
-    private func stroke(for card: LandingAttemptCard?) -> Color {
-        card?.timedOut == true ? Color.orange.opacity(0.3) : Color.clear
+    private func stroke(for card: LandingAttemptCard?,
+                        outcome: LandingOutcomeCard?) -> Color {
+        if outcome?.ok == true { return Color.green.opacity(0.3) }
+        return card?.timedOut == true ? Color.orange.opacity(0.3) : Color.clear
     }
 
     /// The quiet meter under the head: how far the step is through its budget, with the check's
@@ -418,6 +432,15 @@ struct LandingSessionPageView: View {
                openLog.claim == entry.claim, openLog.round == entry.round,
                openLog.check == check.index {
                 LandingCheckLogView(sessionID: sessionID, selectors: openLog)
+                    .padding(.leading, 24)
+            } else if entry.kind == "CHECK_FINISHED", let check = entry.check,
+                      !entry.text.contains("passed") {
+                // A check that failed shows the tail it died on, inline (mockup 05 g); a passed
+                // one keeps its `Log ›` and stays one line.
+                LandingInlineOutput(
+                    sessionID: sessionID,
+                    selectors: LandingLogSelectors(jobId: section.jobId, claim: entry.claim,
+                                                   round: entry.round, check: check.index))
                     .padding(.leading, 24)
             }
         }
@@ -747,11 +770,10 @@ private struct LandingLiveCheckView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            // The board's own header row over the output block: `Merge check · live 1m 53s`.
             Text(title).font(.orbitMeta).foregroundStyle(.secondary)
             if !text.isEmpty {
-                Text(text).font(.orbitMono)
-                    .lineLimit(6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                LandingDarkOutput(text: text)
             }
         }
         .task {
@@ -770,6 +792,54 @@ private struct LandingLiveCheckView: View {
             .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
             .suffix(6)
             .joined(separator: "\n")
+    }
+}
+
+/// One block of check output, as the board draws it (mockups 05 a, b, g, j): a dark panel of the
+/// runner's own lines in monospace, under the `<check> · live <elapsed>` row that names it.
+private struct LandingDarkOutput: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.orbitMono)
+            .foregroundStyle(Color(white: 0.92))
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(Color(white: 0.12), in: RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+/// A finished check's tail, inline, for the check that failed: the failure's own last lines, read
+/// once from the same landing log `Log ›` opens (mockup 05 g).
+private struct LandingInlineOutput: View {
+    let sessionID: String
+    let selectors: LandingLogSelectors
+    @Environment(AppModel.self) private var app
+    @State private var lines: [String] = []
+
+    private var api: APIClient? {
+        guard let baseURL = app.baseURL else { return nil }
+        return APIClient(baseURL: baseURL, tokenStore: app.tokenStore)
+    }
+
+    var body: some View {
+        Group {
+            if !lines.isEmpty {
+                LandingDarkOutput(text: lines.joined(separator: "\n"))
+            }
+        }
+        .task {
+            guard let api, let page = try? await api.landingLog(sessionID: sessionID,
+                                                                selectors) else { return }
+            lines = page.entries.map(\.text).joined()
+                .replacingOccurrences(of: "\r", with: "")
+                .split(separator: "\n", omittingEmptySubsequences: false)
+                .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+                .suffix(6)
+                .map(String.init)
+        }
     }
 }
 

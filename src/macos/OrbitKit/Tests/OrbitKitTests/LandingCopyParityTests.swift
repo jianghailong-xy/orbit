@@ -260,6 +260,44 @@ final class LandingCopyParityTests: XCTestCase {
         XCTAssertEqual(TaskLandingCopy.reportsOnlyBetweenSteps, ProjectPage.landingReportsOnlyBetweenSteps)
     }
 
+    /// The X-E5 card's three lease rows and footer, and the merge card's cancelling words.
+    func testTheXE5LeaseRowsAndTheCancellingWordsAreTheWebsOwn() throws {
+        let web = try source(Self.progressStatus)
+        for label in [ExceptionCards.landingFactLabel, ExceptionCards.runnerFactLabel,
+                      ExceptionCards.stepFactLabel] {
+            assertSays(web, "<FactRow label=\"\(label)\">", in: Self.progressStatus)
+        }
+        assertSays(web, "const generation = lease.generation != null ? `generation ${lease.generation}` : null;",
+                   in: Self.progressStatus)
+        assertSays(web, "reported ? `last report ${reported}` : null",
+                   in: Self.progressStatus)
+        assertSays(web, "expired ? `lease expired ${expired}` : null",
+                   in: Self.progressStatus)
+        assertSays(web, "lease.runner ?? 'The runner'", in: Self.progressStatus)
+        assertSays(web, "lease.claimGeneration != null ? `claim ${lease.claimGeneration}` : null",
+                   in: Self.progressStatus)
+        assertSays(web, "`round ${lease.round}${lease.checkCount != null ? ` of ${lease.checkCount}` : ''}`",
+                   in: Self.progressStatus)
+        // The item is escalated at birth: the footer says the wait alone.
+        assertSays(web, "if (row.kind === 'LANDING_LEASE_EXPIRED') return `Owner: you · ${waited}`;",
+                   in: Self.progressStatus)
+        // The hand-close door is the same kind's (web `HAND_CLOSABLE_KINDS`).
+        assertSays(web, "'LANDING_LEASE_EXPIRED',", in: Self.progressStatus)
+        assertSays(web, "'DELIVERY_REVIEW',", in: Self.progressStatus)
+
+        let merge = try source(Self.projectMerge)
+        for (key, word) in [("CANCELLING_THE_MERGE", PromotionCards.cancellingTheMerge),
+                            ("TOO_LATE_TO_CANCEL", PromotionCards.tooLateToCancel),
+                            ("CANCEL_STOPS_SOON", PromotionCards.cancelStopsSoon),
+                            ("CANCEL_MAY_STILL_MERGE", PromotionCards.cancelMayStillMerge),
+                            ("CANCEL_REQUESTED", PromotionCards.cancelRequestedLabel),
+                            ("STOP_REQUESTED", PromotionCards.stopRequestedClause),
+                            ("RERUN_THE_CHECK", PromotionCards.rerunTheCheck),
+                            ("ABANDON", PromotionCards.abandon)] {
+            assertSays(merge, "export const \(key) = '\(word)';", in: Self.projectMerge)
+        }
+    }
+
     /// The delivery card's third link.
     func testTheDeliveryCardsLandingLinkIsTheWebsOwn() throws {
         let web = try source(Self.deliveryCard)

@@ -83,7 +83,7 @@ reset()
 
 
 def attempt(mode):
-    if mode == "settled":
+    if mode == "settled" or mode == "receipt":
         return {"jobId": "jL", "kind": "LAND_PROMOTION", "state": "MERGED", "generation": 3,
                 "phase": "PUSH", "round": 1, "step": None, "claim": 1, "runnerName": "wikova",
                 "sourceSessionId": "S4", "targetRef": "refs/heads/project/P1",
@@ -91,6 +91,18 @@ def attempt(mode):
                 "progressProtocol": "v2", "check": None, "liveness": None,
                 "blockingReason": None, "timedOut": False, "limitSeconds": 600,
                 "retryable": False, "pushBoundaryPassed": True}
+    if mode == "task-timeout":
+        # 05 i: a task segment's attempt whose runner stopped reporting; the server's Retry takes it.
+        return {"jobId": "jL", "kind": "LAND_TASK", "state": "RUNNING", "generation": 3,
+                "landingSessionId": "L1", "phase": "CHECK", "round": 1, "step": None, "claim": 1,
+                "runnerName": "wikova", "sourceSessionId": "S4",
+                "targetRef": "refs/heads/project/P1",
+                "startedAt": ago(30), "heartbeatAt": ago(23), "outputMovedAt": ago(0.1),
+                "progressProtocol": "v2",
+                "check": {"name": "TASK_ACCEPTANCE", "index": 1, "count": 1,
+                          "budgetSeconds": 1800, "startedAt": ago(30)},
+                "liveness": "LEASE_EXPIRED", "blockingReason": None, "timedOut": True,
+                "limitSeconds": 600, "retryable": True, "pushBoundaryPassed": False}
     timed = mode == "timeout"
     return {"jobId": "jL", "kind": "CHECK_PROMOTION", "state": "RUNNING", "generation": 3,
             "landingSessionId": "L1",
@@ -114,7 +126,28 @@ def entry(kind, text, minutes, *, claim=1, round=None, phase=None, check=None, r
 
 
 def landing(mode):
-    settled = mode == "settled"
+    settled = mode == "settled" or mode == "receipt"
+    if mode == "task-timeout":
+        entries = [
+            entry("ENQUEUED", "Queued · Landing", 30),
+            entry("CLAIMED", "Claimed by runner wikova · claim 1", 30),
+            entry("STEP", "Fetched · synced main", 29, phase="FETCH"),
+            entry("STEP", "Rebased onto main", 28, phase="REBASE"),
+            entry("CHECK_STARTED", "Task acceptance started · round 1", 27,
+                  check={"name": "TASK_ACCEPTANCE", "index": 1}),
+        ]
+        return {
+            "sessionId": "L1", "projectId": "P1", "subject": "TASK", "taskId": "T1",
+            "promotionId": None, "episode": 1, "openedAt": ago(30), "settledAt": None,
+            "settledAs": None, "phase": "CHECK", "round": 1, "checks": [],
+            "liveness": "LEASE_EXPIRED", "blockingReason": None,
+            "currentAttempt": attempt(mode), "todos": [],
+            "generations": [{"sessionId": "L1", "episode": 1, "openedAt": ago(30),
+                             "settledAt": None, "settledAs": None}],
+            "timeline": {"sections": [{"title": "Landing · 1", "jobId": "jL", "kind": "LAND_TASK",
+                                       "generation": 1, "state": "RUNNING", "entries": entries}],
+                         "facts": [], "truncated": False},
+        }
     if settled:
         entries = [
             entry("CLAIMED", "Claimed by runner wikova · claim 1", 12),
@@ -158,11 +191,14 @@ def landing(mode):
 
 
 def landing_row(mode, detail=False):
-    settled = mode == "settled"
+    settled = mode == "settled" or mode == "receipt"
+    task = mode == "task-timeout"
     row = dict(L1_ROW)
     row["status"] = "SUCCEEDED" if settled else "RUNNING"
     row["runStatus"] = row["status"]
-    row["landing"] = {"subject": "PROMOTION",
+    if task:
+        row["title"] = "Land · Ledger migration order"
+    row["landing"] = {"subject": "TASK" if task else "PROMOTION",
                       "state": "SETTLED" if settled else "AWAITING_DECISION",
                       "settledAs": "MERGED" if settled else None,
                       "settledAt": ago(9) if settled else None}
@@ -181,8 +217,13 @@ L1_ROW = {"id": "L1", "publicId": "L1", "title": "Merge project/P1 → main · #
 
 
 def promotion(mode):
-    settled = mode == "settled"
-    return {"promotionId": "PM1", "state": "MERGED" if settled else "CHECKING",
+    # The sessions page's own cards: a task landing has no merge candidate at all.
+    if mode in ("one-job", "two-jobs", "task-timeout"):
+        return None
+    settled = mode in ("settled", "receipt")
+    confirmed = mode in ("confirmed", "cancelling", "land-timeout")
+    view = {"promotionId": "PM1",
+            "state": "MERGED" if settled else "CONFIRMED" if confirmed else "CHECKING",
             "sourceKind": "PROJECT_BRANCH", "sourceRef": "refs/heads/project/P1",
             "sourceSha": "a" * 40, "upstreamRef": "refs/heads/main",
             "commitsAhead": 2, "filesChanged": 3,
@@ -192,8 +233,12 @@ def promotion(mode):
             "upstreamShaChecked": "b" * 40, "landsTreeSha": "5e5bfca" + "0" * 33,
             "landsAs": "MERGE_COMMIT", "askedAt": None, "recheckedAt": None, "decidedAt": None,
             "landingSessionId": "L1", "onPass": "MERGE",
+            "cancelRequested": mode == "cancelling", "pushBoundaryPassed": False,
+            "execution": {"state": "RUNNING", "phase": "CHECK", "startedAt": ago(3)}
+            if confirmed else None,
             "merged": {"sha": "8ed0ea7" + "0" * 33, "at": ago(9), "automatic": True,
                        "byUserId": None, "revert": None} if settled else None}
+    return view
 
 
 def task_item(mode):
@@ -237,29 +282,96 @@ def document(pid):
             "startedAt": ago(19 * DAY), "pausedAt": None, "maxConcurrentTasks": 3}
 
 
+_NO_BODY = object()
+
+TASK_TITLE = "Ledger migration order"
+
+
+def job(job_id, kind, *, state="RUNNING", phase="CHECK", task_title=None, timed=False,
+        retryable=False, liveness="LIVE", landing="L1", heartbeat=0, started=None):
+    """One job in flight, shaped as `GET /projects/:id/integration` serves it. A merge job lands
+    no single task, so it carries neither a task id nor a title (§2.9) — never attribute one from
+    a promotion row."""
+    started = started if started is not None else 110 / 60
+    check_name = "TASK_ACCEPTANCE" if kind == "LAND_TASK" else "MERGE_CHECK"
+    entry = {"jobId": job_id, "kind": kind, "state": state,
+             "phase": phase if state == "RUNNING" else None, "generation": 1,
+             "startedAt": ago(started),
+             "queuedAt": ago(started + 0.5), "heartbeatAt": ago(heartbeat),
+             "runnerName": "wikova" if state == "RUNNING" else None, "retriedBy": None,
+             "timedOut": timed, "limitSeconds": 600 if state == "RUNNING" else None,
+             "retryable": retryable, "claim": 1 if state == "RUNNING" else 0, "round": 1,
+             "check": {"name": check_name, "index": 1, "count": 1 if kind == "LAND_TASK" else 3,
+                       "budgetSeconds": 1800 if kind == "LAND_TASK" else 3600,
+                       "startedAt": ago(started)} if state == "RUNNING" else None,
+             "stepStartedAt": ago(started), "outputMovedAt": ago(0.1),
+             "progressProtocol": "v2", "typicalMs": 18 * 60_000 if kind == "CHECK_PROMOTION" else None,
+             "liveness": liveness if state == "RUNNING" else None,
+             "landingSessionId": landing}
+    if kind == "LAND_TASK" and task_title:
+        entry["taskId"] = "T1"
+        entry["taskTitle"] = task_title
+    return entry
+
+
+def land_tasks(jobs):
+    """Each task's newest LAND_TASK — only task landings have one; a merge job has none."""
+    out = []
+    for entry in jobs:
+        if entry["kind"] != "LAND_TASK":
+            continue
+        out.append({"taskId": entry.get("taskId"),
+                    "taskTitle": entry.get("taskTitle"),
+                    "integration": {"state": "RUNNING", "jobId": entry["jobId"],
+                                    "landTask": {"jobId": entry["jobId"],
+                                                 "state": entry["state"], "phase": "CHECK",
+                                                 "landingSessionId": entry["landingSessionId"],
+                                                 "generation": "3",
+                                                 "targetRef": "refs/heads/project/P1",
+                                                 "startedAt": entry["startedAt"]}}})
+    return out
+
+
 def integration(mode):
-    lead = attempt(mode)
-    lead = dict(lead)
-    lead["taskId"] = "T1"
-    lead["taskTitle"] = "Ledger migration order"
-    flight = {k: lead.get(k) for k in ("taskTitle", "kind", "state", "phase", "startedAt",
-                                       "heartbeatAt", "jobId", "landingSessionId", "taskId",
-                                       "runnerName", "claim", "round", "check", "stepStartedAt",
-                                       "outputMovedAt", "progressProtocol", "typicalMs", "liveness")}
-    flight["runner"] = lead.get("runnerName")
-    land = {"taskId": "T1", "taskTitle": "Ledger migration order",
-            "integration": {"state": "RUNNING", "jobId": "jL",
-                            "landTask": {"jobId": "jL",
-                                         "state": "LANDED" if mode == "settled" else "RUNNING",
-                                         "phase": "CHECK", "landingSessionId": "L1",
-                                         "generation": "3", "targetRef": "refs/heads/project/P1",
-                                         "startedAt": ago(6)}}}
+    if mode in ("settled", "receipt"):
+        jobs = []
+    elif mode == "one-job":
+        jobs = [job("j-task", "LAND_TASK", task_title=TASK_TITLE, landing="LT")]
+    elif mode == "two-jobs":
+        jobs = [job("j-task", "LAND_TASK", task_title=TASK_TITLE, landing="LT"),
+                job("j-check", "CHECK_PROMOTION", state="QUEUED", landing="L1")]
+    elif mode == "merge-two":
+        # The merge round leads; the task landing queued behind it keeps its way in at the foot.
+        jobs = [job("jL", "CHECK_PROMOTION"),
+                job("j-task", "LAND_TASK", state="QUEUED", task_title=TASK_TITLE, landing="LT")]
+    elif mode == "timeout":
+        jobs = [job("jL", "CHECK_PROMOTION", timed=True, liveness="LEASE_EXPIRED",
+                    heartbeat=23, started=30)]
+    elif mode == "land-timeout":
+        jobs = [job("j-merge", "LAND_PROMOTION", phase="REBASE", timed=True,
+                    liveness="LEASE_EXPIRED", heartbeat=23, started=30)]
+    elif mode in ("confirmed", "cancelling"):
+        jobs = [job("j-merge", "LAND_PROMOTION")]
+    elif mode == "task-timeout":
+        jobs = [job("jL", "LAND_TASK", task_title=TASK_TITLE, timed=True,
+                    liveness="LEASE_EXPIRED", heartbeat=23, retryable=True, started=30)]
+    else:  # live
+        jobs = [job("jL", "CHECK_PROMOTION")]
+    lead = jobs[0] if jobs else None
+    flight = None
+    if lead:
+        flight = {k: lead.get(k) for k in ("taskTitle", "kind", "state", "phase", "startedAt",
+                                           "heartbeatAt", "jobId", "landingSessionId", "taskId",
+                                           "runnerName", "claim", "round", "check", "stepStartedAt",
+                                           "outputMovedAt", "progressProtocol", "typicalMs",
+                                           "liveness")}
+        flight["runner"] = lead.get("runnerName")
+        flight["waitMs"] = 60_000
     return {"line": "PROJECT_BRANCH", "ref": "project/P1", "upstreamRef": "main",
-            "integratingCount": 0 if mode == "settled" else 1, "queuedCount": 0,
-            "mergeCheckOnTip": "PASSING" if mode == "settled" else "UNKNOWN",
-            "inFlight": None if mode == "settled" else flight,
-            "inFlightJobs": [] if mode == "settled" else [lead],
-            "landTasks": [land]}
+            "integratingCount": sum(1 for j in jobs if j["state"] == "RUNNING"),
+            "queuedCount": sum(1 for j in jobs if j["state"] == "QUEUED"),
+            "mergeCheckOnTip": "PASSING" if mode in ("settled", "receipt") else "UNKNOWN",
+            "inFlight": flight, "inFlightJobs": jobs, "landTasks": land_tasks(jobs)}
 
 
 X5 = {"itemId": "OI5", "kind": "LANDING_LEASE_EXPIRED",
@@ -271,10 +383,28 @@ X5 = {"itemId": "OI5", "kind": "LANDING_LEASE_EXPIRED",
       "landingSessionId": "L1", "integrationJobId": "jL",
       "actions": ["ABANDON", "OPEN_LANDING"], "primaryAction": "ABANDON",
       "requiredAction": "The runner stopped reporting; abandon this landing, or wait for the runner to come back.",
+      "facts": {"task": {"id": "T1", "title": "Ledger migration order"}},
       "lease": {"lastReportAt": ago(27), "leaseExpiredAt": ago(17), "jobKind": "CHECK_PROMOTION",
                 "generation": 3, "phase": "CHECK", "step": None, "claimGeneration": 1,
                 "round": 1, "checkCount": 3, "runner": "wikova", "progressProtocol": "v2",
                 "pushReported": False}}
+
+def delivery_event():
+    """The `user` event an exception item's delivery leaves in the source conversation (06 b): the
+    paragraph the agent was told, and the fields its card is drawn from."""
+    return {"seq": 1, "type": "user", "ts": ago(6), "turnId": "t1",
+            "payload": {
+                "text": "Exception item delivered to the coordinator.",
+                "openItemDelivery": {
+                    "itemId": "OI9", "kind": "INTEGRATION_CHECK_FAILED",
+                    "title": "Checks failed on the combined tree",
+                    "task": {"id": "T1", "title": "Ledger migration order", "sessionId": "S4"},
+                    "targetRef": "refs/heads/project/P1",
+                    "check": {"name": "MERGE_CHECK", "exitCode": 1, "expectedExitCode": 0},
+                    "actions": ["OPEN_LANDING"],
+                    "landingSessionId": "LT",
+                }}}
+
 
 OPEN_ITEM = {"itemId": "OI1", "kind": "INTEGRATION_CHECK_FAILED",
              "title": "Merge check failed", "detailLine": "",
@@ -300,8 +430,10 @@ class Handler(BaseHTTPRequestHandler):
         with open(LOG, "a") as f:
             f.write("%s %s\n" % (datetime.now().strftime("%H:%M:%S"), line))
 
-    def send(self, status, body=None):
-        data = b"" if body is None else json.dumps(body, ensure_ascii=False).encode()
+    def send(self, status, body=_NO_BODY):
+        # `null` is a body: the promotions door answers a bare JSON null for "asking nothing",
+        # which is not the same as an empty response.
+        data = b"" if body is _NO_BODY else json.dumps(body, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
@@ -367,6 +499,12 @@ class Handler(BaseHTTPRequestHandler):
             if row is not None:
                 if more == []:
                     return self.send(200, row)
+                if more == ["events", "page"]:
+                    # One delivered exception item's card (06 b), in the "delivery" mode: the
+                    # `user` event the control plane records beside the turn's echo.
+                    if MODE["name"] == "delivery" and sid == "S4":
+                        return self.send(200, {"events": [delivery_event()], "hasMore": False})
+                    return self.send(200, {"events": [], "hasMore": False})
                 if more == ["events"]:
                     return self.send(200, {"items": [], "nextCursor": None, "events": []})
                 if more[0] in ("retry-message", "capabilities", "owner-confirmation", "watches",
@@ -427,7 +565,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.send(200, promotion(MODE["name"]))
                 if rest[1:] == ["promotions", "merged"]:
                     return self.send(200, [promotion(MODE["name"])]
-                                     if MODE["name"] == "settled" else [])
+                                     if MODE["name"] in ("settled", "receipt") else [])
                 if rest[1:] == ["ready-to-run"]:
                     return self.send(200, {"count": 0, "taskId": None, "title": None})
 

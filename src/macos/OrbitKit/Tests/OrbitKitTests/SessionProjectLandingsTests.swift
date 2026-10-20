@@ -176,13 +176,17 @@ final class LandingOpenItemDoorTests: XCTestCase {
                        jobKind: String = "LAND_TASK",
                        pushReported: Bool = false) -> ProjectOpenItemRow.OpenItemLease {
         ProjectOpenItemRow.OpenItemLease(
-            lastReportAt: "2026-09-25T06:30:00.000Z", jobKind: jobKind,
+            lastReportAt: "2026-09-25T06:30:00.000Z",
+            leaseExpiredAt: "2026-09-25T06:40:00.000Z",
+            jobKind: jobKind, generation: 3, phase: "CHECK",
+            claimGeneration: 1, round: 1, checkCount: 3, runner: "wikova",
             progressProtocol: progressProtocol, pushReported: pushReported)
     }
 
     private func row(_ lease: ProjectOpenItemRow.OpenItemLease? = nil,
                      actions: [ProjectOpenItemAction] = [.abandon, .openLanding],
-                     primaryAction: ProjectOpenItemAction? = .abandon) -> ProjectOpenItemRow {
+                     primaryAction: ProjectOpenItemAction? = .abandon,
+                     facts: OpenItemFacts? = nil) -> ProjectOpenItemRow {
         ProjectOpenItemRow(
             itemId: "item-1", kind: .landingLeaseExpired,
             title: "A landing stopped reporting",
@@ -190,7 +194,39 @@ final class LandingOpenItemDoorTests: XCTestCase {
             assigneeReason: .escalated, escalatedAt: "2026-09-25T06:57:00.000Z",
             taskId: "t1", sessionId: nil, promotionId: nil,
             landingSessionId: "landing-1", integrationJobId: "job-1",
-            lease: lease, actions: actions, primaryAction: primaryAction)
+            lease: lease, actions: actions, primaryAction: primaryAction, facts: facts)
+    }
+
+    /// The board's three lease rows (06 c), replacing the item's own sentence.
+    func testTheXE5CardDrawsTheClaimsThreeRows() throws {
+        let item = row(lease(jobKind: "CHECK_PROMOTION"),
+                       facts: OpenItemFacts(task: .init(id: "T1", title: "Ledger migration order")))
+        guard case .rows(let block) = ExceptionCards.facts(item) else {
+            return XCTFail("X-E5 draws the lease's rows, not the item's sentence")
+        }
+        XCTAssertEqual(block.rows.map(\.label),
+                       ["Landing", "Runner", "Step"])
+        XCTAssertEqual(block.rows[0].value, "Ledger migration order · generation 3")
+        let reported = ProjectPage.landingClockTime(RelativeTime.parse("2026-09-25T06:30:00.000Z")!)
+        let expired = ProjectPage.landingClockTime(RelativeTime.parse("2026-09-25T06:40:00.000Z")!)
+        XCTAssertEqual(block.rows[1].value,
+                       "wikova · last report \(reported) · lease expired \(expired)")
+        XCTAssertEqual(block.rows[2].value, "checking · claim 1 · round 1 of 3")
+        // An item that predates the lease facts keeps the sentence it always drew.
+        guard case .detailLine = ExceptionCards.facts(row(nil)) else {
+            return XCTFail("a row with no lease keeps its detail line")
+        }
+    }
+
+    /// X-E5 is escalated at birth, so the footer says the wait alone; and its cell is hand-closable.
+    func testTheXE5FooterSaysTheWaitAloneAndTheCardCanBeClosedByHand() {
+        let item = row(lease())
+        let line = ExceptionCards.ownerLine(item)
+        XCTAssertTrue(line.hasPrefix("Owner: you · waiting "), line)
+        XCTAssertFalse(line.contains("came to the owner at"),
+                       "an item escalated at birth has no window to name")
+        XCTAssertTrue(ExceptionCards.markable(item),
+                      "the server's X-E5 cell takes the owner's own ending")
     }
 
     func testTheXE5HeadingCountsTheClaimsSilence() {

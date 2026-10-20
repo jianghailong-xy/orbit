@@ -752,6 +752,23 @@ public enum PromotionCards {
     /// The same line when a passing check becomes the orange "Merge into main?" card. Web's
     /// `ON_PASS_ASKS`.
     public static let onPassAsks = "Asks you when it passes."
+    /// A confirmed merge the owner has asked to stop, before the push (§3.3 M-T10) — the card's
+    /// title and its one status line. Web's `CANCELLING_THE_MERGE` / `CANCEL_STOPS_SOON`.
+    public static let cancellingTheMerge = "Cancelling the merge…"
+    public static let cancelStopsSoon =
+        "Stops at the runner’s next report, within 30 s · nothing has been pushed"
+    /// The ask that came after the push boundary: the push is the fact now.
+    public static let tooLateToCancel = "Too late to cancel — the push has started"
+    /// And that a pre-push cancel is not yet an outcome.
+    public static let cancelMayStillMerge =
+        "If the push starts before it stops, the merge goes through and this card says so."
+    /// The cancelled-in-progress card's press, which is no longer a press.
+    public static let cancelRequestedLabel = "Cancel requested"
+    /// The head's clause while a stop has been asked for and the runner has not answered.
+    public static let stopRequestedClause = "stop requested"
+    /// The timed-out card's two doors (revision 16 / J-T10). Web's `RERUN_THE_CHECK` / `ABANDON`.
+    public static let rerunTheCheck = "Re-run the check"
+    public static let abandon = "Abandon"
 
     /// What a passing check leads to, said while the check still runs: the reader learns now whether
     /// to wait for a question or walk away (owner decision 2026-10-15, on the 2026-10-06 board
@@ -1163,6 +1180,13 @@ public enum ExceptionCards {
     /// field for field (`ProjectProgressStatus.tsx`). The one place the two may differ is the font a
     /// row is drawn in; the rows, their order and every word in them are the same.
     public static func facts(_ row: ProjectOpenItemRow) -> ItemFacts {
+        // §4.6 X-E5 draws the claim it is about in three rows (board v4 06 c) instead of the
+        // item's sentence: which landing, on which runner and since when, and where the runner had
+        // got to. An item an older build opened carries no lease and keeps the sentence it always
+        // did. Web: `LeaseFacts`.
+        if row.kind == .landingLeaseExpired, let lease = row.lease {
+            return .rows(FactBlock(rows: leaseFacts(row, lease)))
+        }
         guard let facts = row.facts else { return .detailLine(row.detailLine) }
         var rows: [FactRow] = []
         if let task = facts.task { rows.append(FactRow(label: taskLabel, value: task.title)) }
@@ -1205,6 +1229,47 @@ public enum ExceptionCards {
         }
         return .rows(FactBlock(rows: rows))
     }
+
+    /// The X-E5 claim's three rows (web `LeaseFacts`): the landing and its generation, the runner
+    /// and the two instants on the reader's own clock, and where the runner had got to.
+    static func leaseFacts(_ row: ProjectOpenItemRow,
+                           _ lease: ProjectOpenItemRow.OpenItemLease) -> [FactRow] {
+        var rows: [FactRow] = []
+        let generation = lease.generation.map { "\(generationWord) \($0)" }
+        let taskTitle = row.facts?.task?.title
+        let landing = [taskTitle, generation].compactMap { $0 }.joined(separator: " · ")
+        if !landing.isEmpty {
+            rows.append(FactRow(label: landingFactLabel, value: landing))
+        }
+        let reported = lease.lastReportAt.flatMap(RelativeTime.parse)
+            .map { ProjectPage.landingClockTime($0) }
+        let expired = lease.leaseExpiredAt.flatMap(RelativeTime.parse)
+            .map { ProjectPage.landingClockTime($0) }
+        let runner = [lease.runner ?? theRunnerWord,
+                      reported.map { "\(lastReportWord) \($0)" },
+                      expired.map { "\(leaseExpiredWord) \($0)" }]
+            .compactMap { $0 }.joined(separator: " · ")
+        if !runner.isEmpty { rows.append(FactRow(label: runnerFactLabel, value: runner)) }
+        let step = lease.phase.flatMap { ProjectPage.integrationPhaseWords[$0] } ?? lease.step
+        let round = lease.round.map {
+            "\(ProjectPage.landingRound) \($0)"
+                + (lease.checkCount.map { " \(ProjectPage.landingOf) \($0)" } ?? "")
+        }
+        let stepRow = [step,
+                       lease.claimGeneration.map { "\(ProjectPage.landingClaim) \($0)" },
+                       round].compactMap { $0 }.joined(separator: " · ")
+        if !stepRow.isEmpty { rows.append(FactRow(label: stepFactLabel, value: stepRow)) }
+        return rows
+    }
+
+    /// The lease block's own words, held to the web's `LeaseFacts` by `LandingCopyParityTests`.
+    public static let landingFactLabel = "Landing"
+    public static let runnerFactLabel = "Runner"
+    public static let stepFactLabel = "Step"
+    public static let generationWord = "generation"
+    public static let lastReportWord = "last report"
+    public static let leaseExpiredWord = "lease expired"
+    public static let theRunnerWord = "The runner"
 
     /// The block's labels, in mock 5's words.
     public static let taskLabel = "Task"
@@ -1465,6 +1530,11 @@ public enum ExceptionCards {
     /// their own — the server's own door refuses all three.
     static let handClosableKinds: Set<ProjectOpenItemKind> = [
         .integrationConflict, .integrationCheckFailed, .integrationError, .taskFailed,
+        .deliveryReview,
+        // §4.6 X-E5: the owner's own ending for a claim whose job may already be gone — the
+        // silence is theirs to judge as dealt with, and the server's `HAND_CLOSABLE_RESOLUTIONS`
+        // takes the same kind.
+        .landingLeaseExpired,
     ]
 
     /// Whether this row carries the address a press would need, in the shape the browser's
@@ -1742,6 +1812,9 @@ public enum ExceptionCards {
     /// reads the browser's own).
     public static func ownerLine(_ row: ProjectOpenItemRow, now: Date = Date()) -> String {
         let waited = "\(ownerPrefix) · waiting \(waited(row, now: now))"
+        // §4.6 X-E5 is escalated at birth: there is no window it waited the coordinator through,
+        // so the footer says the wait alone — the heading above it says the fact it is about.
+        if row.kind == .landingLeaseExpired { return waited }
         guard row.escalatedAt != nil else { return waited }
         return waited + cameToOwnerAt + waitedBeforeEscalation(row)
     }

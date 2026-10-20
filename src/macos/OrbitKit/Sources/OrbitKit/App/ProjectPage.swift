@@ -386,7 +386,11 @@ public enum ProjectPage {
         let unavailable = cannotRead(now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
         let main = RunSettings.mainBranchName(view.upstreamRef)
         let word = integrationJobWords(main)[inFlight.kind ?? ""] ?? "Integration"
-        let what = jobs > 1 ? landingJobsCount(jobs, timedOut: timedOutJobs) : inFlight.taskTitle
+        // A merge lands no single task (§2.9): a task title on the row would attribute the round to
+        // work it never touched, whatever a server puts in `taskTitle`.
+        let mergeJob = ProjectMergeCard.mergeJobKinds.contains(inFlight.kind ?? "")
+        let what = jobs > 1 ? landingJobsCount(jobs, timedOut: timedOutJobs)
+            : mergeJob ? nil : inFlight.taskTitle
         // What the job waited for a runner before it was claimed — the row's own `inFlight` carries
         // it, and only a CLAIMED job has one to show: a queued job's whole clock is that wait.
         let wait = running ? waitLine(inFlight.waitMs) : nil
@@ -471,9 +475,11 @@ public enum ProjectPage {
         let main = RunSettings.mainBranchName(view.upstreamRef)
         return (view.inFlightJobs ?? []).map { job in
             let word = integrationJobWords(main)[job.kind] ?? "Integration"
+            let mergeJob = ProjectMergeCard.mergeJobKinds.contains(job.kind)
+            let what = mergeJob ? nil : job.taskTitle
             let line = job.timedOut && !unavailable
-                ? timedOutLine(job, word: word, what: job.taskTitle, now: now)
-                : liveLine(word: word, what: job.taskTitle, running: job.state == "RUNNING", phase: job.phase,
+                ? timedOutLine(job, word: word, what: what, now: now)
+                : liveLine(word: word, what: what, running: job.state == "RUNNING", phase: job.phase,
                            startedAt: job.startedAt, heartbeatAt: job.heartbeatAt, now: now,
                            updatedAt: updatedAt, unavailable: unavailable, main: main,
                            runner: job.runnerName, claim: job.claim, round: job.round, check: job.check,

@@ -933,7 +933,13 @@ private struct ProjectMergeCardView: View {
     /// Since 2026-10-19 (方案 A) the whole row opens THIS ROUND's landing session; a server that
     /// names none keeps main's press, the jobs list.
     @ViewBuilder private func landingRow(_ line: ProjectPage.LandingLine) -> some View {
-        let head = ProjectLandingHead(title: line.word, head: line.head, running: line.running,
+        // A stop that has been asked for and not yet answered is the head's own clause (§3.3
+        // M-T10), before any of the card's other lines.
+        let shape = merge.current?.cancelRequested == true
+            ? ProjectPage.LandingHead(right: line.head.right, isClock: line.head.isClock,
+                                      detail: "\(line.head.detail) · \(PromotionCards.stopRequestedClause)")
+            : line.head
+        let head = ProjectLandingHead(title: line.word, head: shape, running: line.running,
                                       timedOut: line.timedOut)
         if let roundLanding, let url = URL(string: "orbit-session:\(PublicID.toPublic(roundLanding))") {
             Button { openURL(url) } label: { head.contentShape(Rectangle()) }
@@ -1086,8 +1092,18 @@ private struct ProjectMergeCardView: View {
     /// project page's Integrating mark, sitting beside the word `fetching`. A spinner here said
     /// "work is happening" a fourth time, in a mark neither this card nor this app uses elsewhere.
     @ViewBuilder private func merging(_ view: ProjectPromotionView) -> some View {
-        header(PromotionCards.pageTitle(view), symbol: "arrow.triangle.merge")
-        Text(PromotionCards.mergingStatusLine(view)).font(.orbitLabel)
+        // §3.3 M-T10: the owner asked a confirmed merge to stop. The ask is the server's fact
+        // (`cancelRequested`), and past the push boundary it can only come too late.
+        let cancelling = view.cancelRequested
+        let tooLate = view.pushBoundaryPassed
+        header(cancelling
+               ? (tooLate ? PromotionCards.tooLateToCancel : PromotionCards.cancellingTheMerge)
+               : PromotionCards.pageTitle(view),
+               symbol: "arrow.triangle.merge")
+        Text(cancelling && !tooLate
+             ? PromotionCards.cancelStopsSoon
+             : PromotionCards.mergingStatusLine(view))
+            .font(.orbitLabel)
         if let landing { landingRow(landing) }
         if timedOut {
             if let mergeJobDetail {
@@ -1096,18 +1112,25 @@ private struct ProjectMergeCardView: View {
             }
             timedOutDoors
         } else {
-            Text(PromotionCards.pageNothingToDo).font(.orbitMeta).foregroundStyle(.secondary)
-            queuedFoot
+            Text(cancelling ? PromotionCards.cancelMayStillMerge : PromotionCards.pageNothingToDo)
+                .font(.orbitMeta).foregroundStyle(.secondary)
+            if !cancelling { queuedFoot }
             HStack(spacing: 8) {
                 // The round's landing, beside Cancel (方案 A): the CONFIRMED card's foot names it,
                 // and a server that names none says so in grey.
                 openLandingFoot
                 Spacer(minLength: 8)
-                Button { act { await merge.cancelMergeToMain(view) } } label: {
-                    Text(PromotionCards.cancel)
+                if cancelling {
+                    Text(PromotionCards.cancelRequestedLabel)
+                        .font(.orbitLabel.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                } else {
+                    Button { act { await merge.cancelMergeToMain(view) } } label: {
+                        Text(PromotionCards.cancel)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(acting || view.execution?.phase == "PUSH")
                 }
-                .buttonStyle(.bordered)
-                .disabled(acting || view.execution?.phase == "PUSH")
             }
         }
     }

@@ -475,10 +475,14 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let row = try slice(merge, from: "@ViewBuilder private func landingRow(_ line: ProjectPage.LandingLine) -> some View {",
                             to: "\n    }\n")
         for part in ["if let onLanding {", "Button(action: onLanding) {",
-                     "ProjectLandingHead(title: line.word, head: line.head, running: line.running,",
+                     "ProjectLandingHead(title: line.word, head: shape, running: line.running,",
                      ".buttonStyle(.plain)"] {
             XCTAssertTrue(row.contains(part), "the merge card's landing row keeps `\(part)`")
         }
+        // M-T10's ask, before any of the card's other lines: the head says a stop is in.
+        XCTAssertTrue(row.contains("merge.current?.cancelRequested == true")
+                      && row.contains("PromotionCards.stopRequestedClause"),
+                      "a cancel asked for and not answered is the head's own clause")
         // The merged line's anatomy (owner decision 2026-10-11): the whole row is the press, so the
         // chevron the head used to carry is gone — as the merged line itself has none.
         XCTAssertFalse(row.contains("chevron.right"),
@@ -506,7 +510,7 @@ final class SessionProjectPageWiringTests: XCTestCase {
         XCTAssertFalse(head.contains("chevron"), "the whole row is the press, as the merged line is")
         // Both cards read that one view, and their words come from the one composition each end runs.
         let session = code(try appSource("Views/SessionProjectPage.swift"))
-        XCTAssertTrue(session.contains("ProjectLandingHead(title: line.word, head: line.head, running: line.running,"))
+        XCTAssertTrue(session.contains("ProjectLandingHead(title: line.word, head: shape, running: line.running,"))
         let card = code(try appSource("Views/ProjectLandingCard.swift"))
         let cardHead = try slice(card, from: "private var head: some View {", to: "\n    }\n")
         XCTAssertTrue(cardHead.contains("ProjectLandingHead(title: card.title, head: card.head, running: card.running,"))
@@ -574,7 +578,8 @@ final class SessionProjectPageWiringTests: XCTestCase {
         let page = code(try appSource("Views/SessionProjectPage.swift"))
         let merging = try slice(page, from: "@ViewBuilder private func merging(_ view: ProjectPromotionView) -> some View {",
                                 to: "\n    }\n")
-        XCTAssertTrue(merging.contains("header(PromotionCards.pageTitle(view), symbol: \"arrow.triangle.merge\")"))
+        XCTAssertTrue(merging.contains("PromotionCards.pageTitle(view),") && merging.contains("symbol: \"arrow.triangle.merge\")"),
+                      "the merge card's head keeps its page title unless a cancel is in")
         XCTAssertFalse(merging.contains("ProgressView"), "the landing row below is this card's moving mark")
     }
 
