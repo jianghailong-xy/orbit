@@ -420,7 +420,7 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                         openLanding = { id -> open(OrbitRoute(Destination.SESSION, id, route.workspaceId, origin = Origin.LIST)) },
                         abandon = { jobId -> landingDoor { projects.abandonJob(projectId, jobId) } },
                         rerunCheck = { promotionId -> landingDoor {
-                            projects.recheckPromotion(projectId, promotionId, LandingSessionCopy.RERUN_LANDING_CHECK_REASON) } },
+                            projects.recheckPromotion(projectId, promotionId, LandingSessionCopy.RERUN_CHECK_REASON) } },
                         onDetails = { promotionReview = it },
                         onCoordinator = coordinator?.let { c -> { open(OrbitRoute(Destination.SESSION, c.id, route.workspaceId, origin = Origin.LIST)) } })
                 }

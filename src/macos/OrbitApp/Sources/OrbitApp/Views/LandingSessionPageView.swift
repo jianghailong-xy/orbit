@@ -661,7 +661,8 @@ struct LandingSessionPageView: View {
                 case .rerunTheCheck:
                     guard let promotionID = landing.promotionId else { return }
                     try await api.rerunPromotionCheck(projectID: landing.projectId,
-                                                      promotionID: promotionID)
+                                                      promotionID: promotionID,
+                                                      reason: LandingPageCopy.rerunLandingCheckReason)
                 default:
                     return
                 }

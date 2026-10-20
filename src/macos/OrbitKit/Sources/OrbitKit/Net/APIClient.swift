@@ -829,14 +829,15 @@ public final class APIClient: @unchecked Sendable {
             "projects/\(projectID)/integration/jobs/\(jobID)/abandon")
     }
 
-    /// Re-run a timed-out merge check on the same candidate (the landing page's Re-run the check,
-    /// revision 16): no new candidate. The owner route takes a reason (`RetryIntegrationDto.reason`,
-    /// at least one character), so the page sends the sentence it records — the same one web and
-    /// Android send — naming the page the door was pressed on.
-    public func rerunPromotionCheck(projectID: String, promotionID: String) async throws {
+    /// Re-run a timed-out merge check on the same candidate (Re-run the check, revision 16): no new
+    /// candidate. The owner route takes a reason (`RetryIntegrationDto.reason`, at least one
+    /// character), and each door names where it was pressed — the merge card sends
+    /// `LandingPageCopy.rerunCheckReason`, the landing page `rerunLandingCheckReason`, as web and
+    /// Android do.
+    public func rerunPromotionCheck(projectID: String, promotionID: String, reason: String) async throws {
         _ = try await postRaw(
             "projects/\(projectID)/promotions/\(promotionID)/integration/retry",
-            body: ["reason": LandingPageCopy.rerunLandingCheckReason])
+            body: ["reason": reason])
     }
 
     /// One page of a landing's check output (§2.2 J-T4, §2.9 LS2). Read only when a log is opened.

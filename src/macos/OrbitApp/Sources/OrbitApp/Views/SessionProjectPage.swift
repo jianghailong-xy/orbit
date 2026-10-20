@@ -734,7 +734,8 @@ struct SessionProjectPage: View {
                         await app.loadProjectIntegration(address)
                     },
                     rerunCheck: { promotionID in
-                        try await app.rerunPromotionCheck(address.projectID, promotionID: promotionID)
+                        try await app.rerunPromotionCheck(address.projectID, promotionID: promotionID,
+                                                          reason: LandingPageCopy.rerunCheckReason)
                         await app.loadProjectIntegration(address)
                     },
                     onDetails: { promotionReview = PromotionReviewTarget(id: $0) },

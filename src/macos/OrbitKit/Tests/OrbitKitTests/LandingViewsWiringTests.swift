@@ -153,7 +153,7 @@ final class LandingViewsWiringTests: XCTestCase {
         XCTAssertTrue(app.contains("$0.isLanding && $0.landing?.state == \"AWAITING_DECISION\""),
                       "the Landings group's holders are read where a landing waits")
         XCTAssertTrue(app.contains("func abandonIntegrationJob(_ projectID: String, jobID: String) async throws"))
-        XCTAssertTrue(app.contains("func rerunPromotionCheck(_ projectID: String, promotionID: String) async throws"))
+        XCTAssertTrue(app.contains("func rerunPromotionCheck(_ projectID: String, promotionID: String, reason: String) async throws"))
 
         let model = code(try appSource("ConsoleModel.swift"))
         XCTAssertTrue(model.contains("func abandonIntegration(_ row: ProjectOpenItemRow) async {"))

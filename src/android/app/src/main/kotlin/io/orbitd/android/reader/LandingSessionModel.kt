@@ -112,6 +112,9 @@ object LandingSessionCopy {
     /** What the page's Re-run the check records as its reason: the owner route requires one (`RetryIntegrationDto.reason`),
      *  and the sentence names the page the door was pressed on (web's `RERUN_LANDING_CHECK_REASON`; the Swift sends it too). */
     const val RERUN_LANDING_CHECK_REASON = "Re-run the timed-out check from the landing page."
+    /** What the merge card's Re-run the check records instead, naming the card it was pressed on
+     *  (web's `RERUN_CHECK_REASON`, Swift's `LandingPageCopy.rerunCheckReason`). */
+    const val RERUN_CHECK_REASON = "Re-run the timed-out check from the merge card."
     const val BEFORE_PUSH_ONLY = "Before the push only · nothing pushed yet"
     const val CANCEL_BEFORE_PUSH = "Before the push only · stops at the runner’s next report"
     const val ENDS_NOTHING_PUSHED = "Ends this attempt · nothing was pushed"

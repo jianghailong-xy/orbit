@@ -102,6 +102,9 @@ public enum LandingPageCopy {
     /// What this page's Re-run the check records as its reason (web's `RERUN_LANDING_CHECK_REASON`): the owner
     /// route takes one (`RetryIntegrationDto.reason`), and the sentence names the page the door was pressed on.
     public static let rerunLandingCheckReason = "Re-run the timed-out check from the landing page."
+    /// What the merge card's Re-run the check records instead (web's `RERUN_CHECK_REASON`): the same
+    /// door, naming the card it was pressed on.
+    public static let rerunCheckReason = "Re-run the timed-out check from the merge card."
     public static let beforePushOnly = "Before the push only · nothing pushed yet"
     public static let cancelBeforePush = "Before the push only · stops at the runner’s next report"
     public static let endsNothingPushed = "Ends this attempt · nothing was pushed"

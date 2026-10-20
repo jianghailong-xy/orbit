@@ -45,11 +45,11 @@ private func landingSentBody(_ request: URLRequest) -> Data {
     return data
 }
 
-/// THE LANDING PAGE'S Re-run the check CARRIES A REASON, BECAUSE THE OWNER ROUTE REQUIRES ONE.
+/// EACH DOOR'S Re-run the check CARRIES ITS OWN REASON, BECAUSE THE OWNER ROUTE REQUIRES ONE.
 ///
 /// `POST /projects/:id/promotions/:promotionId/integration/retry` takes `RetryIntegrationDto`, whose
-/// `reason` is `@MinLength(1)`. A bodyless press is refused before the queue sees it — so the page
-/// sends the same sentence web and Android send, naming the page the door was pressed on, and this
+/// `reason` is `@MinLength(1)`. A bodyless press is refused before the queue sees it — so each door
+/// sends the same sentence web and Android send, naming the page or card it was pressed on, and this
 /// pins the request the client actually makes.
 final class LandingRerunDoorTests: XCTestCase {
     override func tearDown() {
@@ -94,7 +94,8 @@ final class LandingRerunDoorTests: XCTestCase {
             return (200, Data("{}".utf8))
         }
 
-        try await client().rerunPromotionCheck(projectID: "project1", promotionID: "promo1")
+        try await client().rerunPromotionCheck(projectID: "project1", promotionID: "promo1",
+                                               reason: LandingPageCopy.rerunLandingCheckReason)
 
         let sent = recorder.sent
         XCTAssertEqual(sent.count, 1, "one press is one request")
@@ -106,5 +107,26 @@ final class LandingRerunDoorTests: XCTestCase {
         XCTAssertEqual(press.body["reason"] as? String,
                        "Re-run the timed-out check from the landing page.",
                        "the sentence web and Android send, verbatim")
+    }
+
+    /// The merge card's door is the same request, naming the card instead (web's `RERUN_CHECK_REASON`).
+    func testTheMergeCardsReRunNamesTheCard() async throws {
+        let recorder = Recorder()
+        LandingRerunURLProtocol.handler = { request in
+            recorder.record(request)
+            return (200, Data("{}".utf8))
+        }
+
+        try await client().rerunPromotionCheck(projectID: "project1", promotionID: "promo1",
+                                               reason: LandingPageCopy.rerunCheckReason)
+
+        let sent = recorder.sent
+        XCTAssertEqual(sent.count, 1, "one press is one request")
+        let press = try XCTUnwrap(sent.first)
+        XCTAssertEqual(press.method, "POST")
+        XCTAssertEqual(press.path, "/api/projects/project1/promotions/promo1/integration/retry")
+        XCTAssertEqual(press.body["reason"] as? String,
+                       "Re-run the timed-out check from the merge card.",
+                       "the sentence web and Android send from the merge card, verbatim")
     }
 }

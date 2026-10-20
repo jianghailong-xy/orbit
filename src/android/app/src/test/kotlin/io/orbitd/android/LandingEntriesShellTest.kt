@@ -153,7 +153,7 @@ class LandingEntriesShellTest {
         await { ProjectShell.calls.contains("POST projects/$launch/integration/jobs/j-1/abandon") }
         compose.onNodeWithTag("project-merge-card:rerun").performClick()
         await { ProjectShell.calls.contains("POST projects/$launch/promotions/pr-1/integration/retry") }
-        assertEquals("""{"reason":"Re-run the timed-out check from the landing page."}""",
+        assertEquals("""{"reason":"Re-run the timed-out check from the merge card."}""",
             ProjectShell.bodies["POST projects/$launch/promotions/pr-1/integration/retry"])
     }
 

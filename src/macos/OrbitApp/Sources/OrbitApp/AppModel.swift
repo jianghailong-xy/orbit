@@ -2684,10 +2684,10 @@ final class AppModel {
     }
 
     /// Re-run a timed-out merge check on the same candidate (revision 16), from the merge card's
-    /// timed-out doors.
-    func rerunPromotionCheck(_ projectID: String, promotionID: String) async throws {
+    /// timed-out doors. The caller names the reason the door records.
+    func rerunPromotionCheck(_ projectID: String, promotionID: String, reason: String) async throws {
         guard let api else { throw APIError.notConfigured }
-        try await api.rerunPromotionCheck(projectID: projectID, promotionID: promotionID)
+        try await api.rerunPromotionCheck(projectID: projectID, promotionID: promotionID, reason: reason)
     }
 
     /// One poll of the page's merge into main. Kept apart from `loadProjectSessions` so the
