@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -167,6 +168,10 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     val busyRun = data.task?.let(TaskListLogic::isBusy) == true
     // While a run of it is going, the page follows it: that is when its owner may be asked something.
     LaunchedEffect(handle, id, busyRun) { while (busyRun) { delay(4000); load() } }
+    // §2.7a's cadence, while the landing is live: 4 s for one that runs, 15 s for one that waits.
+    // A busy run already re-reads every 4 s, which covers a running landing too.
+    val landingEvery = if (busyRun) null else TaskLandingLogic.refetchInterval(TaskIntegrationView.of(data.task))
+    LaunchedEffect(handle, id, landingEvery) { while (landingEvery != null) { delay(landingEvery); load() } }
     LaunchedEffect(data.notice) { if (data.notice != null) { delay(3000); data.notice = null } }
 
     /** A write belongs to the app, not to this page (iOS's model-owned Task): leaving does not cancel it,
@@ -284,6 +289,11 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                         mutate { api.execute(id, trigger, revisionOf(task)) }
                     }, confirmDone = { mutate { api.confirmOwner(id, revisionOf(task)) } }, reopen = { confirm = DetailConfirm.Reopen })
                 }
+            }
+            // Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it
+            // waits or where it stopped, apart from the status above — the web's first block.
+            TaskLandingLogic.status(TaskIntegrationView.of(task))?.let { landing ->
+                item(key = "landing") { LandingSection(landing, open) }
             }
             if (TaskJudgment.isGateRow(task) || task.obj("verifier") != null) item(key = "verifier") {
                 TaskSectionHeader(TaskJudgmentCopy.verifierCardHeading)
@@ -509,6 +519,51 @@ private fun ActionRow(row: TaskActionRow, canStart: Boolean, enabled: Boolean, t
             (if (canStart) TaskDetailLogic.runNowHint(task) else TaskDetailLogic.runDisabledHint(task, assigneeHasRunner))?.let {
                 Text(it, Modifier.testTag("task-run-hint"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
+}
+
+/** The task's Landing section (§2.7a, web `LandTaskStatus`): the badge, the generation, the step it
+ * is on or stopped at, a silent runner's report, the reason and the receipt, the six facts — then
+ * the one way into its landing session. Read-only: no retry, merge or release door lives here. */
+@Composable
+private fun LandingSection(status: TaskLandingStatus, open: (OrbitRoute) -> Unit) {
+    TaskSectionHeader(TaskLandingCopy.landingSection, status.generation?.let { "${TaskLandingCopy.generation} $it" })
+    Column(Modifier.fillMaxWidth().testTag("task-landing"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            status.badge?.let { badge ->
+                val ink = landingInk(badge.tone)
+                Text(badge.label, Modifier.testTag("task-landing-badge").background(ink.copy(alpha = 0.14f), RoundedCornerShape(50))
+                    .padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = ink)
+            }
+            status.step?.let { Text(it, Modifier.testTag("task-landing-step"), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2) }
+        }
+        status.noReport?.let { Text(it, Modifier.testTag("task-landing-no-report"), style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold, color = LocalOrbitColors.current.needsYou) }
+        status.reason?.let { Text(it, Modifier.testTag("task-landing-reason"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        status.receipt?.let { Text(it, Modifier.testTag("task-landing-receipt"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (status.facts.isNotEmpty()) Column(Modifier.testTag("task-landing-facts"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            status.facts.forEach { fact ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(fact.label, Modifier.width(92.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(fact.value, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        TaskLandingLogic.route(status)?.let { route ->
+            TextButton(onClick = { open(route) }, modifier = Modifier.testTag("task-landing-open")) { Text("${TaskLandingCopy.openLanding} ›") }
+        }
+    }
+}
+
+@Composable
+private fun landingInk(tone: String): Color = when (tone) {
+    "amber" -> LocalOrbitColors.current.needsYou
+    "blue" -> LocalOrbitColors.current.running
+    "green" -> LocalOrbitColors.current.success
+    "red" -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 @Composable
