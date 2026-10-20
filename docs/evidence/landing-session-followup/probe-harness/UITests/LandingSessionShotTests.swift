@@ -34,7 +34,10 @@ final class LandingSessionShotTests: ProbeCase {
         let app = launch(until: "Landings", extra: ["-probe.page", "sessions"], "earlier-\(mode)")
         bring(app, element(app, containing: "Landings"), between: 90, and: 520, name)
         XCTAssertTrue(appears(app, line, timeout: 20), "\(mode): the fold never read `\(line)`")
-        XCTAssertFalse(appears(app, "· 0 ", timeout: 2), "\(mode): the fold still writes a zero count")
+        // The zero segments by their own words: the page's progress card says "· 0 running" too.
+        for zero in ["0 landed", "0 nothing to land"] {
+            XCTAssertFalse(appears(app, zero, timeout: 2), "\(mode): the fold still writes `\(zero)`")
+        }
         shot(app, name)
         app.terminate()
         settle(1)
