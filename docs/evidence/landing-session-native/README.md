@@ -106,5 +106,7 @@ workflow that ran on `probe/landing-session-native`; its pictures land in
 - The delivery card's `Open the landing ↗` is exercised by the OrbitKit tests but not
   photographed: the probe would have to seed a `user` event carrying the delivery payload.
 - The Landing card's own foot/row entries are exercised by `LandingEntranceTests` but not
-  photographed: the probe's in-flight job is a merge round, whose card is the merge card.
+  photographed: the probe's in-flight job is a merge round, whose card is the merge card. For the
+  same reason every landing-page picture is a merge round — a task segment's page is covered by
+  `LandingSessionPageTests` and `TaskLandingTests`, not by a picture.
 - The Android client's screenshots belong to the Android tasks that depend on this one.
