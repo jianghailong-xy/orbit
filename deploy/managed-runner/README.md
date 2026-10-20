@@ -331,23 +331,16 @@ network access, fixture Git/worktree/attachment/engine files, actual nonroot ima
 container recreation. Fixture engine files are not a real session. Retain logs, image/package/runtime
 versions and artifact hashes; sanitise credentials before submitting evidence.
 
-The following acceptance items remain **unexecuted**, independently of any local/static success:
+What the local checks cannot show was run in the authorized lab
+([docs/managed-runner-lab.md](../../docs/managed-runner-lab.md#runner-image-t03), task T03):
+- the actual image build with its version record and digest;
+- the image in Kubernetes on an RBD volume, enrolled standalone and as the manager's Pod;
+- recreations on the original claim keeping the runner ID and token, worktrees, attachments and the
+  engine session;
+- a first real engine session on the owner's DeepSeek key, and its continuation after recreation;
+- stops during real active work: a model turn, and a landing's merge check.
 
-1. Actual image build and isolated image smoke, including actual runtime manifest/image digest.
-2. Kubernetes/Ceph-CSI mount, single-Pod protection and original-PVC rebuild/cross-node restore on the
-   approved version tuple, with Pod/PVC/PV/volume/node identities and storage evidence.
-3. First real engine session, using an explicitly authorized test model and credential/account;
-   record provider/model/runtime versions and successful execution. No approved test supply is given
-   by this task; current session credentials or host account homes are not a test supply.
-4. Actual Git worktree and uploaded attachment created by that session, persisted through recreation;
-   compare stable workspace/worktree paths and content hashes.
-5. A continuation of the same real engine session after recreation, with unchanged runner ID/token,
-   retained engine thread/session ID, metadata and SQLite integrity. Merely finding fixture files
-   or comparing runner config is insufficient.
-6. SIGTERM during real active work: prove claims stop, heartbeats/draining remain valid, the turn
-   finishes/releases/flushes normally and the runner exits within the approved window.
-
-Local check results and commits are a phase report for the coordinator. They do not complete the
-project criterion requiring Kubernetes operation and real session recovery. The coordinator must
-arrange these external prerequisites and resume the same task for final independent acceptance;
-production deployment remains outside the project scope.
+Cross-node mounting, migration and takeover are recorded by T02 and T08x on the lab's two nodes.
+`image-smoke.py` (Docker) has not been run end to end: it needs an isolated Docker endpoint, not the
+host's default socket. Only its git-identity step was run against the image. Production deployment
+remains outside the project scope.

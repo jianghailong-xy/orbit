@@ -1,0 +1,29 @@
+{
+  "deleteRequestedAt": "2026-10-17T07:23:01.004+00:00",
+  "grace": 240,
+  "log": "/mnt/data/managed-runner-lab/test-server/state/logs/t03-runner-b92ad0d4-e0c3-4abb-8911-e6978d2da725.log",
+  "logMarks": {
+    "detached": "2026-10-17T07:23:49.318323734Z",
+    "stopping": "2026-10-17T07:23:01.017698791Z"
+  },
+  "logTail": [
+    "2026-10-17T07:21:29.614486259Z [orbit-runner 2026-10-17T07:21:29.614Z] runner \"t03\" online -> https://10.0.2.2:13711 (max 2 concurrent)",
+    "2026-10-17T07:21:29.769171708Z [orbit-runner 2026-10-17T07:21:29.768Z] reclaiming session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 T03 fake-model persistence session 2",
+    "2026-10-17T07:21:30.799839386Z [orbit-runner 2026-10-17T07:21:30.799Z] session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148ba-a3da-7330-94bc-3ba0bd62959a (branch orbit/t03-fake-model-persistence-session-2-244d43)",
+    "2026-10-17T07:21:30.806830046Z [orbit-runner 2026-10-17T07:21:30.806Z] gc: removed orphan uploads dir 01a148b5-1ca5-73eb-8ffa-77f5bef212e1",
+    "2026-10-17T07:21:30.898218071Z [orbit-runner 2026-10-17T07:21:30.898Z] gc: removed orphan uploads dir 01a148ba-1d44-72fc-bcd0-2ab14fdebe29",
+    "2026-10-17T07:22:22.768037974Z [orbit-runner 2026-10-17T07:22:22.767Z] > interactive run 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 T03 fake-model persistence session 2",
+    "2026-10-17T07:22:59.614826931Z [orbit-runner 2026-10-17T07:22:59.614Z] claude plan-usage unavailable: open /var/lib/orbit/home/.claude/.credentials.json: no such file or directory",
+    "2026-10-17T07:23:01.017698791Z [orbit-runner 2026-10-17T07:23:01.017Z] runner stopping; draining session supervisors...",
+    "2026-10-17T07:23:49.318323734Z [orbit-runner 2026-10-17T07:23:49.318Z] \u23f8 interactive run 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 detached for shutdown (resumable)"
+  ],
+  "podGoneAt": "2026-10-17T07:23:50.836+00:00",
+  "podUid": "b92ad0d4-e0c3-4abb-8911-e6978d2da725",
+  "runnerTerminated": {
+    "containerID": "containerd://bd4973d6ee39f4044090d00dad10311416c4c1701c2badb94c3b43e7f95c1467",
+    "exitCode": 0,
+    "finishedAt": "2026-10-17T07:23:49Z",
+    "reason": "Completed",
+    "startedAt": "2026-10-17T07:21:29Z"
+  }
+}

@@ -1,0 +1,2 @@
+T03 lab attachment 1 (model-free phase)
+Created 2026-10-17T07:13:11Z on the host; its sha256 is compared inside the runner volume.

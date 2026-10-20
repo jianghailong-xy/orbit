@@ -1,0 +1,117 @@
+[
+ {
+  "seq": 1,
+  "type": "tool_use",
+  "payload": {
+   "id": "shell-01a148b5-1cba-7419-b3b5-93fb9991a226",
+   "name": "Bash",
+   "input": {
+    "command": "printf \"T03 model-free work\\n\" > t03-shell.txt && git add t03-shell.txt && git commit -q -m \"T03: model-free work in the session worktree\" && git log --oneline -2 && pwd && ls -la /var/lib/orbit/home/.orbit/uploads/*/ 2>&1 | head"
+   }
+  },
+  "turnId": "34hMDFUUvlJIEwEr4vB6k",
+  "ts": "2026-10-17T07:13:11.729Z",
+  "turnPublicId": "34hMDFUUvlJIEwEr4vB6k"
+ },
+ {
+  "seq": 3,
+  "type": "tool_result",
+  "payload": {
+   "content": "688cc7b T03: model-free work in the session worktree\nf75c2d0 orbit: baseline\n/var/lib/orbit/home/.orbit/worktrees/01a148b5-1ca5-73eb-8ffa-77f5bef212e1\ntotal 8\ndrwx------ 2 orbit orbit 4096 Oct 17 07:13 .\ndrwx------ 3 orbit orbit 4096 Oct 17 07:13 ..\n",
+   "isError": false,
+   "toolUseId": "shell-01a148b5-1cba-7419-b3b5-93fb9991a226"
+  },
+  "turnId": "34hMDFUUvlJIEwEr4vB6k",
+  "ts": "2026-10-17T07:13:11.805Z",
+  "turnPublicId": "34hMDFUUvlJIEwEr4vB6k"
+ },
+ {
+  "seq": 4,
+  "type": "user",
+  "payload": {
+   "text": "T03 lab: this message goes to a closed model endpoint on purpose; the attachment must still reach the runner's uploads directory.",
+   "delivery": "enqueued",
+   "attachments": [
+    {
+     "id": "34hMDsVAuFw71iBHtJpfk",
+     "mime": "text/plain",
+     "name": "t03-attachment-2.txt",
+     "publicId": "34hMDsVAuFw71iBHtJpfk"
+    }
+   ]
+  },
+  "turnId": "34hMDsWjYfyEFnAnbvnjF",
+  "ts": "2026-10-17T07:13:36.297Z",
+  "turnPublicId": "34hMDsWjYfyEFnAnbvnjF"
+ },
+ {
+  "seq": 5,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMDsWjYfyEFnAnbvnjF",
+   "delivery": "written",
+   "turnPublicId": "34hMDsWjYfyEFnAnbvnjF"
+  },
+  "turnId": "34hMDsWjYfyEFnAnbvnjF",
+  "ts": "2026-10-17T07:13:36.346Z",
+  "turnPublicId": "34hMDsWjYfyEFnAnbvnjF"
+ },
+ {
+  "seq": 6,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-v4-pro",
+   "subtype": "init",
+   "sessionId": "89KJDawQBDRDXRgAC8Zd2",
+   "sessionPublicId": "89KJDawQBDRDXRgAC8Zd2"
+  },
+  "turnId": "34hMDsWjYfyEFnAnbvnjF",
+  "ts": "2026-10-17T07:13:36.658Z",
+  "turnPublicId": "34hMDsWjYfyEFnAnbvnjF"
+ },
+ {
+  "seq": 8,
+  "type": "system",
+  "payload": {
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"deepseek-v4-pro\",\"query_source\":\"sdk\"}\n"
+  },
+  "turnId": "34hMDsWjYfyEFnAnbvnjF",
+  "ts": "2026-10-17T07:13:36.692Z",
+  "turnPublicId": "34hMDsWjYfyEFnAnbvnjF"
+ },
+ {
+  "seq": 19,
+  "type": "assistant",
+  "payload": {
+   "text": "API Error: Connection refused \u2014 a firewall or proxy may be blocking it (ECONNREFUSED)"
+  },
+  "turnId": "34hMDsWjYfyEFnAnbvnjF",
+  "ts": "2026-10-17T07:16:37.910Z",
+  "turnPublicId": "34hMDsWjYfyEFnAnbvnjF"
+ },
+ {
+  "seq": 20,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMDsWjYfyEFnAnbvnjF",
+   "delivery": "acknowledged",
+   "turnPublicId": "34hMDsWjYfyEFnAnbvnjF"
+  },
+  "turnId": "34hMDsWjYfyEFnAnbvnjF",
+  "ts": "2026-10-17T07:16:38.027Z",
+  "turnPublicId": "34hMDsWjYfyEFnAnbvnjF"
+ },
+ {
+  "seq": 21,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0,
+   "subtype": "success",
+   "numTurns": 1,
+   "contextTokens": 0
+  },
+  "turnId": "34hMDsWjYfyEFnAnbvnjF",
+  "ts": "2026-10-17T07:16:38.027Z",
+  "turnPublicId": "34hMDsWjYfyEFnAnbvnjF"
+ }
+]
