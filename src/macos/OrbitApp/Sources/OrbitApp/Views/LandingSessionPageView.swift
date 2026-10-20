@@ -287,10 +287,16 @@ struct LandingSessionPageView: View {
                     .buttonStyle(.borderedProminent).controlSize(.small).disabled(acting)
             }
             if gates.abandon {
+                // Board 05's light red secondary beside the solid Retry, like the web's default danger
+                // button. iOS draws a bordered destructive button as a red word on a red tint; a Mac
+                // push button keeps the word black unless the label itself is red.
                 Button(role: .destructive) { act(.abandon, landing) } label: {
                     Text(LandingPageCopy.abandon)
+                        #if os(macOS)
+                        .foregroundStyle(.red)
+                        #endif
                 }
-                .buttonStyle(.borderedProminent).controlSize(.small).disabled(acting)
+                .buttonStyle(.bordered).controlSize(.small).disabled(acting)
             }
             Spacer(minLength: 0)
         }

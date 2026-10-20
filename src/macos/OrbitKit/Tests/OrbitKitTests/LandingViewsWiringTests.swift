@@ -53,6 +53,28 @@ final class LandingViewsWiringTests: XCTestCase {
         XCTAssertFalse(page.contains("Copy Link"), "design §3: no Copy Link on the landing menu")
     }
 
+    /// Board 05's timed-out doors: Retry and Re-run the check solid, Abandon the light red secondary
+    /// (`cap4.red`, the web's default danger button). The X-E5 card's solid Abandon lead is its own
+    /// `weighted(...)` in ApprovalCards.swift, pinned by ExceptionCardsWiringTests.
+    func testTheStatusCardDrawsAbandonAsTheLightSecondaryDoor() throws {
+        let page = code(try appSource("Views/LandingSessionPageView.swift"))
+        guard let start = page.range(of: "@ViewBuilder private func timedOutDoors("),
+              let end = page.range(of: "private var offlineCard: some View {",
+                                   range: start.upperBound..<page.endIndex),
+              let split = page.range(of: "if gates.abandon {", range: start.upperBound..<end.lowerBound) else {
+            return XCTFail("the status card keeps its timed-out doors")
+        }
+        let solid = String(page[start.upperBound..<split.lowerBound])
+        let abandon = String(page[split.lowerBound..<end.lowerBound])
+        XCTAssertTrue(solid.contains(".buttonStyle(.borderedProminent)"), "Retry and Re-run the check stay solid")
+        XCTAssertTrue(abandon.contains("Button(role: .destructive) { act(.abandon, landing) } label: {"))
+        XCTAssertTrue(abandon.contains(".buttonStyle(.bordered).controlSize(.small).disabled(acting)"),
+                      "Abandon is the bordered secondary door")
+        XCTAssertFalse(abandon.contains(".borderedProminent"), "Abandon is not a solid red door")
+        XCTAssertTrue(abandon.contains("#if os(macOS)") && abandon.contains(".foregroundStyle(.red)"),
+                      "a Mac push button keeps Abandon's word red")
+    }
+
     /// 方案 A's entrances: one job's card foot, a row each for several (never the merge job's), one
     /// per list row, the merge round's whole row, the CONFIRMED card's foot and the receipt's.
     func testTheLandingCardAndTheJobsListAndTheMergeRowCarryTheirEntries() throws {
