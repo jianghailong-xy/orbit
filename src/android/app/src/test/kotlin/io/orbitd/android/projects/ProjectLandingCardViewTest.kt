@@ -42,19 +42,23 @@ class ProjectLandingCardViewTest {
     private var jobs = 0
     private var project = 0
     private val retried = mutableListOf<String>()
+    private val opened = mutableListOf<String>()
 
     private fun job(id: String, state: String = "RUNNING", phase: String? = "CHECK", title: String = "维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0",
-        started: Long = 66, heartbeat: Long? = 0, timedOut: Boolean = false, retryable: Boolean = false) = buildJsonObject {
-        put("jobId", id); put("kind", "LAND_TASK"); put("state", state); put("phase", phase); put("taskId", "t-$id"); put("taskTitle", title)
+        started: Long = 66, heartbeat: Long? = 0, timedOut: Boolean = false, retryable: Boolean = false, kind: String = "LAND_TASK",
+        landing: String? = "L1") = buildJsonObject {
+        put("jobId", id); put("kind", kind); put("state", state); put("phase", phase); put("taskId", "t-$id"); put("taskTitle", title)
         put("generation", 1); put("startedAt", iso(started)); put("queuedAt", iso(started + 34)); put("heartbeatAt", heartbeat?.let(::iso))
         put("runnerName", "workstation-gpu"); put("timedOut", timedOut); put("limitSeconds", 600); put("retryable", retryable)
+        landing?.let { put("landingSessionId", it) }
     }
     private fun view(vararg listed: JsonObject, waitMs: Int? = 34_000) = buildJsonObject {
         val lead = listed.first()
         put("integratingCount", listed.count { it["state"]?.jsonPrimitive?.content == "RUNNING" })
         put("queuedCount", listed.count { it["state"]?.jsonPrimitive?.content == "QUEUED" })
         putJsonObject("inFlight") {
-            put("taskTitle", lead["taskTitle"]!!); put("state", lead["state"]!!); put("startedAt", lead["startedAt"]!!); put("kind", "LAND_TASK")
+            put("taskTitle", lead["taskTitle"]!!); put("state", lead["state"]!!); put("startedAt", lead["startedAt"]!!)
+            put("kind", lead["kind"]!!); put("jobId", lead["jobId"]!!)
             put("phase", lead["phase"]!!); put("heartbeatAt", lead["heartbeatAt"]!!); put("waitMs", waitMs)
         }
         putJsonArray("landTasks") { listed.forEach { job -> addJsonObject {
@@ -70,7 +74,7 @@ class ProjectLandingCardViewTest {
             Surface(color = MaterialTheme.colorScheme.background) {
                 Column(Modifier.padding(16.dp)) {
                     ProjectLandingCardView(card, onOpenJobs = if (listed) ({ jobs++ }) else null, onOpenProject = if (toProject) ({ project++ }) else null,
-                        retry = { id -> retried += id; refusal })
+                        openLanding = { opened += it }, retry = { id -> retried += id; refusal })
                 }
             }
         } } }
@@ -152,6 +156,34 @@ class ProjectLandingCardViewTest {
         assertEquals(1, project); assertEquals(0, jobs)
         draw(card, listed = false, toProject = false)
         assertFalse(SemanticsActions.OnClick in compose.onNodeWithTag("landing-card:body").fetchSemanticsNode().config)
+    }
+
+    /** 方案 A: a card holding one job names its landing at the card's foot — beside the card's own press, not inside it — and a
+     * server that names none says so in grey in that same slot, with nothing to press. */
+    @Test fun oneJobsCardFootNamesItsLandingOrSaysTheServerNamesNone() {
+        draw(ProjectPage.landingCard(view(job("j-1")), now, now, false)!!)
+        compose.onNodeWithTag("landing-card:open-landing").assertTextEquals("Open landing ›").performClick()
+        assertEquals(listOf("L1"), opened)
+        compose.onNodeWithTag("landing-card:body").performClick()
+        assertEquals("the card's own press is still the jobs list", 1, jobs)
+        shot("6-one-job-open-landing")
+        // The same slot on a server that lists the job but names no landing: the grey sentence, and no press.
+        draw(ProjectPage.landingCard(view(job("j-1", landing = null)), now, now, false)!!)
+        compose.onNodeWithTag("landing-card:open-landing").assertTextEquals("No landing page on this server yet")
+        assertFalse(SemanticsActions.OnClick in compose.onNodeWithTag("landing-card:open-landing").fetchSemanticsNode().config)
+        shot("7-no-landing-on-this-server")
+    }
+
+    /** Several jobs: one way in per row, drawn outside the card's press; the merge job's row carries none — the merge card is
+     * that round's way in. */
+    @Test fun severalJobsEachRowNamesItsOwnLandingExceptTheMergeJobs() {
+        draw(ProjectPage.landingCard(view(job("j-1"), job("j-2", state = "QUEUED", phase = null, kind = "CHECK_PROMOTION",
+            title = "Merge project/launch → main", started = 32, heartbeat = null)), now, now, false)!!)
+        compose.onNodeWithTag("landing-card:job:j-1:open-landing").assertTextEquals("Open landing ›").performClick()
+        assertEquals(listOf("L1"), opened)
+        compose.onNodeWithTag("landing-card:job:j-2:open-landing").assertDoesNotExist()
+        compose.onNodeWithTag("landing-card:open-landing").assertDoesNotExist()
+        shot("8-many-jobs-open-landing")
     }
 
     private val output: File by lazy {

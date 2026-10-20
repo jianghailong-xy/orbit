@@ -143,7 +143,37 @@ object LandingSessionCopy {
     const val A_CLEAN_PASS_MERGES_ON_ITS_OWN = "A clean pass merges on its own"
     const val MERGING_IS_DECIDED_ON_THE_CARD = "Merging is decided on the merge card"
     fun nextMergeOpens(next: Int) = "The next merge into main opens a new landing (#$next)."
+
+    /** The ways into a landing session (contract §2.9 LS6, owner 2026-10-19: 方案 A). Held to the Swift's `LandingPageCopy.openLanding`,
+     * `noLandingPage` and `allJobs`. */
+    const val OPEN_LANDING = "Open landing"
+    const val NO_LANDING_PAGE = "No landing page on this server yet"
+    const val ALL_JOBS = "All jobs"
+
+    /** `+N job queued` — the other jobs a merge round stands for, beside its `All jobs ›`; null when it stands for one. */
+    fun moreJobsQueued(count: Int): String? {
+        val others = count - 1
+        if (others <= 0) return null
+        return "+$others job${if (others == 1) "" else "s"} queued"
+    }
 }
+
+/** A landing entrance's two answers (iOS `LandingEntry`): a session id to open, or the fact that this server names none. */
+sealed interface LandingTarget {
+    data class Link(override val sessionId: String) : LandingTarget
+    data object NoPage : LandingTarget
+
+    val sessionId: String? get() = (this as? Link)?.sessionId
+    /** The words beside the press, or in its place. */
+    val label: String get() = when (this) {
+        is Link -> LandingSessionCopy.OPEN_LANDING
+        NoPage -> LandingSessionCopy.NO_LANDING_PAGE
+    }
+}
+
+/** The one rule every entrance wears: a session to open, else the grey sentence in the same slot. */
+fun landingEntry(landingSessionId: String?): LandingTarget =
+    landingSessionId?.takeIf { it.isNotEmpty() }?.let { LandingTarget.Link(it) } ?: LandingTarget.NoPage
 
 /** The check a v2 claim is running, as the landing view carries it (the project integration read's `ProjectIntegrationCheck`). */
 data class LandingAttemptCheck(val name: String?, val index: Int, val count: Int, val budgetSeconds: Int, val startedAt: String?)
