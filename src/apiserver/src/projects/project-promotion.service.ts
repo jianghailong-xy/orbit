@@ -1300,8 +1300,13 @@ export async function applyPromotionJobResult(
     checks: IntegrationCheckResult[];
     conflicts: string[];
     /** Somebody asked this claim to stop before this result arrived (J-T8). The promotion follows
-     *  the result: a landing still wins (M-T8), everything else settles the cancellation. */
+     *  the result: a landing still wins (M-T8), an answer that proves nothing was pushed settles the
+     *  cancellation, and one that cannot prove it blocks the candidate (§2.6 J12, M-T10). */
     cancelRequested: boolean;
+    /** The step the job stopped at: the one its result names, else the one its row last recorded.
+     *  A stopped landing's ERROR from VERIFY came after its push (§2.6 J12), so the merge may be on
+     *  the upstream. Absent from a caller that has no job row to read it from. */
+    phase?: string | null;
     /** The result's error code (J12), so J-T13's `TARGET_MOVED` can be told from every other
      *  failure a landing reports. */
     errorCode: string | null;
@@ -1337,11 +1342,19 @@ export async function applyPromotionJobResult(
   const checks = input.checks as unknown as Prisma.InputJsonValue;
 
   // J-T12 / M-T10: the job was asked to stop. Only a LANDED result overrides that ask — the push
-  // already happened, and the fact is the fact (M-T8). Everything else settles the cancellation:
-  // CANCELLED, not BLOCKED, because there is no failure for anybody to fix — the owner (or the
-  // supersession that asked) has already taken the question away.
+  // already happened, and the fact is the fact (M-T8). An answer that proves nothing was pushed
+  // settles the cancellation: CANCELLED, not BLOCKED, because there is no failure for anybody to fix
+  // — the owner (or the supersession that asked) has already taken the question away. An answer
+  // that cannot prove it (§2.6 J12) blocks the candidate instead, exactly as `applyCancel` blocks a
+  // timed-out landing it ends with PUSH_OUTCOME_UNKNOWN: the merge may be on the upstream, so it is
+  // not written down as cancelled. Either way the stopped generation opens no failure item (J-T8):
+  // the relay opens one only for a claim nobody asked to stop.
   if ((input.cancelRequested || input.state === 'CANCELLED')
       && input.state !== 'LANDED' && input.state !== 'ALREADY_LANDED') {
+    if (stoppedLandingMayHavePushed(input)) {
+      return blockPromotion(tx, promotion.id, checks, input.conflicts, now, input.sourceSha,
+        promotionBlockedReasonFor(input.state));
+    }
     await tx.projectPromotion.update({
       where: { id: promotion.id },
       data: { state: 'CANCELLED' satisfies PromotionState, decidedAt: now },
@@ -1707,6 +1720,28 @@ async function handBackToOwner(
       checks: storedChecks(promotion),
     },
   };
+}
+
+/**
+ * Whether a stopped claim's answer leaves its merge possibly pushed (§2.6 J12, M-T10). Only a
+ * `LAND_PROMOTION` pushes, and only an ERROR can leave the question open: the job's own CANCELLED
+ * (J-T12), a failed check, a conflict and every other answer end without a push. Of the ERRORs, the
+ * platform's `PUSH_OUTCOME_UNKNOWN` (an abandoned claim, J-T10) says so outright and `RUNNER_LOST`
+ * is the platform's proof that nothing was pushed; of the ones a runner reports, an error from
+ * VERIFY — a legacy claim that read its stop only at the start, pushed, and then found the landed
+ * tree wrong (`LANDED_TREE_MISMATCH`) — came after the push. An ERROR before the push, or a push the
+ * upstream refused, proves the negative.
+ */
+function stoppedLandingMayHavePushed(answer: {
+  jobKind: string;
+  state: string;
+  errorCode: string | null;
+  phase?: string | null;
+}): boolean {
+  if (answer.jobKind !== 'LAND_PROMOTION' || answer.state !== 'ERROR') return false;
+  if (answer.errorCode === 'PUSH_OUTCOME_UNKNOWN') return true;
+  if (answer.errorCode === 'RUNNER_LOST') return false;
+  return answer.phase === 'VERIFY' || answer.errorCode === 'LANDED_TREE_MISMATCH';
 }
 
 /** M-T3 / M-T9: the candidate stops and somebody has to look at it. */

@@ -1145,3 +1145,179 @@ test('the landing view carries the queue’s Retry fact and J-T4’s push bounda
       await stack.db.$disconnect();
     }
   });
+
+// ── the todo list ────────────────────────────────────────────────────────────────────────────────
+
+/** A task landing whose first claim reported a red check: the subject, its LANDING session, and
+ *  the INTEGRATION_CHECK_FAILED the result transaction opened about the task and the job. */
+async function redLanding(stack: Stack, label: string) {
+  const w = await world(stack, label);
+  const task = await doneTask(stack, w, label);
+  const job = await claimLanding(stack, w, `lease-${label}`, 'LAND_TASK');
+  const { landing } = await subjectOfJob(stack.db, job.jobId);
+  assert.equal((await report(stack, w, job, RED)).accepted, true);
+  const failed = await stack.db.projectOpenItem.findFirstOrThrow({
+    where: { taskId: task.taskId, state: 'OPEN', kind: 'INTEGRATION_CHECK_FAILED' },
+    select: { id: true },
+  });
+  return { w, task, job, landing, failedId: failed.id };
+}
+
+/** The landing view's todos as `[id, kind, state]`, through `GET /sessions/:id`'s reader. */
+async function todosOf(stack: Stack, w: World, landingSessionId: string) {
+  const view = await stack.sessions.get(w.ownerId, landingSessionId);
+  assert.equal(view.sessionKind, 'LANDING');
+  return (view.landing.todos as Array<{ id: string; kind: string; state: string }>)
+    .map((todo) => [todo.id, todo.kind, todo.state]);
+}
+
+/** The LANDING row's own `landing.state`, through the list row reader the sessions page draws from
+ *  (`listRowsByIds` is `list`'s query and mapping): what the page's todos are held against. */
+async function rowStateOf(stack: Stack, w: World, landingSessionId: string) {
+  const [row] = await stack.sessions.listRowsByIds(w.ownerId, [landingSessionId]);
+  assert.ok(row, 'the LANDING row is listed');
+  return (row as { landing?: { state: string } }).landing?.state;
+}
+
+test('the landing’s todos list its owed INTEGRATION_* item and not another kind about the same task',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const { w, task, job, landing, failedId } = await redLanding(stack, 'todos-kind');
+
+      // Another kind about the same task and the same job, and owed (a delivery review of a DONE
+      // task is): the landing is not where it is answered, so it is not one of its todos.
+      const review = await stack.db.projectOpenItem.create({
+        data: {
+          projectId: w.projectId, ownerId: w.ownerId, kind: 'DELIVERY_REVIEW', state: 'OPEN',
+          assignee: 'COORDINATOR', assigneeReason: 'DEFAULT', taskId: task.taskId,
+          integrationJobId: job.jobId, dedupeKey: `todos-review:${randomUUID()}`,
+          title: 'Review the delivery', payload: {},
+          waitingSince: new Date(Date.now() - 60_000), assignedAt: new Date(Date.now() - 60_000),
+        },
+        select: { id: true },
+      });
+
+      // The positive control: the red check's own item is listed, and only it.
+      assert.deepEqual(
+        await todosOf(stack, w, landing.sessionId),
+        [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
+        'only the integration item is a todo; the delivery review about the same task is not',
+      );
+      assert.equal(await rowStateOf(stack, w, landing.sessionId), 'AWAITING_DECISION',
+        'the row counts the todo the page lists');
+      assert.equal(
+        (await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: review.id }, select: { state: true } })).state,
+        'OPEN',
+        'the delivery review is still OPEN: its kind alone keeps it off the page',
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('an INTEGRATION_* item still OPEN but owed by nobody is not one of the landing’s todos',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const { w, task, landing, failedId } = await redLanding(stack, 'todos-owed');
+      assert.deepEqual(
+        await todosOf(stack, w, landing.sessionId),
+        [[failedId, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
+        'while the task stands, its integration item is owed and listed',
+      );
+      assert.equal(await rowStateOf(stack, w, landing.sessionId), 'AWAITING_DECISION',
+        'and the row counts it');
+
+      // The task goes away by a write that misses the item's closing edge (the 2026-10-02 shape: a
+      // door that forgets its edge). The integration item still reads OPEN, but a cancelled task's
+      // landing is owed by nobody (`openItemOwed`) and the session row's AWAITING_DECISION does not
+      // count it, so neither does the page.
+      await stack.db.task.update({ where: { id: task.taskId }, data: { status: TaskStatus.CANCELLED } });
+      assert.equal(
+        (await stack.db.projectOpenItem.findUniqueOrThrow({ where: { id: failedId }, select: { state: true } })).state,
+        'OPEN',
+      );
+      assert.deepEqual(
+        await todosOf(stack, w, landing.sessionId),
+        [],
+        'an OPEN integration item owed by nobody is not a todo',
+      );
+      assert.equal(await rowStateOf(stack, w, landing.sessionId), 'IN_FLIGHT',
+        'nor does the row count it: the segment is no longer awaiting a decision');
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('an owed INTEGRATION_* item about the round’s candidate is a todo though its job predates the landing',
+  { skip, timeout: 180_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'todos-legacy');
+      await doneTask(stack, w, 'todos-legacy');
+      assert.equal((await report(stack, w, await claimLanding(stack, w, 'lease-legacy', 'LAND_TASK'), LANDED)).accepted, true);
+      const check = await claimLanding(stack, w, 'lease-legacy-check', 'CHECK_PROMOTION');
+      const { job: checkJob, landing: round } = await subjectOfJob(stack.db, check.jobId);
+      assert.equal(round.subject, 'PROMOTION');
+      assert.ok(round.promotionId, 'the round names the candidate it opened with');
+      assert.equal(checkJob.promotionId, round.promotionId);
+      // The control: nothing is owed yet, so the page lists nothing and the row is in flight.
+      assert.deepEqual(await todosOf(stack, w, round.sessionId), []);
+      assert.equal(await rowStateOf(stack, w, round.sessionId), 'IN_FLIGHT');
+
+      // A red check of the same candidate queued before 0436, so its `landing_id` is NULL, and the
+      // INTEGRATION_CHECK_FAILED it left OPEN. Both rows are inserted directly on purpose: such a
+      // job was queued by a tree from before the column, which no door here is, and it is the one
+      // shape the candidate tier exists for. The item names no task, so only the candidate can tie
+      // it to the round.
+      const codebase = await stack.db.projectCodebase.findFirstOrThrow({
+        where: { projectId: w.projectId }, select: { id: true, integrationRef: true, upstreamRef: true },
+      });
+      const legacyJobId = randomUUID();
+      await stack.db.projectIntegrationJob.create({
+        data: {
+          id: legacyJobId,
+          projectId: w.projectId,
+          ownerId: w.ownerId,
+          codebaseId: codebase.id,
+          kind: 'CHECK_PROMOTION',
+          promotionId: round.promotionId,
+          landingId: null,
+          serialKey: `fixture:legacy:${legacyJobId}`,
+          targetRef: codebase.upstreamRef,
+          upstreamRef: codebase.upstreamRef,
+          sourceRef: codebase.integrationRef,
+          state: 'CHECK_FAILED',
+          finishedAt: new Date(Date.now() - 120_000),
+          idempotencyKey: `fixture:legacy:${legacyJobId}`,
+          createdAt: new Date(Date.now() - 180_000),
+        },
+      });
+      const legacy = await stack.db.projectOpenItem.create({
+        data: {
+          projectId: w.projectId, ownerId: w.ownerId, kind: 'INTEGRATION_CHECK_FAILED', state: 'OPEN',
+          assignee: 'COORDINATOR', assigneeReason: 'DEFAULT', promotionId: round.promotionId,
+          integrationJobId: legacyJobId, dedupeKey: `todos-legacy:${randomUUID()}`,
+          title: 'The merge check failed', payload: {},
+          waitingSince: new Date(Date.now() - 120_000), assignedAt: new Date(Date.now() - 120_000),
+        },
+        select: { id: true },
+      });
+      assert.equal(
+        await stack.db.projectIntegrationJob.count({ where: { id: legacyJobId, landingId: round.id } }),
+        0,
+        'the item\'s job is not one of this landing\'s, so the job tier cannot find it',
+      );
+
+      assert.equal(await rowStateOf(stack, w, round.sessionId), 'AWAITING_DECISION',
+        'the row counts the candidate\'s owed item');
+      assert.deepEqual(
+        await todosOf(stack, w, round.sessionId),
+        [[legacy.id, 'INTEGRATION_CHECK_FAILED', 'OPEN']],
+        'the page lists the item the row counts',
+      );
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });

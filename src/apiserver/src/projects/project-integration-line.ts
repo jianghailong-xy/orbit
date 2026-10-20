@@ -537,6 +537,12 @@ const LIVENESS_OUTPUT_QUIET_AFTER_SECONDS = 10 * 60;
  *  ever" sample §3.6's re-check estimate takes. */
 const TYPICAL_MERGE_CHECK_SAMPLE = 5;
 
+/** How many of a project's newest jobs that finished after their claim those runs are looked for
+ *  in, whatever state the jobs ended in: the bound that keeps `typicalMs` a read of recent work
+ *  however long ago the check last passed. A job that ended without a claim (cancelled while
+ *  QUEUED) takes no place in it. */
+const TYPICAL_MERGE_CHECK_WINDOW = 25;
+
 /** One RUNNING or QUEUED job as `readInFlightJobsForProjects` reads it, before the read-time
  *  conclusions (`timedOut`, liveness, typical duration, blocking reason). */
 interface InFlightJobRow extends IntegrationCheckSource {
@@ -773,13 +779,24 @@ function inFlightOf(job: ProjectIntegrationJob<Date>): ProjectIntegrationInFligh
 
 /**
  * How long this project's successful runs of each check usually take, in ms (§7.2 V6): the median
- * of its last few finished jobs whose `MERGE_CHECK` PASSED, each measured from its last claim
- * (`claimed_at`) to its end.
+ * of the newest TYPICAL_MERGE_CHECK_SAMPLE (5), or fewer, finished jobs whose `MERGE_CHECK` PASSED,
+ * among the project's newest TYPICAL_MERGE_CHECK_WINDOW (25) jobs that finished after their claim,
+ * each measured from its last claim (`claimed_at`) to its end. Lately, not ever, as §3.6 reads it: fewer than five passes in those 25
+ * give the median of the ones there are, and a project whose newest 25 finished jobs hold no pass
+ * has no usual duration, however many passed before them.
  *
  * Not §3.6's `recentCheckDurations`: that one takes every finished run, failed checks included, and
  * measures from the first `started_at` — which J-T1e's requeue and J-T11's hand-back both keep, so a
  * job that queued twice reads as one long run. Only checks that passed are samples, and only the
  * claim that finished the job is the start of the work being measured.
+ *
+ * Read on every poll while a merge check runs, so it is bounded by the window: per project, the 25
+ * are chosen by their columns alone (claimed, finished after the claim, newest `finished_at` first
+ * with `id` breaking a tie), and the `checks` test runs only on those rows. The LIMIT inside the
+ * lateral subquery is what keeps PostgreSQL from testing `checks` before the cut. No index orders a
+ * project's jobs by `finished_at`, and none is needed: the project's rows are found by
+ * `project_integration_job_project_idx` (or a scan where the table is small) and the newest 25 kept
+ * by a top-N sort, which is cheap beside the JSON it no longer opens.
  */
 async function readTypicalCheckMs(
   prisma: Pick<PrismaService, '$queryRaw'>,
@@ -788,26 +805,33 @@ async function readTypicalCheckMs(
   if (projectIds.length === 0) return new Map();
   const ids = Prisma.join(projectIds.map((id) => Prisma.sql`${id}::uuid`));
   const rows = await prisma.$queryRaw<Array<{ projectId: string; ms: number }>>(Prisma.sql`
-    WITH passed AS (
-      SELECT j."project_id" AS "projectId",
-             (EXTRACT(EPOCH FROM (j."finished_at" - j."claimed_at")) * 1000)::float8 AS "ms",
-             row_number() OVER (
-               PARTITION BY j."project_id" ORDER BY j."finished_at" DESC, j."id" DESC) AS "rn"
-        FROM "project_integration_job" j
-       WHERE j."project_id" IN (${ids})
-         AND j."finished_at" IS NOT NULL AND j."claimed_at" IS NOT NULL
-         AND j."finished_at" > j."claimed_at"
-         AND EXISTS (
-           SELECT 1
-             FROM jsonb_array_elements(
-                    CASE WHEN jsonb_typeof(j."checks") = 'array' THEN j."checks" ELSE '[]'::jsonb END) c
-            WHERE c->>'name' = 'MERGE_CHECK'
-              AND c->>'timedOut' = 'false'
-              AND (c->>'exitCode') ~ '^[0-9]+$'
-              AND (c->>'expectedExitCode') ~ '^[0-9]+$'
-              AND (c->>'exitCode')::int = (c->>'expectedExitCode')::int)
-    )
-    SELECT "projectId", "ms" FROM passed WHERE "rn" <= ${TYPICAL_MERGE_CHECK_SAMPLE}`);
+    SELECT p."projectId", passed."ms"
+      FROM (SELECT DISTINCT ids."id" AS "projectId" FROM unnest(ARRAY[${ids}]) AS ids("id")) p
+     CROSS JOIN LATERAL (
+       SELECT finished."ms"
+         FROM (
+           SELECT j."id", j."finished_at", j."checks",
+                  (EXTRACT(EPOCH FROM (j."finished_at" - j."claimed_at")) * 1000)::float8 AS "ms"
+             FROM "project_integration_job" j
+            WHERE j."project_id" = p."projectId"
+              AND j."finished_at" IS NOT NULL AND j."claimed_at" IS NOT NULL
+              AND j."finished_at" > j."claimed_at"
+            ORDER BY j."finished_at" DESC, j."id" DESC
+            LIMIT ${TYPICAL_MERGE_CHECK_WINDOW}
+         ) finished
+        WHERE EXISTS (
+          SELECT 1
+            FROM jsonb_array_elements(
+                   CASE WHEN jsonb_typeof(finished."checks") = 'array'
+                        THEN finished."checks" ELSE '[]'::jsonb END) c
+           WHERE c->>'name' = 'MERGE_CHECK'
+             AND c->>'timedOut' = 'false'
+             AND (c->>'exitCode') ~ '^[0-9]+$'
+             AND (c->>'expectedExitCode') ~ '^[0-9]+$'
+             AND (c->>'exitCode')::int = (c->>'expectedExitCode')::int)
+        ORDER BY finished."finished_at" DESC, finished."id" DESC
+        LIMIT ${TYPICAL_MERGE_CHECK_SAMPLE}
+     ) passed`);
   const durations = new Map<string, number[]>();
   for (const row of rows) {
     durations.set(row.projectId, [...(durations.get(row.projectId) ?? []), Number(row.ms)]);

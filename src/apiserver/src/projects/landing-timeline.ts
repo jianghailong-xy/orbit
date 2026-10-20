@@ -200,7 +200,13 @@ export async function readLandingTimeline(
   // Section numbers are their ORDER WITHIN THE SUBJECT, not the job's own generation: a round can
   // hold a superseded candidate and the candidate that replaced it, both generation 1 of their own
   // candidate, and two sections titled `Merge check · 1` would be one heading for two attempts.
+  // The count starts at the subject's FIRST attempt, not its first listed one: a truncated subject
+  // lists only its newest attempts, and the attempts cut off ahead of them still count, so the
+  // newest of 45 attempts is `Generation 45`, never a renumbered `Generation 40`.
   const sectionOrdinals = new Map<string, number>();
+  for (const job of all.slice(0, all.length - jobs.length)) {
+    sectionOrdinals.set(job.kind, (sectionOrdinals.get(job.kind) ?? 0) + 1);
+  }
 
   const sections: IntegrationTimelineSection<Date>[] = jobs.map((job) => {
     const entries: IntegrationTimelineEntry<Date>[] = [];

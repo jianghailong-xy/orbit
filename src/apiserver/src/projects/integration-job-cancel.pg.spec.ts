@@ -773,6 +773,99 @@ test('a stop is a fact: QUEUED jobs end now, RUNNING ones are asked or ended, an
     }), promotion.receiptIds.length);
   });
 
+  // §2.6 J12 / M-T10: the candidate of a stopped merge is CANCELLED only when its job's answer
+  // proves nothing was pushed. Each case confirms a candidate, claims its LAND_PROMOTION (a legacy
+  // claim: it reads the stop only when it starts), has the owner call it back while the runner is
+  // still reporting, and then reports one answer.
+  const stoppedMerge = async (label: string) => {
+    const w = await world(stack, label, 'MAIN');
+    const { candidate } = await offered(stack, w, label);
+    const check = await claim(stack, w);
+    await report(stack, w, check, CLEAN(sha('a')));
+    await stack.promotions.confirm({ userId: w.ownerId }, w.projectId, candidate.id, sha('a'));
+    const land = await claim(stack, w);
+    assert.equal(land.kind, 'LAND_PROMOTION');
+    assert.equal((await stack.promotions.cancel({ userId: w.ownerId }, w.projectId, candidate.id)).state,
+      'CONFIRMED', 'a landing still reporting is asked, not declared stopped');
+    assert.ok((await jobRow(stack, land.jobId)).cancelRequestedAt);
+    return { w, candidate, land };
+  };
+  const settled = async (w: World, candidateId: string, jobId: string) => ({
+    promotion: await stack.db.projectPromotion.findUniqueOrThrow({
+      where: { id: candidateId }, select: { state: true, blockedReason: true },
+    }),
+    job: await jobRow(stack, jobId),
+    items: await stack.db.projectOpenItem.findMany({
+      where: { projectId: w.projectId, state: 'OPEN', kind: { not: 'PROMOTION_APPROVAL' } },
+      select: { kind: true, integrationJobId: true },
+    }),
+    landings: await stack.db.projectIntegrationJob.count({
+      where: { promotionId: candidateId, kind: 'LAND_PROMOTION' },
+    }),
+  });
+
+  await t.test('(16) a stopped legacy merge that pushed and then failed VERIFY is BLOCKED, not CANCELLED, and opens no item', async () => {
+    const { w, candidate, land } = await stoppedMerge('stopped-verify-error');
+    // It read no stop at its start, pushed, and then found the landed tree was not the tested one.
+    const answered = await report(stack, w, land, {
+      state: 'ERROR', phase: 'VERIFY', errorCode: 'LANDED_TREE_MISMATCH',
+      landedSha: sha('1'), targetShaBefore: sha('0'), upstreamSha: sha('0'), testedSha: sha('2'),
+      testedTreeSha: sha('3'), landedTreeSha: sha('6'), sourceSha: sha('a'), checks: [GREEN_CHECK], conflicts: [],
+    });
+    assert.equal(answered.accepted, true);
+    const after = await settled(w, candidate.id, land.jobId);
+    assert.equal(after.job.state, 'ERROR');
+    assert.equal(after.promotion.state, 'BLOCKED', 'the merge may be on the upstream, so it is not recorded as cancelled');
+    assert.equal(after.promotion.blockedReason, 'ERROR');
+    assert.equal(answered.openItemId, null, 'a stopped generation opens no failure item (J-T8)');
+    assert.deepEqual(after.items, []);
+    assert.equal(after.landings, 1, 'nothing is queued in its place');
+  });
+
+  await t.test('(17) a stopped merge whose check failed is CANCELLED: nothing was pushed', async () => {
+    const { w, candidate, land } = await stoppedMerge('stopped-check-failed');
+    const answered = await report(stack, w, land, {
+      state: 'CHECK_FAILED', phase: 'CHECK', sourceSha: sha('a'), targetShaBefore: sha('0'),
+      upstreamSha: sha('0'), testedSha: sha('2'), testedTreeSha: sha('3'), checks: [RED_CHECK], conflicts: [],
+    });
+    assert.equal(answered.accepted, true);
+    const after = await settled(w, candidate.id, land.jobId);
+    assert.equal(after.job.state, 'CHECK_FAILED');
+    assert.equal(after.promotion.state, 'CANCELLED');
+    assert.equal(after.promotion.blockedReason, null);
+    assert.equal(answered.openItemId, null);
+    assert.deepEqual(after.items, []);
+    assert.equal(after.landings, 1);
+  });
+
+  await t.test('(18) a stopped merge whose push the upstream refused is CANCELLED: nothing was pushed', async () => {
+    const { w, candidate, land } = await stoppedMerge('stopped-push-refused');
+    const answered = await report(stack, w, land, {
+      state: 'ERROR', phase: 'PUSH', errorCode: 'PUSH_REJECTED', sourceSha: sha('a'),
+      targetShaBefore: sha('0'), upstreamSha: sha('0'), testedSha: sha('2'), testedTreeSha: sha('3'),
+      checks: [GREEN_CHECK], conflicts: [],
+    });
+    assert.equal(answered.accepted, true);
+    const after = await settled(w, candidate.id, land.jobId);
+    assert.equal(after.job.state, 'ERROR');
+    assert.equal(after.promotion.state, 'CANCELLED', 'a refused push proves the negative');
+    assert.equal(answered.openItemId, null);
+    assert.deepEqual(after.items, []);
+    assert.equal(after.landings, 1);
+  });
+
+  await t.test('(19) a stopped merge that answers CANCELLED itself is CANCELLED (J-T12)', async () => {
+    const { w, candidate, land } = await stoppedMerge('stopped-cancelled');
+    const answered = await report(stack, w, land, { state: 'CANCELLED', phase: 'MERGE', checks: [], conflicts: [] });
+    assert.equal(answered.accepted, true);
+    const after = await settled(w, candidate.id, land.jobId);
+    assert.equal(after.job.state, 'CANCELLED');
+    assert.equal(after.promotion.state, 'CANCELLED');
+    assert.equal(answered.openItemId, null);
+    assert.deepEqual(after.items, []);
+    assert.equal(after.landings, 1);
+  });
+
   await t.test('(7) a stopped running landing that answers too early ends CANCELLED, never a QUEUED row with a stop', async () => {
     const w = await world(stack, 'too-early-cancel', 'PROJECT_BRANCH');
     const work = await doneTask(stack, w, 'early');

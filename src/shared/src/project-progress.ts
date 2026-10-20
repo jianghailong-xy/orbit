@@ -206,7 +206,7 @@ export interface ProjectIntegrationInFlight<Instant = string> {
   /** The protocol this job's current claim was written with: `'v2'`, or null for legacy. */
   progressProtocol?: string | null;
   /** How long this project's successful runs of the current MERGE_CHECK usually take; null for
-   *  every other check, and until there is a successful run to measure. */
+   *  every other check, and while none of the project's newest finished jobs passed it. */
   typicalMs?: number | null;
   /** §7.2 V6's read-time liveness; null for a job waiting its turn, which has no claim to judge. */
   liveness?: IntegrationJobLiveness | null;
@@ -289,7 +289,7 @@ export interface ProjectIntegrationJob<Instant = string> {
   /** When the current step's output last moved; null when no report measured it. */
   outputMovedAt?: Instant | null;
   /** How long this project's successful runs of the current MERGE_CHECK usually take; null for
-   *  every other check, and until there is a successful run to measure (§7.2 V6). */
+   *  every other check, and while none of the project's newest finished jobs passed it (§7.2 V6). */
   typicalMs?: number | null;
   /** §7.2 V6's read-time liveness; null for a job waiting its turn, which has no claim to judge.
    *  `LEASE_EXPIRED` is the same fact as `timedOut`. */
@@ -355,8 +355,8 @@ export interface SessionLandingAttempt<Instant = string> {
   pushBoundaryPassed?: boolean;
 }
 
-/** One entry of the landing's todo list: an OPEN integration item of its project. The item's own
- *  card is where it is answered; the landing only lists it. */
+/** One entry of the landing's todo list: an OPEN integration item about its subject that somebody
+ *  still owes. The item's own card is where it is answered; the landing only lists it. */
 export interface SessionLandingTodo<Instant = string> {
   id: string;
   kind: string;
@@ -524,7 +524,7 @@ export interface SessionLandingView<Instant = string> {
   blockingReason: IntegrationJobBlockingReason | null;
   /** The newest attempt of the subject, whatever its state; null for a subject no attempt claimed. */
   currentAttempt: SessionLandingAttempt<Instant> | null;
-  /** The subject's integration items still OPEN, oldest first. */
+  /** The subject's integration items still OPEN and still owed (`openItemOwed`), oldest first. */
   todos: SessionLandingTodo<Instant>[];
   /** Every generation of the subject, oldest first. */
   generations: SessionLandingGeneration<Instant>[];
@@ -1131,8 +1131,11 @@ export interface ProjectOpenItemRow<Instant = string> {
   landingSessionId?: string | null;
   /**
    * The landing attempt an X-E5 item is about (§4.6): the integration job whose claim stopped
-   * reporting, as its public id. `ABANDON` names that job in its route, so a client drawing this
-   * row's doors needs it. Null for every other kind, and absent from a server that predates it.
+   * reporting. The server fills it with the job row's UUID; like every id in `PUBLIC_ID_FIELDS`,
+   * a response outside the machine protocol spells it as the job's base62 public id instead
+   * (`PublicIdInterceptor`), with the same value beside it as `integrationJobPublicId`. `ABANDON`
+   * names that job in its route, which takes either spelling, so a client drawing this row's doors
+   * needs it. Null for every other kind, and absent from a server that predates it.
    */
   integrationJobId?: string | null;
   /**

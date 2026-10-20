@@ -40,6 +40,7 @@ import { CoordinatorWakeService } from './coordinator-wake.service';
 import { CriterionReadyProducer } from './criterion-ready.producer';
 import { CriterionUnlandedProducer } from './criterion-unlanded.producer';
 import { INTEGRATION_JOB_CLAIM, INTEGRATION_PROGRESS_V2, PROMOTION_AUTOMATIC_LAND } from './project-integration-job';
+import { MAX_TIMELINE_SECTIONS } from './landing-timeline';
 import { readLandingView } from './landing-view';
 import { readProjectIntegrationRead } from './project-integration-line';
 import { configureProjectIntegration } from './project-integration-line';
@@ -1298,6 +1299,149 @@ test('a claim whose backfill was lost is still drawn from the committed job row'
     await stack.db.$disconnect();
   }
 });
+
+// ── a truncated subject ──────────────────────────────────────────────────────────────────────
+
+test('a subject with more attempts than the timeline lists numbers its sections by their real attempt',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'timeline-truncated');
+      const task = await doneTask(stack, w, 'timeline-truncated');
+      const realJob = await stack.db.projectIntegrationJob.findFirstOrThrow({
+        where: { taskId: task.taskId, kind: 'LAND_TASK' }, select: { id: true, createdAt: true },
+      });
+      const { landing } = await subjectOfJob(stack.db, realJob.id);
+      // The real generation is stopped so it ends CANCELLED, like the fixture attempts after it.
+      await stack.openItems.stopTaskIntegrationAsOwner(w.ownerId, w.projectId, task.taskId, undefined);
+      // More attempts than the timeline lists. This case inserts the later generations straight
+      // into the queue on purpose: a queue reaches forty-five attempts only through forty-four
+      // reruns, and the section numbering past the cut is what has to be proven, not the reruns.
+      // Each is queued a second after the one before, so the subject's order is the insert order.
+      const codebase = await stack.db.projectCodebase.findFirstOrThrow({
+        where: { projectId: w.projectId }, select: { id: true, integrationRef: true, upstreamRef: true },
+      });
+      const total = MAX_TIMELINE_SECTIONS + 5;
+      await stack.db.projectIntegrationJob.createMany({
+        data: Array.from({ length: total - 1 }, (_, index) => {
+          const id = randomUUID();
+          return {
+            id,
+            projectId: w.projectId,
+            ownerId: w.ownerId,
+            codebaseId: codebase.id,
+            kind: 'LAND_TASK',
+            generation: index + 2,
+            taskId: task.taskId,
+            sessionId: task.sessionId,
+            landingId: landing.id,
+            serialKey: `fixture:truncated:${id}`,
+            targetRef: codebase.integrationRef,
+            upstreamRef: codebase.upstreamRef,
+            sourceRef: `refs/heads/${task.branch}`,
+            state: 'CANCELLED',
+            finishedAt: new Date(realJob.createdAt.getTime() + (index + 1) * 1_000),
+            idempotencyKey: `fixture:truncated:${id}`,
+            createdAt: new Date(realJob.createdAt.getTime() + (index + 1) * 1_000),
+          };
+        }),
+      });
+      const timeline = await timelineOf(stack, w, landing.sessionId);
+      assert.equal(timeline.truncated, true);
+      assert.equal(timeline.sections.length, MAX_TIMELINE_SECTIONS);
+      // The newest attempts are listed, each numbered by its place among ALL the subject's attempts:
+      // the first listed is attempt 6 of 45, and the newest is attempt 45, not a renumbered 40.
+      assert.equal(timeline.sections[0].title, `Generation ${total - MAX_TIMELINE_SECTIONS + 1}`);
+      assert.equal(timeline.sections.at(-1)!.title, `Generation ${total}`);
+      assert.deepEqual(
+        timeline.sections.map((section) => section.title),
+        Array.from({ length: MAX_TIMELINE_SECTIONS },
+          (_, index) => `Generation ${total - MAX_TIMELINE_SECTIONS + 1 + index}`),
+      );
+      assert.equal(timeline.sections.at(-1)!.generation, total);
+      await assertNoLandingRunEvents(stack, landing.sessionId);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
+
+test('a merge round with more attempts than the timeline lists numbers each kind\'s sections by its real attempt',
+  { skip, timeout: 240_000 }, async () => {
+    const stack = await connect();
+    try {
+      const w = await world(stack, 'timeline-round-truncated');
+      await doneTask(stack, w, 'timeline-round-truncated');
+      const landingJob = await claimLanding(stack, w, 'lease-1', 'LAND_TASK');
+      assert.equal((await report(stack, w, landingJob, { ...GREEN, checks: [GREEN_CHECK] })).accepted, true);
+      const check = await claimLanding(stack, w, 'lease-check', 'CHECK_PROMOTION');
+      const { landing: round } = await subjectOfJob(stack.db, check.jobId);
+      assert.equal(round.subject, 'PROMOTION');
+      // The real check ends red, so it is finished like the fixture attempts after it.
+      await reportDirect(stack, w, check, promotionRed('1'.repeat(40)));
+      const realJob = await stack.db.projectIntegrationJob.findUniqueOrThrow({
+        where: { id: check.jobId },
+        select: {
+          createdAt: true, codebaseId: true, promotionId: true, targetRef: true, upstreamRef: true, sourceRef: true,
+        },
+      });
+      // More attempts than the timeline lists, the round's two kinds taking turns: check, landing,
+      // check, ... This case inserts the later attempts straight into the queue on purpose, as the
+      // task case above does: a round reaches forty-five attempts only through forty-four rechecks
+      // and landings, and what has to be proven is the numbering past the cut, which here drops
+      // attempts of BOTH kinds (three checks and two landings). Each is queued a second after the
+      // one before, so the subject's order is the insert order.
+      const total = MAX_TIMELINE_SECTIONS + 5;
+      const kindOf = (attempt: number) => (attempt % 2 === 1 ? 'CHECK_PROMOTION' : 'LAND_PROMOTION');
+      await stack.db.projectIntegrationJob.createMany({
+        data: Array.from({ length: total - 1 }, (_, index) => {
+          const id = randomUUID();
+          return {
+            id,
+            projectId: w.projectId,
+            ownerId: w.ownerId,
+            codebaseId: realJob.codebaseId,
+            kind: kindOf(index + 2),
+            generation: index + 2,
+            promotionId: realJob.promotionId,
+            landingId: round.id,
+            serialKey: `fixture:round-truncated:${id}`,
+            targetRef: realJob.targetRef,
+            upstreamRef: realJob.upstreamRef,
+            sourceRef: realJob.sourceRef,
+            state: 'CANCELLED',
+            finishedAt: new Date(realJob.createdAt.getTime() + (index + 1) * 1_000),
+            idempotencyKey: `fixture:round-truncated:${id}`,
+            createdAt: new Date(realJob.createdAt.getTime() + (index + 1) * 1_000),
+          };
+        }),
+      });
+      assert.equal(await stack.db.projectIntegrationJob.count({ where: { landingId: round.id } }), total,
+        'the round holds the real check and the fixture attempts, and nothing else');
+
+      // Every attempt's title by its place among ALL the round's attempts of its kind.
+      const ordinals = new Map<string, number>();
+      const titles = Array.from({ length: total }, (_, index) => {
+        const kind = kindOf(index + 1);
+        const ordinal = (ordinals.get(kind) ?? 0) + 1;
+        ordinals.set(kind, ordinal);
+        return kind === 'CHECK_PROMOTION' ? `Merge check · ${ordinal}` : `Merge to main · ${ordinal}`;
+      });
+      const timeline = await timelineOf(stack, w, round.sessionId);
+      assert.equal(timeline.truncated, true);
+      assert.equal(timeline.sections.length, MAX_TIMELINE_SECTIONS);
+      // The first listed attempt is the 6th: a landing after two cut-off landings, then a check
+      // after three cut-off checks. Each kind counts its own cut-off attempts and only those.
+      assert.equal(timeline.sections[0].title, 'Merge to main · 3');
+      assert.equal(timeline.sections[1].title, 'Merge check · 4');
+      // The newest of each kind carries that kind's real count: 23 checks and 22 landings.
+      assert.equal(timeline.sections.at(-1)!.title, 'Merge check · 23');
+      assert.equal(timeline.sections.at(-2)!.title, 'Merge to main · 22');
+      assert.deepEqual(timeline.sections.map((section) => section.title), titles.slice(-MAX_TIMELINE_SECTIONS));
+      await assertNoLandingRunEvents(stack, round.sessionId);
+    } finally {
+      await stack.db.$disconnect();
+    }
+  });
 
 // ── the owner's stop and abandon ─────────────────────────────────────────────────────────────
 
