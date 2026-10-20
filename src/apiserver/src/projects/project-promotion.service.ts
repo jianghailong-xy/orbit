@@ -1319,6 +1319,9 @@ export async function applyPromotionJobResult(
      * The relay computed it in this same transaction; absent for every result that moved nothing.
      */
     movedCommits?: UpstreamMovedCommitsEnriched | null;
+    /** The sessions the relay locked up front for their merge recovery, when it did: a MERGED promotion's clear is
+     *  limited to those (`MergeReceiptService.lockLandedRecoveries`). */
+    recoveryHeld?: ReadonlySet<string>;
   },
 ): Promise<PromotionJobOutcome | null> {
   const promotion = await tx.projectPromotion.findUnique({
@@ -1424,6 +1427,7 @@ export async function applyPromotionJobResult(
       targetShaBefore: input.targetShaBefore,
       testedSha: input.testedSha,
       testedTreeSha: input.testedTreeSha,
+      recoveryHeld: input.recoveryHeld,
     });
     await tx.projectPromotion.update({
       where: { id: promotion.id },
@@ -1848,40 +1852,25 @@ async function writeUpstreamReceipts(
     /** J12's repair: this receipt is for a landing whose push outcome nobody could read (see
      *  `MergeReceiptService.fromIntegrationJob`). */
     recoveredUnknownPush?: boolean;
+    /** The sessions the result locked up front for their merge recovery, when it did: the clears are limited to
+     *  those (`MergeReceiptService.lockLandedRecoveries`). */
+    recoveryHeld?: ReadonlySet<string>;
   },
 ): Promise<string[]> {
-  const onItsOwnBranch = input.promotion.sourceKind === 'TASK_BRANCH';
-  const landings = onItsOwnBranch ? [] : await tx.projectIntegrationJob.findMany({
-    where: {
-      projectId: input.promotion.projectId,
-      kind: 'LAND_TASK',
-      state: 'LANDED',
-      taskId: { in: input.promotion.includedTaskIds },
-    },
-    orderBy: { finishedAt: 'asc' },
-    select: { taskId: true, sessionId: true, landedSha: true },
-  });
-  const byTask = new Map(landings.map((row) => [row.taskId, row]));
-  const sessionFor = (taskId: string) =>
-    byTask.get(taskId)?.sessionId ?? (onItsOwnBranch ? input.promotion.sessionId : null);
   // Both ids a receipt is written against are history references (0423, 0424), and both are foreign
   // keys on the receipt: a task deleted, or a session purged from Trash, while its work waited for
   // this merge leaves its id on the landing and on the promotion. So each is looked up first, one
   // `IN` apiece, and a gone one is written as the NULL its key used to leave — no receipt for a
   // session that is gone, as when the landing's `session_id` read NULL, and a receipt naming no task
   // for a task that is gone, as SET NULL leaves one written a moment before the delete.
-  const sessionIds = [...new Set(input.promotion.includedTaskIds.flatMap((taskId) => sessionFor(taskId) ?? []))];
-  const liveSessions = new Set(sessionIds.length === 0 ? [] : (await tx.session.findMany({
-    where: { id: { in: sessionIds } },
-    select: { id: true },
-  })).map((row) => row.id));
+  const { onItsOwnBranch, byTask, sessionFor, liveSessions } = await upstreamReceiptWork(tx, input.promotion);
   const liveTasks = new Set(input.promotion.includedTaskIds.length === 0 ? [] : (await tx.task.findMany({
     where: { id: { in: input.promotion.includedTaskIds } },
     select: { id: true },
   })).map((row) => row.id));
   // The merge ends the merge recovery each of these sessions was holding: all of them at once, in id order,
   // before the receipts below take their own locks — so `fromIntegrationJob` finds nothing left to clear.
-  await MergeReceiptService.clearLandedRecoveries(tx, [...liveSessions]);
+  await MergeReceiptService.clearLandedRecoveries(tx, [...liveSessions], input.recoveryHeld);
   const receiptIds: string[] = [];
   for (const taskId of input.promotion.includedTaskIds) {
     const landing = byTask.get(taskId);
@@ -1913,10 +1902,63 @@ async function writeUpstreamReceipts(
       // "nobody pressed this" without the promotion row beside it.
       confirmedAutomatically: input.promotion.confirmedAutomatically,
       recoveredUnknownPush: input.recoveredUnknownPush,
+      recoveryHeld: input.recoveryHeld,
     });
     receiptIds.push(...written);
   }
   return receiptIds;
+}
+
+/** The promotion columns that decide which session each of its tasks' M9 receipts is written against. */
+type UpstreamReceiptPromotion = {
+  id: string; projectId: string; sourceKind: string; sessionId: string | null; includedTaskIds: string[];
+};
+
+/**
+ * Which session each task of a promotion gets its M9 receipt against, and which of those sessions are still there
+ * (`liveSessions`) — read, not locked. Its own landing's session for a `PROJECT_BRANCH` candidate, the candidate's
+ * session for a `TASK_BRANCH` one (see `writeUpstreamReceipts`).
+ */
+async function upstreamReceiptWork(tx: Prisma.TransactionClient, promotion: UpstreamReceiptPromotion) {
+  const onItsOwnBranch = promotion.sourceKind === 'TASK_BRANCH';
+  const landings = onItsOwnBranch ? [] : await tx.projectIntegrationJob.findMany({
+    where: {
+      projectId: promotion.projectId,
+      kind: 'LAND_TASK',
+      state: 'LANDED',
+      taskId: { in: promotion.includedTaskIds },
+    },
+    orderBy: { finishedAt: 'asc' },
+    select: { taskId: true, sessionId: true, landedSha: true },
+  });
+  const byTask = new Map(landings.map((row) => [row.taskId, row]));
+  const sessionFor = (taskId: string) =>
+    byTask.get(taskId)?.sessionId ?? (onItsOwnBranch ? promotion.sessionId : null);
+  const sessionIds = [...new Set(promotion.includedTaskIds.flatMap((taskId) => sessionFor(taskId) ?? []))];
+  const liveSessions = new Set(sessionIds.length === 0 ? [] : (await tx.session.findMany({
+    where: { id: { in: sessionIds } },
+    select: { id: true },
+  })).map((row) => row.id));
+  return { onItsOwnBranch, byTask, sessionFor, liveSessions };
+}
+
+/**
+ * The sessions and tasks this promotion's M9 receipts would name — read, not locked — for
+ * `applyIntegrationJobResult`, which locks them ahead of the first receipt of a result that writes J12's receipts
+ * beside its own or this promotion's: the sessions whose merge recovery they clear, and the tasks their foreign
+ * keys take. None for a promotion that is gone.
+ */
+export async function upstreamReceiptSubjects(
+  tx: Prisma.TransactionClient,
+  promotionId: string,
+): Promise<{ sessionIds: string[]; taskIds: string[] }> {
+  const promotion = await tx.projectPromotion.findUnique({
+    where: { id: promotionId },
+    select: { id: true, projectId: true, sourceKind: true, sessionId: true, includedTaskIds: true },
+  });
+  if (!promotion) return { sessionIds: [], taskIds: [] };
+  const { liveSessions } = await upstreamReceiptWork(tx, promotion);
+  return { sessionIds: [...liveSessions], taskIds: promotion.includedTaskIds };
 }
 
 /**
@@ -1942,6 +1984,8 @@ export async function recoverPromotionPushReceipts(
     testedTreeSha: string | null;
     /** Whether that landing was the Automatic setting's (0301). */
     confirmedAutomatically: boolean;
+    /** The sessions the result locked up front for their merge recovery (`writeUpstreamReceipts`). */
+    recoveryHeld?: ReadonlySet<string>;
   },
 ): Promise<string[]> {
   const promotion = await tx.projectPromotion.findUnique({
@@ -1958,6 +2002,7 @@ export async function recoverPromotionPushReceipts(
     testedSha: input.testedSha,
     testedTreeSha: input.testedTreeSha,
     recoveredUnknownPush: true,
+    recoveryHeld: input.recoveryHeld,
   });
 }
 
