@@ -71,6 +71,7 @@ object SessionProjectLandings {
         val before = mutableListOf<At>()
         var landed = 0
         var nothing = 0
+        var older = 0
         for (session in rows) {
             val landing = session.landing ?: continue
             if (landing.state == "IN_FLIGHT") continue
@@ -90,6 +91,7 @@ object SessionProjectLandings {
             val at = instant(landing.settledAt)
             val word = settledWord(landing.settledAs)
             if (at == Long.MIN_VALUE || now.toEpochMilli() - at > landingsSettledWindowMs) {
+                older += 1
                 if (landing.settledAs in setOf("LANDED", "ALREADY_LANDED")) landed += 1
                 if (landing.settledAs == "NOTHING_TO_LAND") nothing += 1
                 before += At(LandingGroupRow(session.id, title, ProjectAttention.elapsedLabel(landing.settledAt, now) ?: "", word.first, word.second), at)
@@ -97,15 +99,15 @@ object SessionProjectLandings {
             }
             settled += At(LandingGroupRow(session.id, title, ProjectAttention.elapsedLabel(landing.settledAt, now) ?: "", word.first, word.second), at)
         }
-        if (waiting.isEmpty() && settled.isEmpty() && landed + nothing == 0) return null
+        if (waiting.isEmpty() && settled.isEmpty() && older == 0) return null
         // The waiting ones first, longest wait first: the page answers "what is stuck, and on whom".
         waiting.sortBy { it.at }
         settled.sortByDescending { it.at }
         before.sortByDescending { it.at }
-        // The fold counts only what landed and what had nothing to land: with both at 0 there is no fold, and the older rows it would
-        // open to go with it.
-        val earlier = if (landed + nothing > 0) LandingEarlier(landed, nothing) else null
-        return LandingGroup(waiting.map { it.row }, settled.map { it.row }, earlier, if (earlier != null) before.map { it.row } else emptyList())
+        // The fold is there whenever something older is, and opens to all of it; it counts only what landed and what had nothing to
+        // land, so with both at 0 it reads a bare `Earlier`.
+        return LandingGroup(waiting.map { it.row }, settled.map { it.row },
+            if (older > 0) LandingEarlier(landed, nothing) else null, before.map { it.row })
     }
 
     /** How a settled subject ended, in the group's own words. */
@@ -144,7 +146,8 @@ object SessionProjectLandings {
         else -> null
     }
 
-    /** `Earlier · 31 landed · 3 nothing to land` — the fold's one line. A segment whose count is 0 is left out: `Earlier · 2 landed`. */
+    /** `Earlier · 31 landed · 3 nothing to land` — the fold's one line. A segment whose count is 0 is left out: `Earlier · 2 landed`,
+     *  and with both at 0 the line is the bare `Earlier`. */
     fun earlierLine(earlier: LandingEarlier) = listOfNotNull(SessionLandingsCopy.earlier,
         "${earlier.landed} ${SessionLandingsCopy.landed}".takeIf { earlier.landed > 0 },
         "${earlier.nothing} ${SessionLandingsCopy.nothingToLand}".takeIf { earlier.nothing > 0 }).joinToString(" · ")

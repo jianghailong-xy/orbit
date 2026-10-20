@@ -264,16 +264,44 @@ class LandingEntriesShellTest {
         await { exists(hasTestTag("landing-row:l-old-a")) && exists(hasTestTag("landing-row:l-old-c")) }
     }
 
-    /** F″ · with nothing older that landed or had nothing to land there is no fold, nor the rows it would open to. */
-    @Test fun theLandingsGroupDrawsNoFoldOverWhatItDoesNotCount() {
+    /** F″ · older landings that neither landed nor had nothing to land still fold, under the bare `Earlier` — no count, no new
+     *  word — and the fold opens to them. */
+    @Test fun theLandingsFoldIsABareEarlierOverWhatItDoesNotCount() {
         ProjectShell.landings = """[${landingRow("l-await", "Land · stopped", ago(42), "AWAITING_DECISION")},
             ${landingRow("l-old-c", "Land · cancelled", ago(2 * 24 * 60), "SETTLED", settledAs = "CANCELLED", settledAt = ago(2 * 24 * 60))},
-            ${landingRow("l-old-h", "Land · handled", ago(3 * 24 * 60), "SETTLED", settledAs = "HANDLED", settledAt = ago(3 * 24 * 60))}]"""
+            ${landingRow("l-old-h", "Land · handled", ago(3 * 24 * 60), "SETTLED", settledAs = "HANDLED", settledAt = ago(3 * 24 * 60))},
+            ${landingRow("l-old-d", "Land · declined", ago(4 * 24 * 60), "SETTLED", settledAs = "DECLINED", settledAt = ago(4 * 24 * 60))}]"""
         openPage()
-        await { exists(hasTestTag("landing-row:l-await")) }
-        assertFalse("no fold over what it does not count", exists(hasTestTag("landings:earlier")))
-        assertFalse(exists(hasTestTag("landing-row:l-old-c")))
-        assertFalse(exists(hasTestTag("landing-row:l-old-h")))
+        await { exists(hasTestTag("landing-row:l-await")) && exists(hasTestTag("landings:earlier")) }
+        compose.onNodeWithTag("landings:earlier").assert(hasText("Earlier"))
+        assertFalse("no count in the fold's line", exists(hasTestTag("landings:earlier") and hasText("Earlier ·", substring = true)))
+        assertFalse("the older landings start folded", exists(hasTestTag("landing-row:l-old-c")))
+        compose.onNodeWithTag("landings:earlier").performClick()
+        await { exists(hasTestTag("landing-row:l-old-c")) && exists(hasTestTag("landing-row:l-old-h")) && exists(hasTestTag("landing-row:l-old-d")) }
+        assertTrue(exists(hasTestTag("landing-row:l-old-h") and hasText("Handled", substring = true)))
+    }
+
+    /** F‴ · with nothing older there is no fold. */
+    @Test fun theLandingsGroupHasNoFoldWithNothingOlder() {
+        ProjectShell.landings = """[${landingRow("l-await", "Land · stopped", ago(42), "AWAITING_DECISION")},
+            ${landingRow("l-cancelled", "Land · cancelled", ago(120), "SETTLED", settledAs = "CANCELLED", settledAt = ago(60))}]"""
+        openPage()
+        await { exists(hasTestTag("landing-row:l-await")) && exists(hasTestTag("landing-row:l-cancelled")) }
+        assertTrue(exists(hasText("Landings") and isHeading()))
+        assertFalse("no fold with nothing older", exists(hasTestTag("landings:earlier")))
+    }
+
+    /** F⁗ · a group with nothing to list is no group: an in-flight landing is the Landing card's, a merged round the timeline's. */
+    @Test fun theLandingsGroupIsAbsentWithNothingToList() {
+        ProjectShell.landings = """[${landingRow("l-flight", "Land · moving", ago(5), "IN_FLIGHT")},
+            ${landingRow("l-merged", "Merge → main", ago(3 * 24 * 60), "SETTLED", subject = "PROMOTION", settledAs = "MERGED", settledAt = ago(3 * 24 * 60))}]"""
+        openPage()
+        // The completed member arrives in the same read as the landings: once the header counts it, the group has been decided.
+        await { text("page-bar-subtitle") == "Project · 4 sessions" }
+        compose.waitForIdle()
+        assertFalse("no bare Landings heading", exists(hasText("Landings") and isHeading()))
+        assertFalse(exists(hasTestTag("landings:earlier")))
+        assertFalse(exists(hasTestTag("landing-row:l-merged")))
     }
 
     /** G · the source code session's derived label: what the platform did with its work, opening the landing generation. */

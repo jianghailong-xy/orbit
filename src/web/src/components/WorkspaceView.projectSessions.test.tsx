@@ -1380,24 +1380,32 @@ describe('the project sessions page — the Landings group', () => {
       .toEqual(['Land · checks failed', 'Land · landed long ago', 'Land · cancelled long ago']);
   });
 
-  it('draws no fold over older landings that neither landed nor had nothing to land', async () => {
+  it('folds older landings neither count names under a bare Earlier, and opens onto them', async () => {
     rows = [
       LOOSE, COORDINATOR, TASK,
       LANDING(821, 'Land · checks failed', awaiting()),
       LANDING(828, 'Land · cancelled long ago', settled('CANCELLED', 40 * 60)),
       LANDING(829, 'Land · handled long ago', settled('HANDLED', 50 * 60)),
+      LANDING(831, 'Land · declined long ago', settled('DECLINED', 60 * 60)),
     ];
     await mount();
     await openSessions();
 
-    expect(group()).not.toBeNull();
-    expect(group()?.querySelector('.session-project-landing-fold')).toBeNull();
-    expect(group()?.textContent).not.toContain('Earlier');
+    const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
+    expect(fold).not.toBeNull();
+    expect(fold?.querySelector('.session-project-landing-fold-text')?.textContent).toBe('Earlier');
+    expect(fold?.getAttribute('aria-expanded')).toBe('false');
     expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
       .toEqual(['Land · checks failed']);
+    await click(fold, 'the fold');
+    expect(fold?.getAttribute('aria-expanded')).toBe('true');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed', 'Land · cancelled long ago', 'Land · handled long ago', 'Land · declined long ago']);
+    expect(landingRows().slice(1).map((row) => row.querySelector('.session-project-merge-row-detail')?.textContent))
+      .toEqual(['Cancelled', 'Handled', 'Declined']);
   });
 
-  it('is no group at all when its only landings are old ones the fold does not count', async () => {
+  it('is a group of one bare fold when its only landings are old ones neither count names', async () => {
     rows = [
       LOOSE, COORDINATOR, TASK,
       LANDING(828, 'Land · cancelled long ago', settled('CANCELLED', 40 * 60)),
@@ -1406,11 +1414,28 @@ describe('the project sessions page — the Landings group', () => {
     await mount();
     await openSessions();
 
-    expect(group()).toBeNull();
-    expect(mounted().textContent).not.toContain('Land · cancelled long ago');
-    const heads = [...mounted().querySelectorAll<HTMLElement>('.session-col-list .session-section-head')]
-      .map((head) => head.textContent);
-    expect(heads).not.toContain('Landings');
+    expect(sectionHead()).toBe('Landings');
+    expect(landingRows()).toEqual([]);
+    const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
+    expect(fold?.querySelector('.session-project-landing-fold-text')?.textContent).toBe('Earlier');
+    await click(fold, 'the fold');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · cancelled long ago', 'Land · handled long ago']);
+  });
+
+  it('draws no fold when nothing is older than the day', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(821, 'Land · checks failed', awaiting()),
+      LANDING(828, 'Land · cancelled today', settled('CANCELLED', 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed', 'Land · cancelled today']);
+    expect(group()?.querySelector('.session-project-landing-fold')).toBeNull();
+    expect(group()?.textContent).not.toContain('Earlier');
   });
 
   it('never lists a landing in flight, nor a merge round that merged', async () => {

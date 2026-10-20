@@ -316,11 +316,12 @@ export interface LandingGroupRow {
 export interface LandingGroup {
   waiting: LandingGroupRow[];
   settled: LandingGroupRow[];
-  /** Everything older than the window, folded into one row; null when none of it landed or had
-   *  nothing to land (both counts 0). */
+  /** Everything older than the window, folded into one row; null when there is none. Both counts
+   *  are 0 when every older one settled some other way (handled, cancelled, declined, deleted…):
+   *  the fold is still there, and reads a bare `Earlier`. */
   earlier: { landed: number; nothing: number } | null;
-  /** Those same older landings, newest first — what the fold opens to. Empty when it is shut for
-   *  good, which is the same case `earlier` is null in. */
+  /** Those same older landings, newest first — what the fold opens to. Empty exactly when
+   *  `earlier` is null. */
   older: LandingGroupRow[];
 }
 
@@ -362,6 +363,7 @@ export function landingGroup(
   const before: Array<LandingGroupRow & { at: number }> = [];
   let landed = 0;
   let nothing = 0;
+  let older = 0;
   for (const row of rows) {
     const landing = row.landing;
     if (!landing) continue;
@@ -390,6 +392,7 @@ export function landingGroup(
     const at = Date.parse(landing.settledAt ?? '');
     const word = settledWord(landing.settledAs);
     if (!Number.isFinite(at) || now - at > LANDINGS_SETTLED_WINDOW_MS) {
+      older += 1;
       if (landing.settledAs === 'LANDED' || landing.settledAs === 'ALREADY_LANDED') landed += 1;
       if (landing.settledAs === 'NOTHING_TO_LAND') nothing += 1;
       before.push({
@@ -411,19 +414,18 @@ export function landingGroup(
       at,
     });
   }
-  if (waiting.length === 0 && settled.length === 0 && landed + nothing === 0) return null;
+  if (waiting.length === 0 && settled.length === 0 && older === 0) return null;
   // The waiting ones first, longest wait first: the page answers "what is stuck, and on whom".
   waiting.sort((a, b) => a.at - b.at);
   settled.sort((a, b) => b.at - a.at);
   before.sort((a, b) => b.at - a.at);
-  // The fold counts only what landed and what had nothing to land: with both at 0 there is no fold,
-  // and the older rows it would open to go with it.
-  const earlier = landed + nothing > 0 ? { landed, nothing } : null;
+  // The fold is there whenever something older is, and opens to all of it; it counts only what
+  // landed and what had nothing to land, so with both at 0 it reads a bare `Earlier`.
   return {
     waiting: waiting.map(({ at: _at, ...row }) => row),
     settled: settled.map(({ at: _at, ...row }) => row),
-    earlier,
-    older: earlier ? before.map(({ at: _at, ...row }) => row) : [],
+    earlier: older > 0 ? { landed, nothing } : null,
+    older: before.map(({ at: _at, ...row }) => row),
   };
 }
 
@@ -442,7 +444,7 @@ export function landingItemReason(kind: string): string | null {
 }
 
 /** `Earlier · 31 landed · 3 nothing to land` — the fold's one line. A segment whose count is 0 is
- *  left out: `Earlier · 2 landed`. */
+ *  left out: `Earlier · 2 landed`, and with both at 0 the line is the bare `Earlier`. */
 export function landingEarlierLine(earlier: { landed: number; nothing: number }): string {
   return [
     SESSION_LANDINGS_COPY.EARLIER,

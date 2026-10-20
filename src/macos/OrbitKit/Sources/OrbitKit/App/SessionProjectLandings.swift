@@ -74,8 +74,9 @@ public struct LandingEarlier: Equatable, Sendable {
 public struct LandingGroup: Equatable, Sendable {
     public let waiting: [LandingGroupRow]
     public let settled: [LandingGroupRow]
-    /// Everything older than the window, folded into one row; nil when none of it landed or had
-    /// nothing to land (both counts 0).
+    /// Everything older than the window, folded into one row; nil when there is none. Both counts
+    /// are 0 when every older one settled some other way (handled, cancelled, declined, deleted…):
+    /// the fold is still there, and reads a bare `Earlier`.
     public let earlier: LandingEarlier?
     /// Those same older landings, newest first — what the fold opens to. Empty exactly when
     /// `earlier` is nil.
@@ -120,6 +121,7 @@ public enum SessionProjectLandings {
         var before: [(row: LandingGroupRow, at: TimeInterval)] = []
         var landed = 0
         var nothing = 0
+        var older = 0
         for session in rows {
             guard let landing = session.landing else { continue }
             if landing.state == "IN_FLIGHT" { continue }
@@ -145,6 +147,7 @@ public enum SessionProjectLandings {
             let at = instant(landing.settledAt)
             let word = settledWord(landing.settledAs)
             if !at.isFinite || now.timeIntervalSince1970 - at > landingsSettledWindow {
+                older += 1
                 if landing.settledAs == "LANDED" || landing.settledAs == "ALREADY_LANDED" { landed += 1 }
                 if landing.settledAs == "NOTHING_TO_LAND" { nothing += 1 }
                 before.append((
@@ -162,19 +165,18 @@ public enum SessionProjectLandings {
                     detail: word.text, tone: word.tone),
                 at))
         }
-        if waiting.isEmpty && settled.isEmpty && landed + nothing == 0 { return nil }
+        if waiting.isEmpty && settled.isEmpty && older == 0 { return nil }
         // The waiting ones first, longest wait first: the page answers "what is stuck, and on whom".
         waiting.sort { $0.at < $1.at }
         settled.sort { $0.at > $1.at }
         before.sort { $0.at > $1.at }
-        // The fold counts only what landed and what had nothing to land: with both at 0 there is no
-        // fold, and the older rows it would open to go with it.
-        let earlier = landed + nothing > 0 ? LandingEarlier(landed: landed, nothing: nothing) : nil
+        // The fold is there whenever something older is, and opens to all of it; it counts only what
+        // landed and what had nothing to land, so with both at 0 it reads a bare `Earlier`.
         return LandingGroup(
             waiting: waiting.map(\.row),
             settled: settled.map(\.row),
-            earlier: earlier,
-            older: earlier == nil ? [] : before.map(\.row))
+            earlier: older > 0 ? LandingEarlier(landed: landed, nothing: nothing) : nil,
+            older: before.map(\.row))
     }
 
     /// How a settled subject ended, in the group's own words.
@@ -207,7 +209,7 @@ public enum SessionProjectLandings {
     }
 
     /// `Earlier · 31 landed · 3 nothing to land` — the fold's one line. A segment whose count is 0
-    /// is left out: `Earlier · 2 landed`.
+    /// is left out: `Earlier · 2 landed`, and with both at 0 the line is the bare `Earlier`.
     public static func earlierLine(landed: Int, nothing: Int) -> String {
         var parts = [SessionLandingsCopy.earlier]
         if landed > 0 { parts.append("\(landed) \(SessionLandingsCopy.landed)") }

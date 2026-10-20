@@ -197,10 +197,13 @@ final class LandingCopyParityTests: XCTestCase {
         XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 31, nothing: 0), "Earlier · 31 landed")
         XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 0, nothing: 3),
                        "Earlier · 3 nothing to land")
-        // …and with both at 0 there is no fold, nor the rows it would open to.
-        assertSays(web, "const earlier = landed + nothing > 0 ? { landed, nothing } : null;",
+        // …and with both at 0 the fold is still there whenever something older is, a bare
+        // `Earlier` that opens to every older row; with nothing older there is none.
+        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 0, nothing: 0), "Earlier")
+        assertSays(web, "if (waiting.length === 0 && settled.length === 0 && older === 0) return null;",
                    in: Self.sessionProjects)
-        assertSays(web, "older: earlier ? before.map(({ at: _at, ...row }) => row) : [],",
+        assertSays(web, "earlier: older > 0 ? { landed, nothing } : null, "
+                   + "older: before.map(({ at: _at, ...row }) => row),",
                    in: Self.sessionProjects)
         // The item reasons the group's rows print.
         for reason in ["Merge conflict", "Checks failed", "Integration error", "Task failed",

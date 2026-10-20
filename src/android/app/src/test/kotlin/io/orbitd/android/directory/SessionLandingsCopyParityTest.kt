@@ -42,6 +42,7 @@ class SessionLandingsCopyParityTest {
         assertEquals("Earlier · 31 landed · 3 nothing to land", SessionProjectLandings.earlierLine(LandingEarlier(31, 3)))
         assertEquals("Earlier · 31 landed", SessionProjectLandings.earlierLine(LandingEarlier(31, 0)))
         assertEquals("Earlier · 3 nothing to land", SessionProjectLandings.earlierLine(LandingEarlier(0, 3)))
+        assertEquals("both at 0: the bare word", "Earlier", SessionProjectLandings.earlierLine(LandingEarlier(0, 0)))
         listOf("var parts = [SessionLandingsCopy.earlier]",
             "if landed > 0 { parts.append(\"\\(landed) \\(SessionLandingsCopy.landed)\") }",
             "if nothing > 0 { parts.append(\"\\(nothing) \\(SessionLandingsCopy.nothingToLand)\") }",
@@ -89,9 +90,15 @@ class SessionLandingsCopyParityTest {
         assertTrue(SessionProjectLandings.group(rows.filter { it.id == "in-flight" }, now) == null)
     }
 
-    /** The fold names only what landed and what had nothing to land: a zero segment is left out, and with both at 0 there is no
-     *  fold, no older rows under it, and — with nothing else to list — no group. */
+    /** The fold names only what landed and what had nothing to land: a zero segment is left out, and with both at 0 it is a bare
+     *  `Earlier` that still opens to every older row. With nothing older there is no fold, and — with nothing else to list — no
+     *  group. The Swift's own gate and fold, line for line. */
     @Test fun theFoldLeavesOutWhatItDoesNotCount() {
+        listOf("if waiting.isEmpty && settled.isEmpty && older == 0 { return nil }",
+            "earlier: older > 0 ? LandingEarlier(landed: landed, nothing: nothing) : nil,",
+            "older: before.map(\\.row))").forEach {
+            assertTrue("SessionProjectLandings.swift no longer folds with $it", group.contains(it))
+        }
         val now = java.time.Instant.parse("2026-10-19T12:00:00Z")
         fun row(id: String, state: String, settledAs: String? = null, settledAt: String? = null) =
             DirectorySession(id, id, createdAt = "2026-10-15T08:00:00Z", sessionKind = "LANDING",
@@ -106,16 +113,29 @@ class SessionLandingsCopyParityTest {
         val nothingOnly = SessionProjectLandings.group(listOf(row("old-nothing", "SETTLED", "NOTHING_TO_LAND", "2026-10-18T09:00:00Z")), now)!!
         assertEquals("Earlier · 1 nothing to land", SessionProjectLandings.earlierLine(nothingOnly.earlier!!))
 
+        // Both at 0: older rows neither count names still fold, under the bare word, and the fold opens to them.
         val old = listOf(
             row("old-cancelled", "SETTLED", "CANCELLED", "2026-10-18T09:00:00Z"),
             row("old-handled", "SETTLED", "HANDLED", "2026-10-17T09:00:00Z"),
             row("old-declined", "SETTLED", "DECLINED", "2026-10-17T08:00:00Z"),
-            row("old-deleted", "SETTLED", "DELETED", "2026-10-16T09:00:00Z"),
             row("no-instant", "SETTLED", "CANCELLED"))
         val waiting = SessionProjectLandings.group(listOf(row("waiting", "AWAITING_DECISION")) + old, now)!!
         assertEquals(listOf("waiting"), waiting.waiting.map { it.id })
-        assertNull(waiting.earlier)
-        assertEquals(emptyList<LandingGroupRow>(), waiting.older)
-        assertNull("no bare Landings heading", SessionProjectLandings.group(old, now))
+        assertEquals(LandingEarlier(landed = 0, nothing = 0), waiting.earlier)
+        assertEquals("Earlier", SessionProjectLandings.earlierLine(waiting.earlier!!))
+        assertEquals(listOf("old-cancelled", "old-handled", "old-declined", "no-instant"), waiting.older.map { it.id })
+        assertEquals(listOf("Cancelled", "Handled", "Declined", "Cancelled"), waiting.older.map { it.detail })
+        val alone = SessionProjectLandings.group(old, now)!!
+        assertEquals("the fold is the group's one row", emptyList<LandingGroupRow>(), alone.waiting + alone.settled)
+        assertEquals(LandingEarlier(landed = 0, nothing = 0), alone.earlier)
+        assertEquals(listOf("old-cancelled", "old-handled", "old-declined", "no-instant"), alone.older.map { it.id })
+
+        // Nothing older: no fold, nor rows under it; and with nothing else to list, no group.
+        val recent = SessionProjectLandings.group(listOf(row("waiting", "AWAITING_DECISION"),
+            row("cancelled-now", "SETTLED", "CANCELLED", "2026-10-19T11:00:00Z")), now)!!
+        assertEquals(listOf("cancelled-now"), recent.settled.map { it.id })
+        assertNull(recent.earlier)
+        assertEquals(emptyList<LandingGroupRow>(), recent.older)
+        assertNull("no bare Landings heading", SessionProjectLandings.group(listOf(row("moving", "IN_FLIGHT")), now))
     }
 }
