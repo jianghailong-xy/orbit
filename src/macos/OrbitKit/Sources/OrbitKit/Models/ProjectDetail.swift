@@ -338,7 +338,7 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
     /// `"v2"` for a claim that reports periodically, nil for a legacy claim.
     public let progressProtocol: String?
     /// How long this project's successful runs of the current MERGE_CHECK usually take; nil for
-    /// every other check, and until there is a successful run to measure.
+    /// every other check, and while none of the project's newest finished jobs passed it.
     public let typicalMs: Int?
     /// `LIVE`, `QUIET`, `SILENT`, `LEASE_EXPIRED` or `LEGACY` (§7.2 V6); nil for a queued job.
     public let liveness: String?

@@ -178,7 +178,7 @@ public struct SessionLandingAttempt: Codable, Equatable, Sendable {
     }
 }
 
-/// One OPEN integration item of the landing's project (`SessionLandingTodo`).
+/// One OPEN integration item about the landing's subject that somebody still owes (`SessionLandingTodo`).
 public struct SessionLandingTodo: Codable, Equatable, Sendable, Identifiable {
     public let id: String
     public let kind: String
@@ -432,7 +432,7 @@ public struct SessionLandingView: Codable, Equatable, Sendable {
     public let blockingReason: LandTaskBlockingReason?
     /// The newest attempt of the subject, whatever its state; nil for a subject no attempt claimed.
     public let currentAttempt: SessionLandingAttempt?
-    /// The subject's integration items still OPEN, oldest first.
+    /// The subject's integration items still OPEN and still owed, oldest first.
     public let todos: [SessionLandingTodo]
     /// Every generation of the subject, oldest first.
     public let generations: [SessionLandingGeneration]

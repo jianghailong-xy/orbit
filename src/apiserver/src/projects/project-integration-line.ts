@@ -537,9 +537,10 @@ const LIVENESS_OUTPUT_QUIET_AFTER_SECONDS = 10 * 60;
  *  ever" sample §3.6's re-check estimate takes. */
 const TYPICAL_MERGE_CHECK_SAMPLE = 5;
 
-/** How many of a project's newest finished jobs those runs are looked for in, whatever the jobs
- *  ended in: the bound that keeps `typicalMs` a read of recent work however long ago the check
- *  last passed. */
+/** How many of a project's newest jobs that finished after their claim those runs are looked for
+ *  in, whatever state the jobs ended in: the bound that keeps `typicalMs` a read of recent work
+ *  however long ago the check last passed. A job that ended without a claim (cancelled while
+ *  QUEUED) takes no place in it. */
 const TYPICAL_MERGE_CHECK_WINDOW = 25;
 
 /** One RUNNING or QUEUED job as `readInFlightJobsForProjects` reads it, before the read-time
@@ -778,9 +779,9 @@ function inFlightOf(job: ProjectIntegrationJob<Date>): ProjectIntegrationInFligh
 
 /**
  * How long this project's successful runs of each check usually take, in ms (§7.2 V6): the median
- * of up to TYPICAL_MERGE_CHECK_SAMPLE (5) finished jobs whose `MERGE_CHECK` PASSED, among the
- * project's newest TYPICAL_MERGE_CHECK_WINDOW (25) finished jobs, each measured from its last claim
- * (`claimed_at`) to its end. Lately, not ever, as §3.6 reads it: fewer than five passes in those 25
+ * of the newest TYPICAL_MERGE_CHECK_SAMPLE (5), or fewer, finished jobs whose `MERGE_CHECK` PASSED,
+ * among the project's newest TYPICAL_MERGE_CHECK_WINDOW (25) jobs that finished after their claim,
+ * each measured from its last claim (`claimed_at`) to its end. Lately, not ever, as §3.6 reads it: fewer than five passes in those 25
  * give the median of the ones there are, and a project whose newest 25 finished jobs hold no pass
  * has no usual duration, however many passed before them.
  *
