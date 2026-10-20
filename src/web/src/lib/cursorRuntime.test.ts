@@ -209,9 +209,10 @@ describe('Cursor CLI in the New Session hero and the Provider menu', () => {
   });
 
   it('is offered seventh, on its own sign-in, with Auto — and only once a runner of the account knows it', () => {
-    // Engines this runner reports nothing about claim nothing, and stay listed; Cursor CLI comes last.
+    // Engines this runner reports nothing about claim nothing, and stay listed (DeepSeek Harness as
+    // "Update runner", this runner lacking it); Cursor CLI comes last.
     const engines = engineChoices(sources(runner()));
-    expect(engines.map((e) => e.label)).toEqual(['Claude Code', 'Codex', 'Kimi Code', 'OpenCode', 'Cursor CLI']);
+    expect(engines.map((e) => e.label)).toEqual(['Claude Code', 'Codex', 'Kimi Code', 'OpenCode', 'DeepSeek Harness', 'Cursor CLI']);
     const cursor = engines.find((e) => e.slug === CURSOR)!;
     expect(cursor.provider).toMatchObject({ slug: CURSOR, kind: 'login', modelLabel: 'Auto' });
     expect(cursor.unavailable).toBeUndefined();
@@ -223,6 +224,7 @@ describe('Cursor CLI in the New Session hero and the Provider menu', () => {
       'Codex',
       'Kimi Code',
       'OpenCode',
+      'DeepSeek Harness',
     ]);
     // …but another runner that knows it makes this one say why it can't run it.
     const here = engineChoices({ configured: [], engineHealth: older.engines, dshRunner: older, fleet: [older, runner()] });

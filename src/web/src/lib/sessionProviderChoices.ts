@@ -621,7 +621,8 @@ function landingOf(engine: AgentProvider, providers: ProviderChoice[], preferred
  * OpenCode, DeepSeek Harness, Cursor CLI), each with its credentials and the one a pick of it lands on.
  * An engine with nothing to run on here is left out — except DeepSeek Harness on a runner that could
  * run it: with no DeepSeek key yet it offers the connection instead (a turned-off key does not count,
- * since GET /providers lists none), so "where is DeepSeek Harness?" has an answer in the picker itself.
+ * since GET /providers lists none), or "Update runner" on a runner too old for it, so "where is
+ * DeepSeek Harness?" has an answer in the picker itself.
  * Cursor CLI always has its own sign-in to list, so a runner that can't run it lists it greyed with why;
  * and it is drawn at all only once a runner of the account knows it (webShowsEngine).
  */
@@ -631,7 +632,11 @@ export function engineChoices(sources: ChoiceSources, preferred: readonly Engine
     if (!webShowsEngine(engine, fleet)) return [];
     const providers = engineProviders(engine, sources);
     if (providers.length > 0) return [engineLanding(engine, providers, landingOf(engine, providers, preferred))];
-    if (engine === AgentProvider.DSH && sources.dshRunner && dshRunnerState(sources.dshRunner) !== 'updateRunner') {
+    if (engine === AgentProvider.DSH && sources.dshRunner) {
+      // A runner too old for Harness says so first: a key connected now still couldn't run on it.
+      if (dshRunnerState(sources.dshRunner) === 'updateRunner') {
+        return [{ ...engineHead(engine), providers: [], provider: null, unavailable: DSH_STATE_LABEL.updateRunner, fixEngine: engine }];
+      }
       return [{ ...engineHead(engine), providers: [], provider: null, unavailable: 'Connect a DeepSeek key', fixHref: DSH_CONNECT_HREF }];
     }
     return [];
