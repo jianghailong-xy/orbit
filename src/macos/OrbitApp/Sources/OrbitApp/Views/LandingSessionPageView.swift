@@ -830,7 +830,10 @@ private struct LandingInlineOutput: View {
     }
 
     var body: some View {
-        Group {
+        // The read hangs on a stack that is there before it has lines: a `Group` holding only the
+        // `if` is no view at all until then, so its task never ran and the tail never came. A read
+        // that fails or finds nothing draws nothing here, as on web; `Log ›` still opens the log.
+        VStack(alignment: .leading, spacing: 0) {
             if !lines.isEmpty {
                 LandingDarkOutput(text: lines.joined(separator: "\n"))
             }

@@ -182,6 +182,27 @@ final class LandingViewsWiringTests: XCTestCase {
         }
     }
 
+    /// A failed check's tail is read by a task on a view that is there before it has lines (05 g).
+    /// The task used to hang on a `Group` holding only `if !lines.isEmpty`: with no lines that is
+    /// no view, so the task never ran, the log was never read and iOS/macOS never drew the tail.
+    func testAFailedChecksInlineOutputIsReadByAViewThatIsAlwaysThere() throws {
+        let page = code(try appSource("Views/LandingSessionPageView.swift"))
+        guard let start = page.range(of: "private struct LandingInlineOutput: View {"),
+              let end = page.range(of: "final class LandingPromotionSource",
+                                   range: start.upperBound..<page.endIndex) else {
+            return XCTFail("the landing page keeps its inline output")
+        }
+        let inline = String(page[start.upperBound..<end.lowerBound])
+        XCTAssertFalse(inline.contains("Group {"), "a Group holding only an `if` is no view: its task never runs")
+        let flat = inline.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        XCTAssertTrue(flat.contains("var body: some View { VStack(alignment: .leading, spacing: 0) { if !lines.isEmpty { "
+                                    + "LandingDarkOutput(text: lines.joined(separator: \"\\n\")) } } .task {"),
+                      "the read hangs on the stack, which is there before it has lines")
+        XCTAssertTrue(flat.contains("guard let api, let page = try? await api.landingLog(sessionID: sessionID, "
+                                    + "selectors) else { return }"),
+                      "a read that fails draws nothing inline, as on web")
+    }
+
     /// The page's own reads: `includeLanding=1` on the project list, the landing's own cadence, and
     /// the last inFlight snapshot kept for a page that cannot reach the server.
     func testTheLandingReadsAreWired() throws {
