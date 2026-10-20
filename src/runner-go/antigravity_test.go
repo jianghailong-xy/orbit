@@ -162,6 +162,37 @@ func TestAntigravityToolStepsFromTheRecordedSample(t *testing.T) {
 	}
 }
 
+// agy 1.4.3 renamed the file tools and their parameters: the same writes, edit and read stream as
+// write_file, edit_file and read_file, each with a Path (steps as agy 1.4.3 streamed them against
+// the mock). The transcript names them as it named the earlier tools, and a refusal names agy's
+// permission.
+func TestAntigravityRenamedFileToolsReadAsBefore(t *testing.T) {
+	var events []agyRecorded
+	turn := newAgyTurn("t1")
+	emit := func(kind string, payload map[string]interface{}) { events = append(events, agyRecorded{kind, payload}) }
+	for i, call := range []struct {
+		name, path string
+	}{{"write_file", "/work/repo/made.txt"}, {"edit_file", "/work/repo/existing.txt"}, {"read_file", "/work/repo/made.txt"}} {
+		for _, state := range []string{"ACTIVE", "DONE"} {
+			handleAgyStep(map[string]interface{}{"conversation_id": "c", "step_index": float64(2 + 2*i), "state": state, "step_type": "tool",
+				"tool_info": map[string]interface{}{"name": call.name, "parameters": map[string]interface{}{"Path": call.path}}}, turn, emit)
+		}
+	}
+	wantUses := []map[string]interface{}{
+		{"id": "c:2", "name": "Write", "input": map[string]interface{}{"file_path": "/work/repo/made.txt"}},
+		{"id": "c:4", "name": "Edit", "input": map[string]interface{}{"file_path": "/work/repo/existing.txt"}},
+		{"id": "c:6", "name": "Read", "input": map[string]interface{}{"file_path": "/work/repo/made.txt"}},
+	}
+	if uses := agyKinds(events, evToolUse); !reflect.DeepEqual(uses, wantUses) {
+		t.Fatalf("tool uses =\n%v\nwant\n%v", uses, wantUses)
+	}
+	for name, permission := range map[string]string{"write_file": "write_file", "edit_file": "write_file", "read_file": "read_file"} {
+		if got := agyPermission(name); got != permission {
+			t.Errorf("agyPermission(%s) = %s, want %s", name, got, permission)
+		}
+	}
+}
+
 func TestAntigravityMCPCallFromTheRecordedSample(t *testing.T) {
 	events, completions := agyReplay(t, "mcp-call", nil)
 	if len(completions) != 1 || completions[0].Status != stSucceeded {
