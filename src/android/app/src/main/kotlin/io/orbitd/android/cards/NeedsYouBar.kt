@@ -8,14 +8,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
@@ -29,12 +29,16 @@ import io.orbitd.android.directory.TrashingSessions
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.navigation.Origin
+import io.orbitd.android.tasks.TaskTime
 import io.orbitd.android.ui.LocalOrbitColors
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import java.time.Instant
 
-/** Which way the bar's chevron points: where the words say the thing is. */
-enum class NeedsYouChevron { UP, DOWN, FORWARD }
+/** Which way the bar's chevron points: where the words say the card is. Only the bar pointing into this conversation has one —
+ * the cross-session bar's press goes elsewhere, which its words already say, and the whole capsule is the press. */
+enum class NeedsYouChevron { UP, DOWN }
 
 /** Whether the bar was last shown, whether it has shown yet, and its last measured height: what the list is scrolled
  * by when the bar comes or goes, so the line being read stays where it was (the sticky header's `HeaderShift`). */
@@ -71,11 +75,12 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
     val measured = Modifier.onSizeChanged { shift.height = it.height.toFloat() }
     if (below != null) {
         NeedsYouBar(below.text, if (below.side == ReaderSide.ABOVE) NeedsYouChevron.UP else NeedsYouChevron.DOWN,
-            NeedsYouLogic.belowHint, measured) { onBelow(below.rowId) }
+            NeedsYouLogic.belowHint, measured, glyph = below.glyph) { onBelow(below.rowId) }
         return
     }
     val waiting = banner ?: return
-    NeedsYouBar(waiting.text, NeedsYouChevron.FORWARD, if (waiting.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint, measured) {
+    NeedsYouBar(waiting.text, null, if (waiting.ownerItem == null) NeedsYouLogic.sessionHint else NeedsYouLogic.itemHint, measured,
+        detail = waiting.detail, since = waiting.since, more = waiting.more, glyph = waiting.glyph) {
         val target = waiting.target.text("id") ?: return@NeedsYouBar
         val workspace = waiting.target.obj("agent")?.text("id") ?: waiting.target.text("agentId") ?: waiting.target.text("workspaceId")
         // A merge into main waiting on the reader is answered on its project's sessions page, where its card is (iOS 6b4bef713).
@@ -90,35 +95,73 @@ internal fun SessionNeedsYouBar(app: OrbitApplication, handle: SessionHandle, se
 }
 
 /**
- * The needs-you bar (iOS `NeedsYouBannerView`): one amber line under the conversation's header saying something is
- * waiting on the reader, and taking them to it. Inside a conversation holding a question that stops no turn it points
- * into that conversation ("1 open question below"); otherwise at the session — or the owner item's card — that has
- * waited longest elsewhere. One style for both: they differ in their words and their chevron only. Deliberately
- * still — no pulse — since what it names can wait for hours above a transcript somebody is reading.
+ * The needs-you bar (iOS `NeedsYouBannerView`): a capsule under the conversation's header saying something is waiting on the
+ * reader, and taking them to it. Inside a conversation holding a question that stops no turn it points into that conversation
+ * ("1 open question below"); otherwise at the session — or the owner item's card — that has waited longest elsewhere. One style
+ * for both: they differ in their words, their mark and their chevron only. Deliberately still — no pulse — since what it names
+ * can wait for hours above a transcript somebody is reading.
+ *
+ * A capsule, not a band (the owner, 2026-10-21, `docs/mocks/needs-you-capsule`): the amber is one 30 dp circle — the landing
+ * head's (`ProjectLandingHead`) — whose mark says which kind is waiting, never a wash under the words; the words are two lines,
+ * [text] what and [detail] where, with how long it has waited ([since]) and how many wait behind it ([more]). Material has no
+ * glass, so the capsule is the raised surface the reader's cards use, on the page's own surface: the transcript scrolls under
+ * the bar, and the gap around the capsule must not show it.
  */
 @Composable
-internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron, hint: String, modifier: Modifier = Modifier, onPress: () -> Unit) {
+internal fun NeedsYouBar(text: String, chevron: NeedsYouChevron?, hint: String, modifier: Modifier = Modifier, detail: String? = null,
+    since: String? = null, more: Int = 0, glyph: NeedsYouGlyph = NeedsYouGlyph.QUESTION, onPress: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     val amber = LocalOrbitColors.current.needsYou
-    val surface = MaterialTheme.colorScheme.surface
-    // The wash rides on the bar's own surface — the transcript scrolls under it — and dark needs the stronger tint.
-    val wash = amber.copy(alpha = if (surface.luminance() < 0.5f) 0.20f else 0.12f).compositeOver(surface)
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val press = { haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove); onPress() }
-    Column(modifier.fillMaxWidth().testTag("needs-you-bar")) {
+    Box(modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(start = 16.dp, end = 16.dp, bottom = 6.dp)
+        .testTag("needs-you-bar")) {
         // Read as its words, a button, and what the press does (iOS `accessibilityHint`).
-        Row(Modifier.fillMaxWidth().background(wash)
+        Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
             .clickable(onClickLabel = hint, role = Role.Button, onClick = press)
-            .padding(horizontal = 16.dp, vertical = 9.dp),
-            horizontalArrangement = Arrangement.spacedBy(9.dp), verticalAlignment = Alignment.CenterVertically) {
-            // The same amber dot the session lists use for "needs you".
-            Box(Modifier.size(7.dp).background(amber, CircleShape))
-            // Label-primary, not amber: amber text on the amber wash is the legibility trap.
-            Text(text, Modifier.weight(1f).testTag("needs-you-bar-text"), color = MaterialTheme.colorScheme.onSurface,
-                style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Icon(painterResource(if (chevron == NeedsYouChevron.FORWARD) R.drawable.ic_chevron_forward else R.drawable.ic_chevron_down), null,
-                Modifier.size(14.dp).rotate(if (chevron == NeedsYouChevron.UP) 180f else 0f).testTag("needs-you-bar-chevron:${chevron.name}"),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+            .padding(start = 7.dp, end = 16.dp, top = 5.dp, bottom = 5.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            // The one place the amber is; the words stay the surface's own — amber words on amber were the band's trap.
+            Box(Modifier.size(30.dp).background(amber.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(painterResource(glyph.drawable), null, Modifier.size(16.dp).testTag("needs-you-bar-glyph:${glyph.name}"), tint = amber)
+            }
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(text, Modifier.weight(1f).testTag("needs-you-bar-text"), color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (more > 0) Text("+$more", Modifier.testTag("needs-you-bar-more").background(muted.copy(alpha = 0.14f), CircleShape)
+                        .padding(horizontal = 6.dp), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold, color = muted)
+                    since?.let { NeedsYouAge(it) }
+                }
+                detail?.let {
+                    Text(it, Modifier.testTag("needs-you-bar-detail"), style = MaterialTheme.typography.bodySmall, color = muted,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            chevron?.let {
+                Icon(painterResource(R.drawable.ic_chevron_down), null,
+                    Modifier.size(14.dp).rotate(if (it == NeedsYouChevron.UP) 180f else 0f).testTag("needs-you-bar-chevron:${it.name}"), tint = muted)
+            }
         }
-        HorizontalDivider()
     }
+}
+
+/** How long the thing the bar names has waited — "12m", "2h" — kept current while it sits there: the words of a duration still
+ * running (`TaskTime.elapsed`, iOS `RelativeTime.elapsed`), not of an event. */
+@Composable
+private fun NeedsYouAge(since: String) {
+    val now by produceState(Instant.now(), since) { while (true) { delay(30_000); value = Instant.now() } }
+    TaskTime.elapsed(since, now)?.let {
+        Text(it, Modifier.testTag("needs-you-bar-age"), style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum"),
+            color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, softWrap = false)
+    }
+}
+
+/** The drawable for each mark (iOS `NeedsYouGlyph.symbol`). */
+private val NeedsYouGlyph.drawable: Int get() = when (this) {
+    NeedsYouGlyph.MERGE -> R.drawable.ic_merge
+    NeedsYouGlyph.QUESTION -> R.drawable.ic_question_bubble
+    NeedsYouGlyph.WARNING -> R.drawable.ic_warning
+    NeedsYouGlyph.PAUSE -> R.drawable.ic_pause
+    NeedsYouGlyph.HAND -> R.drawable.ic_permission
 }

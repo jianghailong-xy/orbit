@@ -386,7 +386,9 @@ struct ConsoleView: View {
         // bar pointing down into this transcript instead of away from it. See `NeedsYouBannerView`.
         // While you type the bar folds away with the nav bar (`foldsChrome`), and a backdrop takes the
         // nav bar's place behind the status bar so the transcript doesn't scroll under the clock.
-        .safeAreaInset(edge: .top, spacing: 0) {
+        // On iOS 26 it floats over the transcript as the composer band does at the bottom
+        // (`needsYouTop`).
+        .needsYouTop {
             if hSize == .compact {
                 let console = registry.peek(sessionID)
                 if foldsChrome(console) {
@@ -1372,6 +1374,20 @@ private extension View {
 
 #if os(iOS)
 private extension View {
+    /// Where the needs-you bar stands: on iOS 26 a safe-area BAR, so the transcript runs on under
+    /// its capsule and the scroll-edge effect softens what passes there, as under the nav bar above
+    /// it and the composer band below (the owner, 2026-10-16: the bottom as clear as the top; and
+    /// 2026-10-21: the bar a capsule, not a band). Before it, the inset it always was, the bar
+    /// standing on the page's colour.
+    @ViewBuilder func needsYouTop<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        if #available(iOS 26.0, *) {
+            let content = bar()
+            safeAreaBar(edge: .top, spacing: 0) { content.environment(\.floatsOverTranscript, true) }
+        } else {
+            safeAreaInset(edge: .top, spacing: 0, content: bar)
+        }
+    }
+
     /// The sticky question's capsule: iOS 26's Liquid Glass at the height of the back and ⋯ buttons
     /// beside it. Earlier systems draw those as bare glyphs in a 44-point bar, so there it is a
     /// smaller capsule of system fill, as a search field is.

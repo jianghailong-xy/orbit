@@ -222,10 +222,8 @@ final class ExceptionCardsTests: XCTestCase {
         let since = "2026-09-19T19:01:41.497Z"
         let escalated = SessionOwnerItem(itemId: "i", kind: .escalated, title: "t", since: since)
         let paused = SessionOwnerItem(itemId: "i", kind: .fusePaused, title: "t", since: since)
-        XCTAssertEqual(NeedsYouLogic.ownerItemText(escalated, project: nil),
-                       ExceptionCards.escalatedTitle)
-        XCTAssertEqual(NeedsYouLogic.ownerItemText(paused, project: nil),
-                       ExceptionCards.pauseTitle)
+        XCTAssertEqual(NeedsYouLogic.ownerItemWord(escalated), ExceptionCards.escalatedTitle)
+        XCTAssertEqual(NeedsYouLogic.ownerItemWord(paused), ExceptionCards.pauseTitle)
     }
 
     // MARK: what gets a card

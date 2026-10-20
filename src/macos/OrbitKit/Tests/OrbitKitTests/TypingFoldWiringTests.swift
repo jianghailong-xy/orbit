@@ -95,7 +95,7 @@ final class TypingFoldWiringTests: XCTestCase {
         XCTAssertTrue(view.contains(
             ".toolbar(foldsChrome(registry.peek(sessionID)) ? .hidden : .automatic, for: .navigationBar)"))
 
-        let inset = try slice(view, from: ".safeAreaInset(edge: .top, spacing: 0) {\n            if hSize == .compact {",
+        let inset = try slice(view, from: ".needsYouTop {\n            if hSize == .compact {",
                               to: "NeedsYouBannerView(")
         XCTAssertTrue(inset.contains("if foldsChrome(console) {"))
         XCTAssertTrue(inset.contains(".background(.bar, ignoresSafeAreaEdges: .top)"),

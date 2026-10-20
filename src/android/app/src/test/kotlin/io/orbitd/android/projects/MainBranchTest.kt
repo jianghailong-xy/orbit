@@ -316,7 +316,7 @@ class MainBranchTest {
         val items = NeedsYouLogic.ownerItems(listOf(j("""{"itemId":"i1","kind":"PROMOTION_APPROVAL","title":"Merge 3 tasks into master?",
             "since":"2026-10-10T11:00:00Z","mainBranch":"master"}""")))
         assertEquals(OwnerItem("i1", "PROMOTION_APPROVAL", "Merge 3 tasks into master?", "2026-10-10T11:00:00Z", "master"), items.single())
-        assertEquals("Approve merge to master · Aurora", NeedsYouLogic.ownerItemText(items.single(), "Aurora"))
+        assertEquals("Approve merge to master", NeedsYouLogic.ownerItemWord(items.single()))
         assertEquals("Approve merge to master", NeedsYouLogic.oldestItemWord(items))
         assertEquals("Approve merge to main", NeedsYouLogic.oldestItemWord(listOf(items.single().copy(mainBranch = null))))
         assertEquals("Approve merge to main", NeedsYouLogic.kindWord("PROMOTION_APPROVAL"))

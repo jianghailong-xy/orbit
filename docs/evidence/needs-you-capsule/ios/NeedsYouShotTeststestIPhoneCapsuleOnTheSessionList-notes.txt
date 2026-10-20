@@ -1,0 +1,2 @@
+ios-list-light: capsule `Question from coordinator, 落地会话：每次落地都有自己的会话、实时输出和 owner 门, +1` at (20.0, 116.0, 400.0, 44.0)
+ios-list-dark: capsule `Question from coordinator, 落地会话：每次落地都有自己的会话、实时输出和 owner 门, +1` at (20.0, 116.0, 400.0, 44.0)
