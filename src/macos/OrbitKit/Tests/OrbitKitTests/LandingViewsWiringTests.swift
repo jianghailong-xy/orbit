@@ -203,6 +203,23 @@ final class LandingViewsWiringTests: XCTestCase {
                       "a read that fails draws nothing inline, as on web")
     }
 
+    /// The sessions page's Earlier fold is a plain-style button whose label has a Spacer in the
+    /// middle, and a plain button answers only where it draws: its label's content shape makes the
+    /// whole row the target, so a press on the empty middle opens the fold too.
+    func testTheEarlierFoldAnswersAcrossItsWholeRow() throws {
+        let page = code(try appSource("Views/SessionProjectPage.swift"))
+        guard let start = page.range(of: "if let earlier = landingGroup.earlier {"),
+              let end = page.range(of: "if landingsExpanded {", range: start.upperBound..<page.endIndex) else {
+            return XCTFail("the Landings group keeps its Earlier fold")
+        }
+        let fold = String(page[start.upperBound..<end.lowerBound])
+            .split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        XCTAssertTrue(fold.contains("Spacer(minLength: 8)"))
+        XCTAssertTrue(fold.contains(".rotationEffect(.degrees(landingsExpanded ? 90 : 0)) } .contentShape(Rectangle()) } "
+                                    + ".buttonStyle(.plain)"),
+                      "the label's shape, not only what it draws, takes the press")
+    }
+
     /// The page's own reads: `includeLanding=1` on the project list, the landing's own cadence, and
     /// the last inFlight snapshot kept for a page that cannot reach the server.
     func testTheLandingReadsAreWired() throws {

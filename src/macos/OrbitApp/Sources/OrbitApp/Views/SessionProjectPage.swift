@@ -387,6 +387,9 @@ struct SessionProjectPage: View {
                                     .foregroundStyle(.tertiary)
                                     .rotationEffect(.degrees(landingsExpanded ? 90 : 0))
                             }
+                            // A plain button answers only where it draws: the whole row is the
+                            // fold's target, the empty middle under the Spacer included.
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                         if landingsExpanded {
