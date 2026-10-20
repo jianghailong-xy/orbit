@@ -8,6 +8,11 @@
 得到的结论，这里在 1.2.15 上逐条重测过，差异见 §12。下文标【实测】的结论都来自 1.2.15；只来自官方文档、
 本机没有复现的，标【文档】。
 
+**agy 1.4.3**：runner 上的 `/root/.local/bin/agy` 在 2026-10-20 自升级到 1.4.3（`agy --version` 报 `1.4.3`，旧二进制按 §6.1 留在
+同目录的 `agy.<随机数>.old`），工具和参数随之变了：每个工具的 schema 都是 `additionalProperties: false`，文件工具改了名，
+`read_url_content` 删了，`run_command` 的输出前面多了退出码。§2.1–§2.3、§5.1、§5.4、§14.1 里讲工具和参数的段落已按 1.4.3 改写，
+1.2.x 的写法留作历史说明；1.4.3 的实测与 runner 的对应见 §17。§17 之外标【实测】、没写版本的结论仍是 1.2.15 / 1.2.16 上测的。
+
 **方法**：真 agy 加本地 mock Gemini 服务 [`src/runner-go/testdata/mockgemini`](../src/runner-go/testdata/mockgemini)
 （提示词里的 `mock:` 指令决定模型回什么），假 key。所有实验都用临时 HOME 和临时 gemini 目录，没有往任何人的
 `~/.gemini` 写过东西。外连全部经 mock 的 HTTPS 代理记录并拒绝；遥测内容用自签 CA 加 TLS 拦截解开（§7）。
@@ -39,6 +44,9 @@
    阶段 3 起 Orbit 的 Default、Accept Edits 由 Orbit 自己的 PreToolUse hook 问人，agy 确认加载了 hook 才加 skip，否则拒绝启动。（§14）
 9. **仓库里的 `.agents/hooks.json`、`.agents/mcp_config.json` 会被执行**，不管什么权限模式 → 受保护模式下应该拒绝启动，
    做法同 `guardKimiProjectMCP`。（§3.5）
+10. **工具（agy 1.4.3）**：每个工具的 schema 都是 `additionalProperties: false`，带未声明参数的调用在 PreToolUse hook 之前就被拒；
+    文件工具是 `read_file`、`write_file`、`edit_file`（1.2.x 的 `view_file`、`write_to_file`、`replace_file_content`），`read_url_content` 已删除；
+    `init.tools` 仍列旧的内部名字。runner 两代名字都认。（§17）
 
 ---
 
@@ -109,9 +117,14 @@ agy --gemini_dir=<会话 gemini 目录，绝对路径>
 
 - `init` **每个进程只有一个**（Claude 是每轮一个）。`model` 只在传了 `--model` 时出现；`permission_mode` 是
   `request-review`、`always-proceed`（skip 模式或 `toolPermission: always-proceed`）或 `strict`。
-- `init.tools` 列 60 个名字，但真正声明给模型的只有 15 个（`view_file`、`run_command`、`write_to_file`、
-  `replace_file_content`、`read_url_content`、`search_web`、`ask_question`、子代理和任务类等），配了 MCP 再加
-  `call_mcp_tool`、`list_resources`、`read_resource`。`list_dir`、`grep_search`、`find_by_name` 在 API key 模式下没有声明给模型。
+- `init.tools` 列 60 个名字，**不能据此判断模型能调什么**：1.4.3 列的仍是旧的内部名字（`view_file`、`write_to_file`、
+  `replace_file_content`、`multi_replace_file_content`、`read_url_content`…，没有 `read_file`、`write_file`、`edit_file`），
+  而 hook 负载和流里用的是新名字（§17）。1.4.3 在 API key 模式下真正声明给模型的是 12 个：`read_file`、`run_command`、
+  `write_file`、`edit_file`、`search_web`、`ask_question`、`manage_task`、`send_message`、`schedule`、`invoke_subagent`、
+  `define_subagent`、`manage_subagents`，配了 MCP 再加 `call_mcp_tool`、`list_resources`、`read_resource`。`list_dir`、
+  `grep_search`、`find_by_name` 在 API key 模式下仍没有声明给模型。
+  1.2.x（历史）：1.2.15 声明 15 个（`view_file`、`run_command`、`write_to_file`、`replace_file_content`、`read_url_content`、
+  `search_web`、`ask_question`、子代理和任务类等），1.2.16 是 13 个（§14.2）。
 - `step_index` 在整个会话里单调递增，换进程续会话也接着数。
 - 见过的 `step_type`：`user_input`、`agent_response`、`tool`、`system_message`（续会话时注入）、`error_message`（真实错误）、
   `unknown`（`ask_question`）；官方文档还列了 `checkpoint`，mock 下没出现。
@@ -143,27 +156,34 @@ agy --gemini_dir=<会话 gemini 目录，绝对路径>
 **正文分块**：agy 会合并上游的块（mock 两块 12 字的文本出来是一个 24 字的 `text_delta`），不要依赖分块边界。
 最后一块总在 `DONE` 里；一段回复只有一块时，只有一个 `DONE`。
 
-**工具参数是展示子集**【实测】：`run_command` 只给 `CommandLine`；`write_to_file`、`replace_file_content` 只给 `TargetFile`
-（不给内容，也不给 diff）；`view_file` 只给 `AbsolutePath`；`call_mcp_tool` 给 `ServerName`、`ToolName`、`Arguments`；未知工具原样给全部参数。
-文件改动靠 runner 自己的 worktree diff 展示。命令失败也是 `DONE`，**看不到退出码**，只有输出文本。
+**工具参数是展示子集**【实测，1.4.3】：`run_command` 只给 `CommandLine`；`read_file`、`write_file`、`edit_file` 只给 `Path`
+（不给内容，也不给 diff）；`call_mcp_tool` 给 `ServerName`、`ToolName`、`Arguments`；未知工具原样给全部参数。1.2.x 是同一条规则、
+旧的名字：`write_to_file`、`replace_file_content` 只给 `TargetFile`，`view_file` 只给 `AbsolutePath`。
+文件改动靠 runner 自己的 worktree diff 展示。命令失败也是 `DONE`。1.4.3 起退出码写在输出文本的开头：先是一行
+`Command exited with code N.`，空一行，再是一行 `Command output:` 和命令的输出；命令什么都没输出时第二段是 `No output from the command.`。
+runner 把输出原样作为 `evToolResult` 的 `content`，不剥这两行，也不据退出码改 `isError`。（1.2.x 只有输出文本，**看不到退出码**。）
+调用带了 schema 没声明的参数时，工具步骤是 `ERROR`，`tool_info.error.message` 为 `invalid arguments:\n- additional properties '<参数名>' not allowed`，
+命令不执行，按上表 `tool` `ERROR` 那一行映射（§17）。
 agy 的 functionCall id 在流里不出现，所以用 `conversation_id:step_index` 做 toolUseId，续会话后也唯一。
 
 ### 2.3 工具名规范化
 
 和 `canonicalOpenCodeToolName` 同一个目的：让客户端现有的卡片能用。
 
-| agy | Orbit 名 | input |
+| agy 1.4.3（括号里是 1.2.x 的名字） | Orbit 名 | input（括号里是 1.2.x 的参数名） |
 | --- | --- | --- |
 | `run_command` | `Bash` | `{command: CommandLine}` |
-| `view_file` | `Read` | `{file_path: AbsolutePath}` |
-| `write_to_file` | `Write` | `{file_path: TargetFile}` |
-| `replace_file_content`、`multi_replace_file_content` | `Edit` | `{file_path: TargetFile}` |
-| `read_url_content` | `WebFetch` | `{url: Url}` |
+| `read_file`（`view_file`） | `Read` | `{file_path: Path}`（`AbsolutePath`） |
+| `write_file`（`write_to_file`） | `Write` | `{file_path: Path}`（`TargetFile`） |
+| `edit_file`（`replace_file_content`、`multi_replace_file_content`） | `Edit` | `{file_path: Path}`（`TargetFile`） |
+| 无（1.2.x 的 `read_url_content`，1.4.3 已删除） | `WebFetch` | `{url: Url}` |
 | `search_web` | `WebSearch` | 原样 |
 | `call_mcp_tool` | `mcp__<ServerName>__<ToolName>` | `Arguments` |
 | 其他 | 原名 | 原样 |
 
-`read_url_content`、`search_web` 以及未声明给模型的那些工具，参数名只从函数声明里读到，没在 stream-json 里实际见过，
+runner 的 `canonicalAgyTool`（`antigravity.go`）两代名字都认，参数名两代都读（350ab8c8e）：同一个 runner 驱动 1.2.x 与 1.4.3 时，
+transcript 里都是 `Read` / `Write` / `Edit`（审批卡片的映射见 §14.1）。
+`search_web`（1.4.3 声明 `query`、`domain`）以及未声明给模型的那些工具，参数名只从函数声明里读到，没在 stream-json 里实际见过，
 阶段 1 用真 key 样本确认后再定。
 
 ### 2.4 一轮的成败怎么判
@@ -360,6 +380,9 @@ runner 必须比较 `init.conversation_id` 和请求的 id：不一致就发一�
 不管用户存了什么规则，默认、`dontAsk`、`acceptEdits` 三种模式下都要加上 `mcp(orbit/*)`：MCP 调用默认需要审批，
 不加的话 agent 连 Orbit 自己的工具都会被软拒绝（§10.3）。
 语法【文档】：`command(<前缀>)` 按词元前缀匹配，`command(regex:<模式>)` 每个词元按锚定正则匹配，优先级 Deny > Ask > Allow。
+这里的 `read_file(…)`、`write_file(…)`、`command(…)` 是 agy 的**权限名**，不是工具名。1.4.3 把文件工具改名成 `read_file`、`write_file`、
+`edit_file` 之后，权限名没变：默认模式下被拒的 `write_file` 调用，`denied_actions` 仍是 `{"action":"write_file","display_name":"WriteFile"}`，
+stderr 仍提示 `write_file(<target>)`（§17）。runner 把两代的写、改工具都对到 `write_file` 权限，读工具对到 `read_file`（`antigravity.go#agyPermission`）。
 
 ### 5.2 默认模式下的"软拒绝"【实测】
 
@@ -414,7 +437,8 @@ runner 必须比较 `init.conversation_id` 和请求的 id：不一致就发一�
   - 超时被杀 → 工具 `ERROR`（`JSON hook "jsonhook__<名字>_PreToolUse_0_0" failed: command failed: signal: killed`），不执行（`timeout:3` 加 `sleep 10`，4.09 秒失败）。
 - 默认模式下 hook 回 `allow` **越不过**软拒绝：hook 执行了，命令仍然没跑，本轮照样以空回复结束（实验 `h_allow_default`）。
 - hook 收到的 stdin：`toolCall {name, args}`（`args` 是**完整**参数，比 stream-json 里的展示子集全）、`stepIdx`、`conversationId`、
-  `workspacePaths`、`transcriptPath`、`artifactDirectoryPath`、`modelName`。
+  `workspacePaths`、`transcriptPath`、`artifactDirectoryPath`、`modelName`。1.4.3 上这些键不变，`toolCall` 用新名字和新参数
+  （`read_file {Path}`、`write_file {Path, Content}`、`edit_file {Path, Target, Replacement}`）；带未声明参数的调用到不了 hook（§17）。
 - **启动前校验**：`agy --gemini_dir=<gd> --print=/hooks --output-format json` 返回
   `command.data.hooks[]`，每项有 `name`、`enabled`、`source`（hooks.json 的绝对路径）、`actions[].event/command/timeout_seconds`。
   只有在列表里看到 Orbit 自己那条、并且来源是 Orbit 的 gemini 目录时，才加 `--dangerously-skip-permissions`。
@@ -498,7 +522,8 @@ owner 已决定 Orbit 起的会话默认关闭。做法：每会话的 settings.
 | 自升级 manifest | 发 | 照发（要靠 §6 的变量关） |
 
 使用统计里有：安装 ID、`machineId`、版本和平台、各类性能/事件指标、系统提示词的段落名和工具 schema、工作区路径、
-trajectory/会话 ID、本次工具调用的 `toolSummary`/`toolAction`（模型写的那句动作描述）。**对话内容没出现**：
+trajectory/会话 ID、本次工具调用的 `toolSummary`/`toolAction`（模型写的那句动作描述；这是 1.2.15 的测量，1.4.3 的工具已没有
+`toolAction`，只有 `run_command` 还有 `toolSummary`，遥测没在 1.4.3 上重测）。**对话内容没出现**：
 用户提示词、命令行、工具输出在开和关两种情况下都搜不到。
 
 `~/.gemini/config/config.json` 里的 `telemetryEnabled:false` 没有任何效果。没找到能关掉 Clearcut 的环境变量或 flag。
@@ -732,12 +757,19 @@ runner 上没有真实 Gemini key。owner 把 key 写进 runner 上的 `/root/.c
 4. Orbit 自己的 MCP 服务（`call_mcp_tool`、`list_resources`、`read_resource` 且 `ServerName` 为 `orbit`）→ 放行；
 5. 允许规则，按 Kimi 桥的匹配方式（`kimiToolMatchesRule`），**不**认命令前缀 → 放行；
 6. agy 自己的记账：`schedule`、`manage_subagents`、`ask_question`、`manage_task` 的 list/status/kill → 放行（`send_input` 是往运行中的命令里打字，要问）；
-7. 读工作区、会话上传目录、本会话的 artifact 目录（`<gd>/antigravity-cli/brain/<conversation>/`，同 agy 自己默认模式）→ 放行；
+7. 读（`read_file`，1.2.x 的 `view_file`）工作区、会话上传目录、本会话的 artifact 目录（`<gd>/antigravity-cli/brain/<conversation>/`，同 agy 自己默认模式）→ 放行；
 8. 写 artifact 目录（任何模式，同 agy 自己默认模式）、Accept Edits 下写工作区 → 放行，但工作区里任何 `.agents/` 目录下的文件不放行
    （agy 会在运行中加载它，§14.2）；路径先解析软链接，指向不存在目标的软链接不算在内；
 9. 其余 → 审批卡片：和 Kimi 桥一样 `createApproval` + `awaitApprovalDecision`。卡片的 `toolName`/`input` 用 claude 的叫法（`Bash {command, cwd}`、`Write {file_path, content}`、`Edit {file_path, old_string, new_string}`、`mcp__<server>__<tool>`…），
    `toolUseId` 是 `<conversation>:<step>`，和 transcript 里这次 tool_use 的 id 相同。批准 → `allow`；拒绝 → `deny`，理由
    "The user denied this call[: <批注>]"；到点（hook 超时减一分钟）没人答 → `deny`，理由 "Nobody answered the approval request for this call within …"。
+
+文件工具两代名字都认（350ab8c8e，`antigravity_approval.go`）：第 2、8 条的写入目标取 `write_file` / `edit_file` 的 `Path`，或 1.2.x
+`write_to_file` / `replace_file_content` / `multi_replace_file_content` 的 `TargetFile`（`agyWriteTarget`）；第 7 条的路径取 `read_file` 的 `Path`
+或 `view_file` 的 `AbsolutePath`；第 3、5 条的规则和第 9 条的卡片都按同一个规范化的调用匹配（`agyApprovalSubject`）：`write_file {Path, Content}` 与
+`write_to_file {TargetFile, CodeContent}` 都是 `Write {file_path, content}`，`edit_file {Path, Target, Replacement}` 与
+`replace_file_content {TargetFile, TargetContent, ReplacementContent}` 都是 `Edit {file_path, old_string, new_string}`，`read_file {Path}` 与
+`view_file {AbsolutePath}` 都是 `Read {file_path}`。1.4.3 的 `run_command` 没有 `Cwd`，卡片的 `Bash` 只带 `command`。
 
 命令前缀规则（包括会话中途点的 "Always allow"）由控制面在建卡时按工作区规则回答（`permission-rules.ts` 的 `SERVER_MATCHED_RUNTIMES`，同 Kimi、Codex），不出卡片。
 
@@ -767,7 +799,7 @@ PreToolUse hook 的回答（skip 模式，命令是 `echo … > 文件`）：
 
 所以 Orbit 的 hook 绝不输出空，也绝不输出 `ask`。
 
-哪些调用经过 PreToolUse（skip 模式，hook 记录每次调用并放行）：API key 模式下声明给模型的 13 个工具是 `view_file`、`run_command`、
+哪些调用经过 PreToolUse（skip 模式，hook 记录每次调用并放行）：1.2.16 在 API key 模式下声明给模型的 13 个工具（1.4.3 的 12 个见 §2.1、§17）是 `view_file`、`run_command`、
 `manage_task`、`send_message`、`schedule`、`invoke_subagent`、`define_subagent`、`manage_subagents`、`write_to_file`、
 `replace_file_content`、`read_url_content`、`search_web`、`ask_question`，配了 MCP 再加 `call_mcp_tool`、`list_resources`、`read_resource`。
 逐个试过：除 `ask_question` 外都经过 hook（`send_message`、`read_resource` 没单独试）。`ask_question` 不经过 hook，照旧是 `unknown` 步骤和
@@ -1013,6 +1045,54 @@ Free 与个人 Pro/Ultra 同受 §3/§5 的交互数据收集、人工审阅和�
 - **上报。** `engines[antigravity].accounts` 与 Claude/Codex 同形（id、name、home、auth）。Default 的 `auth` 只说 Google 登录：靠 key 跑的 runner 上引擎是 `yes / env_key`，Default 账号是 `no`。各账号额度同一次 `/usage` 读出，放在 `engines[antigravity].planUsage.accounts.<id>`（Default 的仍是 `buckets`），控制面按账号挑选、预检时用 `withEnginePlanUsage` 并进来比较，bucket 的剩余比例换算成已用比例。
 - **能力。** `antigravity-account-login/v1`、`antigravity-account-remove/v1`。旧 runner 不声明，控制面不给它派加账号/删账号。
 - **条款。** §16.8 的风险不因多账号消失，反而更显眼：Google 的条款限制第三方工具使用个人账号登录，§16.9 也不建议用多账号轮换规避限额。页面把 Google 条款放在每次登录的入口旁；是否开启自动换号由使用者决定。
+
+## 17. agy 1.4.3（2026-10-20）
+
+runner 上的 `/root/.local/bin/agy` 在 2026-10-20 自升级到 1.4.3，工具的声明随之变了：`TestAntigravityContractApproval{Allowed,Denied,TimesOut}`
+和 MCP、中断、默认模式那几条契约测试在 1.4.3 上失败过，由 main 上的 350ab8c8e 修好。本节的【实测】是 2026-10-20 在 runner `workstation` 上
+对这个 1.4.3 做的，方法同本文开头（mock Gemini、假 key、临时 HOME 与 gemini 目录、外连全部拒绝），每次启动都带
+`AGY_CLI_DISABLE_AUTO_UPDATE=true`；按 owner 2026-10-20 的决定，这个二进制不改动、不替换、不降级，实验前后 sha512 相同。
+实验脚本与结果在 [`docs/evidence/antigravity-cli-1.4.3/`](./evidence/antigravity-cli-1.4.3/)；`docs/evidence/antigravity-cli-1.2.15/` 仍是 1.2.15 的历史证据。
+
+### 17.1 变了的【实测】
+
+| 项 | 1.4.3 | 1.2.x（历史） |
+| --- | --- | --- |
+| schema | 声明给模型的每个工具（API key 模式 12 个，配了 MCP 15 个，§2.1）的参数 schema 都是 `additionalProperties: false`（`results/decls.json`、`results/mcp.json`） | — |
+| 带未声明参数的调用 | agy 在 PreToolUse hook **之前**就拒：工具步骤 `ERROR`，`tool_info.error` 为 `{"type":"TOOL_ERROR","message":"invalid arguments:\n- additional properties '<参数名>' not allowed"}`；hook 收不到这次调用，命令不执行，模型收到错误后接着往下走（`results/undeclared.json`：带 `Cwd` 的 `run_command`、带 `toolAction` 的 `read_file`） | — |
+| `run_command` 的参数 | 只声明 `CommandLine`、`IsDaemon`、`WaitMsBeforeAsync`、`toolSummary`（必填 `CommandLine`、`toolSummary`、`WaitMsBeforeAsync`）；`Cwd`、`RunPersistent`、`RequestedTerminalID` 都不在其中（二进制里 `RunPersistent` 字段标着 `jsonschema:"-"`） | 1.2.15 / 1.2.16 的实验脚本给它带 `Cwd`、`WaitMsBeforeAsync`、`toolSummary`、`toolAction`（`docs/evidence/antigravity-cli-1.2.15/gen_samples.py`、`docs/evidence/antigravity-cli-1.2.16/s_*.json`） |
+| `toolAction` / `toolSummary` | 没有哪个工具声明 `toolAction`；`toolSummary` 只有 `run_command` 声明 | 1.4.2 的每个工具都要 `toolAction`（350ab8c8e 的提交说明） |
+| 文件工具 | `read_file {Path}`（可选 `StartLine`、`EndLine`、`ByteOffset`）、`write_file {Path, Content}`（可选 `Append`、`Overwrite`、`ArtifactMetadata`）、`edit_file {Path, Target, Replacement}`（可选 `ArtifactMetadata`）；`multi_replace_file_content` 不再声明 | `view_file`（`AbsolutePath`）、`write_to_file`（`TargetFile`、`CodeContent`）、`replace_file_content`（`TargetFile`、`TargetContent`、`ReplacementContent`）、`multi_replace_file_content`（`TargetFile`、`ReplacementChunks`）——runner 读的参数名 |
+| `read_url_content` | 已删除，不再声明 | 声明（§2.1、§14.2） |
+| 名字出现在哪 | hook 负载的 `toolCall.name` 和流里的 `tool_name` / `tool_info.name` 用新名字；`init.tools` 仍列 60 个旧的内部名字（`view_file`、`write_to_file`、`replace_file_content`、`read_url_content`…，没有 `read_file`、`write_file`、`edit_file`），不能据此判断 | 三处都是旧名字 |
+| `run_command` 的输出 | `tool_info.output` 前面多了两行：`Command exited with code N.`，空一行，`Command output:`，然后才是命令的输出；命令没有输出时第二段是 `No output from the command.`。命令失败仍是 `DONE`（`results/tools.json`：`exit 3` 得到 `Command exited with code 3.`） | 只有命令的输出，看不到退出码（§2.2） |
+
+### 17.2 没变的【实测】
+
+- **hook 信封的键**：PreToolUse 的负载仍是 `toolCall {name, args}`（`args` 是完整参数）、`stepIdx`、`conversationId`、`workspacePaths`、
+  `transcriptPath`、`artifactDirectoryPath`、`modelName`；PreInvocation 的仍是 `artifactDirectoryPath`、`conversationId`、`initialNumSteps`、
+  `invocationNum`、`modelName`、`transcriptPath`、`workspacePaths`，每次模型调用前触发一次（§5.4、§14.2；`results/tools.json`）。
+- **`{"decision":…}` 应答**：`allow` 执行，`deny` 带理由拒，模型收到理由接着往下走；`TestAntigravityContractApproval{Allowed,Denied,TimesOut}`
+  在 1.4.3 上通过（`TimesOut` 是没人答时 Orbit 的 hook 到点回 `deny`）。
+- **`--print=/hooks --output-format json`**：仍是 `command.data.hooks[]`，每项 `name`、`enabled`、`source`（hooks.json 的绝对路径）、
+  `actions[]`（`event`、`type`、`command`、`timeout_seconds`），runner 的启动前校验（§14.1）照旧能读（`results/tools.json`）。
+- **权限名**：`command`、`write_file`、`read_file`、`mcp`…不随工具改名；默认模式的软拒绝仍是空 `response`、`denied_actions`
+  `{"action":"write_file","display_name":"WriteFile"}` 加 stderr 那一行（§5.1、§5.2；`results/default-write.json`）。
+- **MCP 的三个工具**：`call_mcp_tool {ServerName, ToolName, Arguments}`、`list_resources {ServerName}`、`read_resource {ServerName, Uri}`，
+  同样是 `additionalProperties: false`；`call_mcp_tool` 经过 PreToolUse，名字不变（`results/mcp.json`）。
+- **展示子集**：流里每个工具只给展示用的那几个参数（§2.2），只是换了新名字。
+- 2026-10-20 在本机用 1.4.3 跑 `ORBIT_REQUIRE_REAL_AGY=1 go test -run TestAntigravityContract`：11 条全部通过。
+
+### 17.3 runner 与 mock（main 上的 350ab8c8e）
+
+- **审批策略、卡片与转录映射两代名字都认**：`antigravity.go` 的 `canonicalAgyTool`（§2.3）与 `agyPermission`（§5.1），`antigravity_approval.go`
+  的 `decideAntigravityToolCall`、`agyApprovalSubject`、`agyWriteTarget`（§14.1）。读工作区不出卡、写 Orbit 自己的配置照旧被拒、
+  卡片上是 `Read` / `Write` / `Edit`，在两代上都一样。
+- **mock 只发请求里声明了的参数**：`src/runner-go/testdata/mockgemini/main.go` 的 `declaredParams` 从请求的函数声明
+  （`parametersJsonSchema`，没有就 `parameters`）读出每个函数的属性名，`parseScript` 只保留其中列出的参数；改过名的工具在剧本里写成
+  `view_file|read_file`，调用请求声明了的第一个名字。所以剧本把各版本要的参数都写上，一份剧本同时驱动 1.4.2 与 1.4.3。
+  §17.1 那一行「带未声明参数的调用」用的是关掉这层过滤的 mock（做法见证据目录的 README）。
+- **契约测试**：`TestAntigravityContractApprovalFileTools`（`antigravity_approval_contract_test.go`）让三个文件工具在任一版本上都经过真的 hook。
 
 ## 附录：实测记录索引
 
