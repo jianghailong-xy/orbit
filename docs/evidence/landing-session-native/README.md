@@ -67,6 +67,21 @@ the words and the door conditions on Linux.
   parts, each entrance, the task section and its poll, the source chip, `includeLanding=1` and the
   inFlight cache.
 
+## Test runs
+
+- `swift test` (OrbitKit, `swift:6.1` in Docker, 2026-10-20): 3983 tests, 5 skipped, 0 failures —
+  includes the four copy-parity suites the task names (`ProjectPageSectionsCopyParityTests`,
+  `SessionProjectCopyParityTests`, `OpenItemDeliveryCopyParityTests`, `TaskDetailCopyParityTests`)
+  and the six landing suites added here.
+- Android `:app:testDebugUnitTest` + `:core:test` (Gradle, 2026-10-20): `ProjectCopyParityTest` 8,
+  `SessionProjectCopyParityTest` 6, `TaskCopyParityTest` 8, `ExceptionCardsTest` 13 — 35 tests, 0
+  failures.
+- Client CI (`client.yml`, macOS OrbitKit tests + OrbitApp build, iOS build): green on the delivered
+  code — the dispatch run on the commit this evidence ships with (its run id is on the task's
+  evidence envelope; `39352792577` gated the same sources minus the menu changes).
+- The screenshot probe (`probe-harness/ci/client.probe.yml`, run `39355049538`): 6 iPhone tests and
+  2 Mac tests passed, 9 pictures. `probe-run.txt` is the probe's own record (run, sha, display).
+
 ## Screenshots
 
 `probe-harness/` is the evidence probe (never merged): the real iPhone `CompactShell` and the real
