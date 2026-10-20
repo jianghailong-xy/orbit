@@ -36,8 +36,10 @@ enum ProbeArgs {
                 ?? model.agents?.items.first?.id
             switch page {
             case "sessions":
+                #if os(iOS)
                 model.openProjectSessions(SessionProjectAddress(projectID: "P1", agentID: "a1",
                                                                 view: .open))
+                #endif
             case "task":
                 model.route(to: .task("T1"))
             case "chat":
