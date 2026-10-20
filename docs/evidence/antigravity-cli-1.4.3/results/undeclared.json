@@ -10,6 +10,7 @@
   "ok.txt",
   "seed.txt"
  ],
+ "seed_txt_after": "alpha\nbeta\n",
  "declared_tools": [
   {
    "name": "read_file",

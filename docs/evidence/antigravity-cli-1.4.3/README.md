@@ -4,7 +4,8 @@
 那两套一样是一次性的实验脚本，写死了 scratch 根目录 `/var/tmp/agy143-doc`（改 `drive.py`、`summarize.py`、`fakemcp.py` 里的路径即可），
 不参与构建和测试；行为由 `src/runner-go/antigravity_contract_test.go`、`antigravity_approval_contract_test.go` 的契约测试兜底。
 
-跑在 runner `workstation` 上的 `/root/.local/bin/agy`（`agy --version` 为 `1.4.3`，sha512 前缀 `746656e7164cacb4`）。每次启动都带
+跑在 runner `workstation-gpu`（主机名 `workstation`）上的 `/root/.local/bin/agy`（`agy --version` 为 `1.4.3`，sha512 前缀 `746656e7164cacb4`；
+2026-10-20 自升级替换掉的旧二进制是 1.4.2，见 `results/agy-binary.txt`）。每次启动都带
 `AGY_CLI_DISABLE_AUTO_UPDATE=true`，HOME、`--gemini_dir` 和工作区都是每次新建的临时目录，外连全部经 mock 的代理拒绝。
 按 owner 2026-10-20 的决定，这个二进制不改动、不替换、不降级：实验前后 sha512 相同。
 
@@ -33,6 +34,8 @@ printf 'module rawmock\n\ngo 1.24\n' > /tmp/rawmock/go.mod
 | `summarize.py` | 把一次运行缩成 §17 引用的事实：第一个带工具的请求里的函数声明（名字、属性、必填、`additionalProperties`）、`init.tools`、每个工具步骤、`result`、hook 调用、`/hooks` 列表、运行后的工作区 |
 | `s-*.txt` | 各场景的剧本（`@WS@` 换成工作区路径） |
 | `results/*.json` | `summarize.py` 的输出 |
+| `results/agy-binary.txt` | 两个二进制的 `--version` 与 sha512，以及 1.4.3 里 `RunPersistent` / `RequestedTerminalID` 的字符串（`RunPersistent` 字段标着 `jsonschema:"-"`） |
+| `results/contract-tests.log` | 同日在这个 agy 上跑 `TestAntigravityContract*` 的 `go test -v` 输出 |
 
 ## 场景
 
@@ -42,8 +45,10 @@ python3 -I drive.py decls s-decls.txt
 python3 -I drive.py tools s-tools.txt --hooks --print-hooks
 python3 -I drive.py undeclared s-undeclared.txt --hooks --raw
 python3 -I drive.py default-write s-default.txt --default-mode
+python3 -I drive.py default-edit s-default-edit.txt --default-mode
+python3 -I drive.py default-command s-default-command.txt --default-mode
 python3 -I drive.py mcp s-mcp.txt --hooks --mcp
-for r in decls tools undeclared default-write mcp; do python3 -I summarize.py $r > results/$r.json; done
+for r in decls tools undeclared default-write default-edit default-command mcp; do python3 -I summarize.py $r > results/$r.json; done
 ```
 
 | 场景 | 看什么 | 结论（§17） |
@@ -51,7 +56,10 @@ for r in decls tools undeclared default-write mcp; do python3 -I summarize.py $r
 | `decls` | 纯文本一轮，API key 模式下声明给模型的工具 | 12 个，全部 `additionalProperties: false`；文件工具是 `read_file`、`write_file`、`edit_file`，没有 `read_url_content`；`run_command` 只有 `CommandLine`、`IsDaemon`、`WaitMsBeforeAsync`、`toolSummary`；没有 `toolAction`；`init.tools` 仍是 60 个旧名字 |
 | `tools` | skip 模式加 hook：`run_command`（`exit 3` 与成功各一次）、`read_file`、`write_file`、`edit_file`；`--print=/hooks` | 流和 hook 负载用新名字，流里只给 `CommandLine` / `Path`；输出前面多了 `Command exited with code N.` 和 `Command output:`；hook 负载与 PreInvocation 的键、`/hooks` 的 JSON 不变 |
 | `undeclared` | 不过滤参数的 mock：带 `Cwd` 的 `run_command`、带 `toolAction` 的 `read_file`，再一条只带声明参数的 `run_command` | 前两条工具 `ERROR`（`additional properties '…' not allowed`），hook 只收到第三条，前两条的命令没执行（工作区里没有 `cwd.txt`）；没有输出的命令写 `No output from the command.` |
-| `default-write` | 不加 skip，`write_file` 写工作区 | 软拒绝不变：`response` 为空，`denied_actions` 为 `{"action":"write_file","display_name":"WriteFile"}`，stderr 仍提示 `write_file(<target>)` |
+| `default-write` | 不加 skip，`write_file` 写工作区 | 软拒绝：`response` 为空，`denied_actions` 为 `{"action":"write_file","display_name":"WriteFile"}`，stderr 仍提示 `write_file(<target>)`；这次被拒的步骤是 `ERROR`（`permission check failed …`），文件没写出来 |
+| `default-edit` | 不加 skip，`edit_file` 改 `seed.txt` | `action` 仍是 `write_file`（`display_name` 为 `EditFile`）；被拒的步骤是没有输出的 `DONE`，`seed.txt` 没变 |
+| `default-command` | 不加 skip，`run_command` 写文件 | `action` 是 `command`（`RunCommand`）；被拒的步骤是没有输出的 `DONE`，命令没执行 |
 | `mcp` | 配一个 MCP 服务器，`call_mcp_tool` 调一次 | 声明 15 个；`call_mcp_tool`、`list_resources`、`read_resource` 的参数不变，同样 `additionalProperties: false`；调用经过 hook |
 
-`ORBIT_REQUIRE_REAL_AGY=1 go test -count=1 -run TestAntigravityContract .`（`src/runner-go`）同日在这个 agy 上 11 条全部通过。
+`ORBIT_REQUIRE_REAL_AGY=1 go test -count=1 -run TestAntigravityContract -v .`（`src/runner-go`）同日在这个 agy 上 11 条全部通过，
+输出在 `results/contract-tests.log`。

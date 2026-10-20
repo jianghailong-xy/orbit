@@ -1,0 +1,11 @@
+$ agy --version  (AGY_CLI_DISABLE_AUTO_UPDATE=true, temp HOME)
+1.4.3
+$ agy.1792471599648467836.old --version  (the binary the 2026-10-20 self-update replaced)
+1.4.2
+$ sha512sum (first 32 hex)
+746656e7164cacb454e06f8246d33bea  /root/.local/bin/agy
+f63dd18d9aee3742055452c6eefbc227  /root/.local/bin/agy.1792471599648467836.old
+$ strings -n 6 /root/.local/bin/agy | grep -o RunPersistent/RequestedTerminalID context (1.4.3)
+      2 GetRunPersistent
+      4 RequestedTerminalID
+      1 RunPersistent#json:"RunPersistent" jsonschema:"-"

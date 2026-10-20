@@ -4,8 +4,9 @@
 Usage: python3 -I summarize.py <run-name>
 
 Keeps the tool declarations of the first request that declares tools (name, properties, required,
-additionalProperties), init.tools, every tool step, the result, the hook calls, the /hooks listing and the
-workspace afterwards. Leaves out the request bodies' prompts, which are agy's and large.
+additionalProperties), init.tools, every tool step, the result, the hook calls, the /hooks listing, the
+workspace afterwards and seed.txt's content afterwards. Leaves out the request bodies' prompts, which are
+agy's and large.
 """
 import json, os, sys
 
@@ -26,6 +27,8 @@ def main():
     summary['flags'] = meta['flags']
     summary['files_under_home'] = meta['files_under_home']
     summary['workspace_after'] = meta['workspace_after']
+    seed = os.path.join(meta['ws'], 'seed.txt')
+    summary['seed_txt_after'] = open(seed).read() if os.path.exists(seed) else None
     for req in lines(os.path.join(out, 'requests.jsonl')):
         body = req.get('body') or {}
         if isinstance(body, str):
