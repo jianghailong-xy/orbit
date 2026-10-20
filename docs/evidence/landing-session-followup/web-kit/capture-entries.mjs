@@ -260,10 +260,22 @@ const FRAMES = {
     sessions: [coordinator, TASK_SESSION, ...groupRows([1, 2].map(older(() => 'NOTHING_TO_LAND')))],
     jobs: [], promotion: null, items: coordinatorOnly,
   },
-  // The older landings were all cancelled: both counts are zero, so there is no Earlier row.
+  // The older landings were cancelled, handled or declined: neither count names them, so the fold
+  // is a bare `Earlier` (coordinator decision B, 2026-10-20) — and it still opens onto them.
+  'earlier-bare': {
+    path: sessionsPath, clip: '.session-col',
+    sessions: [coordinator, TASK_SESSION, ...groupRows([1, 2, 3].map(older((n) => ['CANCELLED', 'HANDLED', 'DECLINED'][n - 1])))],
+    jobs: [], promotion: null, items: coordinatorOnly,
+  },
+  'earlier-bare-open': {
+    path: sessionsPath, clip: '.session-col', openFold: true,
+    sessions: [coordinator, TASK_SESSION, ...groupRows([1, 2, 3].map(older((n) => ['CANCELLED', 'HANDLED', 'DECLINED'][n - 1])))],
+    jobs: [], promotion: null, items: coordinatorOnly,
+  },
+  // No older landing at all: no fold.
   'earlier-none': {
     path: sessionsPath, clip: '.session-col',
-    sessions: [coordinator, TASK_SESSION, ...groupRows([1, 2].map(older(() => 'CANCELLED')))],
+    sessions: [coordinator, TASK_SESSION, ...groupRows([])],
     jobs: [], promotion: null, items: coordinatorOnly,
   },
   // 04 b1 — the sessions page's Landing card for a LAND_TASK: its head says `round 1 of 3`.
@@ -413,6 +425,10 @@ for (const theme of THEMES) {
     if (frame.clickMerged) {
       const merged = page.locator('.session-project-merge-row').first();
       if (await merged.count()) { await merged.click(); await page.waitForTimeout(600); }
+    }
+    if (frame.openFold) {
+      const fold = page.locator('.session-project-landing-fold').first();
+      if (await fold.count()) { await fold.click(); await page.waitForTimeout(600); }
     }
     if (frame.openSheet) {
       const press = page.locator('.session-project-landing button.spl-press').first();

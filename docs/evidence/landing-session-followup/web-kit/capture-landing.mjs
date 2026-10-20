@@ -189,6 +189,32 @@ const FRAMES = {
     promotions: { ...mergedPromo, state: 'CHECKING', merged: null, landsTreeSha: null, onPass: 'MERGE' },
     merged: [], menu: false,
   },
+  // The ✓ reads each line's fields, not its words: a passed check reworded ("green"), a failed one
+  // whose sentence still says "passed" (its exit code is 1, so ✗ and its output inline), and a result
+  // reworded ("Put on main") whose state is LANDED. The old text rule drew the opposite marks on all three.
+  'f-marks': {
+    title: `Land · ${TASK}`,
+    landing: landing({
+      currentAttempt: attempt({ state: 'LANDED', phase: 'PUSH', liveness: null, check: null }),
+      settledAt: '2026-09-25T06:57:00Z', settledAs: 'LANDED', liveness: null,
+      timeline: generation2([
+        entry({ id: 'f1', seq: 1, kind: 'CLAIMED', at: '2026-09-25T06:40:00Z', claim: 1, actor: { type: 'RUNNER' },
+          text: `Claimed by runner ${RUNNER} · claim 1` }),
+        entry({ id: 'f2', seq: 2, kind: 'CHECK_FINISHED', at: '2026-09-25T06:43:00Z', claim: 1, round: 1, phase: 'CHECK',
+          check: { name: 'TASK_ACCEPTANCE', index: 0 }, actor: { type: 'RUNNER' },
+          data: { name: 'TASK_ACCEPTANCE', index: 0, exitCode: 1, expectedExitCode: 0, timedOut: false, durationMs: 130_000 },
+          text: 'Task acceptance passed its first half · exit 1 · 2m 10s' }),
+        entry({ id: 'f3', seq: 3, kind: 'CHECK_FINISHED', at: '2026-09-25T06:56:00Z', claim: 1, round: 1, phase: 'CHECK',
+          check: { name: 'MERGE_CHECK', index: 1 }, actor: { type: 'RUNNER' },
+          data: { name: 'MERGE_CHECK', index: 1, exitCode: 0, expectedExitCode: 0, timedOut: false, durationMs: 1_022_000 },
+          text: 'Merge check green · 17m 02s' }),
+        entry({ id: 'f4', seq: 4, kind: 'RESULT', at: '2026-09-25T06:57:00Z', claim: 1, phase: 'PUSH', actor: { type: 'RUNNER' },
+          data: { state: 'LANDED' }, text: 'Put on project/p1 · 8ed0ea7' }),
+      ]),
+    }),
+    integration: { upstreamRef: 'refs/heads/main', inFlightJobs: [], landTasks: [] },
+    promotions: null, merged: [], menu: false,
+  },
   // 05 c — the settled merge round.
   'c-merged': {
     title: `Merge ${BRANCH} → main · #9`,

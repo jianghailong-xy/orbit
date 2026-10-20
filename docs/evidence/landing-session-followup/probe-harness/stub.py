@@ -9,10 +9,12 @@
 #
 # Task 34jBwFmcEPK012TsNL0Lc (the landing-session follow-up) adds, copied from
 # docs/evidence/landing-session-native/probe-harness:
-#   earlier-both / earlier-landed / earlier-none   the Landings group's older landings: one landed and
-#             one with nothing to land / one landed / one cancelled (no Earlier row at all); `live`
-#             keeps the one with nothing to land alone
+#   earlier-both / earlier-landed / earlier-bare / earlier-empty   the Landings group's older
+#             landings: one landed and one with nothing to land / one landed / one cancelled, one
+#             handled and one declined (a bare `Earlier` fold that opens onto them) / none (no fold);
+#             `live` keeps the one with nothing to land alone
 #   lease-task the X-E5 card for a LAND_TASK (its Step row says `round 1 of 3`)
+#   marks     a settled task landing whose lines are reworded: the ✓ reads each line's data
 # Every check here has a count of 1, so a LAND_TASK's `of 3` can only come from its kind (contract
 # J5), and the timeline's lines carry the `data` their marks are drawn from.
 #
@@ -86,6 +88,10 @@ OLD_CANCELLED = dict(L2, id="L5", publicId="L5", title="Land · Retire the v1 le
                      createdAt=ago(30 * 60), updatedAt=ago(30 * 60), lastTurnAt=ago(30 * 60),
                      landing={"subject": "TASK", "state": "SETTLED", "settledAs": "CANCELLED",
                               "settledAt": ago(30 * 60)})
+OLD_HANDLED = dict(OLD_CANCELLED, id="L6", publicId="L6", title="Land · Webhook retry cap",
+                   landing=dict(OLD_CANCELLED["landing"], settledAs="HANDLED"))
+OLD_DECLINED = dict(OLD_CANCELLED, id="L7", publicId="L7", title="Merge project/P1 → main · #2",
+                    landing=dict(OLD_CANCELLED["landing"], subject="PROMOTION", settledAs="DECLINED"))
 
 
 def older(mode):
@@ -94,8 +100,10 @@ def older(mode):
         return [L3, OLD_LANDED]
     if mode == "earlier-landed":
         return [OLD_LANDED]
-    if mode == "earlier-none":
-        return [OLD_CANCELLED]
+    if mode == "earlier-bare":
+        return [OLD_CANCELLED, OLD_HANDLED, OLD_DECLINED]
+    if mode == "earlier-empty":
+        return []
     return [L3]
 
 
@@ -113,6 +121,14 @@ reset()
 
 
 def attempt(mode):
+    if mode == "marks":
+        return {"jobId": "jL", "kind": "LAND_TASK", "state": "LANDED", "generation": 3,
+                "phase": "PUSH", "round": 1, "step": None, "claim": 1, "runnerName": "wikova",
+                "sourceSessionId": "S4", "targetRef": "refs/heads/project/P1",
+                "startedAt": ago(30), "heartbeatAt": ago(10), "outputMovedAt": ago(10),
+                "progressProtocol": "v2", "check": None, "liveness": None,
+                "blockingReason": None, "timedOut": False, "limitSeconds": 600,
+                "retryable": False, "pushBoundaryPassed": True}
     if mode == "settled" or mode == "receipt":
         return {"jobId": "jL", "kind": "LAND_PROMOTION", "state": "MERGED", "generation": 3,
                 "phase": "PUSH", "round": 1, "step": None, "claim": 1, "runnerName": "wikova",
@@ -160,6 +176,33 @@ PASSED = {"exitCode": 0, "expectedExitCode": 0, "timedOut": False}
 
 def landing(mode):
     settled = mode == "settled" or mode == "receipt"
+    if mode == "marks":
+        # The ✓ reads each line's data, never its words: a failed check whose sentence still says
+        # "passed" (exit 1: ✗ and its output inline), a passed one reworded ("green"), and a result
+        # reworded ("Put on …") whose state is LANDED. The old text rule drew the opposite on all three.
+        entries = [
+            entry("CLAIMED", "Claimed by runner wikova · claim 1", 30),
+            entry("CHECK_FINISHED", "Task acceptance passed its first half · exit 1 · 2m 10s", 26,
+                  round=1, check={"name": "TASK_ACCEPTANCE", "index": 1},
+                  data={"exitCode": 1, "expectedExitCode": 0, "timedOut": False}),
+            entry("CHECK_FINISHED", "Merge check green · 17m 02s", 12, round=1,
+                  check={"name": "MERGE_CHECK", "index": 2}, data=PASSED),
+            entry("RESULT", "Put on project/P1 · 8ed0ea7", 10, data={"state": "LANDED"}),
+        ]
+        return {
+            "sessionId": "L1", "projectId": "P1", "subject": "TASK", "taskId": "T1",
+            "promotionId": None, "episode": 1, "openedAt": ago(30), "settledAt": ago(10),
+            "settledAs": "LANDED", "phase": "PUSH", "round": 1,
+            "checks": [{"name": "MERGE_CHECK", "command": "npm test", "exitCode": 0,
+                        "expectedExitCode": 0, "timedOut": False, "durationMs": 1_022_000}],
+            "liveness": None, "blockingReason": None,
+            "currentAttempt": attempt(mode), "todos": [],
+            "generations": [{"sessionId": "L1", "episode": 1, "openedAt": ago(30),
+                             "settledAt": ago(10), "settledAs": "LANDED"}],
+            "timeline": {"sections": [{"title": "Landing · 1", "jobId": "jL", "kind": "LAND_TASK",
+                                       "generation": 1, "state": "LANDED", "entries": entries}],
+                         "facts": [], "truncated": False},
+        }
     if mode == "task-timeout":
         entries = [
             entry("ENQUEUED", "Queued · Landing", 30),
@@ -229,8 +272,8 @@ def landing(mode):
 
 
 def landing_row(mode, detail=False):
-    settled = mode == "settled" or mode == "receipt"
-    task = mode == "task-timeout"
+    settled = mode in ("settled", "receipt", "marks")
+    task = mode in ("task-timeout", "marks")
     row = dict(L1_ROW)
     row["status"] = "SUCCEEDED" if settled else "RUNNING"
     row["runStatus"] = row["status"]
@@ -238,7 +281,7 @@ def landing_row(mode, detail=False):
         row["title"] = "Land · Ledger migration order"
     row["landing"] = {"subject": "TASK" if task else "PROMOTION",
                       "state": "SETTLED" if settled else "AWAITING_DECISION",
-                      "settledAs": "MERGED" if settled else None,
+                      "settledAs": ("LANDED" if task else "MERGED") if settled else None,
                       "settledAt": ago(9) if settled else None}
     if detail:
         # The detail read carries the whole view under the same key; the list row its summary.
@@ -256,7 +299,7 @@ L1_ROW = {"id": "L1", "publicId": "L1", "title": "Merge project/P1 → main · #
 
 def promotion(mode):
     # The sessions page's own cards: a task landing has no merge candidate at all.
-    if mode in ("one-job", "two-jobs", "task-timeout"):
+    if mode in ("one-job", "two-jobs", "task-timeout", "marks"):
         return None
     settled = mode in ("settled", "receipt")
     confirmed = mode in ("confirmed", "cancelling", "land-timeout")
@@ -371,7 +414,7 @@ def land_tasks(jobs):
 
 
 def integration(mode):
-    if mode in ("settled", "receipt"):
+    if mode in ("settled", "receipt", "marks"):
         jobs = []
     elif mode == "one-job":
         jobs = [job("j-task", "LAND_TASK", task_title=TASK_TITLE, landing="LT")]

@@ -18,14 +18,35 @@ final class LandingSessionShotTests: ProbeCase {
         earlier("earlier-both", says: "Earlier · 1 landed · 1 nothing to land", shot: "ios-04-earlier-both")
     }
 
-    func testIPhoneNoEarlierRowWhenBothCountsAreZero() {
-        setMode("earlier-none")
-        let app = launch(until: "Landings", extra: ["-probe.page", "sessions"], "earlier-none")
+    /// Older landings that neither count names (cancelled, handled, declined): a bare `Earlier` fold
+    /// that still opens onto them (coordinator decision B, 2026-10-20).
+    func testIPhoneBareEarlierFoldOpensOntoUncountedRows() {
+        setMode("earlier-bare")
+        let app = launch(until: "Landings", extra: ["-probe.page", "sessions"], "earlier-bare")
         XCTAssertTrue(appears(app, "Checks failed", timeout: 20), "the group's waiting landing never showed")
-        bring(app, element(app, containing: "Landings"), between: 90, and: 520, "earlier-none")
-        XCTAssertFalse(appears(app, "Earlier", timeout: 4),
-                       "an older landing that was cancelled is neither landed nor nothing to land")
-        shot(app, "ios-04-earlier-none")
+        bring(app, element(app, containing: "Landings"), between: 90, and: 520, "earlier-bare")
+        XCTAssertTrue(appears(app, "Earlier", timeout: 20), "the bare fold never showed")
+        for zero in ["0 landed", "0 nothing to land"] {
+            XCTAssertFalse(appears(app, zero, timeout: 2), "the bare fold writes `\(zero)`")
+        }
+        XCTAssertFalse(appears(app, "Retire the v1 ledger", timeout: 2), "the fold starts closed")
+        shot(app, "ios-04-earlier-bare")
+        press(element(app, containing: "Earlier"))
+        for title in ["Retire the v1 ledger", "Webhook retry cap", "main · #2"] {
+            XCTAssertTrue(appears(app, title, timeout: 20), "the open fold never listed `\(title)`")
+        }
+        shot(app, "ios-04-earlier-bare-open")
+        app.terminate()
+    }
+
+    /// No older landing at all: no fold.
+    func testIPhoneNoFoldWithoutOlderLandings() {
+        setMode("earlier-empty")
+        let app = launch(until: "Landings", extra: ["-probe.page", "sessions"], "earlier-empty")
+        XCTAssertTrue(appears(app, "Checks failed", timeout: 20), "the group's waiting landing never showed")
+        bring(app, element(app, containing: "Landings"), between: 90, and: 520, "earlier-empty")
+        XCTAssertFalse(appears(app, "Earlier", timeout: 4), "nothing older, so no fold")
+        shot(app, "ios-04-earlier-empty")
         app.terminate()
     }
 
@@ -69,6 +90,18 @@ final class LandingSessionShotTests: ProbeCase {
         XCTAssertTrue(appears(app, "Re-run the check", timeout: 20), "a timed-out check offers Re-run the check")
         XCTAssertTrue(appears(app, "Abandon", timeout: 20), "and Abandon, in the light secondary style")
         shot(app, "ios-05-e-check-timeout")
+        app.terminate()
+    }
+
+    /// The ✓ reads each line's data, never its words: reworded lines keep their marks (05 timeline).
+    func testIPhoneTimelineMarksReadTheLinesData() {
+        setMode("marks")
+        let app = launch(until: "Landing · 1", extra: ["-probe.page", "landing"], "landing-marks")
+        for words in ["Task acceptance passed its first half", "Merge check green", "Put on project/P1"] {
+            XCTAssertTrue(appears(app, words, timeout: 20), "the timeline never drew `\(words)`")
+        }
+        bring(app, element(app, containing: "Merge check green"), between: 200, and: 760, "landing-marks")
+        shot(app, "ios-05-marks")
         app.terminate()
     }
 
@@ -161,6 +194,16 @@ final class LandingSessionShotTests: ProbeCase {
         shot(app, name)
         app.terminate()
         settle(1)
+    }
+
+    func testMacTimelineMarksReadTheLinesData() {
+        setMode("marks")
+        let app = launch(until: "Landing · 1", extra: ["-probe.page", "landing"], "mac-landing-marks")
+        for words in ["Task acceptance passed its first half", "Merge check green", "Put on project/P1"] {
+            XCTAssertTrue(appears(app, words, timeout: 20), "the timeline never drew `\(words)`")
+        }
+        shot(app, "mac-05-marks")
+        app.terminate()
     }
 
     func testMacLandingPageTaskTimedOut() {

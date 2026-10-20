@@ -1,7 +1,9 @@
 package io.orbitd.android
 
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.net.Uri
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -107,12 +109,26 @@ abstract class LandingFollowupShots {
         shot("03-earlier-both")
     }
 
-    @Test fun noEarlierRowWhenBothCountsAreZero() {
-        landings(listOf("CANCELLED"))
+    /** Older landings neither count names (cancelled, handled, declined): a bare `Earlier` fold that still opens onto them
+     *  (coordinator decision B, 2026-10-20). */
+    @Test fun aBareEarlierFoldOpensOntoUncountedRows() {
+        landings(listOf("CANCELLED", "HANDLED", "DECLINED"))
+        await { exists(hasTestTag("landings:earlier")) }
+        compose.onNodeWithTag("landings:earlier").assert(hasText("Earlier"))
+        compose.onNodeWithTag("landing-row:l-old-0").assertDoesNotExist()
+        shot("04-earlier-bare")
+        compose.onNodeWithTag("landings:earlier").performClick()
+        await { exists(hasTestTag("landing-row:l-old-0")) && exists(hasTestTag("landing-row:l-old-2")) }
+        shot("04-earlier-bare-open")
+    }
+
+    /** No older landing at all: no fold. */
+    @Test fun noEarlierFoldWithoutOlderLandings() {
+        landings(emptyList())
         await { exists(hasTestTag("landing-row:l-await")) }
         compose.waitForIdle()
         compose.onNodeWithTag("landings:earlier").assertDoesNotExist()
-        shot("04-earlier-none")
+        shot("04-earlier-empty")
     }
 
     /** One waiting landing, one settled today, and the older ones (two days back) settled as [older] says. */
@@ -182,24 +198,25 @@ abstract class LandingFollowupShots {
     }
 
     @Test fun theXe5StepRowOfAMergeCheck() {
-        show { Column(Modifier.verticalScroll(rememberScrollState())) { exceptionCard(xe5("CHECK_PROMOTION", "CHECK")) } }
+        show { Column(Modifier.verticalScroll(rememberScrollState())) { exceptionCard(xe5("CHECK_PROMOTION", "CHECK", task = null)) } }
         compose.onNode(hasText("checking · claim 1 · round 1") and hasAnyAncestor(hasTestTag("item:item-xe5:fact:Step")),
             useUnmergedTree = true).assertExists()
         shot("09-xe5-check")
     }
 
-    private fun xe5(jobKind: String, phase: String): JsonObject {
+    private fun xe5(jobKind: String, phase: String, task: String? = "Land · Wire the page"): JsonObject {
         val now = Instant.now()
         fun at(minutes: Long) = now.minusSeconds(minutes * 60).toString()
         return buildJsonObject {
-            put("itemId", "item-xe5"); put("kind", "LANDING_LEASE_EXPIRED"); put("title", "A landing stopped reporting")
+            put("itemId", "item-xe5"); put("kind", "LANDING_LEASE_EXPIRED")
+            put("title", if (task == null) "A merge check stopped reporting" else "A landing stopped reporting")
             put("detailLine", "The runner stopped reporting"); put("assignee", "OWNER"); put("assigneeReason", "ESCALATED")
             put("waitingSince", at(2)); put("escalatedAt", at(2))
             put("taskId", "t1"); put("sessionId", JsonNull); put("landingSessionId", landing); put("integrationJobId", "j-1")
             putJsonArray("actions") { listOf("ABANDON", "OPEN_LANDING").forEach { add(it) } }
             put("primaryAction", "ABANDON")
             put("requiredAction", "The runner stopped reporting; abandon this landing, or wait for the runner to come back.")
-            put("facts", buildJsonObject { putJsonObject("task") { put("title", "Land · Wire the page") } })
+            put("facts", buildJsonObject { task?.let { title -> putJsonObject("task") { put("title", title) } } })
             putJsonObject("lease") {
                 put("jobKind", jobKind); put("generation", 2); put("phase", phase); put("claimGeneration", 1); put("round", 1)
                 put("checkCount", 1); put("runner", "workstation-gpu"); put("progressProtocol", "v2"); put("pushReported", false)
@@ -226,6 +243,48 @@ abstract class LandingFollowupShots {
         compose.onNodeWithTag("source-landing").assertTextEquals("Landing · checking ›")
         compose.onNodeWithTag("source-landing:ring", useUnmergedTree = true).assertExists()
         shot("10-source-label")
+    }
+
+    // MARK: 05 — the timeline's marks read each line's data, never its words
+
+    /** A settled task landing whose lines are reworded: a check whose sentence still says "passed" but exited 1 is ✗ (and shows its
+     *  output), a passed one reworded "green" is ✓, and a result reworded "Put on …" whose state is LANDED is ✓. The old text rule
+     *  drew the opposite mark on all three. */
+    @Test fun theTimelinesMarksReadTheLinesData() {
+        val entries = listOf(
+            """{"kind":"CLAIMED","at":"${ago(30)}","claim":1,"round":null,"phase":null,"check":null,"text":"Claimed by runner wikova · claim 1"}""",
+            """{"kind":"CHECK_FINISHED","at":"${ago(26)}","claim":1,"round":1,"phase":"CHECK","check":{"name":"TASK_ACCEPTANCE","index":1},
+               "data":{"exitCode":1,"expectedExitCode":0,"timedOut":false},"text":"Task acceptance passed its first half · exit 1 · 2m 10s"}""",
+            """{"kind":"CHECK_FINISHED","at":"${ago(12)}","claim":1,"round":1,"phase":"CHECK","check":{"name":"MERGE_CHECK","index":2},
+               "data":{"exitCode":0,"expectedExitCode":0,"timedOut":false},"text":"Merge check green · 17m 02s"}""",
+            """{"kind":"RESULT","at":"${ago(10)}","claim":1,"round":1,"phase":"PUSH","check":null,"data":{"state":"LANDED"},
+               "text":"Put on project/launch · 8ed0ea7"}""")
+        val attempt = """{"jobId":"j-1","kind":"LAND_TASK","state":"LANDED","generation":1,"phase":"PUSH","round":1,"step":null,"claim":1,
+            "runnerName":"wikova","sourceSessionId":"$landing","targetRef":"refs/heads/project/launch","startedAt":"${ago(30)}",
+            "heartbeatAt":"${ago(10)}","outputMovedAt":"${ago(10)}","progressProtocol":"v2","check":null,"liveness":null,"blockingReason":null,
+            "timedOut":false,"limitSeconds":600,"retryable":false,"pushBoundaryPassed":true}"""
+        ProjectShell.landing = """{"sessionId":"$landing","projectId":"$launch","subject":"TASK","taskId":"t-landing","promotionId":null,"episode":1,
+            "openedAt":"${ago(30)}","settledAt":"${ago(10)}","settledAs":"LANDED","checks":[],"phase":"PUSH","round":1,"currentAttempt":$attempt,
+            "todos":[],"generations":[],"timeline":{"sections":[{"title":"Generation 1","jobId":"j-1","kind":"LAND_TASK","generation":1,
+            "state":"LANDED","entries":[${entries.joinToString(",")}]}],"facts":[]}}"""
+        signIn()
+        open("orbit-session:$landing")
+        await { exists(hasTestTag("landing-page")) }
+        await { exists(hasText("Merge check green · 17m 02s", substring = true), unmerged = true) }
+        compose.onNodeWithTag("landing:mark:1", useUnmergedTree = true).assertTextEquals("✗")
+        compose.onNodeWithTag("landing:mark:2", useUnmergedTree = true).assertTextEquals("✓")
+        compose.onNodeWithTag("landing:mark:3", useUnmergedTree = true).assertTextEquals("✓")
+        shot("11-timeline-marks")
+    }
+
+    private fun open(link: String) {
+        compose.activityRule.scenario.onActivity {
+            val launchIntent = it.intent
+            MainActivity::class.java.getDeclaredMethod("onNewIntent", Intent::class.java).apply { isAccessible = true }
+                .invoke(it, Intent(Intent.ACTION_VIEW, Uri.parse(link)).setClass(it, MainActivity::class.java))
+            it.intent = launchIntent
+        }
+        compose.waitForIdle()
     }
 
     // MARK: the shell and its shots
