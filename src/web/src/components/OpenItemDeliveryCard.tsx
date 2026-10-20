@@ -178,6 +178,11 @@ export function OpenItemDeliveryCard({
   const sessionPublic = routeId(card.task?.sessionId);
   const taskHref = taskPublic ? `/tasks/${encodeURIComponent(taskPublic)}` : null;
   const sessionHref = sessionPublic ? `/sessions/${encodeURIComponent(sessionPublic)}` : null;
+  // The landing this attempt belongs to (§2.9 LS6, board v4 06 b): the third link, AFTER the two
+  // main's card already had — the failed session stays where it was, and the landing is where the
+  // attempt is read step by step. A delivery whose item recorded no landing draws nothing.
+  const landingPublic = card.landingSessionId ? routeId(card.landingSessionId) : null;
+  const landingHref = landingPublic ? `/sessions/${encodeURIComponent(landingPublic)}` : null;
   return (
     <div className="oic-wrap">
       {/* The sticky bar at the top of the transcript names this turn off these two attributes: it
@@ -227,10 +232,11 @@ export function OpenItemDeliveryCard({
             {chips.map((chip) => <span className="oic-chip" key={chip}>{chip}</span>)}
           </div>
         )}
-        {(taskHref || sessionHref) && (
+        {(taskHref || sessionHref || landingHref) && (
           <div className="oic-links">
             {taskHref && <AppLink to={taskHref}>Open the task ↗</AppLink>}
             {sessionHref && <AppLink to={sessionHref}>Open the failed session ↗</AppLink>}
+            {landingHref && <AppLink to={landingHref}>Open the landing ↗</AppLink>}
           </div>
         )}
         <div className="oic-meta">

@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 import { ProjectIntegrationLine } from './ProjectIntegrationLine';
+import { encodeId } from '../lib/idCodec';
+import { projectTaskPath } from '../lib/projectTaskRoute';
 
 const PROJECT = 'project19';
 const QUEUED = '2026-10-04T01:00:00.000Z';
@@ -211,5 +213,33 @@ describe('the line names the project’s main branch (board ⑪)', () => {
     // The owner's last choice for the repository outranks the suggestion, as on the card.
     expect(html({ ...undecided, lastMainBranch: { branch: 'develop', repository: 'acme/payments-api', chosenAt: SYNCED } },
       suggesting('refs/heads/master'))).toContain('directly into develop');
+  });
+});
+
+/**
+ * The title of a current landing opens the landing session it belongs to (§2.9 LS6, board v4 04's
+ * entry table), and the task's own page where the server names no session — one row, one press,
+ * whichever the read allows.
+ */
+describe('a current landing’s title', () => {
+  const LANDING = '0195c0de-0000-7000-8000-00000000e001';
+  const landings = (landingSessionId: string | null) => {
+    const integration = current('CHECK_FAILED');
+    return [{
+      taskId: 'task19',
+      taskTitle: 'Landing visibility',
+      integration: { ...integration, landTask: { ...integration.landTask!, landingSessionId } },
+    }];
+  };
+
+  it('opens the landing session when the generation names one', () => {
+    const html = render(view({ landTasks: landings(LANDING) }));
+    expect(html).toContain(`class="project-land-task-title" href="/sessions/${encodeId(LANDING)}"`);
+  });
+
+  it('opens the task when it names none', () => {
+    const html = render(view({ landTasks: landings(null) }));
+    expect(html).toContain(`class="project-land-task-title" href="${projectTaskPath(PROJECT, 'task19')}"`);
+    expect(html).not.toContain('/sessions/');
   });
 });

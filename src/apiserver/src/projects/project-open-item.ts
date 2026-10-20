@@ -1668,6 +1668,69 @@ export function landingSessionIdOf(payload: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
+/**
+ * The claim an X-E5 item's payload names (§4.6 X-E5, revision 23), as its card reads it.
+ *
+ * The heading's "<N>m" counts from the last report; J12's two facts (the claim's protocol and
+ * whether it ever recorded a push) decide the Abandon sentence; and the card's three rows are drawn
+ * from the rest — the landing's generation, the runner with its last report and the lease's expiry,
+ * and the step with the claim and round. Null for a payload that names none of them, which is what
+ * an older build wrote; the card then says the cautious half of J12 ("it may have been pushed") and
+ * leaves the heading's number out, rather than claiming a push that never happened. Every field
+ * beyond the three the first build wrote is optional: an item opened before it draws what it has.
+ */
+export function leaseFactsOf(
+  payload: unknown,
+): {
+  lastReportAt: string | null;
+  leaseExpiredAt: string | null;
+  jobKind: string | null;
+  generation: number | null;
+  phase: string | null;
+  step: string | null;
+  claimGeneration: number | null;
+  round: number | null;
+  checkCount: number | null;
+  runner: string | null;
+  progressProtocol: string | null;
+  pushReported: boolean;
+} | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const row = payload as {
+    lastReportAt?: unknown; leaseExpiredAt?: unknown; jobKind?: unknown; generation?: unknown;
+    phase?: unknown; step?: unknown; claimGeneration?: unknown; round?: unknown; checkCount?: unknown;
+    runner?: unknown; progressProtocol?: unknown; pushReported?: unknown;
+  };
+  const text = (value: unknown): string | null =>
+    typeof value === 'string' && value !== '' ? value : null;
+  const count = (value: unknown): number | null => {
+    const n = typeof value === 'string' ? Number(value) : value;
+    return typeof n === 'number' && Number.isInteger(n) ? n : null;
+  };
+  const lastReportAt = text(row.lastReportAt);
+  const jobKind = text(row.jobKind);
+  const progressProtocol = text(row.progressProtocol);
+  if (lastReportAt === null && jobKind === null && progressProtocol === null && row.pushReported === undefined) {
+    return null;
+  }
+  return {
+    lastReportAt,
+    leaseExpiredAt: text(row.leaseExpiredAt),
+    jobKind,
+    // Which generation of the work this claim was on, and the claim's own numbers: the card's
+    // "generation N", "claim N · round N of M".
+    generation: count(row.generation),
+    phase: text(row.phase),
+    step: text(row.step),
+    claimGeneration: count(row.claimGeneration),
+    round: count(row.round),
+    checkCount: count(row.checkCount),
+    runner: text(row.runner),
+    progressProtocol,
+    pushReported: row.pushReported === true,
+  };
+}
+
 /** Longest tail of a check's output a turn carries. The payload holds 16 KiB; a turn is not a log. */
 const MAX_CHECK_TAIL_IN_MESSAGE = 1_200;
 
@@ -1931,7 +1994,7 @@ export function openItemFacts(
   task: { id: string; title: string } | null,
 ): OpenItemFacts | null {
   if (!(INTEGRATION_ITEM_KINDS as readonly string[]).includes(kind) && kind !== 'TASK_FAILED'
-      && kind !== DELIVERY_REVIEW_KIND) {
+      && kind !== DELIVERY_REVIEW_KIND && kind !== 'LANDING_LEASE_EXPIRED') {
     return null;
   }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;

@@ -6,6 +6,7 @@ import { MemoryRouter, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProjectIntegrationJob, ProjectIntegrationView } from '@orbit/shared';
 import { ApiError, api } from '../api';
+import { encodeId } from '../lib/idCodec';
 import { projectTaskPath } from '../lib/projectTaskRoute';
 import { MOBILE_QUERY } from '../lib/useMediaQuery';
 import { LandingJobsSheet } from './LandingJobsSheet';
@@ -72,6 +73,10 @@ function view(jobs: ProjectIntegrationJob[] | undefined, lead: ProjectIntegratio
 let integration: ProjectIntegrationView = view([job(), merge()]);
 /** What the retry door answers: the fresh view, or a refusal. */
 let retryAnswer: () => Promise<unknown> = () => Promise.resolve(view([retried, merge()]));
+/** The candidate the merge card is drawn from, or null for a project with none on offer. */
+let currentPromotion: Record<string, unknown> | null = null;
+let promotionAnswer: () => Promise<unknown> = () => Promise.resolve(undefined);
+let abandonAnswer: () => Promise<unknown> = () => Promise.resolve({ abandoned: true });
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 let location = '';
@@ -131,6 +136,9 @@ beforeEach(() => {
   vi.setSystemTime(NOW);
   integration = view([job(), merge()]);
   retryAnswer = () => Promise.resolve(view([retried, merge()]));
+  currentPromotion = null;
+  promotionAnswer = () => Promise.resolve(undefined);
+  abandonAnswer = () => Promise.resolve({ abandoned: true });
   location = '';
   vi.mocked(api).mockReset();
   vi.mocked(api).mockImplementation(((path: string, options?: { method?: string }) => {
@@ -141,7 +149,13 @@ beforeEach(() => {
       });
     }
     if (path === `/projects/${PROJECT}/integration`) return Promise.resolve(integration);
-    if (path === `/projects/${PROJECT}/promotions/current`) return Promise.resolve(null);
+    if (path === `/projects/${PROJECT}/promotions/current`) return Promise.resolve(currentPromotion);
+    if (path.startsWith(`/projects/${PROJECT}/integration/jobs/`) && path.endsWith('/abandon')) {
+      return abandonAnswer();
+    }
+    if (path.startsWith(`/projects/${PROJECT}/promotions/`) && path.endsWith('/integration/retry')) {
+      return promotionAnswer();
+    }
     if (path === `/projects/${PROJECT}/panorama`) return Promise.resolve({
       buckets: { running: 0, ready: 0, blocked: 0, awaitingVerification: 0, done: 7, failed: 2, cancelled: 0 },
       shape: { taskCount: 17, edgeCount: 20, ratio: 20 / 17, maxDepth: 6, form: 'chain' },
@@ -272,11 +286,14 @@ describe('the landing rows that open the list', () => {
     // The head counts the jobs, the row each one is in the body, and the lead's own state is the
     // head's — the same read the list under it draws.
     expect(press?.querySelector('.landing-head-title')?.textContent).toBe('Landing 2 jobs · 1 timed out');
-    // Each row is its job's title and its own state word — the lead's running one in the brand,
-    // the queued one grey.
-    expect([...(press?.querySelectorAll('.spl-jobs li') ?? [])].map((row) => [
-      row.querySelector('span:first-child')?.textContent, row.querySelector('span:last-child')?.textContent,
-    ])).toEqual([[C5, 'Timed out'], ['', 'queued']]);
+    // The rows are the button's SIBLINGS (a link may not live inside one), so the card, not the
+    // press, is what holds them: each its job's title and state word — the lead's running one in
+    // the brand, the queued one grey — and a merge's row named by its own word.
+    const card = document.querySelector('[data-project-block="work-overview"] .session-project-landing');
+    expect(card?.querySelector('.spl-jobs')).not.toBeNull();
+    expect([...(card?.querySelectorAll('.spl-jobs li') ?? [])].map((row) => [
+      row.querySelector('span:first-child')?.textContent, row.querySelector('span:nth-child(2)')?.textContent,
+    ])).toEqual([[C5, 'Timed out'], ['Merge to main', 'queued']]);
     expect(dialog()).toBeNull();
     await click(press, 'the Work overview’s landing card');
     expect(dialog()?.querySelector('.orbit-overlay-title')?.textContent).toBe('2 jobs in flight');
@@ -330,5 +347,283 @@ describe('the landing rows that open the list', () => {
     // The same rule as the Landing card: the card's border and wash are the warning ones.
     expect(card?.classList.contains('is-timed-out')).toBe(true);
     expect(card?.querySelector('.landing-head.is-timed-out')).not.toBeNull();
+  });
+});
+
+/**
+ * The way into a landing session, in the three places the board puts it (docs/mocks/landing-session/
+ * v4/04, owner 2026-10-19 方案 A): said in words on the Landing card and in every row of the jobs
+ * list, and as the merge row's own press while a round of merging runs. The presses main already
+ * had are unchanged, and a server that names no landing session gets the sentence, not a link.
+ */
+const LANDING_A = '0195c0de-0000-7000-8000-00000000a001';
+const LANDING_B = '0195c0de-0000-7000-8000-00000000a002';
+const LANDING_MERGE = '0195c0de-0000-7000-8000-00000000a003';
+const landingPath = (id: string): string => `/sessions/${encodeId(id)}`;
+const NO_LANDING_PAGE = 'No landing page on this server yet';
+
+/** The candidate the merge card is drawn from, in the state a test gives it. */
+function candidate(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    promotionId: '3fFMHLbE7JTsr3vHFOzIDM',
+    state: 'CHECKING',
+    sourceKind: 'PROJECT_BRANCH', sourceRef: `project/${PROJECT}`, sourceSha: 'a'.repeat(40),
+    upstreamRef: 'main', commitsAhead: 2, filesChanged: 3, taskIds: [], tasks: [],
+    checks: [], conflicts: [], upstreamShaChecked: null,
+    upstream: { syncedAt: null, conflicts: false },
+    landsTreeSha: null, landsAs: null, askedAt: null, recheckedAt: null, recheck: null,
+    decidedAt: null, merged: null,
+    ...over,
+  };
+}
+
+const card = (): HTMLElement | null => document.querySelector<HTMLElement>('.session-project-landing');
+const cardFoot = (): HTMLElement | null => document.querySelector<HTMLElement>('.session-project-landing .spl-foot');
+const landingLinks = (root: ParentNode | null = document): HTMLAnchorElement[] =>
+  [...(root?.querySelectorAll<HTMLAnchorElement>('a') ?? [])]
+    .filter((anchor) => anchor.textContent?.startsWith('Open landing'));
+const mergeCard = (): HTMLElement | null => document.querySelector<HTMLElement>('.session-project-merge');
+
+describe('the Landing card’s way into the landing session', () => {
+  it('draws one link at the foot of a card holding one job, as a sibling of its press', async () => {
+    integration = view([job({ landingSessionId: LANDING_A, timedOut: false, retryable: false })]);
+    await mount(<ProjectPanoramaHeader projectId={PROJECT} projectStatus="OPEN" />);
+
+    // The card's one job is the whole body, so its way in is the card's foot.
+    expect(card()?.querySelector('.spl-jobs')).toBeNull();
+    const [link] = landingLinks(card());
+    expect(link?.textContent).toBe('Open landing ›');
+    expect(link?.getAttribute('href')).toBe(landingPath(LANDING_A));
+    // Nothing pressable inside the card's own press: the link is a SIBLING of the button.
+    expect(card()?.querySelectorAll('.spl-press a')).toHaveLength(0);
+    expect(cardFoot()?.contains(link!)).toBe(true);
+    // The whole card is still the jobs list's press.
+    expect(card()?.querySelector('button.spl-press')?.getAttribute('aria-haspopup')).toBe('dialog');
+  });
+
+  it('gives each row of a several-job card its own link, and the merge row none', async () => {
+    integration = view([
+      job({ landingSessionId: LANDING_A, timedOut: false, retryable: false }),
+      merge({ landingSessionId: LANDING_MERGE }),
+      job({ jobId: 'job-2', taskId: 'task-2', taskTitle: 'T2', state: 'QUEUED', phase: null,
+        landingSessionId: LANDING_B, timedOut: false, retryable: false }),
+    ]);
+    await mount(<ProjectPanoramaHeader projectId={PROJECT} projectStatus="OPEN" />);
+
+    const rows = [...(card()?.querySelectorAll('.spl-jobs li') ?? [])];
+    expect(rows).toHaveLength(3);
+    // Each task row carries its own; the merge row carries its word and no way in at all — the
+    // merge card is that round's way in.
+    expect(landingLinks(rows[0]!).map((anchor) => anchor.getAttribute('href')))
+      .toEqual([landingPath(LANDING_A)]);
+    expect(rows[1]!.textContent).toContain('Merge to main');
+    expect(landingLinks(rows[1]!)).toEqual([]);
+    expect(landingLinks(rows[2]!).map((anchor) => anchor.getAttribute('href')))
+      .toEqual([landingPath(LANDING_B)]);
+    // One per row, and none at the card's foot: a card of several hands each job its own. The
+    // foot itself is still there — it is what opens the list ("All jobs ›").
+    expect(landingLinks(cardFoot())).toEqual([]);
+    expect(cardFoot()?.textContent).toContain('All jobs ›');
+    expect(card()?.querySelectorAll('.spl-press a')).toHaveLength(0);
+  });
+
+  it('writes the grey sentence where a server names no landing session', async () => {
+    integration = view([job({ landingSessionId: null, timedOut: false, retryable: false })]);
+    await mount(<ProjectPanoramaHeader projectId={PROJECT} projectStatus="OPEN" />);
+    expect(landingLinks(card())).toEqual([]);
+    expect(card()?.querySelector('.spl-foot .is-none')?.textContent).toBe(NO_LANDING_PAGE);
+  });
+
+  it('opens the landing from the card without opening the jobs list', async () => {
+    integration = view([job({ landingSessionId: LANDING_A, timedOut: false, retryable: false })]);
+    await mount(<ProjectPanoramaHeader projectId={PROJECT} projectStatus="OPEN" />);
+    await click(landingLinks(card())[0], 'the card’s Open landing');
+    expect(location).toBe(landingPath(LANDING_A));
+    expect(dialog()).toBeNull();
+  });
+});
+
+describe('the jobs list’s way into each job’s landing session', () => {
+  it('draws a link on every row that names one, the grey sentence where none is named, and the merge row’s only way in', async () => {
+    integration = view([
+      job({ landingSessionId: LANDING_A }),
+      job({ jobId: 'job-2', taskId: 'task-2', taskTitle: 'T2', state: 'QUEUED', phase: null,
+        landingSessionId: null, timedOut: false, retryable: false }),
+      merge({ landingSessionId: LANDING_MERGE }),
+    ]);
+    await mount(<LandingJobsSheet projectId={PROJECT} open onClose={() => {}} />);
+
+    expect(landingLinks(row('job-c5')).map((anchor) => anchor.getAttribute('href')))
+      .toEqual([landingPath(LANDING_A)]);
+    // A server that names none: the sentence in the same slot, and nothing to press.
+    expect(landingLinks(row('job-2'))).toEqual([]);
+    expect(row('job-2')?.querySelector('.landing-jobs-slot .is-none')?.textContent).toBe(NO_LANDING_PAGE);
+    // The merge row is no press of its own — this link is the only way in it has.
+    const mergeRow = row('job-merge')!;
+    expect(mergeRow.querySelector('a.landing-jobs-open')).toBeNull();
+    expect(landingLinks(mergeRow).map((anchor) => anchor.getAttribute('href')))
+      .toEqual([landingPath(LANDING_MERGE)]);
+    // The row's link and its Retry are siblings: nothing pressable inside anything pressable.
+    expect(document.querySelectorAll('.landing-jobs a button, .landing-jobs button a, .landing-jobs a a'))
+      .toHaveLength(0);
+  });
+
+  it('opens the landing from a row instead of the task', async () => {
+    integration = view([
+      job({ landingSessionId: LANDING_A }),
+      merge({ landingSessionId: LANDING_MERGE }),
+    ]);
+    await mount(<LandingJobsSheet projectId={PROJECT} open onClose={() => {}} />);
+    await click(landingLinks(row('job-c5'))[0], 'C5’s Open landing');
+    expect(location).toBe(landingPath(LANDING_A));
+    await click(landingLinks(row('job-merge'))[0], 'the merge row’s Open landing');
+    expect(location).toBe(landingPath(LANDING_MERGE));
+  });
+});
+
+describe('the merge card’s own way into the round', () => {
+  it('opens this round’s landing session from the merge row while it is checking', async () => {
+    currentPromotion = candidate({ landingSessionId: LANDING_MERGE });
+    integration = view([merge({ kind: 'CHECK_PROMOTION', state: 'RUNNING', phase: 'CHECK',
+      startedAt: instant(NOW - 80_000), heartbeatAt: instant(NOW - 5_000), timedOut: false }),
+    job()]);
+    await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
+    const press = mergeCard()?.querySelector<HTMLAnchorElement>('a.landing-head-press');
+    expect(press?.getAttribute('href')).toBe(landingPath(LANDING_MERGE));
+    expect(press?.textContent).toContain('Merge check');
+    await click(press, 'the merge row');
+    expect(location).toBe(landingPath(LANDING_MERGE));
+    expect(dialog()).toBeNull();
+  });
+
+  it('takes the round’s session from the merge job when the candidate names none', async () => {
+    currentPromotion = candidate();
+    integration = view([merge({ kind: 'CHECK_PROMOTION', state: 'RUNNING', phase: 'CHECK',
+      startedAt: instant(NOW - 80_000), heartbeatAt: instant(NOW - 5_000), timedOut: false,
+      landingSessionId: LANDING_MERGE }), job()]);
+    await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
+    expect(mergeCard()?.querySelector<HTMLAnchorElement>('a.landing-head-press')?.getAttribute('href'))
+      .toBe(landingPath(LANDING_MERGE));
+  });
+
+  it('keeps main’s press — the jobs list — when the server names no session', async () => {
+    currentPromotion = candidate();
+    integration = view([merge({ kind: 'CHECK_PROMOTION', state: 'RUNNING', phase: 'CHECK',
+      startedAt: instant(NOW - 80_000), heartbeatAt: instant(NOW - 5_000), timedOut: false }), job()]);
+    await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
+    expect(mergeCard()?.querySelector('a.landing-head-press')).toBeNull();
+    const press = mergeCard()?.querySelector<HTMLButtonElement>('button.landing-head-press');
+    await click(press, 'the merge row');
+    expect(dialog()?.querySelector('.orbit-overlay-title')?.textContent).toBe('2 jobs in flight');
+  });
+
+  it('counts the jobs beside the merge and opens the list from its foot', async () => {
+    currentPromotion = candidate({ landingSessionId: LANDING_MERGE });
+    integration = {
+      ...view([
+        merge({ kind: 'CHECK_PROMOTION', state: 'RUNNING', phase: 'CHECK',
+          startedAt: instant(NOW - 80_000), heartbeatAt: instant(NOW - 5_000), timedOut: false }),
+        job(),
+        job({ jobId: 'job-3', taskId: 'task-3', taskTitle: 'T3', state: 'QUEUED', phase: null,
+          timedOut: false, retryable: false }),
+      ]),
+    };
+    await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
+    expect(mergeCard()?.querySelector('.session-project-merge-queued')?.textContent).toBe('+2 jobs queued');
+    const allJobs = [...(mergeCard()?.querySelectorAll('button') ?? [])]
+      .find((button) => button.textContent === 'All jobs ›');
+    await click(allJobs, 'All jobs ›');
+    expect(dialog()?.querySelector('.orbit-overlay-title')?.textContent).toBe('3 jobs in flight');
+  });
+
+  it('offers the round’s landing beside Details while the confirmed merge is queued', async () => {
+    currentPromotion = candidate({ state: 'CONFIRMED', landingSessionId: LANDING_MERGE,
+      execution: { state: 'QUEUED', phase: null, startedAt: instant(NOW - 60_000) } });
+    integration = view([merge({ state: 'QUEUED', phase: null, landingSessionId: LANDING_MERGE })]);
+    await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
+    expect(mergeCard()?.getAttribute('data-shape')).toBe('merging');
+    expect(mergeCard()?.textContent).toContain('Merge into main queued');
+    expect(landingLinks(mergeCard()).map((anchor) => anchor.getAttribute('href')))
+      .toEqual([landingPath(LANDING_MERGE)]);
+    expect(mergeCard()?.textContent).toContain('Cancel');
+  });
+
+  it('says a merge is being cancelled, and stops offering Cancel', async () => {
+    currentPromotion = candidate({ state: 'CONFIRMED', cancelRequested: true, landingSessionId: LANDING_MERGE,
+      execution: { state: 'RUNNING', phase: 'CHECK', startedAt: instant(NOW - 200_000) } });
+    integration = view([merge({ state: 'RUNNING', phase: 'CHECK', landingSessionId: LANDING_MERGE,
+      heartbeatAt: instant(NOW - 5_000), timedOut: false })]);
+    await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
+    const text = mergeCard()?.textContent ?? '';
+    expect(text).toContain('Cancelling the merge…');
+    expect(text).toContain('Stops at the runner’s next report, within 30 s · nothing has been pushed');
+    expect(text).toContain('Cancel requested');
+    const cancel = [...(mergeCard()?.querySelectorAll('button') ?? [])]
+      .find((button) => button.textContent === 'Cancel requested');
+    expect(cancel?.hasAttribute('disabled')).toBe(true);
+    expect(landingLinks(mergeCard()).map((anchor) => anchor.getAttribute('href')))
+      .toEqual([landingPath(LANDING_MERGE)]);
+  });
+
+  it('says a cancel came too late when the push boundary is passed', async () => {
+    currentPromotion = candidate({ state: 'CONFIRMED', cancelRequested: true,
+      pushBoundaryPassed: true, landingSessionId: LANDING_MERGE,
+      execution: { state: 'RUNNING', phase: 'PUSH', startedAt: instant(NOW - 200_000) } });
+    integration = view([merge({ state: 'RUNNING', phase: 'PUSH', landingSessionId: LANDING_MERGE,
+      heartbeatAt: instant(NOW - 5_000), timedOut: false })]);
+    await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
+    expect(mergeCard()?.textContent).toContain('Too late to cancel — the push has started');
+  });
+
+  it('offers Re-run the check and Abandon on a timed-out check, and neither on a timed-out merge', async () => {
+    const timedOutCheck = merge({ kind: 'CHECK_PROMOTION', state: 'RUNNING', phase: 'CHECK',
+      startedAt: instant(NOW - 31 * 60_000), heartbeatAt: instant(NOW - 23 * 60_000),
+      timedOut: true, limitSeconds: 600, retryable: false, landingSessionId: LANDING_MERGE });
+    currentPromotion = candidate({ landingSessionId: LANDING_MERGE });
+    integration = view([timedOutCheck]);
+    await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
+    const checkCard = mergeCard()!;
+    expect(checkCard.classList.contains('is-timed-out')).toBe(true);
+    expect(checkCard.querySelector('.session-project-merge-rerun')?.textContent).toBe('Re-run the check');
+    const abandon = checkCard.querySelector<HTMLButtonElement>('.session-project-merge-abandon');
+    expect(abandon?.textContent).toBe('Abandon');
+    // The row still opens the round's landing, timeout or not.
+    expect(checkCard.querySelector<HTMLAnchorElement>('a.landing-head-press')?.getAttribute('href'))
+      .toBe(landingPath(LANDING_MERGE));
+
+    // The re-check is the candidate's own door; the abandon is the job's (J-T10).
+    await click(checkCard.querySelector('.session-project-merge-rerun'), 'Re-run the check');
+    expect(api).toHaveBeenCalledWith(
+      `/projects/${encodeURIComponent(PROJECT)}/promotions/${encodeURIComponent('3fFMHLbE7JTsr3vHFOzIDM')}/integration/retry`,
+      { method: 'POST', body: { reason: 'Re-run the timed-out check from the merge card.' } },
+    );
+    await click(abandon, 'Abandon');
+    expect(api).toHaveBeenCalledWith(
+      `/projects/${PROJECT}/integration/jobs/job-merge/abandon`, { method: 'POST' },
+    );
+    await settle();
+    expect(checkCard.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('offers only Abandon on a timed-out merge to main', async () => {
+    const timedOutMerge = merge({ state: 'RUNNING', phase: 'PUSH',
+      startedAt: instant(NOW - 30 * 60_000), heartbeatAt: instant(NOW - 25 * 60_000),
+      timedOut: true, limitSeconds: 600, landingSessionId: LANDING_MERGE });
+    currentPromotion = candidate({ state: 'CONFIRMED', landingSessionId: LANDING_MERGE,
+      execution: { state: 'RUNNING', phase: 'PUSH', startedAt: instant(NOW - 30 * 60_000) } });
+    integration = view([timedOutMerge]);
+    await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
+    expect(mergeCard()?.classList.contains('is-timed-out')).toBe(true);
+    expect(mergeCard()?.querySelector('.session-project-merge-rerun')).toBeNull();
+    expect(mergeCard()?.querySelector('.session-project-merge-abandon')?.textContent).toBe('Abandon');
+  });
+
+  it('adds no way into the landing when the round is blocked — that row is the Landings group’s', async () => {
+    currentPromotion = candidate({ state: 'BLOCKED', landingSessionId: LANDING_MERGE });
+    integration = view([merge({ state: 'QUEUED', phase: null })]);
+    await mount(<ProjectMergeStrip projectId={PROJECT} onOpenCoordinator={null} />);
+    expect(mergeCard()?.getAttribute('data-shape')).toBe('blocked');
+    expect(landingLinks(mergeCard())).toEqual([]);
+    expect(mergeCard()?.textContent).not.toContain('Open landing');
   });
 });
