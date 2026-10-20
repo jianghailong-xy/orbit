@@ -52,7 +52,7 @@ Two scope questions went to the creating coordinator session `34ZyHoLsfDlMhp5cst
   - `RERUN_CHECK_REASON` is covered by `LandingSessionCopyParityTest.everyWordIsTheSwifts`.
   - The fold line and the gate by `SessionLandingsCopyParityTest.kt:39`, `:70`, `:96`.
   - `landTaskRoundsPerClaim` is pinned to the Swift source by `ExceptionCardsTest.kt:409`.
-- `git merge-tree --write-tree` of the tip against origin/main `4f5c3b766` (fetched 2026-10-20 17:1x UTC) is clean. The two commits main gained since the base (`01415e5e2`, `4f5c3b766`) touch only model routing and the Go Codex runner, none of this branch's files. The server cleanup task `34jBwFldsZVGXcU3hPS6A`, which also edits `integration-job-relay.ts`, has not landed.
+- `git merge-tree --write-tree` of the tip against origin/main `0f9bba8d8` (fetched 2026-10-20 ~18:50 UTC) is clean. The three commits main gained since the base (`01415e5e2`, `4f5c3b766`, `0f9bba8d8`) touch only model routing and the Go Codex runner, none of this branch's files. The server cleanup task `34jBwFldsZVGXcU3hPS6A`, which also edits `integration-job-relay.ts`, has not landed.
 
 ## Tests per item (file:line at `3dd4f3365`)
 
