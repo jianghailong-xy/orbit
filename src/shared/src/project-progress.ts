@@ -1131,8 +1131,10 @@ export interface ProjectOpenItemRow<Instant = string> {
   landingSessionId?: string | null;
   /**
    * The landing attempt an X-E5 item is about (§4.6): the integration job whose claim stopped
-   * reporting, as its public id. `ABANDON` names that job in its route, so a client drawing this
-   * row's doors needs it. Null for every other kind, and absent from a server that predates it.
+   * reporting, as the job row's UUID (the response body carries the base62 twin beside it as
+   * `integrationJobPublicId`, common/public-id-body.ts). `ABANDON` names that job in its route,
+   * which takes either spelling, so a client drawing this row's doors needs it. Null for every
+   * other kind, and absent from a server that predates it.
    */
   integrationJobId?: string | null;
   /**
