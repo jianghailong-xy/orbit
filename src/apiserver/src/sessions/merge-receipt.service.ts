@@ -45,6 +45,13 @@ import { checkpointMergeReceiptKey } from '../projects/task-checkpoint';
 import { retireCandidatesLandedByReceipt } from '../projects/project-promotion.service';
 import { settleTaskSegmentAfterReceipt } from '../projects/landing-session';
 
+/**
+ * The sessions a landing clears the merge recovery of (S3 of the merge-recovery repair loop): it still holds a
+ * recovery or its action, and no merge or check is in flight — that operation's result is what settles it.
+ */
+const HOLDS_LANDED_RECOVERY = Prisma.sql`("merge_recovery" IS NOT NULL OR "merge_recovery_action" IS NOT NULL)
+   AND "merge_status" IS DISTINCT FROM 'pending'`;
+
 export interface RecordMergeReceiptInput {
   result: MergeReceiptResult;
   sourceBranch?: string | null;
@@ -673,6 +680,8 @@ export class MergeReceiptService {
        * ordinary report.
        */
       recoveredUnknownPush?: boolean;
+      /** The sessions `lockLandedRecoveries` took for this result, when it took them: the clear is limited to those. */
+      recoveryHeld?: ReadonlySet<string>;
     },
   ): Promise<string[]> {
     const sourceSha = normalizeSha(args.sourceSha, 'sourceSha');
@@ -684,7 +693,7 @@ export class MergeReceiptService {
       throw new BadRequestException('a landed integration must name where the target ended up');
     }
     // The landing ends the merge recovery its session was holding, before the receipt that says so.
-    await MergeReceiptService.clearLandedRecoveries(tx, [args.sessionId]);
+    await MergeReceiptService.clearLandedRecoveries(tx, [args.sessionId], args.recoveryHeld);
     const created = await tx.sessionMergeReceipt.createManyAndReturn({
       data: [{
         ownerId: args.ownerId,
@@ -732,25 +741,71 @@ export class MergeReceiptService {
    * it, and clearing its action under it would turn a preview's answer into a receipt. The rows are locked in
    * id order in one statement before the one write of each (I3), so a promotion that lands several sessions
    * takes them as every other multi-session writer does; one with no recovery is neither locked nor written.
+   *
+   * With `held`, only the sessions in it are cleared: the ones `lockLandedRecoveries` already took for this
+   * result, so the lock here is one the transaction holds.
    */
   static async clearLandedRecoveries(
     tx: Prisma.TransactionClient,
     sessionIds: ReadonlyArray<string | null | undefined>,
+    held?: ReadonlySet<string>,
   ): Promise<void> {
-    const ids = orderedIds(sessionIds);
+    const ids = orderedIds(sessionIds).filter((id) => held === undefined || held.has(id));
     if (ids.length === 0) return;
-    const held = await tx.$queryRaw<Array<{ id: string }>>`
+    const recovering = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT "id" FROM "session"
        WHERE "id" = ANY(${ids}::uuid[])
-         AND ("merge_recovery" IS NOT NULL OR "merge_recovery_action" IS NOT NULL)
-         AND "merge_status" IS DISTINCT FROM 'pending'
+         AND ${HOLDS_LANDED_RECOVERY}
        ORDER BY "id"
-       FOR NO KEY UPDATE`;
-    if (held.length === 0) return;
+       FOR NO KEY UPDATE`);
+    if (recovering.length === 0) return;
     await tx.session.updateMany({
-      where: { id: { in: held.map((row) => row.id) } },
+      where: { id: { in: recovering.map((row) => row.id) } },
       data: { mergeRecovery: Prisma.DbNull, mergeRecoveryAction: null },
     });
+  }
+
+  /**
+   * The sessions a landing result may clear the merge recovery of, locked before anything else that result needs
+   * of a lower rank than its receipts (`common/lock-order.ts`, rank 30). `applyIntegrationJobResult` takes them for
+   * a stopped LAND_TASK, ahead of the project binding (rank 55), and for a result that writes J12's receipts beside
+   * its own or a promotion's, ahead of the first of them. The `clearLandedRecoveries` beside each receipt then only
+   * takes again a lock this one holds.
+   *
+   * Answers with the sessions taken FOR NO KEY UPDATE, those that match `HOLDS_LANDED_RECOVERY`, and the result's
+   * clears are limited to them. A session that starts to match only after this read — a merge result committing in
+   * between — would otherwise be locked late. It keeps the recovery that merge result wrote, which is where it would
+   * be had the merge result committed after this landing.
+   *
+   * Without `keyShareTheRest`, one statement over the matching sessions, in id order. With it, every session is
+   * taken one at a time in id order, at the mode it ends with: FOR NO KEY UPDATE when it matches, otherwise FOR KEY
+   * SHARE, the mode its receipt's foreign key takes anyway.
+   */
+  static async lockLandedRecoveries(
+    tx: Prisma.TransactionClient,
+    sessionIds: ReadonlyArray<string | null | undefined>,
+    keyShareTheRest = false,
+  ): Promise<Set<string>> {
+    const ids = orderedIds(sessionIds);
+    const held = new Set<string>();
+    if (ids.length === 0) return held;
+    if (!keyShareTheRest) {
+      const recovering = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id" FROM "session"
+         WHERE "id" = ANY(${ids}::uuid[])
+           AND ${HOLDS_LANDED_RECOVERY}
+         ORDER BY "id"
+         FOR NO KEY UPDATE`);
+      for (const row of recovering) held.add(row.id);
+      return held;
+    }
+    for (const id of ids) {
+      const [recovering] = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+        SELECT "id" FROM "session" WHERE "id" = ${id}::uuid AND ${HOLDS_LANDED_RECOVERY} FOR NO KEY UPDATE`);
+      if (recovering) held.add(id);
+      else await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "session" WHERE "id" = ${id}::uuid FOR KEY SHARE`);
+    }
+    return held;
   }
 
   private static errorText(input: RecordMergeReceiptInput): string | null {
