@@ -73,18 +73,17 @@ the words and the door conditions on Linux.
 
 ## Test runs
 
-- `swift test` (OrbitKit, `swift:6.1` in Docker, 2026-10-20): 3983 tests, 5 skipped, 0 failures —
+- `swift test` (OrbitKit, `swift:6.1` in Docker, 2026-10-20): 3992 tests, 5 skipped, 0 failures —
   includes the four copy-parity suites the task names (`ProjectPageSectionsCopyParityTests`,
   `SessionProjectCopyParityTests`, `OpenItemDeliveryCopyParityTests`, `TaskDetailCopyParityTests`)
-  and the six landing suites added here.
+  and the landing suites added here.
 - Android `:app:testDebugUnitTest` + `:core:test` (Gradle, 2026-10-20): `ProjectCopyParityTest` 8,
   `SessionProjectCopyParityTest` 6, `TaskCopyParityTest` 8, `ExceptionCardsTest` 13 — 35 tests, 0
   failures.
 - Client CI (`client.yml`, macOS OrbitKit tests + OrbitApp build, iOS build): green on the delivered
-  code — the dispatch run on the commit this evidence ships with (its run id is on the task's
-  evidence envelope; `39352792577` gated the same sources minus the menu changes).
-- The screenshot probe (`probe-harness/ci/client.probe.yml`, run `39355049538`): 6 iPhone tests and
-  2 Mac tests passed, 9 pictures. `probe-run.txt` is the probe's own record (run, sha, display).
+  code (dispatch run `39362076336` on `db09dbf4`; the evidence commit after it adds these files only).
+- The screenshot probe (`probe-harness/ci/client.probe.yml`, run `39362076160`): 16 iPhone tests and
+  2 Mac tests passed, 20 pictures. `probe-run.txt` is the probe's own record (run, sha, display).
 
 ## Screenshots
 
@@ -118,10 +117,7 @@ workflow that ran on `probe/landing-session-native`; its pictures land in
 
 ## What is not covered here
 
-- The delivery card's `Open the landing ↗` is exercised by the OrbitKit tests but not
-  photographed: the probe would have to seed a `user` event carrying the delivery payload.
-- The Landing card's own foot/row entries are exercised by `LandingEntranceTests` but not
-  photographed: the probe's in-flight job is a merge round, whose card is the merge card. For the
-  same reason every landing-page picture is a merge round — a task segment's page is covered by
-  `LandingSessionPageTests` and `TaskLandingTests`, not by a picture.
 - The Android client's screenshots belong to the Android tasks that depend on this one.
+- The probe drives one state per launch against a stub; a live server's timing (the ring's motion,
+  a poll landing mid-second) is not photographed, and the landing-page pictures are stills of the
+  model's own values (the OrbitKit tests hold those values to the web's).
