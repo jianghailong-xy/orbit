@@ -131,19 +131,28 @@ type codexAppActiveTurn struct {
 	// retryWake is open while a capacity retry waits out its backoff; an interrupt closes it so
 	// the wait ends at once instead of holding a Stop or an `end` for up to two minutes.
 	retryWake chan struct{}
+	// reviewAtCapacity: Codex's auto_review approvals reviewer could not review an action of this
+	// turn because its model was at capacity. Codex then refuses the action and tells the model
+	// not to go on without asking, so the turn ends normally with its work undone — replayed
+	// like a turn that failed "at capacity" itself, which has the action reviewed again.
+	reviewAtCapacity bool
 }
 
 type codexCapacityRetry struct {
-	orbitTurnID string
-	prepared    codexPreparedTurn
-	attempt     int
-	delay       time.Duration
-	wake        chan struct{}
-	openSteers  []string
+	// reviewAtCapacity: replayed for an auto review that found its model at capacity, rather than
+	// for the turn's own failure.
+	reviewAtCapacity bool
+	orbitTurnID      string
+	prepared         codexPreparedTurn
+	attempt          int
+	delay            time.Duration
+	wake             chan struct{}
+	openSteers       []string
 }
 
-// beginCodexCapacityRetry turns a finalize of a turn that failed "at capacity" into a replay of the
-// same turn, while retries remain: the active turn goes back to its not-yet-started state — no
+// beginCodexCapacityRetry turns a finalize of a turn that failed "at capacity" — or that ended
+// after an auto review of one of its actions found the reviewer's model at capacity — into a replay
+// of the same turn, while retries remain: the active turn goes back to its not-yet-started state — no
 // Codex turn id, so an interrupt in the backoff finalizes it as interrupted rather than addressing
 // a turn that is over — and the reply text the failed attempt left behind is dropped. Steers the
 // failed attempt still held are claimed for the caller to answer: Codex discarded them with it.
@@ -161,18 +170,24 @@ func beginCodexCapacityRetry(activeMu *sync.Mutex, active **codexAppActiveTurn, 
 	if errText == "" {
 		errText = a.result.Error
 	}
-	if status != stFailed || !isCodexCapacityError(errText) {
+	turnAtCapacity := status == stFailed && isCodexCapacityError(errText)
+	// A turn that failed for some other reason keeps that failure: replaying it would only
+	// repeat it.
+	reviewAtCapacity := a.reviewAtCapacity && status == stSucceeded
+	if !turnAtCapacity && !reviewAtCapacity {
 		return codexCapacityRetry{}, false
 	}
 	retry := codexCapacityRetry{
-		orbitTurnID: a.orbitTurnID,
-		prepared:    *a.prepared,
-		attempt:     a.capacityRetries + 1,
-		delay:       codexCapacityRetryDelays[a.capacityRetries],
-		wake:        make(chan struct{}),
-		openSteers:  takeOpenCodexSteers(a),
+		reviewAtCapacity: !turnAtCapacity,
+		orbitTurnID:      a.orbitTurnID,
+		prepared:         *a.prepared,
+		attempt:          a.capacityRetries + 1,
+		delay:            codexCapacityRetryDelays[a.capacityRetries],
+		wake:             make(chan struct{}),
+		openSteers:       takeOpenCodexSteers(a),
 	}
 	a.capacityRetries++
+	a.reviewAtCapacity = false
 	a.retryWake = retry.wake
 	a.codexTurnID = ""
 	a.startSent = false
@@ -343,10 +358,9 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 	// sendTurn sends the active turn's turn/start; assigned below, once what it calls exists.
 	var sendTurn func(orbitTurnID string, prepared codexPreparedTurn)
 
-	// retryAtCapacity replays a turn that failed "at capacity" instead of finalizing it, after
-	// a backoff an interrupt cuts short. Every Codex turn of the session ends through
-	// finalizeActive — those that run Codex's auto_review approvals reviewer included — so all
-	// of them get it.
+	// retryAtCapacity replays a turn that failed "at capacity", or whose auto review did,
+	// instead of finalizing it, after a backoff an interrupt cuts short. Every Codex turn of the
+	// session ends through finalizeActive, so all of them get it.
 	retryAtCapacity := func(result codexTurnResult) bool {
 		retry, ok := beginCodexCapacityRetry(&activeMu, &active, result, threadID)
 		if !ok {
@@ -355,7 +369,11 @@ func runCodexAppServerSessionProcess(ctx context.Context, shutdownCtx context.Co
 		for _, steerTurnID := range retry.openSteers {
 			steerDispatch.fail(steerTurnID, errCodexSteerDropped)
 		}
-		logln("codex model at capacity for", job.SessionID+"; retrying turn", retry.orbitTurnID,
+		what := "codex model at capacity for"
+		if retry.reviewAtCapacity {
+			what = "codex auto review model at capacity for"
+		}
+		logln(what, job.SessionID+"; retrying turn", retry.orbitTurnID,
 			fmt.Sprintf("in %s (retry %d of %d)", retry.delay, retry.attempt, len(codexCapacityRetryDelays)))
 		asyncWg.Add(1)
 		go func() {
@@ -2013,6 +2031,23 @@ func handleCodexAppNotificationWithImageFallback(threadID string, msg codexRPCMe
 			(*active).result.Status = stFailed
 			(*active).result.Subtype = "error"
 			(*active).result.Error = errMsg
+		}
+		activeMu.Unlock()
+	case "item/autoApprovalReview/completed":
+		// [UNSTABLE] in the app-server schema. Which status a reviewer that could not run reports
+		// is not documented, so anything but an approval whose rationale says "at capacity" counts.
+		review := mapValue(params["review"])
+		status, rationale := firstString(review, "status"), firstString(review, "rationale")
+		if status == "approved" || status == "inProgress" {
+			return
+		}
+		logln("codex auto review", status+":", clip(rationale, 300))
+		if !isCodexCapacityError(rationale) {
+			return
+		}
+		activeMu.Lock()
+		if *active != nil {
+			(*active).reviewAtCapacity = true
 		}
 		activeMu.Unlock()
 	case "thread/tokenUsage/updated":

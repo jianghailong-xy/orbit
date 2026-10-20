@@ -219,3 +219,89 @@ func TestCodexCapacityBackoffIsInterruptibleAndForgetsTheFailedAttempt(t *testin
 		t.Fatal("an interrupted turn was replayed")
 	}
 }
+
+// Codex's auto_review approvals reviewer runs on a model of its own, and when that model is at
+// capacity the review cannot run: Codex refuses the action ("Automatic approval review failed:
+// Selected model is at capacity…") and tells the model not to go on without asking, so the turn
+// ends normally with its work undone. The turn is replayed as if it had failed "at capacity"
+// itself; the replay has the action reviewed again, so nothing is let through unreviewed.
+
+const codexReviewAtCapacityRationale = "Automatic approval review failed: " + codexCapacityMessage
+
+func codexReviewAttempt(status, rationale, reply string) []map[string]interface{} {
+	return append([]map[string]interface{}{
+		{"method": "item/autoApprovalReview/completed", "params": map[string]interface{}{
+			"threadId": "thread-fake-session", "turnId": "turn-fake-session", "reviewId": "review-1",
+			"targetItemId": "exec-1", "startedAtMs": 1, "completedAtMs": 2, "decisionSource": "agent",
+			"action": map[string]interface{}{"type": "command", "command": "make field-build"},
+			"review": map[string]interface{}{"status": status, "rationale": rationale},
+		}},
+	}, codexCompletedAttempt(reply)...)
+}
+
+func TestCodexTurnWhoseAutoReviewWasAtCapacityIsReplayed(t *testing.T) {
+	// The schema does not say which status a reviewer that could not run reports.
+	for _, status := range []string{"denied", "timedOut", "aborted"} {
+		t.Run(status, func(t *testing.T) {
+			got, inputs := runCodexCapacitySession(t,
+				codexReviewAttempt(status, codexReviewAtCapacityRationale, "I need approval to run make field-build."),
+				codexCompletedAttempt("field-build done"))
+			if len(inputs) != 2 || inputs[0] != inputs[1] {
+				t.Fatalf("turn/start inputs %v, want the same input twice", inputs)
+			}
+			if got.Status != stSucceeded || got.Result != "field-build done" {
+				t.Fatalf("turn completed %+v, want SUCCEEDED with the replay's reply", got)
+			}
+		})
+	}
+}
+
+func TestCodexTurnWhoseAutoReviewStaysAtCapacityEndsAfterTheRetries(t *testing.T) {
+	attempts := make([][]map[string]interface{}, len(codexCapacityRetryDelays)+1)
+	for i := range attempts {
+		attempts[i] = codexReviewAttempt("denied", codexReviewAtCapacityRationale, "I need approval to run make field-build.")
+	}
+	got, inputs := runCodexCapacitySession(t, attempts...)
+	if want := len(codexCapacityRetryDelays) + 1; len(inputs) != want {
+		t.Fatalf("turn/start sent %d times, want %d", len(inputs), want)
+	}
+	if got.Status != stSucceeded || got.Result != "I need approval to run make field-build." {
+		t.Fatalf("turn completed %+v, want the last attempt's own ending", got)
+	}
+}
+
+// A review that ran and decided is the reviewer's answer, whatever it says.
+func TestCodexTurnWhoseAutoReviewDecidedIsNotReplayed(t *testing.T) {
+	for name, review := range map[string][2]string{
+		"a denial":    {"denied", "Deletes files outside the workspace."},
+		"an approval": {"approved", "Low risk; the queue is at capacity so the script drains it."},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, inputs := runCodexCapacitySession(t,
+				codexReviewAttempt(review[0], review[1], "done as far as allowed"),
+				codexCompletedAttempt("unreachable"))
+			if len(inputs) != 1 || got.Result != "done as far as allowed" {
+				t.Fatalf("turn/start sent %d times, turn completed %+v; want one attempt", len(inputs), got)
+			}
+		})
+	}
+}
+
+// A turn that failed for some other reason keeps that failure even if a review of it was at capacity.
+func TestCodexReviewAtCapacityDoesNotReplayATurnThatFailedOtherwise(t *testing.T) {
+	var mu sync.Mutex
+	active := &codexAppActiveTurn{
+		orbitTurnID: "orbit-turn-1", startSent: true, reviewAtCapacity: true,
+		prepared: &codexPreparedTurn{Prompt: "run the ledger spec"},
+	}
+	if _, ok := beginCodexCapacityRetry(&mu, &active, codexTurnResult{Status: stFailed, Error: "unauthorized"}, "thread-1"); ok {
+		t.Fatal("a turn that failed unauthorized was replayed for its review")
+	}
+	if _, ok := beginCodexCapacityRetry(&mu, &active, codexTurnResult{Status: stInterrupted}, "thread-1"); ok {
+		t.Fatal("an interrupted turn was replayed for its review")
+	}
+	retry, ok := beginCodexCapacityRetry(&mu, &active, codexTurnResult{Status: stSucceeded}, "thread-1")
+	if !ok || !retry.reviewAtCapacity || active.reviewAtCapacity {
+		t.Fatalf("beginCodexCapacityRetry = %+v, %v (flag left %v); want a review replay that clears the flag", retry, ok, active.reviewAtCapacity)
+	}
+}
