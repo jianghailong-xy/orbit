@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AgentProvider, ALL_ENGINES, ENGINE_CLI_NAMES, type LoginEngine } from '@orbit/shared';
+import { CURSOR_CONNECT_HREF, cursorRunnerState } from '../lib/cursorRuntime';
 import { DSH_CONNECT_HREF, dshRunnerState } from '../lib/dshRuntime';
 import { runsOnEnvKey } from '../lib/engineAccounts';
 import { encodeId } from '../lib/idCodec';
@@ -21,8 +22,10 @@ import { Button } from './ui/Button';
  * nothing of their own.
  */
 
-/** The engines a machine signs in, in the order every list on the page names them. */
-const ENGINES = (Object.keys(ENGINE_NAME) as LoginEngine[]).filter(webShowsEngine);
+/** The engines a machine signs in, in the order every list on the page names them — Cursor CLI once a
+ *  runner of the account knows it (webShowsEngine). */
+const enginesFor = (runners: Runner[]): LoginEngine[] =>
+  (Object.keys(ENGINE_NAME) as LoginEngine[]).filter((engine) => webShowsEngine(engine, runners));
 
 const machineName = (runner: Runner) => runner.displayName || runner.name;
 
@@ -38,6 +41,8 @@ function signedOutOn(runner: Runner, engine: LoginEngine): boolean {
   if (engine === 'antigravity' && (runner.antigravity?.supported === false || runner.antigravity?.googleLogin !== 'available')) {
     return false;
   }
+  // A machine that can't run Cursor CLI at all says so on its row; signing in there would not help.
+  if (engine === 'cursor' && cursorRunnerState(runner) !== 'ready') return false;
   return !health?.accounts?.some((account) => account.auth === 'yes');
 }
 
@@ -50,6 +55,7 @@ function signedOutOn(runner: Runner, engine: LoginEngine): boolean {
 function loginsOn(runner: Runner, engine: LoginEngine | 'opencode'): number {
   const health = engineHealthOf(runner, engine);
   if (!health?.installed || (engine === 'antigravity' && runner.antigravity?.supported === false)) return 0;
+  if (engine === 'cursor' && cursorRunnerState(runner) !== 'ready') return 0;
   const accounts = health.accounts ?? [];
   if (accounts.length === 0) return health.auth === 'yes' ? 1 : 0;
   return accounts.filter((account) => account.auth === 'yes' || runsOnEnvKey(health, account)).length;
@@ -79,6 +85,21 @@ function harnessModelOf(online: Runner[]): string | null {
 }
 
 /**
+ * The model a Cursor CLI session on a Cursor key starts on: Auto, Cursor's own default, by the name the
+ * catalogue of the first machine online that can run it gives it — the models are Cursor CLI's on each
+ * machine, whichever key it runs on (docs/cursor-runtime-contract.md §10). Auto it is with none.
+ */
+function cursorModelOf(online: Runner[]): string {
+  for (const runner of online) {
+    const catalog = runner.modelCatalog?.[AgentProvider.CURSOR];
+    if (cursorRunnerState(runner) !== 'ready' || !catalog?.length) continue;
+    const model = runner.runtimeDefaultModels?.[AgentProvider.CURSOR] || 'default';
+    return catalog.find((option) => option.value === model)?.label ?? catalog[0].label;
+  }
+  return 'Auto';
+}
+
+/**
  * What needs a person, a line each, and nothing at all while nothing does: an engine signed out on a
  * machine that is online — signed in again right here, with the same sign-in its row on the machine's
  * card opens — a machine that is offline, and an account pool no session can start on. Each line ends
@@ -87,9 +108,10 @@ function harnessModelOf(online: Runner[]): string | null {
 export function NeedsAttention({ runners, pools }: { runners: Runner[]; pools: ProviderPool[] }) {
   // The sign-in open under one of the lines, by runner and engine.
   const [signIn, setSignIn] = useState<string | null>(null);
+  const engines = enginesFor(runners);
   const signedOut = runners
     .filter((runner) => runner.online)
-    .flatMap((runner) => ENGINES.filter((engine) => signedOutOn(runner, engine)).map((engine) => ({ runner, engine })));
+    .flatMap((runner) => engines.filter((engine) => signedOutOn(runner, engine)).map((engine) => ({ runner, engine })));
   const offline = runners.filter((runner) => !runner.online);
   const unavailable = pools.filter((pool) => pool.unavailable);
   if (signedOut.length === 0 && offline.length === 0 && unavailable.length === 0) return null;
@@ -173,6 +195,7 @@ export function EngineOverview({
   const installOn = (engine: AgentProvider) =>
     online.length > 0 ? `?runner=${encodeId(online[0].id)}&engine=${engine}` : '/runners/register';
   const harnessModel = harnessModelOf(online);
+  const cursorModel = cursorModelOf(online);
 
   return (
     <div className="re-sec">
@@ -182,7 +205,7 @@ export function EngineOverview({
       </div>
       <div className="infra-engines">
         {ALL_ENGINES.map((engine) => {
-          if (!webShowsEngine(engine)) return null;
+          if (!webShowsEngine(engine, runners)) return null;
           // DeepSeek Harness has no sign-in on a machine: it runs on DeepSeek keys alone.
           const machines =
             engine === AgentProvider.DSH
@@ -215,7 +238,8 @@ export function EngineOverview({
                       <div>
                         <b>API key</b> ·{' '}
                         {engineKeys.map((key, index) => {
-                          const model = engine === AgentProvider.DSH ? harnessModel : defaultModelOf(key);
+                          const model =
+                            engine === AgentProvider.DSH ? harnessModel : engine === AgentProvider.CURSOR ? cursorModel : defaultModelOf(key);
                           return (
                             <Fragment key={key.id}>
                               {index > 0 && ', '}
@@ -245,7 +269,7 @@ export function EngineOverview({
                 ) : (
                   <div className="infra-engine-src none">
                     No machine signed in, no key. <Link to={installOn(engine)}>Install on a machine</Link> or{' '}
-                    <Link to="/providers/new">connect a key</Link>.
+                    <Link to={engine === AgentProvider.CURSOR ? CURSOR_CONNECT_HREF : '/providers/new'}>connect a key</Link>.
                   </div>
                 )}
               </div>

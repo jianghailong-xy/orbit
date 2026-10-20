@@ -38,6 +38,17 @@ public enum ComposerLogic {
         return parts.enumerated().map { index, part in index < parts.count - 1 ? part + "." : part }
     }
 
+    /// As `sentences`, with a sentence too long for an item's three lines on a phone also broken at its
+    /// last comma: Cursor CLI's Auto note, whose "…no effort or context to set" ran into a fourth line.
+    public static func clauses(_ text: String, maxCharacters: Int = 72) -> [String] {
+        sentences(text).flatMap { sentence -> [String] in
+            guard sentence.count > maxCharacters, let comma = sentence.range(of: ", ", options: .backwards) else {
+                return [sentence]
+            }
+            return [String(sentence[..<comma.lowerBound]) + ",", String(sentence[comma.upperBound...])]
+        }
+    }
+
     /// A sentence as a Mac menu can show it — the lines of a paragraph, each its own item, since an
     /// NSMenu draws an item on one line however long. Breaks at spaces; a run with none (a long id,
     /// a CJK sentence, whose characters count double) breaks where it fills the line. Past
@@ -581,13 +592,15 @@ public enum ComposerSlash {
     /// since its own command handler ends a stream-json session), so they keep only Orbit's local
     /// commands; local commands are available on every engine. Asked of the session's engine, never of
     /// its provider: a key on Codex's protocol runs on Codex, and a DeepSeek key on Claude Code has
-    /// Claude Code's commands (web `slashAssetMatchesEngine`).
+    /// Claude Code's commands (web `slashAssetMatchesEngine`). Kimi Code and Cursor CLI list their own,
+    /// which the runner reports as the CLI announces them over ACP (Cursor's `available_commands_update`),
+    /// tagged with the engine: a session on either sees only its own engine's.
     public static func forEngine(items: [SlashCommandInfo], engine: String?) -> [SlashCommandInfo] {
         items.filter { item in
             if item.type == "local" { return true }
             switch engine {
             case "codex", "opencode", "antigravity", "dsh": return false
-            case "kimi":  return item.provider == "kimi"
+            case "kimi", CursorRuntime.engine: return item.provider == engine
             default:      return item.provider == nil || item.provider == "claude"
             }
         }

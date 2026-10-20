@@ -1,0 +1,143 @@
+{
+ "name": "failure-shapes-without-prompt",
+ "runId": "2026-10-17T08-41-58-465Z",
+ "startedAt": "2026-10-17T08:42:07.434Z",
+ "finishedAt": "2026-10-17T08:43:17.334Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/failure-shapes-without-prompt.ndjson",
+ "protocolLines": 60,
+ "fixtures": [
+  "failure-shapes-without-prompt/bogus-key-memory",
+  "failure-shapes-without-prompt/bogus-key-file"
+ ],
+ "checks": [
+  {
+   "name": "invalid API key (memory store): session/new -> -32603 \"Failed to initialize session services\"",
+   "ok": true,
+   "detail": {
+    "code": -32603,
+    "message": "Internal error",
+    "data": {
+     "message": "Failed to initialize session services"
+    }
+   }
+  },
+  {
+   "name": "invalid API key (memory store): session/list still answers (no auth check with a key present)",
+   "ok": true,
+   "detail": {
+    "sessions": []
+   }
+  },
+  {
+   "name": "invalid API key (file store): session/new -> -32603 \"Failed to initialize session services\"",
+   "ok": true,
+   "detail": {
+    "code": -32603,
+    "message": "Internal error",
+    "data": {
+     "message": "Failed to initialize session services"
+    }
+   }
+  },
+  {
+   "name": "invalid API key (file store): session/list still answers (no auth check with a key present)",
+   "ok": true,
+   "detail": {
+    "sessions": []
+   }
+  },
+  {
+   "name": "invalid key: `agent models` exits 1 with \"The provided API key is invalid\"",
+   "ok": true,
+   "detail": "\u001b[33m⚠ Warning: The provided API key is invalid.\u001b[0m\nThe API key was loaded from the CURSOR_API_KEY environment variable.\nPlease check you have the right key, create a new one, or authenticate without it."
+  },
+  {
+   "name": "invalid key via --api-key: same message, exit 1",
+   "ok": true
+  },
+  {
+   "name": "valid key: `agent models` exits 0 and lists auto first",
+   "ok": true,
+   "skipped": true,
+   "detail": "skipped: no key file"
+  },
+  {
+   "name": "offline: initialize still works",
+   "ok": true,
+   "skipped": true,
+   "detail": "skipped: unshare -n is linux-only"
+  },
+  {
+   "name": "offline: session/new -> the same -32603 \"Failed to initialize session services\" as an invalid key",
+   "ok": true,
+   "skipped": true,
+   "detail": "skipped: unshare -n is linux-only"
+  },
+  {
+   "name": "offline: `agent models` exits 1 with \"Failed to reach the Cursor API\"",
+   "ok": true,
+   "skipped": true,
+   "detail": "skipped: unshare -n is linux-only"
+  },
+  {
+   "name": "acp --model <unknown>: no session/new reply, process exits 1, stderr lists valid models",
+   "ok": true,
+   "skipped": true,
+   "detail": "skipped: needs the owner key"
+  },
+  {
+   "name": "acp --model <legacy slug> resolves to the bracket variant",
+   "ok": true,
+   "skipped": true,
+   "detail": "skipped: needs the owner key"
+  },
+  {
+   "name": "an invalid project .cursor/cli.json makes `agent acp` exit 1 before answering initialize",
+   "ok": true,
+   "detail": {
+    "exit": {
+     "code": 1,
+     "signal": null
+    }
+   }
+  },
+  {
+   "name": "with --disable-project-configs the same invalid .cursor/cli.json no longer stops `agent acp` (initialize answers)",
+   "ok": true,
+   "detail": {
+    "exit": null,
+    "stderr": ""
+   }
+  },
+  {
+   "name": "…and session/new succeeds with the key",
+   "ok": true,
+   "skipped": true,
+   "detail": "skipped: needs the owner key"
+  },
+  {
+   "name": "`agent acp --authless` refuses: only for agent-cli-local (exit 2)",
+   "ok": true,
+   "detail": "Error: --authless can only be used with agent-cli-local"
+  },
+  {
+   "name": "authless environment variables do not lift the auth requirement in ACP",
+   "ok": true,
+   "detail": {
+    "code": -32000,
+    "message": "Authentication required",
+    "data": {
+     "message": "Authentication required. Please run 'agent login' first, then call authenticate() with methodId 'cursor_login'."
+    }
+   }
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {}
+}

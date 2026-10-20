@@ -1,4 +1,5 @@
 import { AgentProvider } from './enums';
+import { decodeCursorModel } from './cursorModels';
 import type { RunnerModelCatalog, RunnerModelInfo } from './dto';
 
 /** The model each provider falls back to when neither the session nor its Runtime supplies one.
@@ -76,7 +77,9 @@ export const FAST_MODE_CAPABLE_CLAUDE_MODELS: ReadonlySet<string> = new Set([
  * One model's row in the assigned runner's catalogue for the runtime that will execute it.
  *
  * Shared by the two capability questions that used to be answered from static tables, so both
- * read the same row and cannot disagree about whether the runner has spoken.
+ * read the same row and cannot disagree about whether the runner has spoken. A Cursor CLI variant
+ * (`claude-opus-5-5[context=1m]`) the catalogue does not list as it stands is its model's row: the
+ * catalogue lists each model once, by its bare name, with the settings a variant names (cursorModels.ts).
  */
 export function runnerCatalogRow(
   runtime: string,
@@ -85,7 +88,10 @@ export function runnerCatalogRow(
 ): RunnerModelInfo | undefined {
   const rows = modelCatalog?.[runtime as AgentProvider];
   if (!Array.isArray(rows)) return undefined;
-  return rows.find((row) => row?.value === model);
+  const row = rows.find((entry) => entry?.value === model);
+  if (row || runtime !== AgentProvider.CURSOR) return row;
+  const name = decodeCursorModel(model).model;
+  return rows.find((entry) => entry?.value === name);
 }
 
 /**

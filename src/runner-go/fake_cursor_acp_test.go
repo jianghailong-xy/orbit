@@ -23,8 +23,9 @@ package main
 // sub-agents. What the runner wrote is kept in received.jsonl, each line with how much of the
 // recording had gone out by then, and how the CLI was started in start.json. Like the real CLI it does
 // not exit when stdin ends, only on SIGTERM (143) or SIGINT (130) (§3.4) — or, when the script says so,
-// once its recording has gone out: killed, as a crash, or with its stdout closed while it runs on. The
-// same binary answers `agent models` the ways P0a recorded it (§9), each call noted in models.jsonl.
+// once its recording has gone out or where the replay holds: killed, as a crash, or with its stdout closed
+// while it runs on. The same binary answers `agent models` the ways P0a recorded it (§9), each call noted
+// in models.jsonl.
 //
 // A script can also have the CLI start, as its first prompt arrives, what a session's commands leave
 // running (Spawn, scope.json): the processes a session's scope has to reclaim (session_scope.go).
@@ -52,8 +53,9 @@ type fakeCursorACPScript struct {
 	Recording string `json:"recording"`
 	// Session, when set, is the one session of a recording that holds two.
 	Session string `json:"session,omitempty"`
-	// Exit ends the CLI once its recording has gone out and nothing waits on the runner: "SIGKILL" kills
-	// it, as a crash does (§3.4, §12), and "close-stdout" closes its connection while it runs on.
+	// Exit ends the CLI once its recording has gone out, or HoldAfter holds it, and nothing waits on the
+	// runner: "SIGKILL" kills it, as a crash does (§3.4, §12), and "close-stdout" closes its connection while
+	// it runs on.
 	Exit string `json:"exit,omitempty"`
 	// Models is how `agent models` answers: "invalid-key" or "offline" as P0a recorded them
 	// (failure-shapes-without-prompt), a catalogue otherwise.
@@ -75,8 +77,16 @@ type fakeCursorACPScript struct {
 	// current_mode_update for the mode asked, then {}.
 	Modes bool `json:"modes,omitempty"`
 	// HoldAfter stops the replay once the runner has answered the request the CLI sent under this recorded
-	// id, until the runner sends anything else: a stop, or the CLI ending, finds the turn still running.
+	// id, until the runner sends anything else: a stop, or the CLI ending, finds the turn still running — with
+	// Exit, the CLI ends there.
 	HoldAfter string `json:"holdAfter,omitempty"`
+	// Config answers a session/set_config_option the recording does not hold with the same params the way
+	// the recording shows the CLI answering one (§10), from the recording's own data: selecting a model
+	// lists the mode, the model and that model's own options as the recording's cursor/list_available_models
+	// lists them, at their defaults; setting an option moves its currentValue; and a model, option or value
+	// the CLI does not list is refused -32602, as the recording refuses one. A set_config_option the
+	// recording holds with the same params is replayed as recorded.
+	Config bool `json:"config,omitempty"`
 }
 
 // fakeCursorScopeProcessEnv starts this test binary as one of the processes a Spawn script starts
@@ -346,6 +356,14 @@ func runFakeCursorACP(dir string) int {
 		}
 		os.Exit(143)
 	}()
+	// SIGUSR1 closes the connection while the CLI runs on, whatever it is waiting on — a request of its own the
+	// runner has not answered among them, where Exit never ends it (cursorSignalReplay).
+	hangUp := make(chan os.Signal, 1)
+	signal.Notify(hangUp, syscall.SIGUSR1)
+	go func() {
+		<-hangUp
+		_ = os.Stdout.Close()
+	}()
 	var requests []fakeCursorRequest
 	var lines []fakeCursorLine
 	if err == nil {
@@ -361,8 +379,22 @@ func runFakeCursorACP(dir string) int {
 		return 2
 	}
 	defer received.Close()
+	// What a Config script answers from: every model the recording's catalogue lists, with its own options,
+	// and the options the CLI last listed for the session.
+	catalogue := map[string][]interface{}{}
+	for _, line := range lines {
+		models, _ := mapValue(line.msg["result"])["models"].([]interface{})
+		for _, raw := range models {
+			model := mapValue(raw)
+			catalogue[firstString(model, "value")], _ = model["configOptions"].([]interface{})
+		}
+	}
+	var options []interface{}
 	out := bufio.NewWriter(os.Stdout)
 	write := func(msg map[string]interface{}) {
+		if listed, ok := mapValue(msg["result"])["configOptions"].([]interface{}); ok {
+			options = listed
+		}
 		if line, err := json.Marshal(msg); err == nil {
 			_, _ = out.Write(append(line, '\n'))
 			_ = out.Flush()
@@ -428,7 +460,7 @@ func runFakeCursorACP(dir string) int {
 			cursor++
 			waiting = line.ask
 		}
-		if cursor == len(lines) && waiting == "" {
+		if (cursor == len(lines) || held) && waiting == "" {
 			switch script.Exit {
 			case "SIGKILL":
 				_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
@@ -456,11 +488,22 @@ func runFakeCursorACP(dir string) int {
 		switch {
 		case method != "" && id != nil:
 			match := -1
-			for i := next; i < len(requests) && script.MatchParams; i++ {
+			configures := script.Config && method == "session/set_config_option"
+			for i := next; i < len(requests) && (script.MatchParams || configures); i++ {
 				if requests[i].method == method && fakeCursorSameParams(requests[i].params, params) {
 					match = i
 					break
 				}
+			}
+			if match < 0 && configures {
+				listed, refusal := fakeCursorConfigAnswer(options, catalogue, firstString(params, "configId"), firstString(params, "value"))
+				if refusal != "" {
+					write(map[string]interface{}{"jsonrpc": "2.0", "id": id, "error": map[string]interface{}{
+						"code": -32602, "message": "Invalid params", "data": map[string]interface{}{"message": refusal}}})
+				} else {
+					write(map[string]interface{}{"jsonrpc": "2.0", "id": id, "result": map[string]interface{}{"configOptions": listed}})
+				}
+				continue
 			}
 			for i := next; i < len(requests) && match < 0; i++ {
 				if requests[i].method == method {
@@ -532,6 +575,40 @@ func runFakeCursorACP(dir string) int {
 	return 0
 }
 
+// fakeCursorConfigAnswer is the options a Config script's CLI lists once a session/set_config_option the
+// recording does not hold has set id to value, or the refusal the CLI answers it with (§10). Selecting a
+// model keeps the mode and the model, at its new value, and lists that model's own options from the
+// catalogue in place of the last model's.
+func fakeCursorConfigAnswer(options []interface{}, catalogue map[string][]interface{}, id, value string) ([]interface{}, string) {
+	var listed []interface{}
+	set := false
+	for _, raw := range options {
+		var option map[string]interface{}
+		if wire, err := json.Marshal(raw); err != nil || json.Unmarshal(wire, &option) != nil {
+			continue
+		}
+		switch other := firstString(option, "id"); {
+		case other == id && !cursorOffers(option, value) && id == "model":
+			return nil, "Invalid model value: " + value
+		case other == id && !cursorOffers(option, value):
+			return nil, "Invalid value for " + id + ": " + value
+		case other == id:
+			option["currentValue"] = value
+			set = true
+		case id == "model" && other != "mode":
+			continue // the last model's own option
+		}
+		listed = append(listed, option)
+	}
+	if !set {
+		return nil, "Invalid value for " + id + ": " + value
+	}
+	if id == "model" {
+		listed = append(listed, catalogue[value]...)
+	}
+	return listed, ""
+}
+
 // fakeCursorSameParams is whether a request's params are a recorded one's, the session id and the working
 // directory aside: those are the run's own.
 func fakeCursorSameParams(recorded, sent map[string]interface{}) bool {
@@ -583,15 +660,18 @@ func newCursorReplay(t *testing.T, recording, session string) *cursorReplay {
 	return newCursorReplayScript(t, fakeCursorACPScript{Recording: recording, Session: session})
 }
 
-// newCursorReplayScript replays the recording script names (scenario/process, under testdata/cursor) the
-// way the rest of the script says.
+// newCursorReplayScript replays the recording script names (scenario/process, under testdata/cursor, or a
+// test's own directory by its absolute path) the way the rest of the script says.
 func newCursorReplayScript(t *testing.T, script fakeCursorACPScript) *cursorReplay {
 	t.Helper()
 	recording := script.Recording
 	dir := t.TempDir()
-	abs, err := filepath.Abs(filepath.Join("testdata", "cursor", recording))
-	if err != nil {
-		t.Fatal(err)
+	abs := recording
+	if !filepath.IsAbs(abs) {
+		var err error
+		if abs, err = filepath.Abs(filepath.Join("testdata", "cursor", recording)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(abs, "stdout.jsonl")); err != nil {
 		t.Fatalf("no recording %s: %v", recording, err)

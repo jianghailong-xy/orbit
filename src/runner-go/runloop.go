@@ -1685,7 +1685,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 				if ir.Mode == "update" {
 					install.startUpdate(residentProviderCount, doctorProxyVars(cfg.ServerURL), report, engineHealth.refresh, refreshCatalogAfterEngineUpdate)
 				} else {
-					install.start(ir.Engine, report, engineHealth.refresh)
+					install.start(ir.Engine, report, engineHealth, beatNow)
 				}
 			}
 			// Re-read the runtime CLIs' model lists because someone asked from the UI. On its

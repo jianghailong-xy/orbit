@@ -1,0 +1,10 @@
+add-button-light: in view after 0 drag(s) at (16.0, 528.0, 370.0, 52.0)
+add-light: name field 49 label="" value="Work" frame=(32.0, 505.0, 338.0, 34.0) hittable=true
+add-done-light: in view after 0 drag(s) at (32.0, 569.3333333333334, 265.0, 15.666666666666629)
+menu-team-light: in view after 0 drag(s) at (32.0, 418.9166666666667, 43.33333333333333, 20.333333333333314)
+remove-light: confirm 9 label="Remove" value="" frame=(205.0, 493.0, 140.0, 48.0) hittable=true
+add-button-dark: in view after 0 drag(s) at (16.0, 528.0, 370.0, 52.0)
+add-dark: name field 49 label="" value="Work" frame=(32.0, 505.0, 338.0, 34.0) hittable=true
+add-done-dark: in view after 0 drag(s) at (32.0, 569.3333333333334, 265.0, 15.666666666666629)
+menu-team-dark: in view after 0 drag(s) at (32.0, 418.9166666666667, 43.33333333333333, 20.333333333333314)
+remove-dark: confirm 9 label="Remove" value="" frame=(205.0, 493.0, 140.0, 48.0) hittable=true

@@ -6610,6 +6610,14 @@ html[data-theme='dark'] .session-tag-chip {
   color: var(--text-3);
   white-space: nowrap;
 }
+/* Under the rows, why none of them can go into the running turn (Cursor CLI's, the board's Web 5 ②). */
+.pending-tray-note {
+  padding: 6px 14px 4px 40px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-3);
+  border-top: 1px dashed var(--border-subtle);
+}
 .pending-tray-actions {
   flex: none;
   display: inline-flex;
@@ -9557,6 +9565,18 @@ button.chat-jump-start:hover {
   margin: 6px 0 0;
   color: var(--text-2);
   font-size: 12px;
+}
+/* The way on a quota card names inline: Cursor CLI's "start a new session on …". */
+.chat-quota-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--brand);
+  font: inherit;
+  cursor: pointer;
+}
+.chat-quota-link:hover {
+  text-decoration: underline;
 }
 /* The provider's error verbatim (transient-API-error variant only). Monospace and clipped to a
    few lines: it is a machine string worth copying exactly, but a JSON body must not push the

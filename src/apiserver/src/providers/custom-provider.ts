@@ -4,6 +4,7 @@ import {
   ENGINE_CLI_NAMES,
   antigravityBaseModel,
   credentialEngines,
+  decodeCursorModel,
   isEngineCompatible,
   isRetiredModel,
   keyDialect,
@@ -829,7 +830,9 @@ function runtimeCatalogDefault(
  * slice of a multi-provider space rather than the whole of it. Antigravity is judged like the rest,
  * against the base models its runner folds `agy models` into — and the full level-suffixed slug a
  * caller typed (`gemini-3.8-flash-high`, `claude-sonnet-5-5-medium`) is that same base model, so
- * the base row is the answer rather than the whole slug reading as retired.
+ * the base row is the answer rather than the whole slug reading as retired. A Cursor CLI variant
+ * (`claude-opus-5-5[context=1m,fast=true]`) is offered when its model is: the catalogue lists each
+ * model once, by its bare name, and the settings a variant names are the runner's to apply.
  */
 function retiredPin(
   row: ModelProviderRow | null,
@@ -849,11 +852,12 @@ function retiredPin(
   // level (`claude-sonnet-5-5-medium`): the base row is the same model's answer, so a
   // level-suffixed id is judged by it rather than dropped as an id agy no longer lists.
   const judged = runtime === AgentProvider.ANTIGRAVITY ? antigravityBaseModel(model) : model;
-  return isRetiredModel(
-    judged,
+  const retired = (id: string) => isRetiredModel(
+    id,
     runtimeCatalogModels(args.modelCatalog, runtime),
     savedRuntimeDefaultModel(args.runtimeDefaultModels, runtime),
   );
+  return retired(judged) && (runtime !== AgentProvider.CURSOR || retired(decodeCursorModel(model).model));
 }
 
 function firstNonBlank(...values: Array<string | null | undefined>): string | undefined {

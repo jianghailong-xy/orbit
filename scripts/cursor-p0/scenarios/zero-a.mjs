@@ -5,15 +5,27 @@ import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { AUTO_MODEL, currentModel, sleep } from '../lib/harness.mjs';
-import { VERSION, TARBALL_SHA256, CLI_DIR, AGENT, P0_ROOT } from '../lib/env.mjs';
+import { VERSION, ACTIVE_TARBALL_SHA256, CLI_DIR, AGENT, P0_ROOT } from '../lib/env.mjs';
 
 const sha256File = f => createHash('sha256').update(readFileSync(f)).digest('hex');
 // Processes whose command line names a path under `dir`.
 function processesUnder(dir) {
   const out = [];
-  for (const d of readdirSync('/proc')) {
-    if (!/^\d+$/.test(d) || Number(d) === process.pid) continue;
-    try { const c = readFileSync(`/proc/${d}/cmdline`, 'utf8').replace(/\0/g, ' ').trim(); if (c.includes(dir)) out.push({ pid: Number(d), cmdline: c }); } catch {}
+  if (process.platform === 'linux') {
+    for (const d of readdirSync('/proc')) {
+      if (!/^\d+$/.test(d) || Number(d) === process.pid) continue;
+      try { const c = readFileSync(`/proc/${d}/cmdline`, 'utf8').replace(/\0/g, ' ').trim(); if (c.includes(dir)) out.push({ pid: Number(d), cmdline: c }); } catch {}
+    }
+  } else {
+    // darwin: no /proc; `ps -axo pid=,command=` covers the harness user's processes.
+    const r = spawnSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' });
+    for (const line of (r.stdout ?? '').split('\n')) {
+      const i = line.indexOf(' ');
+      if (i <= 0) continue;
+      const pid = Number(line.slice(0, i).trim());
+      const cmd = line.slice(i + 1);
+      if (Number.isInteger(pid) && pid !== process.pid && cmd.includes(dir)) out.push({ pid, cmdline: cmd });
+    }
   }
   return out;
 }
@@ -22,10 +34,10 @@ const LOGIN_URL = /^https:\/\/cursor\.com\/loginDeepControl\?challenge=[^&]+&uui
 
 export const zeroA = [
   {
-    name: 'install-and-version', real: 0,
+    name: 'install-and-version', real: 0, needsKey: false,
     async run(ctx) {
       const tarball = join(P0_ROOT, 'dl', VERSION, 'agent-cli-package.tar.gz');
-      ctx.check('the tarball of the build under test has the expected sha256', existsSync(tarball) && sha256File(tarball) === TARBALL_SHA256, { bytes: existsSync(tarball) ? statSync(tarball).size : null });
+      ctx.check('the tarball of the build under test has the expected sha256', existsSync(tarball) && sha256File(tarball) === ACTIVE_TARBALL_SHA256, { bytes: existsSync(tarball) ? statSync(tarball).size : null });
       const files = [];
       const walk = d => { for (const n of readdirSync(d)) { const f = join(d, n); const st = statSync(f); st.isDirectory() ? walk(f) : files.push(st.size); } };
       walk(CLI_DIR);
@@ -62,7 +74,7 @@ export const zeroA = [
     },
   },
   {
-    name: 'signed-out-handshake', real: 0,
+    name: 'signed-out-handshake', real: 0, needsKey: false,
     async run(ctx) {
       const slot = ctx.slot('a');
       const work = ctx.repo('work');
@@ -208,6 +220,9 @@ export const zeroA = [
     async run(ctx) {
       const work = ctx.repo('work');
       const authFields = f => existsSync(f) ? { mode: (statSync(f).mode & 0o777).toString(8), fields: Object.keys(JSON.parse(readFileSync(f, 'utf8'))) } : null;
+      // Where store=file writes auth.json: $XDG_CONFIG_HOME/cursor on Linux, $HOME/.cursor on macOS (the
+      // darwin branch of cli-credentials/dist/index.js; XDG_CONFIG_HOME is ignored on macOS).
+      const authPathOf = slot => process.platform === 'darwin' ? join(slot.home, '.cursor', 'auth.json') : join(slot.xdgConfig, 'cursor', 'auth.json');
       const results = {};
       for (const store of ['file', 'memory', null]) {
         const label = store ?? 'unset';
@@ -216,15 +231,20 @@ export const zeroA = [
         await ctx.initialize(p);
         const n = await ctx.newSession(p, work);
         await p.dispose();
-        results[label] = { newOk: !!n.result, auth: authFields(join(slot.xdgConfig, 'cursor', 'auth.json')), status: JSON.parse(ctx.cli(slot, ['status', '--format', 'json'], { envOpts: { store } }).stdout || 'null') };
+        results[label] = { newOk: !!n.result, auth: authFields(authPathOf(slot)), status: JSON.parse(ctx.cli(slot, ['status', '--format', 'json'], { envOpts: { store } }).stdout || 'null') };
       }
       ctx.note('stores', results);
-      ctx.check('file store persists accessToken, refreshToken AND the API key in $XDG_CONFIG_HOME/cursor/auth.json (0600)', results.file.auth?.mode === '600' && JSON.stringify(results.file.auth.fields) === '["accessToken","refreshToken","apiKey"]');
+      ctx.check(`file store persists accessToken, refreshToken AND the API key in ${process.platform === 'darwin' ? '$HOME/.cursor/auth.json' : '$XDG_CONFIG_HOME/cursor/auth.json'} (0600)`, results.file.auth?.mode === '600' && JSON.stringify(results.file.auth.fields) === '["accessToken","refreshToken","apiKey"]');
       ctx.check('memory store writes no auth.json', results.memory.newOk && results.memory.auth === null);
-      ctx.check('unset store behaves like file on Linux', results.unset.auth?.mode === '600');
+      if (process.platform === 'darwin') {
+        ctx.check('unset store is the macOS Keychain: no auth.json is written', results.unset.auth === null);
+        // Keychain entry names are asserted in the darwin-only `macos-keychain-store` scenario.
+      } else {
+        ctx.check('unset store behaves like file on Linux', results.unset.auth?.mode === '600');
+      }
       ctx.check('`status` reports the persisted exchange tokens (file) but not an env-only key (memory)', results.file.status?.isAuthenticated === true && results.memory.status?.isAuthenticated === false, { file: results.file.status?.status, memory: results.memory.status?.status });
       // Token lifetimes (claims only) and injection of a token instead of the key.
-      const auth = JSON.parse(readFileSync(join(ctx.dir, 'slots', 'store-file', 'xdg-config', 'cursor', 'auth.json'), 'utf8'));
+      const auth = JSON.parse(readFileSync(authPathOf(ctx.slot('store-file')), 'utf8'));
       ctx.red.secret(auth.accessToken, 'ACCESS_TOKEN').secret(auth.refreshToken, 'REFRESH_TOKEN');
       // Cursor's JWTs carry `time` (issue time, seconds) instead of `iat`.
       const claims = t => { const c = JSON.parse(Buffer.from(t.split('.')[1], 'base64url').toString()); const iat = c.iat ?? Number(c.time); return { claimKeys: Object.keys(c).sort(), type: c.type, scope: c.scope, lifetimeHours: c.exp && iat ? Math.round((c.exp - iat) / 360) / 10 : null }; };
@@ -235,7 +255,7 @@ export const zeroA = [
       const n1 = await ctx.newSession(p1, work);
       ctx.check('CURSOR_AUTH_TOKEN (memory store, no API key) opens a session', !!n1.result?.sessionId, errOf(n1));
       await p1.dispose();
-      ctx.check('CURSOR_AUTH_TOKEN with memory store persists nothing', !existsSync(join(tokSlot.xdgConfig, 'cursor', 'auth.json')));
+      ctx.check('CURSOR_AUTH_TOKEN with memory store persists nothing', !existsSync(authPathOf(tokSlot)));
       const flagSlot = ctx.slot('auth-token-flag');
       const p2 = ctx.acp({ slot: flagSlot, cwd: work, label: 'acp-auth-token-flag', args: ['--auth-token', auth.accessToken], envOpts: { apiKey: false, store: 'memory' } });
       await ctx.initialize(p2);
@@ -250,9 +270,10 @@ export const zeroA = [
       await p3.dispose();
       // logout only clears local state
       const fileSlot = join(ctx.dir, 'slots', 'store-file');
-      const lo = ctx.cli({ home: join(fileSlot, 'home'), config: join(fileSlot, 'cursor-config'), data: join(fileSlot, 'cursor-data'), xdgConfig: join(fileSlot, 'xdg-config'), xdgCache: join(fileSlot, 'xdg-cache'), xdgData: join(fileSlot, 'xdg-data') }, ['logout'], { envOpts: { apiKey: false, store: 'file' } });
+      const fileSlotObj = { home: join(fileSlot, 'home'), config: join(fileSlot, 'cursor-config'), data: join(fileSlot, 'cursor-data'), xdgConfig: join(fileSlot, 'xdg-config'), xdgCache: join(fileSlot, 'xdg-cache'), xdgData: join(fileSlot, 'xdg-data') };
+      const lo = ctx.cli(fileSlotObj, ['logout'], { envOpts: { apiKey: false, store: 'file' } });
       ctx.note('logout', { exit: lo.exit, stdout: lo.stdout.trim(), stderr: lo.stderr.trim() });
-      ctx.check('`agent logout` deletes auth.json', lo.exit === 0 && !existsSync(join(fileSlot, 'xdg-config', 'cursor', 'auth.json')));
+      ctx.check('`agent logout` deletes auth.json', lo.exit === 0 && !existsSync(authPathOf(fileSlotObj)));
     },
   },
   {
@@ -268,6 +289,7 @@ export const zeroA = [
         'all-variables': s => ({ layout: 'full' }),
       };
       const trees = {};
+      const darwin = process.platform === 'darwin';
       for (const [label, f] of Object.entries(layouts)) {
         const slot = ctx.slot(label.replace(/[^a-zA-Z0-9]+/g, '_'));
         const p = ctx.acp({ slot, cwd: work, label, envOpts: { store: 'file', ...f(slot) } });
@@ -276,20 +298,33 @@ export const zeroA = [
         await sleep(3000);
         await p.dispose();
         trees[label] = ctx.tree(slot.root);
+        // ctx.tree elides the compile cache and synced skills; their homes are asserted by existence instead.
+        trees[label + ':exists'] = { compileCacheHome: existsSync(join(slot.home, 'Library', 'Caches', 'cursor-compile-cache')), compileCacheXdg: existsSync(join(slot.xdgCache, 'cursor-compile-cache')), skillsInHome: existsSync(join(slot.home, '.cursor', 'skills-cursor')), xdgCacheEmpty: !existsSync(slot.xdgCache) || readdirSync(slot.xdgCache).length === 0 };
       }
       ctx.note('files per layout (after initialize + session/new)', trees);
       const has = (label, re) => trees[label].some(l => re.test(l));
-      ctx.check('HOME only: config under ~/.cursor, auth under ~/.config/cursor', has('home-only', /^home\/\.cursor\/cli-config\.json/) && has('home-only', /^home\/\.config\/cursor\/auth\.json/));
-      ctx.check('CURSOR_CONFIG_DIR moves cli-config, statsig cache and acp-sessions, not auth.json', has('home+CURSOR_CONFIG_DIR', /^cursor-config\/cli-config\.json/) && has('home+CURSOR_CONFIG_DIR', /^cursor-config\/acp-sessions\//) && has('home+CURSOR_CONFIG_DIR', /^home\/\.config\/cursor\/auth\.json/));
-      ctx.check('XDG_CONFIG_HOME (without CURSOR_CONFIG_DIR) moves both config and auth.json to $XDG_CONFIG_HOME/cursor', has('home+XDG_CONFIG_HOME', /^xdg-config\/cursor\/cli-config\.json/) && has('home+XDG_CONFIG_HOME', /^xdg-config\/cursor\/auth\.json/));
-      ctx.check('agent-cli-state.json stays in $HOME/.cursor under every layout', Object.keys(trees).every(l => has(l, /^home\/\.cursor\/agent-cli-state\.json/)));
-      ctx.check('built-in skills are synced into $HOME/.cursor/skills-cursor under every layout', Object.keys(trees).every(l => has(l, /^home\/\.cursor\/skills-cursor\//)));
-      ctx.check('XDG_DATA_HOME / XDG_CACHE_HOME move nothing the CLI writes at startup', !trees['home+XDG_DATA_HOME+XDG_CACHE_HOME'].some(l => /^xdg-(data|cache)\/./.test(l)));
+      const ex = (label, k) => trees[label + ':exists'][k];
+      if (darwin) {
+        ctx.check('HOME only: config under ~/.cursor, auth under ~/.cursor/auth.json (macOS ignores XDG for auth)', has('home-only', /^home\/\.cursor\/cli-config\.json/) && has('home-only', /^home\/\.cursor\/auth\.json/));
+        ctx.check('CURSOR_CONFIG_DIR moves cli-config, statsig cache and acp-sessions, not auth.json', has('home+CURSOR_CONFIG_DIR', /^cursor-config\/cli-config\.json/) && has('home+CURSOR_CONFIG_DIR', /^cursor-config\/acp-sessions\//) && has('home+CURSOR_CONFIG_DIR', /^home\/\.cursor\/auth\.json/));
+        ctx.check('XDG_CONFIG_HOME moves the config dir but auth.json stays in $HOME/.cursor', has('home+XDG_CONFIG_HOME', /^xdg-config\/cursor\/cli-config\.json/) && has('home+XDG_CONFIG_HOME', /^home\/\.cursor\/auth\.json/));
+        ctx.check('agent-cli-state.json stays in $HOME/.cursor under every layout', Object.keys(trees).every(l => !l.endsWith(':exists') && has(l, /^home\/\.cursor\/agent-cli-state\.json/)));
+        ctx.check('built-in skills are synced into $HOME/.cursor/skills-cursor under every layout', Object.keys(trees).filter(l => !l.endsWith(':exists')).every(l => ex(l, 'skillsInHome')));
+        ctx.check('the Node compile cache goes to $HOME/Library/Caches on macOS, not XDG_CACHE_HOME', Object.keys(trees).filter(l => !l.endsWith(':exists')).every(l => ex(l, 'compileCacheHome') && !ex(l, 'compileCacheXdg')));
+        ctx.check('XDG_DATA_HOME gets nothing the CLI writes at startup', !trees['home+XDG_DATA_HOME+XDG_CACHE_HOME'].some(l => /^xdg-(data|cache)\/./.test(l)));
+      } else {
+        ctx.check('HOME only: config under ~/.cursor, auth under ~/.config/cursor', has('home-only', /^home\/\.cursor\/cli-config\.json/) && has('home-only', /^home\/\.config\/cursor\/auth\.json/));
+        ctx.check('CURSOR_CONFIG_DIR moves cli-config, statsig cache and acp-sessions, not auth.json', has('home+CURSOR_CONFIG_DIR', /^cursor-config\/cli-config\.json/) && has('home+CURSOR_CONFIG_DIR', /^cursor-config\/acp-sessions\//) && has('home+CURSOR_CONFIG_DIR', /^home\/\.config\/cursor\/auth\.json/));
+        ctx.check('XDG_CONFIG_HOME (without CURSOR_CONFIG_DIR) moves both config and auth.json to $XDG_CONFIG_HOME/cursor', has('home+XDG_CONFIG_HOME', /^xdg-config\/cursor\/cli-config\.json/) && has('home+XDG_CONFIG_HOME', /^xdg-config\/cursor\/auth\.json/));
+        ctx.check('agent-cli-state.json stays in $HOME/.cursor under every layout', Object.keys(trees).every(l => !l.endsWith(':exists') && has(l, /^home\/\.cursor\/agent-cli-state\.json/)));
+        ctx.check('built-in skills are synced into $HOME/.cursor/skills-cursor under every layout', Object.keys(trees).filter(l => !l.endsWith(':exists')).every(l => ex(l, 'skillsInHome')));
+        ctx.check('XDG_DATA_HOME / XDG_CACHE_HOME move nothing the CLI writes at startup', !trees['home+XDG_DATA_HOME+XDG_CACHE_HOME'].some(l => /^xdg-(data|cache)\/./.test(l)));
+      }
       ctx.check('CURSOR_DATA_DIR gets nothing at startup (projects/<slug>/ appears only when something creates it, e.g. `agent mcp enable`)', !trees['home+CURSOR_DATA_DIR'].some(l => /^cursor-data\/./.test(l)));
     },
   },
   {
-    name: 'failure-shapes-without-prompt', real: 0,
+    name: 'failure-shapes-without-prompt', real: 0, needsKey: false,
     async run(ctx) {
       const work = ctx.repo('work');
       const bogus = 'crsr_' + '0'.repeat(64);
@@ -310,32 +345,48 @@ export const zeroA = [
       ctx.check('invalid key: `agent models` exits 1 with "The provided API key is invalid"', m1.exit === 1 && /API key is invalid/.test(m1.stderr), m1.stderr.trim());
       const m2 = ctx.cli(bs, ['--api-key', bogus, 'models'], { envOpts: { apiKey: false, store: 'memory' } });
       ctx.check('invalid key via --api-key: same message, exit 1', m2.exit === 1 && /API key is invalid/.test(m2.stderr));
-      const good = ctx.cli(ctx.slot('good-cli'), ['models'], { envOpts: { store: 'memory' } });
-      ctx.check('valid key: `agent models` exits 0 and lists auto first', good.exit === 0 && /auto - Auto/.test(good.stdout));
-      ctx.note('models (first lines)', good.stdout.split('\n').slice(0, 8));
-      // offline: no network namespace at all
-      const os = ctx.slot('offline');
-      const p = ctx.acp({ slot: os, cwd: work, label: 'acp-offline', wrap: ['/usr/bin/unshare', '-n'], envOpts: { store: 'memory' } });
-      const i = await ctx.initialize(p);
-      const n = await ctx.newSession(p, work);
-      ctx.check('offline: initialize still works', i.result?.protocolVersion === 1);
-      ctx.check('offline: session/new -> the same -32603 "Failed to initialize session services" as an invalid key', n.error?.code === -32603 && n.error?.data?.message === 'Failed to initialize session services', errOf(n));
-      ctx.fixture(p, 'offline');
-      await p.dispose();
-      const om = spawnSync('/usr/bin/unshare', ['-n', AGENT, 'models'], { env: ctx.env(os, { store: 'memory' }), encoding: 'utf8', timeout: 60000, cwd: work });
-      ctx.check('offline: `agent models` exits 1 with "Failed to reach the Cursor API"', om.status === 1 && /Failed to reach the Cursor API/.test(om.stderr), ctx.red.text(om.stderr.trim()));
-      // unknown --model at start: the process exits during session/new
-      const ms = ctx.slot('model-flag');
-      const q = ctx.acp({ slot: ms, cwd: work, label: 'acp-model-flag-unknown', args: ['--model', 'no-such-model'], envOpts: { store: 'memory' } });
-      await ctx.initialize(q);
-      const qn = await ctx.newSession(q, work);
-      await q.waitExit(10000);
-      ctx.check('acp --model <unknown>: no session/new reply, process exits 1, stderr lists valid models', qn.transportClosed === true && q.exit?.code === 1 && /Cannot use this model|Available|gpt-/.test(q.stderr), { exit: q.exit, stderrTail: q.stderr.slice(-200) });
-      const q2 = ctx.acp({ slot: ms, cwd: work, label: 'acp-model-flag-slug', args: ['--model', 'gpt-5.5'], envOpts: { store: 'memory' } });
-      await ctx.initialize(q2);
-      const q2n = await ctx.newSession(q2, work);
-      ctx.check('acp --model <legacy slug> resolves to the bracket variant', /^gpt-5\.5\[/.test(currentModel(q2n.result ?? {}) ?? ''), currentModel(q2n.result ?? {}));
-      await q2.dispose();
+      if (ctx.key) {
+        const good = ctx.cli(ctx.slot('good-cli'), ['models'], { envOpts: { store: 'memory' } });
+        ctx.check('valid key: `agent models` exits 0 and lists auto first', good.exit === 0 && /auto - Auto/.test(good.stdout));
+        ctx.note('models (first lines)', good.stdout.split('\n').slice(0, 8));
+      } else {
+        ctx.check('valid key: `agent models` exits 0 and lists auto first', true, 'skipped: no key file', true);
+      }
+      // offline: no network namespace at all (linux/unshare only)
+      if (process.platform === 'linux') {
+        const os = ctx.slot('offline');
+        const p = ctx.acp({ slot: os, cwd: work, label: 'acp-offline', wrap: ['/usr/bin/unshare', '-n'], envOpts: { store: 'memory' } });
+        const i = await ctx.initialize(p);
+        const n = await ctx.newSession(p, work);
+        ctx.check('offline: initialize still works', i.result?.protocolVersion === 1);
+        ctx.check('offline: session/new -> the same -32603 "Failed to initialize session services" as an invalid key', n.error?.code === -32603 && n.error?.data?.message === 'Failed to initialize session services', errOf(n));
+        ctx.fixture(p, 'offline');
+        await p.dispose();
+        const om = spawnSync('/usr/bin/unshare', ['-n', AGENT, 'models'], { env: ctx.env(os, { store: 'memory' }), encoding: 'utf8', timeout: 60000, cwd: work });
+        ctx.check('offline: `agent models` exits 1 with "Failed to reach the Cursor API"', om.status === 1 && /Failed to reach the Cursor API/.test(om.stderr), ctx.red.text(om.stderr.trim()));
+      } else {
+        ctx.check('offline: initialize still works', true, 'skipped: unshare -n is linux-only', true);
+        ctx.check('offline: session/new -> the same -32603 "Failed to initialize session services" as an invalid key', true, 'skipped: unshare -n is linux-only', true);
+        ctx.check('offline: `agent models` exits 1 with "Failed to reach the Cursor API"', true, 'skipped: unshare -n is linux-only', true);
+      }
+      // unknown --model at start: with a valid key the process exits during session/new (needs the key
+      // to reach model validation; without credentials session/new fails on auth first).
+      if (ctx.key) {
+        const ms = ctx.slot('model-flag');
+        const q = ctx.acp({ slot: ms, cwd: work, label: 'acp-model-flag-unknown', args: ['--model', 'no-such-model'], envOpts: { store: 'memory' } });
+        await ctx.initialize(q);
+        const qn = await ctx.newSession(q, work);
+        await q.waitExit(10000);
+        ctx.check('acp --model <unknown>: no session/new reply, process exits 1, stderr lists valid models', qn.transportClosed === true && q.exit?.code === 1 && /Cannot use this model|Available|gpt-/.test(q.stderr), { exit: q.exit, stderrTail: q.stderr.slice(-200) });
+        const q2 = ctx.acp({ slot: ms, cwd: work, label: 'acp-model-flag-slug', args: ['--model', 'gpt-5.5'], envOpts: { store: 'memory' } });
+        await ctx.initialize(q2);
+        const q2n = await ctx.newSession(q2, work);
+        ctx.check('acp --model <legacy slug> resolves to the bracket variant', /^gpt-5\.5\[/.test(currentModel(q2n.result ?? {}) ?? ''), currentModel(q2n.result ?? {}));
+        await q2.dispose();
+      } else {
+        ctx.check('acp --model <unknown>: no session/new reply, process exits 1, stderr lists valid models', true, 'skipped: needs the owner key', true);
+        ctx.check('acp --model <legacy slug> resolves to the bracket variant', true, 'skipped: needs the owner key', true);
+      }
       // invalid project .cursor/cli.json kills the process at start
       const bad = ctx.repo('bad-cli-json', { '.cursor/cli.json': JSON.stringify({ permissions: { allow: ['Shell(*)'] }, unknownKey: 1 }) });
       const r = ctx.acp({ slot: ctx.slot('bad-cli'), cwd: bad, label: 'acp-invalid-cli-json', envOpts: { store: 'memory' } });
@@ -345,8 +396,13 @@ export const zeroA = [
       // The same repository with project configs off: the file is never read.
       const r2 = ctx.acp({ slot: ctx.slot('bad-cli-disabled'), cwd: bad, label: 'acp-invalid-cli-json-disabled', args: ['--disable-project-configs'], envOpts: { store: 'memory' } });
       const r2i = await ctx.initialize(r2);
-      const r2n = r2i.result ? await ctx.newSession(r2, bad) : null;
-      ctx.check('with --disable-project-configs the same invalid .cursor/cli.json no longer stops `agent acp` (initialize and session/new answer)', r2i.result?.protocolVersion === 1 && !!r2n?.result?.sessionId, { exit: r2.exit, stderr: r2.stderr.slice(-200), newError: r2n?.error });
+      ctx.check('with --disable-project-configs the same invalid .cursor/cli.json no longer stops `agent acp` (initialize answers)', r2i.result?.protocolVersion === 1, { exit: r2.exit, stderr: r2.stderr.slice(-200) });
+      if (ctx.key) {
+        const r2n = r2i.result ? await ctx.newSession(r2, bad) : null;
+        ctx.check('…and session/new succeeds with the key', !!r2n?.result?.sessionId, { newError: r2n?.error });
+      } else {
+        ctx.check('…and session/new succeeds with the key', true, 'skipped: needs the owner key', true);
+      }
       await r2.dispose();
       // hidden local mode is not available in this build
       const al = ctx.cli(ctx.slot('authless'), ['acp', '--authless'], { envOpts: { apiKey: false, store: 'memory' } });

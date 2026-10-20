@@ -458,6 +458,8 @@ export const createInteractiveSession = (body: {
   antigravityAccount?: string;
   /** The same again for the built-in Kimi engine: one of the runner's Kimi Code accounts. */
   kimiAccount?: string;
+  /** The same again for Cursor CLI on its own sign-in: one of the runner's Cursor CLI accounts. */
+  cursorAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];

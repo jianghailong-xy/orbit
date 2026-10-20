@@ -382,6 +382,7 @@ import {
   advertisedRunnerProviders,
   dshRuntimeUnavailable,
   runnerAdvertisesProvider,
+  runnerKnowsCursor,
   withProviderDeclarations,
 } from './runner-provider-support';
 import { coordinatorCreateAllowedBy } from './unstarted-project-create';
@@ -2190,11 +2191,24 @@ export class RunnerApiController {
    * `installing` — the runner's own guard makes the repeat a no-op. An abandoned install is swept
    * here for the same reason sign-ins are: the runner's installer times out on its own, so a row
    * still in flight past that window has no process behind it and would block the next attempt.
+   *
+   * Cursor CLI's install is judged again on the runner as this heartbeat has just described it
+   * (runnerKnowsCursor), which the start (RunnersService.startInstall) could only check against the
+   * last one: a process that does not know Cursor CLI is never handed it, and the install is settled
+   * as failed with the words that say to update it rather than left to time out.
    */
   private async drainInstallRequest(runnerId: string): Promise<InstallCommand | undefined> {
     const r = await this.prisma.runner.findUnique({
       where: { id: runnerId },
-      select: { installStatus: true, installEngine: true, installAt: true, installMode: true },
+      select: {
+        installStatus: true,
+        installEngine: true,
+        installAt: true,
+        installMode: true,
+        capabilities: true,
+        capabilitiesReportedAt: true,
+        engines: true,
+      },
     });
     if (!r?.installStatus) return undefined;
     const update = r.installMode === 'update';
@@ -2217,6 +2231,14 @@ export class RunnerApiController {
     // An update names no engine — it does every CLI already on the machine, like the engine-update loop.
     if (update) return { attempt: r.installAt?.toISOString() ?? '', mode: 'update' };
     if (!isInstallEngine(r.installEngine)) return undefined;
+    if (r.installEngine === 'cursor' && !runnerKnowsCursor(r)) {
+      // On the install this read, so one started since is never the one settled.
+      await this.prisma.runner.updateMany({
+        where: { id: runnerId, installStatus: 'pending', installEngine: 'cursor', installAt: r.installAt },
+        data: { installStatus: 'failed', installMessage: CURSOR_RUNNER_UPGRADE_ERROR },
+      });
+      return undefined;
+    }
     return { engine: r.installEngine, attempt: r.installAt?.toISOString() ?? '', mode: 'install' };
   }
 

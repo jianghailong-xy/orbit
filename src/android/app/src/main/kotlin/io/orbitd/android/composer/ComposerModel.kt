@@ -443,4 +443,14 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
         return EngineCopy.switchNote(catalog.providerName(engine, from), catalog.providerName(engine, to), liveRun = !terminal(detail))
     }
     fun consumeCreated() { mutable.update { it.copy(draft = it.draft.copy(createdSessionId = null)) }; launch { persist() } }
+
+    /** A pick made for this draft from elsewhere — a Cursor CLI quota card's "start a new session on Team" (the board's iOS 5 ⑧) — held as
+     * if picked here, once the draft's saved copy is read: its engine, provider and account, the model left to the draft's own seed. */
+    fun hold(values: JsonObject) {
+        launch {
+            withTimeoutOrNull(10_000) { state.first { it.loaded } } ?: return@launch
+            mutable.update { it.copy(draft = it.draft.copy(resumeConfig = JsonObject(it.draft.resumeConfig - "account" - "model" - "effort" + values))) }
+            persist()
+        }
+    }
 }

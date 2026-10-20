@@ -1650,7 +1650,14 @@ export function TaskDetailPanel({
                 matchTriggerWidth={false}
                 options={[
                   { value: '', label: "Assignee's" },
-                  { label: '', options: ALL_ENGINES.filter(webShowsEngine).map((engine) => ({ value: engine, label: ENGINE_CLI_NAMES[engine] })) },
+                  {
+                    label: '',
+                    // Cursor CLI once a runner of the account knows it (webShowsEngine).
+                    options: ALL_ENGINES.filter((engine) => webShowsEngine(engine, runnersQ.data)).map((engine) => ({
+                      value: engine,
+                      label: ENGINE_CLI_NAMES[engine],
+                    })),
+                  },
                 ]}
                 renderOption={(option) =>
                   option.value ? (

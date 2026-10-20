@@ -1,5 +1,6 @@
 import {
   AgentProvider,
+  decodeCursorModel,
   type RunnerModelCatalog,
   type RuntimeDefaultModels,
 } from '@orbit/shared';
@@ -53,7 +54,9 @@ export function runtimeCatalogModels(
 
 /** The reasoning levels/variants a runner reports for one runtime model, or undefined when the
  * heartbeat catalog has no exact row for it. The heartbeat catalog is deliberately runner-wide,
- * so "no row" means "possibly project-scoped", not "unsupported". */
+ * so "no row" means "possibly project-scoped", not "unsupported". A Cursor CLI variant the catalog
+ * does not list as it stands (`claude-opus-5-5[context=1m]`) takes its model's levels: its settings
+ * leave the effort alone. */
 export function runtimeCatalogReasoningLevels(
   value: unknown,
   runtime: AgentProvider,
@@ -62,7 +65,8 @@ export function runtimeCatalogReasoningLevels(
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const rows = (value as RunnerModelCatalog)[runtime];
   if (!Array.isArray(rows)) return undefined;
-  const row = rows.find((entry) => entry && entry.value === model);
+  const row = rows.find((entry) => entry && entry.value === model) ??
+    (runtime === AgentProvider.CURSOR ? rows.find((entry) => entry && entry.value === decodeCursorModel(model).model) : undefined);
   if (!row) return undefined;
   return Array.isArray(row.reasoningLevels)
     ? row.reasoningLevels.filter((level): level is string => typeof level === 'string')

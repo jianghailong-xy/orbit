@@ -79,6 +79,8 @@ private class TaskDetailData {
     var lists by mutableStateOf<List<JsonObject>>(emptyList())
     var share by mutableStateOf<JsonObject?>(null)
     var runner by mutableStateOf<JsonObject?>(null)
+    /** Every runner of the account: whether Cursor CLI is offered as a pin at all (ProviderEngines.androidShowsEngine). */
+    var runners by mutableStateOf<List<JsonObject>>(emptyList())
     var providers by mutableStateOf<List<JsonObject>>(emptyList())
     var busy by mutableStateOf(false)
     /** A refusal of what an open sheet sent, said on the sheet: the page's banner is behind it. */
@@ -132,6 +134,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 // The keys with the engines each runs on, and the account pools read as providers: what a pin can name.
                 fun rows(vararg path: String) = async { runCatching { (api.read(path.toList()) as? JsonArray).orEmpty().filterIsInstance<JsonObject>() }.getOrNull() }
                 val providers = rows("providers")
+                val runners = rows("runners")
                 val pools = rows("providers", "pools")
                 val sharedPools = rows("providers", "shared-pools")
                 data.owner = owner.await()
@@ -141,6 +144,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 lists.await()?.let { data.lists = it }
                 share.await()?.let { data.share = it }
                 runner.await()?.let { data.runner = it }
+                runners.await()?.let { data.runners = it }
                 providers.await()?.let { keys ->
                     data.providers = (keys + pools.await().orEmpty().map { ProviderEngines.poolRow(it, ProviderEngines.CLAUDE) } +
                         sharedPools.await().orEmpty().map { ProviderEngines.poolRow(it, ProviderEngines.CODEX) }).distinctBy { it.text("slug") }
@@ -535,7 +539,9 @@ private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: L
         PickerRow(EngineCopy.ENGINE, if (pinnedEngine == null && pinnedProvider == null) "${EngineCopy.ASSIGNEES} · ${ProviderEngines.cliName(assigneeEngine)}"
             else ProviderEngines.cliName(runEngine), enabled,
             listOf<Pair<String?, String>>(null to EngineCopy.ASSIGNEES) +
-                ProviderEngines.ALL_ENGINES.filter(ProviderEngines::androidShowsEngine).map { it to ProviderEngines.cliName(it) },
+                // Cursor CLI once a runner of the account knows it, as every list of engines offers it.
+                ProviderEngines.ALL_ENGINES.filter { ProviderEngines.androidShowsEngine(it, data.runners + listOfNotNull(data.runner)) }
+                    .map { it to ProviderEngines.cliName(it) },
             details = mapOf(null to ProviderEngines.cliName(assigneeEngine)), tag = "task-engine") { engine ->
             TaskPins.engine(engine, pinnedEngine, pinnedProvider, ProviderEngines.providerEngines(pinnedProvider, data.providers))?.let(pin)
         }

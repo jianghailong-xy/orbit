@@ -10,6 +10,10 @@ export const PINNED_VERSION = '2026.10.14-941492e';
 export const PINNED_TARBALL_SHA256 = '6f6bf39dd2df29dcd38643cdfab0155ce71699953889f732deec123f6562bb2d';
 export const VERSION = process.env.CURSOR_P0_VERSION ?? PINNED_VERSION;
 export const TARBALL_SHA256 = VERSION === PINNED_VERSION ? PINNED_TARBALL_SHA256 : process.env.CURSOR_P0_TARBALL_SHA256 ?? null;
+// P0b: darwin/arm64 tarball hash (measured 2026-10-17 on orbit-macos), and the hash of the tarball
+// for the platform this harness runs on (only the pinned build has a darwin hash).
+export const TARBALL_SHA256_DARWIN = 'c6d9e2eaa1b1e24221517e0b4206b1f1593792e6f0d8a52e9b507bbe7ab0cc77';
+export const ACTIVE_TARBALL_SHA256 = VERSION === PINNED_VERSION && process.platform === 'darwin' && process.arch === 'arm64' ? TARBALL_SHA256_DARWIN : TARBALL_SHA256;
 export const P0_ROOT = process.env.CURSOR_P0_ROOT ?? '/mnt/data/cursor-p0';
 export const CLI_DIR = process.env.CURSOR_P0_CLI ?? join(P0_ROOT, 'cli', VERSION);
 export const AGENT = join(CLI_DIR, 'cursor-agent');
@@ -68,6 +72,7 @@ export function cursorEnv(slot, { layout = 'full', apiKey = null, store = 'file'
 // ledger outlives runs and refuses past its cap.
 export const LEDGERS = {
   p0a: { file: 'prompts.jsonl', cap: 30, task: 'P0a 34h05eeSDrtKGW2ret55v' },
+  p0b: { file: 'p0b-prompts.jsonl', cap: 30, task: 'P0b 34h05fIoCOHhRY79oksON' },
   p0c: { file: 'p0c-prompts.jsonl', cap: 10, task: 'P0c 34h3xGGSqUnA6DTMj1iop' },
 };
 export const LEDGER_NAME = process.env.CURSOR_P0_LEDGER ?? 'p0c';

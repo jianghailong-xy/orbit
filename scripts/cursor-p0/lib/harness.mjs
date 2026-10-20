@@ -64,8 +64,11 @@ export class ScenarioContext {
     this.fixtures = [];
   }
 
-  check(name, ok, detail) {
-    this.checks.push({ name, ok: Boolean(ok), ...(detail === undefined ? {} : { detail: this.red.value(detail) }) });
+  // A check is a recorded assertion. `skipped` marks checks a scenario could not run (e.g. the
+  // owner's key file is absent): they count as pass but carry skipped:true, so readers can tell
+  // "held" from "verified".
+  check(name, ok, detail, skipped = false) {
+    this.checks.push({ name, ok: Boolean(ok), ...(skipped ? { skipped: true } : {}), ...(detail === undefined ? {} : { detail: this.red.value(detail) }) });
     return Boolean(ok);
   }
   note(key, value) { this.detail[key] = this.red.value(value); return value; }

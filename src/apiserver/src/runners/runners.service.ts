@@ -41,6 +41,7 @@ import {
   LOGIN_RELAY_TIMEOUT_MS,
   accountLoginTooOld,
 } from '../runner-api/runner-api.controller';
+import { CURSOR_RUNNER_UPGRADE_ERROR, runnerKnowsCursor } from '../runner-api/runner-provider-support';
 import { loginCodeRelay } from './login-code-relay';
 import { engineKeepsAccounts } from '../common/runner-engines';
 import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
@@ -739,6 +740,10 @@ export class RunnersService {
    *
    * One at a time per machine, like the sign-in relay: a second request replaces the first, since
    * a user staring at a stuck row needs a way out that isn't waiting for a timeout.
+   *
+   * Cursor CLI's install, Reinstall included, goes only to a runner that knows Cursor CLI
+   * (runnerKnowsCursor), and any other is refused here in words that say to update it: an older one has
+   * no install for it. The heartbeat asks the polling process again (drainInstallRequest).
    */
   async startInstall(ownerId: string, id: string, engine: InstallEngine): Promise<RunnerInstallState> {
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
@@ -748,6 +753,9 @@ export class RunnersService {
     }
     if (engine === 'antigravity' && !antigravityState(runner).supported) {
       throw new BadRequestException('Antigravity needs Orbit runner 0.1.209 or newer — updates itself when idle');
+    }
+    if (engine === 'cursor' && !runnerKnowsCursor(runner)) {
+      throw new BadRequestException(CURSOR_RUNNER_UPGRADE_ERROR);
     }
     const r = await this.prisma.runner.update({
       where: { id },

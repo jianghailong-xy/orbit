@@ -476,6 +476,8 @@ DELETE /api/pat/self               → {id, revokedAt, revokedReason}
   - codex app-server 在挂会话 `ORBIT_*` 的地方调用它；
   - 从零拼的环境直接写上标记：wiki 维护 clean start、dsh 本体、dsh 的 orbit MCP、OpenCode 交给 `orbit mcp` 的
     environment 块。
+  - Cursor CLI（第七个 engine，后来加入）：本体在 `cursor_launch.go` 的 `prepareCursorLaunch` 里调用它（白名单加工作区变量之后、
+    固定层之前）；它的 orbit MCP 与 dsh 共用 `orbitMCPDeclaredEnv`，直接写上标记。两处都在下面的普查里（`cursor`、`cursor orbit MCP server`）。
 - 测试：
   - `TestAgentEnvironmentsWithholdUserCredentials` 断言每个构造点恰好带一个 `ORBIT_RUNNER_CHILD=1`，即使 runner
     自己的环境和 agent 配置都把它置空；同时断言不经 runner 起的登录 shell 不带它。
