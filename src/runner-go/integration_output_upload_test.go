@@ -244,7 +244,9 @@ func urlOnlyRedactor() *integrationOutputRedactor {
 // scheme in front of it. A check prints a database's, a cache's or a broker's address as readily as
 // a git remote's, and a rule that named only https, ftp and ssh let every one of those through whole.
 // The git remotes come out exactly as they always did: the userinfo, a bare token or user included,
-// becomes the marker and the scheme and host stay.
+// becomes the marker and the scheme and host stay. The userinfo runs to the LAST `@` before the
+// authority ends, as net/url reads it: a raw `@` in a password is common, and stopping at the first
+// one sent the rest of the password on as if it were the host.
 func TestIntegrationOutputRedactsTheUserinfoOfAnyScheme(t *testing.T) {
 	redactor := urlOnlyRedactor()
 	for _, tc := range []struct{ name, text, want, leak string }{
@@ -274,6 +276,22 @@ func TestIntegrationOutputRedactsTheUserinfoOfAnyScheme(t *testing.T) {
 			"remote: https://[redacted]@example.invalid/o/r.git", "ghp_tokenvalue0123"},
 		{"git ssh user", "ssh://git@example.invalid/o/r.git",
 			"ssh://[redacted]@example.invalid/o/r.git", "ssh://git@"},
+		{"an @ in the password", "postgres://app:p@ss@db/x",
+			"postgres://[redacted]@db/x", "@ss"},
+		{"an @ in a password with no user", "redis://:p@ss@cache:6379",
+			"redis://[redacted]@cache:6379", "@ss"},
+		{"an @ in the user", "https://user@example.com:pw@host/x",
+			"https://[redacted]@host/x", "pw"},
+		{"a user with an empty password", "https://tok3nvalue:@example.invalid/o/r.git",
+			"https://[redacted]@example.invalid/o/r.git", "tok3nvalue"},
+		{"a # in the password", "postgres://app:abc#123@db/x",
+			"postgres://[redacted]@db/x", "abc#123"},
+		{"a ? in the password", "postgres://app:abc?123@db/x",
+			"postgres://[redacted]@db/x", "abc?123"},
+		// The price of the two above: a query straight after the host is still the authority, so
+		// an `@` in it takes the host with it. A word lost, not a password.
+		{"an @ in a query with no path before it", "open http://example.invalid?to=a@b now",
+			"open http://[redacted]@b now", "example.invalid"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := redactor.redact(tc.text)
@@ -301,6 +319,12 @@ func TestIntegrationOutputLeavesTextWithoutUserinfoAlone(t *testing.T) {
 		"ws://localhost:8080/socket?user=a@b",
 		"a:// b@c, 3://4@5 and http://@host/path",
 		"the build took 3:04 on user@host",
+		"http://example.com/@user",
+		"see http://example.com/a?b=c@d",
+		"mailto:someone@example.invalid",
+		"ssh user@host",
+		"npm install npm:@scope/pkg",
+		"file:///home/u@x",
 	} {
 		if got := redactor.redact(text); got != text {
 			t.Fatalf("redact(%q) = %q, want it unchanged", text, got)
@@ -310,7 +334,8 @@ func TestIntegrationOutputLeavesTextWithoutUserinfoAlone(t *testing.T) {
 
 // TestIntegrationOutputRedactsAnAddressSplitAcrossTwoChunks: the uploader streams, so an address can
 // arrive in two writes with a flush between them — the cut inside the scheme, inside the user or the
-// password, right before or right after the `@`. Every one of those cuts comes out exactly as the
+// password, right before or right after the `@`, and between two `@`s of one userinfo, where the
+// first has arrived and the last has not. Every one of those cuts comes out exactly as the
 // whole text redacted at once: nothing of the userinfo leaves early, nothing is sent twice and
 // nothing is lost. It holds with no secret in the environment (carry 0), where only the address's own
 // hold-back protects it, and with a secret whose carry is shorter than the address.
@@ -329,6 +354,10 @@ func TestIntegrationOutputRedactsAnAddressSplitAcrossTwoChunks(t *testing.T) {
 		{"redis://:cachePass99@cache:6379/0\n", "redis://", "cachePass99"},
 		{"fatal: could not read https://x-access-token:ghs_tok3nvalue@example.invalid/o/r.git\n", "https://", "ghs_tok3nvalue"},
 		{"token unrelated-0123 then amqp://guest:brokerPw77@mq:5672/vhost\n", "amqp://", "brokerPw77"},
+		{"postgres://app:p@ss@db/x\n", "postgres://", "p@ss"},
+		{"redis://:p@ss@cache:6379\n", "redis://", "p@ss"},
+		{"https://user@example.com:pw@host/x\n", "https://", "example.com:pw"},
+		{"dial mysql://root:my@Pw0rd@127.0.0.1:3306/app failed\n", "mysql://", "my@Pw0rd"},
 	}
 	for _, r := range redactors {
 		for _, line := range lines {
@@ -337,7 +366,8 @@ func TestIntegrationOutputRedactsAnAddressSplitAcrossTwoChunks(t *testing.T) {
 				t.Fatalf("%s: the one-shot redaction of %q still carries the password: %q", r.name, line.text, want)
 			}
 			start := strings.Index(line.text, line.scheme)
-			at := start + strings.Index(line.text[start:], "@")
+			// Where the address's authority ends: until then another `@` may still arrive.
+			end := start + len(line.scheme) + strings.IndexAny(line.text[start+len(line.scheme):], "/ \n")
 			for split := 1; split < len(line.text); split++ {
 				first, second := line.text[:split], line.text[split:]
 				early, whole := streamTwoChunks(t, r.new(), first, second)
@@ -347,9 +377,9 @@ func TestIntegrationOutputRedactsAnAddressSplitAcrossTwoChunks(t *testing.T) {
 				if strings.Contains(early, line.password) || !strings.HasPrefix(want, early) {
 					t.Fatalf("%s: %q + %q: the mid-command flush sent %q, not a prefix of %q", r.name, first, second, early, want)
 				}
-				// The address is held back from its scheme on, and only from there: what came before
-				// it is not kept off the page along with it.
-				if r.name == "no secrets" && split >= start && split <= at && early != line.text[:start] {
+				// The address is held back from its scheme on until its authority ends, and only from
+				// there: what came before it is not kept off the page along with it.
+				if r.name == "no secrets" && split >= start && split <= end && early != line.text[:start] {
 					t.Fatalf("%s: %q + %q: the mid-command flush sent %q, want %q", r.name, first, second, early, line.text[:start])
 				}
 			}

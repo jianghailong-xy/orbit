@@ -30,9 +30,9 @@ const (
 	integrationOutputEvery = 2 * time.Second
 	// How many trailing bytes are held back between flushes, so a secret (or a URL's userinfo)
 	// split across two chunks is still matched whole by the redactor. It is one less than the
-	// longest secret, or further back to the scheme of an address the text ends in whose `@` has
-	// not arrived yet, capped either way: a value longer than this is redacted only when it arrives
-	// whole.
+	// longest secret, or further back to the scheme of an address the text ends in whose authority
+	// has not ended yet, capped either way: a value longer than this is redacted only when it
+	// arrives whole.
 	integrationOutputCarryMax = 256
 	// The budget one flush has to reach the control plane. Uploads are best-effort and must never
 	// hold a check's end for long.
@@ -201,8 +201,11 @@ func (u *integrationLogUploader) loop() {
 
 // drain sends what is pending, in chunks of at most chunkBytes. It holds back the last `carry`
 // bytes between flushes so a secret split across two flushes is still whole when the redactor sees
-// it, and an address the text ends in from its scheme on while its userinfo may still be arriving;
-// the final drain (a command's Close) sends everything.
+// it, and an address the text ends in from its scheme on while its authority is unfinished; the
+// final drain (a command's Close) sends everything. So the trailing word of a line that has not
+// ended yet (anything that could begin a scheme) waits for the next write or for Close, and so does
+// an address with no `/` or whitespace after its `://` yet, at most integrationOutputCarryMax bytes
+// either way.
 //
 // Redaction happens FIRST, on the whole pending buffer, and the carry is taken from the redacted
 // text: cutting the raw buffer and redacting only the part that is sent would send the first half of
@@ -237,14 +240,16 @@ func (u *integrationLogUploader) drain(route *integrationLogRoute, final bool) {
 		if u.carry > 0 && len(text) > u.carry {
 			cut = len(text) - u.carry
 		}
-		// An address the text ends in is held back from its scheme on while its userinfo may still
-		// be arriving, carry or no carry: sent now, `postgres://app:s3` would leave the rest of the
-		// password to come as `cretPass@db`, which no rule can tell is a credential any more.
+		// An address the text ends in is held back from its scheme on while its authority is
+		// unfinished, carry or no carry: sent now, `postgres://app:s3` would leave the rest of the
+		// password to come as `cretPass@db`, which no rule can tell is a credential any more, and
+		// `postgres://app:p@ss`, already redacted to `postgres://[redacted]@ss`, would leave
+		// `@db` to make `ss` the host when it was the end of the password.
 		if at := integrationUnfinishedURL(text); at < cut {
 			cut = at
 		}
-		// With nothing to hold back the cut is len(text): the bound keeps it from reading
-		// text[len(text)], which is what a carry of 0 used to do.
+		// With nothing to hold back the cut is len(text); the cut < len(text) bound keeps the rune
+		// walk from reading text[len(text)].
 		for cut > 0 && cut < len(text) && !utf8.RuneStart(text[cut]) {
 			cut--
 		}
@@ -339,7 +344,8 @@ type integrationOutputRedactor struct {
 }
 
 // The userinfo half of a URL, scheme included: `https://user:token@host` and `https://token@host`
-// are both a credential the machine holds and neither may reach the control plane. The scheme is any
+// are both a credential the machine holds and neither may reach the control plane, and neither may
+// `https://token:@host`, a token given as a user with an empty password. The scheme is any
 // RFC 3986 scheme (ALPHA *( ALPHA / DIGIT / "+" / "-" / "." )), not a list: a check prints
 // `postgres://app:pw@db`, `amqp://user:pw@mq` or `mongodb+srv://admin:pw@cluster` as readily as a
 // git remote, and naming only https, ftp and ssh let every one of those through whole. A password
@@ -347,20 +353,34 @@ type integrationOutputRedactor struct {
 // userinfo too. Nothing asks for a word boundary before the scheme: `_postgres://` and
 // `jdbc:postgresql://` find their scheme where it begins, and what the replacement keeps is whatever
 // scheme the rule matched, so a wider start costs a reader nothing.
-var integrationURLCredential = regexp.MustCompile(`(?i)([a-z][a-z0-9+.-]*://)(?:[^/\s:@]+(?::[^/\s@]+)?|:[^/\s@]+)@`)
+//
+// The userinfo runs to the LAST `@` of the authority, as net/url's Parse reads it and as the
+// control plane's own redactor (src/apiserver/src/common/secret-redaction.ts) does: a raw `@` in a
+// database's or a broker's password is common, and ending at the first one sent
+// `postgres://app:p@ss@db` on as `postgres://[redacted]@ss@db`. The authority ends at the first `/`
+// or whitespace after the `://`. Unlike net/url and the control plane's rule, a `?` or `#` does not
+// end it: a raw one in a password (`postgres://app:abc#123@db`) would then end the address before
+// its `@` and send the password whole, and what that costs the other way is the host of an address
+// whose query follows it with no path between (`http://host?to=a@b` reads `http://[redacted]@b`).
+// An `@` after the authority's `/` (`https://example.com/@scope/pkg`) is a path's and is left
+// alone, and so is an empty userinfo (`http://@host`), which holds nothing.
+var integrationURLCredential = regexp.MustCompile(`(?i)([a-z][a-z0-9+.-]*://)[^/\s]+@`)
 
 // The end of a text that may still turn out to be a URL's userinfo once more output arrives: a
-// scheme (or the start of one), `scheme:`, `scheme:/`, `scheme://`, and a userinfo its `@` has not
-// closed yet. Every proper prefix of what integrationURLCredential matches is matched here, so a
-// flush that stops where this begins never sends half an address.
-var integrationURLCredentialTail = regexp.MustCompile(`(?i)[a-z][a-z0-9+.-]*(?::(?:/(?:/[^/\s:@]*(?::[^/\s@]*)?)?)?)?$`)
+// scheme (or the start of one), `scheme:`, `scheme:/`, `scheme://`, and an authority no `/` or
+// whitespace has ended yet, with or without an `@` in it: one that has its `@` may still get
+// another, and the userinfo runs to the last. Every proper prefix of what integrationURLCredential
+// matches is matched here, and so is every text that a match may still grow out of, so a flush that
+// stops where this begins never sends half an address.
+var integrationURLCredentialTail = regexp.MustCompile(`(?i)[a-z][a-z0-9+.-]*(?::(?:/(?:/[^/\s]*)?)?)?$`)
 
-// integrationUnfinishedURL is where an address that text ends in begins while its userinfo may still
-// be on the way, or len(text) when there is none. Only the last integrationOutputCarryMax bytes are
+// integrationUnfinishedURL is where an address that text ends in begins while its authority is
+// unfinished, or len(text) when there is none. Only the last integrationOutputCarryMax bytes are
 // looked at, so this hold-back is capped like a secret's carry: an address longer than that from its
-// scheme to its `@` is redacted only when it arrives whole, and a long run that merely reads like an
-// address's start (a trailing word is a scheme until something a scheme cannot hold follows it) is
-// not kept off the page until the command ends.
+// scheme to its last `@` is redacted only when it arrives whole, and a long run that merely reads
+// like an address's start (a trailing word is a scheme until something a scheme cannot hold follows
+// it, and an authority runs until a `/` or whitespace ends it) is not kept off the page until the
+// command ends.
 func integrationUnfinishedURL(text string) int {
 	from := len(text) - integrationOutputCarryMax
 	if from < 0 {
