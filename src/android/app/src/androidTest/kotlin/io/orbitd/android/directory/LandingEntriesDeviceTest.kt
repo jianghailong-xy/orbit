@@ -96,8 +96,10 @@ class LandingEntriesDeviceTest {
                 await { exists(hasText("Coordinate launch") and hasClickAction()) }
                 compose.onNode(hasText("Coordinate launch") and hasClickAction()).performClick()
                 await { exists(hasTestTag("item:item-xe5:OPEN_LANDING")) }
-                compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("item:item-xe5:OPEN_LANDING"))
+                // The card is taller than the viewport: the frame is its head and lease rows, then the door is scrolled to.
+                compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("item:item-xe5"))
                 capture("07-xe5-card")
+                compose.onNodeWithTag("transcript-list").performScrollToNode(hasTestTag("item:item-xe5:OPEN_LANDING"))
                 compose.onNodeWithTag("item:item-xe5:OPEN_LANDING").performClick()
                 await { exists(hasTestTag("landing-page")) }
                 capture("08-landing-from-waiting-card")
@@ -149,12 +151,13 @@ class LandingEntriesDeviceTest {
         "check":{"name":"TASK_ACCEPTANCE","index":1,"count":3,"budgetSeconds":3600,"startedAt":"${ago(110)}"},"liveness":"LIVE",
         "blockingReason":null,"timedOut":false,"limitSeconds":600,"retryable":false,"pushBoundaryPassed":false},"todos":[],"generations":[]}}"""
 
-    private val xe5 = """{"itemId":"item-xe5","kind":"LANDING_LEASE_EXPIRED","title":"A landing stopped reporting",
-        "detailLine":"The runner stopped reporting","assignee":"OWNER","assigneeReason":"ESCALATED","waitingSince":"${ago(120)}",
-        "escalatedAt":"${ago(120)}","landingSessionId":"$landing","integrationJobId":"j-1","actions":["ABANDON","OPEN_LANDING"],
+    private val xe5 get() = """{"itemId":"item-xe5","kind":"LANDING_LEASE_EXPIRED","title":"A landing stopped reporting",
+        "detailLine":"The runner stopped reporting","assignee":"OWNER","assigneeReason":"ESCALATED","waitingSince":"${ago(2)}",
+        "escalatedAt":"${ago(2)}","landingSessionId":"$landing","integrationJobId":"j-1","actions":["ABANDON","OPEN_LANDING"],
         "primaryAction":"ABANDON","requiredAction":"The runner stopped reporting; abandon this landing, or wait for the runner to come back.",
+        "facts":{"task":{"title":"Land · Wire the page"}},
         "lease":{"jobKind":"LAND_TASK","generation":2,"phase":"REBASE","claimGeneration":1,"round":1,"checkCount":3,"runner":"wikova",
-        "progressProtocol":"v2","pushReported":false,"lastReportAt":"${ago(300)}"}}"""
+        "progressProtocol":"v2","pushReported":false,"lastReportAt":"${ago(29)}","leaseExpiredAt":"${ago(19)}"}}"""
 
     private fun fixture() = object : Dispatcher() {
         override fun dispatch(request: RecordedRequest): MockResponse {
