@@ -1,0 +1,1 @@
+sessions-group: in view after 1 move(s) at (0.0, 469.6666666666667, 402.0, 40.333333333333314)

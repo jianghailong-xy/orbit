@@ -1,0 +1,2 @@
+mac-overview: no window after launch; pressing ⌘N
+mac-overview: 1 window(s)

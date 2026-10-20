@@ -1,0 +1,109 @@
+==> iPhone E839A11B-51B4-4AD3-ACF4-A53B95B7C957
+==> stub ready on 127.0.0.1:8765 (pid 4433, after 4s); {"line": "PROJECT_BRANCH", "ref": "project/P1", "upstreamRef": "main", "integrat
+==> mac
+Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacLandingPage]' started.
+Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacLandingPage]' passed (29.798 seconds).
+Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacWorkOverviewDrawsTheMergeJob]' started.
+Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacWorkOverviewDrawsTheMergeJob]' passed (30.167 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 59.965 (59.966) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 59.965 (59.967) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 59.965 (59.970) seconds
+** TEST SUCCEEDED **
+==> stub ready on 127.0.0.1:8765 (pid 16334, after 2s); {"line": "PROJECT_BRANCH", "ref": "project/P1", "upstreamRef": "main", "integrat
+==> ios
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneCancellingMerge]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneCancellingMerge]' passed (33.652 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneCheckTimeoutCard]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneCheckTimeoutCard]' passed (11.838 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneConfirmedFoot]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneConfirmedFoot]' passed (15.861 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneDeliveryCardsLandingLink]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneDeliveryCardsLandingLink]' passed (16.918 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingCardOneJobCarriesItsFoot]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingCardOneJobCarriesItsFoot]' passed (10.967 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingCardSeveralJobsAndTheJobsList]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingCardSeveralJobsAndTheJobsList]' passed (15.431 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingMenuOnATimedOutRound]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingMenuOnATimedOutRound]' passed (15.816 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingPageLiveAndSettled]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingPageLiveAndSettled]' passed (23.800 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingsGroup]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingsGroup]' passed (18.293 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneMergeRoundRowAndQueuedJobs]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneMergeRoundRowAndQueuedJobs]' passed (11.647 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneMergeTimeoutCard]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneMergeTimeoutCard]' passed (18.884 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneOwnersXE5LandingCard]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneOwnersXE5LandingCard]' passed (16.844 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneReceiptFoot]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneReceiptFoot]' passed (95.939 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneSourceConversationsLabel]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneSourceConversationsLabel]' passed (81.864 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneTaskPageLandingSection]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneTaskPageLandingSection]' passed (15.907 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneTaskSegmentTimedOut]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneTaskSegmentTimedOut]' passed (10.799 seconds).
+	 Executed 16 tests, with 0 failures (0 unexpected) in 414.460 (414.475) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 414.460 (414.476) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 414.460 (414.477) seconds
+** TEST SUCCEEDED **
+.ls-probe/run.sh: line 84: 16334 Terminated: 15          python3 -u stub.py 8765 "$1" > "$1.out" 2>&1
+/Users/runner/work/orbit/orbit/.ls-probe/shots/ios:
+total 12536
+drwxr-xr-x  44 runner  staff    1408 Oct 20 03:24 .
+drwxr-xr-x   4 runner  staff     128 Oct 20 03:02 ..
+drwxr-xr-x  55 runner  staff    1760 Oct 20 03:24 attachments
+-rw-r--r--   1 runner  staff  394719 Oct 20 03:18 ios-04-a2-jobs-list.png
+-rw-r--r--   1 runner  staff  231352 Oct 20 03:18 ios-04-b1-card-one-job.png
+-rw-r--r--   1 runner  staff  236099 Oct 20 03:18 ios-04-b2-card-several-jobs.png
+-rw-r--r--   1 runner  staff  221782 Oct 20 03:19 ios-04-b4-merge-row-queued.png
+-rw-r--r--   1 runner  staff  242443 Oct 20 03:19 ios-04-c1-landings-group.png
+-rw-r--r--   1 runner  staff  247437 Oct 20 03:17 ios-04-c2-confirmed.png
+-rw-r--r--   1 runner  staff  247489 Oct 20 03:17 ios-04-c3-cancelling.png
+-rw-r--r--   1 runner  staff  217169 Oct 20 03:17 ios-04-c5-check-timeout.png
+-rw-r--r--   1 runner  staff  235438 Oct 20 03:19 ios-04-c6-merge-timeout.png
+-rw-r--r--   1 runner  staff  375369 Oct 20 03:21 ios-04-c7-receipt.png
+-rw-r--r--   1 runner  staff  324862 Oct 20 03:18 ios-05-a-live.png
+-rw-r--r--   1 runner  staff  321616 Oct 20 03:19 ios-05-c-merged.png
+-rw-r--r--   1 runner  staff  437647 Oct 20 03:18 ios-05-e-timeout-menu.png
+-rw-r--r--   1 runner  staff  311244 Oct 20 03:23 ios-05-i-task-timeout.png
+-rw-r--r--   1 runner  staff  224533 Oct 20 03:17 ios-06-b-delivery.png
+-rw-r--r--   1 runner  staff  121005 Oct 20 03:23 ios-06-source-label.png
+-rw-r--r--   1 runner  staff  321747 Oct 20 03:23 ios-06-task-landing.png
+-rw-r--r--   1 runner  staff  443734 Oct 20 03:20 ios-06-xe5-card.png
+-rw-r--r--@  1 runner  staff       0 Oct 20 03:17 LandingSessionShotTeststestIPhoneCancellingMerge-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct 20 03:17 LandingSessionShotTeststestIPhoneCheckTimeoutCard-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct 20 03:17 LandingSessionShotTeststestIPhoneConfirmedFoot-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct 20 03:18 LandingSessionShotTeststestIPhoneDeliveryCardsLandingLink-notes.txt
+-rw-r--r--@  1 runner  staff      89 Oct 20 03:18 LandingSessionShotTeststestIPhoneLandingCardOneJobCarriesItsFoot-notes.txt
+-rw-r--r--@  1 runner  staff      90 Oct 20 03:18 LandingSessionShotTeststestIPhoneLandingCardSeveralJobsAndTheJobsList-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct 20 03:18 LandingSessionShotTeststestIPhoneLandingMenuOnATimedOutRound-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct 20 03:19 LandingSessionShotTeststestIPhoneLandingPageLiveAndSettled-notes.txt
+-rw-r--r--@  1 runner  staff      94 Oct 20 03:19 LandingSessionShotTeststestIPhoneLandingsGroup-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct 20 03:19 LandingSessionShotTeststestIPhoneMergeRoundRowAndQueuedJobs-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct 20 03:19 LandingSessionShotTeststestIPhoneMergeTimeoutCard-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct 20 03:20 LandingSessionShotTeststestIPhoneOwnersXE5LandingCard-notes.txt
+-rw-r--r--@  1 runner  staff      89 Oct 20 03:21 LandingSessionShotTeststestIPhoneReceiptFoot-notes.txt
+-rw-r--r--@  1 runner  staff     121 Oct 20 03:23 LandingSessionShotTeststestIPhoneSourceConversationsLabel-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct 20 03:23 LandingSessionShotTeststestIPhoneTaskPageLandingSection-notes.txt
+-rw-r--r--@  1 runner  staff       0 Oct 20 03:23 LandingSessionShotTeststestIPhoneTaskSegmentTimedOut-notes.txt
+-rw-r--r--@  1 runner  staff   17761 Oct 20 03:21 missing-band-receipt.txt
+-rw-r--r--@  1 runner  staff   12101 Oct 20 03:23 missing-band-source-label.txt
+-rw-r--r--   1 runner  staff    1350 Oct 20 03:24 not-served.txt
+-rw-r--r--   1 runner  staff  342532 Oct 20 03:23 requests.log
+-rw-r--r--   1 runner  staff    3764 Oct 20 03:17 requests.log.out
+-rw-r--r--   1 runner  staff     680 Oct 20 03:24 writes.txt
+-rw-r--r--   1 runner  staff  760958 Oct 20 03:24 xcodebuild-ios.log
+
+/Users/runner/work/orbit/orbit/.ls-probe/shots/mac:
+total 1792
+drwxr-xr-x  10 runner  staff     320 Oct 20 03:24 .
+drwxr-xr-x   4 runner  staff     128 Oct 20 03:02 ..
+drwxr-xr-x   9 runner  staff     288 Oct 20 03:11 attachments
+-rw-r--r--   1 runner  staff  108738 Oct 20 03:11 mac-04-work-overview-merge-job.png
+-rw-r--r--   1 runner  staff  104446 Oct 20 03:11 mac-05-a-live.png
+-rw-r--r--   1 runner  staff     854 Oct 20 03:24 not-served.txt
+-rw-r--r--   1 runner  staff    9306 Oct 20 03:11 requests.log
+-rw-r--r--   1 runner  staff    1878 Oct 20 03:11 requests.log.out
+-rw-r--r--   1 runner  staff      80 Oct 20 03:24 writes.txt
+-rw-r--r--   1 runner  staff  671831 Oct 20 03:11 xcodebuild-mac.log

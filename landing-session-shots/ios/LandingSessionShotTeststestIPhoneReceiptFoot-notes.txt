@@ -1,0 +1,1 @@
+receipt: never between 120.0 and 640.0; last frame (0.0, 576.0, 402.0, 70.33333333333337)

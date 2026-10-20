@@ -1,0 +1,2 @@
+mac-landing: no window after launch; pressing ⌘N
+mac-landing: 1 window(s)

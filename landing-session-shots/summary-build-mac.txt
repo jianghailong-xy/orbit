@@ -1,0 +1,8 @@
+Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacLandingPage]' started.
+Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacLandingPage]' passed (29.798 seconds).
+Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacWorkOverviewDrawsTheMergeJob]' started.
+Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacWorkOverviewDrawsTheMergeJob]' passed (30.167 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 59.965 (59.966) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 59.965 (59.967) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 59.965 (59.970) seconds
+** TEST SUCCEEDED **

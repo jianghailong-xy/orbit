@@ -1,0 +1,68 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "c9d516659242abc54e9213eea65dcdd7cc3aa7cf",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "69D675AE-2AE1-4929-A245-57156BA7E391.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "LandingSessionShotTeststestMacLandingPage-notes_0_D8210DDE-3274-41FC-BE71-6269E34963CC.txt",
+        "timestamp" : 1792465861.717
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "c9d516659242abc54e9213eea65dcdd7cc3aa7cf",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "C8DB6168-86AD-4219-9B5C-96E85B9477D1.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-05-a-live_0_A0D4A824-CCE9-4597-A2E0-6801AD211DDB.png",
+        "timestamp" : 1792465860.621
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "c9d516659242abc54e9213eea65dcdd7cc3aa7cf",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "FBFFDEAA-5FDF-4939-8DC5-9193E1A74AFA.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "no-window-mac-landing_0_B59CF15A-F7DC-4CD9-8AB4-4E192BF82252.txt",
+        "timestamp" : 1792465852.31
+      }
+    ],
+    "testIdentifier" : "LandingSessionShotTests/testMacLandingPage()",
+    "testIdentifierURL" : "test://com.apple.xcode/LandingSessionProbe/LandingSessionMacProbeUITests/LandingSessionShotTests/testMacLandingPage"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "c9d516659242abc54e9213eea65dcdd7cc3aa7cf",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "F2B492A3-0157-4C78-823D-0D9D004F46A5.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "LandingSessionShotTeststestMacWorkOverviewDrawsTheMergeJob-notes_0_3FA0E1B6-EE51-4D1B-B064-BB02BDADA020.txt",
+        "timestamp" : 1792465891.883
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "c9d516659242abc54e9213eea65dcdd7cc3aa7cf",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "02EAF337-319B-4259-AB78-31A67B0BA1DD.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "mac-04-work-overview-merge-job_0_45B5B337-3004-4B93-959C-4192A6677A27.png",
+        "timestamp" : 1792465890.849
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "c9d516659242abc54e9213eea65dcdd7cc3aa7cf",
+        "deviceName" : "My Mac",
+        "exportedFileName" : "47CB0A4A-66B1-4E05-8C8D-3B56AE6CCFD5.txt",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "no-window-mac-overview_0_56CEF98D-62B2-433B-93CC-F87553D3D144.txt",
+        "timestamp" : 1792465879.868
+      }
+    ],
+    "testIdentifier" : "LandingSessionShotTests/testMacWorkOverviewDrawsTheMergeJob()",
+    "testIdentifierURL" : "test://com.apple.xcode/LandingSessionProbe/LandingSessionMacProbeUITests/LandingSessionShotTests/testMacWorkOverviewDrawsTheMergeJob"
+  }
+]

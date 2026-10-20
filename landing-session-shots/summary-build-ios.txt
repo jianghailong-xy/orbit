@@ -1,0 +1,36 @@
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneCancellingMerge]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneCancellingMerge]' passed (33.652 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneCheckTimeoutCard]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneCheckTimeoutCard]' passed (11.838 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneConfirmedFoot]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneConfirmedFoot]' passed (15.861 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneDeliveryCardsLandingLink]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneDeliveryCardsLandingLink]' passed (16.918 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingCardOneJobCarriesItsFoot]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingCardOneJobCarriesItsFoot]' passed (10.967 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingCardSeveralJobsAndTheJobsList]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingCardSeveralJobsAndTheJobsList]' passed (15.431 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingMenuOnATimedOutRound]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingMenuOnATimedOutRound]' passed (15.816 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingPageLiveAndSettled]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingPageLiveAndSettled]' passed (23.800 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingsGroup]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingsGroup]' passed (18.293 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneMergeRoundRowAndQueuedJobs]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneMergeRoundRowAndQueuedJobs]' passed (11.647 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneMergeTimeoutCard]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneMergeTimeoutCard]' passed (18.884 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneOwnersXE5LandingCard]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneOwnersXE5LandingCard]' passed (16.844 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneReceiptFoot]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneReceiptFoot]' passed (95.939 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneSourceConversationsLabel]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneSourceConversationsLabel]' passed (81.864 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneTaskPageLandingSection]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneTaskPageLandingSection]' passed (15.907 seconds).
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneTaskSegmentTimedOut]' started.
+Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneTaskSegmentTimedOut]' passed (10.799 seconds).
+	 Executed 16 tests, with 0 failures (0 unexpected) in 414.460 (414.475) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 414.460 (414.476) seconds
+	 Executed 16 tests, with 0 failures (0 unexpected) in 414.460 (414.477) seconds
+** TEST SUCCEEDED **

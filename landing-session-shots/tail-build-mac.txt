@@ -1,0 +1,300 @@
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestSupport.framework /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTestCore.framework /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks/XCTAutomationSupport.framework /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks
+
+Copy /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-copy -exclude .DS_Store -exclude CVS -exclude .svn -exclude .git -exclude .hg -exclude Headers -exclude PrivateHeaders -exclude Modules -exclude \*.tbd -resolve-src-symlinks /Applications/Xcode_26.6.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks/Testing.framework /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks
+
+CodeSign /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib
+/Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/libXCTestSwiftSupport.dylib: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework
+/Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCUnit.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework
+/Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCUIAutomation.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework
+/Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTestSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework
+/Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTestCore.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework
+/Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTest.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework
+/Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/XCTAutomationSupport.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --timestamp\=none --preserve-metadata\=identifier,entitlements,flags --generate-entitlement-der /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework
+/Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/Frameworks/Testing.framework: replacing existing signature
+
+CodeSign /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/PlugIns/LandingSessionMacProbeUITests.xctest (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Intermediates.noindex/LandingSessionProbe.build/Debug/LandingSessionMacProbeUITests.build/LandingSessionMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/PlugIns/LandingSessionMacProbeUITests.xctest
+
+RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/PlugIns/LandingSessionMacProbeUITests.xctest (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    builtin-RegisterExecutionPolicyException /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/PlugIns/LandingSessionMacProbeUITests.xctest
+
+Touch /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/PlugIns/LandingSessionMacProbeUITests.xctest (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    /usr/bin/touch -c /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app/Contents/PlugIns/LandingSessionMacProbeUITests.xctest
+
+CodeSign /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app (in target 'LandingSessionMacProbeUITests' from project 'LandingSessionProbe')
+    cd /Users/runner/work/orbit/orbit/.ls-probe
+    
+    Signing Identity:     "Sign to Run Locally"
+    
+    /usr/bin/codesign --force --sign - --entitlements /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Intermediates.noindex/LandingSessionProbe.build/Debug/LandingSessionMacProbeUITests.build/LandingSessionMacProbeUITests.xctest.xcent --timestamp\=none --generate-entitlement-der /Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app
+/Users/runner/work/orbit/orbit/.ls-probe/.dd-mac/Build/Products/Debug/LandingSessionMacProbeUITests-Runner.app: replacing existing signature
+
+2026-10-20 03:10:29.970603+0000 LandingSessionMacProbeUITests-Runner[13694:43550] [Default] Running tests...
+Test Suite 'All tests' started at 2026-10-20 03:10:32.021.
+Test Suite 'LandingSessionMacProbeUITests.xctest' started at 2026-10-20 03:10:32.024.
+Test Suite 'LandingSessionShotTests' started at 2026-10-20 03:10:32.024.
+Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacLandingPage]' started.
+    t =     0.00s Start Test at 2026-10-20 03:10:32.026
+    t =     2.54s Set Up
+    t =     2.97s Open io.orbitd.landingsessionmacprobe
+    t =     2.97s     Launch io.orbitd.landingsessionmacprobe
+2026-10-20 03:10:35.586 xcodebuild[4643:19939] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-20 03:10:35.586 xcodebuild[4643:19939] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     4.73s         Wait for accessibility to load
+    t =     5.07s         Setting up automation session
+    t =     5.11s         Wait for io.orbitd.landingsessionmacprobe to idle
+    t =     5.13s Get number of matches for: Descendants matching type Window
+    t =     5.92s Get number of matches for: Descendants matching type Window
+    t =     6.45s Get number of matches for: Descendants matching type Window
+    t =     7.01s Get number of matches for: Descendants matching type Window
+    t =     7.54s Get number of matches for: Descendants matching type Window
+    t =     8.07s Get number of matches for: Descendants matching type Window
+    t =     8.60s Get number of matches for: Descendants matching type Window
+    t =     9.14s Get number of matches for: Descendants matching type Window
+    t =     9.66s Get number of matches for: Descendants matching type Window
+    t =    10.20s Get number of matches for: Descendants matching type Window
+    t =    10.71s Get number of matches for: Descendants matching type Window
+    t =    11.24s Get number of matches for: Descendants matching type Window
+    t =    11.76s Get number of matches for: Descendants matching type Window
+    t =    12.28s Get number of matches for: Descendants matching type Window
+    t =    12.80s Get number of matches for: Descendants matching type Window
+    t =    13.33s Get number of matches for: Descendants matching type Window
+    t =    13.85s Get number of matches for: Descendants matching type Window
+    t =    14.38s Get number of matches for: Descendants matching type Window
+    t =    14.90s Get number of matches for: Descendants matching type Window
+    t =    15.43s Get number of matches for: Descendants matching type Window
+    t =    15.95s Get number of matches for: Descendants matching type Window
+    t =    16.48s Get number of matches for: Descendants matching type Window
+    t =    17.00s Get number of matches for: Descendants matching type Window
+    t =    17.53s Get number of matches for: Descendants matching type Window
+    t =    18.06s Get number of matches for: Descendants matching type Window
+    t =    18.58s Get number of matches for: Descendants matching type Window
+    t =    19.11s Get number of matches for: Descendants matching type Window
+    t =    19.68s Get number of matches for: Descendants matching type Window
+    t =    20.20s Requesting snapshot of accessibility hierarchy for app with pid 14061
+    t =    20.24s Requesting snapshot of accessibility hierarchy for app with pid 14061
+    t =    20.29s Added attachment named 'no-window-mac-landing.txt'
+    t =    20.30s Type 'n' key with modifiers '⌘' (0x10)
+    t =    20.30s     Wait for io.orbitd.landingsessionmacprobe to idle
+    t =    20.30s     Find the Target Application 'io.orbitd.landingsessionmacprobe'
+    t =    20.31s     Check for interrupting elements affecting "LandingSessionMacProbe" Application
+    t =    20.31s     Synthesize event
+    t =    21.92s     Wait for io.orbitd.landingsessionmacprobe to idle
+    t =    21.93s Get number of matches for: Descendants matching type Window
+    t =    22.06s Get number of matches for: Descendants matching type Window
+    t =    22.16s Checking existence of `Any (First Match)`
+    t =    22.23s Checking existence of `StaticText (First Match)`
+    t =    22.28s Checking existence of `Any (First Match)`
+    t =    22.83s Checking existence of `Any (First Match)`
+    t =    22.88s Checking existence of `StaticText (First Match)`
+    t =    22.92s Checking existence of `Any (First Match)`
+    t =    23.47s Checking existence of `Any (First Match)`
+    t =    23.54s Checking existence of `StaticText (First Match)`
+    t =    23.60s Checking existence of `Any (First Match)`
+    t =    24.15s Checking existence of `Any (First Match)`
+    t =    24.24s Checking existence of `StaticText (First Match)`
+    t =    24.31s Checking existence of `Any (First Match)`
+    t =    24.86s Checking existence of `Any (First Match)`
+    t =    24.96s Checking existence of `StaticText (First Match)`
+    t =    25.24s Checking existence of `Any (First Match)`
+    t =    25.79s Checking existence of `Any (First Match)`
+    t =    25.85s Checking existence of `StaticText (First Match)`
+    t =    25.88s Checking existence of `StaticText (First Match)`
+    t =    27.93s Checking existence of `Any (First Match)`
+    t =    28.13s Checking existence of `StaticText (First Match)`
+    t =    28.17s Checking existence of `StaticText (First Match)`
+    t =    28.22s Checking existence of `Window (First Match)`
+    t =    28.22s Checking existence of `Window (First Match)`
+    t =    28.22s Find the Window (First Match)
+    t =    28.60s Added attachment named 'mac-05-a-live'
+    t =    28.60s Terminate io.orbitd.landingsessionmacprobe:14061
+    t =    29.69s Tear Down
+    t =    29.69s     Added attachment named 'LandingSessionShotTeststestMacLandingPage-notes.txt'
+Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacLandingPage]' passed (29.798 seconds).
+Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacWorkOverviewDrawsTheMergeJob]' started.
+    t =     0.00s Start Test at 2026-10-20 03:11:01.824
+    t =     0.12s Set Up
+2026-10-20 03:11:02.381 xcodebuild[4643:19939] [MT] IDELaunchParametersSnapshot: The operation couldn’t be completed. (DebuggerLLDB.DebuggerVersionStore.StoreError error 0.)
+2026-10-20 03:11:02.383 xcodebuild[4643:19939] [MT] IDELaunchParametersSnapshot: no debugger version
+    t =     0.28s Open io.orbitd.landingsessionmacprobe
+    t =     0.28s     Launch io.orbitd.landingsessionmacprobe
+    t =     2.24s         Wait for accessibility to load
+    t =     2.43s         Setting up automation session
+    t =     2.44s         Wait for io.orbitd.landingsessionmacprobe to idle
+    t =     2.45s Get number of matches for: Descendants matching type Window
+    t =     3.06s Get number of matches for: Descendants matching type Window
+    t =     3.58s Get number of matches for: Descendants matching type Window
+    t =     4.14s Get number of matches for: Descendants matching type Window
+    t =     4.66s Get number of matches for: Descendants matching type Window
+    t =     5.18s Get number of matches for: Descendants matching type Window
+    t =     5.74s Get number of matches for: Descendants matching type Window
+    t =     6.28s Get number of matches for: Descendants matching type Window
+    t =     6.80s Get number of matches for: Descendants matching type Window
+    t =     7.33s Get number of matches for: Descendants matching type Window
+    t =     7.86s Get number of matches for: Descendants matching type Window
+    t =     8.38s Get number of matches for: Descendants matching type Window
+    t =     8.90s Get number of matches for: Descendants matching type Window
+    t =     9.43s Get number of matches for: Descendants matching type Window
+    t =     9.96s Get number of matches for: Descendants matching type Window
+    t =    10.50s Get number of matches for: Descendants matching type Window
+    t =    11.02s Get number of matches for: Descendants matching type Window
+    t =    11.55s Get number of matches for: Descendants matching type Window
+    t =    12.08s Get number of matches for: Descendants matching type Window
+    t =    12.62s Get number of matches for: Descendants matching type Window
+    t =    13.15s Get number of matches for: Descendants matching type Window
+    t =    13.67s Get number of matches for: Descendants matching type Window
+    t =    14.19s Get number of matches for: Descendants matching type Window
+    t =    14.74s Get number of matches for: Descendants matching type Window
+    t =    15.30s Get number of matches for: Descendants matching type Window
+    t =    15.82s Get number of matches for: Descendants matching type Window
+    t =    16.34s Get number of matches for: Descendants matching type Window
+    t =    16.87s Get number of matches for: Descendants matching type Window
+    t =    17.40s Get number of matches for: Descendants matching type Window
+    t =    17.93s Requesting snapshot of accessibility hierarchy for app with pid 15163
+    t =    18.01s Requesting snapshot of accessibility hierarchy for app with pid 15163
+    t =    18.04s Added attachment named 'no-window-mac-overview.txt'
+    t =    18.05s Type 'n' key with modifiers '⌘' (0x10)
+    t =    18.05s     Wait for io.orbitd.landingsessionmacprobe to idle
+    t =    18.05s     Find the Target Application 'io.orbitd.landingsessionmacprobe'
+    t =    18.07s     Check for interrupting elements affecting "LandingSessionMacProbe" Application
+    t =    18.07s     Synthesize event
+    t =    18.61s     Wait for io.orbitd.landingsessionmacprobe to idle
+    t =    18.61s Get number of matches for: Descendants matching type Window
+    t =    18.69s Get number of matches for: Descendants matching type Window
+    t =    18.74s Checking existence of `Any (First Match)`
+    t =    18.85s Checking existence of `StaticText (First Match)`
+    t =    18.89s Checking existence of `Any (First Match)`
+    t =    19.44s Checking existence of `Any (First Match)`
+    t =    19.49s Checking existence of `StaticText (First Match)`
+    t =    19.53s Checking existence of `Any (First Match)`
+    t =    20.07s Checking existence of `Any (First Match)`
+    t =    20.15s Checking existence of `StaticText (First Match)`
+    t =    20.19s Checking existence of `Any (First Match)`
+    t =    20.75s Checking existence of `Any (First Match)`
+    t =    20.80s Checking existence of `StaticText (First Match)`
+    t =    20.83s Checking existence of `Any (First Match)`
+    t =    21.37s Checking existence of `Any (First Match)`
+    t =    21.42s Checking existence of `StaticText (First Match)`
+    t =    21.57s Checking existence of `Any (First Match)`
+    t =    22.13s Checking existence of `Any (First Match)`
+    t =    22.34s Checking existence of `Any (First Match)`
+    t =    24.40s Checking existence of `Any (First Match)`
+    t =    24.49s Checking existence of `Any (First Match)`
+    t =    24.54s Checking existence of `Any (First Match)`
+    t =    24.64s Checking existence of `StaticText (First Match)`
+    t =    24.72s Checking existence of `Any (First Match)`
+    t =    25.29s Checking existence of `Any (First Match)`
+    t =    25.38s Checking existence of `StaticText (First Match)`
+    t =    25.47s Checking existence of `Any (First Match)`
+    t =    26.05s Checking existence of `Any (First Match)`
+    t =    26.12s Checking existence of `StaticText (First Match)`
+    t =    26.18s Checking existence of `Any (First Match)`
+    t =    26.76s Checking existence of `Any (First Match)`
+    t =    26.82s Checking existence of `StaticText (First Match)`
+    t =    26.90s Checking existence of `Any (First Match)`
+    t =    27.46s Checking existence of `Any (First Match)`
+    t =    27.52s Checking existence of `StaticText (First Match)`
+    t =    27.61s Checking existence of `Any (First Match)`
+    t =    28.18s Checking existence of `Any (First Match)`
+    t =    28.27s Checking existence of `StaticText (First Match)`
+    t =    28.38s Checking existence of `Any (First Match)`
+    t =    28.97s Checking existence of `Window (First Match)`
+    t =    28.97s Checking existence of `Window (First Match)`
+    t =    28.98s Find the Window (First Match)
+    t =    29.03s Added attachment named 'mac-04-work-overview-merge-job'
+    t =    29.03s Terminate io.orbitd.landingsessionmacprobe:15163
+    t =    30.06s Tear Down
+    t =    30.06s     Added attachment named 'LandingSessionShotTeststestMacWorkOverviewDrawsTheMergeJob-notes.txt'
+Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacWorkOverviewDrawsTheMergeJob]' passed (30.167 seconds).
+Test Suite 'LandingSessionShotTests' passed at 2026-10-20 03:11:31.991.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 59.965 (59.966) seconds
+Test Suite 'LandingSessionMacProbeUITests.xctest' passed at 2026-10-20 03:11:31.991.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 59.965 (59.967) seconds
+Test Suite 'All tests' passed at 2026-10-20 03:11:31.992.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 59.965 (59.970) seconds
+2026-10-20 03:11:32.555 xcodebuild[4643:19939] [MT] IDETestOperationsObserverDebug: 69.066 elapsed -- Testing started completed.
+2026-10-20 03:11:32.555 xcodebuild[4643:19939] [MT] IDETestOperationsObserverDebug: 0.000 sec, +0.000 sec -- start
+2026-10-20 03:11:32.555 xcodebuild[4643:19939] [MT] IDETestOperationsObserverDebug: 69.066 sec, +69.066 sec -- end
+
+Test session results, code coverage, and logs:
+	/Users/runner/work/orbit/orbit/.ls-probe/results/mac.xcresult
+
+** TEST SUCCEEDED **
+
+Testing started
