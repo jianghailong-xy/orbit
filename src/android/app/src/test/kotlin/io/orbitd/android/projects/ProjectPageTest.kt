@@ -141,10 +141,12 @@ class ProjectPageTest {
     /** One `inFlightJobs` element, its instants counted in seconds before `now`. */
     private fun job(id: String, kind: String = "LAND_TASK", state: String = "RUNNING", phase: String? = "FETCH", taskId: String? = "t-c5",
         title: String? = "C5 · 托管 runner", generation: Int = 1, started: Long = 80, queued: Long = 95, heartbeat: Long? = 20,
-        runner: String? = "workstation-gpu", retriedBy: String? = null, timedOut: Boolean = false, limit: Int? = 600, retryable: Boolean = false) = buildJsonObject {
+        runner: String? = "workstation-gpu", retriedBy: String? = null, timedOut: Boolean = false, limit: Int? = 600, retryable: Boolean = false,
+        landing: String? = null) = buildJsonObject {
         put("jobId", id); put("kind", kind); put("state", state); put("phase", phase); put("taskId", taskId); put("taskTitle", title)
         put("generation", generation); put("startedAt", iso(started)); put("queuedAt", iso(queued)); put("heartbeatAt", heartbeat?.let(::iso))
         put("runnerName", runner); put("retriedBy", retriedBy); put("timedOut", timedOut); put("limitSeconds", limit); put("retryable", retryable)
+        landing?.let { put("landingSessionId", it) }
     }
     private fun integration(integrating: Int, queued: Int, inFlight: JsonObject, jobs: List<JsonObject>?) = buildJsonObject {
         put("integratingCount", integrating); put("queuedCount", queued); put("inFlight", inFlight); jobs?.let { put("inFlightJobs", JsonArray(it)) }
@@ -237,8 +239,9 @@ class ProjectPageTest {
         assertEquals(listOf("j-c5", "j-merge"), lines.map { it.jobId })
         assertEquals(LandingJobLine("j-c5", "t-c5", LandingLine("Landing", "C5 · 托管 runner", false, "Timed out", "110m", "No report for", "limit 10m", timedOut = true),
             "Runner workstation-gpu took it at $at · stopped at fetching · no push recorded", true), lines[0])
-        // A promotion lands no single task: no title, nothing to open.
-        assertEquals(LandingJobLine("j-merge", null, LandingLine("Merge to main", null, false, "queued", "41m 8s", "Queued for", "Updated just now"), null, false), lines[1])
+        // A promotion lands no single task: no title, nothing to open, and it is a merge job — the merge card is its way in.
+        assertEquals(LandingJobLine("j-merge", null, LandingLine("Merge to main", null, false, "queued", "41m 8s", "Queued for", "Updated just now"),
+            null, false, null, true), lines[1])
         fun detail(phase: String?, runner: String? = "workstation-gpu") = ProjectPage.landingJobLines(integration(0, 0, inFlight(started = 6_630),
             listOf(job("j", phase = phase, started = 6_630, heartbeat = 6_620, runner = runner, timedOut = true))), now, now, false, zone).first().detail
         assertEquals("Runner workstation-gpu took it at $at · stopped at pushing · may have been pushed", detail("PUSH"))
@@ -270,6 +273,23 @@ class ProjectPageTest {
         assertEquals("0m 10s", lines[0].line.clock); assertEquals("Updated 110m ago", lines[0].line.updated)
         assertTrue(lines[0].detail!!.endsWith("stopped at fetching · no push recorded")); assertTrue(lines[0].retryable)
         assertEquals("Update unavailable", ProjectPage.landingJobLines(stuckLanding(), now, now.minusSeconds(91), false).first().line.state)
+    }
+
+    /** §2.9 LS6: each job line carries the landing it belongs to, and a merge job says so — its row is named by its word and carries
+     * no entry of its own; the card's jobs carry the same two facts. */
+    @Test fun theJobLinesCarryTheLandingEachJobBelongsTo() {
+        val view = integration(1, 1, inFlight("C5", started = 80, kind = "LAND_TASK", phase = "FETCH", heartbeat = 20),
+            listOf(job("j1", landing = "L1"), job("j2", kind = "CHECK_PROMOTION", state = "QUEUED", phase = null, taskId = null, title = null,
+                started = 60, queued = 60, heartbeat = null, runner = null, limit = null, landing = "L2")))
+        val lines = ProjectPage.landingJobLines(view, now, now, false)
+        assertEquals(listOf("L1", "L2"), lines.map { it.landingSessionId })
+        assertEquals(listOf(false, true), lines.map { it.mergeJob })
+        assertNull("a merge job lands no single task", lines[1].line.what)
+        val card = ProjectPage.landingCard(view, now, now, false)!!
+        assertEquals(listOf("L1", "L2"), card.jobs.map { it.landingSessionId })
+        assertEquals(listOf(false, true), card.jobs.map { it.mergeJob })
+        // A server that names no landing leaves the slot out, which draws the grey sentence rather than a link.
+        assertNull(ProjectPage.landingJobLines(integration(0, 1, inFlight(started = 30), listOf(job("j"))), now, now, false).single().landingSessionId)
     }
 
     /** An element that leaves its optional facts out reads as their empty forms; one that is not an object is an older server's list. */

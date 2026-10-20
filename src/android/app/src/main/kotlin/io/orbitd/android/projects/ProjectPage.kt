@@ -1,6 +1,7 @@
 package io.orbitd.android.projects
 
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.directory.ProjectMergeCard
 import io.orbitd.android.taskprojects.SharePanelCopy
 import kotlinx.serialization.json.*
 import java.time.Instant
@@ -57,14 +58,19 @@ data class LandingHead(val right: String, val isClock: Boolean, val detail: Stri
 data class LandingCard(val word: String, val title: String, val state: String, val running: Boolean, val timedOut: Boolean, val what: String?,
     val jobs: List<Job>, val target: String?, val clock: String, val clockLabel: String, val wait: String?, val updated: String?,
     val liveness: LandingLiveness?, val detail: String?, val retryJobId: String?) {
-    /** One job in flight, as the card's body draws it: its task's title (null for a job that lands no task) and its own state. */
+    /** One job in flight, as the card's body draws it: its task's title (null for a job that lands no task) and its own state.
+     * `landingSessionId` is the landing it belongs to (§2.9), or null where the server named none; `mergeJob` is a round of
+     * merging into main, whose way in is the merge card — its row carries no "Open landing ›". */
     data class Job(val jobId: String, val taskId: String?, val title: String?, val state: String, val running: Boolean, val timedOut: Boolean,
-        val retryable: Boolean, val detail: String?)
+        val retryable: Boolean, val detail: String?, val landingSessionId: String? = null, val mergeJob: Boolean = false)
     val head: LandingHead get() = ProjectPage.landingHead(state, timedOut, clockLabel, clock, wait, updated, liveness)
 }
 /** One job of the list the landing row opens, drawn as the row itself: `taskId` is what a press opens, `detail` what a timed-out or
- * retried job adds under it, and Retry is offered on the server's `retryable`, never inferred from `timedOut`. */
-data class LandingJobLine(val jobId: String, val taskId: String?, val line: LandingLine, val detail: String?, val retryable: Boolean)
+ * retried job adds under it, and Retry is offered on the server's `retryable`, never inferred from `timedOut`.
+ * `landingSessionId` is the landing this job belongs to (§2.9); `mergeJob` is a round of merging into main, whose row's only way in
+ * is "Open landing ›" — the merge card is that round's other way. */
+data class LandingJobLine(val jobId: String, val taskId: String?, val line: LandingLine, val detail: String?, val retryable: Boolean,
+    val landingSessionId: String? = null, val mergeJob: Boolean = false)
 data class Pill(val label: String, val tone: TagTone)
 data class Tag(val text: String, val tone: TagTone)
 data class TaskGroup(val key: String, val heading: String, val tasks: List<JsonObject>, val settled: Boolean = false)
@@ -195,7 +201,9 @@ object ProjectPage {
         val unavailable = cannotRead(now, updatedAt, refreshFailed)
         val main = mainOf(view)
         val word = jobWords(main)[inFlight.text("kind")] ?: "Integration"
-        val what = if (jobs > 1) landingJobsCount(jobs, timedOutJobs) else inFlight.text("taskTitle")
+        // A merge lands no single task (§2.9): a task title on the row would attribute the round to work it never touched.
+        val mergeJob = inFlight.text("kind") in ProjectMergeCard.mergeJobKinds
+        val what = if (jobs > 1) landingJobsCount(jobs, timedOutJobs) else if (mergeJob) null else inFlight.text("taskTitle")
         // Only a claimed job has a wait to show: a queued job's whole clock is that wait, which "Queued for" says.
         val wait = if (running) inFlight.number("waitMs")?.takeIf { it > 0 }?.let { landingClock(it / 1000.0) } else null
         val lead = listed?.firstOrNull()
@@ -233,7 +241,9 @@ object ProjectPage {
     fun landingCard(view: JsonObject, now: Instant, updatedAt: Instant?, refreshFailed: Boolean, zone: ZoneId = ZoneId.systemDefault()): LandingCard? {
         val line = landingLine(view, now, updatedAt, refreshFailed) ?: return null
         val jobs = landingJobLines(view, now, updatedAt, refreshFailed, zone).map { job ->
-            LandingCard.Job(job.jobId, job.taskId, job.line.what, job.line.state, job.line.running, job.line.timedOut, job.retryable, job.detail)
+            // A merge job lands no single task, so its row is named by its word — "Merge to main", "Merge check" — not left blank.
+            LandingCard.Job(job.jobId, job.taskId, job.line.what ?: job.line.word, job.line.state, job.line.running,
+                job.line.timedOut, job.retryable, job.detail, job.landingSessionId, job.mergeJob)
         }
         // The line's own rule for the name slot, one row down: several jobs are a count in the head and a row each in the body.
         val several = view.n("integratingCount") + view.n("queuedCount") > 1
@@ -257,13 +267,17 @@ object ProjectPage {
         val main = mainOf(view)
         return inFlightJobs(view).orEmpty().map { job ->
             val word = jobWords(main)[job.text("kind")] ?: "Integration"
-            val line = if (job.flag("timedOut") && !unavailable) timedOutLine(job, word, job.text("taskTitle"), now)
-                else liveLine(word, job.text("taskTitle"), (job.text("state") ?: "QUEUED") == "RUNNING", job.text("phase"), job.text("startedAt"),
+            val mergeJob = job.text("kind") in ProjectMergeCard.mergeJobKinds
+            // A merge into main lands no single task (§2.9): its row shows the word, never a task it never touched.
+            val what = if (mergeJob) null else job.text("taskTitle")
+            val line = if (job.flag("timedOut") && !unavailable) timedOutLine(job, word, what, now)
+                else liveLine(word, what, (job.text("state") ?: "QUEUED") == "RUNNING", job.text("phase"), job.text("startedAt"),
                     job.text("heartbeatAt"), now, updatedAt, unavailable, main, runner = job.text("runnerName"), claim = job.number("claim"),
                     round = job.number("round"), check = job.obj("check"), stepStartedAt = job.text("stepStartedAt"),
                     outputMovedAt = job.text("outputMovedAt"), typicalMs = job.number("typicalMs"), livenessWord = job.text("liveness"),
                     firstStartedAt = firstStartedAt(view, job.text("jobId")))
-            LandingJobLine(job.text("jobId").orEmpty(), job.text("taskId"), line, landingJobDetail(job, zone, main), job.flag("retryable"))
+            LandingJobLine(job.text("jobId").orEmpty(), job.text("taskId"), line, landingJobDetail(job, zone, main), job.flag("retryable"),
+                job.text("landingSessionId")?.takeIf { it.isNotEmpty() }, mergeJob)
         }
     }
 
@@ -536,6 +550,9 @@ object ProjectPage {
     }
     fun actionLabel(action: String) = when (action) {
         "REVIEW" -> "Review"; "ANSWER" -> "Answer"; "RESUME" -> "Resume"; "OPEN_COORDINATOR" -> "Open coordinator"; "OPEN_TASK_SESSION" -> "Open task session"
+        // §2.9 LS6's two landing doors (board v4 07): the way into the landing an item is about, and the owner's end of a timed-out
+        // attempt (J-T10). The words are `LandingSessionCopy`'s and `ExceptionCards`' own on the cards; these are the project page's.
+        "OPEN_LANDING" -> "Open landing"; "ABANDON" -> "Abandon"
         else -> null
     }
     /** The first action the server listed that this client can carry out. */
@@ -543,6 +560,10 @@ object ProjectPage {
         "REVIEW", "ANSWER", "OPEN_COORDINATOR" -> true
         "RESUME" -> row.text("fuseEpisodeId") != null
         "OPEN_TASK_SESSION" -> row.text("sessionId") != null || row.text("taskId") != null
+        // A reading door onto the landing this item is about, and the one job an Abandon ends; either is drawn only where the row
+        // carries the address it needs.
+        "OPEN_LANDING" -> !row.text("landingSessionId").isNullOrEmpty()
+        "ABANDON" -> !row.text("integrationJobId").isNullOrEmpty()
         else -> false
     } }
 
