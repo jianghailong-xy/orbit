@@ -16,7 +16,8 @@ import (
 //   * a check's output is uploaded in ordered chunks, under the check it belongs to and under the
 //     claim the report carries;
 //   * the machine's own secrets never reach the control plane — the runner token, credentials in
-//     the environment, and the userinfo of a git remote URL;
+//     the environment, and the userinfo of a URL of any scheme (a git remote's, a database's), even
+//     when the address arrives split across two writes;
 //   * a refused claim stops the uploader instead of retrying into it;
 //   * a legacy claim uploads nothing and keeps the 16 KB tail its result always carried.
 
@@ -231,6 +232,183 @@ func TestIntegrationOutputRedactsTheRunnersSecrets(t *testing.T) {
 	if !strings.Contains(joined.String(), integrationOutputRedacted) {
 		t.Fatalf("the upload = %q, want the redaction marker", joined.String())
 	}
+}
+
+// urlOnlyRedactor holds no secret at all — carry 0, as in the merge check's stripped environment —
+// so the URL rule is the only thing between an address and the control plane.
+func urlOnlyRedactor() *integrationOutputRedactor {
+	return &integrationOutputRedactor{urlCredential: integrationURLCredential}
+}
+
+// TestIntegrationOutputRedactsTheUserinfoOfAnyScheme: a URL's userinfo is a credential whatever the
+// scheme in front of it. A check prints a database's, a cache's or a broker's address as readily as
+// a git remote's, and a rule that named only https, ftp and ssh let every one of those through whole.
+// The git remotes come out exactly as they always did: the userinfo, a bare token or user included,
+// becomes the marker and the scheme and host stay.
+func TestIntegrationOutputRedactsTheUserinfoOfAnyScheme(t *testing.T) {
+	redactor := urlOnlyRedactor()
+	for _, tc := range []struct{ name, text, want, leak string }{
+		{"postgres", "dial postgres://app:s3cretPass@db.internal:5432/orders failed",
+			"dial postgres://[redacted]@db.internal:5432/orders failed", "s3cretPass"},
+		{"postgresql in an assignment", "DATABASE_URL=postgresql://app:s3cretPass@db/orders",
+			"DATABASE_URL=postgresql://[redacted]@db/orders", "s3cretPass"},
+		{"mysql", "mysql://root:myPw0rd99@127.0.0.1:3306/app",
+			"mysql://[redacted]@127.0.0.1:3306/app", "myPw0rd99"},
+		{"redis with no user", "redis://:cachePass99@cache:6379/0",
+			"redis://[redacted]@cache:6379/0", "cachePass99"},
+		{"rediss with a user", "rediss://default:cachePass99@cache:6380",
+			"rediss://[redacted]@cache:6380", "cachePass99"},
+		{"amqp", "amqp://guest:brokerPw77@mq:5672/vhost",
+			"amqp://[redacted]@mq:5672/vhost", "brokerPw77"},
+		{"mongodb+srv", "mongodb+srv://admin:mongoPw42@cluster0.example.invalid/db?retryWrites=true",
+			"mongodb+srv://[redacted]@cluster0.example.invalid/db?retryWrites=true", "mongoPw42"},
+		{"jdbc's inner scheme", "jdbc:postgresql://app:s3cretPass@db:5432/orders",
+			"jdbc:postgresql://[redacted]@db:5432/orders", "s3cretPass"},
+		{"upper case", "S3://KEYID:Sekr1tValue@bucket/key",
+			"S3://[redacted]@bucket/key", "Sekr1tValue"},
+		{"after a word character", "url_postgres://app:s3cretPass@db",
+			"url_postgres://[redacted]@db", "s3cretPass"},
+		{"git https remote", "fatal: could not read https://bob:hunter2pass@example.invalid/repo.git",
+			"fatal: could not read https://[redacted]@example.invalid/repo.git", "hunter2pass"},
+		{"git https token alone", "remote: https://ghp_tokenvalue0123@example.invalid/o/r.git",
+			"remote: https://[redacted]@example.invalid/o/r.git", "ghp_tokenvalue0123"},
+		{"git ssh user", "ssh://git@example.invalid/o/r.git",
+			"ssh://[redacted]@example.invalid/o/r.git", "ssh://git@"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := redactor.redact(tc.text)
+			if got != tc.want {
+				t.Fatalf("redact(%q) = %q, want %q", tc.text, got, tc.want)
+			}
+			if strings.Contains(got, tc.leak) {
+				t.Fatalf("redact(%q) still carries %q", tc.text, tc.leak)
+			}
+		})
+	}
+}
+
+// TestIntegrationOutputLeavesTextWithoutUserinfoAlone: an `@` that is not a URL's userinfo, and an
+// address that has no userinfo, are not a credential and come out as they went in.
+func TestIntegrationOutputLeavesTextWithoutUserinfoAlone(t *testing.T) {
+	redactor := urlOnlyRedactor()
+	for _, text := range []string{
+		"mail someone@example.invalid about it",
+		"git@example.invalid:owner/repo.git",
+		"go: downloading golang.org/x/mod@v0.17.0",
+		"see https://example.invalid/pkg@v1.2.3 and https://registry.example.invalid/@scope/pkg",
+		"postgres://db.internal:5432/orders",
+		"https://example.invalid:8443/path",
+		"ws://localhost:8080/socket?user=a@b",
+		"a:// b@c, 3://4@5 and http://@host/path",
+		"the build took 3:04 on user@host",
+	} {
+		if got := redactor.redact(text); got != text {
+			t.Fatalf("redact(%q) = %q, want it unchanged", text, got)
+		}
+	}
+}
+
+// TestIntegrationOutputRedactsAnAddressSplitAcrossTwoChunks: the uploader streams, so an address can
+// arrive in two writes with a flush between them — the cut inside the scheme, inside the user or the
+// password, right before or right after the `@`. Every one of those cuts comes out exactly as the
+// whole text redacted at once: nothing of the userinfo leaves early, nothing is sent twice and
+// nothing is lost. It holds with no secret in the environment (carry 0), where only the address's own
+// hold-back protects it, and with a secret whose carry is shorter than the address.
+func TestIntegrationOutputRedactsAnAddressSplitAcrossTwoChunks(t *testing.T) {
+	redactors := []struct {
+		name string
+		new  func() *integrationOutputRedactor
+	}{
+		{"no secrets", urlOnlyRedactor},
+		{"a short secret", func() *integrationOutputRedactor {
+			return &integrationOutputRedactor{secrets: []string{"unrelated-0123"}, urlCredential: integrationURLCredential}
+		}},
+	}
+	lines := []struct{ text, scheme, password string }{
+		{"connecting to postgres://app:s3cretPass@db.internal:5432/orders now\n", "postgres://", "s3cretPass"},
+		{"redis://:cachePass99@cache:6379/0\n", "redis://", "cachePass99"},
+		{"fatal: could not read https://x-access-token:ghs_tok3nvalue@example.invalid/o/r.git\n", "https://", "ghs_tok3nvalue"},
+		{"token unrelated-0123 then amqp://guest:brokerPw77@mq:5672/vhost\n", "amqp://", "brokerPw77"},
+	}
+	for _, r := range redactors {
+		for _, line := range lines {
+			want := r.new().redact(line.text)
+			if strings.Contains(want, line.password) {
+				t.Fatalf("%s: the one-shot redaction of %q still carries the password: %q", r.name, line.text, want)
+			}
+			start := strings.Index(line.text, line.scheme)
+			at := start + strings.Index(line.text[start:], "@")
+			for split := 1; split < len(line.text); split++ {
+				first, second := line.text[:split], line.text[split:]
+				early, whole := streamTwoChunks(t, r.new(), first, second)
+				if whole != want {
+					t.Fatalf("%s: %q + %q uploaded %q, want the one-shot redaction %q", r.name, first, second, whole, want)
+				}
+				if strings.Contains(early, line.password) || !strings.HasPrefix(want, early) {
+					t.Fatalf("%s: %q + %q: the mid-command flush sent %q, not a prefix of %q", r.name, first, second, early, want)
+				}
+				// The address is held back from its scheme on, and only from there: what came before
+				// it is not kept off the page along with it.
+				if r.name == "no secrets" && split >= start && split <= at && early != line.text[:start] {
+					t.Fatalf("%s: %q + %q: the mid-command flush sent %q, want %q", r.name, first, second, early, line.text[:start])
+				}
+			}
+		}
+	}
+}
+
+// TestIntegrationOutputBoundsTheHoldBackOfAnUnfinishedAddress: what an address whose `@` has not
+// arrived holds back is capped like a secret's carry. A long run that reads like the start of an
+// address must not keep a check's output off the page until the command ends.
+func TestIntegrationOutputBoundsTheHoldBackOfAnUnfinishedAddress(t *testing.T) {
+	text := "x://" + strings.Repeat("a", 4*integrationOutputCarryMax)
+	early, whole := streamTwoChunks(t, urlOnlyRedactor(), text, "\n")
+	if held := len(text) - len(early); held > integrationOutputCarryMax {
+		t.Fatalf("the mid-command flush held back %d bytes, want at most %d", held, integrationOutputCarryMax)
+	}
+	if whole != text+"\n" {
+		t.Fatalf("uploaded %d bytes, want the %d written", len(whole), len(text)+1)
+	}
+}
+
+// streamTwoChunks writes first, flushes the way the timer does while a command runs, writes second
+// and ends the command. It answers what that mid-command flush sent and the whole upload, and checks
+// the seq numbering on the way. Neither the timer nor a full buffer flushes on its own here, so the
+// one flush in the middle is the only boundary.
+func streamTwoChunks(t *testing.T, redactor *integrationOutputRedactor, first, second string) (early, whole string) {
+	t.Helper()
+	recorder := &outputRecorder{}
+	uploader := newIntegrationLogUploader(context.Background(), IntegrationJobCommand{
+		outputSender:     recorder.send,
+		outputEvery:      time.Hour,
+		outputChunkBytes: 1 << 20,
+		outputRedactor:   redactor,
+	})
+	out := newIntegrationOutput()
+	uploader.attach(out, IntegrationJobOutputCheck{Name: "TASK_ACCEPTANCE", Index: 1})
+	if _, err := out.Write([]byte(first)); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	uploader.drain(nil, false)
+	var b strings.Builder
+	for _, chunk := range recorder.snapshot() {
+		b.WriteString(chunk.Text)
+	}
+	early = b.String()
+	if _, err := out.Write([]byte(second)); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	uploader.Close()
+	uploader.close()
+	chunks := recorder.snapshot()
+	if seqs := outputSeqs(chunks); !seqsContiguousFromZero(seqs) {
+		t.Fatalf("seqs = %v, want 0..n-1", seqs)
+	}
+	b.Reset()
+	for _, chunk := range chunks {
+		b.WriteString(chunk.Text)
+	}
+	return early, b.String()
 }
 
 // TestIntegrationOutputStopsOnARefusedClaim: 409 STALE_CLAIM / ALREADY_FINAL and 404 mean the claim
