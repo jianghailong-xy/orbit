@@ -4,7 +4,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.net.Uri
-import android.view.View
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
@@ -36,15 +35,13 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The landing session page as drawn, in the six states the board's v4 07 frame and 05's frames name (A-1; contract §2.9
- * LS1/LS6, §7.2 V6): checking, a timed-out LAND_TASK, a timed-out Merge to main, after a takeover, settled, and the ⋮ menu
- * open. Every state is written to a PNG under `src/android/build/evidence/a1-landing-session/` beside its semantics tree.
+ * The landing session page as drawn, in the frames the board's v4 07/05 name (A-1; contract §2.9 LS1/LS6, §7.2 V6):
+ * checking, a timed-out LAND_TASK, a timed-out Merge to main, after a takeover, settled, a merge round checking, the
+ * task segment's ⋮ menu and the merge round's ⋮ menu. Each frame is written to
+ * `docs/evidence/landing-session-android/<theme>/` beside its semantics tree, light and dark, so the pictures a
+ * reader checks against 07/05 are the evidence itself and not a build directory.
  */
-@RunWith(RobolectricTestRunner::class)
-@Config(sdk = [29], application = ProjectShellApplication::class, qualifiers = "w412dp-h915dp-xhdpi")
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-class LandingSessionViewTest {
+abstract class LandingSessionFrames {
     @get:Rule(order = 0)
     val mainDispatcher = object : TestWatcher() {
         override fun starting(description: Description) { Dispatchers.setMain(UnconfinedTestDispatcher()) }
@@ -52,6 +49,9 @@ class LandingSessionViewTest {
     }
     @get:Rule(order = 1)
     val compose = createAndroidComposeRule<MainActivity>()
+
+    /** The theme this frame set is drawn in: the class's own qualifier decides it. */
+    protected abstract val theme: String
 
     private val launch = ProjectShell.LAUNCH
     private val landing = ProjectShell.LANDING
@@ -63,12 +63,13 @@ class LandingSessionViewTest {
     private fun view(kind: String = "LAND_TASK", subject: String = "TASK", taskId: String? = "t-landing", promotionId: String? = null,
         state: String = "RUNNING", liveness: String? = "LIVE", timedOut: Boolean = false, retryable: Boolean = false, claim: Int = 1,
         round: Int? = 1, phase: String? = "CHECK", runner: String = "wikova", step: Long = 110, heartbeat: Long = 0,
-        settledAt: String? = null, settledAs: String? = null, timeline: String? = null, checks: String = "[]"): String {
+        settledAt: String? = null, settledAs: String? = null, timeline: String? = null, checks: String = "[]",
+        check: Boolean = state == "RUNNING"): String {
         val attempt = """{"jobId":"j-1","kind":"$kind","state":"$state","generation":1,"phase":${phase?.let { "\"$it\"" } ?: "null"},
             "round":${round ?: "null"},"step":null,"claim":$claim,"runnerName":"$runner","sourceSessionId":"$landing",
             "targetRef":"refs/heads/project/launch","startedAt":"${ago(step)}","heartbeatAt":${if (heartbeat == 0L) "\"${ago(0)}\"" else "\"${ago(heartbeat)}\""},
             "outputMovedAt":"${ago(6)}","progressProtocol":"v2",
-            "check":${if (state == "RUNNING") """{"name":"${if (kind == "CHECK_PROMOTION") "MERGE_CHECK" else "TASK_ACCEPTANCE"}","index":1,"count":3,"budgetSeconds":3600,"startedAt":"${ago(step)}"}""" else "null"},
+            "check":${if (check) """{"name":"${if (kind == "CHECK_PROMOTION") "MERGE_CHECK" else "TASK_ACCEPTANCE"}","index":1,"count":3,"budgetSeconds":3600,"startedAt":"${ago(step)}"}""" else "null"},
             "liveness":${liveness?.let { "\"$it\"" } ?: "null"},"blockingReason":null,"timedOut":$timedOut,"limitSeconds":600,
             "retryable":$retryable,"pushBoundaryPassed":false}"""
         return """{"sessionId":"$landing","projectId":"$launch","subject":"$subject","taskId":${taskId?.let { "\"$it\"" } ?: "null"},
@@ -78,79 +79,102 @@ class LandingSessionViewTest {
             ${timeline?.let { ""","timeline":$it""" }.orEmpty()}}"""
     }
 
-    private fun timeline(vararg entries: Pair<String, String>) = """{"sections":[{"title":"Generation 1","jobId":"j-1","kind":"LAND_TASK",
-        "generation":1,"state":"RUNNING","entries":[${entries.joinToString(",") { """{"kind":"${it.first}","at":"${it.second}",
-        "claim":1,"round":1,"check":null,${if (it.first == "TAKEN_OVER") "\"claim\":2," else ""}"text":"${it.first}"}""" }}]}],"facts":[]}"""
+    /** One fact of the server's timeline: the kind the ledger stores, when, the sentence the server writes for it
+     *  (`project-integration-event.ts`), and the phase a push line is recognised by. */
+    private data class Fact(val kind: String, val at: String, val text: String, val phase: String? = null)
 
+    /** One section of the server's own timeline: its title and the facts it recorded, each with the server's sentence,
+     *  never the kind's name. */
+    private fun timeline(entries: Array<Fact>, title: String = "Generation 1", kind: String = "LAND_TASK", state: String = "RUNNING"): String =
+        """{"sections":[{"title":"$title","jobId":"j-1","kind":"$kind","generation":1,"state":"$state","entries":[${
+            entries.joinToString(",") { e -> """{"kind":"${e.kind}","at":"${e.at}","claim":1,"round":1,"phase":${e.phase?.let { "\"$it\"" } ?: "null"},"check":null,"text":"${e.text}"}""" }
+        }]}],"facts":[]}"""
+
+    private var signedIn = false
+
+    /** The link again: a fresh page reads the fixture as it stands now. Whatever is up — a landing page, an open ⋮
+     *  popup, or both — is left first; a back press the popup swallows is fine, the loop checks what remains. */
     private fun openLanding(landingJson: String) {
-        if (ProjectShell.landing == null) {
-            ProjectShell.landing = landingJson
-            signIn()
-            open("orbit-session:$landing")
-        } else {
-            // Back to the page beneath, then the same link again: a fresh page reads the fixture as it stands now.
-            await { exists(hasContentDescription("Back")) }
-            compose.onNodeWithContentDescription("Back").performClick()
-            compose.waitForIdle()
-            ProjectShell.landing = landingJson
-            open("orbit-session:$landing")
-        }
-        try { await { exists(hasTestTag("landing-page")) } } catch (failure: Throwable) {
-            File(output, "timeout-tree.txt").writeText(runCatching { compose.onRoot().printToString() }.getOrDefault(""))
-            File(output, "timeout-calls.txt").writeText("landingSet=${ProjectShell.landing != null} served=${ProjectShell.landingServed}\n" +
-                ProjectShell.calls.joinToString("\n"))
-            throw failure
-        }
+        ProjectShell.landing = landingJson
+        if (!signedIn) { signIn(); signedIn = true }
+        leavePage()
+        open("orbit-session:$landing")
+        await { exists(hasTestTag("landing-page")) }
         compose.waitForIdle()
     }
 
-    @Test fun theSixStatesAreDrawn() {
-        val generation1 = timeline("ENQUEUED" to ago(240), "CLAIMED" to ago(180), "CHECK_STARTED" to ago(110))
+    private fun backOnce() {
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
+    }
 
-        // ① Checking: the shape of the head every landing surface wears, the budget and its meter, the live line, V6's facts.
-        openLanding(view(timeline = generation1))
-        await { text("landing-head:right") == "1m 50s of 60m" }
-        assertEquals("checking · output 6s ago · claim 1 · round 1 of 3 · updated just now", text("landing-head:detail"))
-        assertEquals("Task acceptance 1m 50s of 60m", text("landing:budget"))
-        assertEquals("Output 6s ago · Updated just now", text("landing:live"))
+    private fun leavePage() {
+        repeat(4) {
+            if (menuItems().isEmpty() && !exists(hasTestTag("landing-page"))) return
+            backOnce()
+            compose.waitForIdle()
+        }
+    }
+
+    @Test fun theFramesAreDrawn() {
+        // ① Checking (05 a, 07): the head every landing surface wears, the budget and its meter, the V6 live line, and the
+        // server's own timeline sentences with the running check's tail.
+        openLanding(view(timeline = timeline(arrayOf(
+            Fact("ENQUEUED", ago(240), "Task marked done · queued to land on project/launch"),
+            Fact("CLAIMED", ago(180), "Claimed by runner wikova · claim 1"),
+            Fact("CHECK_STARTED", ago(110), "Task acceptance started · claim 1 · wikova")))))
+        await { text("landing-head:right")?.matches(Regex("1m 5\\ds of 60m")) == true }
+        assertTrue(text("landing-head:detail")!!.matches(Regex("checking · output \\d+s ago · claim 1 · round 1 of 3 · updated just now")))
+        assertTrue(text("landing:budget")!!.matches(Regex("Task acceptance 1m 5\\ds of 60m")))
+        assertTrue(text("landing:live")!!.matches(Regex("Output \\d+s ago · Updated just now")))
         assertEquals("Generation 1", text("landing:section-title:j-1"))
+        assertTrue(exists(hasText("Claimed by runner wikova · claim 1")))
         assertTrue(exists(hasTestTag("landing:live-check")))
-        shot("1-checking")
+        shot("01-checking")
 
-        // ② A timed-out LAND_TASK: the whole card amber, the runner's last word, J12's sentence, Retry and Abandon.
+        // ② A timed-out LAND_TASK (05 i, 07): the whole card amber, the runner's last word, J12's sentence, Retry and Abandon.
         openLanding(view(timedOut = true, liveness = "LEASE_EXPIRED", retryable = true, step = 1380, heartbeat = 1380,
-            timeline = timeline("ENQUEUED" to ago(1600), "CLAIMED" to ago(1500), "STEP" to ago(1440))))
+            timeline = timeline(arrayOf(
+                Fact("ENQUEUED", ago(1600), "Task marked done · queued to land on project/launch"),
+                Fact("CLAIMED", ago(1500), "Claimed by runner wikova · claim 1"),
+                Fact("STEP", ago(1440), "Rebasing onto project/launch", phase = "REBASE")))))
         await { exists(hasTestTag("landing-head:timed-out"), unmerged = true) }
         assertEquals("No report for 23m · limit 10m", text("landing-head:detail"))
         assertEquals("Nothing was pushed — the runner reports before it pushes, and it never did.", text("landing:push-sentence"))
         assertTrue(exists(hasTestTag("landing:retry")) && exists(hasTestTag("landing:abandon")))
         assertFalse(exists(hasTestTag("landing:rerun")))
-        shot("2-timed-out-land-task")
+        assertTrue(exists(hasText("Rebasing onto project/launch")))
+        shot("02-timed-out-land-task")
 
-        // ③ A timed-out Merge to main: no Retry, Abandon and the card's own sentence, and the review the round is decided on.
+        // ③ A timed-out Merge to main (05 f): no Retry, Abandon and the card's own sentence, and the review the round is
+        // decided on; the timeline says where the push stopped.
         ProjectShell.promotion = """{"promotionId":"pr-1","state":"CONFIRMED","sourceRef":"refs/heads/project/launch","upstreamRef":"refs/heads/main",
             "landsAs":"MERGE_COMMIT","taskIds":["t1","t2"],"tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs"}]}"""
-        val pushLine = """{"sections":[{"title":"Merge to main · 1","jobId":"j-1","kind":"LAND_PROMOTION","generation":1,"state":"RUNNING",
-            "entries":[{"kind":"STEP","at":"2026-10-20T15:42:00Z","claim":1,"phase":"PUSH","text":"Reported starting the push to main"}]}],"facts":[]}"""
         openLanding(view(subject = "PROMOTION", taskId = null, promotionId = "pr-1", kind = "LAND_PROMOTION", timedOut = true,
-            liveness = "LEASE_EXPIRED", phase = "PUSH", step = 1380, heartbeat = 1380, timeline = pushLine))
+            liveness = "LEASE_EXPIRED", phase = "PUSH", step = 1380, heartbeat = 1380,
+            timeline = timeline(arrayOf(Fact("STEP", "2026-10-20T15:42:00Z", "Reported starting the push to project/launch", phase = "PUSH")),
+                title = "Merge to main · 1", kind = "LAND_PROMOTION")))
         await { text("landing-head:title") == "Merge to main" }
         assertEquals("Timed out", text("landing-head:right"))
         assertTrue(text("landing:push-sentence")!!.startsWith("May have been pushed"))
         assertFalse(exists(hasTestTag("landing:retry")))
         assertEquals("No Retry: a confirmed merge ends by Abandon, or finishes when a new process on the runner takes it over.",
             text("landing:door-hint"))
-        shot("3-timed-out-merge-to-main")
+        shot("03-timed-out-merge-to-main")
 
-        // ④ After a takeover: claim 2 of the same section, first started kept, the new claim's own clock.
-        openLanding(view(claim = 2, step = 290, timeline = timeline("CLAIMED" to "2026-10-20T17:03:00Z", "TAKEN_OVER" to "2026-10-20T17:31:00Z")))
+        // ④ After a takeover (05 j): claim 2 of the same section, the first start kept, the new claim's own clock.
+        openLanding(view(claim = 2, step = 290, timeline = timeline(arrayOf(
+            Fact("CLAIMED", "2026-10-20T17:03:00Z", "Claimed by runner wikova · claim 1"),
+            Fact("TAKEN_OVER", "2026-10-20T17:31:00Z", "Taken over by a new process on runner wikova · claim 2")))))
         await { text("landing-head:detail")?.contains("claim 2") == true }
         assertTrue(text("landing-head:detail")!!.contains("Taken over "))
         val firstStarted = io.orbitd.android.projects.ProjectPage.landingClockTime(Instant.parse("2026-10-20T17:03:00Z"))
         assertTrue(text("landing-head:detail")!!.contains("first started $firstStarted"))
-        shot("4-taken-over")
+        assertTrue(exists(hasText("Taken over by a new process on runner wikova · claim 2")))
+        shot("04-taken-over")
 
-        // ⑤ Settled: the round's outcome, the tasks now on main, the check that passed and the tree it landed.
+        // ⑤ Settled (05 c): the round's outcome with the green ✓, the tasks now on main, the check that passed and the tree
+        // it landed.
         ProjectShell.merged = """[{"promotionId":"pr-1","sourceRef":"refs/heads/project/launch","upstreamRef":"refs/heads/main","landsTreeSha":"5e5bfca1234",
             "landsAs":"MERGE_COMMIT","taskIds":["t1","t2"],"tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs"}],
             "merged":{"sha":"8ed0ea712345","at":"${ago(600)}","automatic":true},
@@ -159,26 +183,58 @@ class LandingSessionViewTest {
             settledAt = ago(600), settledAs = "MERGED",
             checks = """[{"name":"MERGE_CHECK","expectedExitCode":0,"exitCode":0,"timedOut":false,"durationMs":1061000}]"""))
         await { text("landing-head:title") == "Merged into main" }
-        assertEquals("Merged into main", text("landing-head:title"))
         assertEquals("8ed0ea7 · 2 tasks · automatically", text("landing-head:detail"))
+        assertTrue(exists(hasTestTag("landing-head:done"), unmerged = true))
         assertTrue(exists(hasText("Now on main · 2 tasks"), unmerged = true))
         assertTrue(exists(hasText("Landed exactly the tested tree 5e5bfca · as a merge commit"), unmerged = true))
         assertEquals("This landing is complete — nothing to type here.", text("landing:footer-line"))
-        shot("5-settled")
+        shot("05-settled")
 
-        // ⑥ The ⋯ menu open: the ways to look at the merge round, then its Cancel merge, and no session menu's rows.
+        // ⑥ A confirmed merge round, ⋮ open (05 d): Merge to main, the ways to look — Review card, Open coordinator — then
+        // Cancel merge with its consequence, and no Open task / Open source session / Copy Link.
         ProjectShell.coordinatorStatus = """{"state":"LIVE","coordination":{"session":{"id":"${ProjectShell.COORD}"}}}"""
-        ProjectShell.promotion = """{"promotionId":"pr-1","state":"CONFIRMED","sourceRef":"refs/heads/project/launch","upstreamRef":"refs/heads/main",
-            "landsAs":"MERGE_COMMIT","taskIds":["t1","t2"],"tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs"}]}"""
-        openLanding(view(subject = "PROMOTION", taskId = null, promotionId = "pr-1", kind = "LAND_PROMOTION", phase = "PUSH", step = 290))
+        ProjectShell.promotion = """{"promotionId":"pr-1","state":"CONFIRMED","sourceRef":"refs/heads/project/launch",
+            "upstreamRef":"refs/heads/main","landsAs":"MERGE_COMMIT","taskIds":["t1","t2"],"tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs"}]}"""
+        openLanding(view(subject = "PROMOTION", taskId = null, promotionId = "pr-1", kind = "LAND_PROMOTION", phase = "PUSH",
+            step = 290, check = false,
+            timeline = timeline(arrayOf(Fact("STEP", ago(290), "Reported starting the push to project/launch", phase = "PUSH")),
+                title = "Merge to main · 1", kind = "LAND_PROMOTION")))
+        await { text("landing-head:title") == "Merge to main" }
         await { exists(hasTestTag("landing-more")) }
         compose.onNodeWithTag("landing-more").performClick()
-        await { compose.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction()).fetchSemanticsNodes().isNotEmpty() }
+        await { menuItems().isNotEmpty() }
         assertEquals(listOf("Open coordinator", "Review card", "Cancel merge"), menuItems())
-        shot("6-menu-open", popup = true)
+        assertTrue(exists(hasText(LandingSessionCopy.CANCEL_BEFORE_PUSH), unmerged = true))
+        shot("06-merge-menu", popup = true)
+
+        // ⑦ The task segment's ⋮ menu (07 11:05): Open task / Open source session / Open coordinator, then Stop landing.
+        openLanding(view(timeline = timeline(arrayOf(
+            Fact("ENQUEUED", ago(240), "Task marked done · queued to land on project/launch"),
+            Fact("CLAIMED", ago(180), "Claimed by runner wikova · claim 1")))))
+        await { exists(hasTestTag("landing-more")) }
+        compose.onNodeWithTag("landing-more").performClick()
+        await { menuItems().isNotEmpty() }
+        assertEquals(listOf("Open task", "Open source session", "Open coordinator", "Stop landing"), menuItems())
+        assertTrue(exists(hasText("Before the push only · nothing pushed yet"), unmerged = true))
+        shot("07-task-menu", popup = true)
+
+        // ⑧ A merge round checking alone (05 a): Merge check's budget and usually, the live line, the on-pass sentence and
+        // the footer's `A clean pass merges on its own` — no menu over it.
+        ProjectShell.promotion = """{"promotionId":"pr-1","state":"CHECKING","onPass":"MERGE","sourceRef":"refs/heads/project/launch",
+            "upstreamRef":"refs/heads/main","landsAs":"MERGE_COMMIT","taskIds":["t1","t2"],"tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs"}]}"""
+        openLanding(view(subject = "PROMOTION", taskId = null, promotionId = "pr-1", kind = "CHECK_PROMOTION", phase = "CHECK",
+            step = 160, timeline = timeline(arrayOf(Fact("CHECK_STARTED", ago(160), "Merge check started · claim 1 · wikova")),
+                title = "Merge check · 1", kind = "CHECK_PROMOTION")))
+        await { text("landing-head:title") == "Merge check" }
+        assertEquals("Merges on its own when it passes.", text("landing:on-pass"))
+        assertTrue(exists(hasText("A clean pass merges on its own")))
+        assertTrue(text("landing:budget")!!.matches(Regex("Merge check 2m 4\\ds of 60m")))
+        assertTrue(text("landing:live")!!.matches(Regex("Output \\d+s ago · Updated just now")))
+        assertTrue(exists(hasText("Merge check started · claim 1 · wikova")))
+        shot("08-merge-checking")
     }
 
-    /** One of the page's two intents: the menu's rows, in the order the board draws them. */
+    /** The page's ⋮ rows, in the order the board draws them. */
     private fun menuItems() = compose.onAllNodes(hasAnyAncestor(isPopup()) and hasClickAction()).fetchSemanticsNodes()
         .mapNotNull { node -> node.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
 
@@ -190,7 +246,7 @@ class LandingSessionViewTest {
     private val output: File by lazy {
         val root = generateSequence(File(System.getProperty("user.dir")).absoluteFile) { it.parentFile }
             .first { File(it, "src/android/settings.gradle.kts").isFile }
-        File(root, "src/android/build/evidence/a1-landing-session").also { it.mkdirs() }
+        File(root, "docs/evidence/landing-session-android/$theme").also { it.mkdirs() }
     }
 
     /** The window as drawn, written beside its semantics tree; a menu's popup is drawn where DropdownMenu put it. */
@@ -240,4 +296,22 @@ class LandingSessionViewTest {
         }
         compose.waitForIdle()
     }
+}
+
+/** The frames in the app's light theme. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [29], application = ProjectShellApplication::class, qualifiers = "w412dp-h915dp-xhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+class LandingSessionViewTest : LandingSessionFrames() {
+    override val theme = "light"
+}
+
+/** The same frames in the app's dark theme (the night qualifier is what `isSystemInDarkTheme` reads). */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [29], application = ProjectShellApplication::class, qualifiers = "w412dp-h915dp-night-xhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+class LandingSessionViewDarkTest : LandingSessionFrames() {
+    override val theme = "dark"
 }

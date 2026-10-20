@@ -170,7 +170,9 @@ internal fun LandingSessionPage(app: OrbitApplication, handle: SessionHandle, ro
                         LandingMenuAction.CANCEL -> landing.promotionId?.let { projects.cancelPromotion(landing.projectId, it) }
                         LandingMenuAction.ABANDON -> attempt?.jobId?.let { projects.abandonJob(landing.projectId, it) }
                         LandingMenuAction.RETRY -> attempt?.jobId?.let { projects.retryJob(landing.projectId, it) }
-                        LandingMenuAction.RERUN_THE_CHECK -> landing.promotionId?.let { projects.recheckPromotion(landing.projectId, it) }
+                        LandingMenuAction.RERUN_THE_CHECK -> landing.promotionId?.let {
+                            projects.recheckPromotion(landing.projectId, it, LandingSessionCopy.RERUN_LANDING_CHECK_REASON)
+                        }
                         else -> Unit
                     }
                 } catch (cancel: CancellationException) { throw cancel }
@@ -357,7 +359,9 @@ private fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, car
             return@Column
         }
         if (outcome != null) {
-            ProjectLandingHead(outcome.title, LandingHead(outcome.right, false, outcome.detail.orEmpty()), running = false, timedOut = false)
+            // A settled success wears the green ✓ the merge card's `Merged into main` row wears (mockup 05 c).
+            ProjectLandingHead(outcome.title, LandingHead(outcome.right, false, outcome.detail.orEmpty()), running = false, timedOut = false,
+                ok = outcome.ok)
             outcome.tasksHeading?.let { Text(it, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold) }
             outcome.tasks.forEach { title ->
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {

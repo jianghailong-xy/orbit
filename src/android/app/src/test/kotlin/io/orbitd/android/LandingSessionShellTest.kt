@@ -149,6 +149,9 @@ class LandingSessionShellTest {
         assertFalse(exists(hasTestTag("landing:retry")))
         compose.onNodeWithTag("landing:rerun").performClick()
         await { ProjectShell.calls.contains("POST projects/$launch/promotions/pr-1/integration/retry") }
+        // RetryIntegrationDto.reason is required: a bodyless press is refused before the queue is asked.
+        assertEquals("""{"reason":"Re-run the timed-out check from the landing page."}""",
+            ProjectShell.bodies["POST projects/$launch/promotions/pr-1/integration/retry"])
         compose.onNodeWithTag("landing:abandon").performClick()
         await { ProjectShell.calls.contains("POST projects/$launch/integration/jobs/j-1/abandon") }
     }

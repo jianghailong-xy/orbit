@@ -76,9 +76,11 @@ class ProjectApi(private val auth: AuthSession, private val handle: SessionHandl
     /** J-T10's owner abandon of one running job whose runner stopped reporting: it ends, and nothing is queued again. */
     suspend fun abandonJob(id: String, jobId: String) =
         send("abandon:$jobId", listOf("projects", id, "integration", "jobs", jobId, "abandon"))
-    /** Revision 16's owner re-check of a timed-out merge check on the same candidate; the page's Re-run the check. */
-    suspend fun recheckPromotion(id: String, promotionId: String) =
-        send("promotion:recheck:$promotionId", listOf("projects", id, "promotions", promotionId, "integration", "retry"))
+    /** Revision 16's owner re-check of a timed-out merge check on the same candidate; the page's Re-run the check. The owner
+     *  route takes a reason (`RetryIntegrationDto.reason`), so one travels with the press. */
+    suspend fun recheckPromotion(id: String, promotionId: String, reason: String) =
+        send("promotion:recheck:$promotionId", listOf("projects", id, "promotions", promotionId, "integration", "retry"),
+            body = buildJsonObject { put("reason", reason) })
     suspend fun start(id: String, body: JsonObject) = send(body.text("criteriaDigest").orEmpty(), listOf("projects", id, "start"), body = body)
     /** The candidate this project is asking its owner to merge into main, or null while it asks nothing — which the server answers
      * with no body. Its latest candidate, whatever state it is in. */

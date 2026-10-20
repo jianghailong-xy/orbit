@@ -109,6 +109,9 @@ object LandingSessionCopy {
     const val ABANDON = "Abandon"
     const val RETRY = "Retry"
     const val RERUN_THE_CHECK = "Re-run the check"
+    /** What the page's Re-run the check records as its reason: the owner route requires one (`RetryIntegrationDto.reason`),
+     *  and the sentence names the page the door was pressed on (web's `RERUN_LANDING_CHECK_REASON`; the Swift sends it too). */
+    const val RERUN_LANDING_CHECK_REASON = "Re-run the timed-out check from the landing page."
     const val BEFORE_PUSH_ONLY = "Before the push only · nothing pushed yet"
     const val CANCEL_BEFORE_PUSH = "Before the push only · stops at the runner’s next report"
     const val ENDS_NOTHING_PUSHED = "Ends this attempt · nothing was pushed"
