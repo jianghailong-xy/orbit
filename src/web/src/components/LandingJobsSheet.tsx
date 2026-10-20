@@ -4,6 +4,7 @@ import { RightOutlined } from '@ant-design/icons';
 import type { ProjectIntegrationView } from '@orbit/shared';
 import { api } from '../api';
 import { projectIntegrationQuery } from '../lib/queries';
+import { LandingLink, LandingNoPage } from './LandingLink';
 import { useIsMobile } from '../lib/useMediaQuery';
 import {
   LANDING_WORDS,
@@ -134,6 +135,17 @@ function LandingJobRow({
           {LANDING_WORDS.RETRY}
         </Button>
       ) : null}
+      {/* The row's own way into the landing this job belongs to (owner 2026-10-19): a sibling of
+          Retry and of the row's task link, never inside either. A merge into main lands no task and
+          its row is no press, so this is that row's only way in — and a server that names no
+          landing session gets the sentence instead of a link. */}
+      <div className="landing-jobs-slot">
+        {job.landingSessionId ? (
+          <LandingLink className="landing-jobs-landing" sessionId={job.landingSessionId} />
+        ) : (
+          <LandingNoPage className="landing-jobs-landing is-none" />
+        )}
+      </div>
       {retry.isError ? (
         <div className="landing-jobs-error" role="alert">
           {/* The server's sentence ends with its own full stop; this line supplies one. */}

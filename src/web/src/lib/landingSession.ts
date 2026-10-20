@@ -104,7 +104,6 @@ export const LANDING_PAGE_COPY = {
     'May have been pushed — an older runner reports only between steps, so Orbit can’t rule it out.',
   MAY_HAVE_PUSHED_AT: (time: string): string =>
     `May have been pushed — it reported starting the push at ${time}, then went silent.`,
-  CHECK_PUSHES_NOTHING_SENTENCE: 'A check pushes nothing — main is as it was.',
 
   /** The menu and the two presses that leave this page (design §3, LS6). */
   OPEN_TASK: 'Open Task',
@@ -778,7 +777,7 @@ export interface LandingMenuItem {
 export function landingMenuItemList(
   landing: SessionLandingView,
   gates: LandingGates,
-  options: { hasCoordinator: boolean; hasReview: boolean; pushSentence: string | null },
+  options: { hasCoordinator: boolean; hasReview: boolean; nothingPushed: boolean },
 ): LandingMenuItem[] {
   const items: LandingMenuItem[] = [];
   if (landing.taskId) {
@@ -816,7 +815,9 @@ export function landingMenuItemList(
   if (gates.abandon) {
     items.push({
       key: 'abandon', action: 'ABANDON', label: LANDING_PAGE_COPY.ABANDON,
-      sub: options.pushSentence === LANDING_PAGE_COPY.NOTHING_PUSHED_SENTENCE
+      // J12's verdict, not the sentence the card draws: a check never pushes, so its Abandon ends
+      // an attempt that provably never reached main even though no push line is written for it.
+      sub: options.nothingPushed
         ? LANDING_PAGE_COPY.ENDS_NOTHING_PUSHED
         : LANDING_PAGE_COPY.ENDS_MAY_HAVE_PUSHED,
       danger: true,
@@ -836,15 +837,18 @@ export function landingMenuItemList(
 
 /**
  * The J12 sentence under a timed-out attempt: which jobs can prove nothing was pushed and which
- * cannot. A merge check never pushes, so it says that instead of either sentence; a v2 claim that
- * never recorded a PUSH proves nothing was pushed; everything else — a legacy claim, a takeover of
- * one, a report that named the push — may have been.
+ * cannot. A v2 claim that never recorded a PUSH proves nothing was pushed; everything else — a
+ * legacy claim, a takeover of one, a report that named the push — may have been.
+ *
+ * A merge check gets NO sentence (owner 2026-10-19: "检查作业超时不写推送一句" — CHECK_PROMOTION
+ * never pushes, so a push sentence about it is noise on a card that already says what stopped).
+ * The claim's own line (`landingTimeoutLine`) still says where the runner was.
  */
 export function landingPushSentence(
   landing: SessionLandingView,
   attempt: NonNullable<SessionLandingView['currentAttempt']>,
 ): string | null {
-  if (attempt.kind === 'CHECK_PROMOTION') return LANDING_PAGE_COPY.CHECK_PUSHES_NOTHING_SENTENCE;
+  if (attempt.kind === 'CHECK_PROMOTION') return null;
   const reported = pushReport(landing, attempt.jobId);
   if (attempt.progressProtocol === 'v2' && !reported.reported) {
     return LANDING_PAGE_COPY.NOTHING_PUSHED_SENTENCE;

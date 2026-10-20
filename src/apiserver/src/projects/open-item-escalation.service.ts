@@ -386,9 +386,15 @@ export class ProjectOpenItemEscalationService implements OnModuleInit, OnModuleD
                'leaseExpiredAt', to_char((COALESCE(j."heartbeat_at", j."claimed_at")
                                            + (${leaseLimitSeconds('j')} * interval '1 second'))
                                          AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+               'generation', j."generation",
                'phase', j."phase",
                'step', j."step",
                'round', j."round",
+               -- The check the claim was on, for "round N of M" (0434's current_check column;
+               -- absent before a check starts and on a legacy claim). No backticks in here: this
+               -- whole statement is a JS template literal.
+               'checkIndex', NULLIF(j."current_check"->>'index', '')::int,
+               'checkCount', NULLIF(j."current_check"->>'count', '')::int,
                'progressProtocol', j."progress_protocol",
                'pushReported', (j."push_reported_generation" IS NOT NULL
                                 AND j."push_reported_generation" = j."claim_generation"),

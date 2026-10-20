@@ -427,7 +427,7 @@ describe('a timed-out landing', () => {
     expect(page().textContent).toContain('Retry failed — this job is not in flight any more.');
   });
 
-  it('a merge check says a check pushes nothing and offers Re-run the check', async () => {
+  it('a merge check offers Re-run the check, and writes no push sentence', async () => {
     view = landing({
       subject: 'PROMOTION',
       taskId: null,
@@ -437,7 +437,11 @@ describe('a timed-out landing', () => {
       }),
     });
     await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
-    expect(page().textContent).toContain('A check pushes nothing — main is as it was.');
+    // The facts line says where the runner was; the push sentence is not written for a check
+    // (owner 2026-10-19: "检查作业超时不写推送一句").
+    expect(page().textContent).not.toContain('A check pushes nothing');
+    expect(page().textContent).not.toContain('main is as it was');
+    expect(page().textContent).toContain('stopped at');
     expect(button('Re-run the check')).toBeTruthy();
     expect(button('Abandon')).toBeTruthy();
     expect(button('Retry')).toBeNull();

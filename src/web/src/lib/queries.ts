@@ -310,11 +310,24 @@ export const sessionsQuery = (
  *  session events cannot re-read every project's full member list. */
 export const PROJECT_SESSION_REFRESH_MS = 60_000;
 
-export const projectSessionsQuery = (opts: { projectId: string; view: SessionListView }) =>
+/**
+ * A project's members across workspaces.
+ *
+ * `includeLanding` asks the server for the project's LANDING sessions beside the conversations
+ * (contract §2.9 LS6; `GET /sessions?projectId=&includeLanding=1`). Only the project's sessions page
+ * asks: the flat list, its counts and its search never see a landing, and no other read should pay
+ * for one.
+ */
+export const projectSessionsQuery = (opts: {
+  projectId: string;
+  view: SessionListView;
+  includeLanding?: boolean;
+}) =>
   queryOptions({
-    queryKey: ['project-sessions', opts.projectId, opts.view] as const,
+    queryKey: ['project-sessions', opts.projectId, opts.view, opts.includeLanding === true] as const,
     queryFn: () => {
       const qs = new URLSearchParams({ projectId: opts.projectId, view: opts.view });
+      if (opts.includeLanding) qs.set('includeLanding', '1');
       return api<SessionListItem[]>(`/sessions?${qs}`);
     },
     staleTime: 15_000,

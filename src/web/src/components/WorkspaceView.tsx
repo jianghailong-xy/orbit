@@ -145,9 +145,13 @@ import {
   type SessionFolderRow,
 } from '../lib/sessionFolders';
 import {
+  SESSION_LANDINGS_COPY,
   SESSION_PROJECT_COPY,
+  landingGroup,
+  landingItemReason,
   listShowsProjects,
   sessionProjectListing,
+  sourceLandingLabel,
   type SessionProjectRow,
   type SessionProjectEntry,
 } from '../lib/sessionProjects';
@@ -356,8 +360,10 @@ import {
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
 import { isLandingSessionDetail } from '../lib/landingSession';
-import { landingCard } from './ProjectPanoramaHeader';
+import { Glyph, landingCard } from './ProjectPanoramaHeader';
 import { LandingJobsSheet } from './LandingJobsSheet';
+import { LandingLink } from './LandingLink';
+import { SessionProjectLandings } from './SessionProjectLandings';
 import { LandingSessionView } from './LandingSessionView';
 import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectStartDialog } from './StartProjectCard';
@@ -440,6 +446,7 @@ import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
 import type {
+  SessionSourceLanding,
   SessionTurnIntent,
   SessionTurnPlacement,
   WatchView,
@@ -3291,13 +3298,15 @@ export function WorkspaceView({
     sessions: visibleSessions, view: effectiveView, enabled: projectsShown && !openProjectId,
     controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
   });
+  // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
+  // read ever sees one (§2.9 LS6).
   const projectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open' }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open', includeLanding: !!openProjectId }),
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
   const completedProjectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed' }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed', includeLanding: !!openProjectId }),
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
@@ -3309,10 +3318,21 @@ export function WorkspaceView({
     refetchInterval: 60_000,
   });
   const pageMerges = useMemo(() => (Array.isArray(pageMergesQ.data) ? pageMergesQ.data : []), [pageMergesQ.data]);
-  const projectMembers = useMemo(() => [...new Map(
+  const allProjectMembers = useMemo(() => [...new Map(
     [...(projectSessionsQ.data ?? []), ...(completedProjectSessionsQ.data ?? [])].map((s) => [s.id, s]),
   ).values()].sort((a, b) => (Date.parse(b.lastTurnAt ?? b.createdAt ?? '') || 0) -
     (Date.parse(a.lastTurnAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
+  // A project's LANDING sessions are its subject's, not conversations: they are counted nowhere on
+  // this page — not in "Project · N sessions", not in the running count, not among the status dots,
+  // not in the timeline — and are drawn once, in the Landings group below the coordinator.
+  const projectMembers = useMemo(
+    () => allProjectMembers.filter((s) => s.sessionKind !== 'LANDING'),
+    [allProjectMembers],
+  );
+  const landingMembers = useMemo(
+    () => allProjectMembers.filter((s) => s.sessionKind === 'LANDING'),
+    [allProjectMembers],
+  );
   const pageCoordinator = projectMembers.find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null;
   const pageMenuCoordinator = pageCoordinator;
   const pageProject = projectsQ.data?.find((p) => p.id === openProjectId);
@@ -3356,6 +3376,34 @@ export function WorkspaceView({
   const pageStart = pageNotStarted
     ? startPageRow(pageStarted, pageOpenItemsQ.isError ? undefined : pageOpenItemsQ.data)
     : null;
+  // Who is holding each landing that waits (§4.7): the group's rows say the outcome and the holder,
+  // and both are the open items' facts about the same subject — `landingSessionId` is the join.
+  const pageLandingItemsQ = useQuery({
+    ...projectOpenItemsQuery(openProjectId ?? ''),
+    // Only a landing that WAITS needs a holder named, so a project with none pays for no read — and
+    // the page shares this key with the start row's own read, so it is one request either way.
+    enabled: !!openProjectId && landingMembers.some((s) => s.landing?.state === 'AWAITING_DECISION'),
+    refetchInterval: controlLive ? 20_000 : 4000,
+  });
+  const landingHolders = useMemo(() => {
+    const holders = new Map<string, { reason: string | null; assignee: 'OWNER' | 'COORDINATOR' | null }>();
+    const items = pageLandingItemsQ.data;
+    for (const row of [...(items?.needsYou ?? []), ...(items?.withCoordinator ?? [])]) {
+      if (!row.landingSessionId || holders.has(row.landingSessionId)) continue;
+      holders.set(row.landingSessionId, {
+        reason: landingItemReason(row.kind),
+        assignee: row.assignee === 'OWNER' ? 'OWNER' : row.assignee === 'COORDINATOR' ? 'COORDINATOR' : null,
+      });
+    }
+    return holders;
+  }, [pageLandingItemsQ.data]);
+  // The group: waiting first, then the last day's, then one folded line (§2.9 LS6, board v4 04).
+  const landingGroupView = useMemo(
+    () => (openProjectId && landingMembers.length > 0
+      ? landingGroup(landingMembers, { holders: landingHolders })
+      : null),
+    [openProjectId, landingMembers, landingHolders],
+  );
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
   // shows folders at all.
@@ -3474,34 +3522,41 @@ export function WorkspaceView({
   // On a project's page the merges into main it has made sit among its sessions at their own
   // instant (`projectTimelineSections`): rows of their own kind, never sessions.
   const sections = useMemo<Array<{ key: string; title: string; tag: SessionTagRef | null; sessions: Array<SessionProjectEntry<SessionListItem> | ProjectPageMerge> }>>(
-    () =>
-      openProjectId
-        ? [
-            ...(pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
-              sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : []),
-            ...projectTimelineSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), pageMerges)
-              .map((s) => ({ key: s.title, title: s.title, tag: null, sessions: s.items.map((item) =>
-                item.kind === 'merge'
-                  ? { kind: 'merge' as const, id: item.id, promotion: item.promotion }
-                  : { ...item.session, kind: 'session' as const }) })),
-          ]
-        : groupByTag
-        ? sessionTagSections(folderListing.entries).map((s) => ({
-            key: s.tag?.id ?? '__untagged__',
-            tag: s.tag,
-            title: s.tag?.name ?? 'Untagged',
-            sessions: s.sessions,
-          }))
-        : sessionTimeSections(folderListing.entries, {
-            pinnedFirst: view === 'open' && !tagFilter,
-          }).map((s) => ({
-            key: s.title,
-            tag: null as SessionTagRef | null,
-            ...s,
-            // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
-            sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
-          })),
-    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers, pageMerges],
+    () => {
+      if (!openProjectId) {
+        return groupByTag
+          ? sessionTagSections(folderListing.entries).map((s) => ({
+              key: s.tag?.id ?? '__untagged__',
+              tag: s.tag,
+              title: s.tag?.name ?? 'Untagged',
+              sessions: s.sessions,
+            }))
+          : sessionTimeSections(folderListing.entries, {
+              pinnedFirst: view === 'open' && !tagFilter,
+            }).map((s) => ({
+              key: s.title,
+              tag: null as SessionTagRef | null,
+              ...s,
+              // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
+              sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
+            }));
+      }
+      const coordinator = pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
+        sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : [];
+      const timeline = projectTimelineSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), pageMerges)
+        .map((s) => ({ key: s.title, title: s.title, tag: null, sessions: s.items.map((item) =>
+          item.kind === 'merge'
+            ? { kind: 'merge' as const, id: item.id, promotion: item.promotion }
+            : { ...item.session, kind: 'session' as const }) }));
+      // The Landings group sits below the coordinator and above the timeline, and only when it has
+      // something to list; its rows never enter `sessions`, so no count or arrow key sees one.
+      const landings = landingGroupView
+        ? [{ key: 'Landings', title: SESSION_LANDINGS_COPY.TITLE, tag: null,
+            sessions: [] as Array<SessionProjectEntry<SessionListItem> | ProjectPageMerge> }]
+        : [];
+      return [...coordinator, ...landings, ...timeline];
+    },
+    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers, pageMerges, landingGroupView],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
@@ -9800,6 +9855,15 @@ export function WorkspaceView({
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
     : '';
   const headRunWord = selected ? statusLabel(selectedSession ?? selected, selectedWatchingWord) : '';
+  // The landing this conversation's work fed (§2.9 LS1's derived field), for the label at the
+  // session's bottom, and the label itself — one read of one helper, so the words and the ink are
+  // not decided twice.
+  const selectedSourceLanding = (selectedSession as { sourceLanding?: SessionSourceLanding | null } | null)
+    ?.sourceLanding ?? null;
+  const sourceLandingLabelView = sourceLandingLabel(selectedSourceLanding);
+  const sourceLanding = sourceLandingLabelView && selectedSourceLanding
+    ? { ...sourceLandingLabelView, id: selectedSourceLanding.landingSessionId }
+    : null;
   const headLifecycleWord = selectedLifecycleState
     ? sessionLifecycleLabel(selectedLifecycleState)
     : null;
@@ -10116,6 +10180,12 @@ export function WorkspaceView({
             folderEdit?.id === row.folder.id ? folderEditRow(row.folder.id) : folderRowView(row),
           )}
           {sections.map((sec) => (
+            sec.key === 'Landings' && landingGroupView ? (
+              <SessionProjectLandings key={sec.key} group={landingGroupView}
+                onOpen={(landingSessionId) => navigateWithPaneSlide('push', () => navigate(
+                  sessionPath(landingSessionId), { state: stampFromList() },
+                ))} />
+            ) : (
             <section key={sec.key} className={openProjectId && sec.key === 'Coordinator' ? 'session-project-coordinator' : undefined}>
               {sec.key === 'Pinned' ? (
                 <button
@@ -10422,6 +10492,7 @@ export function WorkspaceView({
                 );
               })}
             </section>
+            )
           ))}
           {/* Foot of the loaded window while a page is in flight, so a scroll that outruns the
               fetch (or a switch to a workspace not yet cached) shows progress rather than an
@@ -11126,6 +11197,24 @@ export function WorkspaceView({
                   waitingKind={selectedSession?.waitingKind ?? null}
                 />
               )}
+              {/* The landing this conversation's work fed, at the session's own bottom (owner
+                  2026-10-19, board v4 06 e): a derived label, not a turn — the source session did
+                  the work, the platform lands it, and the label opens the landing session where
+                  every attempt is read. Absent from a session that produced no landing work, and
+                  from a server that predates the field. */}
+              {selected && !selectedTrashed && sourceLanding ? (
+                <div className="session-source-landing">
+                  <LandingLink className={`session-source-landing-chip is-${sourceLanding.tone}`}
+                    sessionId={sourceLanding.id}>
+                    {/* The ring the board draws on the pill (06 e): work in hand, the same mark the
+                        landing rows carry — and the words beside it say the same thing without it. */}
+                    {sourceLanding.tone === 'run'
+                      ? <Glyph shape="spinner" color="currentColor" size={11} />
+                      : null}
+                    {`${sourceLanding.text} ›`}
+                  </LandingLink>
+                </div>
+              ) : null}
               {selected &&
                 !selectedTrashed &&
                 showQueuedNotice &&
