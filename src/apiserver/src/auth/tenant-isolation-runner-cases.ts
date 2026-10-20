@@ -1162,6 +1162,10 @@ export const RUNNER_ISOLATION_FIELDS_BY_HAND: Readonly<Record<string, string>> =
   'POST /runner/heartbeat body engines[].accounts[].id':
     'an engine account\'s directory on that machine (`default` or eight hex digits), stored in its own engine health '
     + '(runner-api.controller.ts:1046)',
+  'POST /runner/heartbeat body modelCatalog.*[].parameters[].id':
+    'a Cursor CLI option id (`context`, `fast`, a model\'s effort) in the model catalogue the machine reports about '
+    + 'itself, not an Orbit row: stored on the reporting runner\'s own row and read back only through that runner '
+    + '(runner-api.controller.ts:1271)',
   'POST /runner/heartbeat body repos[].agentIds[]':
     'which of the machine\'s checkouts serve which workspace, kept as its own repo-health snapshot and read only '
     + 'through a workspace of its own (runner-api.controller.ts:1075)',

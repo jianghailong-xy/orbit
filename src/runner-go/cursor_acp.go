@@ -35,9 +35,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -519,19 +521,60 @@ func (a *cursorACPClient) enterMode(ctx context.Context, sessionID, mode string)
 	return nil
 }
 
-// configure puts the session on its model and effort with session/set_config_option, never --model
-// (§10, §16.3): the model is the whole process's, and an unknown one passed as a flag ends it. A
-// session that names no model stays on the one it runs on — Auto, for a new one — or goes back to Auto
-// from another. An effort the model does not take is left at the model's own, as on Kimi: a session is
-// not failed over a tuning knob.
+// configure puts the session on its model, the model's settings and its effort with
+// session/set_config_option, never --model (§10, §16.3): the model is the whole process's, and an
+// unknown one passed as a flag ends it. The session's model value names the model and the context and
+// fast lane it runs with, the way Cursor writes a variant (`claude-opus-5-5[context=1m,fast=true]`,
+// decodeCursorModel): the bare model is selected first, then each of those settings the model lists —
+// at the value named, or at the model's own default where the value names none, since the process can
+// be on a setting an earlier selection left (the CLI keeps its selection in its config, §3.1). A
+// session that names no model stays on the one it runs on — Auto, for a new one — or goes back to
+// Auto from another, and Auto takes no settings. A setting or an effort the model does not take is
+// left at the model's own and logged, as on Kimi: a session is not failed over a tuning knob.
 func (a *cursorACPClient) configure(ctx context.Context, sessionID string, agent AgentExecConfig) error {
-	model := strings.TrimSpace(agent.Model)
+	model, settings := decodeCursorModel(agent.Model)
 	current := firstString(cursorSessionOption(a.configOptions, "model"), "currentValue")
 	if model == "" && current != "" && !cursorAutoModel(current) {
 		model = "default"
 	}
 	if model != "" && model != current {
 		if err := a.setOption(ctx, sessionID, "model", model); err != nil {
+			return err
+		}
+	}
+	selected := firstString(cursorSessionOption(a.configOptions, "model"), "currentValue")
+	named := map[string]string{}
+	for _, setting := range settings {
+		switch {
+		case cursorAutoModel(selected):
+			logln("cursor: Auto takes no model settings; ignoring", setting.id+"="+setting.value)
+		case !slices.Contains(cursorVariantParameters, setting.id):
+			logln("cursor: a model value sets only the context and fast lane; ignoring", setting.id+"="+setting.value)
+		default:
+			named[setting.id] = setting.value
+		}
+	}
+	for _, id := range cursorVariantParameters {
+		option := cursorSessionOption(a.configOptions, id)
+		value, asked := named[id]
+		if option == nil {
+			if asked {
+				logln("cursor: the session's model takes no", id+"; ignoring", value)
+			}
+			continue
+		}
+		fallback := cursorParameterDefault(selected, id)
+		if asked && !cursorOffers(option, value) {
+			logln("cursor: the session's model does not offer", id, value+"; leaving it at the model's own", firstNonEmpty(fallback, firstString(option, "currentValue")))
+			asked = false
+		}
+		if !asked {
+			value = fallback
+		}
+		if value == "" || value == firstString(option, "currentValue") || !cursorOffers(option, value) {
+			continue
+		}
+		if err := a.setOption(ctx, sessionID, id, value); err != nil {
 			return err
 		}
 	}
@@ -1083,11 +1126,20 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 
 	var naming sync.WaitGroup
 	defer naming.Wait()
+	// Cursor names a conversation from the first prompt it is sent (§3.2). A conversation opened here has
+	// Orbit's agent instructions ahead of that prompt, so its name sums up those rather than the person's
+	// message — "Orbit Agent Instructions" in P8 — in whatever words Cursor picks. None is reported: the
+	// session keeps the title cut from the person's first message.
+	var openedWithInstructions atomic.Bool
 	mapper := newCursorEventMapper(p.emitFor)
 	mapper.onTitle = func(title string) {
 		// Only when the claim asks for it (session_naming.go): any other session's title is a person's,
 		// a task's or the server's, which a title Cursor made up must not replace.
 		if p.job.Naming == nil || p.t == nil {
+			return
+		}
+		if openedWithInstructions.Load() {
+			logln("session title: Cursor CLI named", p.job.SessionID, "from Orbit's agent instructions, not the person's message; not reported")
 			return
 		}
 		naming.Add(1)
@@ -1108,7 +1160,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	}
 	// The rules the session was dispatched with do not change while it runs; the mode can (reload).
 	preApproved := AgentExecConfig{AllowedTools: append([]string(nil), p.job.Agent.AllowedTools...)}
-	bridge := newCursorPermissionBridge(policy, mapper.permissionAsk, func(ask cursorPermissionAsk) bool {
+	bridge := newCursorPermissionBridge(policy, mapper.permissionAsk, mapper.refuse, mapper.withdraw, func(ask cursorPermissionAsk) bool {
 		return cursorPreApproved(preApproved, ask)
 	}, bridgeCursorCard(p.t, p.job.SessionID), p.emitFor, launch.Cwd)
 	app, err := startCursorACP(p.ctx, *launch, mapper, bridge, p.emit)
@@ -1157,6 +1209,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	if method == "session/new" {
 		instructions = cursorAgentInstructions(p.job)
 	}
+	openedWithInstructions.Store(instructions != "")
 	// The control plane keeps the runtime session id from this event (runtimeInitSessionId).
 	p.emit(evSystem, map[string]interface{}{"subtype": "init", "provider": providerCursor, "runtime": "acp",
 		"sessionId": sessionID, "cliVersion": launch.Version, "resumed": method == "session/load"})

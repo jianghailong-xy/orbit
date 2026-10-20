@@ -71,7 +71,8 @@ export class RenameAccountDto {
   @IsString() @MaxLength(60) name!: string;
 }
 
-/** Which CLI to install on the runner. Required — there is no historical default here. */
+/** Which CLI to install on the runner. Required — there is no historical default here. Cursor CLI's
+ *  goes only to a runner that knows Cursor CLI (RunnersService.startInstall). */
 export class StartInstallDto {
-  @IsIn(['claude', 'codex', 'kimi', 'antigravity', 'opencode', 'dsh']) engine!: InstallEngine;
+  @IsIn(['claude', 'codex', 'kimi', 'antigravity', 'opencode', 'dsh', 'cursor']) engine!: InstallEngine;
 }

@@ -45,6 +45,11 @@ export function planUsageSnapshotForProvider(
     if (usage.antigravity) return usage.antigravity;
     return usage.provider === 'antigravity' ? usage : null;
   }
+  // Cursor CLI's is only ever nested (PlanUsage.cursor); a flat one names itself.
+  if (provider === AgentProvider.CURSOR) {
+    if (usage.cursor) return usage.cursor;
+    return usage.provider === AgentProvider.CURSOR ? usage : null;
+  }
   if (provider === 'codex') {
     if (usage.codex) return usage.codex;
     if (usage.provider && usage.provider !== 'codex') return null;
@@ -224,7 +229,48 @@ function codexRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
   });
 }
 
+/**
+ * A Cursor CLI account's included usage (PlanUsageIncludedUsage) as rows: one window, its period's —
+ * a paid plan's week, else the billing month — and only while Cursor reports some of it used. Its 0% is
+ * no reading (docs/cursor-runtime-contract.md §11: the Free plan's requests and Auto never move it), so
+ * an account with none has no row, and every reader says "Usage unavailable" rather than draw 0%.
+ * Whether the account is spent is not a reading at all but a turn that met the limit (cursorUsageLimit).
+ */
+function cursorRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
+  const included = usage.includedUsage;
+  const used = included?.percentUsed;
+  if (!included || typeof used !== 'number' || !Number.isFinite(used) || used <= 0) return [];
+  return [
+    {
+      key: 'included',
+      label: included.period === 'weekly' ? 'Weekly limit' : 'Monthly limit',
+      window: { utilization: used, ...(included.resetsAt ? { resetsAt: included.resetsAt } : {}) },
+      percent: clampPercent(used),
+      nearLimit: used >= 90,
+    },
+  ];
+}
+
+/**
+ * When a Cursor CLI account met Cursor's usage limit this period ("Upgrade your plan to continue",
+ * contract §12): spent until its included usage resets, which `resetsAt` names when Cursor did — and
+ * not at all once that has passed, or for a limit met before this period began. Null for an account
+ * that can run. The same judgement @orbit/shared's quota gates make of the snapshot (cursorWindows).
+ */
+export function cursorUsageLimit(
+  usage: PlanUsageSnapshot | null | undefined,
+  now: number = Date.now(),
+): { resetsAt?: string } | null {
+  const included = usage?.includedUsage;
+  const reached = Date.parse(included?.limitReachedAt ?? '');
+  if (!included || Number.isNaN(reached) || reached < Date.parse(included.startsAt ?? '')) return null;
+  const resets = Date.parse(included.resetsAt ?? '');
+  if (resets <= now) return null;
+  return resets > reached ? { resetsAt: included.resetsAt } : {};
+}
+
 export function planUsageRows(usage: PlanUsageSnapshot): PlanUsageDisplayRow[] {
+  if (usage.provider === AgentProvider.CURSOR) return cursorRows(usage);
   if (usage.provider === 'antigravity') return (usage.buckets ?? []).map((bucket) => {
     const used = (1 - bucket.remainingFraction) * 100;
     return {

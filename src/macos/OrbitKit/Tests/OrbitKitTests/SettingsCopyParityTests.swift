@@ -312,9 +312,12 @@ final class SettingsCopyParityTests: XCTestCase {
                    in: Self.engineNames)
         XCTAssertEqual(Infrastructure.engineCards(runners: [], keys: [], pools: []).map(\.name),
                        ["Claude Code", "Codex", "Kimi Code", "Antigravity CLI", "OpenCode", "DeepSeek Harness"])
-        // A machine's sign-in names the engines it signs in as the web's sign-in does.
-        let names = LoginEngine.allCases.map { "\($0.rawValue): '\($0.displayName)'" }.joined(separator: ", ")
+        // A machine's sign-in names the engines it signs in as the web's sign-in does — Cursor CLI by the
+        // shared table's name, which the web reads from it rather than writing it out.
+        let names = LoginEngine.allCases.filter { $0 != .cursor }.map { "\($0.rawValue): '\($0.displayName)'" }
+            .joined(separator: ", ") + ", cursor: ENGINE_CLI_NAMES[AgentProvider.CURSOR],"
         assertSays(try web("src/web/src/components/RunnerSignIn.tsx"), names, in: "src/web/src/components/RunnerSignIn.tsx")
+        XCTAssertEqual(LoginEngine.cursor.displayName, ProviderEngines.cliName("cursor"))
         // A key keeps the name its owner gave it — a Gemini key's too — under every engine it runs on.
         assertSays(overview, "{index > 0 && ', '} {key.label}", in: Self.overview)
         XCTAssertEqual(Infrastructure.keyLabel("Gemini", presetSlug: "gemini"), "Gemini")

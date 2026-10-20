@@ -18,7 +18,7 @@
    turn 上；客户端把它当作空输入框的灰字，行尾一个 **Use**，点一下填进输入框（不发送）。
 3. **一条，不是三条。** Claude 的提示词要的是「我正要打这句」的那一条，不给新点子，拿不准就不给。这比一排泛泛的
    选项更像「帮我少打字」，尤其在手机上。
-4. **其他引擎没有原生能力**（Codex、Kimi、OpenCode、DeepSeek Harness、Antigravity）。二期可以用服务端已经在用的
+4. **其他引擎没有原生能力**（Codex、Kimi、OpenCode、DeepSeek Harness、Antigravity、Cursor CLI）。二期可以用服务端已经在用的
    DeepSeek（会话命名用的那把 key）补齐，但要把每轮最后一条回复发给 DeepSeek；owner 定了先不做（§9-⑤）。
 5. **代价**：每个合格的 turn 多一次「整段上下文的缓存读」，大约相当于 agent 多走一步，记在该会话的 Claude 账号上
    （连 DeepSeek 的会话记在那把 DeepSeek key 上）。
@@ -36,7 +36,7 @@
   消息之前发出的事件都是会话级的（`session.go:2517`）。
 - `handleMessage`（`src/runner-go/claude.go:28`）只认 `system` / `assistant` / `user` / `stream_event`，其他类型的
   帧直接丢弃。
-- 六个引擎都是先发 `turn_end`、再调 turn-complete，客户端认的「这一轮结束了」就是 `turn_end`：web 收到后
+- 七个引擎都是先发 `turn_end`、再调 turn-complete（Cursor CLI 的在 `src/runner-go/cursor_events.go` 的 `settle`，之后 `cursor_acp.go` 才调 turn-complete），客户端认的「这一轮结束了」就是 `turn_end`：web 收到后
   `setIdle(true)`，收到 `user` 后 `setIdle(false)`（`src/web/src/components/WorkspaceView.tsx:4383-4398`）；Swift 端是
   `TranscriptReducer` 的 `endTurn`（`TranscriptReducer.swift:267`）。引擎自己发起的 turn（后台任务通知、定时唤醒）
   不走 turn-complete，只发一条不带 `turnId` 的 `turn_end`（`src/apiserver/src/runner-api/engine-turn.ts:37-66`）。
@@ -58,6 +58,7 @@
 | Claude Code | **有**：`--prompt-suggestions` | 要求 `--print` + `--output-format stream-json`，正是 Orbit 的模式 |
 | Codex 0.161 | 无 | 只有 `request_user_input` 的「建议答案」（属于提问卡）和插件推荐 |
 | Kimi / OpenCode / DeepSeek Harness / Antigravity | 未见 | — |
+| Cursor CLI 2026.10.14-941492e | 无 | ACP 的 `session/update` 种类里没有这一项（`docs/cursor-runtime-contract.md` §4.1） |
 
 Claude 的实现要点（读 2.1.293 内置的 JS 得到，均可在二进制里检索到原文）：
 

@@ -1,0 +1,38 @@
+infra-light-settings-row: in view after 2 drag(s) at (16.0, 722.0, 370.0, 52.0)
+infra-light: Settings row 9 label="Infrastructure, 1 needs you" value="" frame=(16.0, 722.0, 370.0, 52.0) hittable=true
+overview-light: in view after 2 drag(s) at (16.0, 808.6666666666666, 370.0, 45.66666666666674)
+machine-light-row: in view after 3 drag(s) at (16.0, 500.00000000000017, 370.0, 74.33333333333331)
+machine-light: hpc row 9 label="hpc, 3 / 16 running · All signed in" value="" frame=(16.0, 500.00000000000017, 370.0, 74.33333333333331) hittable=true
+machine-light-cursor: in view after 4 drag(s) at (16.0, 553.3333333333335, 370.0, 168.0)
+machine-light: Cursor CLI row 9 label="Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 4:17 AM" value="" frame=(16.0, 553.3333333333335, 370.0, 168.0) hittable=true
+machine-footer-light: in view after 1 drag(s) at (16.0, 695.0, 370.0, 77.66666666666663)
+machine-open-light-cursor: in view after 0 drag(s) at (16.0, 423.3333333333335, 370.0, 168.0)
+machine-open-light: Cursor CLI row 9 label="Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 4:17 AM" value="" frame=(16.0, 423.3333333333335, 370.0, 168.0) hittable=true
+engine-footer-light: in view after 0 drag(s) at (16.0, 580.0, 370.0, 61.66666666666663)
+ios2-d-state-not-installed-cursor: in view after 2 drag(s) at (16.0, 556.6666666666666, 370.0, 74.33333333333337)
+ios2-d-state-not-installed: Cursor CLI row 9 label="Cursor CLI, Not installed" value="" frame=(16.0, 556.6666666666666, 370.0, 74.33333333333337) hittable=true
+ios2-e-state-signed-out-cursor: in view after 1 drag(s) at (16.0, 538.0, 370.0, 115.33333333333337)
+ios2-e-state-signed-out: Cursor CLI row 9 label="Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" value="" frame=(16.0, 538.0, 370.0, 115.33333333333337) hittable=true
+ios2-f-state-update-runner-cursor: in view after 1 drag(s) at (72.0, 703.6666666666666, 80.66666666666666, 20.33333333333337)
+ios2-f-state-update-runner: Cursor CLI row 48 label="Cursor CLI" value="" frame=(72.0, 703.6666666666666, 80.66666666666666, 20.33333333333337) hittable=true
+ios2-g-state-unsupported-version-cursor: in view after 2 drag(s) at (16.0, 482.3333333333333, 370.0, 148.00000000000006)
+ios2-g-state-unsupported-version: Cursor CLI row 9 label="Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." value="" frame=(16.0, 482.3333333333333, 370.0, 148.00000000000006) hittable=true
+infra-dark-settings-row: in view after 2 drag(s) at (16.0, 722.0, 370.0, 52.0)
+infra-dark: Settings row 9 label="Infrastructure, 1 needs you" value="" frame=(16.0, 722.0, 370.0, 52.0) hittable=true
+overview-dark: in view after 2 drag(s) at (16.0, 808.6666666666666, 370.0, 45.66666666666674)
+machine-dark-row: in view after 3 drag(s) at (16.0, 500.00000000000017, 370.0, 74.33333333333331)
+machine-dark: hpc row 9 label="hpc, 3 / 16 running · All signed in" value="" frame=(16.0, 500.00000000000017, 370.0, 74.33333333333331) hittable=true
+machine-dark-cursor: in view after 4 drag(s) at (16.0, 553.3333333333335, 370.0, 168.0)
+machine-dark: Cursor CLI row 9 label="Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 4:22 AM" value="" frame=(16.0, 553.3333333333335, 370.0, 168.0) hittable=true
+machine-footer-dark: in view after 1 drag(s) at (16.0, 695.0, 370.0, 77.66666666666663)
+machine-open-dark-cursor: in view after 0 drag(s) at (16.0, 423.3333333333335, 370.0, 168.0)
+machine-open-dark: Cursor CLI row 9 label="Cursor CLI, 2026.10.14-941492e · 2 accounts signed in, Next: Team, Monthly limit, 34%, Resets Sat, Oct 24 at 4:22 AM" value="" frame=(16.0, 423.3333333333335, 370.0, 168.0) hittable=true
+engine-footer-dark: in view after 0 drag(s) at (16.0, 580.0, 370.0, 61.66666666666663)
+ios2-d-state-not-installed-cursor: in view after 2 drag(s) at (16.0, 556.6666666666666, 370.0, 74.33333333333337)
+ios2-d-state-not-installed: Cursor CLI row 9 label="Cursor CLI, Not installed" value="" frame=(16.0, 556.6666666666666, 370.0, 74.33333333333337) hittable=true
+ios2-e-state-signed-out-cursor: in view after 1 drag(s) at (16.0, 538.0, 370.0, 115.33333333333337)
+ios2-e-state-signed-out: Cursor CLI row 9 label="Cursor CLI, 2026.10.14-941492e · Signed out, Sign In" value="" frame=(16.0, 538.0, 370.0, 115.33333333333337) hittable=true
+ios2-f-state-update-runner-cursor: in view after 1 drag(s) at (72.0, 703.6666666666666, 80.66666666666666, 20.33333333333337)
+ios2-f-state-update-runner: Cursor CLI row 48 label="Cursor CLI" value="" frame=(72.0, 703.6666666666666, 80.66666666666666, 20.33333333333337) hittable=true
+ios2-g-state-unsupported-version-cursor: in view after 2 drag(s) at (16.0, 482.3333333333333, 370.0, 148.00000000000006)
+ios2-g-state-unsupported-version: Cursor CLI row 9 label="Cursor CLI, 2026.10.16-e3cb207 · Unsupported version, Orbit runs Cursor CLI 2026.10.14-941492e. Reinstall puts that version back on this runner; sessions here can’t start until then." value="" frame=(16.0, 482.3333333333333, 370.0, 148.00000000000006) hittable=true

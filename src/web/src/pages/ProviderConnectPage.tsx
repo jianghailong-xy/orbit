@@ -9,6 +9,7 @@ import {
   ENGINE_CLI_NAMES,
   PROVIDER_PRESETS,
   providerPreset,
+  type CursorKeyCheckAnswer,
   type ProviderKeyUsage,
   type ProviderPreset,
 } from '@orbit/shared';
@@ -305,7 +306,7 @@ function ProviderForm({
   // runtime back as it is, so every one of them has to survive the round trip.
   const [runtime, setRuntime] = useState<Runtime>(
     editing
-      ? editing.runtime === 'codex' || editing.runtime === 'kimi' || editing.runtime === 'antigravity' || editing.runtime === 'dsh'
+      ? editing.runtime === 'codex' || editing.runtime === 'kimi' || editing.runtime === 'antigravity' || editing.runtime === 'dsh' || editing.runtime === 'cursor'
         ? editing.runtime
         : 'claude'
       : (preset?.runtime ?? 'claude'),
@@ -321,8 +322,10 @@ function ProviderForm({
   // would only be a copy that stops updating. What's left is a custom endpoint, which has no
   // catalogue behind it, and a row saved back when editing the list was still offered.
   const maintained = !!preset && follows;
-  // The pre-save probe's verdict, when it failed: shown inline, with "Save anyway" beside it.
+  // The pre-save probe's verdict, when it failed: shown inline, with "Save anyway" beside it — except
+  // for a Cursor key Cursor itself refused, which no endpoint quirk explains (`probeRefused`).
   const [probeError, setProbeError] = useState<string | null>(null);
+  const [probeRefused, setProbeRefused] = useState(false);
   const [probing, setProbing] = useState(false);
   // Why the server refused the save — a key in use on an engine its new endpoint can't serve among the
   // reasons (PROVIDER_DIALECT_IN_USE) — shown above the buttons, as the server worded it.
@@ -333,6 +336,9 @@ function ProviderForm({
   // A DeepSeek key — the one key DeepSeek Harness runs on — says which engines get it, and how
   // (docs/mocks/provider-engine-decoupling, boards 2 and 3).
   const harness = engines.includes(AgentProvider.DSH);
+  // A Cursor User API Key, which Cursor CLI alone runs on and which only a runner of the owner's can
+  // check: the server never uses it itself (docs/cursor-runtime-contract.md §9; the board's Web 4).
+  const cursor = runtime === 'cursor';
   // What uses a saved DeepSeek key on each engine, beside each in Works with.
   const usage = useQuery({ ...keyUsageQuery(editing?.id ?? ''), enabled: !!editing && harness });
 
@@ -396,11 +402,19 @@ function ProviderForm({
         },
       });
     },
-    onSuccess: () => {
+    onSuccess: (saved) => {
       // Both this list and the de-sensitized ['providers'] catalog the pickers read
       // must refresh on any change.
       void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY });
       void qc.invalidateQueries({ queryKey: providersQuery().queryKey });
+      // A new Cursor key is unchecked until a runner checks it again: what the check on connecting
+      // found is not kept, so Check Again goes now, and the keys table has its answer from the start.
+      const id = (saved as { id?: string } | undefined)?.id ?? editing?.id;
+      if (cursor && newKey && id) {
+        void api(`${PROVIDERS_BASE}/${id}/key-check`, { method: 'POST' })
+          .catch(() => undefined)
+          .finally(() => void qc.invalidateQueries({ queryKey: PROVIDERS_LIST_KEY }));
+      }
       message.success(editing ? 'Provider updated' : 'Provider created');
       navigate('/infrastructure#keys');
     },
@@ -447,6 +461,31 @@ function ProviderForm({
    */
   const connect = async () => {
     setProbeError(null);
+    setProbeRefused(false);
+    // A Cursor key is checked by a runner of the owner's with Cursor CLI's `agent models`, which
+    // spends no request (P2): refused by Cursor, it is not saved; Cursor or a runner out of reach says
+    // nothing about the key, which may be saved anyway.
+    if (newKey && cursor) {
+      setProbing(true);
+      try {
+        const r = await api<CursorKeyCheckAnswer>('/providers/test', {
+          method: 'POST',
+          body: { baseUrl: baseUrl.trim(), apiKey: newKey, runtime },
+        });
+        if (!r.ok) {
+          setProbeError(r.message);
+          setProbeRefused(r.keyCheck === 'INVALID');
+          return;
+        }
+      } catch (e) {
+        setProbeError((e as Error).message || 'Could not check the key');
+        return;
+      } finally {
+        setProbing(false);
+      }
+      saveMut.mutate();
+      return;
+    }
     if (newKey && probeModel) {
       setProbing(true);
       try {
@@ -545,9 +584,11 @@ function ProviderForm({
               {runtimeSummary(identity.runtime)} ·{' '}
               {/* Counting a shipped list would misstate what this offers — the runner's CLI
                   decides, and that list changes without us. */}
-              {preset?.modelsFromRuntime
-                ? 'models from the runtime CLI'
-                : `${identity.count} model${identity.count === 1 ? '' : 's'} ${identity.counted}`}
+              {identity.runtime === 'cursor'
+                ? 'models from Cursor CLI on each machine'
+                : preset?.modelsFromRuntime
+                  ? 'models from the runtime CLI'
+                  : `${identity.count} model${identity.count === 1 ? '' : 's'} ${identity.counted}`}
             </div>
           </div>
         </div>
@@ -651,7 +692,11 @@ function ProviderForm({
           ) : (
             ''
           )}
-          {newKey ? ` ${editing ? 'Saving' : 'Connecting'} sends one tiny test request first.` : ''}
+          {newKey
+            ? cursor
+              ? ` ${editing ? 'Saving' : 'Connecting'} checks it with Cursor first.`
+              : ` ${editing ? 'Saving' : 'Connecting'} sends one tiny test request first.`
+            : ''}
         </div>
         {/* What agy does with the key, which the owner should know before handing it over
             (docs/antigravity-runtime-contract.md §3.2 and §7; docs/provider-engine-contract.md §4.6). */}
@@ -667,6 +712,39 @@ function ProviderForm({
       {/* Right under the key: the balance is the account's that key belongs to. Only a saved key has
           one — the server asks DeepSeek with what is stored, never with what is being typed. */}
       {editing && hasDeepSeekBalance(editing) && <DeepSeekBalanceSection row={editing} />}
+
+      {cursor && (
+        <section className="provider-step">
+          <div className="provider-works">
+            <div className="provider-works-head">
+              Works with
+              <small>— {ENGINE_CLI_NAMES[AgentProvider.CURSOR]} only; sessions on this key are billed to its Cursor plan</small>
+            </div>
+            <div className="provider-works-row">
+              <span className="provider-works-engine">
+                <EngineTile engine={AgentProvider.CURSOR} size={18} />
+                {ENGINE_CLI_NAMES[AgentProvider.CURSOR]}
+              </span>
+              <span className="provider-works-how">Cursor’s own agent · models from Cursor on each machine</span>
+            </div>
+          </div>
+          {/* Where the key goes, as measured on Linux runners (docs/cursor-runtime-contract.md §8.4, the
+              P0c run of D4's approach A): Cursor CLI gets it, the commands its agent runs don't. */}
+          {!editing && (
+            <div className="provider-who">
+              <b>Who gets this key</b>
+              <ul>
+                <li>
+                  Sessions on {ENGINE_CLI_NAMES[AgentProvider.CURSOR]} hand it to the CLI on the runner, and commands the
+                  agent runs there can’t read it.
+                </li>
+                <li>A runner with {ENGINE_CLI_NAMES[AgentProvider.CURSOR]} checks it when you connect. The check spends none of your requests.</li>
+                <li>It never runs another engine, and no other key runs {ENGINE_CLI_NAMES[AgentProvider.CURSOR]}.</li>
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
 
       {harness && (
         <section className="provider-step">
@@ -717,8 +795,11 @@ function ProviderForm({
                     </Field>
                   )}
                   <Field label="Endpoint">
+                    {/* Cursor CLI trades the key at Cursor's own API by itself: nothing here sends it
+                        anywhere else, so the endpoint is only shown. */}
                     <Input
                       value={baseUrl}
+                      readOnly={cursor}
                       onChange={(e) => {
                         setBaseUrl(e.target.value);
                         setProbeError(null);
@@ -732,9 +813,11 @@ function ProviderForm({
                             ? `${vendor}'s own API, which the Kimi CLI speaks natively.`
                             : preset.runtime === 'antigravity'
                               ? `${vendor}'s own API, which the Antigravity CLI speaks natively.`
-                              : harness
-                                ? `${vendor}'s Anthropic-compatible API — ${engineList(engines)} all call it.`
-                                : `The endpoint ${vendor} documents for Claude Code.`)}
+                              : preset.runtime === 'cursor'
+                                ? `${vendor}'s own API, which ${ENGINE_CLI_NAMES[AgentProvider.CURSOR]} trades the key with itself.`
+                                : harness
+                                  ? `${vendor}'s Anthropic-compatible API — ${engineList(engines)} all call it.`
+                                  : `The endpoint ${vendor} documents for Claude Code.`)}
                     </div>
                   </Field>
                 </>
@@ -748,7 +831,7 @@ function ProviderForm({
                   preset!.modelsFromRuntime ? (
                     <div style={{ color: 'var(--text-3)', fontSize: 12 }}>
                       Provided by the{' '}
-                      {runtime === 'codex' ? 'Codex' : runtime === 'antigravity' ? 'Antigravity' : 'Claude Code'}{' '}
+                      {runtime === 'codex' ? 'Codex' : runtime === 'antigravity' ? 'Antigravity' : runtime === 'cursor' ? 'Cursor' : 'Claude Code'}{' '}
                       CLI on each runner, refreshed automatically — new models appear without any
                       change here.
                     </div>
@@ -887,7 +970,7 @@ function ProviderForm({
           </span>
         </span>
         <span className="prov-actions" style={{ gap: 8 }}>
-          {probeError && (
+          {probeError && !probeRefused && (
             <Button loading={saveMut.isPending} onClick={() => saveMut.mutate()}>
               Save anyway
             </Button>

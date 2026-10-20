@@ -1,0 +1,104 @@
+{
+ "ios-1-new-session-light": [
+  "ios1-a-engine-sheet ← phone 2",
+  "ios1-b-hero-cursor ← phone 3",
+  "ios1-c-row-not-installed-sheet ← phone 4",
+  "ios1-d-row-signed-out-sheet ← phone 4",
+  "ios1-e-row-update-runner-sheet ← phone 4",
+  "ios1-f-row-unsupported-version-sheet ← phone 4"
+ ],
+ "ios-1-new-session-dark": [
+  "ios1-a-engine-sheet ← phone 2",
+  "ios1-b-hero-cursor ← phone 3",
+  "ios1-c-row-not-installed-sheet ← phone 4",
+  "ios1-d-row-signed-out-sheet ← phone 4",
+  "ios1-e-row-update-runner-sheet ← phone 4",
+  "ios1-f-row-unsupported-version-sheet ← phone 4"
+ ],
+ "ios-2-infrastructure-light": [
+  "ios2-a-infrastructure-cursor-card ← phone 1",
+  "ios2-b-machine-hpc-cursor-row ← phone 2",
+  "ios2-c-cursor-engine-page ← phone 3",
+  "ios2-c2-cursor-engine-page-footer ← phone 3",
+  "ios2-d-state-not-installed-page ← phone 4",
+  "ios2-d-state-not-installed-engine-page ← phone 4",
+  "ios2-e-state-signed-out-page ← phone 4",
+  "ios2-f-state-update-runner-page ← phone 4",
+  "ios2-g-state-unsupported-version-page ← phone 4",
+  "ios2-g-state-unsupported-version-engine-page ← phone 4"
+ ],
+ "ios-2-infrastructure-dark": [
+  "ios2-a-infrastructure-cursor-card ← phone 1",
+  "ios2-b-machine-hpc-cursor-row ← phone 2",
+  "ios2-c-cursor-engine-page ← phone 3",
+  "ios2-c2-cursor-engine-page-footer ← phone 3",
+  "ios2-d-state-not-installed-page ← phone 4",
+  "ios2-d-state-not-installed-engine-page ← phone 4",
+  "ios2-e-state-signed-out-page ← phone 4",
+  "ios2-f-state-update-runner-page ← phone 4",
+  "ios2-g-state-unsupported-version-page ← phone 4",
+  "ios2-g-state-unsupported-version-engine-page ← phone 4"
+ ],
+ "ios-3-add-account-light": [
+  "ios3-a-add-pending ← phone 1",
+  "ios3-b-add-link ← phone 2",
+  "ios3-c-add-expired ← phone 3",
+  "ios3-d-add-done ← phone 4",
+  "ios3-e-team-menu ← phone 5",
+  "ios3-f-sign-in-again-link ← phone 6",
+  "ios3-g-remove-confirm ← phone 7",
+  "ios3-h-remove-refused ← phone 8"
+ ],
+ "ios-3-add-account-dark": [
+  "ios3-a-add-pending ← phone 1",
+  "ios3-b-add-link ← phone 2",
+  "ios3-c-add-expired ← phone 3",
+  "ios3-d-add-done ← phone 4",
+  "ios3-e-team-menu ← phone 5",
+  "ios3-f-sign-in-again-link ← phone 6",
+  "ios3-g-remove-confirm ← phone 7",
+  "ios3-h-remove-refused ← phone 8"
+ ],
+ "ios-4-api-key-light": [
+  "ios4-a-api-keys ← phone 2",
+  "ios4-b-cursor-key-valid ← phone 3",
+  "ios4-c-cursor-key-rejected ← phone 4",
+  "ios4-d-cursor-key-checked-again ← phone 4"
+ ],
+ "ios-4-api-key-dark": [
+  "ios4-a-api-keys ← phone 2",
+  "ios4-b-cursor-key-valid ← phone 3",
+  "ios4-c-cursor-key-rejected ← phone 4",
+  "ios4-d-cursor-key-checked-again ← phone 4"
+ ],
+ "ios-5-session-light": [
+  "ios5-a-model-menu-auto ← phone 1",
+  "ios5-a2-model-menu-auto-three-models ← phone 1",
+  "ios5-b0-chip-opus ← phone 2",
+  "ios5-b-model-menu-opus ← phone 2",
+  "ios5-b2-model-menu-opus-three-models ← phone 2",
+  "ios5-c-turn-running-queued ← phone 3",
+  "ios5-d-context-unavailable ← phone 4",
+  "ios5-e-usage-limit ← phone 5"
+ ],
+ "ios-5-session-dark": [
+  "ios5-a-model-menu-auto ← phone 1",
+  "ios5-a2-model-menu-auto-three-models ← phone 1",
+  "ios5-b0-chip-opus ← phone 2",
+  "ios5-b-model-menu-opus ← phone 2",
+  "ios5-b2-model-menu-opus-three-models ← phone 2",
+  "ios5-c-turn-running-queued ← phone 3",
+  "ios5-d-context-unavailable ← phone 4",
+  "ios5-e-usage-limit ← phone 5"
+ ],
+ "ios-6-modes-and-switch-light": [
+  "ios6-a-modes ← phone 2",
+  "ios6-b-provider-blocked ← phone 4",
+  "ios6-c-provider-draft ← phone 5"
+ ],
+ "ios-6-modes-and-switch-dark": [
+  "ios6-a-modes ← phone 2",
+  "ios6-b-provider-blocked ← phone 4",
+  "ios6-c-provider-draft ← phone 5"
+ ]
+}

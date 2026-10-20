@@ -1825,11 +1825,16 @@ private struct TaskDetailContent: View {
                              antigravity: runner?.antigravity,
                              antigravityKeyAvailable: SessionProviderChoices.antigravityKeyAvailable(
                                 workspace: assigneeAgent(task), runner: runner),
-                             dshState: runner.map { DshRuntime.state(of: $0) })
+                             dshState: runner.map { DshRuntime.state(of: $0) },
+                             cursorState: runner.map { CursorRuntime.state(of: $0) },
+                             showsCursor: ProviderEngines.appleShowsEngine(CursorRuntime.engine,
+                                                                           runners: model.runners?.runners))
     }
 
+    /// The pins as the task holds them, with the account's runners in view: Cursor CLI is an Engine choice
+    /// once one of them knows it (`ProviderEngines.appleShowsEngine`).
     private func runPin(_ task: TaskItem) -> TaskRunPin {
-        TaskRunPin(task: task, assignee: assigneeAgent(task), configured: pinConfigured)
+        TaskRunPin(task: task, assignee: assigneeAgent(task), configured: pinConfigured, runners: model.runners?.runners)
     }
 
     /// The engine this task's runs use (board 6 ①): the assignee's, or one of the six by its CLI's

@@ -48,6 +48,19 @@ final class ConsoleRegistry {
     private var savedSeq: [String: Int] = [:]
     /// Records a link asked a console to open at, held until that console is made (`openRecord`).
     private var pendingRecords: [String: String] = [:]
+    /// The account a draft about to open for a workspace starts on, by workspace id: what the usage-limit
+    /// card's "start a new session on …" asks for (board iOS 5 ⑧), taken by that draft as it appears.
+    @ObservationIgnored private var pendingDraftAccounts: [String: (engine: String, account: String)] = [:]
+
+    /// Ask the next draft for `agentID` to start on `engine`'s `account`.
+    func queueDraftAccount(agentID: String, engine: String, account: String) {
+        pendingDraftAccounts[agentID] = (engine, account)
+    }
+
+    /// The account queued for the next draft of `agentID`, once.
+    func takeDraftAccount(agentID: String) -> (engine: String, account: String)? {
+        pendingDraftAccounts.removeValue(forKey: agentID)
+    }
     /// Merges and commits a console here asked for that the runner hasn't answered yet. They're
     /// followed here, not in the console: its poll stops with its focus, so leaving the session
     /// meant the result card never came — or came late, the next time the session was opened. From

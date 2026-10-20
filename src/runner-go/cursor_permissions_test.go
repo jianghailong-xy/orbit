@@ -9,6 +9,8 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -333,11 +335,19 @@ func TestCursorPermissionModes(t *testing.T) {
 // cursorKillReplay ends the replayed CLI as a crash would, while it waits on the runner (§3.4, §12).
 func cursorKillReplay(t *testing.T, fake *cursorReplay) {
 	t.Helper()
+	cursorSignalReplay(t, fake, syscall.SIGKILL)
+}
+
+// cursorSignalReplay sends the replayed CLI sig, whatever it is waiting on: SIGKILL ends it as a crash would,
+// SIGTERM has it exit 143 by itself, as the pinned CLI does (§3.4), and SIGUSR1 has it close its connection and
+// run on (fake_cursor_acp_test.go).
+func cursorSignalReplay(t *testing.T, fake *cursorReplay, sig syscall.Signal) {
+	t.Helper()
 	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
 		data, err := os.ReadFile(filepath.Join(fake.dir, "start.json"))
 		var call fakeCursorCall
 		if err == nil && json.Unmarshal(data, &call) == nil && call.PID > 0 {
-			_ = syscall.Kill(call.PID, syscall.SIGKILL)
+			_ = syscall.Kill(call.PID, sig)
 			return
 		}
 	}
@@ -347,7 +357,8 @@ func cursorKillReplay(t *testing.T, fake *cursorReplay) {
 // TestCursorApprovalInterrupted stops the turn, or loses the CLI's connection, while a request waits on
 // Orbit — on a person's card where the mode asks one, on the mode's own answer where it does not — in every
 // declared mode: what was asked is answered cancelled (or reaches no CLI at all), a card still open is
-// withdrawn, the turn settles once, and an answer that comes after reaches nothing.
+// withdrawn, the turn settles once, an answer that comes after reaches nothing, and the call a withdrawn
+// permission card was about settles as not run (TestCursorWithdrawnApprovals).
 func TestCursorApprovalInterrupted(t *testing.T) {
 	type setup struct {
 		recording, session, mode string
@@ -462,6 +473,16 @@ func TestCursorApprovalInterrupted(t *testing.T) {
 					for _, card := range run.cards {
 						if card.ToolName == s.card {
 							released = card.released()
+							// A permission request's call was answered cancelled, which Cursor CLI takes as a refusal: not
+							// run, saying how the turn ended — not as one Orbit refused: nobody did. The plan Cursor asked
+							// to have accepted is no call of that kind, and settles as the turn's end settles a card it cut short.
+							want := map[string]string{"stop": cursorStoppedBeforeApproval, "disconnect": cursorEndedBeforeApproval}[how]
+							if s.card == "ExitPlanMode" {
+								want = cursorUnfinishedTool(run.completions[0].Status)
+							}
+							if result := cursorCardResult(run, "turn-1", card); result["content"] != want || result["isError"] != true {
+								t.Errorf("the withdrawn card's call settled %v, want %q", result, want)
+							}
 						}
 					}
 					if !released {
@@ -492,20 +513,811 @@ func TestCursorApprovalInterrupted(t *testing.T) {
 	})
 }
 
-// cursorBridgeRig drives a permission bridge directly, recording every answer and card.
+// cursorSettledCard is one card a turn put out: the tool it is, with its input, and the result it settled with.
+type cursorSettledCard struct {
+	Name    string
+	Input   interface{}
+	Result  string
+	IsError bool
+}
+
+// cursorSettledCards is every card a turn put out, in order, each with its one result.
+func cursorSettledCards(t *testing.T, run cursorRun, turn string) []cursorSettledCard {
+	t.Helper()
+	results := map[string][]map[string]interface{}{}
+	for _, result := range run.of(turn, evToolResult) {
+		results[asString(result["toolUseId"])] = append(results[asString(result["toolUseId"])], result)
+	}
+	var cards []cursorSettledCard
+	for _, use := range run.of(turn, evToolUse) {
+		settled := results[asString(use["id"])]
+		if len(settled) != 1 {
+			t.Fatalf("card %q settled %d times: %v", use["id"], len(settled), settled)
+		}
+		cards = append(cards, cursorSettledCard{asString(use["name"]), use["input"], asString(settled[0]["content"]), settled[0]["isError"] == true})
+	}
+	return cards
+}
+
+// cursorCardResult is the result the call an approval card was about settled with, nil unless exactly one.
+func cursorCardResult(run cursorRun, turn string, card cursorTestCard) map[string]interface{} {
+	var found []map[string]interface{}
+	for _, result := range run.of(turn, evToolResult) {
+		if result["toolUseId"] == card.ToolUseID {
+			found = append(found, result)
+		}
+	}
+	if len(found) != 1 {
+		return nil
+	}
+	return found[0]
+}
+
+// TestCursorRefusedToolCards holds the transcript to what happened to a call a permission request asked
+// about (D-P8-1): Cursor CLI completes a command or an edit Orbit refused with no output at all — P8's
+// recording off the wire, and P5c's — which read as a success with nothing to show, so the runner settles
+// the card of every call it did not allow, while the turn ran, as not run. An allowed call keeps what
+// Cursor reported (exit code, stdout, stderr), an MCP call Cursor reports {rejected:true} for reads as
+// before, and a card the turn's end withdrew unanswered settles as not run, saying how the turn ended
+// (TestCursorWithdrawnApprovals). A refused call the turn's end overtakes — stopped, the CLI killed, or its
+// connection closed, before Cursor completed the call — settles as not run as well: Cursor CLI runs nothing
+// before it has the answer (§5.2). An allowed call the turn's end overtakes still settles as P5c settles it:
+// it may have run.
+func TestCursorRefusedToolCards(t *testing.T) {
+	const notRun = "Not run: the tool call was rejected."
+	about := func(card cursorTestCard, word string) bool {
+		wire, _ := json.Marshal(card.Input)
+		return strings.Contains(string(wire), word)
+	}
+	deny := func(word string) func(cursorTestCard) cursorTestDecision {
+		return func(card cursorTestCard) cursorTestDecision {
+			if about(card, word) {
+				return cursorTestDecision{Status: "DENIED"}
+			}
+			return cursorTestDecision{Status: "ALLOWED"}
+		}
+	}
+	// completions is the recorded completion of each card, by its id: the update that carries the call's outcome.
+	completions := func(t *testing.T, recording string) map[string]map[string]interface{} {
+		done := map[string]map[string]interface{}{}
+		for _, params := range recordedSessionUpdates(t, recording) {
+			if update := mapValue(params["update"]); firstString(update, "status") == "completed" {
+				done[firstString(update, "toolCallId")] = update
+			}
+		}
+		return done
+	}
+	type askedCard struct {
+		Name  string
+		Input interface{}
+	}
+	asked := func(run cursorRun) []askedCard {
+		var cards []askedCard
+		for _, card := range run.cards {
+			cards = append(cards, askedCard{card.ToolName, card.Input})
+		}
+		return cards
+	}
+	t.Run("p8-shell-rejected", func(t *testing.T) {
+		// Accept Edits, two commands on Orbit's card: `git log` allowed, `date -u > notes-when.txt` refused.
+		const recording = "p8/key-allow-reject/session"
+		first, then := cursorTurns(cursorMessage("turn-1", "two commands"), cursorMessage("turn-2", "what happened to step 2"))
+		run := runCursorSession(t, cursorRunOptions{recording: recording, agent: cursorInMode("acceptEdits"), first: first, then: then,
+			approve: deny("date -u")})
+		if run.status != stSucceeded || len(run.completions) != 2 || run.completions[0].Status != stSucceeded || run.completions[1].Status != stSucceeded {
+			t.Fatalf("run = %s, completions %+v", run.status, run.completions)
+		}
+		if answers := cursorAnswersByRequest(t, run.fake); !cursorJSONEqual(t, answers, map[string][]string{"0": {cursorAllowOnce}, "1": {cursorRejectOnce}}) {
+			t.Fatalf("requests answered %q", answers)
+		}
+		if got, want := asked(run), []askedCard{{"Bash", map[string]interface{}{"command": "git log --oneline -1"}},
+			{"Bash", map[string]interface{}{"command": "date -u > notes-when.txt"}}}; !cursorJSONEqual(t, got, want) {
+			t.Fatalf("cards = %+v, want %+v", got, want)
+		}
+		// What Cursor CLI sent: the allowed command's exit code, stdout and stderr; for the refused one, nothing.
+		done := completions(t, recording)
+		allowed, refused := done[run.cards[0].ToolUseID], done[run.cards[1].ToolUseID]
+		if out := mapValue(allowed["rawOutput"]); len(out) != 3 || out["exitCode"] != float64(0) || out["stdout"] != "3c93801 init sandbox\n" || out["stderr"] != "" {
+			t.Fatalf("the allowed command completed with %v", allowed)
+		}
+		if refused == nil || refused["rawOutput"] != nil || refused["content"] != nil {
+			t.Fatalf("the refused command completed with %v, want no output at all", refused)
+		}
+		want := []cursorSettledCard{
+			{"Bash", map[string]interface{}{"command": "git log --oneline -1"}, "3c93801 init sandbox", false},
+			{"Bash", map[string]interface{}{"command": "date -u > notes-when.txt"}, notRun, true},
+		}
+		if got := cursorSettledCards(t, run, "turn-1"); !cursorJSONEqual(t, got, want) {
+			t.Fatalf("turn 1 cards = %+v, want %+v", got, want)
+		}
+		if uses := run.of("turn-2", evToolUse); len(uses) != 0 || run.completions[1].Result != "Step 1 printed `3c93801 init sandbox`. Step 2 did not run because the command was rejected." {
+			t.Fatalf("turn 2: cards %v, result %q", uses, run.completions[1].Result)
+		}
+	})
+	t.Run("p5c-accept-edits-allow-deny", func(t *testing.T) {
+		// Accept Edits: two commands and two writes outside the workspace, each on Orbit's card; the "denied" ones refused.
+		const recording = "p5c/accept-edits-allow-deny/session"
+		first, then := cursorTurns(cursorMessage("turn-1", "four steps"))
+		run := runCursorSession(t, cursorRunOptions{recording: recording, agent: cursorInMode("acceptEdits"), first: first, then: then,
+			approve: deny("denied")})
+		if run.status != stSucceeded || len(run.completions) != 1 || run.completions[0].Status != stSucceeded {
+			t.Fatalf("run = %s, completions %+v", run.status, run.completions)
+		}
+		if answers := cursorAnswersByRequest(t, run.fake); !cursorJSONEqual(t, answers, map[string][]string{
+			"0": {cursorAllowOnce}, "1": {cursorRejectOnce}, "2": {cursorAllowOnce}, "3": {cursorRejectOnce}}) {
+			t.Fatalf("requests answered %q", answers)
+		}
+		if got, want := asked(run), []askedCard{
+			{"Bash", map[string]interface{}{"command": "touch cmd-allowed.txt"}},
+			{"Bash", map[string]interface{}{"command": "touch cmd-denied.txt"}},
+			{"Write", map[string]interface{}{"file_path": "<OUTSIDE>/edit-allowed.txt", "content": "allowed\n"}},
+			{"Write", map[string]interface{}{"file_path": "<OUTSIDE>/edit-denied.txt", "content": "denied\n"}},
+		}; !cursorJSONEqual(t, got, want) {
+			t.Fatalf("cards = %+v, want %+v", got, want)
+		}
+		done := completions(t, recording)
+		for i, card := range run.cards {
+			completed := done[card.ToolUseID]
+			if refused := i%2 == 1; completed == nil || refused != (completed["rawOutput"] == nil && completed["content"] == nil) {
+				t.Fatalf("card %d (%s) completed with %v", i, card.ToolName, completed)
+			}
+		}
+		want := []cursorSettledCard{
+			{"Bash", map[string]interface{}{"command": "touch cmd-allowed.txt"}, "", false},
+			{"Bash", map[string]interface{}{"command": "touch cmd-denied.txt"}, notRun, true},
+			{"Write", map[string]interface{}{"file_path": "<OUTSIDE>/edit-allowed.txt", "content": "allowed"}, "", false},
+			{"Edit", map[string]interface{}{"file_path": "<OUTSIDE>/edit-denied.txt"}, notRun, true},
+		}
+		if got := cursorSettledCards(t, run, "turn-1"); !cursorJSONEqual(t, got, want) {
+			t.Fatalf("cards = %+v, want %+v", got, want)
+		}
+	})
+	t.Run("p5c-dont-ask", func(t *testing.T) {
+		// Don't Ask refuses the command unasked; the write inside the workspace asks nothing; Orbit's own tool runs.
+		const recording = "p5c/dont-ask/session"
+		first, then := cursorTurns(cursorMessage("turn-1", "three steps"))
+		run := runCursorSession(t, cursorRunOptions{recording: recording, agent: cursorInMode("dontAsk"), first: first, then: then,
+			approve: func(card cursorTestCard) cursorTestDecision {
+				t.Errorf("Don't Ask filed a card: %+v", card)
+				return cursorTestDecision{Status: "DENIED"}
+			}})
+		if run.status != stSucceeded || len(run.completions) != 1 || run.completions[0].Status != stSucceeded {
+			t.Fatalf("run = %s, completions %+v", run.status, run.completions)
+		}
+		if answers := cursorAnswersByRequest(t, run.fake); !cursorJSONEqual(t, answers, map[string][]string{"0": {cursorRejectOnce}, "1": {cursorAllowOnce}}) {
+			t.Fatalf("requests answered %q", answers)
+		}
+		want := []cursorSettledCard{
+			{"Bash", map[string]interface{}{"command": "touch dontask-cmd.txt"}, notRun, true},
+			{"Write", map[string]interface{}{"file_path": "<RUN>/work/dontask-edit.txt", "content": "edit"}, "", false},
+			{"mcp__orbit__task_get", map[string]interface{}{}, "Done. Cursor CLI does not pass an MCP tool's result on to Orbit.", false},
+		}
+		if got := cursorSettledCards(t, run, "turn-1"); !cursorJSONEqual(t, got, want) {
+			t.Fatalf("cards = %+v, want %+v", got, want)
+		}
+		var notes []string
+		for _, event := range run.events {
+			if event.typ == evSystem && event.payload["subtype"] == "permission_denied" {
+				notes = append(notes, asString(event.payload["name"])+": "+asString(event.payload["reason"]))
+			}
+		}
+		if !cursorJSONEqual(t, notes, []string{"Bash: Don't Ask refuses without asking"}) {
+			t.Fatalf("permission notes = %q", notes)
+		}
+	})
+	t.Run("mcp-rejected-unchanged", func(t *testing.T) {
+		// P0's conversation answered as P0 answered it: the MCP call refused, which Cursor completes with {rejected:true}.
+		const recording = "multi-turn-tools-default/turns"
+		first, then := cursorTurns(cursorMessage("turn-1", "first message"))
+		run := runCursorSession(t, cursorRunOptions{recording: recording, first: first, then: then,
+			approve: func(card cursorTestCard) cursorTestDecision {
+				if card.ToolName == "mcp__p0probe__record" {
+					return cursorTestDecision{Status: "DENIED"}
+				}
+				return cursorTestDecision{Status: "ALLOWED"}
+			}})
+		var mcp []cursorTestCard
+		for _, card := range run.cards {
+			if card.ToolName == "mcp__p0probe__record" {
+				mcp = append(mcp, card)
+			}
+		}
+		if len(mcp) != 1 {
+			t.Fatalf("cards = %+v", run.cards)
+		}
+		if completed := completions(t, recording)[mcp[0].ToolUseID]; !cursorJSONEqual(t, completed["rawOutput"], map[string]interface{}{"rejected": true}) {
+			t.Fatalf("the refused MCP call completed with %v", completed)
+		}
+		if result := cursorCardResult(run, "turn-1", mcp[0]); result["content"] != notRun || result["isError"] != true {
+			t.Fatalf("the refused MCP call settled %v", result)
+		}
+		// The same completion of a call no answer of Orbit's refused reads the same; an MCP call that ran, as before.
+		var events cursorEvents
+		m := newCursorEventMapper(events.emitFor)
+		m.bind("s")
+		if err := m.begin("turn"); err != nil {
+			t.Fatal(err)
+		}
+		for id, output := range map[string]interface{}{"rejected": map[string]interface{}{"rejected": true}, "ran": map[string]interface{}{"success": true}} {
+			for _, update := range []map[string]interface{}{
+				{"sessionUpdate": "tool_call", "toolCallId": id, "kind": "other", "title": "p0probe: record", "status": "pending",
+					"rawInput": map[string]interface{}{"providerIdentifier": "p0probe", "toolName": "record", "args": map[string]interface{}{}}},
+				{"sessionUpdate": "tool_call_update", "toolCallId": id, "status": "in_progress"},
+				{"sessionUpdate": "tool_call_update", "toolCallId": id, "status": "completed", "rawOutput": output},
+			} {
+				m.update(map[string]interface{}{"sessionId": "s", "update": update})
+			}
+		}
+		got := map[string]string{}
+		for _, event := range events.snapshot() {
+			if event.typ == evToolResult {
+				got[asString(event.payload["toolUseId"])] = asString(event.payload["content"]) + fmt.Sprintf(" (isError %v)", event.payload["isError"])
+			}
+		}
+		if want := map[string]string{"rejected": notRun + " (isError true)",
+			"ran": "Done. Cursor CLI does not pass an MCP tool's result on to Orbit. (isError false)"}; !cursorJSONEqual(t, got, want) {
+			t.Fatalf("results = %q, want %q", got, want)
+		}
+	})
+	// settledBy holds the turn to having settled once, the way end ended it (cursorSettlementOutcome).
+	settledBy := func(t *testing.T, run cursorRun, end string) {
+		t.Helper()
+		if len(run.completions) != 1 {
+			t.Fatalf("completions = %+v, want the turn settled once", run.completions)
+		}
+		got := run.completions[0]
+		if !map[string]bool{
+			"stop":       got.Status == stInterrupted,
+			"disconnect": got.Status == stFailed && strings.Contains(got.Error, "exited during this turn"),
+			"eof":        got.Status == stFailed && strings.Contains(got.Error, "connection ended during this turn without an answer"),
+		}[end] {
+			t.Fatalf("the turn ended by %s settled %+v", end, got)
+		}
+	}
+	// overtaken runs a recording's first turn in Accept Edits, each card decided by approve, and ends it once the
+	// runner's answer to the CLI's recorded request hold has reached the CLI, before Cursor CLI reports that call:
+	// the replay holds there (HoldAfter). end "stop" has Orbit stop the turn, "disconnect" kills the CLI, and "eof"
+	// has it close its connection and run on.
+	overtaken := func(t *testing.T, recording, hold, end string, approve func(cursorTestCard) cursorTestDecision) cursorRun {
+		t.Helper()
+		first, then := cursorTurns(cursorMessage("turn-1", "first message"))
+		run := runCursorSession(t, cursorRunOptions{recording: recording, agent: cursorInMode("acceptEdits"), first: first, then: then,
+			approve: approve,
+			script: func(script *fakeCursorACPScript) {
+				script.HoldAfter, script.CancelEndsPrompt = hold, true
+				script.Exit = map[string]string{"disconnect": "SIGKILL", "eof": "close-stdout"}[end]
+			},
+			onAnswer: func(id string) []RunInboxResponse {
+				if end == "stop" && id == hold {
+					return []RunInboxResponse{{TurnID: "stop-1", Kind: "interrupt"}}
+				}
+				return nil
+			}})
+		settledBy(t, run, end)
+		return run
+	}
+	for _, end := range []string{"stop", "disconnect", "eof"} {
+		t.Run("p8-refused-then-"+end, func(t *testing.T) {
+			// P8's turn as P8 answered it — `git log` allowed, `date -u > notes-when.txt` refused on Orbit's card —
+			// over before Cursor CLI completes the refused command.
+			run := overtaken(t, "p8/key-allow-reject/session", "1", end, deny("date -u"))
+			if answers := cursorAnswersByRequest(t, run.fake); !cursorJSONEqual(t, answers, map[string][]string{"0": {cursorAllowOnce}, "1": {cursorRejectOnce}}) {
+				t.Fatalf("requests answered %q", answers)
+			}
+			want := []cursorSettledCard{
+				{"Bash", map[string]interface{}{"command": "git log --oneline -1"}, "3c93801 init sandbox", false},
+				{"Bash", map[string]interface{}{"command": "date -u > notes-when.txt"}, notRun, true},
+			}
+			if got := cursorSettledCards(t, run, "turn-1"); !cursorJSONEqual(t, got, want) {
+				t.Fatalf("cards = %+v, want %+v", got, want)
+			}
+		})
+	}
+	// P5c's turn as P5c answered it, up to the write outside the workspace: the command refused before it is not
+	// run, and the write settles as P5c settles a call the turn's end overtook.
+	p5cStopped := []cursorSettledCard{
+		{"Bash", map[string]interface{}{"command": "touch cmd-allowed.txt"}, "", false},
+		{"Bash", map[string]interface{}{"command": "touch cmd-denied.txt"}, notRun, true},
+		{"Edit", map[string]interface{}{"file_path": "<OUTSIDE>/edit-allowed.txt"}, cursorUnfinishedTool(stInterrupted), true},
+	}
+	t.Run("p5c-allowed-then-stop", func(t *testing.T) {
+		// The write allowed on Orbit's card, and the turn stopped before Cursor CLI reports it: it may have run.
+		run := overtaken(t, "p5c/accept-edits-allow-deny/session", "2", "stop", deny("denied"))
+		if answers := cursorAnswersByRequest(t, run.fake); !cursorJSONEqual(t, answers, map[string][]string{
+			"0": {cursorAllowOnce}, "1": {cursorRejectOnce}, "2": {cursorAllowOnce}}) {
+			t.Fatalf("requests answered %q", answers)
+		}
+		if got := cursorSettledCards(t, run, "turn-1"); !cursorJSONEqual(t, got, p5cStopped) {
+			t.Fatalf("cards = %+v, want %+v", got, p5cStopped)
+		}
+	})
+	t.Run("p5c-withdrawn-then-stop", func(t *testing.T) {
+		// The turn stopped while the write is still on Orbit's card: the card is withdrawn, and the request answered
+		// cancelled once the turn is over — no refusal of Orbit's, but the write did not run either: it settles as not
+		// run, stopped before anybody approved it.
+		first, then := cursorTurns(cursorMessage("turn-1", "first message"))
+		run := runCursorSession(t, cursorRunOptions{recording: "p5c/accept-edits-allow-deny/session", agent: cursorInMode("acceptEdits"),
+			first: first, then: then,
+			script: func(script *fakeCursorACPScript) { script.CancelEndsPrompt = true },
+			approve: func(card cursorTestCard) cursorTestDecision {
+				if about(card, "edit-allowed") {
+					return cursorTestDecision{} // open until the runner stops reading it
+				}
+				return deny("denied")(card)
+			},
+			onCard: func(card cursorTestCard) []RunInboxResponse {
+				if about(card, "edit-allowed") {
+					return []RunInboxResponse{{TurnID: "stop-1", Kind: "interrupt"}}
+				}
+				return nil
+			}})
+		settledBy(t, run, "stop")
+		if answers := cursorAnswersByRequest(t, run.fake); !cursorJSONEqual(t, answers, map[string][]string{
+			"0": {cursorAllowOnce}, "1": {cursorRejectOnce}, "2": {"cancelled"}}) {
+			t.Fatalf("requests answered %q", answers)
+		}
+		if len(run.cards) != 3 || !run.cards[2].released() {
+			t.Fatalf("cards = %+v, want the write's card withdrawn", run.cards)
+		}
+		want := append(append([]cursorSettledCard(nil), p5cStopped[:2]...),
+			cursorSettledCard{"Edit", map[string]interface{}{"file_path": "<OUTSIDE>/edit-allowed.txt"}, cursorStoppedBeforeApproval, true})
+		if got := cursorSettledCards(t, run, "turn-1"); !cursorJSONEqual(t, got, want) {
+			t.Fatalf("cards = %+v, want %+v", got, want)
+		}
+	})
+	t.Run("turn-end-rules", func(t *testing.T) {
+		// The mapper alone, one turn per way a turn ends: a call the bridge marked refused that Cursor CLI has not
+		// completed settles as not run whatever ended the turn; an unmarked one as P5c settles it.
+		for _, end := range []struct {
+			result map[string]interface{}
+			err    error
+		}{
+			{map[string]interface{}{"stopReason": "end_turn"}, nil},
+			{map[string]interface{}{"stopReason": "cancelled"}, nil},
+			{map[string]interface{}{"stopReason": "max_tokens"}, nil},
+			{nil, errors.New("Cursor CLI exited during this turn (signal: killed) without answering it.")},
+		} {
+			var events cursorEvents
+			m := newCursorEventMapper(events.emitFor)
+			m.bind("s")
+			if err := m.begin("turn"); err != nil {
+				t.Fatal(err)
+			}
+			for _, id := range []string{"refused", "unmarked"} {
+				for _, update := range []map[string]interface{}{
+					{"sessionUpdate": "tool_call", "toolCallId": id, "kind": "execute", "title": "`touch " + id + ".txt`", "status": "pending",
+						"rawInput": map[string]interface{}{"command": "touch " + id + ".txt"}},
+					{"sessionUpdate": "tool_call_update", "toolCallId": id, "status": "in_progress"},
+				} {
+					m.update(map[string]interface{}{"sessionId": "s", "update": update})
+				}
+			}
+			m.refuse("turn", "refused")
+			request, ok := m.settle("turn", end.result, end.err)
+			if !ok {
+				t.Fatal("the turn did not settle")
+			}
+			got := map[string]string{}
+			for _, event := range events.snapshot() {
+				if event.typ == evToolResult {
+					got[asString(event.payload["toolUseId"])] = fmt.Sprintf("%s (isError %v)", event.payload["content"], event.payload["isError"])
+				}
+			}
+			if want := map[string]string{"refused": notRun + " (isError true)", "unmarked": cursorUnfinishedTool(request.Status) + " (isError true)"}; !cursorJSONEqual(t, got, want) {
+				t.Fatalf("a turn settled %s: results %q, want %q", request.Status, got, want)
+			}
+		}
+	})
+	t.Run("rules", func(t *testing.T) {
+		// The bridge and the mapper alone, request by request: the card's id names how the person answers.
+		rig := newCursorBridgeRig("acceptEdits", func(ctx context.Context, _ string, _ interface{}, id string) (*ApprovalDecisionResponse, error) {
+			switch id {
+			case "denied", "denied-yet-output":
+				return &ApprovalDecisionResponse{Status: "DENIED"}, nil
+			case "unfiled":
+				return nil, errors.New("the control plane did not take the card")
+			case "held":
+				<-ctx.Done()
+				return nil, ctx.Err()
+			}
+			return &ApprovalDecisionResponse{Status: "ALLOWED"}, nil
+		})
+		if err := rig.mapper.begin("turn"); err != nil {
+			t.Fatal(err)
+		}
+		rig.bridge.begin("turn")
+		send := func(update map[string]interface{}) {
+			rig.mapper.update(map[string]interface{}{"sessionId": "s", "update": update})
+		}
+		request := 0
+		// ask opens a command's card and asks for it, as Cursor CLI does, offering the options given (Cursor's own
+		// three when none), and returns what the request was answered once the answer is out.
+		ask := func(id string, options ...[3]string) []string {
+			command := "touch " + id + ".txt"
+			send(map[string]interface{}{"sessionUpdate": "tool_call", "toolCallId": id, "kind": "execute", "title": "`" + command + "`",
+				"status": "pending", "rawInput": map[string]interface{}{"command": command}})
+			send(map[string]interface{}{"sessionUpdate": "tool_call_update", "toolCallId": id, "status": "in_progress"})
+			request++
+			rig.bridge.permission(request, cursorPermissionParams(map[string]interface{}{"toolCallId": id, "title": "`" + command + "`",
+				"kind": "execute", "status": "pending"}, options...))
+			if id == "held" {
+				return nil
+			}
+			return rig.answered(fmt.Sprint(request))
+		}
+		complete := func(id string, output interface{}) {
+			update := map[string]interface{}{"sessionUpdate": "tool_call_update", "toolCallId": id, "status": "completed"}
+			if output != nil {
+				update["rawOutput"] = output
+			}
+			send(update)
+		}
+		answers := map[string][]string{
+			"denied":            ask("denied"),
+			"denied-yet-output": ask("denied-yet-output"),
+			"unfiled":           ask("unfiled"),
+			"unknown-options":   ask("unknown-options", [3]string{"allow-once", "Allow once", "allow_once"}),
+			"allowed":           ask("allowed"),
+			"allowed-silent":    ask("allowed-silent"),
+		}
+		// A person refused it, and Cursor CLI completes it with nothing at all.
+		complete("denied", nil)
+		// Refused, though a replay streams output for it: Orbit's refusal decides.
+		complete("denied-yet-output", map[string]interface{}{"exitCode": float64(0), "stdout": "ran\n", "stderr": ""})
+		// The card could not be filed, so nobody decided: answered cancelled while the turn runs, which Cursor CLI
+		// takes as a refusal — and so are options Orbit does not know.
+		complete("unfiled", nil)
+		complete("unknown-options", nil)
+		// Allowed: what Cursor reported, as before — a command that printed nothing says nothing.
+		complete("allowed", map[string]interface{}{"exitCode": float64(0), "stdout": "done\n", "stderr": ""})
+		complete("allowed-silent", nil)
+		// Still on the card when the turn is stopped: withdrawn, answered cancelled, and not run — the turn was
+		// stopped before anybody approved it.
+		ask("held")
+		rig.bridge.close()
+		answers["held"] = rig.answered(fmt.Sprint(request))
+		if _, ok := rig.mapper.settle("turn", map[string]interface{}{"stopReason": "cancelled"}, nil); !ok {
+			t.Fatal("the turn did not settle")
+		}
+		if want := map[string][]string{"denied": {cursorRejectOnce}, "denied-yet-output": {cursorRejectOnce}, "unfiled": {"cancelled"},
+			"unknown-options": {"cancelled"}, "allowed": {cursorAllowOnce}, "allowed-silent": {cursorAllowOnce}, "held": {"cancelled"}}; !cursorJSONEqual(t, answers, want) {
+			t.Fatalf("answers = %q, want %q", answers, want)
+		}
+		got := map[string]string{}
+		for _, event := range rig.events.snapshot() {
+			if event.typ == evToolResult {
+				got[asString(event.payload["toolUseId"])] = fmt.Sprintf("%s (isError %v)", event.payload["content"], event.payload["isError"])
+			}
+		}
+		want := map[string]string{
+			"denied":            notRun + " (isError true)",
+			"denied-yet-output": notRun + " (isError true)",
+			"unfiled":           notRun + " (isError true)",
+			"unknown-options":   notRun + " (isError true)",
+			"allowed":           "done (isError false)",
+			"allowed-silent":    " (isError false)",
+			"held":              cursorStoppedBeforeApproval + " (isError true)",
+		}
+		if !cursorJSONEqual(t, got, want) {
+			t.Fatalf("results:\n%q\nwant:\n%q", got, want)
+		}
+	})
+}
+
+// What a call settles with whose approval card the turn's end withdrew before anybody answered it
+// (cursorWithdrawnTool): the turn stopped by Orbit, or ended any other way.
+const (
+	cursorStoppedBeforeApproval = "Not run: the turn was stopped before this tool call was approved."
+	cursorEndedBeforeApproval   = "Not run: the turn ended before this tool call was approved."
+)
+
+// cursorRecordedCheck is whether the run P5c recorded passed the check it names (summary.json): what the real
+// CLI did, which a replay cannot show.
+func cursorRecordedCheck(t *testing.T, scenario, name string) bool {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("testdata", "cursor", "p5c", scenario, "summary.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var summary struct {
+		Checks []struct {
+			Name string `json:"name"`
+			Pass bool   `json:"pass"`
+		} `json:"checks"`
+	}
+	if err := json.Unmarshal(data, &summary); err != nil {
+		t.Fatal(err)
+	}
+	for _, check := range summary.Checks {
+		if check.Name == name {
+			return check.Pass
+		}
+	}
+	t.Fatalf("p5c/%s/summary.json has no check %q", scenario, name)
+	return false
+}
+
+// TestCursorWithdrawnApprovals holds the transcript to what happened to a call whose approval card nobody had
+// answered when its turn ended: the card is withdrawn and the request answered cancelled, which Cursor CLI takes
+// as a refusal, so the call did not run — as P5c measured on the real CLI (accept-edits-stop,
+// accept-edits-disconnect: the command never ran). It settles isError:true as not run, saying whether Orbit
+// stopped the turn or it ended another way. The bridge marks the card as it withdraws it, so the mark is in
+// place before the turn settles, however soon that is; a card answered before the withdrawal is not marked,
+// and settles as before.
+func TestCursorWithdrawnApprovals(t *testing.T) {
+	const rejected = "Not run: the tool call was rejected."
+	// endWithCardOpen runs a P5c recording's turn in Accept Edits, its one card held open, and once the card is
+	// filed ends the turn the way end says: "stop" has Orbit stop it; "disconnect" kills the CLI, as P5c's
+	// recording did; "process-exit" has the CLI exit by itself; "eof" has it close its connection and run on.
+	endWithCardOpen := func(t *testing.T, scenario, end string) {
+		t.Helper()
+		recording := "p5c/" + scenario + "/session"
+		var fake *cursorReplay
+		first, then := cursorTurns(cursorMessage("turn-1", "first message"))
+		run := runCursorSession(t, cursorRunOptions{recording: recording, agent: cursorInMode("acceptEdits"), first: first, then: then,
+			script:  func(script *fakeCursorACPScript) { script.CancelEndsPrompt = true },
+			replay:  func(f *cursorReplay) { fake = f },
+			approve: func(cursorTestCard) cursorTestDecision { return cursorTestDecision{} }, // open until the runner stops reading it
+			onCard: func(cursorTestCard) []RunInboxResponse {
+				switch end {
+				case "stop":
+					return []RunInboxResponse{{TurnID: "stop-1", Kind: "interrupt"}}
+				case "disconnect":
+					go cursorSignalReplay(t, fake, syscall.SIGKILL)
+				case "process-exit":
+					go cursorSignalReplay(t, fake, syscall.SIGTERM)
+				case "eof":
+					go cursorSignalReplay(t, fake, syscall.SIGUSR1)
+				}
+				return nil
+			}})
+		if len(run.completions) != 1 {
+			t.Fatalf("completions = %+v, want the turn settled once", run.completions)
+		}
+		if got := run.completions[0]; !map[string]bool{
+			"stop":         got.Status == stInterrupted,
+			"disconnect":   got.Status == stFailed && strings.Contains(got.Error, "exited during this turn (signal: killed)"),
+			"process-exit": got.Status == stFailed && strings.Contains(got.Error, "exited during this turn (exit status 143)"),
+			"eof":          got.Status == stFailed && strings.Contains(got.Error, "connection ended during this turn without an answer"),
+		}[end] {
+			t.Fatalf("the turn ended by %s settled %+v", end, got)
+		}
+		if len(run.cards) != 1 || !run.cards[0].released() {
+			t.Fatalf("cards = %+v, want the one card withdrawn", run.cards)
+		}
+		// No allow ever reached the CLI: after a stop, the cancelled the withdrawal answers, once; otherwise nothing
+		// but that, the CLI being gone.
+		answers := cursorAnswersByRequest(t, run.fake)
+		if end == "stop" {
+			cancels := 0
+			for _, line := range run.fake.received(t) {
+				if line.Message["method"] == "session/cancel" {
+					cancels++
+				}
+			}
+			if !cursorJSONEqual(t, answers, map[string][]string{"0": {"cancelled"}}) || cancels != 1 {
+				t.Fatalf("requests answered %q, %d session/cancel: want the request answered cancelled and one cancel", answers, cancels)
+			}
+		} else if len(answers) > 1 || len(answers["0"]) > 1 || (len(answers["0"]) == 1 && answers["0"][0] != "cancelled") {
+			t.Fatalf("requests answered %q after the CLI went away", answers)
+		}
+		// The CLI never completed the call, and the run P5c recorded found it did not run.
+		for _, params := range recordedSessionUpdates(t, recording) {
+			if update := mapValue(params["update"]); firstString(update, "toolCallId") == run.cards[0].ToolUseID && firstString(update, "status") == "completed" {
+				t.Fatalf("the recording completes the withdrawn call: %v", update)
+			}
+		}
+		if !cursorRecordedCheck(t, scenario, "command-did-not-run") {
+			t.Fatalf("P5c's %s run did not find the command unrun", scenario)
+		}
+		text := cursorEndedBeforeApproval
+		if end == "stop" {
+			text = cursorStoppedBeforeApproval
+		}
+		command := map[string]string{"accept-edits-stop": "touch stopped.txt", "accept-edits-disconnect": "touch disconnected.txt"}[scenario]
+		want := []cursorSettledCard{{"Bash", map[string]interface{}{"command": command}, text, true}}
+		if got := cursorSettledCards(t, run, "turn-1"); !cursorJSONEqual(t, got, want) {
+			t.Fatalf("cards = %+v, want %+v", got, want)
+		}
+	}
+	t.Run("accept-edits-stop", func(t *testing.T) { endWithCardOpen(t, "accept-edits-stop", "stop") })
+	t.Run("accept-edits-disconnect", func(t *testing.T) { endWithCardOpen(t, "accept-edits-disconnect", "disconnect") })
+	// The other ways the CLI can go away with the card open: it exits by itself (SIGTERM, which the pinned CLI
+	// exits 143 on, §3.4), or closes its connection and runs on (EOF).
+	t.Run("process-exit", func(t *testing.T) { endWithCardOpen(t, "accept-edits-disconnect", "process-exit") })
+	t.Run("eof", func(t *testing.T) { endWithCardOpen(t, "accept-edits-disconnect", "eof") })
+	t.Run("turn-end-rules", func(t *testing.T) {
+		// The mapper alone, one turn per way a turn ends: a call whose card was withdrawn settles as not run, saying
+		// whether the turn was stopped — also when Cursor CLI, taking the cancelled answer as a refusal, completes it
+		// with nothing before the turn settles. A refused call settles as Orbit's refusal, an unmarked one as P5c
+		// settles it.
+		for _, end := range []struct {
+			result    map[string]interface{}
+			err       error
+			withdrawn string
+		}{
+			{map[string]interface{}{"stopReason": "end_turn"}, nil, cursorEndedBeforeApproval},
+			{map[string]interface{}{"stopReason": "cancelled"}, nil, cursorStoppedBeforeApproval},
+			{map[string]interface{}{"stopReason": "max_tokens"}, nil, cursorEndedBeforeApproval},
+			{nil, errors.New("Cursor CLI exited during this turn (signal: killed) without answering it."), cursorEndedBeforeApproval},
+			{nil, errors.New("Cursor CLI's connection ended during this turn without an answer, while the process kept running (EOF)."), cursorEndedBeforeApproval},
+		} {
+			var events cursorEvents
+			m := newCursorEventMapper(events.emitFor)
+			m.bind("s")
+			if err := m.begin("turn"); err != nil {
+				t.Fatal(err)
+			}
+			for _, id := range []string{"withdrawn", "withdrawn-completed", "refused", "unmarked"} {
+				for _, update := range []map[string]interface{}{
+					{"sessionUpdate": "tool_call", "toolCallId": id, "kind": "execute", "title": "`touch " + id + ".txt`", "status": "pending",
+						"rawInput": map[string]interface{}{"command": "touch " + id + ".txt"}},
+					{"sessionUpdate": "tool_call_update", "toolCallId": id, "status": "in_progress"},
+				} {
+					m.update(map[string]interface{}{"sessionId": "s", "update": update})
+				}
+			}
+			m.withdraw("turn", "withdrawn")
+			m.withdraw("turn", "withdrawn-completed")
+			m.refuse("turn", "refused")
+			m.update(map[string]interface{}{"sessionId": "s", "update": map[string]interface{}{"sessionUpdate": "tool_call_update",
+				"toolCallId": "withdrawn-completed", "status": "completed"}})
+			request, ok := m.settle("turn", end.result, end.err)
+			if !ok {
+				t.Fatal("the turn did not settle")
+			}
+			got := map[string][]string{}
+			for _, event := range events.snapshot() {
+				if event.typ == evToolResult {
+					id := asString(event.payload["toolUseId"])
+					got[id] = append(got[id], fmt.Sprintf("%s (isError %v)", event.payload["content"], event.payload["isError"]))
+				}
+			}
+			want := map[string][]string{
+				"withdrawn":           {end.withdrawn + " (isError true)"},
+				"withdrawn-completed": {end.withdrawn + " (isError true)"},
+				"refused":             {rejected + " (isError true)"},
+				"unmarked":            {cursorUnfinishedTool(request.Status) + " (isError true)"},
+			}
+			if !cursorJSONEqual(t, got, want) {
+				t.Fatalf("a turn settled %s: results %q, want %q", request.Status, got, want)
+			}
+		}
+	})
+	t.Run("marked-before-settle", func(t *testing.T) {
+		// The bridge and the mapper alone, the turn stopped with one card still open: the withdrawal marks it, so the
+		// turn settles it as not run although the request's answer has not gone out yet — here it cannot until the
+		// turn has settled — and that answer, when it goes, is cancelled. Cards answered before the stop are not
+		// marked by it: the allowed one settles as P5c settles a call the turn cut short, the refused one as refused.
+		release := make(chan struct{})
+		rig := newCursorBridgeRig("acceptEdits", func(ctx context.Context, _ string, _ interface{}, id string) (*ApprovalDecisionResponse, error) {
+			switch id {
+			case "held":
+				<-ctx.Done()
+				<-release
+				return nil, ctx.Err()
+			case "denied":
+				return &ApprovalDecisionResponse{Status: "DENIED"}, nil
+			}
+			return &ApprovalDecisionResponse{Status: "ALLOWED"}, nil
+		})
+		if err := rig.mapper.begin("turn"); err != nil {
+			t.Fatal(err)
+		}
+		rig.bridge.begin("turn")
+		ask := func(request int, id string) {
+			command := "touch " + id + ".txt"
+			for _, update := range []map[string]interface{}{
+				{"sessionUpdate": "tool_call", "toolCallId": id, "kind": "execute", "title": "`" + command + "`", "status": "pending",
+					"rawInput": map[string]interface{}{"command": command}},
+				{"sessionUpdate": "tool_call_update", "toolCallId": id, "status": "in_progress"},
+			} {
+				rig.mapper.update(map[string]interface{}{"sessionId": "s", "update": update})
+			}
+			rig.bridge.permission(request, cursorPermissionParams(map[string]interface{}{"toolCallId": id, "title": "`" + command + "`",
+				"kind": "execute", "status": "pending"}))
+		}
+		ask(1, "allowed")
+		ask(2, "denied")
+		answers := map[string][]string{"allowed": rig.answered("1"), "denied": rig.answered("2")}
+		ask(3, "held")
+		rig.bridge.close()
+		request, ok := rig.mapper.settle("turn", map[string]interface{}{"stopReason": "cancelled"}, nil)
+		if !ok || request.Status != stInterrupted {
+			t.Fatalf("the turn settled %+v (%v), want interrupted", request, ok)
+		}
+		rig.mu.Lock()
+		early := len(rig.answers["3"])
+		rig.mu.Unlock()
+		if early != 0 {
+			t.Fatalf("the withdrawn request was answered before the turn settled")
+		}
+		close(release)
+		answers["held"] = rig.answered("3")
+		if want := map[string][]string{"allowed": {cursorAllowOnce}, "denied": {cursorRejectOnce}, "held": {"cancelled"}}; !cursorJSONEqual(t, answers, want) {
+			t.Fatalf("answers = %q, want %q", answers, want)
+		}
+		got := map[string]string{}
+		for _, event := range rig.events.snapshot() {
+			if event.typ == evToolResult {
+				got[asString(event.payload["toolUseId"])] = fmt.Sprintf("%s (isError %v)", event.payload["content"], event.payload["isError"])
+			}
+		}
+		want := map[string]string{
+			"allowed": cursorUnfinishedTool(stInterrupted) + " (isError true)",
+			"denied":  rejected + " (isError true)",
+			"held":    cursorStoppedBeforeApproval + " (isError true)",
+		}
+		if !cursorJSONEqual(t, got, want) {
+			t.Fatalf("results:\n%q\nwant:\n%q", got, want)
+		}
+	})
+	t.Run("asked-after-the-stop", func(t *testing.T) {
+		// The bridge and the mapper alone: a request that comes once the stop has closed the bridge, before the turn
+		// settles — Cursor CLI asked as the stop went out — is answered cancelled with nobody asked, and its call
+		// settles as one whose card was withdrawn; so does one the bridge closed under while it was being answered
+		// (now) or put on a card (later).
+		rig := newCursorBridgeRig("acceptEdits", func(context.Context, string, interface{}, string) (*ApprovalDecisionResponse, error) {
+			t.Error("a card was filed after the stop")
+			return nil, errors.New("closed")
+		})
+		if err := rig.mapper.begin("turn"); err != nil {
+			t.Fatal(err)
+		}
+		rig.bridge.begin("turn")
+		for _, id := range []string{"asked", "answered", "carded"} {
+			command := "touch " + id + ".txt"
+			for _, update := range []map[string]interface{}{
+				{"sessionUpdate": "tool_call", "toolCallId": id, "kind": "execute", "title": "`" + command + "`", "status": "pending",
+					"rawInput": map[string]interface{}{"command": command}},
+				{"sessionUpdate": "tool_call_update", "toolCallId": id, "status": "in_progress"},
+			} {
+				rig.mapper.update(map[string]interface{}{"sessionId": "s", "update": update})
+			}
+		}
+		rig.bridge.close()
+		rig.bridge.permission(1, cursorPermissionParams(map[string]interface{}{"toolCallId": "asked", "title": "`touch asked.txt`",
+			"kind": "execute", "status": "pending"}))
+		rig.bridge.now(2, "answered", cursorSelected(cursorAllowOnce))
+		rig.bridge.later(3, "carded", func(context.Context) map[string]interface{} { return cursorSelected(cursorAllowOnce) })
+		answers := map[string][]string{}
+		for _, id := range []string{"1", "2", "3"} {
+			answers[id] = rig.answered(id)
+		}
+		if want := map[string][]string{"1": {"cancelled"}, "2": {"cancelled"}, "3": {"cancelled"}}; !cursorJSONEqual(t, answers, want) {
+			t.Fatalf("answers = %q, want %q", answers, want)
+		}
+		if _, ok := rig.mapper.settle("turn", map[string]interface{}{"stopReason": "cancelled"}, nil); !ok {
+			t.Fatal("the turn did not settle")
+		}
+		got := map[string]string{}
+		for _, event := range rig.events.snapshot() {
+			if event.typ == evToolResult {
+				got[asString(event.payload["toolUseId"])] = fmt.Sprintf("%s (isError %v)", event.payload["content"], event.payload["isError"])
+			}
+		}
+		notRun := cursorStoppedBeforeApproval + " (isError true)"
+		if want := map[string]string{"asked": notRun, "answered": notRun, "carded": notRun}; !cursorJSONEqual(t, got, want) {
+			t.Fatalf("results:\n%q\nwant:\n%q", got, want)
+		}
+	})
+}
+
+// cursorBridgeRig drives a permission bridge directly, recording every answer and card, and what its mapper
+// put out.
 type cursorBridgeRig struct {
 	mu      sync.Mutex
 	answers map[string][]map[string]interface{}
 	cards   []string
 	notes   []map[string]interface{}
+	events  cursorEvents
 	bridge  *cursorPermissionBridge
 	mapper  *cursorEventMapper
 }
 
 func newCursorBridgeRig(mode string, card cursorApprovalCard) *cursorBridgeRig {
 	rig := &cursorBridgeRig{answers: map[string][]map[string]interface{}{}}
-	var events cursorEvents
-	rig.mapper = newCursorEventMapper(events.emitFor)
+	rig.mapper = newCursorEventMapper(rig.events.emitFor)
 	rig.mapper.bind("s")
 	if card == nil {
 		card = func(context.Context, string, interface{}, string) (*ApprovalDecisionResponse, error) {
@@ -519,7 +1331,7 @@ func newCursorBridgeRig(mode string, card cursorApprovalCard) *cursorBridgeRig {
 		return card(ctx, name, input, id)
 	}
 	policy, _ := cursorPermissionPolicyFor(mode)
-	rig.bridge = newCursorPermissionBridge(policy, rig.mapper.permissionAsk, func(ask cursorPermissionAsk) bool {
+	rig.bridge = newCursorPermissionBridge(policy, rig.mapper.permissionAsk, rig.mapper.refuse, rig.mapper.withdraw, func(ask cursorPermissionAsk) bool {
 		return cursorPreApproved(AgentExecConfig{AllowedTools: []string{"mcp__orbit__*"}}, ask)
 	}, wrapped, func(_ string, typ string, payload map[string]interface{}) {
 		rig.mu.Lock()
