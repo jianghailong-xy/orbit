@@ -17,6 +17,14 @@
 // ancestry check an ALREADY_MERGED receipt has to pass at the runner's CLI and MCP doors still refuses a sha the target
 // does not contain (its Go tests, run by name beside the PostgreSQL scenarios).
 //
+// S3's lock order (task 34ivMR9MjIQEjnTw4Xmx2): a landing locks the sessions whose recovery it clears ahead of the
+// project binding and of its first receipt. A stopped LAND_TASK takes its sessions (FOR NO KEY UPDATE when one holds
+// a recovery to clear, FOR KEY SHARE otherwise), then the project and its tasks FOR KEY SHARE, then the binding. It
+// still clears the recovery and writes the receipt, and neither the DONE that races it nor a project delete meets a
+// deadlock. A result that writes J12's receipts beside its own, or beside a promotion's, takes every session they
+// clear in one statement before the first of them. The order is read from the statements the result's transaction
+// sends.
+//
 // Run from the repository root:
 //
 //   node scripts/test-merge-recovery-server.mjs
@@ -86,6 +94,28 @@ export const pgCases = {
     'S3 a match by content is no ALREADY_MERGED and no reader of landed receipts counts it',
     // The file's one top-level test, whose subtests the scenarios above are.
     'S3 Done ends an ALREADY_LANDED merge recovery, and a landing from elsewhere clears one, on PostgreSQL',
+  ],
+  'sessions/merge-recovery-lock-order': [
+    // A stopped LAND_TASK's session holding a recovery: FOR NO KEY UPDATE, then the project and the task FOR KEY SHARE,
+    // then the binding, then its first write; after the binding only the clear re-taking that session. The recovery is
+    // cleared and the MERGED receipt written.
+    'S3 a stopped LAND_TASK that lands locks its session, the project and the task before the binding, and still clears the recovery and writes the receipt',
+    // No recovery, and a recovery with a check in flight: the session FOR KEY SHARE in the same place, the row
+    // unchanged, the receipt written.
+    'S3 a stopped LAND_TASK takes its session FOR KEY SHARE when there is no recovery to clear, and a check in flight keeps its own',
+    // A second connection holds the session and the task FOR UPDATE, as turnComplete's DONE does, and then takes the
+    // binding: the result commits on its first attempt, with and without a recovery, and the DONE's generation is queued.
+    'S3 a stopped LAND_TASK and the DONE that races it finish without a deadlock',
+    // The same with ProjectsService.remove's two locks: the project FOR UPDATE, then the binding its cascade deletes.
+    'S3 a stopped LAND_TASK and a project delete that races it finish without a deadlock',
+    // J12 beside a landing's own receipt: both sessions in one statement in id order, before the first receipt.
+    'S3 a landing that repairs an unknown push locks every session it clears in one statement before its first receipt',
+    // The same on a stopped LAND_TASK: the repair's session and task are taken before the binding as well.
+    'S3 a stopped LAND_TASK that repairs an unknown push locks the repair\'s session and task before the binding too',
+    // J12 beside a promotion that merges: the sessions of both in one statement, before the first receipt.
+    'S3 a promotion that merges beside a J12 repair locks the sessions of both in one statement before its first receipt',
+    // The file's one top-level test, whose subtests the scenarios above are.
+    'S3 a landing locks the sessions whose recovery it clears before the binding and before its first receipt, on PostgreSQL',
   ],
 };
 
@@ -195,6 +225,7 @@ export function checkGuards(scratch) {
   assert.equal(new Set(goNames).size, goNames.length, 'a Go scenario is named twice');
   assert.equal(pgLogName(0, 'sessions/merge-repair-continue'), '1-merge-repair-continue.pg.spec.tap');
   assert.equal(pgLogName(1, 'sessions/merge-recovery-done'), '2-merge-recovery-done.pg.spec.tap');
+  assert.equal(pgLogName(2, 'sessions/merge-recovery-lock-order'), '3-merge-recovery-lock-order.pg.spec.tap');
   process.stdout.write('PASS guard: the scenario tables name each scenario once, and only a file that exists\n');
 }
 
