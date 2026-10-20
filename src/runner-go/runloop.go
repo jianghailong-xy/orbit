@@ -689,6 +689,19 @@ func manualWorktreeCommandAllowed(operationID, leaseOwner, processOwner string) 
 	return operationID != "" && leaseOwner != "" && strings.EqualFold(leaseOwner, processOwner)
 }
 
+// settleSessionCheckout finishes the checkout setupWorktree stood the session in (execDir) before an
+// engine works in it. A resumed/reclaimed session whose last act was a park checkpoint has it undone,
+// so the agent continues from an uncommitted working tree, not a committed snapshot — no stray
+// checkpoint left in history; a no-op for fresh sessions and permanent ends. On a managed runner the
+// checkout is then on the volume: Git fsyncs none of HEAD, its worktree metadata or the files it
+// checked out.
+func settleSessionCheckout(job *ClaimedSession, execDir string) {
+	if job.WT != nil {
+		uncommitParkCheckpoint(job.WT)
+	}
+	syncManagedVolume("the session's checkout", execDir)
+}
+
 // heartbeatMerge performs one heartbeat-delivered merge against the exact supervisor
 // epoch its heartbeat advertised, or answers why it did not. merge is mergeToMain.
 func heartbeatMerge(
@@ -717,6 +730,7 @@ func heartbeatMerge(
 		logln("merging", req.SessionID+":", receipt)
 	}
 	res := merge(req)
+	syncManagedVolume("a merge", expandTilde(req.WorkDir))
 	// Record where this session's work went before opening the gate.
 	rememberMergeTarget(req.SessionID, req.TargetBranch)
 	release()
@@ -754,6 +768,7 @@ func heartbeatCommit(
 		logln("committing", req.SessionID+":", receipt)
 	}
 	res := commit(req)
+	syncManagedVolume("a commit")
 	release()
 	res.Message = appendWorktreeReceipt(res.Message, receipt)
 	return res
@@ -1725,6 +1740,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 					}
 					return false
 				})
+				syncManagedVolume("a checkout cleanup", expandTilde(rc.Root))
 				if err := t.repoCleanupResult(RepoCleanupResultRequest{
 					Root: rc.Root, Status: out.Status, State: out.State,
 					RescueBranch: out.RescueBranch, Message: out.Message,
@@ -1879,12 +1895,7 @@ func runLoop(cfg *RunnerConfig) (bool, func()) {
 		// judges the target the Merge button names rather than main (see mergeTargetBySession).
 		rememberMergeTarget(job.SessionID, job.MergeTarget)
 		execDir := setupWorktree(job, sessionExecDir(job.WorkDir))
-		// A resumed/reclaimed session whose last act was a park checkpoint: undo it so the
-		// agent continues from an uncommitted working tree, not a committed snapshot — no
-		// stray checkpoint left in history. No-op for fresh sessions and permanent ends.
-		if job.WT != nil {
-			uncommitParkCheckpoint(job.WT)
-		}
+		settleSessionCheckout(job, execDir)
 		jobCtx, cancel := context.WithCancel(context.Background())
 		s, added := pool.register(job, cancel, initiallyActive)
 		if !added {

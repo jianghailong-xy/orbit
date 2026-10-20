@@ -98,6 +98,15 @@ Every request needs `Authorization: Bearer <token>`. Anything else is refused wi
   is `IMAGE_REFUSED`, and a container of it that was made and never started is removed, never
   started, and made again from the current image. A runner's next container waits, as any next
   generation does, until its previous container is gone and nothing refers to the volume.
+- **No runner container without the host firewall, where there is one.** A deployment whose
+  install firewalled the managed runners' network has `firewall/config.json` beside `channel.json`
+  ([the firewall](../firewall/README.md)). There the channel creates or starts a runner container
+  only while the firewall service's `firewall/status.json` says its rules are in force: `"enforced"`,
+  not past its `validUntil`, from this boot (`bootId`), and for the bridge and gateway the configured
+  network has now. Otherwise the create is `503 FIREWALL_NOT_ENFORCED` with the reason, before
+  anything is made; the manager waits on it as on `CONTAINER_LIMIT`, spending none of the runner's
+  attempts, and a container made and never started is left for the manager. Reads, stops and removals go on regardless, and so does the
+  single-container guard's dry run. Without `firewall/config.json` nothing changes.
 
 ## Disk limit
 
@@ -194,7 +203,8 @@ In a Compose deployment, `scripts/install-server.sh` writes both files, the toke
 socket are made there too), mounted at `/var/lib/orbit-managed-runners` in `docker-channel` and,
 read-only, in the apiserver; the network is `orbit-managed-runners`, with inter-container traffic
 off, and a runner reaches the apiserver through the gateway's published port at that network's
-gateway address. Each upgrade rebuilds the image and names its new ID in both files, then recreates
+gateway address. Unless installed with `--no-managed-runner-firewall`, `data/managed-runners/firewall/`
+holds the host firewall's configuration and status, which the rule above reads. Each upgrade rebuilds the image and names its new ID in both files, then recreates
 the apiserver and, after it, the channel. The probe volume and `--disk-probe-path` are Compose's own
 (the service's `command` and third mount), so a deployment gets them with the Compose file, freshly
 installed or upgraded, and no file in `data/managed-runners` names them.

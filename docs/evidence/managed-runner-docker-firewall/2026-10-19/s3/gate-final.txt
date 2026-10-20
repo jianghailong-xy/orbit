@@ -1,0 +1,22 @@
+== the gate at 2026-10-19T08:16:37Z: final
+-- docker-channel: start-up and refusals
+2026-10-19T08:14:48Z orbit-docker-channel: instance orbit-2c0690be serving on /var/lib/orbit-managed-runners/channel.sock; image sha256:ab810fa76b04ad68842db009a12e17f5e69f66e641ceb60d07fba34014092345, network orbit-managed-runners
+2026-10-19T08:15:58Z orbit-docker-channel: container mr-01a1533b-4e3e-70bb-bd2c-e87f82571a67 created and started
+-- managed-runner-firewall
+Error response from daemon: No such container: orbit-managed-runner-firewall
+-- apiserver: managed runner lines
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[ManagedRunners] [39m[32mmanaged runners are enabled in orbit-2c0690be (Docker instance orbit-2c0690be)[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mManagedRunnerGateModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mManagedRunnerModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mManagedRunnerController {/api/managed-runner}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner/ensure, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner/retry, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner/wake, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner/sleep, POST} route[39m[38;5;3m +1ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner/delete, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mManagedRunnerAdmissionController {/api/managed-runner/admission}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner/admission, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mManagedRunnerAdminController {/api/admin/managed-runners}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/admin/managed-runners/:id/volume-switch, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 117  - [39m10/19/2026, 8:15:08 AM [32m    LOG[39m [38;5;3m[ProviderEngineMigration] [39m[32mprovider-engine-migration ecaac184-0929-493d-8305-49149806d5ee {"step":"check","table":"managed_runner","rowId":null,"ownerId":null,"action":"NOOP","note":"every managed runner starts on a built-in engine; none is rewritten"}[39m

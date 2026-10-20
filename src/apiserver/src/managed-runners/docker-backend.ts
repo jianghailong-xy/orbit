@@ -10,6 +10,7 @@ import {
   type DockerChannel,
 } from './docker-channel-client';
 import {
+  ManagedFirewallNotEnforced,
   ManagedInstanceLimit,
   ManagedRunnerConflict,
   ManagedVolumeHeld,
@@ -289,7 +290,8 @@ export class DockerBackend implements ManagedRunnerBackend {
 
   /**
    * The channel refuses it, VOLUME_IN_USE, while any other container refers to the volume, and
-   * CONTAINER_LIMIT (429) while this instance has `maxContainers` containers: the manager then waits.
+   * CONTAINER_LIMIT (429) while this instance has `maxContainers` containers, and FIREWALL_NOT_ENFORCED (503)
+   * while the host's firewall for managed runners is configured and not in force: the manager then waits.
    */
   async createInstance(mapping: ManagedRunner): Promise<DockerInstance> {
     const name = managedPodName(mapping.runnerId);
@@ -299,6 +301,7 @@ export class DockerBackend implements ManagedRunnerBackend {
     } catch (error) {
       if (error instanceof DockerChannelError && error.code === 'VOLUME_IN_USE') throw new ManagedVolumeHeld(error.message);
       if (error instanceof DockerChannelError && error.code === 'CONTAINER_LIMIT') throw new ManagedInstanceLimit(error.message);
+      if (error instanceof DockerChannelError && error.code === 'FIREWALL_NOT_ENFORCED') throw new ManagedFirewallNotEnforced(error.message);
       throw error;
     }
   }

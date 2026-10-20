@@ -1,0 +1,6 @@
+# This image takes the firewall's one file, never the deployment's data, secrets or the rest of the checkout.
+**
+!deploy/
+!deploy/managed-runner/
+!deploy/managed-runner/firewall/
+!deploy/managed-runner/firewall/firewall.py

@@ -1,0 +1,4 @@
+{"n": 1, "phase": "facts", "step": "git", "startedAt": "2026-10-19T14:22:26.757+00:00", "seconds": 3.3, "ok": true, "error": null, "checks": 1, "failed": []}
+{"n": 2, "phase": "facts", "step": "host", "startedAt": "2026-10-19T14:22:30.172+00:00", "seconds": 6.2, "ok": true, "error": null, "checks": 3, "failed": []}
+{"n": 3, "phase": "facts", "step": "cluster", "startedAt": "2026-10-19T14:22:36.394+00:00", "seconds": 0.4, "ok": true, "error": null, "checks": 3, "failed": []}
+{"n": 4, "phase": "facts", "step": "ceph", "startedAt": "2026-10-19T14:22:36.829+00:00", "seconds": 27.3, "ok": false, "error": null, "checks": 1, "failed": ["Ceph is HEALTH_OK"]}

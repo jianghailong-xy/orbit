@@ -32,7 +32,8 @@ import type { FencingReceiptVerdict, ManagedRunnerPredecessor, ObservedStopProof
  *   - Identity. Whatever is found under a name is checked against the mapping before it is used or
  *     recorded (`volumeProblem`, `backingProblem`, `credentialProblem`, `instanceProblem`): another
  *     owner's, runner's, generation's or volume's object is a problem an operator reviews, never
- *     adopted, replaced or deleted.
+ *     adopted, replaced or deleted. A volume an operator restored under the runner's name is recorded
+ *     only by their explicit, verified switch (`readReplacement`, `recordedVolumeHolders`; Kubernetes).
  *   - Retention. No method removes a data volume. A volume belongs to no instance (no owner object,
  *     nothing that cascades) and outlives sleep, replacement, failure and the switch turned off.
  *   - Instance identity. An instance is made for one generation and runs with it, and the backend
@@ -102,6 +103,22 @@ export interface ManagedVolumeBacking {
 export interface VerifiedVolume {
   readonly volume: ManagedVolume;
   readonly backing: ManagedVolumeBacking;
+}
+
+/**
+ * The volume under a mapping's name, read as the restored volume an operator switches the mapping to
+ * (managed-runner-manager.ts, `switchVolume`), not as the recorded one.
+ */
+export interface ManagedReplacementVolume {
+  readonly volume: ManagedVolume;
+  /** The storage it is bound to, or null while it is not bound or that storage cannot be read. */
+  readonly backing: ManagedVolumeBacking | null;
+  /** Its removal was asked and it is not gone yet. */
+  readonly removing: boolean;
+  /** Why it does not carry the marks every pass checks the mapping's volume for, or its storage is not bound to it; null when it does. */
+  readonly problem: string | null;
+  /** Why its storage was made for something else before it; null when it was made for this volume. */
+  readonly foreign: string | null;
 }
 
 /** The bootstrap credential of a generation, as found under its name. */
@@ -206,6 +223,19 @@ export class ManagedInstanceLimit extends Error {
   }
 }
 
+/**
+ * The host refused an instance because its firewall for managed runners is not in force (Docker: the
+ * channel's FIREWALL_NOT_ENFORCED, while the managed-runner-firewall service does not report its rules on
+ * the host), and made none. Not a failure of the runner: the manager waits, as it waits for room, and
+ * makes the instance once the firewall reports them in force again.
+ */
+export class ManagedFirewallNotEnforced extends Error {
+  constructor(readonly detail: string) {
+    super(detail);
+    this.name = 'ManagedFirewallNotEnforced';
+  }
+}
+
 export interface ManagedRunnerBackend {
   readonly name: ManagedRunnerBackendName;
   readonly terms: ManagedRunnerBackendTerms;
@@ -235,6 +265,19 @@ export interface ManagedRunnerBackend {
   backingProblem(backing: ManagedVolumeBacking, mapping: ManagedRunner): string | null;
   /** What still holds a verified volume on a machine (Kubernetes: its VolumeAttachments). Empty: released. */
   volumeHolders(volume: VerifiedVolume): Promise<string[]>;
+
+  // ── an operator's switch to a restored volume: Kubernetes only ──
+  /**
+   * The volume now under the mapping's name, judged as the restored volume to switch the mapping to; null when
+   * nothing is there. Absent where a restored volume keeps its recorded identity (Docker: the runbook's restore
+   * gives the volume back its labels, and the manager finds it as recorded), so there is no switch.
+   */
+  readReplacement?(mapping: ManagedRunner): Promise<ManagedReplacementVolume | null>;
+  /**
+   * What still holds the mapping's recorded volume on a machine: found by its recorded storage UID and handle, since
+   * the volume under its name is now `replacement`. Empty: released.
+   */
+  recordedVolumeHolders?(mapping: ManagedRunner, replacement: ManagedReplacementVolume): Promise<string[]>;
 
   // ── the instance credential ──
   readCredential(mapping: ManagedRunner): Promise<ManagedCredential | null>;

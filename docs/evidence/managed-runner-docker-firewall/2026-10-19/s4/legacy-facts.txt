@@ -1,0 +1,17 @@
+81:ORBIT_MANAGED_RUNNERS_ENABLED=true
+82:ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+83:COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall
+84:ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK=/run/xtables.lock
+/run/xtables.lock -> /run/xtables.lock /work/s4/data/managed-runners/firewall -> /var/lib/orbit-managed-runner-firewall 
+-- legacy IPv4
+-A INPUT -i br-20a9995b888b -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT
+-A DOCKER-USER -i br-20a9995b888b -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+4
+17
+-- legacy IPv6
+-N ORBIT-MR-FORWARD
+-A ORBIT-MR-FORWARD -j REJECT --reject-with icmp6-adm-prohibited
+-- nft (none expected)
+0
+2026-10-19T08:20:32Z orbit-managed-runner-firewall: network orbit-managed-runners (bridge br-20a9995b888b, gateway 172.19.0.1): only the gateway's port 2086, 0 DNS server(s) and 0 allowed destination(s) besides public addresses; checked every 10 s
+2026-10-19T08:20:33Z orbit-managed-runner-firewall: enforced

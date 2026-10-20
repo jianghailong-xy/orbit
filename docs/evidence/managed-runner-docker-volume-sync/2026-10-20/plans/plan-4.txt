@@ -1,0 +1,28 @@
+# The main comparison, staggered: each runner starts at a random moment of a 25 s ramp before the 120 s window and each
+# turn's think time is 1 to 3 s, so the runners are out of step as different people's sessions are. The build before T02c
+# (before), T02c's (t02c) and the mitigated one (d10), 1, 4 and 8 runners, the runner's commit after every turn; two
+# rounds of each, in blocks d10-before-t02c-d10-before-t02c. The deployment is on before after plan 3.
+switch d10
+s01-d-n8 d10 8 120 3 400 2000 1 25
+s02-d-n4 d10 4 120 3 400 2000 1 25
+s03-d-n1 d10 1 120 3 400 2000 1 25
+switch before
+s04-b-n1 before 1 120 3 400 2000 1 25
+s05-b-n4 before 4 120 3 400 2000 1 25
+s06-b-n8 before 8 120 3 400 2000 1 25
+switch t02c
+s07-a-n8 t02c 8 120 3 400 2000 1 25
+s08-a-n4 t02c 4 120 3 400 2000 1 25
+s09-a-n1 t02c 1 120 3 400 2000 1 25
+switch d10
+s10-d-n1 d10 1 120 3 400 2000 1 25
+s11-d-n4 d10 4 120 3 400 2000 1 25
+s12-d-n8 d10 8 120 3 400 2000 1 25
+switch before
+s13-b-n8 before 8 120 3 400 2000 1 25
+s14-b-n4 before 4 120 3 400 2000 1 25
+s15-b-n1 before 1 120 3 400 2000 1 25
+switch t02c
+s16-a-n1 t02c 1 120 3 400 2000 1 25
+s17-a-n4 t02c 4 120 3 400 2000 1 25
+s18-a-n8 t02c 8 120 3 400 2000 1 25

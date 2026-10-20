@@ -1,0 +1,806 @@
+{
+  "label": "p03-b-n8",
+  "variant": "before",
+  "runners": 8,
+  "loadSeconds": 120,
+  "workload": {
+    "cycles": 3,
+    "files": 400,
+    "thinkMs": 2000,
+    "commitEvery": 1
+  },
+  "quietBefore": {
+    "seconds": 15,
+    "utilPercent": 2.88,
+    "writeMBps": 0.068,
+    "readMBps": 0.0,
+    "testHostWriteMBps": 0.052,
+    "testHostReadMBps": 0.0,
+    "journalWriteMBps": 0.014,
+    "othersWriteMBps": 0.002,
+    "othersReadMBps": 0.0,
+    "load": [
+      "9.07",
+      "9.28",
+      "9.26"
+    ],
+    "memAvailableMiB": 8958,
+    "qemu": "0"
+  },
+  "window": {
+    "start": "2026-10-19T22:30:48Z",
+    "seconds": 120.0
+  },
+  "disk": {
+    "seconds": 119.0,
+    "sdbUtilPct": {
+      "mean": 54.0,
+      "p95": 100.2,
+      "max": 100.2
+    },
+    "sdbWriteMBps": {
+      "mean": 2.97,
+      "p95": 10.78,
+      "max": 27.07
+    },
+    "sdbWrittenMB": 352.2,
+    "sdbWritesPerS": {
+      "mean": 88.5,
+      "p95": 259.48,
+      "max": 308.38
+    },
+    "sdbWAwaitMs": {
+      "mean": 15.05,
+      "p95": 59.49,
+      "max": 87.44
+    },
+    "sdbQueue": {
+      "mean": 8.27,
+      "p95": 39.21,
+      "max": 59.7
+    },
+    "sdbFlushes": 2948,
+    "sdbFlushesPerS": {
+      "mean": 24.81,
+      "p95": 59.76,
+      "max": 74.48
+    },
+    "sdbFlushMs": {
+      "mean": 23.79,
+      "p95": 65.64,
+      "max": 99.71
+    },
+    "sdbReadMBps": {
+      "mean": 3.76,
+      "p95": 12.83,
+      "max": 17.68
+    },
+    "cpuIowaitPct": {
+      "mean": 2.13,
+      "p95": 13.78,
+      "max": 25.96
+    },
+    "hostIoSomePct": {
+      "mean": 12.52,
+      "p95": 40.2,
+      "max": 66.54
+    },
+    "hostIoFullPct": {
+      "mean": 1.81,
+      "p95": 13.33,
+      "max": 25.71
+    },
+    "dirtyMB": {
+      "mean": 84.51,
+      "p95": 547.34,
+      "max": 655.7
+    },
+    "writebackMB": {
+      "mean": 0.4,
+      "p95": 0.92,
+      "max": 15.25
+    },
+    "jbd2WrittenMB": 27.7,
+    "memAvailableMiB": {
+      "min": 904
+    },
+    "cgroups": {
+      "dind": {
+        "writtenMB": 309.1,
+        "readMB": 416.8,
+        "ioSomePct": 25.35,
+        "ioSomePctP95": 77.9,
+        "ioFullPct": 24.12,
+        "cpuCores": 0.73,
+        "throttledMs": 0,
+        "dirtyMBMax": 40.0,
+        "memMBMax": 3933,
+        "pageCacheRefaults": 103213
+      },
+      "mr-01a155a1-d3c3-76fe-b73f-dfb5b6cd3305": {
+        "writtenMB": 35.8,
+        "readMB": 27.9,
+        "ioSomePct": 15.71,
+        "ioSomePctP95": 78.0,
+        "ioFullPct": 15.66,
+        "cpuCores": 0.04,
+        "throttledMs": 301,
+        "dirtyMBMax": 5.0,
+        "memMBMax": 235,
+        "pageCacheRefaults": 180
+      },
+      "mr-01a155a1-d3eb-740d-ba20-9075fe0731d3": {
+        "writtenMB": 44.9,
+        "readMB": 18.9,
+        "ioSomePct": 11.66,
+        "ioSomePctP95": 72.2,
+        "ioFullPct": 11.64,
+        "cpuCores": 0.05,
+        "throttledMs": 254,
+        "dirtyMBMax": 4.9,
+        "memMBMax": 331,
+        "pageCacheRefaults": 251
+      },
+      "mr-01a155a1-d422-715e-9e9d-d483a4a84850": {
+        "writtenMB": 10.8,
+        "readMB": 46.6,
+        "ioSomePct": 21.46,
+        "ioSomePctP95": 91.0,
+        "ioFullPct": 21.42,
+        "cpuCores": 0.04,
+        "throttledMs": 271,
+        "dirtyMBMax": 5.1,
+        "memMBMax": 333,
+        "pageCacheRefaults": 712
+      },
+      "mr-01a155a1-d45b-7075-bba3-f28d00e4ddbb": {
+        "writtenMB": 25.5,
+        "readMB": 55.2,
+        "ioSomePct": 20.79,
+        "ioSomePctP95": 93.6,
+        "ioFullPct": 20.75,
+        "cpuCores": 0.05,
+        "throttledMs": 294,
+        "dirtyMBMax": 5.1,
+        "memMBMax": 305,
+        "pageCacheRefaults": 1377
+      },
+      "mr-01a155a1-d48f-70eb-8a15-ad6b40f090d9": {
+        "writtenMB": 26.2,
+        "readMB": 45.1,
+        "ioSomePct": 15.38,
+        "ioSomePctP95": 93.2,
+        "ioFullPct": 15.34,
+        "cpuCores": 0.05,
+        "throttledMs": 333,
+        "dirtyMBMax": 5.1,
+        "memMBMax": 306,
+        "pageCacheRefaults": 827
+      },
+      "mr-01a155a1-d4e5-7614-805f-c860e3d77741": {
+        "writtenMB": 35.9,
+        "readMB": 38.2,
+        "ioSomePct": 20.02,
+        "ioSomePctP95": 84.3,
+        "ioFullPct": 19.98,
+        "cpuCores": 0.05,
+        "throttledMs": 531,
+        "dirtyMBMax": 5.1,
+        "memMBMax": 278,
+        "pageCacheRefaults": 741
+      },
+      "mr-01a155a1-d52f-702a-a700-f59884b28a25": {
+        "writtenMB": 28.8,
+        "readMB": 31.7,
+        "ioSomePct": 14.23,
+        "ioSomePctP95": 76.3,
+        "ioFullPct": 14.18,
+        "cpuCores": 0.04,
+        "throttledMs": 173,
+        "dirtyMBMax": 4.9,
+        "memMBMax": 247,
+        "pageCacheRefaults": 471
+      },
+      "mr-01a155a1-d568-71f0-a360-0b6cd5ef8397": {
+        "writtenMB": 35.1,
+        "readMB": 26.4,
+        "ioSomePct": 15.06,
+        "ioSomePctP95": 78.9,
+        "ioFullPct": 15.01,
+        "cpuCores": 0.05,
+        "throttledMs": 300,
+        "dirtyMBMax": 5.0,
+        "memMBMax": 341,
+        "pageCacheRefaults": 206
+      },
+      "orbit-apiserver": {
+        "writtenMB": 0.0,
+        "readMB": 106.6,
+        "ioSomePct": 18.94,
+        "ioSomePctP95": 75.5,
+        "ioFullPct": 18.78,
+        "cpuCores": 0.1,
+        "throttledMs": 0,
+        "dirtyMBMax": 0.0,
+        "memMBMax": 376,
+        "pageCacheRefaults": 15831
+      },
+      "orbit-gateway": {
+        "writtenMB": 0.0,
+        "readMB": 0.1,
+        "ioSomePct": 0.12,
+        "ioSomePctP95": 0,
+        "ioFullPct": 0.12,
+        "cpuCores": 0.01,
+        "throttledMs": 0,
+        "dirtyMBMax": 0.0,
+        "memMBMax": 23,
+        "pageCacheRefaults": 16
+      },
+      "orbit-postgres": {
+        "writtenMB": 44.2,
+        "readMB": 4.0,
+        "ioSomePct": 12.07,
+        "ioSomePctP95": 45.5,
+        "ioFullPct": 11.74,
+        "cpuCores": 0.16,
+        "throttledMs": 0,
+        "dirtyMBMax": 3.5,
+        "memMBMax": 291,
+        "pageCacheRefaults": 659
+      }
+    }
+  },
+  "diskIdle": {
+    "seconds": 37.2,
+    "sdbUtilPct": {
+      "mean": 12.16,
+      "p95": 57.03,
+      "max": 60.28
+    },
+    "sdbWriteMBps": {
+      "mean": 0.79,
+      "p95": 6.36,
+      "max": 7.03
+    },
+    "sdbWrittenMB": 29.5,
+    "sdbWritesPerS": {
+      "mean": 51.9,
+      "p95": 197.6,
+      "max": 247.26
+    },
+    "sdbWAwaitMs": {
+      "mean": 2.73,
+      "p95": 5.01,
+      "max": 5.28
+    },
+    "sdbQueue": {
+      "mean": 0.3,
+      "p95": 1.55,
+      "max": 2.3
+    },
+    "sdbFlushes": 713,
+    "sdbFlushesPerS": {
+      "mean": 19.18,
+      "p95": 50.9,
+      "max": 55.56
+    },
+    "sdbFlushMs": {
+      "mean": 4.59,
+      "p95": 7.89,
+      "max": 10.66
+    },
+    "sdbReadMBps": {
+      "mean": 0.04,
+      "p95": 0.29,
+      "max": 1.13
+    },
+    "cpuIowaitPct": {
+      "mean": 0.61,
+      "p95": 3.34,
+      "max": 4.25
+    },
+    "hostIoSomePct": {
+      "mean": 0.32,
+      "p95": 3.1,
+      "max": 3.67
+    },
+    "hostIoFullPct": {
+      "mean": 0.31,
+      "p95": 3.02,
+      "max": 3.35
+    },
+    "dirtyMB": {
+      "mean": 11.6,
+      "p95": 37.91,
+      "max": 37.95
+    },
+    "writebackMB": {
+      "mean": 0.01,
+      "p95": 0.04,
+      "max": 0.29
+    },
+    "jbd2WrittenMB": 4.6,
+    "memAvailableMiB": {
+      "min": 7642
+    },
+    "cgroups": {
+      "dind": {
+        "writtenMB": 22.6,
+        "readMB": 1.6,
+        "ioSomePct": 1.34,
+        "ioSomePctP95": 8.2,
+        "ioFullPct": 1.31,
+        "cpuCores": 0.48,
+        "throttledMs": 0,
+        "dirtyMBMax": 20.1,
+        "memMBMax": 3284,
+        "pageCacheRefaults": 2
+      },
+      "mr-01a155a1-d3c3-76fe-b73f-dfb5b6cd3305": {
+        "writtenMB": 0.0,
+        "readMB": 0.0,
+        "ioSomePct": 0.15,
+        "ioSomePctP95": 0,
+        "ioFullPct": 0.15,
+        "cpuCores": 0.0,
+        "throttledMs": 0,
+        "dirtyMBMax": 0.0,
+        "memMBMax": 14,
+        "pageCacheRefaults": 0
+      },
+      "mr-01a155a1-d3eb-740d-ba20-9075fe0731d3": {
+        "writtenMB": 0.0,
+        "readMB": 1.1,
+        "ioSomePct": 0.75,
+        "ioSomePctP95": 2.6,
+        "ioFullPct": 0.75,
+        "cpuCores": 0.02,
+        "throttledMs": 151,
+        "dirtyMBMax": 0.8,
+        "memMBMax": 190,
+        "pageCacheRefaults": 0
+      },
+      "mr-01a155a1-d422-715e-9e9d-d483a4a84850": {
+        "writtenMB": 0.9,
+        "readMB": 0.0,
+        "ioSomePct": 0.01,
+        "ioSomePctP95": 0.0,
+        "ioFullPct": 0.01,
+        "cpuCores": 0.04,
+        "throttledMs": 128,
+        "dirtyMBMax": 4.9,
+        "memMBMax": 198,
+        "pageCacheRefaults": 0
+      },
+      "mr-01a155a1-d45b-7075-bba3-f28d00e4ddbb": {
+        "writtenMB": 0.9,
+        "readMB": 0.0,
+        "ioSomePct": 0.01,
+        "ioSomePctP95": 0.0,
+        "ioFullPct": 0.01,
+        "cpuCores": 0.03,
+        "throttledMs": 117,
+        "dirtyMBMax": 4.9,
+        "memMBMax": 186,
+        "pageCacheRefaults": 0
+      },
+      "mr-01a155a1-d48f-70eb-8a15-ad6b40f090d9": {
+        "writtenMB": 0.0,
+        "readMB": 0.2,
+        "ioSomePct": 0.24,
+        "ioSomePctP95": 1.0,
+        "ioFullPct": 0.24,
+        "cpuCores": 0.02,
+        "throttledMs": 172,
+        "dirtyMBMax": 0.8,
+        "memMBMax": 188,
+        "pageCacheRefaults": 0
+      },
+      "mr-01a155a1-d4e5-7614-805f-c860e3d77741": {
+        "writtenMB": 0.0,
+        "readMB": 0.0,
+        "ioSomePct": 0.0,
+        "ioSomePctP95": 0,
+        "ioFullPct": 0.0,
+        "cpuCores": 0.0,
+        "throttledMs": 0,
+        "dirtyMBMax": 0.0,
+        "memMBMax": 28,
+        "pageCacheRefaults": 0
+      },
+      "mr-01a155a1-d52f-702a-a700-f59884b28a25": {
+        "writtenMB": 5.9,
+        "readMB": 0.1,
+        "ioSomePct": 0.05,
+        "ioSomePctP95": 0.0,
+        "ioFullPct": 0.05,
+        "cpuCores": 0.04,
+        "throttledMs": 156,
+        "dirtyMBMax": 4.7,
+        "memMBMax": 189,
+        "pageCacheRefaults": 0
+      },
+      "mr-01a155a1-d568-71f0-a360-0b6cd5ef8397": {
+        "writtenMB": 5.8,
+        "readMB": 0.0,
+        "ioSomePct": 0.04,
+        "ioSomePctP95": 0.0,
+        "ioFullPct": 0.04,
+        "cpuCores": 0.03,
+        "throttledMs": 257,
+        "dirtyMBMax": 4.9,
+        "memMBMax": 191,
+        "pageCacheRefaults": 0
+      },
+      "orbit-apiserver": {
+        "writtenMB": 0.0,
+        "readMB": 0.0,
+        "ioSomePct": 0.05,
+        "ioSomePctP95": 0.0,
+        "ioFullPct": 0.05,
+        "cpuCores": 0.09,
+        "throttledMs": 0,
+        "dirtyMBMax": 0.0,
+        "memMBMax": 391,
+        "pageCacheRefaults": 1
+      },
+      "orbit-gateway": {
+        "writtenMB": 0.0,
+        "readMB": 0.0,
+        "ioSomePct": 0.0,
+        "ioSomePctP95": 0,
+        "ioFullPct": 0.0,
+        "cpuCores": 0.01,
+        "throttledMs": 0,
+        "dirtyMBMax": 0.0,
+        "memMBMax": 22,
+        "pageCacheRefaults": 0
+      },
+      "orbit-postgres": {
+        "writtenMB": 6.4,
+        "readMB": 0.0,
+        "ioSomePct": 1.55,
+        "ioSomePctP95": 4.1,
+        "ioFullPct": 1.54,
+        "cpuCores": 0.12,
+        "throttledMs": 0,
+        "dirtyMBMax": 0.1,
+        "memMBMax": 265,
+        "pageCacheRefaults": 1
+      }
+    }
+  },
+  "syncfs": {
+    "calls": 0,
+    "callsPerMinute": 0.0,
+    "ms": {
+      "n": 0
+    },
+    "totalSeconds": 0.0,
+    "busyPctOfWindow": 0.0,
+    "mostAtOnce": 0,
+    "byRunner": {},
+    "others": {},
+    "failed": 0
+  },
+  "api": {
+    "errors": 0,
+    "status": {
+      "n": 240,
+      "p50": 4.9,
+      "p90": 11.6,
+      "p99": 134.0,
+      "max": 2331.8,
+      "mean": 19.5
+    },
+    "session": {
+      "n": 240,
+      "p50": 9.6,
+      "p90": 16.7,
+      "p99": 150.5,
+      "max": 692.0,
+      "mean": 16.0
+    },
+    "list": {
+      "n": 240,
+      "p50": 24.1,
+      "p90": 50.2,
+      "p99": 532.9,
+      "max": 766.4,
+      "mean": 38.9
+    },
+    "rename": {
+      "n": 240,
+      "p50": 23.6,
+      "p90": 137.4,
+      "p99": 357.4,
+      "max": 8294.6,
+      "mean": 86.1
+    },
+    "reads": {
+      "n": 720,
+      "p50": 11.5,
+      "p90": 36.6,
+      "p99": 309.4,
+      "max": 2331.8,
+      "mean": 24.8
+    },
+    "all": {
+      "n": 960,
+      "p50": 13.7,
+      "p90": 60.7,
+      "p99": 334.5,
+      "max": 8294.6,
+      "mean": 40.1
+    }
+  },
+  "apiIdle": {
+    "errors": 0,
+    "status": {
+      "n": 76,
+      "p50": 3.5,
+      "p90": 9.6,
+      "p99": 10.9,
+      "max": 10.9,
+      "mean": 5.2
+    },
+    "session": {
+      "n": 76,
+      "p50": 11.2,
+      "p90": 15.3,
+      "p99": 18.4,
+      "max": 18.4,
+      "mean": 10.6
+    },
+    "list": {
+      "n": 76,
+      "p50": 24.0,
+      "p90": 27.4,
+      "p99": 34.3,
+      "max": 34.3,
+      "mean": 22.9
+    },
+    "rename": {
+      "n": 76,
+      "p50": 13.9,
+      "p90": 27.8,
+      "p99": 64.4,
+      "max": 64.4,
+      "mean": 16.1
+    },
+    "reads": {
+      "n": 228,
+      "p50": 11.2,
+      "p90": 25.3,
+      "p99": 33.5,
+      "max": 34.3,
+      "mean": 12.9
+    },
+    "all": {
+      "n": 304,
+      "p50": 13.0,
+      "p90": 25.3,
+      "p99": 37.7,
+      "max": 64.4,
+      "mean": 13.7
+    }
+  },
+  "gateway": {
+    "requests": 1683,
+    "runnerWrites": {
+      "n": 518,
+      "p50": 18.0,
+      "p90": 155.0,
+      "p99": 1705.0,
+      "max": 11796.0,
+      "mean": 129.9
+    },
+    "runnerWritesByPath": {
+      "POST /api/runner/sessions/:id/events": {
+        "n": 386,
+        "p50": 15.0,
+        "p90": 136.0,
+        "p99": 907.0,
+        "max": 1705.0,
+        "mean": 61.8
+      },
+      "POST /api/runner/heartbeat": {
+        "n": 60,
+        "p50": 30.0,
+        "p90": 1111.0,
+        "p99": 11796.0,
+        "max": 11796.0,
+        "mean": 686.8
+      },
+      "POST /api/runner/sessions/:id/turn-complete": {
+        "n": 28,
+        "p50": 17.0,
+        "p90": 130.0,
+        "p99": 316.0,
+        "max": 316.0,
+        "mean": 45.6
+      },
+      "POST /api/runner/sessions/:id/commit-result": {
+        "n": 22,
+        "p50": 10.0,
+        "p90": 23.0,
+        "p99": 47.0,
+        "max": 47.0,
+        "mean": 14.0
+      },
+      "POST /api/runner/sessions/:id/takeover-leases": {
+        "n": 22,
+        "p50": 15.0,
+        "p90": 21.0,
+        "p99": 309.0,
+        "max": 309.0,
+        "mean": 29.3
+      }
+    },
+    "turnComplete": {
+      "n": 28,
+      "p50": 17.0,
+      "p90": 130.0,
+      "p99": 316.0,
+      "max": 316.0,
+      "mean": 45.6
+    },
+    "commitResult": {
+      "n": 22,
+      "p50": 10.0,
+      "p90": 23.0,
+      "p99": 47.0,
+      "max": 47.0,
+      "mean": 14.0
+    },
+    "users": {
+      "n": 0
+    },
+    "errors5xx": 1
+  },
+  "postgres": {
+    "insertCommitMs": {
+      "n": 603,
+      "p50": 16.6,
+      "p90": 202.32,
+      "p99": 941.19,
+      "max": 1324.73,
+      "mean": 84.91
+    },
+    "readMs": {
+      "n": 593,
+      "p50": 0.38,
+      "p90": 89.63,
+      "p99": 841.76,
+      "max": 1208.93,
+      "mean": 44.24
+    },
+    "scheduleLagMs": {
+      "n": 1196,
+      "p50": 0.07,
+      "p90": 90.14,
+      "p99": 841.69,
+      "max": 1208.65,
+      "mean": 41.55
+    }
+  },
+  "postgresIdle": {
+    "insertCommitMs": {
+      "n": 179,
+      "p50": 4.71,
+      "p90": 14.79,
+      "p99": 53.04,
+      "max": 55.31,
+      "mean": 7.99
+    },
+    "readMs": {
+      "n": 183,
+      "p50": 0.34,
+      "p90": 0.85,
+      "p99": 5.86,
+      "max": 16.46,
+      "mean": 0.56
+    },
+    "scheduleLagMs": {
+      "n": 362,
+      "p50": 0.06,
+      "p90": 0.07,
+      "p99": 8.17,
+      "max": 43.23,
+      "mean": 0.34
+    }
+  },
+  "statements": {
+    "commit": null,
+    "top": [
+      {
+        "calls": 815,
+        "totalMs": 46806.142,
+        "meanMs": 57.431,
+        "maxMs": 1324.698,
+        "query": "SELECT pg_advisory_xact_lock($1, $2)"
+      },
+      {
+        "calls": 496,
+        "totalMs": 968.8,
+        "meanMs": 1.953,
+        "maxMs": 715.706,
+        "query": "SELECT id, (\"inbox_lease_owner\" IS NOT DISTINCT FROM $1::uuid) AS \"leaseOwnerMatches\" FROM \"session\" WHERE id = $2:"
+      },
+      {
+        "calls": 250,
+        "totalMs": 668.69,
+        "meanMs": 2.675,
+        "maxMs": 221.035,
+        "query": "SELECT \"public\".\"managed_runner\".\"id\", \"public\".\"managed_runner\".\"generation\", \"public\".\"managed_runner\".\"pod_uid\", \"public\".\"managed_runner"
+      },
+      {
+        "calls": 256,
+        "totalMs": 667.924,
+        "meanMs": 2.609,
+        "maxMs": 418.506,
+        "query": "UPDATE \"public\".\"managed_runner\" SET \"lease_holder\" = $1, \"lease_expires_at\" = $2, \"updated_at\" = $3 WHERE (\"public\".\"managed_runner\".\"id\" ="
+      },
+      {
+        "calls": 82,
+        "totalMs": 411.029,
+        "meanMs": 5.013,
+        "maxMs": 407.866,
+        "query": "SELECT \"public\".\"runner\".\"id\", \"public\".\"runner\".\"engines\" FROM \"public\".\"runner\" WHERE (\"public\".\"runner\".\"id\" = $1 AND $4=$5) LIMIT $2 OFF"
+      },
+      {
+        "calls": 38,
+        "totalMs": 343.148,
+        "meanMs": 9.03,
+        "maxMs": 165.562,
+        "query": "SELECT id, provider, \"provider_builtin\" AS \"providerBuiltin\", engine, \"owner_id\" AS \"ownerId\", \"inbox_lease_generation\" AS \"inboxLeaseGenera"
+      }
+    ]
+  },
+  "turns": {
+    "answered": 30,
+    "seconds": {
+      "n": 30,
+      "p50": 24.89,
+      "p90": 56.3,
+      "p99": 61.06,
+      "max": 61.06,
+      "mean": 29.63
+    },
+    "notAnswered": []
+  },
+  "runnerCommits": {
+    "n": 30,
+    "ms": {
+      "n": 30,
+      "p50": 636.0,
+      "p90": 15581.0,
+      "p99": 51791.0,
+      "max": 51791.0,
+      "mean": 6943.1
+    },
+    "retried": 0,
+    "notCommitted": []
+  },
+  "engine": {
+    "toolCalls": 300,
+    "engineCommitMs": {
+      "n": 90,
+      "p50": 4.8,
+      "p90": 476.4,
+      "p99": 1960.3,
+      "max": 1960.3,
+      "mean": 135.8
+    },
+    "buildMs": {
+      "n": 90,
+      "p50": 23.0,
+      "p90": 108.6,
+      "p99": 2522.1,
+      "max": 2522.1,
+      "mean": 179.4
+    }
+  },
+  "workerErrors": {}
+}

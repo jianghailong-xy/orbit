@@ -1,0 +1,3 @@
+14:44:55Z host MemAvailable 5756 MiB (floor 1536 MiB): booting orbit-mr-lab-2 (3072 MiB)
+14:44:57Z started orbit-mr-lab-2.service (cgroup /system.slice/orbit-mr-lab-2.service)
+14:45:24Z SSH to VM 2 is up: 7.0.0-34-generic

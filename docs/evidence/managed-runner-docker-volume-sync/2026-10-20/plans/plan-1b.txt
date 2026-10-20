@@ -1,0 +1,15 @@
+# plan-1.txt from r02 on: its runner matrix.sh stopped after r01, whose driver read the rest of the plan as its input
+r02-a-n4 t02c 4 120 3 400 2000
+r03-a-n8 t02c 8 120 3 400 2000
+switch before
+r04-b-n1 before 1 120 3 400 2000
+r05-b-n4 before 4 120 3 400 2000
+r06-b-n8 before 8 120 3 400 2000
+switch t02c
+r07-a-n8 t02c 8 120 3 400 2000
+r08-a-n4 t02c 4 120 3 400 2000
+r09-a-n1 t02c 1 120 3 400 2000
+switch before
+r10-b-n8 before 8 120 3 400 2000
+r11-b-n4 before 4 120 3 400 2000
+r12-b-n1 before 1 120 3 400 2000

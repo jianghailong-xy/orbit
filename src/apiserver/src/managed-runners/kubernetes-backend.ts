@@ -18,6 +18,7 @@ import {
   type ManagedCredential,
   type ManagedFencingReceipt,
   type ManagedInstance,
+  type ManagedReplacementVolume,
   type ManagedRunnerBackend,
   type ManagedRunnerBackendFailure,
   type ManagedRunnerBackendTerms,
@@ -64,6 +65,8 @@ import {
  *   released      no VolumeAttachment names the volume's PV
  *   fencing       an operator's receipt in ConfigMap `mr-fence-<runner uuid>`
  *   capacity      the profile's budget, pooled by cluster key and namespace
+ *   a switch      an operator's restored claim under the runner's name, judged as its replacement, and the
+ *                 recorded PV's attachments, found by its UID and handle (`readReplacement`, `recordedVolumeHolders`)
  *
  * Every method makes the calls the manager made itself before this interface existed, in the same
  * order, with the same identity checks and messages; T04 added the stop-report finalizer's removal
@@ -90,6 +93,9 @@ interface KubeCredential extends ManagedCredential {
 }
 interface KubeInstance extends ManagedInstance {
   readonly pod: Pod;
+}
+interface KubeReplacement extends ManagedReplacementVolume {
+  readonly backing: KubeBacking | null;
 }
 
 function volumeOf(pvc: PersistentVolumeClaim): KubeVolume {
@@ -120,6 +126,19 @@ function exitOf(pod: Pod): ManagedInstance['exit'] {
   const all = [...ended(pod.status?.initContainerStatuses), ...runner];
   if (all.length === 0) return null;
   return { code: (runner[0] ?? all[0]).exitCode ?? null, outOfMemory: all.some((t) => t.reason === 'OOMKilled' && t.exitCode === 137) };
+}
+
+/**
+ * Why `pv` was not made for `pvc`, or null when it was. A dynamically provisioned PV is created after its claim;
+ * one created before the claim was bound to something else first — a retained volume of another claim, rebound by
+ * hand — and is no restore made for this one. Both stamps are the API server's.
+ */
+function madeForAnother(pv: PersistentVolume, pvc: PersistentVolumeClaim): string | null {
+  const made = Date.parse(pv.metadata.creationTimestamp ?? '');
+  const claimed = Date.parse(pvc.metadata.creationTimestamp ?? '');
+  if (Number.isNaN(made) || Number.isNaN(claimed)) return `when PV ${pv.metadata.name} was made, against PVC ${pvc.metadata.name}, cannot be told`;
+  if (made >= claimed) return null;
+  return `PV ${pv.metadata.name} was created at ${pv.metadata.creationTimestamp}, before PVC ${pvc.metadata.name} (${pvc.metadata.creationTimestamp}): it was made for another claim first`;
 }
 
 function instanceOf(pod: Pod): KubeInstance {
@@ -195,6 +214,48 @@ export class KubernetesBackend implements ManagedRunnerBackend {
   async volumeHolders({ volume }: VerifiedVolume): Promise<string[]> {
     const attachments = await this.kube.listVolumeAttachments();
     return attachments.filter((va) => va.spec.source.persistentVolumeName === volume.boundTo).map((va) => va.metadata.name);
+  }
+
+  // ── an operator's switch to a restored volume ──────────────────────────────────────────────
+
+  /**
+   * The claim now under the runner's name, judged as the restored volume an operator switches the mapping to
+   * (managed-runner-manager.ts, `switchVolume`): the marks every pass checks the mapping's claim for
+   * (`pvcIdentityProblem`, its own UID in the recorded one's place), its PV's binding (`pvIdentityProblem`, with
+   * nothing of the old PV recorded) and whether that PV was made for it (`madeForAnother`).
+   */
+  async readReplacement(mapping: ManagedRunner): Promise<KubeReplacement | null> {
+    const pvc = await this.kube.persistentVolumeClaims.get(mapping.pvcName);
+    if (!pvc) return null;
+    const volume = volumeOf(pvc);
+    const removing = !!pvc.metadata.deletionTimestamp;
+    const marks = pvcIdentityProblem(pvc, this.identity(mapping), this.profile, null);
+    const pv = volume.boundTo ? await this.kube.getPersistentVolume(volume.boundTo) : null;
+    if (!pv) return { volume, backing: null, removing, problem: marks, foreign: null };
+    const backing: KubeBacking = { uid: pv.metadata.uid!, handle: pv.spec.csi?.volumeHandle as string, pv };
+    const problem = marks ?? pvIdentityProblem(pv, volume.uid, this.profile, { pvUid: null, volumeHandle: null });
+    return { volume, backing, removing, problem, foreign: madeForAnother(pv, pvc) };
+  }
+
+  /**
+   * The VolumeAttachments of the mapping's recorded PV, found by the PV UID and volume handle the mapping records:
+   * the claim under its name is the restored one now, bound to another PV. Every attachment of the restored PV's
+   * CSI driver but that PV's own is read back to its PV; one whose PV cannot be read is counted, since it may be
+   * the recorded one.
+   */
+  async recordedVolumeHolders(mapping: ManagedRunner, replacement: KubeReplacement): Promise<string[]> {
+    const driver = replacement.backing?.pv.spec.csi?.driver;
+    const holders: string[] = [];
+    for (const va of await this.kube.listVolumeAttachments()) {
+      const name = va.spec.source.persistentVolumeName;
+      if (!name || name === replacement.volume.boundTo || (driver && va.spec.attacher !== driver)) continue;
+      const pv = await this.kube.getPersistentVolume(name);
+      if (!pv) holders.push(`${va.metadata.name} on node ${va.spec.nodeName} (its PV ${name} cannot be read)`);
+      else if (pv.metadata.uid === mapping.pvUid || pv.spec.csi?.volumeHandle === mapping.volumeHandle) {
+        holders.push(`${va.metadata.name} on node ${va.spec.nodeName} (PV ${name})`);
+      }
+    }
+    return holders;
   }
 
   // ── the bootstrap credential ───────────────────────────────────────────────────────────────

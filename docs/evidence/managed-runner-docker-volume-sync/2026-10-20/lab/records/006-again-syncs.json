@@ -1,0 +1,32 @@
+{
+ "checks": [
+  {
+   "check": "cyd: the runner syncs before reports and behind every tool, its volume a filesystem of its own on RBD",
+   "ok": true,
+   "value": [
+    "[orbit-runner 2026-10-19T23:09:40.619Z] volume syncs: before reports and behind every tool; the volume is /dev/rbd0 (ext4), a filesystem of its own"
+   ]
+  },
+  {
+   "check": "cyd: the volume's mount is the root of an RBD device's filesystem",
+   "ok": true,
+   "value": {
+    "root": "/",
+    "source": "/dev/rbd0"
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T23:10:08.651+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "again",
+ "result": {
+  "lines": [
+   "[orbit-runner 2026-10-19T23:09:40.619Z] volume syncs: before reports and behind every tool; the volume is /dev/rbd0 (ext4), a filesystem of its own"
+  ],
+  "mountinfo": "643 628 251:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=1024"
+ },
+ "seconds": 0.4,
+ "startedAt": "2026-10-19T23:10:08.244+00:00",
+ "step": "syncs"
+}

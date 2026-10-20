@@ -1,0 +1,14 @@
++ 2026-10-19T07:46:52Z /etc/d9/dockerd-flags: --userland-proxy=false; pkill -TERM -x dockerd
+firewall backend: {"Driver":"iptables"}
+0
+Chain ORBIT-MR-INPUT (1 references)
+    pkts      bytes target     prot opt in     out     source               destination         
+       0        0 RETURN     all  --  *      *       0.0.0.0/0            0.0.0.0/0            ctstate RELATED,ESTABLISHED
+       0        0 RETURN     tcp  --  *      *       0.0.0.0/0            172.19.0.1           tcp dpt:2086
+       0        0 RETURN     tcp  --  *      *       0.0.0.0/0            10.77.0.2            tcp dpt:18080
+      12      672 REJECT     all  --  *      *       0.0.0.0/0            0.0.0.0/0            reject-with icmp-admin-prohibited
+Chain ORBIT-MR-FORWARD (1 references)
+    pkts      bytes target     prot opt in     out     source               destination         
+    1711  1073179 RETURN     all  --  *      *       0.0.0.0/0            0.0.0.0/0            ctstate RELATED,ESTABLISHED
+      12      720 RETURN     tcp  --  *      *       0.0.0.0/0            0.0.0.0/0            ctstate DNAT ctorigdst 172.19.0.1 ctorigdstport 2086
+       4      240 RETURN     tcp  --  *      *       0.0.0.0/0            10.77.0.2            tcp dpt:18080
