@@ -51,8 +51,8 @@ func codexTurnError(result codexTurnResult) string {
 var codexCapacityRetryDelays = []time.Duration{60 * time.Second, 90 * time.Second, 120 * time.Second}
 
 // isCodexCapacityError reports a turn error as that refusal. The match is deliberately loose about
-// the wording and nothing else. Keep it identical to isCapacityFailure in
-// src/apiserver/src/tasks/task-route-decision.ts.
+// the wording and nothing else. Keep it identical to MODEL_AT_CAPACITY_ERROR_MARKER in
+// src/apiserver/src/tasks/model-routing.ts.
 func isCodexCapacityError(msg string) bool {
 	return strings.Contains(strings.ToLower(msg), "at capacity")
 }

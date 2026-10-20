@@ -28,6 +28,7 @@ import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
 import { readExecutableAcceptanceOutcome } from './executable-acceptance-round';
 import {
+  MODEL_AT_CAPACITY_ERROR_MARKER,
   MODEL_ROUTING_ENGINES,
   MODEL_ROUTING_LEVELS,
   priorLevel,
@@ -316,11 +317,10 @@ function quotaFailure(error: string | null): boolean {
 
 /**
  * "Selected model is at capacity": the provider turned the run away at admission, for minutes and
- * across models, so like a spent quota it says nothing about the task. Keep the match identical to
- * isCodexCapacityError in src/runner-go/codex.go.
+ * across models, so like a spent quota it says nothing about the task.
  */
 function capacityFailure(error: string | null): boolean {
-  return error?.toLowerCase().includes('at capacity') ?? false;
+  return error?.toLowerCase().includes(MODEL_AT_CAPACITY_ERROR_MARKER) ?? false;
 }
 
 /**

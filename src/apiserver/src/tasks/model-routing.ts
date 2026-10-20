@@ -52,6 +52,13 @@ export interface ModelRoutingSelection {
 export type ModelRoutingOutcome =
   'FAILED' | 'ACCEPTANCE_FAILED' | 'VERIFICATION_FAILED' | 'SENT_BACK' | 'OK';
 
+/**
+ * What a run's error says when the provider found the model at capacity ("Selected model is at
+ * capacity"), matched case-insensitively as a substring. Keep it identical to isCodexCapacityError in
+ * src/runner-go/codex.go.
+ */
+export const MODEL_AT_CAPACITY_ERROR_MARKER = 'at capacity';
+
 export interface ModelRoutingRun {
   ordinal: number;
   status: string;
