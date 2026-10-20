@@ -20,7 +20,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "light",
@@ -43,7 +45,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "light",
@@ -72,7 +76,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "light",
@@ -95,7 +101,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "light",
@@ -119,7 +127,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "light",
@@ -143,7 +153,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "light",
@@ -166,7 +178,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "light",
@@ -189,7 +203,35 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
+  },
+  {
+    "theme": "light",
+    "frame": "receipt",
+    "errors": [],
+    "unhandled": [],
+    "landingCard": null,
+    "landingLinks": [],
+    "sheetRows": [],
+    "mergeCard": null,
+    "mergeLinks": [],
+    "landingsGroup": null,
+    "landingsRows": [],
+    "landingFold": null,
+    "headerCount": "Project · 2 sessions",
+    "xe5": [],
+    "deliveryLinks": [],
+    "sourceChip": null,
+    "sourceChipHref": null,
+    "taskLanding": null,
+    "taskLandingLink": [],
+    "receipt": "✓ Merged into main automaticallyFROM ORBITCommit8ed0ea7 · merge of project/34bmzOkov3xN2yLPrnsCk · under your Automatic setting · 11m agoNow on main2 tasks维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑；10-10 跑了 13 轮，上限 8）维护：同一会话跨页时，dossier 在一轮里被重复发出（计数虚高；会话中途有新记录时整轮会失败）Undogit revert -m 1 8ed0ea7Nextproject/34bmzOkov3xN2yLPrnsCk keeps goingOpen landing ›",
+    "receiptLinks": [
+      "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM2?project=2zwQZ2hd93IvLb59t6p9d",
+      "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM2?project=2zwQZ2hd93IvLb59t6p9d"
+    ]
   },
   {
     "theme": "light",
@@ -216,7 +258,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "light",
@@ -266,7 +310,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "light",
@@ -315,7 +361,9 @@
     "taskLanding": "LandingTask DONELanding checks failedgeneration 1stopped while checkingChecks failed on the combined tree: Task acceptance exited 1 (expected 0)Its work is on the project branch by an existing receipt.Targetproject/34bmzOkov3xN2yLPrnsCkQueue wait48sQueuedOct 19, 2:40:00 PMStartedOct 19, 2:42:00 PMHeartbeatOct 19, 2:44:00 PMFinishedOct 19, 2:45:00 PMOpen landing ›",
     "taskLandingLink": [
       "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM3"
-    ]
+    ],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "dark",
@@ -338,7 +386,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "dark",
@@ -361,7 +411,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "dark",
@@ -390,7 +442,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "dark",
@@ -413,7 +467,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "dark",
@@ -437,7 +493,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "dark",
@@ -461,7 +519,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "dark",
@@ -484,7 +544,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "dark",
@@ -507,7 +569,35 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
+  },
+  {
+    "theme": "dark",
+    "frame": "receipt",
+    "errors": [],
+    "unhandled": [],
+    "landingCard": null,
+    "landingLinks": [],
+    "sheetRows": [],
+    "mergeCard": null,
+    "mergeLinks": [],
+    "landingsGroup": null,
+    "landingsRows": [],
+    "landingFold": null,
+    "headerCount": "Project · 2 sessions",
+    "xe5": [],
+    "deliveryLinks": [],
+    "sourceChip": null,
+    "sourceChipHref": null,
+    "taskLanding": null,
+    "taskLandingLink": [],
+    "receipt": "✓ Merged into main automaticallyFROM ORBITCommit8ed0ea7 · merge of project/34bmzOkov3xN2yLPrnsCk · under your Automatic setting · 11m agoNow on main2 tasks维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑；10-10 跑了 13 轮，上限 8）维护：同一会话跨页时，dossier 在一轮里被重复发出（计数虚高；会话中途有新记录时整轮会失败）Undogit revert -m 1 8ed0ea7Nextproject/34bmzOkov3xN2yLPrnsCk keeps goingOpen landing ›",
+    "receiptLinks": [
+      "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM2?project=2zwQZ2hd93IvLb59t6p9d",
+      "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM2?project=2zwQZ2hd93IvLb59t6p9d"
+    ]
   },
   {
     "theme": "dark",
@@ -534,7 +624,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "dark",
@@ -584,7 +676,9 @@
     "sourceChip": null,
     "sourceChipHref": null,
     "taskLanding": null,
-    "taskLandingLink": []
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
   },
   {
     "theme": "dark",
@@ -633,58 +727,8 @@
     "taskLanding": "LandingTask DONELanding checks failedgeneration 1stopped while checkingChecks failed on the combined tree: Task acceptance exited 1 (expected 0)Its work is on the project branch by an existing receipt.Targetproject/34bmzOkov3xN2yLPrnsCkQueue wait48sQueuedOct 19, 2:40:00 PMStartedOct 19, 2:42:00 PMHeartbeatOct 19, 2:44:00 PMFinishedOct 19, 2:45:00 PMOpen landing ›",
     "taskLandingLink": [
       "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM3"
-    ]
-  },
-  {
-    "theme": "light",
-    "frame": "receipt",
-    "errors": [],
-    "unhandled": [],
-    "landingCard": null,
-    "landingLinks": [],
-    "sheetRows": [],
-    "mergeCard": null,
-    "mergeLinks": [],
-    "landingsGroup": null,
-    "landingsRows": [],
-    "landingFold": null,
-    "headerCount": "Project · 2 sessions",
-    "xe5": [],
-    "deliveryLinks": [],
-    "sourceChip": null,
-    "sourceChipHref": null,
-    "taskLanding": null,
-    "taskLandingLink": [],
-    "receipt": "✓ Merged into main automaticallyFROM ORBITCommit8ed0ea7 · merge of project/34bmzOkov3xN2yLPrnsCk · under your Automatic setting · 11m agoNow on main2 tasks维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑；10-10 跑了 13 轮，上限 8）维护：同一会话跨页时，dossier 在一轮里被重复发出（计数虚高；会话中途有新记录时整轮会失败）Undogit revert -m 1 8ed0ea7Nextproject/34bmzOkov3xN2yLPrnsCk keeps goingOpen landing ›",
-    "receiptLinks": [
-      "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM2?project=2zwQZ2hd93IvLb59t6p9d",
-      "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM2?project=2zwQZ2hd93IvLb59t6p9d"
-    ]
-  },
-  {
-    "theme": "dark",
-    "frame": "receipt",
-    "errors": [],
-    "unhandled": [],
-    "landingCard": null,
-    "landingLinks": [],
-    "sheetRows": [],
-    "mergeCard": null,
-    "mergeLinks": [],
-    "landingsGroup": null,
-    "landingsRows": [],
-    "landingFold": null,
-    "headerCount": "Project · 2 sessions",
-    "xe5": [],
-    "deliveryLinks": [],
-    "sourceChip": null,
-    "sourceChipHref": null,
-    "taskLanding": null,
-    "taskLandingLink": [],
-    "receipt": "✓ Merged into main automaticallyFROM ORBITCommit8ed0ea7 · merge of project/34bmzOkov3xN2yLPrnsCk · under your Automatic setting · 11m agoNow on main2 tasks维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑；10-10 跑了 13 轮，上限 8）维护：同一会话跨页时，dossier 在一轮里被重复发出（计数虚高；会话中途有新记录时整轮会失败）Undogit revert -m 1 8ed0ea7Nextproject/34bmzOkov3xN2yLPrnsCk keeps goingOpen landing ›",
-    "receiptLinks": [
-      "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM2?project=2zwQZ2hd93IvLb59t6p9d",
-      "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM2?project=2zwQZ2hd93IvLb59t6p9d"
-    ]
+    ],
+    "receipt": null,
+    "receiptLinks": []
   }
 ]
