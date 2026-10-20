@@ -79,6 +79,7 @@ workflow that ran on `probe/landing-session-native`; its pictures land in
 | `ios/ios-04-c1-landings-group.png` | 04 c1 — the Landings group, waiting + folded |
 | `ios/ios-06-task-landing.png` | 06 — the task page's Landing section |
 | `ios/ios-06-source-label.png` | 06 e — the source session's derived label |
+| `ios/ios-06-xe5-card.png` | 06 c — the X-E5 owner card: its heading and lead Abandon |
 | `mac/mac-05-a-live.png` | 05 a on the Mac |
 | `mac/mac-04-work-overview-merge-job.png` | 04 — the Work overview drawing a merge job |
 

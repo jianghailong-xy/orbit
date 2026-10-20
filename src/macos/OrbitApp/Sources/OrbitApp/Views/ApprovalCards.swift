@@ -4400,7 +4400,7 @@ private struct OwnerItemCardView: View {
                                             row: ProjectOpenItemRow) -> some View {
         if let make = makePress(cardPress, row: row) {
             doorRow(cardPress.consequence) {
-                weighted(cardPress.tier) {
+                weighted(cardPress.tier, tint: cardPress.action == .abandon ? .red : nil) {
                     Button(action: make) {
                         Text(cardPress.label).approvalActionLabel()
                     }
@@ -4469,9 +4469,12 @@ private struct OwnerItemCardView: View {
     /// style is the only thing the tier decides here: WHICH presses exist, and in what order, is
     /// `ExceptionCards.presses` — the browser's own rule, so the two cards cannot disagree.
     @ViewBuilder private func weighted<V: View>(_ tier: ExceptionCards.PressTier,
+                                                tint: Color? = nil,
                                                 @ViewBuilder _ button: () -> V) -> some View {
         if tier == .primary {
-            button().buttonStyle(.borderedProminent)
+            // Abandon leads X-E5 in the board's solid red; every other leading door wears the
+            // accent. The tint is the style's, not a second button.
+            button().buttonStyle(.borderedProminent).tint(tint ?? .accentColor)
         } else if tier == .link {
             button().buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.secondary)
         } else {

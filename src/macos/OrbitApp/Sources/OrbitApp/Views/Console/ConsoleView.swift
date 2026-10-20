@@ -416,12 +416,17 @@ struct ConsoleView: View {
         // says.
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                if let session = appModel.session(id: sessionID) {
-                    sessionMenu(session)
-                } else {
-                    Button {} label: { Image(systemName: "ellipsis") }
-                        .disabled(true)
-                        .accessibilityLabel("Session actions")
+                // A landing session is platform work (LS6): its page carries the ⋯ menu the design
+                // gives it, and none of the conversation's own actions — no rename, share, pin,
+                // move or complete. The frame still shows Back, which is how a reader leaves.
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    if let session = appModel.session(id: sessionID) {
+                        sessionMenu(session)
+                    } else {
+                        Button {} label: { Image(systemName: "ellipsis") }
+                            .disabled(true)
+                            .accessibilityLabel("Session actions")
+                    }
                 }
             }
         }
@@ -452,10 +457,14 @@ struct ConsoleView: View {
         // `.primaryAction` there, as the project and task pages' menus do.
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { showShare = true } label: {
-                    Label("Share session", systemImage: "square.and.arrow.up")
+                // No Share on a landing session (LS6): it is platform work, not a conversation,
+                // and its page's own ⋯ menu is the whole of what it offers.
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    Button { showShare = true } label: {
+                        Label("Share session", systemImage: "square.and.arrow.up")
+                    }
+                    .help("Share a read-only link to this session")
                 }
-                .help("Share a read-only link to this session")
             }
         }
         #endif

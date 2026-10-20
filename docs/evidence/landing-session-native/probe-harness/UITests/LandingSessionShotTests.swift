@@ -27,12 +27,18 @@ final class LandingSessionShotTests: ProbeCase {
         setMode("timeout")
         let app = launch(until: "Timed out", extra: ["-probe.page", "landing"], "landing-timeout")
         XCTAssertTrue(appears(app, "No report for 23m", timeout: 20), "the timeout line never showed")
-        let more = buttons(app, beginning: "More actions").first
-        XCTAssertNotNil(more, "the ⋯ menu's button never showed")
-        if let more { press(more) }
-        XCTAssertTrue(appears(app, "Abandon", timeout: 20), "the timed-out menu never offered Abandon")
+        // The page's own ⋯, by its identifier: the console's session menu is not drawn on a
+        // landing session, so this is the only one.
+        let more = app.buttons["landing-more"]
+        XCTAssertTrue(more.waitForExistence(timeout: 20), "the page's ⋯ never showed")
+        press(more)
+        // The menu's Abandon row carries "Ends this attempt · nothing was pushed"; the card's own
+        // Abandon consequence says "Ends this attempt. Nothing was pushed, and nothing is queued
+        // again." The mid-dot clause is the menu's alone, so its appearance is the menu being open.
+        XCTAssertTrue(appears(app, "· nothing was pushed", timeout: 20),
+                      "the timed-out menu never opened on Abandon")
         XCTAssertTrue(appears(app, "Re-run the check", timeout: 20),
-                      "a timed-out check never offered Re-run the check")
+                      "the menu never offered Re-run the check")
         shot(app, "ios-05-e-timeout-menu")
         app.terminate()
     }

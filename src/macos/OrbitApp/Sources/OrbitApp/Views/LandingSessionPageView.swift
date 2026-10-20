@@ -144,6 +144,12 @@ struct LandingSessionPageView: View {
             Image(systemName: "ellipsis.circle")
                 .font(.orbitGlyph)
         }
+        // The board's plain ⋯ rather than macOS's pull-down bezel, and one identifier a screenshot
+        // test can press: the console's own session menu is not drawn on a landing session.
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityIdentifier("landing-more")
         .accessibilityLabel("More actions")
     }
 
