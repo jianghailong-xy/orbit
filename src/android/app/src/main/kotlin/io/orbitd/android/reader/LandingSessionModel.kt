@@ -208,9 +208,10 @@ data class LandingAttempt(
     val blockingSummary: String?,
 )
 
-/** One line of the server-written timeline (`IntegrationTimelineEntry`); [text] is the whole sentence. */
+/** One line of the server-written timeline (`IntegrationTimelineEntry`); [text] is the whole sentence, [data] the
+ *  structured fields it was written from (a check's exit codes, a result's state). */
 data class LandingEntry(val kind: String, val at: String, val claim: Int, val round: Int?, val checkName: String?, val checkIndex: Int?,
-    val phase: String?, val reason: String?, val text: String)
+    val phase: String?, val reason: String?, val text: String, val data: JsonObject? = null)
 data class LandingSection(val title: String, val jobId: String, val kind: String, val generation: Int, val state: String,
     val entries: List<LandingEntry>)
 data class LandingFact(val kind: String, val text: String)
@@ -328,7 +329,7 @@ object LandingSessionModel {
                         s.number("generation") ?: 1, s.text("state").orEmpty(), s.objects("entries").map { e ->
                             LandingEntry(e.text("kind").orEmpty(), e.text("at").orEmpty(), e.number("claim") ?: 0, e.number("round"),
                                 e.obj("check")?.text("name"), e.obj("check")?.number("index"), e.text("phase"), e.text("reason"),
-                                e.text("text").orEmpty())
+                                e.text("text").orEmpty(), e.obj("data"))
                         })
                 },
                 facts = t.objects("facts").map { LandingFact(it.text("kind").orEmpty(), it.text("text").orEmpty()) },
@@ -730,6 +731,24 @@ object LandingSessionModel {
         "ERROR" -> "stopped · $state"
         "CANCELLED" -> "stopped"
         else -> null
+    }
+
+    /** A finished check passed: no timeout, and the exit code it expected. Read off [LandingEntry.data], never off the
+     *  sentence; no exit code is not a pass (unlike [LandingCheckResult.passed], the settled card's rule). Swift's
+     *  `IntegrationTimelineEntry.checkPassed`. */
+    fun checkPassed(entry: LandingEntry): Boolean {
+        val data = entry.data ?: return false
+        if (entry.kind != "CHECK_FINISHED" || data.flag("timedOut")) return false
+        val exitCode = data.number("exitCode") ?: return false
+        return exitCode == data.number("expectedExitCode")
+    }
+
+    /** A check or result line that ended well draws ✓, and one that did not draws ✗: a passed check, or a result whose
+     *  branch is on its target. Swift's `IntegrationTimelineEntry.succeeded`. */
+    fun entryOk(entry: LandingEntry): Boolean = when (entry.kind) {
+        "CHECK_FINISHED" -> checkPassed(entry)
+        "RESULT", "RESULT_FALLBACK" -> entry.data?.text("state") in setOf("LANDED", "ALREADY_LANDED", "NOTHING_TO_LAND")
+        else -> false
     }
 }
 

@@ -439,8 +439,7 @@ struct LandingSessionPageView: View {
                openLog.check == check.index {
                 LandingCheckLogView(sessionID: sessionID, selectors: openLog)
                     .padding(.leading, 24)
-            } else if entry.kind == "CHECK_FINISHED", let check = entry.check,
-                      !entry.text.contains("passed") {
+            } else if entry.kind == "CHECK_FINISHED", let check = entry.check, !entry.checkPassed {
                 // A check that failed shows the tail it died on, inline (mockup 05 g); a passed
                 // one keeps its `Log ›` and stays one line.
                 LandingInlineOutput(
@@ -464,9 +463,7 @@ struct LandingSessionPageView: View {
         case "TAKEN_OVER":
             return Mark(glyph: "↗", color: .accentColor)
         case "CHECK_FINISHED", "RESULT", "RESULT_FALLBACK":
-            let ok = entry.text.contains("passed")
-                || ["Landed", "Already", "Nothing to push", "Merged"].contains { entry.text.hasPrefix($0) }
-            return ok ? Mark(glyph: "✓", color: .green) : Mark(glyph: "✗", color: .red)
+            return entry.succeeded ? Mark(glyph: "✓", color: .green) : Mark(glyph: "✗", color: .red)
         case "STOP_REQUESTED", "CANCELLED", "ABANDONED", "TIMED_OUT", "PUSH_REFUSED":
             return Mark(glyph: "✗", color: .red)
         case "ENQUEUED", "REQUEUED", "NEXT_GENERATION", "SKIPPED_CHECK", "FIX_TASK":

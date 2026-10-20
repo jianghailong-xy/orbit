@@ -473,7 +473,8 @@ private fun LandingTimelineSectionView(section: LandingSection, view: LandingVie
                             style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace), color = muted)
                     }
                     val mark = landingMark(entry, section.entries, index)
-                    Text(mark.first, Modifier.width(16.dp), style = MaterialTheme.typography.bodySmall, color = mark.second)
+                    Text(mark.first, Modifier.width(16.dp).testTag("landing:mark:$index"), style = MaterialTheme.typography.bodySmall,
+                        color = mark.second)
                     Text(entry.text, Modifier.weight(1f).testTag("landing:entry:$index"), style = MaterialTheme.typography.bodyMedium)
                     if (selectors != null) {
                         TextButton(onClick = { openLog = if (openLog == selectors) null else selectors },
@@ -485,7 +486,7 @@ private fun LandingTimelineSectionView(section: LandingSection, view: LandingVie
                 }
                 when {
                     selectors != null && openLog == selectors -> LandingLogBlock(selectors, onLog)
-                    selectors != null && !entry.text.contains("passed") -> LandingLogBlock(selectors, onLog)
+                    selectors != null && !LandingSessionModel.checkPassed(entry) -> LandingLogBlock(selectors, onLog)
                 }
             }
         }
@@ -506,10 +507,8 @@ private fun LandingTimelineSectionView(section: LandingSection, view: LandingVie
 /** What a timeline mark says, and the ink it says it in (mockups 05 a/e/i). */
 private fun landingMark(entry: LandingEntry, entries: List<LandingEntry>, index: Int): Pair<String, Color> = when (entry.kind) {
     "TAKEN_OVER" -> "↗" to Color(0xFF0066BE)
-    "CHECK_FINISHED", "RESULT", "RESULT_FALLBACK" -> {
-        val ok = entry.text.contains("passed") || listOf("Landed", "Already", "Nothing to push", "Merged").any { entry.text.startsWith(it) }
-        if (ok) "✓" to Color(0xFF247344) else "✗" to Color(0xFFB3261E)
-    }
+    "CHECK_FINISHED", "RESULT", "RESULT_FALLBACK" ->
+        if (LandingSessionModel.entryOk(entry)) "✓" to Color(0xFF247344) else "✗" to Color(0xFFB3261E)
     "STOP_REQUESTED", "CANCELLED", "ABANDONED", "TIMED_OUT", "PUSH_REFUSED" -> "✗" to Color(0xFFB3261E)
     "ENQUEUED", "REQUEUED", "NEXT_GENERATION", "SKIPPED_CHECK", "FIX_TASK" -> "≡" to Color.Unspecified
     "RELEASED" -> "↩" to Color.Unspecified

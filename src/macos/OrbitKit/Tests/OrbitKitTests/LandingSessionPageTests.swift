@@ -128,6 +128,7 @@ final class LandingSessionPageTests: XCTestCase {
             at: over["at"] as? String ?? step,
             claim: over["claim"] as? Int ?? 1,
             phase: over["phase"] as? String,
+            data: over["data"] as? [String: JSONValue],
             text: over["text"] as? String ?? "Claimed by runner wikova · claim 1")
     }
 
@@ -648,5 +649,68 @@ final class LandingSessionPageTests: XCTestCase {
             now: now, updatedAt: now)!
         XCTAssertEqual(error.state, "Stopped with an error")
         XCTAssertEqual(error.failure, "Stopped with an error · nothing was pushed")
+    }
+
+    // MARK: - the timeline's ✓ reads the line's fields, not its sentence
+
+    private func finished(_ data: [String: JSONValue]?,
+                          text: String = "Merge check passed · 17m 02s") -> IntegrationTimelineEntry {
+        var over: [String: Any] = ["kind": "CHECK_FINISHED", "phase": "CHECK", "text": text]
+        if let data { over["data"] = data }
+        return entry(over)
+    }
+
+    private func result(_ state: String?, _ text: String,
+                        kind: String = "RESULT") -> IntegrationTimelineEntry {
+        var over: [String: Any] = ["kind": kind, "text": text]
+        if let state { over["data"] = ["state": JSONValue.string(state)] }
+        return entry(over)
+    }
+
+    private func exitData(_ code: JSONValue, expected: Int = 0,
+                          timedOut: Bool = false) -> [String: JSONValue] {
+        ["exitCode": code, "expectedExitCode": .int(expected), "timedOut": .bool(timedOut)]
+    }
+
+    func testACheckPassedWhenItExitedWithTheCodeItExpectedAndDidNotTimeOut() {
+        XCTAssertTrue(finished(exitData(.int(0))).checkPassed)
+        XCTAssertTrue(finished(exitData(.int(3), expected: 3)).checkPassed)
+        XCTAssertFalse(finished(exitData(.int(1))).checkPassed)
+        XCTAssertFalse(finished(exitData(.int(0), timedOut: true)).checkPassed)
+        // No exit code is not a pass, and neither is a line with no fields at all.
+        XCTAssertFalse(finished(exitData(.null)).checkPassed)
+        XCTAssertFalse(finished(nil).checkPassed)
+        XCTAssertFalse(finished([:]).checkPassed)
+    }
+
+    func testTheWordingChangedTheCheckmarkDidNot() {
+        let green = finished(exitData(.int(0)), text: "Merge check green · 17m 02s")
+        XCTAssertTrue(green.checkPassed)
+        XCTAssertTrue(green.succeeded)
+        let saysPassed = finished(exitData(.int(1)), text: "Merge check passed · 3m 52s")
+        XCTAssertFalse(saysPassed.checkPassed)
+        XCTAssertFalse(saysPassed.succeeded)
+        XCTAssertTrue(result("LANDED", "Put on main · 8ed0ea7").succeeded)
+        XCTAssertTrue(result("ALREADY_LANDED", "Was on main · 8ed0ea7").succeeded)
+        XCTAssertTrue(result("NOTHING_TO_LAND", "No commits to push").succeeded)
+        XCTAssertTrue(result("NOTHING_TO_LAND", "Nothing to push · the branch carried no commits",
+                             kind: "RESULT_FALLBACK").succeeded)
+    }
+
+    func testEveryOtherResultIsACrossWhateverABranchNameInItSays() {
+        XCTAssertFalse(result("READY", "Ready to merge into fix/passed-x").succeeded)
+        XCTAssertFalse(result("CONFLICT", "Could not sync main into fix/passed-x · merge conflict").succeeded)
+        XCTAssertFalse(result("CHECK_FAILED", "Check failed · nothing was pushed").succeeded)
+        XCTAssertFalse(result("ERROR", "Stopped with an error · PUSH_FAILED").succeeded)
+        XCTAssertFalse(result("CANCELLED", "Stopped · not landed").succeeded)
+        XCTAssertFalse(result("SUPERSEDED", "Superseded · a newer attempt asks the same question").succeeded)
+        XCTAssertFalse(result(nil, "Landed on main · 8ed0ea7").succeeded)
+        XCTAssertFalse(result(nil, "Landed on main · 8ed0ea7", kind: "RESULT_FALLBACK").succeeded)
+    }
+
+    func testNoOtherKindOfLineIsACheckOrAResult() {
+        XCTAssertFalse(entry(["kind": "RESULT", "data": exitData(.int(0))]).checkPassed)
+        XCTAssertFalse(entry(["kind": "CLAIMED", "data": ["state": JSONValue.string("LANDED")],
+                              "text": "Landed on main"]).succeeded)
     }
 }

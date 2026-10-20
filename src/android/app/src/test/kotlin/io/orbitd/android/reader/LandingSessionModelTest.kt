@@ -1,5 +1,7 @@
 package io.orbitd.android.reader
 
+import io.orbitd.android.core.cards.number
+import io.orbitd.android.core.cards.text
 import io.orbitd.android.navigation.ObjectId
 import java.time.Instant
 import java.time.ZoneOffset
@@ -285,14 +287,26 @@ class LandingSessionModelTest {
         val timeline = """{"sections":[
             {"title":"Merge check · 1","jobId":"j-check","kind":"CHECK_PROMOTION","generation":1,"state":"CHECK_FAILED",
              "entries":[{"kind":"CHECK_STARTED","at":"${iso(900)}","claim":1,"round":1,"check":{"name":"MERGE_CHECK","index":1},"text":"Merge check started"},
-                        {"kind":"CHECK_FINISHED","at":"${iso(600)}","claim":1,"round":1,"check":{"name":"MERGE_CHECK","index":1},"text":"Merge check failed · exit 1"}]},
-            {"title":"Merge to main · 1","jobId":"j-merge","kind":"LAND_PROMOTION","generation":1,"state":"MERGED","entries":[]}],
+                        {"kind":"CHECK_FINISHED","at":"${iso(600)}","claim":1,"round":1,"check":{"name":"MERGE_CHECK","index":1},
+                         "data":{"name":"MERGE_CHECK","index":1,"exitCode":1,"expectedExitCode":0,"timedOut":false,"durationMs":232000},
+                         "text":"Merge check failed · exit 1"}]},
+            {"title":"Merge to main · 1","jobId":"j-merge","kind":"LAND_PROMOTION","generation":1,"state":"MERGED",
+             "entries":[{"kind":"RESULT","at":"${iso(300)}","claim":1,"data":{"state":"LANDED"},"text":"Landed on main · 8ed0ea7"},
+                        {"kind":"RESULT","at":"${iso(200)}","claim":1,"data":"LANDED","text":"Landed on main · 8ed0ea7"}]}],
             "facts":[{"kind":"FIX_TASK","text":"Filed fix-1"}],"truncated":true}"""
         val sections = LandingSessionModel.read(landingJson(timeline = timeline)).timeline!!
         assertEquals(listOf("Merge check · 1", "Merge to main · 1"), sections.sections.map { it.title })
         assertEquals(2, sections.sections[0].entries.size)
         assertEquals(1, sections.sections[0].entries[1].checkIndex)
         assertEquals("Merge check failed · exit 1", sections.sections[0].entries[1].text)
+        // A line's `data` is the fields its sentence was written from; a value that is not an object reads as none.
+        assertNull(sections.sections[0].entries[0].data)
+        assertEquals(1, sections.sections[0].entries[1].data?.number("exitCode"))
+        assertFalse(LandingSessionModel.checkPassed(sections.sections[0].entries[1]))
+        assertEquals("LANDED", sections.sections[1].entries[0].data?.text("state"))
+        assertTrue(LandingSessionModel.entryOk(sections.sections[1].entries[0]))
+        assertNull(sections.sections[1].entries[1].data)
+        assertFalse(LandingSessionModel.entryOk(sections.sections[1].entries[1]))
         assertEquals("Filed fix-1", sections.facts.single().text)
         assertTrue(sections.truncated)
         assertEquals("not landed · CHECK_FAILED", LandingSessionModel.sectionState("CHECK_FAILED"))
@@ -305,6 +319,54 @@ class LandingSessionModelTest {
         val report = LandingSessionModel.noReportBand(view(timedOut = true, heartbeat = 1380L), ZoneOffset.UTC)
         assertEquals("No report from wikova since 17:13", report)
         assertNull(LandingSessionModel.noReportBand(view()))
+    }
+
+    // The timeline's ✓ reads the line's fields, never its sentence (the web's `landingCheckPassed` / `landingEntryOk`).
+
+    private fun line(kind: String, text: String, data: String?) =
+        LandingEntry(kind, iso(60), 1, 1, null, null, null, null, text, data?.let { json(it) })
+    private fun finished(data: String?, text: String = "Merge check passed · 17m 02s") = line("CHECK_FINISHED", text, data)
+    private fun result(state: String?, text: String, kind: String = "RESULT") =
+        line(kind, text, state?.let { """{"state":"$it"}""" })
+
+    @Test fun aCheckPassedWhenItExitedWithTheCodeItExpectedAndDidNotTimeOut() {
+        assertTrue(LandingSessionModel.checkPassed(finished("""{"exitCode":0,"expectedExitCode":0,"timedOut":false}""")))
+        assertTrue(LandingSessionModel.checkPassed(finished("""{"exitCode":3,"expectedExitCode":3,"timedOut":false}""")))
+        assertFalse(LandingSessionModel.checkPassed(finished("""{"exitCode":1,"expectedExitCode":0,"timedOut":false}""")))
+        assertFalse(LandingSessionModel.checkPassed(finished("""{"exitCode":0,"expectedExitCode":0,"timedOut":true}""")))
+        // No exit code is not a pass, and neither is a line with no fields at all.
+        assertFalse(LandingSessionModel.checkPassed(finished("""{"exitCode":null,"expectedExitCode":0,"timedOut":false}""")))
+        assertFalse(LandingSessionModel.checkPassed(finished(null)))
+        assertFalse(LandingSessionModel.checkPassed(finished("{}")))
+    }
+
+    @Test fun theWordingChangedTheCheckmarkDidNot() {
+        val green = finished("""{"exitCode":0,"expectedExitCode":0,"timedOut":false}""", "Merge check green · 17m 02s")
+        assertTrue(LandingSessionModel.checkPassed(green))
+        assertTrue(LandingSessionModel.entryOk(green))
+        val saysPassed = finished("""{"exitCode":1,"expectedExitCode":0,"timedOut":false}""", "Merge check passed · 3m 52s")
+        assertFalse(LandingSessionModel.checkPassed(saysPassed))
+        assertFalse(LandingSessionModel.entryOk(saysPassed))
+        assertTrue(LandingSessionModel.entryOk(result("LANDED", "Put on main · 8ed0ea7")))
+        assertTrue(LandingSessionModel.entryOk(result("ALREADY_LANDED", "Was on main · 8ed0ea7")))
+        assertTrue(LandingSessionModel.entryOk(result("NOTHING_TO_LAND", "No commits to push")))
+        assertTrue(LandingSessionModel.entryOk(result("NOTHING_TO_LAND", "Nothing to push · the branch carried no commits", "RESULT_FALLBACK")))
+    }
+
+    @Test fun everyOtherResultIsACrossWhateverABranchNameInItSays() {
+        assertFalse(LandingSessionModel.entryOk(result("READY", "Ready to merge into fix/passed-x")))
+        assertFalse(LandingSessionModel.entryOk(result("CONFLICT", "Could not sync main into fix/passed-x · merge conflict")))
+        assertFalse(LandingSessionModel.entryOk(result("CHECK_FAILED", "Check failed · nothing was pushed")))
+        assertFalse(LandingSessionModel.entryOk(result("ERROR", "Stopped with an error · PUSH_FAILED")))
+        assertFalse(LandingSessionModel.entryOk(result("CANCELLED", "Stopped · not landed")))
+        assertFalse(LandingSessionModel.entryOk(result("SUPERSEDED", "Superseded · a newer attempt asks the same question")))
+        assertFalse(LandingSessionModel.entryOk(result(null, "Landed on main · 8ed0ea7")))
+        assertFalse(LandingSessionModel.entryOk(result(null, "Landed on main · 8ed0ea7", "RESULT_FALLBACK")))
+    }
+
+    @Test fun noOtherKindOfLineIsACheckOrAResult() {
+        assertFalse(LandingSessionModel.checkPassed(line("RESULT", "Merge check passed", """{"exitCode":0,"expectedExitCode":0,"timedOut":false}""")))
+        assertFalse(LandingSessionModel.entryOk(line("CLAIMED", "Landed on main", """{"state":"LANDED"}""")))
     }
 
     // MARK: the doors and the menu

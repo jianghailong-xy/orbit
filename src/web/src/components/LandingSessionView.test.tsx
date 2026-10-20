@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  IntegrationTimelineEntry,
   ProjectPromotionView,
   SessionLandingAttempt,
   SessionLandingView,
@@ -230,7 +231,7 @@ describe('the landing session page', () => {
               {
                 id: 'e2', seq: 2, kind: 'RESULT', at: at(11, 7), claim: 1, round: null,
                 check: null, phase: 'CHECK', step: null, actor: { type: 'RUNNER' }, reason: null,
-                data: null, text: 'Check failed · nothing was pushed',
+                data: { state: 'CHECK_FAILED' }, text: 'Check failed · nothing was pushed',
               },
             ],
           },
@@ -264,7 +265,11 @@ describe('the landing session page', () => {
               {
                 id: 'e7', seq: 7, kind: 'CHECK_FINISHED', at: at(14, 58), claim: 2, round: 1,
                 check: { name: 'MERGE_CHECK', index: 1 }, phase: 'CHECK', step: null,
-                actor: { type: 'RUNNER' }, reason: null, data: null,
+                actor: { type: 'RUNNER' }, reason: null,
+                data: {
+                  name: 'MERGE_CHECK', index: 1, exitCode: 0, expectedExitCode: 0, timedOut: false,
+                  durationMs: 1_022_000,
+                },
                 text: 'Merge check passed · 17m 02s',
               },
             ],
@@ -328,7 +333,9 @@ describe('the landing session page', () => {
           entries: [{
             id: 'e1', seq: 1, kind: 'CHECK_FINISHED', at: at(14, 58), claim: 1, round: 1,
             check: { name: 'MERGE_CHECK', index: 1 }, phase: 'CHECK', step: null,
-            actor: { type: 'RUNNER' }, reason: null, data: null, text: 'Merge check failed · exit 1 · 3m 52s',
+            actor: { type: 'RUNNER' }, reason: null,
+            data: { exitCode: 1, expectedExitCode: 0, timedOut: false },
+            text: 'Merge check failed · exit 1 · 3m 52s',
           }],
         }],
         facts: [], truncated: false,
@@ -351,6 +358,64 @@ describe('the landing session page', () => {
     expect(page().textContent).toContain('FAIL  server-execution > runs on the server');
     await click(button('Log ›'), 'the log press again');
     expect(page().querySelector('.landing-log')).toBeNull();
+  });
+
+  it('marks a check or result line by its fields: the wording changed, the ✓ did not', async () => {
+    const line = (
+      id: string,
+      kind: 'CHECK_FINISHED' | 'RESULT' | 'RESULT_FALLBACK',
+      text: string,
+      data: Record<string, unknown> | null,
+      check: number | null = null,
+    ): IntegrationTimelineEntry => ({
+      id, seq: Number(id.slice(1)), kind, at: at(14, 58), claim: 1, round: 1,
+      check: check == null ? null : { name: 'MERGE_CHECK', index: check }, phase: 'CHECK',
+      step: null, actor: { type: 'RUNNER' }, reason: null, data, text,
+    });
+    view = landing({
+      currentAttempt: attempt({ state: 'CHECK_FAILED' }),
+      timeline: {
+        sections: [{
+          title: 'Generation 1',
+          jobId: 'job-1',
+          kind: 'LAND_TASK',
+          generation: 1,
+          state: 'CHECK_FAILED',
+          entries: [
+            line('r1', 'CHECK_FINISHED', 'Merge check green · 17m 02s',
+              { exitCode: 0, expectedExitCode: 0, timedOut: false }, 1),
+            line('r2', 'CHECK_FINISHED', 'Merge check passed · 3m 52s',
+              { exitCode: 1, expectedExitCode: 0, timedOut: false }, 2),
+            line('r3', 'CHECK_FINISHED', 'Merge check passed · 1m 10s', null, 3),
+            line('r4', 'RESULT', 'Put on main · 8ed0ea7', { state: 'LANDED' }),
+            line('r5', 'RESULT', 'Ready to merge into fix/passed-x', { state: 'READY' }),
+            line('r6', 'RESULT_FALLBACK', 'Landed on main · 8ed0ea7', null),
+          ],
+        }],
+        facts: [], truncated: false,
+      },
+    });
+    logAnswer = () => Promise.resolve({
+      jobId: 'job-1',
+      entries: [{
+        jobId: 'job-1', claim: 1, round: 1, check: { name: 'MERGE_CHECK', index: 2 },
+        seq: 0, text: 'FAIL  server-execution > runs on the server', truncatedBytes: 0, at: at(14, 58),
+      }],
+      nextCursor: null,
+    });
+    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    const marks = [...page().querySelectorAll<HTMLElement>('.landing-timeline-glyph')]
+      .map((mark) => `${mark.textContent}:${mark.className.replace('landing-timeline-glyph ', '')}`);
+    expect(marks).toEqual([
+      '✓:is-ok', '✗:is-failed', '✗:is-failed', '✓:is-ok', '✗:is-failed', '✗:is-failed',
+    ]);
+    // Only the checks that did not pass read their tail inline (05 g); the reworded pass stays one line.
+    const inline = calls
+      .map((call) => call.path)
+      .filter((path) => path.startsWith(`/sessions/${SESSION}/landing/log?`))
+      .map((path) => new URLSearchParams(path.split('?')[1]).get('check'));
+    expect(inline.sort()).toEqual(['2', '3']);
+    expect(page().querySelectorAll('.landing-live-output')).toHaveLength(2);
   });
 });
 
@@ -508,7 +573,7 @@ describe('the merge round’s sections and its gates', () => {
             entries: [{
               id: 'e2', seq: 2, kind: 'RESULT', at: at(9, 51), claim: 1, round: null,
               check: null, phase: 'PUSH', step: null, actor: { type: 'RUNNER' }, reason: null,
-              data: null, text: 'Landed on main · 8ed0ea7',
+              data: { state: 'LANDED' }, text: 'Landed on main · 8ed0ea7',
             }],
           },
         ],

@@ -9,7 +9,9 @@ import type {
 import {
   LANDING_PAGE_COPY,
   landingAttemptCard,
+  landingCheckPassed,
   landingDuration,
+  landingEntryOk,
   landingFooter,
   landingGates,
   landingHeaderSub,
@@ -539,5 +541,62 @@ describe('the settled round is the outcome', () => {
   it('spells a duration in minutes and seconds at every length', () => {
     expect(landingDuration(17 * 60_000 + 41_000)).toBe('17m 41s');
     expect(landingDuration(3_600_000 + 5 * 60_000)).toBe('1h 05m');
+  });
+});
+
+describe('the timeline’s ✓ reads the line’s fields, not its sentence', () => {
+  const finished = (data: Record<string, unknown> | null, text = 'Merge check passed · 17m 02s') => entry({
+    kind: 'CHECK_FINISHED',
+    check: { name: 'MERGE_CHECK', index: 1 },
+    phase: 'CHECK',
+    data,
+    text,
+  });
+  const result = (state: string | null, text: string, kind: 'RESULT' | 'RESULT_FALLBACK' = 'RESULT') => entry({
+    kind,
+    data: state == null ? null : { state },
+    text,
+  });
+
+  it('a check passed when it exited with the code it expected and did not time out', () => {
+    expect(landingCheckPassed(finished({ exitCode: 0, expectedExitCode: 0, timedOut: false }))).toBe(true);
+    expect(landingCheckPassed(finished({ exitCode: 3, expectedExitCode: 3, timedOut: false }))).toBe(true);
+    expect(landingCheckPassed(finished({ exitCode: 1, expectedExitCode: 0, timedOut: false }))).toBe(false);
+    expect(landingCheckPassed(finished({ exitCode: 0, expectedExitCode: 0, timedOut: true }))).toBe(false);
+    // No exit code is not a pass, and neither is a line with no fields at all.
+    expect(landingCheckPassed(finished({ exitCode: null, expectedExitCode: 0, timedOut: false }))).toBe(false);
+    expect(landingCheckPassed(finished(null))).toBe(false);
+    expect(landingCheckPassed(finished({}))).toBe(false);
+  });
+
+  it('the wording changed, the ✓ did not', () => {
+    const green = finished({ exitCode: 0, expectedExitCode: 0, timedOut: false }, 'Merge check green · 17m 02s');
+    expect(landingCheckPassed(green)).toBe(true);
+    expect(landingEntryOk(green)).toBe(true);
+    const saysPassed = finished({ exitCode: 1, expectedExitCode: 0, timedOut: false }, 'Merge check passed · 3m 52s');
+    expect(landingCheckPassed(saysPassed)).toBe(false);
+    expect(landingEntryOk(saysPassed)).toBe(false);
+    expect(landingEntryOk(result('LANDED', 'Put on main · 8ed0ea7'))).toBe(true);
+    expect(landingEntryOk(result('ALREADY_LANDED', 'Was on main · 8ed0ea7'))).toBe(true);
+    expect(landingEntryOk(result('NOTHING_TO_LAND', 'No commits to push'))).toBe(true);
+    expect(landingEntryOk(result('NOTHING_TO_LAND', 'Nothing to push · the branch carried no commits', 'RESULT_FALLBACK')))
+      .toBe(true);
+  });
+
+  it('every other result is ✗, whatever a branch name in it says', () => {
+    expect(landingEntryOk(result('READY', 'Ready to merge into fix/passed-x'))).toBe(false);
+    expect(landingEntryOk(result('CONFLICT', 'Could not sync main into fix/passed-x · merge conflict'))).toBe(false);
+    expect(landingEntryOk(result('CHECK_FAILED', 'Check failed · nothing was pushed'))).toBe(false);
+    expect(landingEntryOk(result('ERROR', 'Stopped with an error · PUSH_FAILED'))).toBe(false);
+    expect(landingEntryOk(result('CANCELLED', 'Stopped · not landed'))).toBe(false);
+    expect(landingEntryOk(result('SUPERSEDED', 'Superseded · a newer attempt asks the same question'))).toBe(false);
+    expect(landingEntryOk(result(null, 'Landed on main · 8ed0ea7'))).toBe(false);
+    expect(landingEntryOk(result(null, 'Landed on main · 8ed0ea7', 'RESULT_FALLBACK'))).toBe(false);
+  });
+
+  it('no other kind of line is a check or a result', () => {
+    expect(landingCheckPassed(entry({ kind: 'RESULT', data: { exitCode: 0, expectedExitCode: 0, timedOut: false } })))
+      .toBe(false);
+    expect(landingEntryOk(entry({ kind: 'CLAIMED', data: { state: 'LANDED' }, text: 'Landed on main' }))).toBe(false);
   });
 });

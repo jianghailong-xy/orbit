@@ -264,13 +264,16 @@ public struct IntegrationTimelineEntry: Codable, Equatable, Sendable {
     public let phase: String?
     public let step: String?
     public let reason: String?
+    /// The structured fields the server wrote the sentence from (a check's exit codes, a result's
+    /// state). A value this build cannot read is the same as none.
+    public let data: [String: JSONValue]?
     public let text: String
     public let derived: Bool?
 
     public init(id: String? = nil, seq: Int? = nil, kind: String = "", at: String = "",
                 claim: Int = 0, round: Int? = nil, check: LandingTimelineCheck? = nil,
                 phase: String? = nil, step: String? = nil, reason: String? = nil,
-                text: String = "", derived: Bool? = nil) {
+                data: [String: JSONValue]? = nil, text: String = "", derived: Bool? = nil) {
         self.id = id
         self.seq = seq
         self.kind = kind
@@ -281,8 +284,32 @@ public struct IntegrationTimelineEntry: Codable, Equatable, Sendable {
         self.phase = phase
         self.step = step
         self.reason = reason
+        self.data = data
         self.text = text
         self.derived = derived
+    }
+
+    /// A finished check passed: it did not time out and exited with the code it expected. Read off
+    /// `data`, never off the sentence; a check with no exit code did not pass (unlike
+    /// `LandingCheckResult.passed`, the settled card's rule). Web: `landingCheckPassed`.
+    public var checkPassed: Bool {
+        guard kind == "CHECK_FINISHED", data?["timedOut"]?.boolValue != true,
+              let exitCode = data?["exitCode"]?.intValue else { return false }
+        return exitCode == data?["expectedExitCode"]?.intValue
+    }
+
+    /// A check or result line that ended well draws ✓, and one that did not draws ✗: a passed
+    /// check, or a result whose branch is on its target. Web: `landingEntryOk`.
+    public var succeeded: Bool {
+        switch kind {
+        case "CHECK_FINISHED":
+            return checkPassed
+        case "RESULT", "RESULT_FALLBACK":
+            guard let state = data?["state"]?.stringValue else { return false }
+            return ["LANDED", "ALREADY_LANDED", "NOTHING_TO_LAND"].contains(state)
+        default:
+            return false
+        }
     }
 
     public init(from decoder: Decoder) throws {
@@ -297,6 +324,7 @@ public struct IntegrationTimelineEntry: Codable, Equatable, Sendable {
         phase = try? c.decodeIfPresent(String.self, forKey: .phase)
         step = try? c.decodeIfPresent(String.self, forKey: .step)
         reason = try? c.decodeIfPresent(String.self, forKey: .reason)
+        data = try? c.decodeIfPresent([String: JSONValue].self, forKey: .data)
         text = try c.decodeIfPresent(String.self, forKey: .text) ?? ""
         derived = try? c.decodeIfPresent(Bool.self, forKey: .derived)
     }

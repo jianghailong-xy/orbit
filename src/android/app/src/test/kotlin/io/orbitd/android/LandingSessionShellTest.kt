@@ -202,6 +202,28 @@ class LandingSessionShellTest {
         await { ProjectShell.calls.any { it.startsWith("GET sessions/$landing/landing/log?jobId=j-1") } }
     }
 
+    /** The marks read the line's fields, not its sentence: a reworded pass keeps its ✓ and stays one line, and a failed
+     *  check whose sentence says `passed` draws ✗ and reads its tail inline. */
+    @Test fun theTimelinesMarksReadTheLinesFieldsNotItsSentence() {
+        ProjectShell.landing = view(state = "CHECK_FAILED", timeline = timeline("""{"kind":"CHECK_FINISHED","at":"${ago(900)}","claim":1,
+            "round":1,"check":{"name":"TASK_ACCEPTANCE","index":1},"data":{"exitCode":0,"expectedExitCode":0,"timedOut":false},
+            "text":"Task acceptance green · 3m 52s"},
+            {"kind":"CHECK_FINISHED","at":"${ago(600)}","claim":1,"round":1,"check":{"name":"MERGE_CHECK","index":2},
+            "data":{"exitCode":1,"expectedExitCode":0,"timedOut":false},"text":"Merge check passed · 1m 10s"},
+            {"kind":"RESULT","at":"${ago(300)}","claim":1,"data":{"state":"LANDED"},"text":"Put on project/launch · 8ed0ea7"},
+            {"kind":"RESULT","at":"${ago(200)}","claim":1,"data":{"state":"READY"},"text":"Ready to merge into fix/passed-x"}"""))
+        ProjectShell.landingLog = """{"jobId":"j-1","entries":[{"claim":1,"round":1,"seq":0,"text":"FAILED something\n","truncatedBytes":0}],"nextCursor":null}"""
+        signIn(); open("orbit-session:$landing")
+        await { exists(hasTestTag("landing:mark:3")) }
+        assertEquals(listOf("✓", "✗", "✓", "✗"), (0..3).map { text("landing:mark:$it") })
+        // Only the check that did not pass reads its tail inline (05 g).
+        await { exists(hasTestTag("landing:log-text")) }
+        assertEquals(1, compose.onAllNodesWithTag("landing:log-block", useUnmergedTree = true).fetchSemanticsNodes().size)
+        val logs = ProjectShell.calls.filter { it.startsWith("GET sessions/$landing/landing/log?") }
+        assertTrue(logs.any { it.contains("check=2") })
+        assertTrue(logs.none { it.contains("check=1") })
+    }
+
     // MARK: the journey's hands and eyes
 
     private fun app() = compose.activity.application as OrbitApplication

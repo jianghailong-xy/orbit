@@ -1,4 +1,5 @@
 import type {
+  IntegrationTimelineEntry,
   IntegrationTimelineSection,
   ProjectPromotionView,
   SessionLandingView,
@@ -955,6 +956,35 @@ export function landingSectionState(state: string): string | null {
     // `Landed on …`); the board's settled round wears no suffix on its headings.
     default:
       return null;
+  }
+}
+
+/** The result states a timeline line marks as a success: the branch is on its target. */
+const LANDING_OK_STATES = new Set(['LANDED', 'ALREADY_LANDED', 'NOTHING_TO_LAND']);
+
+/**
+ * A finished check passed: it did not time out and exited with the code it expected. Read off the
+ * line's `data`, the fields the server wrote its sentence from, never off the sentence. A check
+ * with no exit code did not pass, unlike on the settled card's check line.
+ */
+export function landingCheckPassed(entry: IntegrationTimelineEntry): boolean {
+  if (entry.kind !== 'CHECK_FINISHED') return false;
+  const data = entry.data ?? {};
+  return data.timedOut !== true
+    && typeof data.exitCode === 'number'
+    && data.exitCode === data.expectedExitCode;
+}
+
+/** A check or result line that ended well draws ✓, and one that did not draws ✗ (05 a/e/g). */
+export function landingEntryOk(entry: IntegrationTimelineEntry): boolean {
+  switch (entry.kind) {
+    case 'CHECK_FINISHED':
+      return landingCheckPassed(entry);
+    case 'RESULT':
+    case 'RESULT_FALLBACK':
+      return LANDING_OK_STATES.has(String(entry.data?.state));
+    default:
+      return false;
   }
 }
 

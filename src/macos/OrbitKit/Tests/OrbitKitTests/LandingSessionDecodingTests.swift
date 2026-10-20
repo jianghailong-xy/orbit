@@ -86,10 +86,45 @@ final class LandingSessionDecodingTests: XCTestCase {
         XCTAssertEqual(timeline.sections.first?.title, "Merge check · 1")
         XCTAssertEqual(timeline.sections.first?.entries.first?.text,
                        "Claimed by runner wikova · claim 1")
+        XCTAssertNil(timeline.sections.first?.entries.first?.data)
         XCTAssertEqual(timeline.facts.first?.kind, "FIX_TASK")
         XCTAssertFalse(timeline.truncated)
         // A landing detail carries no derived source label about itself.
         XCTAssertNil(detail.sourceLanding)
+    }
+
+    /// A timeline line's `data`: the fields its sentence was written from, which its mark reads. A
+    /// value that is not an object is read past, the way a missing one is.
+    func testATimelineLinesDataDecodesAndAnUnreadableOneIsIgnored() throws {
+        let entries = try decode([IntegrationTimelineEntry].self, """
+        [
+          {"id":"e1","seq":1,"kind":"CHECK_FINISHED","at":"2026-09-25T06:58:00.000Z","claim":1,
+           "round":1,"check":{"name":"MERGE_CHECK","index":1},"phase":"CHECK","step":null,
+           "actor":{"type":"RUNNER"},"reason":null,
+           "data":{"name":"MERGE_CHECK","index":1,"exitCode":0,"expectedExitCode":0,
+                   "timedOut":false,"durationMs":1022000,
+                   "finishedAt":"2026-09-25T06:58:00.000Z"},
+           "text":"Merge check passed · 17m 02s"},
+          {"id":"e2","seq":2,"kind":"RESULT","at":"2026-09-25T06:58:01.000Z","claim":1,
+           "round":null,"check":null,"phase":"PUSH","step":null,"actor":{"type":"RUNNER"},
+           "reason":null,"data":{"state":"LANDED","requestedState":"LANDED","errorCode":null},
+           "text":"Landed on main · 8ed0ea7"},
+          {"id":"e3","seq":3,"kind":"RESULT","at":"2026-09-25T06:58:02.000Z","claim":1,
+           "data":"LANDED","text":"Landed on main · 8ed0ea7"}
+        ]
+        """)
+        XCTAssertEqual(entries.count, 3)
+        XCTAssertEqual(entries[0].data?["exitCode"]?.intValue, 0)
+        XCTAssertEqual(entries[0].data?["expectedExitCode"]?.intValue, 0)
+        XCTAssertEqual(entries[0].data?["timedOut"]?.boolValue, false)
+        XCTAssertTrue(entries[0].checkPassed)
+        XCTAssertTrue(entries[0].succeeded)
+        XCTAssertEqual(entries[1].data?["state"]?.stringValue, "LANDED")
+        XCTAssertEqual(entries[1].data?["errorCode"], .null)
+        XCTAssertTrue(entries[1].succeeded)
+        XCTAssertNil(entries[2].data)
+        XCTAssertEqual(entries[2].text, "Landed on main · 8ed0ea7")
+        XCTAssertFalse(entries[2].succeeded, "no readable state is not a landing")
     }
 
     /// An older server sends neither field: the session still reads, as the conversation it was.

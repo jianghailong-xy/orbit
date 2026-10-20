@@ -20,6 +20,8 @@ import {
   LANDING_PAGE_COPY,
   landingAttemptCard,
   landingCheckLabel,
+  landingCheckPassed,
+  landingEntryOk,
   landingFooter,
   landingGates,
   landingHeaderSub,
@@ -620,7 +622,7 @@ function LandingTimeline({
                     {/* A check that failed shows the tail it died on, inline (05 g); a passed one
                         keeps its Log › and stays one line. */}
                     {entry.kind === 'CHECK_FINISHED' && entry.check && section.jobId
-                      && !entry.text.includes('passed') ? (
+                      && !landingCheckPassed(entry) ? (
                         <LandingInlineOutput
                           key={`inline-${section.jobId}-${entry.claim}-${entry.round ?? 0}-${entry.check.index}`}
                           sessionId={sessionId}
@@ -668,9 +670,7 @@ function entryGlyph(
     case 'CHECK_FINISHED':
     case 'RESULT':
     case 'RESULT_FALLBACK':
-      return entry.text.includes('passed') || /^(Landed|Already|Nothing to push|Merged)/.test(entry.text)
-        ? { glyph: '✓', tone: 'ok' }
-        : { glyph: '✗', tone: 'failed' };
+      return landingEntryOk(entry) ? { glyph: '✓', tone: 'ok' } : { glyph: '✗', tone: 'failed' };
     case 'STOP_REQUESTED':
     case 'CANCELLED':
     case 'ABANDONED':
