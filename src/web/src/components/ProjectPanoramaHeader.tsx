@@ -813,9 +813,10 @@ export interface LandingCard {
   detail: string | null;
   /** The job Retry takes, when the server says a retry takes one. */
   retryJobId: string | null;
-  /** The lead job is a round of merging into main (a merge check, or the merge itself). It lands
-   *  no task, so a card holding only it says no "Nothing to do" (board v4 04 draws no body under
-   *  that head). Read off `inFlight`, so a server that does not list its jobs says it too. */
+  /** The card holds one job — by the same counts its head is named by — and it is a round of
+   *  merging into main (a merge check, or the merge itself). It lands no task, so the card says no
+   *  "Nothing to do" (board v4 04 draws no body under that head). Read off `inFlight`, so a server
+   *  that does not list its jobs says it too. */
   mergeJob: boolean;
 }
 
@@ -881,7 +882,7 @@ export function landingCard(
     ...(line.liveness ? { liveness: line.liveness } : {}),
     detail: line.timedOut ? lead?.detail ?? null : null,
     retryJobId: lead?.retryable ? lead.jobId : null,
-    mergeJob: MERGE_JOB_KINDS.has(view.inFlight?.kind ?? ''),
+    mergeJob: !several && MERGE_JOB_KINDS.has(view.inFlight?.kind ?? ''),
   };
 }
 

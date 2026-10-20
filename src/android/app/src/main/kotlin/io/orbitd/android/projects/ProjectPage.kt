@@ -55,8 +55,9 @@ data class LandingLine(val word: String, val what: String?, val running: Boolean
 data class LandingHead(val right: String, val isClock: Boolean, val detail: String)
 /** The landing in flight as a card of its own (iOS 749d995c5, docs/mocks/project-landing-card): the landing line's head, then what is
  * landing — one task's title, or a row per job — the branch the lead job lands on, and where a timed-out runner stopped.
- * `mergeJob`: the lead job is a round of merging into main, read off `inFlight` (so a server that lists no jobs says it too); it lands
- * no task, so a card holding only it says no "Nothing to do" (board v4 04 draws no body under that head). */
+ * `mergeJob`: the card holds one job — by the same counts its head is named by — and it is a round of merging into main, read off
+ * `inFlight` (so a server that lists no jobs says it too); it lands no task, so the card says no "Nothing to do" (board v4 04 draws no
+ * body under that head). */
 data class LandingCard(val word: String, val title: String, val state: String, val running: Boolean, val timedOut: Boolean, val what: String?,
     val jobs: List<Job>, val target: String?, val clock: String, val clockLabel: String, val wait: String?, val updated: String?,
     val liveness: LandingLiveness?, val detail: String?, val retryJobId: String?, val mergeJob: Boolean = false) {
@@ -258,7 +259,7 @@ object ProjectPage {
         return LandingCard(line.word, if (several) listOfNotNull(line.word, line.what).joinToString(" ") else line.word, line.state, line.running,
             line.timedOut, if (several) null else line.what, jobs, lead?.let { landingTarget(view, it.jobId) }, line.clock, line.clockLabel, line.wait,
             line.updated, line.liveness, if (line.timedOut) lead?.detail else null, lead?.takeIf { it.retryable }?.jobId,
-            ProjectMergeCard.isMergeJob(view.obj("inFlight")))
+            !several && ProjectMergeCard.isMergeJob(view.obj("inFlight")))
     }
 
     /** The branch a job lands on, short, off the project's own landings (`landTasks[].integration.landTask`) — the task page's Target

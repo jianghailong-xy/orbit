@@ -140,6 +140,13 @@ class ProjectLandingCardTest {
                     put("phase", "CHECK"); put("heartbeatAt", iso(0)) }
             }
             assertTrue(kind, ProjectPage.landingCard(older, now, now, false)!!.mergeJob)
+            // The same server counting two jobs: the card holds more than the merge job, so it keeps the sentence it says about them.
+            val olderTwo = buildJsonObject {
+                put("integratingCount", 1); put("queuedCount", 1)
+                putJsonObject("inFlight") { put("taskTitle", null as String?); put("state", "RUNNING"); put("startedAt", iso(66)); put("kind", kind)
+                    put("phase", "CHECK"); put("heartbeatAt", iso(0)) }
+            }
+            assertFalse(kind, ProjectPage.landingCard(olderTwo, now, now, false)!!.mergeJob)
         }
         // A task landing is none, even with a merge queued behind it, and nor is a job of no kind.
         assertFalse(ProjectPage.landingCard(running(listOf(job("j-c5"))), now, now, false)!!.mergeJob)

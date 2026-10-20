@@ -179,6 +179,13 @@ final class ProjectLandingCardTests: XCTestCase {
                 inFlight: .init(taskTitle: nil, state: "RUNNING", startedAt: iso(66),
                                 kind: kind, phase: "CHECK", heartbeatAt: iso(0)))
             XCTAssertTrue(try XCTUnwrap(ProjectPage.landingCard(older, now: now, updatedAt: now)).mergeJob, kind)
+            // The same server counting two jobs: the card holds more than the merge job, so its
+            // head names two jobs and it keeps the sentence it says about them.
+            let olderTwo = ProjectIntegrationView(
+                integratingCount: 1, queuedCount: 1,
+                inFlight: .init(taskTitle: nil, state: "RUNNING", startedAt: iso(66),
+                                kind: kind, phase: "CHECK", heartbeatAt: iso(0)))
+            XCTAssertFalse(try XCTUnwrap(ProjectPage.landingCard(olderTwo, now: now, updatedAt: now)).mergeJob, kind)
         }
         // A task landing is none, even with a merge queued behind it, and nor is a job of no kind.
         XCTAssertFalse(try XCTUnwrap(ProjectPage.landingCard(running([job("j-c5")]), now: now, updatedAt: now)).mergeJob)

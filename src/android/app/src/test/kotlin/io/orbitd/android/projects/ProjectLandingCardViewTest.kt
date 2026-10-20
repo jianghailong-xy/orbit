@@ -212,6 +212,17 @@ class ProjectLandingCardViewTest {
         }
         draw(ProjectPage.landingCard(view(job("j-1")), now, now, false)!!)
         compose.onNodeWithText(ProjectPage.landingNothingToDo, useUnmergedTree = true).assertExists()
+        // An older server that counts two jobs behind a merge check and lists none: no lone merge job, so the sentence stays.
+        val olderTwo = buildJsonObject {
+            put("integratingCount", 1); put("queuedCount", 1)
+            putJsonObject("inFlight") {
+                put("taskTitle", null as String?); put("state", "RUNNING"); put("startedAt", iso(66)); put("kind", "CHECK_PROMOTION")
+                put("jobId", "j-m"); put("phase", "CHECK"); put("heartbeatAt", iso(0))
+            }
+        }
+        draw(ProjectPage.landingCard(olderTwo, now, now, false)!!)
+        says("landing-head:title", "Merge check 2 jobs")
+        compose.onNodeWithText(ProjectPage.landingNothingToDo, useUnmergedTree = true).assertExists()
     }
 
     private val output: File by lazy {

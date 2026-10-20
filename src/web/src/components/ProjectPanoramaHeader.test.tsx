@@ -570,6 +570,21 @@ describe('the landing card', () => {
     );
     expect(older).toContain('class="landing-head-title">Merge check<');
     expect(older).not.toContain('spl-note');
+
+    // That server counting two jobs behind a merge check is no lone merge job: its head names two
+    // jobs, and the card keeps the sentence it says about them.
+    const olderTwo = renderAt(
+      seeded(integration({
+        integratingCount: 1,
+        queuedCount: 1,
+        inFlight: { taskTitle: null, state: 'RUNNING', kind: 'CHECK_PROMOTION', phase: 'CHECK',
+          startedAt: '2026-09-25T13:58:00Z', heartbeatAt: '2026-09-25T13:58:00Z' },
+        inFlightJobs: undefined,
+      })),
+      '2026-09-25T13:59:20Z',
+    );
+    expect(olderTwo).toContain('class="landing-head-title">Merge check 2 jobs<');
+    expect(olderTwo).toContain('class="spl-note">Nothing to do — it lands on its own.<');
   });
 
   it('still says where a lone merge job’s runner stopped once it timed out', () => {
@@ -1205,6 +1220,11 @@ describe('landingCard', () => {
       const older = integration({ inFlight: { taskTitle: null, state: 'QUEUED', kind, startedAt: instant(NOW - 5_000) },
         inFlightJobs: undefined, landTasks: undefined });
       expect(landingCard(older, NOW, { updatedAt: NOW })!.mergeJob).toBe(true);
+      // The same server counting two jobs: the card holds more than the merge job.
+      const olderTwo = integration({ integratingCount: 1, queuedCount: 1,
+        inFlight: { taskTitle: null, state: 'RUNNING', kind, startedAt: instant(NOW - 5_000) },
+        inFlightJobs: undefined, landTasks: undefined });
+      expect(landingCard(olderTwo, NOW, { updatedAt: NOW })!.mergeJob).toBe(false);
     }
     // A task landing is none, even with a merge queued behind it, and nor is a job of no kind.
     expect(landingCard(listing([job()]), NOW, { updatedAt: NOW })!.mergeJob).toBe(false);
