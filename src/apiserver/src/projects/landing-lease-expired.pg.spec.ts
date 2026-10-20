@@ -931,8 +931,9 @@ test('X-E5: the lease-expired item, its edges, its backstop and what it does not
     const w = await world(stack, 'read', 'PROJECT_BRANCH');
     await doneTask(stack, w, 'read');
     const job = await claim(stack, w);
-    // Where the runner had got to when it stopped reporting: the card's "Step" row is read off
-    // these, and its "round N of M" off the check in flight.
+    // Where the runner had got to when it stopped reporting: the card's "Step" row is read off the
+    // phase, the claim and the round. Its M comes from jobKind (§7.2 V6), never from the check's
+    // count, which the row only passes through.
     const CHECK = { name: 'MERGE_CHECK', index: 2, count: 3, budgetSeconds: 600, startedAt: new Date() };
     await stack.db.projectIntegrationJob.update({
       where: { id: job.jobId },
