@@ -37,7 +37,8 @@ import kotlinx.coroutines.launch
  * the word, the live clock at the right of it, and one line under both with the state, the wait and the freshness. No chevron: the
  * whole row is the press wherever there is one. */
 @Composable
-internal fun ProjectLandingHead(title: String, head: LandingHead, running: Boolean, timedOut: Boolean, modifier: Modifier = Modifier) {
+internal fun ProjectLandingHead(title: String, head: LandingHead, running: Boolean, timedOut: Boolean, modifier: Modifier = Modifier,
+    detailLines: Int = 1) {
     val warning = LocalOrbitColors.current.needsYou
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     // The landing row's ink: the accent while the job runs, grey while it waits its turn or the app cannot read the server, and the
@@ -56,8 +57,8 @@ internal fun ProjectLandingHead(title: String, head: LandingHead, running: Boole
                 Text(head.right, Modifier.testTag("landing-head:right"), style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
                     fontWeight = FontWeight.SemiBold, color = ink, maxLines = 1, softWrap = false)
             }
-            Text(head.detail, Modifier.testTag("landing-head:detail"), style = MaterialTheme.typography.bodyMedium, color = muted, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
+            Text(head.detail, Modifier.testTag("landing-head:detail"), style = MaterialTheme.typography.bodyMedium, color = muted,
+                maxLines = detailLines, overflow = TextOverflow.Ellipsis)
         }
     }
 }
