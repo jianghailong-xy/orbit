@@ -26,8 +26,8 @@ import { INTEGRATION_ITEM_KINDS, openItemOwed } from './project-open-item';
  *
  * Everything here is a fact another door already keeps: the newest attempt is the job row, its
  * liveness and blocking reason are `readInFlightJobs`' own read-time rules, the todos are the
- * project's OPEN integration items still owed, and the generations are the subject's own episodes. Nothing is copied
- * into the session row and nothing is written.
+ * subject's OPEN integration items still owed, and the generations are the subject's own
+ * episodes. Nothing is copied into the session row and nothing is written.
  *
  * Deliberately absent until the later tasks add them: the job timeline and the per-check output.
  */
@@ -105,6 +105,7 @@ export async function readLandingView(
   const todos = await readLandingTodos(prisma, ownerId, {
     projectId: landing.projectId,
     taskId: landing.taskId,
+    promotionId: landing.promotionId,
     jobIds: jobRows.map((row) => row.id),
   });
 
@@ -180,18 +181,26 @@ export async function readLandingView(
 /** The subject's OPEN integration items: what the landing page lists as its todos (LS4 — the item
  *  keeps its own card and assignee; the landing only shows that it is waiting).
  *
- *  Only the INTEGRATION_* kinds, and only while still OWED (`openItemOwed`): the same two filters
- *  the session row's AWAITING_DECISION asks (`SessionsService`'s LANDING subquery), so the page
- *  never lists a todo the row does not count. Another kind about the same task (a delivery review,
- *  a task failure) is not the landing's to show, and an integration item whose candidate left the
- *  live states, or whose task was cancelled or replaced, is owed by nobody however OPEN it reads. */
+ *  Only the INTEGRATION_* kinds, only while still OWED (`openItemOwed`), and only an item about the
+ *  subject's task, about the candidate the landing row names, or about a job of this landing: the
+ *  same filters and the same three tiers the session row's AWAITING_DECISION asks
+ *  (`SessionsService`'s LANDING subquery), so every todo the page lists is one that subquery would
+ *  also count while the landing is unsettled. A settled generation is not held to it: the row
+ *  answers SETTLED before it asks anything, and the task tier matches every episode of the task,
+ *  so a settled generation can still list its task's owed items from a later episode. The candidate
+ *  tier is what finds an item about one of the candidate's jobs queued before 0436, whose
+ *  `landing_id` is NULL and so is no job of this landing. Another kind about the same task (a
+ *  delivery review, a task failure) is not the landing's to show, and an integration item whose
+ *  candidate left the live states, or whose task was cancelled or replaced, is owed by nobody
+ *  however OPEN it reads. */
 async function readLandingTodos(
   prisma: PrismaService,
   ownerId: string,
-  subject: { projectId: string; taskId: string | null; jobIds: string[] },
+  subject: { projectId: string; taskId: string | null; promotionId: string | null; jobIds: string[] },
 ): Promise<SessionLandingTodo<Date>[]> {
   const tiers = [
     ...(subject.taskId ? [Prisma.sql`item."task_id" = ${subject.taskId}::uuid`] : []),
+    ...(subject.promotionId ? [Prisma.sql`item."promotion_id" = ${subject.promotionId}::uuid`] : []),
     ...(subject.jobIds.length > 0
       ? [Prisma.sql`item."integration_job_id" IN (${Prisma.join(subject.jobIds.map((id) => Prisma.sql`${id}::uuid`))})`]
       : []),

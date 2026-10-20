@@ -443,19 +443,24 @@ function loggedClient(url: string): { db: PrismaClient; prisma: PrismaService; s
  * Which comes first for the call under test: it settles, or it waits on a lock. A backend of this
  * database other than the asking one that waits on a lock can only be that call — every spec file
  * has a database of its own, its cases run one at a time, and the side connection holding the lock
- * is not waiting. Bounded, so a case whose call does neither is red rather than hung.
+ * is not waiting. Bounded, so a case whose call does neither is red rather than hung. A wait also
+ * answers the statement each waiting backend is blocked in (`pg_stat_activity.query`), so a case can
+ * say WHICH of the call's statements waits, not only that one does.
  */
-async function settlesOrWaits(db: PrismaClient, settled: () => boolean): Promise<'SETTLED' | 'WAITING' | 'NEITHER'> {
+async function settlesOrWaits(
+  db: PrismaClient,
+  settled: () => boolean,
+): Promise<{ outcome: 'SETTLED' | 'WAITING' | 'NEITHER'; waitingQueries: string[] }> {
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
-    if (settled()) return 'SETTLED';
-    const [row] = await db.$queryRaw<Array<{ n: number }>>`
-      SELECT count(*)::int AS "n" FROM pg_stat_activity
+    if (settled()) return { outcome: 'SETTLED', waitingQueries: [] };
+    const rows = await db.$queryRaw<Array<{ query: string }>>`
+      SELECT "query" FROM pg_stat_activity
        WHERE "wait_event_type" = 'Lock' AND "datname" = current_database() AND "pid" <> pg_backend_pid()`;
-    if ((row?.n ?? 0) > 0) return 'WAITING';
+    if (rows.length > 0) return { outcome: 'WAITING', waitingQueries: rows.map((row) => row.query) };
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  return settled() ? 'SETTLED' : 'NEITHER';
+  return { outcome: settled() ? 'SETTLED' : 'NEITHER', waitingQueries: [] };
 }
 
 /** A second connection, proven to be this spec's own database before it takes anything. */
@@ -499,7 +504,7 @@ test("a chunk is accepted while another transaction holds its job row FOR KEY SH
     chunk = sent;
     void sent.then(() => { settled = true; }, () => { settled = true; });
     assert.equal(
-      await settlesOrWaits(stack.db, () => settled),
+      (await settlesOrWaits(stack.db, () => settled)).outcome,
       'SETTLED',
       'the chunk waited on a FOR KEY SHARE holder of its job row, which only a FOR UPDATE of that row does',
     );
@@ -542,11 +547,16 @@ test('a chunk waits for a DELETE of its job row: accepted once the delete rolls 
       const sent = output(stack, w, job, seq, `chunk ${seq}\n`);
       chunk = sent;
       void sent.then(() => { settled = true; }, () => { settled = true; });
-      assert.equal(
-        await settlesOrWaits(stack.db, () => settled),
-        'WAITING',
-        'the chunk did not wait for a transaction that is deleting its job',
-      );
+      const wait = await settlesOrWaits(stack.db, () => settled);
+      assert.equal(wait.outcome, 'WAITING', 'the chunk did not wait for a transaction that is deleting its job');
+      // The statement that waits is the gate's own read of the job row under its claim, FOR NO KEY
+      // UPDATE — not the log INSERT, whose foreign key's FOR KEY SHARE would wait on the delete too
+      // and so would make this half green for a gate that took no lock at all.
+      assert.equal(wait.waitingQueries.length, 1, `one backend waits: ${JSON.stringify(wait.waitingQueries)}`);
+      assert.match(wait.waitingQueries[0], /FROM "project_integration_job"\s/);
+      assert.match(wait.waitingQueries[0], /"claim_lease_owner"/);
+      assert.match(wait.waitingQueries[0], /\bFOR NO KEY UPDATE\s*$/);
+      assert.doesNotMatch(wait.waitingQueries[0], /INSERT INTO "project_integration_job_log"/);
       assert.equal(settled, false, 'the chunk is still waiting while the delete is open');
       await side.query(end);
       return sent;
