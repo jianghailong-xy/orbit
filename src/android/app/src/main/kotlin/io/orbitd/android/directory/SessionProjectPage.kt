@@ -437,10 +437,11 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
                 item(key = "heading:landings") { SectionHeading(SessionLandingsCopy.title) }
                 val openLanding: (String) -> Unit = { id -> open(OrbitRoute(Destination.SESSION, id, route.workspaceId, origin = Origin.LIST)) }
                 items(group.waiting + group.settled, key = { "landing:${it.id}" }) { row -> LandingGroupRowView(row, openLanding) }
-                group.earlier?.let { earlier -> item(key = "landings:earlier") {
-                    EarlierLandingsRow(earlier, landingsExpanded) { landingsExpanded = !landingsExpanded }
-                } }
-                if (landingsExpanded) items(group.older, key = { "landing:${it.id}" }) { row -> LandingGroupRowView(row, openLanding) }
+                group.earlier?.let { earlier ->
+                    item(key = "landings:earlier") { EarlierLandingsRow(earlier, landingsExpanded) { landingsExpanded = !landingsExpanded } }
+                    // The older rows are the fold's alone: with no fold, an open state left over draws none of them.
+                    if (landingsExpanded) items(group.older, key = { "landing:${it.id}" }) { row -> LandingGroupRowView(row, openLanding) }
+                }
             }
             // The members by recency, newest first, in the list's day sections — without Pinned: the page has none — and the merges
             // into main already made among them, each at its own instant.

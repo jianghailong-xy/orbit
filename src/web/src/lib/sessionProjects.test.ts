@@ -371,6 +371,40 @@ describe('the Landings group', () => {
     expect(group.older.map((row) => row.id)).toEqual(['old-landed', 'old-nothing', 'older-still']);
   });
 
+  it('leaves a segment whose count is 0 out of the fold’s line', () => {
+    expect(landingEarlierLine({ landed: 2, nothing: 0 })).toBe('Earlier · 2 landed');
+    expect(landingEarlierLine({ landed: 0, nothing: 1 })).toBe('Earlier · 1 nothing to land');
+    // Only landed: the fold says so, and still opens to every older row, the cancelled one too.
+    const landedOnly = landingGroup([
+      landing('old-landed', { state: 'SETTLED', settledAs: 'LANDED', settledAt: ago(26 * 60) }),
+      landing('old-again', { state: 'SETTLED', settledAs: 'ALREADY_LANDED', settledAt: ago(28 * 60) }),
+      landing('old-cancelled', { state: 'SETTLED', settledAs: 'CANCELLED', settledAt: ago(30 * 60) }),
+    ], { now: NOW })!;
+    expect(landedOnly.earlier).toEqual({ landed: 2, nothing: 0 });
+    expect(landingEarlierLine(landedOnly.earlier!)).toBe('Earlier · 2 landed');
+    expect(landedOnly.older.map((row) => row.id)).toEqual(['old-landed', 'old-again', 'old-cancelled']);
+    const nothingOnly = landingGroup([
+      landing('old-nothing', { state: 'SETTLED', settledAs: 'NOTHING_TO_LAND', settledAt: ago(26 * 60) }),
+    ], { now: NOW })!;
+    expect(landingEarlierLine(nothingOnly.earlier!)).toBe('Earlier · 1 nothing to land');
+  });
+
+  it('draws no fold when nothing older landed or had nothing to land', () => {
+    const old = [
+      landing('old-cancelled', { state: 'SETTLED', settledAs: 'CANCELLED', settledAt: ago(26 * 60) }),
+      landing('old-handled', { state: 'SETTLED', settledAs: 'HANDLED', settledAt: ago(30 * 60) }),
+      landing('old-declined', { state: 'SETTLED', settledAs: 'DECLINED', settledAt: ago(32 * 60) }),
+      landing('old-deleted', { state: 'SETTLED', settledAs: 'DELETED', settledAt: ago(34 * 60) }),
+      landing('no-instant', { state: 'SETTLED', settledAs: 'CANCELLED', settledAt: null }),
+    ];
+    const group = landingGroup([landing('waiting', { state: 'AWAITING_DECISION' }), ...old], { now: NOW })!;
+    expect(group.waiting.map((row) => row.id)).toEqual(['waiting']);
+    expect(group.earlier).toBeNull();
+    expect(group.older).toEqual([]);
+    // …and with nothing else to list, there is no group: no bare "Landings" heading.
+    expect(landingGroup(old, { now: NOW })).toBeNull();
+  });
+
   it('never lists a round of merging that merged — the timeline has that row', () => {
     const group = landingGroup([
       landing('round', { subject: 'PROMOTION', state: 'SETTLED', settledAs: 'MERGED', settledAt: ago(30) }),

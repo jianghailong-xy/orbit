@@ -71,7 +71,6 @@ object SessionProjectLandings {
         val before = mutableListOf<At>()
         var landed = 0
         var nothing = 0
-        var older = 0
         for (session in rows) {
             val landing = session.landing ?: continue
             if (landing.state == "IN_FLIGHT") continue
@@ -91,7 +90,6 @@ object SessionProjectLandings {
             val at = instant(landing.settledAt)
             val word = settledWord(landing.settledAs)
             if (at == Long.MIN_VALUE || now.toEpochMilli() - at > landingsSettledWindowMs) {
-                older += 1
                 if (landing.settledAs in setOf("LANDED", "ALREADY_LANDED")) landed += 1
                 if (landing.settledAs == "NOTHING_TO_LAND") nothing += 1
                 before += At(LandingGroupRow(session.id, title, ProjectAttention.elapsedLabel(landing.settledAt, now) ?: "", word.first, word.second), at)
@@ -99,13 +97,15 @@ object SessionProjectLandings {
             }
             settled += At(LandingGroupRow(session.id, title, ProjectAttention.elapsedLabel(landing.settledAt, now) ?: "", word.first, word.second), at)
         }
-        if (waiting.isEmpty() && settled.isEmpty() && older == 0) return null
+        if (waiting.isEmpty() && settled.isEmpty() && landed + nothing == 0) return null
         // The waiting ones first, longest wait first: the page answers "what is stuck, and on whom".
         waiting.sortBy { it.at }
         settled.sortByDescending { it.at }
         before.sortByDescending { it.at }
-        return LandingGroup(waiting.map { it.row }, settled.map { it.row },
-            if (older > 0) LandingEarlier(landed, nothing) else null, before.map { it.row })
+        // The fold counts only what landed and what had nothing to land: with both at 0 there is no fold, and the older rows it would
+        // open to go with it.
+        val earlier = if (landed + nothing > 0) LandingEarlier(landed, nothing) else null
+        return LandingGroup(waiting.map { it.row }, settled.map { it.row }, earlier, if (earlier != null) before.map { it.row } else emptyList())
     }
 
     /** How a settled subject ended, in the group's own words. */
@@ -144,9 +144,10 @@ object SessionProjectLandings {
         else -> null
     }
 
-    /** `Earlier · 31 landed · 3 nothing to land` — the fold's one line. */
-    fun earlierLine(earlier: LandingEarlier) =
-        "${SessionLandingsCopy.earlier} · ${earlier.landed} ${SessionLandingsCopy.landed} · ${earlier.nothing} ${SessionLandingsCopy.nothingToLand}"
+    /** `Earlier · 31 landed · 3 nothing to land` — the fold's one line. A segment whose count is 0 is left out: `Earlier · 2 landed`. */
+    fun earlierLine(earlier: LandingEarlier) = listOfNotNull(SessionLandingsCopy.earlier,
+        "${earlier.landed} ${SessionLandingsCopy.landed}".takeIf { earlier.landed > 0 },
+        "${earlier.nothing} ${SessionLandingsCopy.nothingToLand}".takeIf { earlier.nothing > 0 }).joinToString(" · ")
 
     /** The derived label on a source work session (board v4 06 e): three facts, three inks. A settled subject says where the work
      *  went; an open one says what the platform is doing — the attempt's own step where the server names it, else its state. */

@@ -185,10 +185,22 @@ final class LandingCopyParityTests: XCTestCase {
         assertSays(web, "export const LANDINGS_SETTLED_WINDOW_MS = 24 * 60 * 60 * 1_000;",
                    in: Self.sessionProjects)
         XCTAssertEqual(landingsSettledWindow, 24 * 60 * 60)
-        assertSays(web, "return `${SESSION_LANDINGS_COPY.EARLIER} · ${earlier.landed} ${SESSION_LANDINGS_COPY.LANDED} · ${earlier.nothing} ${SESSION_LANDINGS_COPY.NOTHING_TO_LAND}`;",
+        // A segment whose count is 0 is left out, on both sides.
+        assertSays(web, "return [ SESSION_LANDINGS_COPY.EARLIER, "
+                   + "earlier.landed > 0 ? `${earlier.landed} ${SESSION_LANDINGS_COPY.LANDED}` : null, "
+                   + "earlier.nothing > 0 ? `${earlier.nothing} ${SESSION_LANDINGS_COPY.NOTHING_TO_LAND}` : null, "
+                   + "].filter(Boolean).join(' · ');",
                    in: Self.sessionProjects)
         XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 31, nothing: 3),
                        "Earlier · 31 landed · 3 nothing to land")
+        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 31, nothing: 0), "Earlier · 31 landed")
+        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 0, nothing: 3),
+                       "Earlier · 3 nothing to land")
+        // …and with both at 0 there is no fold, nor the rows it would open to.
+        assertSays(web, "const earlier = landed + nothing > 0 ? { landed, nothing } : null;",
+                   in: Self.sessionProjects)
+        assertSays(web, "older: earlier ? before.map(({ at: _at, ...row }) => row) : [],",
+                   in: Self.sessionProjects)
         // The item reasons the group's rows print.
         for reason in ["Merge conflict", "Checks failed", "Integration error", "Task failed",
                        "Delivery review", "No report from the runner"] {

@@ -78,6 +78,41 @@ final class SessionProjectLandingsTests: XCTestCase {
         XCTAssertEqual(group.older.map(\.id), ["old-landed", "old-nothing", "older-still"])
     }
 
+    func testLeavesASegmentWhoseCountIsZeroOutOfTheFoldsLine() throws {
+        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 2, nothing: 0), "Earlier · 2 landed")
+        XCTAssertEqual(SessionProjectLandings.earlierLine(landed: 0, nothing: 1),
+                       "Earlier · 1 nothing to land")
+        // Only landed: the fold says so, and still opens to every older row, the cancelled one too.
+        let landedOnly = try XCTUnwrap(SessionProjectLandings.group([
+            row("old-landed", state: "SETTLED", settledAs: "LANDED", settledAt: ago(26 * 60)),
+            row("old-again", state: "SETTLED", settledAs: "ALREADY_LANDED", settledAt: ago(28 * 60)),
+            row("old-cancelled", state: "SETTLED", settledAs: "CANCELLED", settledAt: ago(30 * 60)),
+        ], now: now))
+        XCTAssertEqual(landedOnly.earlier, LandingEarlier(landed: 2, nothing: 0))
+        XCTAssertEqual(landedOnly.older.map(\.id), ["old-landed", "old-again", "old-cancelled"])
+        let nothingOnly = try XCTUnwrap(SessionProjectLandings.group([
+            row("old-nothing", state: "SETTLED", settledAs: "NOTHING_TO_LAND", settledAt: ago(26 * 60)),
+        ], now: now))
+        XCTAssertEqual(nothingOnly.earlier, LandingEarlier(landed: 0, nothing: 1))
+    }
+
+    func testDrawsNoFoldWhenNothingOlderLandedOrHadNothingToLand() throws {
+        let old = [
+            row("old-cancelled", state: "SETTLED", settledAs: "CANCELLED", settledAt: ago(26 * 60)),
+            row("old-handled", state: "SETTLED", settledAs: "HANDLED", settledAt: ago(30 * 60)),
+            row("old-declined", state: "SETTLED", settledAs: "DECLINED", settledAt: ago(32 * 60)),
+            row("old-deleted", state: "SETTLED", settledAs: "DELETED", settledAt: ago(34 * 60)),
+            row("no-instant", state: "SETTLED", settledAs: "CANCELLED"),
+        ]
+        let group = try XCTUnwrap(SessionProjectLandings.group(
+            [row("waiting", state: "AWAITING_DECISION")] + old, now: now))
+        XCTAssertEqual(group.waiting.map(\.id), ["waiting"])
+        XCTAssertNil(group.earlier)
+        XCTAssertTrue(group.older.isEmpty)
+        // …and with nothing else to list, there is no group: no bare "Landings" heading.
+        XCTAssertNil(SessionProjectLandings.group(old, now: now))
+    }
+
     func testNeverListsARoundOfMergingThatMerged() throws {
         let group = try XCTUnwrap(SessionProjectLandings.group([
             row("round", subject: "PROMOTION", state: "SETTLED", settledAs: "MERGED",

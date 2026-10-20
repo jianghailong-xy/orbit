@@ -251,6 +251,31 @@ class LandingEntriesShellTest {
         await { exists(hasTestTag("landing-page")) }
     }
 
+    /** F′ · a count of 0 is left out of the fold's line, and the fold still opens to every older row, the cancelled one too. */
+    @Test fun theLandingsFoldLeavesOutAZeroCount() {
+        ProjectShell.landings = """[${landingRow("l-await", "Land · stopped", ago(42), "AWAITING_DECISION")},
+            ${landingRow("l-old-a", "Land · old", ago(2 * 24 * 60), "SETTLED", settledAs = "LANDED", settledAt = ago(2 * 24 * 60))},
+            ${landingRow("l-old-c", "Land · cancelled", ago(3 * 24 * 60), "SETTLED", settledAs = "CANCELLED", settledAt = ago(3 * 24 * 60))}]"""
+        openPage()
+        await { exists(hasTestTag("landing-row:l-await")) && exists(hasTestTag("landings:earlier")) }
+        compose.onNodeWithTag("landings:earlier").assert(hasText("Earlier · 1 landed"))
+        assertFalse("no zero segment", exists(hasTestTag("landings:earlier") and hasText("nothing to land", substring = true)))
+        compose.onNodeWithTag("landings:earlier").performClick()
+        await { exists(hasTestTag("landing-row:l-old-a")) && exists(hasTestTag("landing-row:l-old-c")) }
+    }
+
+    /** F″ · with nothing older that landed or had nothing to land there is no fold, nor the rows it would open to. */
+    @Test fun theLandingsGroupDrawsNoFoldOverWhatItDoesNotCount() {
+        ProjectShell.landings = """[${landingRow("l-await", "Land · stopped", ago(42), "AWAITING_DECISION")},
+            ${landingRow("l-old-c", "Land · cancelled", ago(2 * 24 * 60), "SETTLED", settledAs = "CANCELLED", settledAt = ago(2 * 24 * 60))},
+            ${landingRow("l-old-h", "Land · handled", ago(3 * 24 * 60), "SETTLED", settledAs = "HANDLED", settledAt = ago(3 * 24 * 60))}]"""
+        openPage()
+        await { exists(hasTestTag("landing-row:l-await")) }
+        assertFalse("no fold over what it does not count", exists(hasTestTag("landings:earlier")))
+        assertFalse(exists(hasTestTag("landing-row:l-old-c")))
+        assertFalse(exists(hasTestTag("landing-row:l-old-h")))
+    }
+
     /** G · the source code session's derived label: what the platform did with its work, opening the landing generation. */
     @Test fun theSourceSessionsLandingLabelOpensItsLanding() {
         ProjectShell.landing = landingView

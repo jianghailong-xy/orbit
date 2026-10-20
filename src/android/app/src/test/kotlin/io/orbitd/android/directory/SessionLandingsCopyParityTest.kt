@@ -2,6 +2,7 @@ package io.orbitd.android.directory
 
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -36,11 +37,17 @@ class SessionLandingsCopyParityTest {
     }
 
     @Test fun everyBuiltSentenceIsOneSwiftExpression() {
-        // `Earlier · 31 landed · 3 nothing to land` — the Swift's `earlierLine`, sentinel-rendered.
-        val earlier = SessionProjectLandings.earlierLine(LandingEarlier(31, 3))
-        assertEquals("Earlier · 31 landed · 3 nothing to land", earlier)
-        assertTrue("SessionProjectLandings.swift no longer builds the fold",
-            group.contains("\"\\(SessionLandingsCopy.earlier) · \\(landed) \\(SessionLandingsCopy.landed)\""))
+        // `Earlier · 31 landed · 3 nothing to land` — the Swift's `earlierLine`, sentinel-rendered: a segment whose count is 0 is
+        // left out, on both sides.
+        assertEquals("Earlier · 31 landed · 3 nothing to land", SessionProjectLandings.earlierLine(LandingEarlier(31, 3)))
+        assertEquals("Earlier · 31 landed", SessionProjectLandings.earlierLine(LandingEarlier(31, 0)))
+        assertEquals("Earlier · 3 nothing to land", SessionProjectLandings.earlierLine(LandingEarlier(0, 3)))
+        listOf("var parts = [SessionLandingsCopy.earlier]",
+            "if landed > 0 { parts.append(\"\\(landed) \\(SessionLandingsCopy.landed)\") }",
+            "if nothing > 0 { parts.append(\"\\(nothing) \\(SessionLandingsCopy.nothingToLand)\") }",
+            "parts.joined(separator: \" · \")").forEach {
+            assertTrue("SessionProjectLandings.swift no longer builds the fold with $it", group.contains(it))
+        }
         // A settled merge is named by the landing page's own two words, in the order the Swift's `settledWord` names them.
         assertEquals("Merged into main" to LandingGroupTone.MERGE, SessionProjectLandings.settledWord("MERGED"))
         assertTrue("SessionProjectLandings.swift no longer says \"Merged into main\"", group.contains("\"Merged into main\""))
@@ -80,5 +87,35 @@ class SessionLandingsCopyParityTest {
         assertEquals(LandingEarlier(landed = 1, nothing = 1), group.earlier)
         assertEquals(listOf("old-a", "old-b"), group.older.map { it.id })
         assertTrue(SessionProjectLandings.group(rows.filter { it.id == "in-flight" }, now) == null)
+    }
+
+    /** The fold names only what landed and what had nothing to land: a zero segment is left out, and with both at 0 there is no
+     *  fold, no older rows under it, and — with nothing else to list — no group. */
+    @Test fun theFoldLeavesOutWhatItDoesNotCount() {
+        val now = java.time.Instant.parse("2026-10-19T12:00:00Z")
+        fun row(id: String, state: String, settledAs: String? = null, settledAt: String? = null) =
+            DirectorySession(id, id, createdAt = "2026-10-15T08:00:00Z", sessionKind = "LANDING",
+                landing = SessionLandingSummary("TASK", state, settledAs, settledAt))
+        val landedOnly = SessionProjectLandings.group(listOf(
+            row("old-landed", "SETTLED", "LANDED", "2026-10-18T09:00:00Z"),
+            row("old-again", "SETTLED", "ALREADY_LANDED", "2026-10-17T09:00:00Z"),
+            row("old-cancelled", "SETTLED", "CANCELLED", "2026-10-16T09:00:00Z")), now)!!
+        assertEquals(LandingEarlier(landed = 2, nothing = 0), landedOnly.earlier)
+        assertEquals("Earlier · 2 landed", SessionProjectLandings.earlierLine(landedOnly.earlier!!))
+        assertEquals("the fold still opens to every older row", listOf("old-landed", "old-again", "old-cancelled"), landedOnly.older.map { it.id })
+        val nothingOnly = SessionProjectLandings.group(listOf(row("old-nothing", "SETTLED", "NOTHING_TO_LAND", "2026-10-18T09:00:00Z")), now)!!
+        assertEquals("Earlier · 1 nothing to land", SessionProjectLandings.earlierLine(nothingOnly.earlier!!))
+
+        val old = listOf(
+            row("old-cancelled", "SETTLED", "CANCELLED", "2026-10-18T09:00:00Z"),
+            row("old-handled", "SETTLED", "HANDLED", "2026-10-17T09:00:00Z"),
+            row("old-declined", "SETTLED", "DECLINED", "2026-10-17T08:00:00Z"),
+            row("old-deleted", "SETTLED", "DELETED", "2026-10-16T09:00:00Z"),
+            row("no-instant", "SETTLED", "CANCELLED"))
+        val waiting = SessionProjectLandings.group(listOf(row("waiting", "AWAITING_DECISION")) + old, now)!!
+        assertEquals(listOf("waiting"), waiting.waiting.map { it.id })
+        assertNull(waiting.earlier)
+        assertEquals(emptyList<LandingGroupRow>(), waiting.older)
+        assertNull("no bare Landings heading", SessionProjectLandings.group(old, now))
     }
 }

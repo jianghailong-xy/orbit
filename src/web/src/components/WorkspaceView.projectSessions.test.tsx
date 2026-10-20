@@ -1363,6 +1363,56 @@ describe('the project sessions page — the Landings group', () => {
       .toEqual(expect.arrayContaining(['Land · landed long ago', 'Land · nothing long ago']));
   });
 
+  it('leaves a zero count out of the fold’s line, and still opens to every older row', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(821, 'Land · checks failed', awaiting()),
+      LANDING(824, 'Land · landed long ago', settled('LANDED', 30 * 60)),
+      LANDING(828, 'Land · cancelled long ago', settled('CANCELLED', 40 * 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
+    expect(fold?.querySelector('.session-project-landing-fold-text')?.textContent).toBe('Earlier · 1 landed');
+    await click(fold, 'the fold');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed', 'Land · landed long ago', 'Land · cancelled long ago']);
+  });
+
+  it('draws no fold over older landings that neither landed nor had nothing to land', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(821, 'Land · checks failed', awaiting()),
+      LANDING(828, 'Land · cancelled long ago', settled('CANCELLED', 40 * 60)),
+      LANDING(829, 'Land · handled long ago', settled('HANDLED', 50 * 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    expect(group()).not.toBeNull();
+    expect(group()?.querySelector('.session-project-landing-fold')).toBeNull();
+    expect(group()?.textContent).not.toContain('Earlier');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed']);
+  });
+
+  it('is no group at all when its only landings are old ones the fold does not count', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(828, 'Land · cancelled long ago', settled('CANCELLED', 40 * 60)),
+      LANDING(829, 'Land · handled long ago', settled('HANDLED', 50 * 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    expect(group()).toBeNull();
+    expect(mounted().textContent).not.toContain('Land · cancelled long ago');
+    const heads = [...mounted().querySelectorAll<HTMLElement>('.session-col-list .session-section-head')]
+      .map((head) => head.textContent);
+    expect(heads).not.toContain('Landings');
+  });
+
   it('never lists a landing in flight, nor a merge round that merged', async () => {
     rows = [
       LOOSE, COORDINATOR, TASK,
