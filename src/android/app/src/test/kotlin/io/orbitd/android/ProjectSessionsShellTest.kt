@@ -64,8 +64,8 @@ class ProjectSessionsShellTest {
         await { exists(hasText("Launch") and hasText("Project · 4 sessions")) }
         compose.onNodeWithContentDescription("Open Project").assertExists()
         // Read across workspaces, by project: Open and Completed together, the coordinator first, the rest by recency.
-        assertTrue(ProjectShell.calls.any { it == "GET sessions?view=open&projectId=${ProjectShell.LAUNCH}" })
-        assertTrue(ProjectShell.calls.any { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}" })
+        assertTrue(ProjectShell.calls.any { it == "GET sessions?view=open&projectId=${ProjectShell.LAUNCH}&includeLanding=1" })
+        assertTrue(ProjectShell.calls.any { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}&includeLanding=1" })
         assertEquals(listOf("Coordinator", "Coordinate launch", "Today", "Wire tests", "Quota retry", "2–7 days ago", "Shipped docs"), pageLines())
         compose.onNode(hasTestTag("project-sessions-progress-line") and hasText("3/8 done · 1 running")).assertExists()
         // A task landing on the project branch is a card of its own under the progress card (A11-11), no longer a row of it.
@@ -360,7 +360,7 @@ class ProjectSessionsShellTest {
     /** A wait on the fixture or the store, not the screen: it idles the UI on every look, or the store's coroutines (on the main
      * looper) would never run. */
     private fun settled(condition: () -> Boolean) = await { compose.waitForIdle(); condition() }
-    private fun completedReads() = ProjectShell.calls.count { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}" }
+    private fun completedReads() = ProjectShell.calls.count { it == "GET sessions?view=completed&projectId=${ProjectShell.LAUNCH}&includeLanding=1" }
     private fun toastShows(text: String) = exists(hasText(text) and hasAnyAncestor(hasTestTag("toast")))
     private fun memberAction(session: String, action: String) {
         compose.onNodeWithContentDescription("Options for $session").performScrollTo().performClick()

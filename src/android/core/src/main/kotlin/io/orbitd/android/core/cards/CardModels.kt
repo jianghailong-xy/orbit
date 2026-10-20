@@ -54,7 +54,7 @@ enum class CardVerb(val label: String) {
     SEND_BACK("Send back"), CONFIRM_OWNER("Confirm done"), APPROVE_CRITERIA("Approve changes"),
     REJECT_CRITERIA("Keep current criteria"), CONFIRM_CRITERIA("Confirm criteria"), START("Start project"),
     OWNER_ANSWER("Send answer"), RETURN_COORDINATOR("Ask the coordinator again"), RESUME("Resume"),
-    MARK_HANDLED("Mark as handled"), RETRY_TASK("Retry task"), CANCEL_TASK("Cancel task"),
+    MARK_HANDLED("Mark as handled"), RETRY_TASK("Retry task"), CANCEL_TASK("Cancel task"), ABANDON("Abandon"),
     /** RETRY on an integration item (A08-17): its task's landing queued again, or the merge candidate's check run again. */
     RETRY_INTEGRATION("Retry"), RERUN_CHECK("Re-run the check"),
     CONFIRM_MERGE("Merge"), DECLINE_MERGE("Not now"), CANCEL_MERGE("Cancel merge"),
@@ -273,12 +273,15 @@ object CardCatalog {
                 // RETRY is three doors under one name, chosen by the item (`ExceptionCards.retryVerb`).
                 if ("RETRY" in verbs) ExceptionCards.retryVerb(row)?.let(::add)
                 if ("CANCEL_TASK" in verbs && row.text("taskId") != null) add(CardVerb.CANCEL_TASK)
-                if (kind in setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED")) add(CardVerb.MARK_HANDLED)
+                // §2.9 LS6's reading door opens a session, so it carries no verb; J-T10's Abandon ends the one job the item names.
+                if ("ABANDON" in verbs && !row.text("integrationJobId").isNullOrEmpty()) add(CardVerb.ABANDON)
+                if (kind in setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "LANDING_LEASE_EXPIRED")) add(CardVerb.MARK_HANDLED)
             }
             add(InteractionCard("item:$itemId", if (kind == "COORDINATOR_QUESTION") CardFamily.OWNER_QUESTION else CardFamily.EXCEPTION,
                 if (kind == "FUSE_PAUSED") "Project paused" else row.text("title") ?: "Project item", row, session, project, itemId,
                 // Returning an OPEN item resets this public timestamp; later escalation reuses its itemId.
-                "${row["question"]}:${row["actions"]}:${row["assignee"]}:${row["taskId"]}:${row["promotionId"]}:${row["fuseEpisodeId"]}:${row["waitingSince"]}", actions))
+                "${row["question"]}:${row["actions"]}:${row["assignee"]}:${row["taskId"]}:${row["promotionId"]}:${row["fuseEpisodeId"]}:" +
+                    "${row["waitingSince"]}:${row["landingSessionId"]}:${row["integrationJobId"]}", actions))
         }
         (standing["promotion"] as? JsonObject)?.let { row ->
             val promotion = row.text("promotionId") ?: return@let
