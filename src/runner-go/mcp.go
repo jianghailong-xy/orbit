@@ -474,8 +474,8 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 				"a session in the project", true)
 		}
 		raw, err := s.t.getProjectIntegration(s.sessionID, id,
-			getString(args, "jobId"), getString(args, "claim"), getString(args, "round"),
-			getString(args, "check"), getString(args, "cursor"), getString(args, "timelineCursor"))
+			getString(args, "jobId"), getNumberAsString(args, "claim"), getNumberAsString(args, "round"),
+			getNumberAsString(args, "check"), getString(args, "cursor"), getString(args, "timelineCursor"))
 		if err != nil {
 			return toolResult("read project integration failed: "+err.Error(), true)
 		}
@@ -3242,15 +3242,15 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 					"description": "Narrow the page to one job, as the queue or a task's landing names it.",
 				},
 				"claim": map[string]interface{}{
-					"type":        "string",
+					"type":        "integer",
 					"description": "Narrow the page to one claim generation, from 0 (the enqueue).",
 				},
 				"round": map[string]interface{}{
-					"type":        "string",
+					"type":        "integer",
 					"description": "Narrow the page to one round inside the claim, from 0 (the facts from before its first round).",
 				},
 				"check": map[string]interface{}{
-					"type":        "string",
+					"type":        "integer",
 					"description": "Narrow the check log to one check's position in the run, from 1.",
 				},
 				"cursor": map[string]interface{}{
@@ -4855,6 +4855,24 @@ func getOptionalPriority(args map[string]interface{}, key string) (*int, error) 
 		return nil, bad
 	}
 	return &n, nil
+}
+
+// getNumberAsString reads a numeric argument that travels on as a query value, spelled the way
+// the caller wrote it. JSON numbers decode to float64, and an agent sends a claim generation or a
+// round as a number as often as a quoted one, so both reach the server as the same digits: 3 and
+// "3" are "3", and a large integer keeps every digit rather than an exponent. Nothing is judged
+// here — a negative or fractional number is spelled out ("-1", "2.5") exactly as a bad string is
+// passed on, and the server refuses both with the one message it gives for that field.
+func getNumberAsString(args map[string]interface{}, key string) string {
+	switch v := args[key].(type) {
+	case string:
+		return v
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case int:
+		return strconv.Itoa(v)
+	}
+	return ""
 }
 
 func getString(args map[string]interface{}, key string) string {

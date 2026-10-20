@@ -325,6 +325,99 @@ func TestMCPProjectIntegrationGetRequiresAProjectAndASession(t *testing.T) {
 	}
 }
 
+// The page selectors are numbers, and an agent passes them as JSON numbers as often as quoted:
+// both spellings must build the very same request. A number read as a string alone was dropped
+// without a word, and the read came back unnarrowed.
+func TestMCPProjectIntegrationGetSendsNumericSelectorsAsTheirDigits(t *testing.T) {
+	var gotQueries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQueries = append(gotQueries, r.URL.RequestURI())
+		w.Write([]byte(`{"projectId":"p1","queue":[],"generations":[]}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	read := func(args map[string]interface{}) string {
+		t.Helper()
+		gotQueries = nil
+		args["projectId"] = "p1"
+		if res := mcp.callTool("project_integration_get", args); res["isError"] == true {
+			t.Fatalf("project_integration_get(%v) returned an error: %#v", args, res["content"])
+		}
+		if len(gotQueries) != 1 {
+			t.Fatalf("project_integration_get(%v) sent %d requests", args, len(gotQueries))
+		}
+		return gotQueries[0]
+	}
+
+	asNumbers := read(map[string]interface{}{"jobId": "j1", "claim": float64(3), "round": float64(2), "check": float64(1)})
+	asStrings := read(map[string]interface{}{"jobId": "j1", "claim": "3", "round": "2", "check": "1"})
+	if asNumbers != asStrings {
+		t.Fatalf("numbers built %q, strings built %q", asNumbers, asStrings)
+	}
+	if want := "/api/runner/projects/p1/integration?check=1&claim=3&jobId=j1&round=2"; asNumbers != want {
+		t.Fatalf("the request = %q, want %q", asNumbers, want)
+	}
+	// Zero is a page, not an absent selector: claim 0 is the enqueue and round 0 the facts from
+	// before the first round.
+	if got := read(map[string]interface{}{"claim": float64(0), "round": float64(0)}); got != "/api/runner/projects/p1/integration?claim=0&round=0" {
+		t.Fatalf("claim 0, round 0 sent %q", got)
+	}
+}
+
+// A claim generation is a bigint on the server. A JSON number decodes to float64, whose default
+// spelling turns a large integer into an exponent the server's digits-only check refuses, so every
+// digit is written out. A negative or fractional number is spelled as it is and left to that same
+// check, exactly as a bad string is.
+func TestMCPProjectIntegrationGetSpellsLargeAndInvalidNumbersOut(t *testing.T) {
+	var gotClaim string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotClaim = r.URL.Query().Get("claim")
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	for _, c := range []struct {
+		claim interface{}
+		want  string
+	}{
+		{float64(9007199254740991), "9007199254740991"},
+		{float64(1e21), "1000000000000000000000"},
+		{float64(12345678), "12345678"},
+		{"9007199254740993", "9007199254740993"},
+		{float64(-1), "-1"},
+		{float64(2.5), "2.5"},
+	} {
+		gotClaim = ""
+		res := mcp.callTool("project_integration_get", map[string]interface{}{"projectId": "p1", "claim": c.claim})
+		if res["isError"] == true {
+			t.Fatalf("claim %v returned an error: %#v", c.claim, res["content"])
+		}
+		if gotClaim != c.want {
+			t.Errorf("claim %v sent %q, want %q", c.claim, gotClaim, c.want)
+		}
+	}
+}
+
+// The schema says what the handler reads: the three page selectors are declared integers, as
+// every other numeric argument in the tool list is, so an agent is told to send the number.
+func TestMCPProjectIntegrationGetDeclaresTheSelectorsAsIntegers(t *testing.T) {
+	for _, descriptor := range toolDescriptors(false, false) {
+		if descriptor["name"] != "project_integration_get" {
+			continue
+		}
+		props := descriptor["inputSchema"].(map[string]interface{})["properties"].(map[string]interface{})
+		for _, key := range []string{"claim", "round", "check"} {
+			if got := props[key].(map[string]interface{})["type"]; got != "integer" {
+				t.Errorf("%s is declared %v", key, got)
+			}
+		}
+		return
+	}
+	t.Fatal("project_integration_get missing from the base tools")
+}
+
 func TestMCPConfirmationReviewToolsPostTheInputUnderTheReviewingSession(t *testing.T) {
 	for _, tool := range []string{"task_confirmation_review", "task_confirmation_return"} {
 		if !hasMCPTool(toolDescriptors(false, false), tool) {
