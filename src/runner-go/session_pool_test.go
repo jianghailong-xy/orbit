@@ -242,6 +242,31 @@ func TestSessionPoolNewClaimWinsBeforeLatePriorPark(t *testing.T) {
 	}
 }
 
+// A supervisor registered for a checkout setupWorktree refused (a damaged repository on a managed
+// runner, a pinned commit it could not stand on) has no dir to run in. The claim that wakes it
+// brings a fresh payload, which knows nothing of the refusal: the refusal carries over, as the
+// checkout would, so the engine is refused rather than started where the runner happens to be.
+func TestSessionPoolActivationKeepsARefusedCheckoutRefused(t *testing.T) {
+	p := newSessionPool(1)
+	refused := poolJob("a")
+	refused.SourceRefusal = &SourcePinRefusal{Code: repositoryDamagedRefusal, Detail: map[string]interface{}{"reason": "its HEAD is empty"}}
+	s, added := p.register(refused, func() {}, false)
+	if !added {
+		t.Fatal("the session was not registered")
+	}
+	claim := poolJob("a")
+	if _, ok := p.activate(claim); !ok {
+		t.Fatal("the claim did not activate the supervisor")
+	}
+	_, claimed, ok := p.reserveEngine(s, context.Background(), context.Background())
+	if !ok || claimed != claim {
+		t.Fatalf("the supervisor did not adopt the claim: %v %p", ok, claimed)
+	}
+	if claimed.SourceRefusal == nil || claimed.SourceRefusal.Code != repositoryDamagedRefusal {
+		t.Fatalf("the claim lost the refusal of the checkout: %+v", claimed.SourceRefusal)
+	}
+}
+
 func TestSessionPoolExecutableWaitsForClaimActivation(t *testing.T) {
 	clock := newFakePoolClock()
 	p := newSessionPoolWithClock(1, clock)

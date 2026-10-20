@@ -1,0 +1,4608 @@
+{
+ "git": "git version 2.47.3",
+ "strace": "strace -- version 6.13",
+ "kernel": "6.12.107+deb13-amd64",
+ "filesystem": "ext4 rw,noatime",
+ "modes": {
+  "default": {
+   "env": {},
+   "summary": {
+    "HEAD": {
+     "files": 4,
+     "contentSynced": 0,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "checkout -b",
+      "clone --no-local",
+      "init",
+      "symbolic-ref"
+     ]
+    },
+    "checked-out file": {
+     "files": 6,
+     "contentSynced": 0,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "clone --no-local",
+      "commit in worktree",
+      "merge --no-ff",
+      "second commit (existing ref)",
+      "stash",
+      "worktree add -b"
+     ]
+    },
+    "commit-graph": {
+     "files": 1,
+     "contentSynced": 1,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "gc (repack, commit-graph)"
+     ]
+    },
+    "config": {
+     "files": 3,
+     "contentSynced": 0,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "clone --no-local",
+      "config",
+      "init"
+     ]
+    },
+    "index": {
+     "files": 11,
+     "contentSynced": 0,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "add",
+      "checkout -b",
+      "clone --no-local",
+      "commit in worktree",
+      "first commit (new branch ref)",
+      "merge --no-ff",
+      "rebase",
+      "reset --hard",
+      "second commit (existing ref)",
+      "stash",
+      "worktree add -b"
+     ]
+    },
+    "init skeleton": {
+     "files": 33,
+     "contentSynced": 0,
+     "namedDurably": 17,
+     "both": 0,
+     "ops": [
+      "clone --no-local",
+      "gc (repack, commit-graph)",
+      "init"
+     ]
+    },
+    "loose object": {
+     "files": 17,
+     "contentSynced": 0,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "add",
+      "commit in worktree",
+      "fetch",
+      "first commit (new branch ref)",
+      "merge --no-ff",
+      "second commit (existing ref)",
+      "stash",
+      "tag -a"
+     ]
+    },
+    "object info": {
+     "files": 1,
+     "contentSynced": 0,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "gc (repack, commit-graph)"
+     ]
+    },
+    "operation state": {
+     "files": 9,
+     "contentSynced": 0,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "commit in worktree",
+      "fetch",
+      "first commit (new branch ref)",
+      "merge --no-ff",
+      "reset --hard",
+      "second commit (existing ref)",
+      "stash",
+      "worktree add -b"
+     ]
+    },
+    "other: ": {
+     "files": 1,
+     "contentSynced": 0,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "worktree add -b"
+     ]
+    },
+    "pack": {
+     "files": 2,
+     "contentSynced": 1,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "clone --no-local",
+      "gc (repack, commit-graph)"
+     ]
+    },
+    "pack metadata": {
+     "files": 4,
+     "contentSynced": 2,
+     "namedDurably": 2,
+     "both": 0,
+     "ops": [
+      "clone --no-local",
+      "gc (repack, commit-graph)"
+     ]
+    },
+    "packed-refs": {
+     "files": 3,
+     "contentSynced": 0,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "clone --no-local",
+      "gc (repack, commit-graph)",
+      "pack-refs"
+     ]
+    },
+    "ref": {
+     "files": 15,
+     "contentSynced": 0,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "branch",
+      "checkout -b",
+      "clone --no-local",
+      "commit in worktree",
+      "fetch",
+      "first commit (new branch ref)",
+      "merge --no-ff",
+      "reset --hard",
+      "second commit (existing ref)",
+      "stash",
+      "tag -a",
+      "update-ref",
+      "worktree add -b"
+     ]
+    },
+    "reflog": {
+     "files": 31,
+     "contentSynced": 0,
+     "namedDurably": 7,
+     "both": 0,
+     "ops": [
+      "branch",
+      "checkout -b",
+      "clone --no-local",
+      "commit in worktree",
+      "fetch",
+      "first commit (new branch ref)",
+      "gc (repack, commit-graph)",
+      "merge --no-ff",
+      "reset --hard",
+      "second commit (existing ref)",
+      "stash",
+      "symbolic-ref",
+      "worktree add -b"
+     ]
+    },
+    "worktree HEAD": {
+     "files": 1,
+     "contentSynced": 0,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "worktree add -b"
+     ]
+    },
+    "worktree metadata": {
+     "files": 2,
+     "contentSynced": 0,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "worktree add -b"
+     ]
+    }
+   },
+   "ops": [
+    {
+     "op": "init",
+     "argv": [
+      "git",
+      "init",
+      "-q",
+      "-b",
+      "main",
+      "repo"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/HEAD",
+       "kind": "HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/config",
+       "kind": "config",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/description",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/applypatch-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/commit-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/fsmonitor-watchman.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/post-update.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-applypatch.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-commit.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-merge-commit.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-push.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-rebase.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-receive.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/prepare-commit-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/push-to-checkout.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/sendemail-validate.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/update.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/info/exclude",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "config",
+     "argv": [
+      "git",
+      "config",
+      "user.name",
+      "Probe"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/config",
+       "kind": "config",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "write file",
+     "argv": [
+      "sh",
+      "-c",
+      "printf \"one\\n\" > note.txt"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "add",
+     "argv": [
+      "git",
+      "add",
+      "note.txt"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/56/26abf0f72e58d7a153368ba57db4c673c0e171",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "first commit (new branch ref)",
+     "argv": [
+      "git",
+      "commit",
+      "-q",
+      "-m",
+      "first"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/COMMIT_EDITMSG",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/55/395afcbf69d05c47d335c06a78e65bec630e7e",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/7d/73ee3f0aa90740b4fdf04e8a08299a4a8a7cd7",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "second commit (existing ref)",
+     "argv": [
+      "sh",
+      "-c",
+      "printf \"two\\n\" >> note.txt && git commit -q -am second"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/COMMIT_EDITMSG",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/29/8428dcc81eec5cb43b485e74564bdd30e04272",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/5d/e826c0366b36329b62301bbcd4d1bf64f22ebc",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/81/4f4a422927b82f5f8a43f8fab6d3839e3983f2",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "branch",
+     "argv": [
+      "git",
+      "branch",
+      "feature"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/logs/refs/heads/feature",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/feature",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "worktree add -b",
+     "argv": [
+      "git",
+      "worktree",
+      "add",
+      "-q",
+      "-b",
+      "session",
+      "../wt",
+      "HEAD"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/logs/refs/heads/session",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/session",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/HEAD",
+       "kind": "worktree HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/ORIG_HEAD",
+       "kind": "operation state",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/commondir",
+       "kind": "worktree metadata",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/gitdir",
+       "kind": "worktree metadata",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "wt/.git",
+       "kind": "other: ",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "wt/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "commit in worktree",
+     "argv": [
+      "sh",
+      "-c",
+      "printf \"wt\\n\" > wt.txt && git add wt.txt && git commit -q -m \"in worktree\""
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/logs/refs/heads/session",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/79/100c7c5dd0d1e43f264b1c292423500146e243",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/a9/e191ff366b8265503bbd4a6d1da6c4211e4fc4",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/dc/b580444076ba00d68ab1696ca661888c96ffea",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/session",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/COMMIT_EDITMSG",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "wt/wt.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "update-ref",
+     "argv": [
+      "git",
+      "update-ref",
+      "refs/orbit/base",
+      "HEAD~1"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/refs/orbit/base",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "merge --no-ff",
+     "argv": [
+      "git",
+      "merge",
+      "-q",
+      "--no-ff",
+      "-m",
+      "merge session",
+      "session"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/ORIG_HEAD",
+       "kind": "operation state",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/c6/542399fb693f508f40ea8d3715d0e12d3b2ead",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/wt.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "reset --hard",
+     "argv": [
+      "git",
+      "reset",
+      "-q",
+      "--hard",
+      "HEAD~1"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/ORIG_HEAD",
+       "kind": "operation state",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "checkout -b",
+     "argv": [
+      "git",
+      "checkout",
+      "-q",
+      "-b",
+      "other"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/HEAD",
+       "kind": "HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/other",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/other",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "symbolic-ref",
+     "argv": [
+      "git",
+      "symbolic-ref",
+      "HEAD",
+      "refs/heads/main"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/HEAD",
+       "kind": "HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "tag -a",
+     "argv": [
+      "git",
+      "tag",
+      "-a",
+      "-m",
+      "tag",
+      "v1"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/objects/6d/a7a0f355bf1e3936de98726d70988ff10c050b",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/tags/v1",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "stash",
+     "argv": [
+      "sh",
+      "-c",
+      "printf \"dirty\\n\" >> note.txt && git stash -q"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/ORIG_HEAD",
+       "kind": "operation state",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/stash",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/06/9c8f2d26ff978791d6294c49d38b465ea1c6df",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/51/049644d32063db1ddb2009176d2eaaeb9b1832",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/96/b7582b500e8c7134e9caa4d78c30477e09ae06",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/a1/0aa707f1d417b62324f93b5c9f948ea2f7ee27",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/stash",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "rebase",
+     "argv": [
+      "git",
+      "rebase",
+      "-q",
+      "main"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/worktrees/wt/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "pack-refs",
+     "argv": [
+      "git",
+      "pack-refs",
+      "--all"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/packed-refs",
+       "kind": "packed-refs",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "gc (repack, commit-graph)",
+     "argv": [
+      "git",
+      "gc",
+      "-q"
+     ],
+     "fsyncCalls": 4,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/info/refs",
+       "kind": "init skeleton",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/feature",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/other",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/session",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/stash",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/info/commit-graph",
+       "kind": "commit-graph",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/info/packs",
+       "kind": "object info",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/pack/pack-40d91791d84a81de74b9730f0b1990f3eab3f1ba.idx",
+       "kind": "pack metadata",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/pack/pack-40d91791d84a81de74b9730f0b1990f3eab3f1ba.pack",
+       "kind": "pack",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/pack/pack-40d91791d84a81de74b9730f0b1990f3eab3f1ba.rev",
+       "kind": "pack metadata",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/packed-refs",
+       "kind": "packed-refs",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/logs/HEAD",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "clone --no-local",
+     "argv": [
+      "git",
+      "clone",
+      "-q",
+      "--no-local",
+      "repo",
+      "clone"
+     ],
+     "fsyncCalls": 3,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "clone/.git/HEAD",
+       "kind": "HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/config",
+       "kind": "config",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/description",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/applypatch-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/commit-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/fsmonitor-watchman.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/post-update.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-applypatch.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-commit.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-merge-commit.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-push.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-rebase.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-receive.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/prepare-commit-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/push-to-checkout.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/sendemail-validate.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/update.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/info/exclude",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/logs/refs/remotes/origin/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/objects/pack/pack-8bbeb7f6341186ff81972145f3d5199da64360c1.idx",
+       "kind": "pack metadata",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/objects/pack/pack-8bbeb7f6341186ff81972145f3d5199da64360c1.pack",
+       "kind": "pack",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/objects/pack/pack-8bbeb7f6341186ff81972145f3d5199da64360c1.rev",
+       "kind": "pack metadata",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/packed-refs",
+       "kind": "packed-refs",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/refs/remotes/origin/HEAD",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "fetch",
+     "argv": [
+      "sh",
+      "-c",
+      "git -C ../repo commit -q --allow-empty -m upstream && git fetch -q origin"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "clone/.git/FETCH_HEAD",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/logs/refs/remotes/origin/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/objects/9e/8d82a357c4b80cc998da90a10ad6944944fa1f",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/refs/remotes/origin/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/COMMIT_EDITMSG",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/9e/8d82a357c4b80cc998da90a10ad6944944fa1f",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "worktree remove",
+     "argv": [
+      "git",
+      "worktree",
+      "remove",
+      "--force",
+      "../wt"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": []
+    }
+   ]
+  },
+  "committed,index": {
+   "env": {
+    "GIT_CONFIG_PARAMETERS": "'core.fsync'='committed,index' 'core.fsyncmethod'='fsync'"
+   },
+   "summary": {
+    "HEAD": {
+     "files": 4,
+     "contentSynced": 0,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "checkout -b",
+      "clone --no-local",
+      "init",
+      "symbolic-ref"
+     ]
+    },
+    "checked-out file": {
+     "files": 6,
+     "contentSynced": 0,
+     "namedDurably": 6,
+     "both": 0,
+     "ops": [
+      "clone --no-local",
+      "commit in worktree",
+      "merge --no-ff",
+      "second commit (existing ref)",
+      "stash",
+      "worktree add -b"
+     ]
+    },
+    "commit-graph": {
+     "files": 1,
+     "contentSynced": 1,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "gc (repack, commit-graph)"
+     ]
+    },
+    "config": {
+     "files": 3,
+     "contentSynced": 0,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "clone --no-local",
+      "config",
+      "init"
+     ]
+    },
+    "index": {
+     "files": 11,
+     "contentSynced": 10,
+     "namedDurably": 7,
+     "both": 7,
+     "ops": [
+      "add",
+      "checkout -b",
+      "clone --no-local",
+      "commit in worktree",
+      "first commit (new branch ref)",
+      "merge --no-ff",
+      "rebase",
+      "reset --hard",
+      "second commit (existing ref)",
+      "stash",
+      "worktree add -b"
+     ]
+    },
+    "init skeleton": {
+     "files": 33,
+     "contentSynced": 0,
+     "namedDurably": 17,
+     "both": 0,
+     "ops": [
+      "clone --no-local",
+      "gc (repack, commit-graph)",
+      "init"
+     ]
+    },
+    "loose object": {
+     "files": 17,
+     "contentSynced": 17,
+     "namedDurably": 17,
+     "both": 17,
+     "ops": [
+      "add",
+      "commit in worktree",
+      "fetch",
+      "first commit (new branch ref)",
+      "merge --no-ff",
+      "second commit (existing ref)",
+      "stash",
+      "tag -a"
+     ]
+    },
+    "object info": {
+     "files": 1,
+     "contentSynced": 0,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "gc (repack, commit-graph)"
+     ]
+    },
+    "operation state": {
+     "files": 9,
+     "contentSynced": 4,
+     "namedDurably": 6,
+     "both": 2,
+     "ops": [
+      "commit in worktree",
+      "fetch",
+      "first commit (new branch ref)",
+      "merge --no-ff",
+      "reset --hard",
+      "second commit (existing ref)",
+      "stash",
+      "worktree add -b"
+     ]
+    },
+    "other: ": {
+     "files": 1,
+     "contentSynced": 0,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "worktree add -b"
+     ]
+    },
+    "pack": {
+     "files": 2,
+     "contentSynced": 1,
+     "namedDurably": 2,
+     "both": 1,
+     "ops": [
+      "clone --no-local",
+      "gc (repack, commit-graph)"
+     ]
+    },
+    "pack metadata": {
+     "files": 4,
+     "contentSynced": 2,
+     "namedDurably": 4,
+     "both": 2,
+     "ops": [
+      "clone --no-local",
+      "gc (repack, commit-graph)"
+     ]
+    },
+    "packed-refs": {
+     "files": 3,
+     "contentSynced": 3,
+     "namedDurably": 2,
+     "both": 2,
+     "ops": [
+      "clone --no-local",
+      "gc (repack, commit-graph)",
+      "pack-refs"
+     ]
+    },
+    "ref": {
+     "files": 15,
+     "contentSynced": 14,
+     "namedDurably": 5,
+     "both": 4,
+     "ops": [
+      "branch",
+      "checkout -b",
+      "clone --no-local",
+      "commit in worktree",
+      "fetch",
+      "first commit (new branch ref)",
+      "merge --no-ff",
+      "reset --hard",
+      "second commit (existing ref)",
+      "stash",
+      "tag -a",
+      "update-ref",
+      "worktree add -b"
+     ]
+    },
+    "reflog": {
+     "files": 31,
+     "contentSynced": 0,
+     "namedDurably": 14,
+     "both": 0,
+     "ops": [
+      "branch",
+      "checkout -b",
+      "clone --no-local",
+      "commit in worktree",
+      "fetch",
+      "first commit (new branch ref)",
+      "gc (repack, commit-graph)",
+      "merge --no-ff",
+      "reset --hard",
+      "second commit (existing ref)",
+      "stash",
+      "symbolic-ref",
+      "worktree add -b"
+     ]
+    },
+    "worktree HEAD": {
+     "files": 1,
+     "contentSynced": 0,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "worktree add -b"
+     ]
+    },
+    "worktree metadata": {
+     "files": 2,
+     "contentSynced": 0,
+     "namedDurably": 2,
+     "both": 0,
+     "ops": [
+      "worktree add -b"
+     ]
+    }
+   },
+   "ops": [
+    {
+     "op": "init",
+     "argv": [
+      "git",
+      "init",
+      "-q",
+      "-b",
+      "main",
+      "repo"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/HEAD",
+       "kind": "HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/config",
+       "kind": "config",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/description",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/applypatch-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/commit-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/fsmonitor-watchman.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/post-update.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-applypatch.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-commit.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-merge-commit.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-push.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-rebase.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-receive.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/prepare-commit-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/push-to-checkout.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/sendemail-validate.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/update.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/info/exclude",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "config",
+     "argv": [
+      "git",
+      "config",
+      "user.name",
+      "Probe"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/config",
+       "kind": "config",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "write file",
+     "argv": [
+      "sh",
+      "-c",
+      "printf \"one\\n\" > note.txt"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "add",
+     "argv": [
+      "git",
+      "add",
+      "note.txt"
+     ],
+     "fsyncCalls": 2,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/56/26abf0f72e58d7a153368ba57db4c673c0e171",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "first commit (new branch ref)",
+     "argv": [
+      "git",
+      "commit",
+      "-q",
+      "-m",
+      "first"
+     ],
+     "fsyncCalls": 4,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/COMMIT_EDITMSG",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/7d/73ee3f0aa90740b4fdf04e8a08299a4a8a7cd7",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/aa/cd24facf175230a77366aa2b3bf04a2882924a",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "second commit (existing ref)",
+     "argv": [
+      "sh",
+      "-c",
+      "printf \"two\\n\" >> note.txt && git commit -q -am second"
+     ],
+     "fsyncCalls": 4,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/COMMIT_EDITMSG",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/29/8428dcc81eec5cb43b485e74564bdd30e04272",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/81/4f4a422927b82f5f8a43f8fab6d3839e3983f2",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/de/f12b30cb42ac5952d8e8ce487bb630c0586888",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "branch",
+     "argv": [
+      "git",
+      "branch",
+      "feature"
+     ],
+     "fsyncCalls": 1,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/logs/refs/heads/feature",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/feature",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "worktree add -b",
+     "argv": [
+      "git",
+      "worktree",
+      "add",
+      "-q",
+      "-b",
+      "session",
+      "../wt",
+      "HEAD"
+     ],
+     "fsyncCalls": 3,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/logs/refs/heads/session",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/heads/session",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/HEAD",
+       "kind": "worktree HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/ORIG_HEAD",
+       "kind": "operation state",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/commondir",
+       "kind": "worktree metadata",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/gitdir",
+       "kind": "worktree metadata",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "wt/.git",
+       "kind": "other: ",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "wt/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "commit in worktree",
+     "argv": [
+      "sh",
+      "-c",
+      "printf \"wt\\n\" > wt.txt && git add wt.txt && git commit -q -m \"in worktree\""
+     ],
+     "fsyncCalls": 6,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/logs/refs/heads/session",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/39/f569fdb1b5c522f036aec51aa6d71113451f01",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/a9/e191ff366b8265503bbd4a6d1da6c4211e4fc4",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/dc/b580444076ba00d68ab1696ca661888c96ffea",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/heads/session",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/COMMIT_EDITMSG",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "wt/wt.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "update-ref",
+     "argv": [
+      "git",
+      "update-ref",
+      "refs/orbit/base",
+      "HEAD~1"
+     ],
+     "fsyncCalls": 1,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/refs/orbit/base",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "merge --no-ff",
+     "argv": [
+      "git",
+      "merge",
+      "-q",
+      "--no-ff",
+      "-m",
+      "merge session",
+      "session"
+     ],
+     "fsyncCalls": 6,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/ORIG_HEAD",
+       "kind": "operation state",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/4e/5e13cfa79ae3c1028ac9a7c1cce5ef2c3aa7f2",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/wt.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "reset --hard",
+     "argv": [
+      "git",
+      "reset",
+      "-q",
+      "--hard",
+      "HEAD~1"
+     ],
+     "fsyncCalls": 3,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/ORIG_HEAD",
+       "kind": "operation state",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "checkout -b",
+     "argv": [
+      "git",
+      "checkout",
+      "-q",
+      "-b",
+      "other"
+     ],
+     "fsyncCalls": 2,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/HEAD",
+       "kind": "HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/other",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/other",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "symbolic-ref",
+     "argv": [
+      "git",
+      "symbolic-ref",
+      "HEAD",
+      "refs/heads/main"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/HEAD",
+       "kind": "HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "tag -a",
+     "argv": [
+      "git",
+      "tag",
+      "-a",
+      "-m",
+      "tag",
+      "v1"
+     ],
+     "fsyncCalls": 2,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/objects/35/f6548fee00b56700ee40c46c2d36b7afa00e44",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/tags/v1",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "stash",
+     "argv": [
+      "sh",
+      "-c",
+      "printf \"dirty\\n\" >> note.txt && git stash -q"
+     ],
+     "fsyncCalls": 11,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/ORIG_HEAD",
+       "kind": "operation state",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/stash",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/34/7bbb921a6992c6579b77347b51651d6fc4849b",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/51/049644d32063db1ddb2009176d2eaaeb9b1832",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/a1/0aa707f1d417b62324f93b5c9f948ea2f7ee27",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/f2/3b7942e4dae1001395b8d2dc7f77d44af7b17b",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/stash",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "rebase",
+     "argv": [
+      "git",
+      "rebase",
+      "-q",
+      "main"
+     ],
+     "fsyncCalls": 1,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/worktrees/wt/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "pack-refs",
+     "argv": [
+      "git",
+      "pack-refs",
+      "--all"
+     ],
+     "fsyncCalls": 1,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/packed-refs",
+       "kind": "packed-refs",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "gc (repack, commit-graph)",
+     "argv": [
+      "git",
+      "gc",
+      "-q"
+     ],
+     "fsyncCalls": 5,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/info/refs",
+       "kind": "init skeleton",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/feature",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/other",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/session",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/stash",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/info/commit-graph",
+       "kind": "commit-graph",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/info/packs",
+       "kind": "object info",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/pack/pack-e3f7127b510c8c4a70bdc61d1163b1dca97169c3.idx",
+       "kind": "pack metadata",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/pack/pack-e3f7127b510c8c4a70bdc61d1163b1dca97169c3.pack",
+       "kind": "pack",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/pack/pack-e3f7127b510c8c4a70bdc61d1163b1dca97169c3.rev",
+       "kind": "pack metadata",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/packed-refs",
+       "kind": "packed-refs",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/logs/HEAD",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "clone --no-local",
+     "argv": [
+      "git",
+      "clone",
+      "-q",
+      "--no-local",
+      "repo",
+      "clone"
+     ],
+     "fsyncCalls": 6,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "clone/.git/HEAD",
+       "kind": "HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/config",
+       "kind": "config",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/description",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/applypatch-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/commit-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/fsmonitor-watchman.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/post-update.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-applypatch.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-commit.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-merge-commit.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-push.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-rebase.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-receive.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/prepare-commit-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/push-to-checkout.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/sendemail-validate.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/update.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/info/exclude",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/logs/refs/remotes/origin/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/objects/pack/pack-6cc33180494a344f91c9e7578a8ae53858496144.idx",
+       "kind": "pack metadata",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/objects/pack/pack-6cc33180494a344f91c9e7578a8ae53858496144.pack",
+       "kind": "pack",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/objects/pack/pack-6cc33180494a344f91c9e7578a8ae53858496144.rev",
+       "kind": "pack metadata",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/packed-refs",
+       "kind": "packed-refs",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/refs/remotes/origin/HEAD",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "fetch",
+     "argv": [
+      "sh",
+      "-c",
+      "git -C ../repo commit -q --allow-empty -m upstream && git fetch -q origin"
+     ],
+     "fsyncCalls": 4,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "clone/.git/FETCH_HEAD",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/logs/refs/remotes/origin/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/objects/5a/3f9cdbe83ebb3712b66f6be1124315efef9e47",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/refs/remotes/origin/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/COMMIT_EDITMSG",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/5a/3f9cdbe83ebb3712b66f6be1124315efef9e47",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "worktree remove",
+     "argv": [
+      "git",
+      "worktree",
+      "remove",
+      "--force",
+      "../wt"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": []
+    }
+   ]
+  },
+  "all": {
+   "env": {
+    "GIT_CONFIG_PARAMETERS": "'core.fsync'='all' 'core.fsyncmethod'='fsync'"
+   },
+   "summary": {
+    "HEAD": {
+     "files": 4,
+     "contentSynced": 0,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "checkout -b",
+      "clone --no-local",
+      "init",
+      "symbolic-ref"
+     ]
+    },
+    "checked-out file": {
+     "files": 6,
+     "contentSynced": 0,
+     "namedDurably": 6,
+     "both": 0,
+     "ops": [
+      "clone --no-local",
+      "commit in worktree",
+      "merge --no-ff",
+      "second commit (existing ref)",
+      "stash",
+      "worktree add -b"
+     ]
+    },
+    "commit-graph": {
+     "files": 1,
+     "contentSynced": 1,
+     "namedDurably": 0,
+     "both": 0,
+     "ops": [
+      "gc (repack, commit-graph)"
+     ]
+    },
+    "config": {
+     "files": 3,
+     "contentSynced": 0,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "clone --no-local",
+      "config",
+      "init"
+     ]
+    },
+    "index": {
+     "files": 11,
+     "contentSynced": 10,
+     "namedDurably": 7,
+     "both": 7,
+     "ops": [
+      "add",
+      "checkout -b",
+      "clone --no-local",
+      "commit in worktree",
+      "first commit (new branch ref)",
+      "merge --no-ff",
+      "rebase",
+      "reset --hard",
+      "second commit (existing ref)",
+      "stash",
+      "worktree add -b"
+     ]
+    },
+    "init skeleton": {
+     "files": 33,
+     "contentSynced": 0,
+     "namedDurably": 17,
+     "both": 0,
+     "ops": [
+      "clone --no-local",
+      "gc (repack, commit-graph)",
+      "init"
+     ]
+    },
+    "loose object": {
+     "files": 17,
+     "contentSynced": 17,
+     "namedDurably": 17,
+     "both": 17,
+     "ops": [
+      "add",
+      "commit in worktree",
+      "fetch",
+      "first commit (new branch ref)",
+      "merge --no-ff",
+      "second commit (existing ref)",
+      "stash",
+      "tag -a"
+     ]
+    },
+    "object info": {
+     "files": 1,
+     "contentSynced": 0,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "gc (repack, commit-graph)"
+     ]
+    },
+    "operation state": {
+     "files": 9,
+     "contentSynced": 4,
+     "namedDurably": 6,
+     "both": 2,
+     "ops": [
+      "commit in worktree",
+      "fetch",
+      "first commit (new branch ref)",
+      "merge --no-ff",
+      "reset --hard",
+      "second commit (existing ref)",
+      "stash",
+      "worktree add -b"
+     ]
+    },
+    "other: ": {
+     "files": 1,
+     "contentSynced": 0,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "worktree add -b"
+     ]
+    },
+    "pack": {
+     "files": 2,
+     "contentSynced": 1,
+     "namedDurably": 2,
+     "both": 1,
+     "ops": [
+      "clone --no-local",
+      "gc (repack, commit-graph)"
+     ]
+    },
+    "pack metadata": {
+     "files": 4,
+     "contentSynced": 2,
+     "namedDurably": 4,
+     "both": 2,
+     "ops": [
+      "clone --no-local",
+      "gc (repack, commit-graph)"
+     ]
+    },
+    "packed-refs": {
+     "files": 3,
+     "contentSynced": 3,
+     "namedDurably": 2,
+     "both": 2,
+     "ops": [
+      "clone --no-local",
+      "gc (repack, commit-graph)",
+      "pack-refs"
+     ]
+    },
+    "ref": {
+     "files": 15,
+     "contentSynced": 14,
+     "namedDurably": 5,
+     "both": 4,
+     "ops": [
+      "branch",
+      "checkout -b",
+      "clone --no-local",
+      "commit in worktree",
+      "fetch",
+      "first commit (new branch ref)",
+      "merge --no-ff",
+      "reset --hard",
+      "second commit (existing ref)",
+      "stash",
+      "tag -a",
+      "update-ref",
+      "worktree add -b"
+     ]
+    },
+    "reflog": {
+     "files": 31,
+     "contentSynced": 0,
+     "namedDurably": 14,
+     "both": 0,
+     "ops": [
+      "branch",
+      "checkout -b",
+      "clone --no-local",
+      "commit in worktree",
+      "fetch",
+      "first commit (new branch ref)",
+      "gc (repack, commit-graph)",
+      "merge --no-ff",
+      "reset --hard",
+      "second commit (existing ref)",
+      "stash",
+      "symbolic-ref",
+      "worktree add -b"
+     ]
+    },
+    "worktree HEAD": {
+     "files": 1,
+     "contentSynced": 0,
+     "namedDurably": 1,
+     "both": 0,
+     "ops": [
+      "worktree add -b"
+     ]
+    },
+    "worktree metadata": {
+     "files": 2,
+     "contentSynced": 0,
+     "namedDurably": 2,
+     "both": 0,
+     "ops": [
+      "worktree add -b"
+     ]
+    }
+   },
+   "ops": [
+    {
+     "op": "init",
+     "argv": [
+      "git",
+      "init",
+      "-q",
+      "-b",
+      "main",
+      "repo"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/HEAD",
+       "kind": "HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/config",
+       "kind": "config",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/description",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/applypatch-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/commit-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/fsmonitor-watchman.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/post-update.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-applypatch.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-commit.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-merge-commit.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-push.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-rebase.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/pre-receive.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/prepare-commit-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/push-to-checkout.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/sendemail-validate.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/hooks/update.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/info/exclude",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "config",
+     "argv": [
+      "git",
+      "config",
+      "user.name",
+      "Probe"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/config",
+       "kind": "config",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "write file",
+     "argv": [
+      "sh",
+      "-c",
+      "printf \"one\\n\" > note.txt"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "add",
+     "argv": [
+      "git",
+      "add",
+      "note.txt"
+     ],
+     "fsyncCalls": 2,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/56/26abf0f72e58d7a153368ba57db4c673c0e171",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "first commit (new branch ref)",
+     "argv": [
+      "git",
+      "commit",
+      "-q",
+      "-m",
+      "first"
+     ],
+     "fsyncCalls": 4,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/COMMIT_EDITMSG",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/7d/73ee3f0aa90740b4fdf04e8a08299a4a8a7cd7",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/9a/c3a2080089e4a599b5705771a93dae932dbb52",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "second commit (existing ref)",
+     "argv": [
+      "sh",
+      "-c",
+      "printf \"two\\n\" >> note.txt && git commit -q -am second"
+     ],
+     "fsyncCalls": 4,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/COMMIT_EDITMSG",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/29/8428dcc81eec5cb43b485e74564bdd30e04272",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/68/9c7ad41daa69d505b57ca0513a611bcc48f5e4",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/81/4f4a422927b82f5f8a43f8fab6d3839e3983f2",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "branch",
+     "argv": [
+      "git",
+      "branch",
+      "feature"
+     ],
+     "fsyncCalls": 1,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/logs/refs/heads/feature",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/feature",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "worktree add -b",
+     "argv": [
+      "git",
+      "worktree",
+      "add",
+      "-q",
+      "-b",
+      "session",
+      "../wt",
+      "HEAD"
+     ],
+     "fsyncCalls": 3,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/logs/refs/heads/session",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/heads/session",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/HEAD",
+       "kind": "worktree HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/ORIG_HEAD",
+       "kind": "operation state",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/commondir",
+       "kind": "worktree metadata",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/gitdir",
+       "kind": "worktree metadata",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "wt/.git",
+       "kind": "other: ",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "wt/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "commit in worktree",
+     "argv": [
+      "sh",
+      "-c",
+      "printf \"wt\\n\" > wt.txt && git add wt.txt && git commit -q -m \"in worktree\""
+     ],
+     "fsyncCalls": 6,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/logs/refs/heads/session",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/4e/7bebd2e59c947257ef8afd5e387c2763090cd3",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/a9/e191ff366b8265503bbd4a6d1da6c4211e4fc4",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/dc/b580444076ba00d68ab1696ca661888c96ffea",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/heads/session",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/worktrees/wt/COMMIT_EDITMSG",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "wt/wt.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "update-ref",
+     "argv": [
+      "git",
+      "update-ref",
+      "refs/orbit/base",
+      "HEAD~1"
+     ],
+     "fsyncCalls": 1,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/refs/orbit/base",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "merge --no-ff",
+     "argv": [
+      "git",
+      "merge",
+      "-q",
+      "--no-ff",
+      "-m",
+      "merge session",
+      "session"
+     ],
+     "fsyncCalls": 6,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/ORIG_HEAD",
+       "kind": "operation state",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/d2/3cae15a39713da8ae918afaf9976f10b6e6ddb",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/wt.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "reset --hard",
+     "argv": [
+      "git",
+      "reset",
+      "-q",
+      "--hard",
+      "HEAD~1"
+     ],
+     "fsyncCalls": 3,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/ORIG_HEAD",
+       "kind": "operation state",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "checkout -b",
+     "argv": [
+      "git",
+      "checkout",
+      "-q",
+      "-b",
+      "other"
+     ],
+     "fsyncCalls": 2,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/HEAD",
+       "kind": "HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/other",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/refs/heads/other",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "symbolic-ref",
+     "argv": [
+      "git",
+      "symbolic-ref",
+      "HEAD",
+      "refs/heads/main"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/HEAD",
+       "kind": "HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "tag -a",
+     "argv": [
+      "git",
+      "tag",
+      "-a",
+      "-m",
+      "tag",
+      "v1"
+     ],
+     "fsyncCalls": 2,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/objects/57/539c6abc9ffc32f3d1f6aff48c40e2c90efa77",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/tags/v1",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "stash",
+     "argv": [
+      "sh",
+      "-c",
+      "printf \"dirty\\n\" >> note.txt && git stash -q"
+     ],
+     "fsyncCalls": 11,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/ORIG_HEAD",
+       "kind": "operation state",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/logs/refs/stash",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/42/49e7b04d6a5b40b1e625cb8125e2165f222dac",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/51/049644d32063db1ddb2009176d2eaaeb9b1832",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/a1/0aa707f1d417b62324f93b5c9f948ea2f7ee27",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/f8/b9e75eecbe8e25287f8326abc0cd6e73334040",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/stash",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "rebase",
+     "argv": [
+      "git",
+      "rebase",
+      "-q",
+      "main"
+     ],
+     "fsyncCalls": 1,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/worktrees/wt/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "pack-refs",
+     "argv": [
+      "git",
+      "pack-refs",
+      "--all"
+     ],
+     "fsyncCalls": 1,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/packed-refs",
+       "kind": "packed-refs",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      }
+     ]
+    },
+    {
+     "op": "gc (repack, commit-graph)",
+     "argv": [
+      "git",
+      "gc",
+      "-q"
+     ],
+     "fsyncCalls": 5,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "repo/.git/info/refs",
+       "kind": "init skeleton",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/feature",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/other",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/session",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/stash",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/info/commit-graph",
+       "kind": "commit-graph",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/objects/info/packs",
+       "kind": "object info",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/pack/pack-41c9f84126b91a1106b3859238d81ebd12cf7966.idx",
+       "kind": "pack metadata",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/pack/pack-41c9f84126b91a1106b3859238d81ebd12cf7966.pack",
+       "kind": "pack",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/pack/pack-41c9f84126b91a1106b3859238d81ebd12cf7966.rev",
+       "kind": "pack metadata",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/packed-refs",
+       "kind": "packed-refs",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/worktrees/wt/logs/HEAD",
+       "kind": "reflog",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "clone --no-local",
+     "argv": [
+      "git",
+      "clone",
+      "-q",
+      "--no-local",
+      "repo",
+      "clone"
+     ],
+     "fsyncCalls": 6,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "clone/.git/HEAD",
+       "kind": "HEAD",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/config",
+       "kind": "config",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/description",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/applypatch-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/commit-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/fsmonitor-watchman.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/post-update.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-applypatch.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-commit.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-merge-commit.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-push.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-rebase.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/pre-receive.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/prepare-commit-msg.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/push-to-checkout.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/sendemail-validate.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/hooks/update.sample",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/index",
+       "kind": "index",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/info/exclude",
+       "kind": "init skeleton",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/logs/refs/remotes/origin/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/objects/pack/pack-ed7c7be065e6a30f8f239eab2f26bec1add5f93c.idx",
+       "kind": "pack metadata",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/objects/pack/pack-ed7c7be065e6a30f8f239eab2f26bec1add5f93c.pack",
+       "kind": "pack",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/objects/pack/pack-ed7c7be065e6a30f8f239eab2f26bec1add5f93c.rev",
+       "kind": "pack metadata",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/packed-refs",
+       "kind": "packed-refs",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/refs/remotes/origin/HEAD",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/note.txt",
+       "kind": "checked-out file",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "fetch",
+     "argv": [
+      "sh",
+      "-c",
+      "git -C ../repo commit -q --allow-empty -m upstream && git fetch -q origin"
+     ],
+     "fsyncCalls": 4,
+     "syncfsCalls": 0,
+     "files": [
+      {
+       "path": "clone/.git/FETCH_HEAD",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/logs/refs/remotes/origin/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": false
+      },
+      {
+       "path": "clone/.git/objects/65/cac33e3c10ad4db8be2fe84eb7aca99b283e81",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "clone/.git/refs/remotes/origin/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": false
+      },
+      {
+       "path": "repo/.git/COMMIT_EDITMSG",
+       "kind": "operation state",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/HEAD",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/logs/refs/heads/main",
+       "kind": "reflog",
+       "how": "created",
+       "contentSynced": false,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/objects/65/cac33e3c10ad4db8be2fe84eb7aca99b283e81",
+       "kind": "loose object",
+       "how": "hard-linked",
+       "contentSynced": true,
+       "namedDurably": true
+      },
+      {
+       "path": "repo/.git/refs/heads/main",
+       "kind": "ref",
+       "how": "renamed",
+       "contentSynced": true,
+       "namedDurably": true
+      }
+     ]
+    },
+    {
+     "op": "worktree remove",
+     "argv": [
+      "git",
+      "worktree",
+      "remove",
+      "--force",
+      "../wt"
+     ],
+     "fsyncCalls": 0,
+     "syncfsCalls": 0,
+     "files": []
+    }
+   ]
+  }
+ }
+}

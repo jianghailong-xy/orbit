@@ -712,7 +712,17 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * Routes the census cannot stand up against the production apiserver, each with why, and the reading
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
-export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {};
+export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  'POST /admin/managed-runners/:id/volume-switch':
+    'an administrator acts on another account\'s runner by design, and anybody else is refused 403 by AdminRoleGuard '
+    + 'before anything is read (users/admin-role.guard.ts:21). The census server runs with managed runners off, where every '
+    + 'caller, an administrator too, is answered 404 MANAGED_RUNNER_DISABLED before the role is asked (managed-runners/'
+    + 'managed-runner-gate.ts:76), so no case of it can be answered there. On, the runner id finds that runner\'s mapping '
+    + 'alone (managed-runners/managed-runner.service.ts:294), its volume is read only under that runner\'s own fixed name in '
+    + 'the managed namespace (managed-runners/kubernetes-backend.ts:228), and a volume another mapping records is refused '
+    + '(managed-runners/managed-runner-manager.ts:1460) — all of it, and a member\'s 403 with nothing written, sent over HTTP '
+    + 'in managed-runners/managed-runner-volume-switch.pg.spec.ts',
+};
 
 // ── Ids a request carries in its body or query ────────────────────────────────────────────────────
 //

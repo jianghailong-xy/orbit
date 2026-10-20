@@ -1,0 +1,153 @@
+{
+ "checks": [
+  {
+   "check": "the database and k3s agree",
+   "ok": true,
+   "value": []
+  }
+ ],
+ "endedAt": "2026-10-18T15:21:12.994+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "account",
+ "result": {
+  "identity": {
+   "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+   "generation": 1,
+   "podUid": "6356a1c8-f4c8-4254-ada3-fd43a22f3389",
+   "pool": "orbit-mr-rbd",
+   "pvName": "pvc-be5549db-33bc-4e32-af48-cae1f6758b4d",
+   "pvUid": "0da9bf74-33f0-48ff-a808-76d1f7911e53",
+   "pvcName": "mr-data-01a14f99-caed-762f-92e2-6291c6d5ab95",
+   "pvcUid": "be5549db-33bc-4e32-af48-cae1f6758b4d",
+   "rbdImage": "csi-vol-1e64aa21-12ef-4b1c-a61f-3e219729115c",
+   "runnerId": "01a14f99-caed-762f-92e2-6291c6d5ab95",
+   "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1e64aa21-12ef-4b1c-a61f-3e219729115c",
+   "workspaceId": "01a14f99-caf0-77ab-b42b-cf051a6c0c53"
+  },
+  "key": {
+   "at": "2026-10-18T15:21:07.633+00:00",
+   "baseUrl": "http://10.0.2.2:13712/anthropic",
+   "defaultModel": "deepseek-v4-pro",
+   "enabled": true,
+   "id": "34i7Wgf7DYzMJOjJqdNwY",
+   "label": "FAKE model (lab, not a model)",
+   "owner": "ann",
+   "presetSlug": "deepseek",
+   "runtime": "claude",
+   "slug": "deepseek"
+  },
+  "ready": {
+   "at": "2026-10-18T15:21:12.586+00:00",
+   "changes": [
+    {
+     "at": "2026-10-18T15:21:07.686+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 1,
+      "management_state": "STARTING",
+      "pod": "6356a1c8",
+      "reason": "MODEL_UNAVAILABLE",
+      "revision": 12
+     }
+    },
+    {
+     "at": "2026-10-18T15:21:12.586+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 1,
+      "management_state": "READY",
+      "pod": "6356a1c8",
+      "reason": null,
+      "revision": 13
+     }
+    }
+   ],
+   "reached": "READY",
+   "seconds": 4.9
+  },
+  "signIn": {
+   "created": true,
+   "owner": "ann",
+   "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+   },
+   "signIn": {
+    "at": "2026-10-18T15:20:41.412+00:00",
+    "ms": 51.1,
+    "status": 201
+   },
+   "user": {
+    "email": "t08b-ann@lab.invalid",
+    "id": "34i7W1Pcy2TrsvLwGgFVW"
+   }
+  },
+  "starting": {
+   "at": "2026-10-18T15:21:07.633+00:00",
+   "changes": [
+    {
+     "at": "2026-10-18T15:20:41.522+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 1,
+      "management_state": "PROVISIONING",
+      "pod": null,
+      "reason": null,
+      "revision": 4
+     }
+    },
+    {
+     "at": "2026-10-18T15:20:46.972+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 1,
+      "management_state": "STARTING",
+      "pod": "6356a1c8",
+      "reason": null,
+      "revision": 11
+     }
+    },
+    {
+     "at": "2026-10-18T15:21:07.633+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 1,
+      "management_state": "STARTING",
+      "pod": "6356a1c8",
+      "reason": "MODEL_UNAVAILABLE",
+      "revision": 12
+     }
+    }
+   ],
+   "reached": "STARTING",
+   "seconds": 26.2
+  },
+  "times": {
+   "generation": 1,
+   "initialProvider": "deepseek",
+   "mappingCreatedAt": "2026-10-18T15:20:41.458+00:00",
+   "node": "orbit-mr-lab",
+   "podCreatedAt": "2026-10-18T15:20:46Z",
+   "pvcCreatedAt": "2026-10-18T15:20:41Z",
+   "readyAt": "2026-10-18T15:21:12.415+00:00",
+   "runner": {
+    "capabilities_reported_at": "2026-10-18T15:21:03.567+00:00",
+    "enrolled_at": "2026-10-18T15:20:41.453",
+    "last_heartbeat_at": "2026-10-18T15:21:03.566",
+    "status": "ONLINE",
+    "version": "managed-ebf54ab8ddcb35224a4d8f0c1feae0e480186b38"
+   },
+   "runnerContainerStartedAt": "2026-10-18T15:20:54Z",
+   "secretCreatedAt": "2026-10-18T15:20:46Z"
+  }
+ },
+ "seconds": 31.6,
+ "startedAt": "2026-10-18T15:20:41.362+00:00",
+ "step": "ready"
+}

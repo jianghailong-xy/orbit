@@ -352,6 +352,8 @@ func deliverIntegrationResult(ctx context.Context, t *Transport, jobID string, b
 	if err := spoolIntegrationResult(entry); err != nil {
 		logln("integration job", jobID, "result could not be spooled:", err)
 	}
+	// The local branch the job advanced, and the spooled report, are on the volume before the send.
+	syncManagedVolume("an integration job")
 	integrationResultRetry.settleAsWork(ctx, t, entry)
 }
 

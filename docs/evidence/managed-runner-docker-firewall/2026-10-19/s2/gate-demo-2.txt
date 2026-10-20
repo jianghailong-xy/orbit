@@ -1,0 +1,14 @@
++ 2026-10-19T08:05:14Z at 74f2c0ec50d48a918c7662b192d6fcd45b75ccd2: docker compose stop managed-runner-firewall
+ Container orbit-managed-runner-firewall Stopped 
++ 2026-10-19T08:05:26Z woken
+STARTING | 7 | 0 | 2026-10-19 08:09:27.452+00 | FIREWALL_NOT_ENFORCED | The Docker host's firewall for managed runners is not in force, so this runner is not started yet. It starts by itself once an operator has the firewall running again.
+[33m[Nest] 117  - [39m10/19/2026, 8:05:26 AM [33m   WARN[39m [38;5;3m[ManagedRunnerManager] [39m[33mmanaged runner 01a15310-a8a3-708d-a5a4-b1c1377d2c91: FIREWALL_NOT_ENFORCED: the managed runners' host firewall is not in force: the firewall service reports 'stopped': the firewall service stopped; its rules stay; it is sta
+2026-10-19T08:05:26Z orbit-docker-channel: no runner container is started: the managed runners' host firewall is not in force (the firewall service reports 'stopped': the firewall service stopped; its rules stay)
+2026-10-19T08:06:27Z orbit-docker-channel: no runner container is started: the managed runners' host firewall is not in force (the firewall service reports 'stopped': the firewall service stopped; its rules stay)
+2026-10-19T08:07:27Z orbit-docker-channel: no runner container is started: the managed runners' host firewall is not in force (the firewall service reports 'stopped': the firewall service stopped; its rules stay)
+2026-10-19T08:08:27Z orbit-docker-channel: no runner container is started: the managed runners' host firewall is not in force (the firewall service reports 'stopped': the firewall service stopped; its rules stay)
++ 2026-10-19T08:09:01Z docker compose start managed-runner-firewall
+2026-10-19T08:09:28Z orbit-docker-channel: container mr-01a15310-a89f-7592-8a0e-190140b17331 created and started
+READY | 7 | 0 | 
++ 2026-10-19T08:09:35Z right after: pkill -TERM -x dockerd
+READY | 8 | 1 | 

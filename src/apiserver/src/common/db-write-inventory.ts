@@ -1493,6 +1493,20 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     effects: 'None inside.',
     answer: 'No request waits on it: the worker logs the exhausted conflict, and its next pass fails the mapping, or puts it to sleep, again.',
   },
+  // ── An administrator's switch of a managed runner's data volume to a restored one (no migration). One
+  //    more unit, in the order fallAsleep keeps: the mapping row first, by a compare-and-set, then the
+  //    runner row, then the capacity pool row, and last the audit row, which locks nothing else.
+  {
+    at: 'managed-runners/managed-runner-manager.ts#commitSwitch',
+    shape: 'TX_RETRIED',
+    locks: 'managed_runner by id (a compare-and-set on revision, the switch\'s own lease holder, management state, generation and the recorded Pod UID: the new PVC UID, PV UID and volume handle, SLEEPING, and for a stopped instance still recorded generation + 1 and the Pod cleared), then runner by id (its credential hash replaced) only when such an instance is retired, then managed_runner_capacity by id (a compute share still held given back), then one INSERT of an `activity` row, which has no foreign key and no trigger. The order of fallAsleep, with the audit row last. The new PVC UID and volume handle are unique keys of managed_runner: a second mapping taking either meanwhile fails the UPDATE with P2002, which is a refusal, not a retry.',
+    identity: 'The revision the administrator read and the switch\'s lease: a request whose mapping moved matches no row and is answered with the current revision; the same idempotency key again is answered from the row, with no second audit row.',
+    isolation: '',
+    attempts: 4,
+    replay: 'A rolled-back attempt switched, retired, released and recorded nothing; the re-run does all of it from the same row, once. The CHECK on the pool keeps a share from being given back twice.',
+    effects: 'None inside. Every Kubernetes read the checks made came before the closure; the reconcile kick comes after commit.',
+    answer: 'Typed 503 from the global boundary after transient retry exhaustion; the administrator sends the switch again, which finds the mapping switched (the same key) or answers the revision it is at.',
+  },
   // ── Orbit Wiki (migration 0307, docs/wiki-design.md §4). Every unit below locks wiki rows and
   //    nothing else: 0307's header works through why the wiki's children reach their owner through
   //    the space rather than the user row, so a propose or a decide takes no rank-10 key lock and
@@ -1898,7 +1912,7 @@ export const TRANSACTION_PARTICIPANTS: readonly TransactionParticipant[] = [
   // Managed runner capacity (migration 0413): the pool's two conditional UPDATEs, run only inside the
   // transaction that records or clears the mapping's share.
   { at: 'managed-runners/managed-runner-capacity.ts#reserveCapacity', under: 'managed-runners/managed-runner-manager.ts#admitted' },
-  { at: 'managed-runners/managed-runner-capacity.ts#releaseCapacity', under: 'managed-runners/managed-runner-manager.ts#fallAsleep and #commitReleasingCompute' },
+  { at: 'managed-runners/managed-runner-capacity.ts#releaseCapacity', under: 'managed-runners/managed-runner-manager.ts#fallAsleep, #commitReleasingCompute and #commitSwitch' },
   { at: 'wiki-worker/wiki-repo-ops.ts#settleRead', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult' },
   { at: 'wiki-worker/wiki-repo-ops.ts#notifyRepoOpSettled', under: 'wiki-worker/wiki-repo-ops.ts#applyWikiRepoOpResult and #failWikiRepoOp' },
   // What waits on a job that ended for good — its calls, its repository operations, its run or plan job — settled

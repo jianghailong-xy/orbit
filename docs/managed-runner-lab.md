@@ -1,14 +1,17 @@
 # Managed runner single-machine lab
 
 A disposable test environment for the managed runner project: one KVM virtual machine on the HPC
-host (Orbit runner `workstation-gpu`) running single-node k3s, a single-host Ceph cluster and
-Ceph-CSI RBD. The owner authorized it on 2026-10-17 as the project's "authorized isolated test
-environment", limited to one machine, one node and one failure domain. It changes nothing on the
-host beyond its own files and its own transient systemd unit, it is off unless a test window needs
-it, and it does not enable managed runners anywhere: the server switch stays off by default, and
-no default entry point (root Compose, `.env.example`, `/upgrade`, release, install or start
-scripts) refers to it. [The design contract](managed-runner-design.md) is the baseline; this page
-records how the lab follows it and where it departs from it.
+host (Orbit runner `workstation-gpu`) running k3s, a single-host Ceph cluster and Ceph-CSI RBD, and
+since 2026-10-19 a second, smaller VM that joins it as a second k3s node ([Two nodes](#two-nodes-l1)).
+The owner authorized the first VM on 2026-10-17 as the project's "authorized isolated test
+environment", limited to one machine, one node and one failure domain. On 2026-10-19 they added the
+second VM, so that one volume can move between two nodes; it is still one physical machine and one
+failure domain. The lab changes nothing on the host beyond its own files and its own transient
+systemd units, it is off unless a test window needs it, and it does not enable managed runners
+anywhere: the server switch stays off by default, and no default entry point (root Compose,
+`.env.example`, `/upgrade`, release, install or start scripts) refers to it.
+[The design contract](managed-runner-design.md) is the baseline; this page records how the lab
+follows it and where it departs from it.
 
 The scripts are in [`scripts/managed-runner/lab/`](../scripts/managed-runner/lab/), with every
 version and checksum pinned in [`lab.env`](../scripts/managed-runner/lab/lab.env).
@@ -18,33 +21,45 @@ version and checksum pinned in [`lab.env`](../scripts/managed-runner/lab/lab.env
 ```text
 HPC host (Debian 13, kernel 6.12, ~15 GiB RAM, shared by every Orbit session)
   orbit-runner-root.service ............ the Orbit runner and its sessions (not touched)
-  orbit-mr-lab.service (transient) ..... qemu-system-x86_64, its own cgroup in system.slice:
+  orbit-mr-lab.service (transient) ..... first VM's qemu, its own cgroup in system.slice:
   |                                      MemoryMax 6656M, OOMScoreAdjust 1000, CPUQuota 400%
   |  127.0.0.1:16222 -> guest :22    (SSH)          QEMU user network (slirp): no bridge,
   |  127.0.0.1:16443 -> guest :6443  (k3s API)      no tap, no firewall change; the guest
-  |                                                 reaches host services at 10.0.2.2
+  |  127.0.0.1:16230 (listens) .. the link          reaches host services at 10.0.2.2
+  orbit-mr-lab-2.service (transient) ... second VM's qemu (two-node mode only), system.slice:
+  |                                      MemoryMax 3584M, OOMScoreAdjust 1000, CPUQuota 200%
+  |  127.0.0.1:16223 -> guest :22    (SSH)          its own QEMU user network
+  |  -> 127.0.0.1:16230 (connects) .. the link: a QEMU socket netdev, Ethernet frames between
+  |                                   the two qemu processes over one loopback TCP connection
   /mnt/data/managed-runner-lab/ (0700) .. every disk, key, log and kubeconfig of the lab
 
-Guest orbit-mr-lab (Ubuntu 26.04.1 LTS, kernel 7.0.0-34-generic, 4 vCPU, 6 GiB, 10.0.2.15)
+Guest orbit-mr-lab (Ubuntu 26.04.1 LTS, kernel 7.0.0-34-generic, 4 vCPU, 6 GiB)
+  user network 10.0.2.15, link lablink0 10.77.0.1/24
   Ceph 20.2.4 under cephadm/podman ...... 1 mon, 1 mgr, 3 OSDs on vdb/vdc/vdd (one virtual disk
-  |                                       each on /mnt/data); outside Kubernetes, so for k3s it
-  |                                       is an external Ceph test backend at 10.0.2.15
-  k3s v1.36.5 (single node) ............. Ceph-CSI Operator v1.1.0 -> Ceph-CSI v3.18.0 RBD driver
+  |                                       each on /mnt/data), all on 10.77.0.1; outside
+  |                                       Kubernetes, so for k3s an external Ceph test backend
+  k3s v1.36.5 server, node 10.77.0.1 .... Ceph-CSI Operator v1.1.0 -> Ceph-CSI v3.18.0 RBD driver
                                           StorageClass runner-data, namespace orbit-mr-test
+
+Guest orbit-mr-lab-2 (same image and kernel, 2 vCPU, 3 GiB), two-node mode only
+  user network 10.0.2.15 (its own), link lablink0 10.77.0.2/24
+  k3s v1.36.5 agent, node 10.77.0.2 ..... Ceph-CSI node plugin; kernel RBD client of the first
+                                          VM's Ceph over the link; no Ceph of its own
 ```
 
 Nothing of Kubernetes, Ceph or CSI is installed on the host, and the host loads no `rbd`, `nbd`,
-`ceph` or `libceph` module: RBD devices are mapped by the guest's kernel. `status.sh` prints the
-host's module list and the qemu process's listening sockets (only the two 127.0.0.1 forwards).
-The host keeps only `kubectl` (v1.36.5, checksum-verified) in `/mnt/data/managed-runner-lab/bin/`.
+`ceph` or `libceph` module: RBD devices are mapped by the guests' kernels. `status.sh` prints the
+host's module list, each qemu process's listening sockets (only 127.0.0.1) and the link's one
+connection. The host keeps only `kubectl` (v1.36.5, checksum-verified) in
+`/mnt/data/managed-runner-lab/bin/`.
 
 ## Versions
 
 | Component | Version | Pin |
 | --- | --- | --- |
-| Guest image | Ubuntu 26.04 LTS cloud image, release 20260927 (26.04.1) | SHA-256 `8800651811af…7332b2`, checked against `SHA256SUMS`, whose signature by Ubuntu's image key `D2EB4462…7DB87C81` is verified |
-| Guest kernel | `7.0.0-34-generic`; `rbd.ko` is in the base modules package and loads at boot | from the image |
-| Kubernetes | k3s `v1.36.5+k3s1` (Kubernetes 1.36.5, inside Ceph-CSI v3.18.0's tested 1.34–1.36) | binary and `install.sh` by SHA-256 |
+| Guest image | Ubuntu 26.04 LTS cloud image, release 20260927 (26.04.1), for both VMs | SHA-256 `8800651811af…7332b2`, checked against `SHA256SUMS`, whose signature by Ubuntu's image key `D2EB4462…7DB87C81` is verified |
+| Guest kernel | `7.0.0-34-generic` in both VMs; `rbd.ko` is in the base modules package and loads at boot | from the image |
+| Kubernetes | k3s `v1.36.5+k3s1` (Kubernetes 1.36.5, inside Ceph-CSI v3.18.0's tested 1.34–1.36): the server in the first VM, the same binary as the agent in the second | binary and `install.sh` by SHA-256 |
 | Ceph | Tentacle `20.2.4` (2026-08-19 security release, CVE-2025-30156 and three others) | `quay.io/ceph/ceph@sha256:6bb1c8a4…` for every daemon; `cephadm` 20.2.4 by SHA-256 |
 | Ceph-CSI | `v3.18.0` RBD driver | `quay.io/cephcsi/cephcsi:v3.18.0@sha256:0a92e5c8…` |
 | CSI deployment | Ceph-CSI Operator `v1.1.0` | `install.yaml` by SHA-256, operator image by digest |
@@ -60,7 +75,9 @@ image build pin.
 
 | Contract baseline | Lab | Why |
 | --- | --- | --- |
-| External Ceph supplied by a storage owner | Ceph in the same VM, deployed by cephadm with podman, independent of k3s | No storage owner or cluster exists; the owner authorized building one inside the VM. k3s reaches it like any external cluster (MON at 10.0.2.15:6789). |
+| External Ceph supplied by a storage owner | Ceph in the first VM, deployed by cephadm with podman, independent of k3s | No storage owner or cluster exists; the owner authorized building one inside the VM. k3s reaches it like any external cluster (MON at 10.77.0.1:6789, on the link). |
+| Nodes on separate machines and a real network | Two VMs on one host, joined by a QEMU socket netdev over 127.0.0.1; Ceph's public network and the k3s nodes' addresses are the link's 10.77.0.0/24 | The owner's 2026-10-19 decision: a second node without a second machine or any change to the host's network. Cross-node attach, detach and mount are real; physical failures are not (one machine, one failure domain). |
+| CSI controller plugin wherever the scheduler puts it | Pinned to the first VM by the Driver's `controllerPlugin.affinity` | The second VM is the one failed on purpose; with the provisioner and attacher on it, its hard stop would also stop every attach and detach. |
 | CRUSH failure domain from the storage owner (`host` or wider) | Failure domain `osd`; pool size 3, `min_size` 2 | One host. The contract forbids a single copy (`size 1`/`min_size 1`), so three OSDs keep three replicas; they share one VM and one physical HDD, so the replicas exercise replication and degraded-I/O rules but protect against no hardware failure. |
 | Distro Ceph packages | Upstream 20.2.4 container image under cephadm | Ubuntu 26.04's own Ceph is 20.2.0 with only an RGW fix (2026-10-05); it lacks the CephX fix that introduced `aes256k`. download.ceph.com has no 26.04 packages. |
 | Direct Ceph-CSI install "following its pinned Operator instructions" | Ceph-CSI Operator v1.1.0 with an image set ConfigMap pinning v3.18.0 and the sidecars | v3.17+ recommends the operator; Helm is deprecated in v3.18. |
@@ -79,15 +96,17 @@ StorageClass and PVCs are rendered from the repository's templates by `ceph_rbd.
 | What | Value |
 | --- | --- |
 | VM, Kubernetes node, kubeconfig context | `orbit-mr-lab` |
+| Second VM, its Kubernetes node | `orbit-mr-lab-2` (unit `orbit-mr-lab-2.service`); no context of its own: the one kubeconfig and context serve both nodes |
+| Link | `lablink0` in both guests (MAC `52:54:00:4c:00:01` and `…:02`), 10.77.0.1/24 and 10.77.0.2/24; the first qemu listens on 127.0.0.1:16230, the second connects |
 | kubeconfig | `/mnt/data/managed-runner-lab/kubeconfig.json` (0600, JSON as the manager profile expects); context `orbit-mr-lab`, cluster `orbit-mr-lab`, user `orbit-mr-lab-admin` (k3s admin client certificate, cluster-admin), server `https://127.0.0.1:16443`, default namespace `orbit-mr-test` |
 | Test namespace | `orbit-mr-test` |
 | StorageClass | `runner-data` (not default; the k3s local-path class is disabled, so it is the only class) |
 | Ceph pool | `orbit-mr-rbd`: replicated, size 3, `min_size` 2, 32 PGs, application `rbd` |
 | Ceph FSID / CSI `clusterID` | New on every `create.sh`; read it from `state/facts.json`. The current one is `12b3f1b2-c9ec-11f1-80c0-525400123456`. |
-| CSI | namespace `ceph-csi-operator-system`; Driver `rbd.csi.ceph.com`; CephConnection `orbit-mr-lab-ceph` (monitor `10.0.2.15:6789`); ClientProfile named after the FSID; image set ConfigMap `orbit-mr-lab-images` |
+| CSI | namespace `ceph-csi-operator-system`; Driver `rbd.csi.ceph.com`; CephConnection `orbit-mr-lab-ceph` (monitor `10.77.0.1:6789`); ClientProfile named after the FSID; image set ConfigMap `orbit-mr-lab-images` |
 | CephX identity of the CSI driver | `client.orbit-mr-csi`: `mon 'profile rbd'`, `osd 'profile rbd pool=orbit-mr-rbd'`, `mgr 'profile rbd pool=orbit-mr-rbd'` |
 | CSI Secret | `ceph-csi-operator-system/orbit-mr-csi-rbd` (`userID`, `userKey`), referenced by the StorageClass for provisioner, controller publish, controller expand and node stage |
-| SSH | `ssh -i /mnt/data/managed-runner-lab/ssh/id_ed25519 -p 16222 ubuntu@127.0.0.1` |
+| SSH | `ssh -i /mnt/data/managed-runner-lab/ssh/id_ed25519 -p 16222 ubuntu@127.0.0.1`; the second VM on port 16223 (same key) |
 
 The CSI key goes from `ceph auth print-key` straight into `kubectl create secret` inside the guest
 and is compared with the Secret by hash. It is never printed, logged, written to the host or kept
@@ -116,15 +135,16 @@ client libraries (Tentacle packages in its Rocky Linux 10 image) provision with 
 | --- | --- |
 | Guest | 4 vCPU, 6144 MiB RAM; no swap inside the guest |
 | Unit `orbit-mr-lab.service` | `MemoryMax=6656M` (guest RAM plus qemu's own memory), `OOMScoreAdjust=1000` (under host-wide memory pressure the kernel's OOM killer picks the VM first, ahead of processes in the runner's cgroup, whose `OOMPolicy=stop` would stop every session), `CPUQuota=400%` |
-| Boot guard | `start.sh` refuses to boot when the host's `MemAvailable` is below 2048 MiB (`LAB_MIN_AVAILABLE_MIB`) and says why |
-| Disks | root 40 GiB qcow2 overlay on the verified image; three 20 GiB qcow2 OSD disks; all thin, `cache=none`, on the /mnt/data HDD |
+| Second guest | 2 vCPU, 3072 MiB RAM; unit `orbit-mr-lab-2.service` with `MemoryMax=3584M`, `OOMScoreAdjust=1000`, `CPUQuota=200%`; kubelet `system-reserved` cpu 250m, memory 512 MiB (no Ceph beside it), the same hard eviction |
+| Boot guard | `start.sh` refuses to boot when the host's `MemAvailable` is below the floor of what it is about to boot, and says why: 2048 MiB for the first VM (`LAB_MIN_AVAILABLE_MIB`), 1536 MiB for the second (`LAB2_MIN_AVAILABLE_MIB`), 3584 MiB for both together |
+| Disks | first VM: root 40 GiB qcow2 overlay on the verified image, three 20 GiB qcow2 OSD disks; second VM: root 30 GiB qcow2 overlay (`disks/node2-root.qcow2`); all thin, `cache=none`, on the /mnt/data HDD |
 | Ceph | `osd_memory_target` 896 MiB per OSD (the smallest value Ceph accepts), autotune off; `mon_memory_target` 512 MiB; one mon, one mgr; no dashboard, monitoring stack, ceph-exporter or device monitoring; mgr modules `nfs` and `nvmeof` off |
 | k3s | traefik, servicelb, metrics-server, local-path and the Helm controller disabled; kubelet `system-reserved` cpu 1, memory 3 GiB (Ceph runs outside the kubelet's accounting), hard eviction below 256 MiB |
 | Returning memory | virtio-balloon free page reporting, at 32 KiB granularity (`page_reporting_order` 3; the default 2 MiB returned almost nothing of a busy guest's free memory), and clean page cache dropped at the end of `create.sh` and `start.sh` and every 5 minutes by `orbit-lab-drop-caches.timer` |
 
 ### Memory measured
 
-Figures in MiB from 2026-10-17: the unit's cgroup (`memory.current`, `memory.swap.current`), the
+The two-node figures of 2026-10-19 are in [Two nodes](#memory-measured-1). Figures in MiB from 2026-10-17: the unit's cgroup (`memory.current`, `memory.swap.current`), the
 guest's own statistics through the balloon, and the host's `/proc/meminfo`. Other sessions kept
 running on the host throughout, so the host's `MemAvailable` also moved on its own; the unit's
 figures are the VM's footprint.
@@ -163,12 +183,13 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 
 | Script | What it does |
 | --- | --- |
-| `create.sh` | Builds the lab, or finishes an interrupted build: verified downloads, disks, cloud-init seed, boot (through `start.sh`), guest packages, Ceph, k3s, kubeconfig, Ceph-CSI, StorageClass, namespace, facts, a page-cache drop, health. Each step skips what exists, so rerun it after any failure. Leaves the VM running. |
-| `start.sh` | Boots the VM as `orbit-mr-lab.service` behind the memory guard, waits until `status.sh` reports healthy and drops the guest's page cache (`--no-wait` returns after SSH). |
-| `stop.sh` | ACPI shutdown through QMP and a wait for qemu to exit (15–22 s measured); `--force` stops the unit after the timeout. Use it, not `systemctl stop`, which cuts the power. |
-| `status.sh` | Host boundary (kernel modules, listening sockets), unit memory, guest memory through the balloon, Ceph health, k3s node, Ceph-CSI workloads, StorageClass and namespace; exit 1 when running but unhealthy, `--wait SECONDS` to wait for health. |
-| `smoke.sh run` / `smoke.sh verify RUN_ID` | The storage smoke test below; reports go to `state/smoke-RUN_ID.json`. |
-| `destroy.sh --yes-destroy-lab` | Shuts down and deletes the disks (all Ceph and PVC data), seed, SSH key and kubeconfig; keeps downloads, logs and earlier reports (`--purge` removes everything). |
+| `create.sh [--nodes 2]` | Builds the lab, or finishes an interrupted build: verified downloads, disks, cloud-init seeds, boot (through `start.sh`), guest packages, the link NIC, Ceph, k3s, kubeconfig, Ceph-CSI, StorageClass, namespace, facts, a page-cache drop, health. With `--nodes 2` it then builds the second VM: its disk and seed, boot, packages, link NIC, the join token, the k3s agent and the CSI node plugin on it. Each step skips what exists, so rerun it after any failure. A lab from before the link gets its Ceph and k3s moved onto it ([below](#moving-ceph-and-k3s-onto-the-link)). Leaves the VMs running. |
+| `start.sh [--nodes 2]` | Single-node mode by default: boots the first VM as `orbit-mr-lab.service`. `--nodes 2` is two-node mode: the first VM if it is off, then the second as `orbit-mr-lab-2.service`; it also brings the second back after a hard stop. Behind the memory guard for what it boots, it waits until `status.sh` reports healthy, cordons the second node in single-node mode and uncordons it in two-node mode, and drops the guests' page cache (`--no-wait` returns after SSH). |
+| `stop.sh [--node 2] [--hard]` | ACPI shutdown through QMP and a wait for qemu to exit, the second VM first (15–22 s measured for the first); `--force` stops a unit after the timeout. Use it, not `systemctl stop`, which cuts the power. `--node 2` stops only the second VM, cordoned first: back to single-node mode. `--node 2 --hard` kills the second VM's qemu with SIGKILL instead, for failure tests ([below](#a-hard-stop-of-the-second-node)). |
+| `status.sh` | Host boundary (kernel modules, listening sockets, the link's connection), each unit's memory, guest memory through the balloon, both guests' health (Ceph, the link, Ceph reached from the second VM), every running VM's node Ready, Ceph-CSI workloads and the node plugin on each of those nodes, StorageClass and namespace; with the second VM off its node is reported, not required. Exit 1 when running but unhealthy, `--wait SECONDS` to wait for health. |
+| `smoke.sh run` / `smoke.sh verify RUN_ID` | The single-node storage smoke test below; reports go to `state/smoke-RUN_ID.json`. |
+| `two-node.py topology\|migrate\|hard-stop\|verify RUN_ID\|memory LABEL` | The two-node checks ([below](#two-nodes-l1)): one PVC moving between the nodes, the second node's hard stop and recovery, the data after a restart, memory; reports go to `state/two-node-RUN_ID.json`. |
+| `destroy.sh --yes-destroy-lab [--node 2]` | Shuts down and deletes the disks (all Ceph and PVC data), seeds, SSH key and kubeconfig; keeps downloads, logs and earlier reports (`--purge` removes everything). `--node 2` deletes only the second VM's disk and seed and its node in the cluster; it holds no Ceph data. |
 | `test-server.sh start [--managed\|--managed-false\|--managed-false-no-profile]\|stop\|status\|secrets` | The isolated test control plane on the host, all on 127.0.0.1 and outside the runner's cgroup with memory caps: PostgreSQL (container `orbit-mr-lab-pg`, port 15433), this checkout's apiserver (unit `orbit-mr-lab-api`, port 13710, built beforehand), a TLS front with a lab-only CA (unit `orbit-mr-lab-tls`, port 13711, the address Pods use: `https://10.0.2.2:13711`) and `fake-model.py` (unit `orbit-mr-lab-fake-model`, port 13712). Data, secrets and logs in `LAB_DIR/test-server`, or in `LAB_TEST_SERVER_DIR`, which keeps a task's database apart. `--managed` turns managed runners on with the profile `single-writer.py profile` wrote, `--managed-false` names the same profile with the switch explicitly `false`, `--managed-false-no-profile` sets `false` and names no profile (no Kubernetes or Ceph configuration at all); `secrets` only makes the secrets and the lab CA. |
 | `single-writer.py` | The manager's own Pods in the lab ([below](#single-writer-protection-t02a)): the manager's ServiceAccount and least-privilege RBAC, the admission webhook (k3s's AdmissionConfiguration with the webhook's bearer token, and the repository's webhook template), the image import under its digest, the manager profile, and the checks: second Pods, outages, the probe payload inside the runner container, storage records, credential replay at the runner door, stopping the runner, a force delete and an incomplete fencing receipt. |
 | `manager-lab.py` | The manager against real k3s ([below](#manager-reconciliation-t04)): the T04 server directory, a second apiserver replica, owners and their concurrent sign-ins and ensures, the database against k3s (`consistency`), a recorder of every change, a stand-in Claude login on a runner's volume, a killed runner process, an operator's delete or eviction, an API outage, a controller crash timed on a create, the switch checks and one owner against another. |
@@ -178,18 +199,23 @@ All scripts run as root on HPC from the repository checkout, and only touch this
 | `lab-ca-image.Dockerfile` | One layer on the product image: the lab CA in the system trust store, for the manager's Pod, which mounts no CA bundle. |
 | `runner-image.py` | Runs the optional runner image in the lab: imports an image archive into the guest's containerd, enrolls once, starts, stops and recreates the runner Pod on one PVC, drives sessions and a landing on the test server, and hashes the persistent state; see [Runner image](#runner-image-t03). |
 | `wake-lab.py` | Wake, sleep and capacity on real k3s ([below](#wake-sleep-and-capacity-t06)), through manager-lab.py's gate, replica, views and `kill-runner`: a profile with a budget of one runner and a 60 s idle interval, accounts with a fake-model key, a self-managed runner and its dispatch, every kind of demand (a turn, a session, a task's Run Now or run time, all at once), waits on a mapping or on an answer quoting a marker, data on the runner's volume, the administrator's disable, a ResourceQuota of zero Pods, the switch-off check for demand, and a recorder with its timeline. |
-| `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. `FAKE-SLOW`, `FAKE-BG` (a call of the runner's `bg_run`), `FAKE-WAKEUP` (`schedule_wakeup`), `FAKE-WRITE` (a call of Claude Code's own Bash tool that commits a file in the session's worktree) and `FAKE-APIERR` (an overloaded provider) in a message shape the answer; see its header. |
+| `fake-model.py` | An Anthropic-dialect stand-in that answers turns with canned text and logs each request's history, for checks that must not depend on a model or a key. Its answers are not engine acceptance. `FAKE-SLOW`, `FAKE-BG` (a call of the runner's `bg_run`), `FAKE-WAKEUP` (`schedule_wakeup`), `FAKE-WRITE` (a call of Claude Code's own Bash tool that commits a file in the session's worktree), `FAKE-HOLD` (the answer to that tool's result held open, so the turn is still running) and `FAKE-APIERR` (an overloaded provider) in a message shape the answer; see its header. |
 | `acceptance-lab.py` | The end-to-end run of task T08 ([below](#end-to-end-acceptance-t08)): two accounts through the switch unset, `false` and on, provisioning, capacity, sessions, busy and idle, wakes, Pod rebuilds, a controller restart, an image rollback, an independent RBD backup restored to a new PVC, and the switch off again, in one command that stops at the first failed check; `report` condenses a run, `secret-scan` checks its records. |
+| `switch-lab.py` | Task T08b's run ([below](#a-restored-volume-back-under-its-runner-t08b)), on acceptance-lab.py's helpers: one account provisioned, data on its volume, an independent backup, the volume lost, the runbook's restore into a new claim under the runner's name, the administrator's volume switch and the wake on the restored claim, in one command that stops at the first failed check; `report` condenses a run. |
+| `takeover-lab.py` | Task T02's run on the two nodes ([below](#cross-node-migration-and-takeover-t02)), on acceptance-lab.py's helpers: one account's runner moved to the other node through sleep and wake, Pods on its claim pinned to the other node, what RWO and RBD do alone, the second node's power cut while the runner writes there, the runbook's failover (receipt, out-of-service taint, finalizer) and the old node's return; it stops at the first failed check and goes on from a step (`--from-step`); `report` condenses a run, `secret-scan` checks its records. |
+| `cross-node-lab.py` | Task T08x's run on the two nodes ([below](#two-accounts-across-two-nodes-t08x)), on takeover-lab.py's helpers: two accounts' runners moved to the other node (a message, a task run now), second Pods on each claim and Pods mixing the accounts, the second node's power cut with both runners on it (no Git work in the last minute, a last message to each session, one volume synced and one not), the runbook's failover for both with the runbook's own query and commands, the old node's return, and `kubectl drain` both ways; `--from-step`, `report` and `secret-scan` as above. |
+| `durability-lab.py` | Task T02c's run on the two nodes ([below](#git-work-and-engine-sessions-through-a-power-cut-t02c)), on takeover-lab.py's and cross-node-lab.py's helpers: T07's leftover Pod released by the runbook's patch after its owner is confirmed, Git's commit costs on the runner class's storage, then one account's runner on the project line's image and one on this branch's: the runner's and the engine's Git work and a last turn in the last seconds, the second node's power cut, a copy of the volume's snapshot read before anything mounts it, the runbook's failover, the session resumed, the second node back; and a damaged volume woken on the fixed image. Its last phase, `again` (task D10), does the after run once more for a later runner change, with a new account. `--from-step`, `report` and `secret-scan` as above. |
 
 A test window:
 
 ```sh
-sudo scripts/managed-runner/lab/start.sh            # refuses below 2 GiB MemAvailable
+sudo scripts/managed-runner/lab/start.sh            # single-node mode; refuses below 2 GiB MemAvailable
+sudo scripts/managed-runner/lab/start.sh --nodes 2  # or two-node mode; refuses below 3.5 GiB for both
 K="/mnt/data/managed-runner-lab/bin/kubectl --kubeconfig /mnt/data/managed-runner-lab/kubeconfig.json --context orbit-mr-lab"
-$K get nodes
+$K get nodes -o wide
 $K -n orbit-mr-test get pvc
 ssh -i /mnt/data/managed-runner-lab/ssh/id_ed25519 -p 16222 ubuntu@127.0.0.1 sudo cephadm shell -- ceph -s
-sudo scripts/managed-runner/lab/stop.sh             # leave it off between test windows
+sudo scripts/managed-runner/lab/stop.sh             # both VMs, the second first; leave them off between windows
 ```
 
 Pass `--kubeconfig` and `--context` on every command; never point another tool at a default or
@@ -571,24 +597,486 @@ Left in the lab: `test-server-t08` with ann, bob and cy SLEEPING, their claims k
 `/mnt/data/managed-runner-lab/backups/t08-20261018T125553Z` (0700); the webhook removed; the test server, gate, replica,
 recorder and self-managed runner stopped; the VM off.
 
+## A restored volume back under its runner (T08b)
+
+Recorded 2026-10-18 by task T08b: one account through the volume switch on the lab's real k3s, in one run of `switch-lab.py`
+at `eccae61cd` (22 steps, 78 checks, all passed, 15:18:39–15:26:40 UTC, 8.0 minutes). The records are in
+[the evidence](evidence/managed-runner-volume-switch/2026-10-18/README.md), and the procedure it follows is the runbook's
+[Put a restored volume back under its runner](managed-runner-kubernetes-operations.md#put-a-restored-volume-back-under-its-runner).
+fake-model.py stood in for a model as a DeepSeek-preset key, since the owner's key file did not exist. The runner image was
+T06b's, whose sources this branch does not change; nothing was built into an image or pushed.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t08b    # earlier tasks' databases untouched
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+OUT=/mnt/data/tmp/t08b-run && mkdir -p $OUT        # a transient unit: a runner outage cannot end the run
+sudo systemd-run --unit=orbit-mr-lab-t08b-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR -p WorkingDirectory=$PWD \
+  -p StandardOutput=append:$OUT/run.log -p StandardError=append:$OUT/run.log \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/switch-lab.py run --out $OUT
+python3 scripts/managed-runner/lab/switch-lab.py report $OUT        # each step's time and checks, the intervals
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+| Check | Result |
+| --- | --- |
+| Before | ann signed in and was READY on a fake-model key, her first session holding an attachment and a file the engine committed in its worktree. The probe wrote 8 MiB of random bytes, 150 SQLite rows (WAL, `synchronous=FULL`) and a Git commit while a 150 s turn kept the runner up. Disabled, she was asleep 28.4 s later. Her 2 GiB RBD image was exported out of the VM in 8.2 s (18.2 MB gzip) and checked on the host with no cluster in 4.4 s. |
+| The loss | Her claim, its PV (Released, kept by `Retain`) and its RBD image deleted. Enabled again, a message: the wake failed `PVC_MISSING` 0.6 s later, no claim made in its place, the message waiting. |
+| The restore | A new claim `mr-data-<runner uuid>` with the manager's marks, `Bound` to a new PV and image; the claim, its binding and the backup's write into the image took 17.1 s, and the image read back with the backup's SHA-256. A check Pod on the claim was refused by the guard (`NOT_THE_MANAGER`). The manager kept `PVC_MISSING` and adopted nothing; its detail said the claim under the name was not the recorded one. |
+| The switch | ann's own request was refused 403, another UID 409 `VOLUME_NOT_VERIFIED`, a stale revision 409 with the current one; nothing was switched. The administrator's switch was answered 200 in 0.4 s: `SLEEPING`, desired `RUNNING`, generation 2, from the lost claim, PV and handle to the restored ones. One `activity` row named the administrator, the time and both volumes. The same request again: `replayed`, no second row. |
+| The wake | The waiting message woke the runner at once: Secret and Pod in the switch's second, the runner container 14 s later, the message answered 23.7 s after the switch and READY at 51 s. The same runner ID and workspace, generation 2 (the backed-up volume had last run generation 1), the Pod admitted for the restored claim's UID, `/var/lib/orbit` an ext4 RBD device. The engine's next request carried the earlier conversation. The probe's random bytes, rows and Git commit and every upload, worktree file, transcript and SQLite database (`integrity_check` ok) were as backed up. |
+| At the end | The database and k3s agreed; never more than one Pod on the volume in the recorder's timeline (sampled every second, 31 changes written); Ceph `HEALTH_OK`; the lost image gone and the restored one there; ann asleep on the restored claim. |
+
+Finding, fixed in `eccae61cd`: in the first full run (kept in the evidence's `trial/`), the same switch sent again right after
+it was refused `MAPPING_BUSY`. The switch kicks the manager, whose wake pass then held the mapping's lease. A replay is now
+answered from a read. That trial's run passed everything else; its directory is `test-server-t08b-dev`.
+
+Left in the lab: `test-server-t08b` (ann SLEEPING on her restored claim) and the trial's `test-server-t08b-dev` (its ann
+SLEEPING on its own); the two restored claims with their PVs and images, as retained test data; the backups
+`backups/t08b-20261018T150259Z` (the trial's) and `backups/t08b-20261018T152419Z` (0700). The lost volumes' claims, PVs and
+images were deleted, as the test required. The webhook is removed, the test server and gate are stopped, and the VM is off.
+
+## Two nodes (L1)
+
+Recorded 2026-10-19 by task L1. On 2026-10-19 the owner decided to add a second, smaller KVM VM on
+the same host as a second k3s node, so that the cross-node parts of criteria 2 and 8 can be tested
+here (T02, then T08x). It runs only a k3s agent; Ceph stays a single-host cluster in the first VM.
+The records are in [the evidence](evidence/managed-runner-two-node-lab/2026-10-19/README.md).
+
+### Topology
+
+| | First VM | Second VM |
+| --- | --- | --- |
+| Unit, size | `orbit-mr-lab.service`: 4 vCPU, 6144 MiB, `MemoryMax=6656M` | `orbit-mr-lab-2.service`: 2 vCPU, 3072 MiB, `MemoryMax=3584M` |
+| Disks, in `/mnt/data/managed-runner-lab/disks` | `root.qcow2` (40 GiB) and three OSD disks | `node2-root.qcow2` (30 GiB), an overlay on the same verified image |
+| User network | 10.0.2.15; 127.0.0.1:16222 → :22, 127.0.0.1:16443 → :6443 | its own, also 10.0.2.15; 127.0.0.1:16223 → :22 |
+| Link | `lablink0` 10.77.0.1/24 (`52:54:00:4c:00:01`); qemu listens on 127.0.0.1:16230 | `lablink0` 10.77.0.2/24 (`52:54:00:4c:00:02`); qemu connects to 127.0.0.1:16230 |
+| Kubernetes node | `orbit-mr-lab`: k3s server (control plane), InternalIP 10.77.0.1, Pod CIDR 10.42.0.0/24 | `orbit-mr-lab-2`: k3s agent of `https://10.77.0.1:6443`, InternalIP 10.77.0.2, Pod CIDR 10.42.1.0/24 |
+| Labels | k3s's own: `kubernetes.io/hostname`, `node-role.kubernetes.io/control-plane=true`, `node.kubernetes.io/instance-type=k3s`, arch and os | the same without the control-plane role; no zone or region labels, since both are one machine |
+| Allocatable | 3 CPU, 2592 MiB | 1750m CPU, 2134 MiB |
+| Ceph | MON (3300, 6789), mgr and 3 OSDs, all on 10.77.0.1; `public_network` 10.77.0.0/24 | none: its kernel RBD client reaches the first VM's MON and OSDs over the link |
+| Ceph-CSI | operator, controller plugin (pinned here), node plugin | node plugin (the DaemonSet's second Pod) |
+
+Both run Ubuntu 26.04.1 with kernel 7.0.0-34-generic and k3s v1.36.5+k3s1, from the same pinned
+image and binary; the second VM's kernel maps the `aes256k` CSI key like the first. Flannel's VXLAN
+runs over `lablink0` (`flannel-iface`), and the API server advertises 10.77.0.1. The join token goes
+from the server's `agent-token` into the agent's `/etc/rancher/k3s/agent-token` (0600) through an
+SSH pipe and is compared by hash; it is never printed or written on the host. The lab sets no
+separate agent token, so this is k3s's server token, held by the two guests only.
+
+### The link
+
+- A QEMU socket netdev: one more virtio NIC in each VM, the first qemu listening on 127.0.0.1:16230
+  and the second connecting to it, the two exchanging Ethernet frames over that one TCP connection.
+  No bridge, tap, host address or route, and no change to the host's network or firewall; `ss` on
+  the host shows the listener and the one connection.
+- 10.77.0.0/24 is clear of the HPC LAN (192.168.1.0/24), Docker's networks (172.16.0.0/12 and
+  192.168.0.0/16, its default pools), k3s's Pods and Services (10.42.0.0/16, 10.43.0.0/16), podman's
+  default (10.88.0.0/16) and the QEMU user network (10.0.2.0/24) that both VMs keep for downloads.
+- In each guest `provision.sh link` writes `/etc/netplan/60-orbit-lab-link.yaml`: the NIC matched by
+  its MAC, named `lablink0`, a static address, no DHCP or IPv6, and `ignore-carrier`, so that the
+  address stays while the other VM is off. A new VM's seed gives DHCP to its user-network NIC only
+  (the first VM's install, from when it had one NIC, already names that NIC by its MAC).
+- The first VM always has its link NIC, in single-node mode too, so Ceph and k3s keep one address
+  in both modes. A round trip over the link takes 0.3–0.7 ms idle (`agent-health`), up to 9 ms
+  while both VMs boot.
+- Only the listening end waits for a new connection. If the first VM's qemu went while the second
+  ran, the second's end would stay down until its own qemu starts again; so `stop.sh` stops the
+  second VM first and `start.sh` starts the first first.
+
+### Moving Ceph and k3s onto the link
+
+The single-node lab had Ceph and its k3s node on 10.0.2.15, the user network's address, which the
+second VM cannot reach: its own user network gives it the same address. `create.sh` moved them in
+place on 2026-10-19, keeping the FSID, pools, images, keys, claims and imported images.
+`provision.sh ceph` and `provision.sh k3s` do this whenever they find another address:
+
+1. First, the Pods that map RBD in the first VM are deleted, because a kernel client mapped through
+   the old addresses would hang once they move. Here that was the L0 smoke Pod
+   `lab-20261017061552-b`, recreated afterwards on its claim.
+2. While the MON still answers at 10.0.2.15: `ceph config set global public_network 10.77.0.0/24`
+   and `ceph orch host set-addr orbit-mr-lab 10.77.0.1`.
+3. `ceph mon getmap`, then `monmaptool --rm orbit-mr-lab` and `monmaptool --addv orbit-mr-lab
+   [v2:10.77.0.1:3300,v1:10.77.0.1:6789]`. The MON is stopped and the map injected with
+   `ceph-mon -i orbit-mr-lab --inject-monmap` in `cephadm shell --name mon.orbit-mr-lab`. `mon_host`
+   and the MON's `public network` are rewritten in `/etc/ceph/ceph.conf` and in every daemon's
+   `config` under `/var/lib/ceph/FSID`. Then the MON is started again. This is Ceph's "Changing a
+   Monitor's IP address" (the advanced method).
+4. The mgr, the three OSDs and the crash agent are restarted, and they bind to the new public
+   network. A quick restart of a cephadm unit can fail with "Device or resource busy", because its
+   last container's conmon is still there; systemd starts it again by itself. `ceph orch ps
+   --refresh` then clears cephadm's stale "failed daemon" warning.
+5. k3s gets `node-ip: 10.77.0.1`, `flannel-iface: lablink0` and `tls-san` in `config.yaml`, then a
+   restart. The k3s installer restarts the service only for a new binary or unit, so `provision.sh`
+   remembers the config k3s last started with and asks for the restart when it differs.
+6. The CephConnection's monitor became `10.77.0.1:6789`, and the operator rewrote `ceph-csi-config`.
+
+No test data was lost. All 31 claims of earlier tasks are still `Bound`. Their 32 PVs (one
+`Released`, as before) and the RBD images behind them are still there: 36 claims, 37 PVs and 37
+images in all after this task's five claims. The pool `orbit-mr-rbd` and the StorageClass
+`runner-data` keep their names, and the FSID is unchanged. The L0 smoke volume was read again after
+the move and after each later restart, in both modes. Each time it had the same ordinary file, Git
+commit, 107 SQLite rows (row hash) and random-file SHA-256, with `integrity_check` `ok`, now mapped
+through 10.77.0.1; these are also the hashes of the coordinator's L0 review run of 2026-10-17. A new
+lab bootstraps Ceph on the link address directly.
+
+### Two modes
+
+| | Single-node mode | Two-node mode |
+| --- | --- | --- |
+| Start | `start.sh` | `start.sh --nodes 2` |
+| Running | the first VM | both; the first boots first |
+| Memory guard | host `MemAvailable` ≥ 2048 MiB | ≥ 3584 MiB to boot both, ≥ 1536 MiB to add the second to a running first |
+| The second node | registered, `NotReady` (unreachable) and cordoned | `Ready` and schedulable |
+| Stop | `stop.sh` | `stop.sh` (the second VM first), or `stop.sh --node 2` back to single-node mode |
+
+Single-node mode is the lab as T03–T08b used it, plus one node that stays `NotReady` and cordoned:
+nothing new is scheduled onto it, and its node-plugin Pod waits there. Before a two-node window,
+make sure no other experiment, dind host or pg spec batch runs on HPC (`docker ps`,
+`systemctl list-units --type=service --state=running`, `free -m`). If one does, wait, and tell the
+coordinator in a task comment.
+
+### A hard stop of the second node
+
+`stop.sh --node 2 --hard` kills the second VM's qemu with SIGKILL. That is a power cut: the guest
+gets no shutdown, the node is not cordoned and nothing tells the cluster. `start.sh --nodes 2` brings
+the VM back: the memory guard for the second VM, the boot, both nodes `Ready` and the node uncordoned.
+`two-node.py hard-stop` does both around a writer Pod on the second node. It samples every 5 s
+(`rbd status` every 15 s); the timeline is in the evidence. Observed on 2026-10-19, with the power
+cut at 10:08:12Z:
+
+| Time | Node `orbit-mr-lab-2` | The Pod (writer on an RWO claim) | VolumeAttachment | RBD watcher |
+| --- | --- | --- | --- | --- |
+| Before | `Ready` | `Running`, Ready | attached to `orbit-mr-lab-2` | `10.77.0.2:0/…`, the second VM's kernel |
+| Cut + 34 s | `Ready` (stale) | `Running`, Ready (stale) | attached | gone: Ceph drops a watch after 30 s without pings (sampled every 15 s) |
+| Cut + 48 s | `Unknown` (`NodeStatusUnknown`), taints `unreachable:NoSchedule` and `unreachable:NoExecute` | `Running`, Ready `False` | attached | none |
+| Cut + 5 min 48 s | `Unknown` | evicted by the `NoExecute` taint after its 300 s toleration: `deletionTimestamp` set, still `Running`, because no kubelet confirms the stop | attached | none |
+| Cut + 7 min, end of the window | `Unknown` | Terminating | still attached; nothing detached it | none |
+| Boot + 31 s (10:15:47Z) | `Ready` again, taints gone | the kubelet found no containers: `Failed` | attached | none |
+| Boot + 52 s | `Ready` | removed | deleted (detached) | none |
+
+The claim was then mounted on the first node. It held 121 rows, including every one of the 120
+acknowledged before the cut, and `integrity_check` was `ok` after SQLite's WAL recovery. Cleanup
+left no Pod, VolumeAttachment or watcher. Within the 7 minutes nothing moved the volume off the dead
+node: there was no detach while the Pod stayed Terminating, and no replacement Pod, since none was
+asked for. Whether and how a successor may take the volume, and how the old node is fenced, is for
+T02 to establish ([it did](#cross-node-migration-and-takeover-t02)).
+
+A finding: after this test Ceph reported `BLUESTORE_SLOW_OP_ALERT` for osd.2, slow BlueStore
+operations on the shared HDD. By default the alert stays for 24 hours, which held `status.sh`
+unhealthy. The lab now sets `bluestore_slow_ops_warn_lifetime` to 600 s (`provision.sh ceph`), and
+the alert cleared 10 minutes later.
+
+### Smoke results
+
+`two-node.py migrate` (run `l1m-20261019100149`) uses the repository's probe payload, with each Pod
+pinned to its node by a required node affinity:
+
+| Step | Result |
+| --- | --- |
+| PVC from `runner-data` | `Bound`: RWO, `Filesystem`, ext4, `Retain`, mounter `rbd`, image `orbit-mr-rbd/csi-vol-1ea2d45d…` |
+| First node | Pod Ready in 7.2 s; VolumeAttachment `csi-d9bed501…` on `orbit-mr-lab`; `/dev/rbd1` mapped by the first VM, watcher `10.77.0.1`. It wrote 104 SQLite rows (WAL, `synchronous=FULL`), an ordinary file, a Git commit and 32 MiB of random bytes; `integrity_check` `ok` |
+| To the second node | Pod deleted: VolumeAttachment gone and device unmapped 13.4 s later. Pod on `orbit-mr-lab-2` Ready in 53.4 s (the probe image's first pull there); VolumeAttachment `csi-d92a005c…` on `orbit-mr-lab-2`; `/dev/rbd0` mapped by the second VM, watcher `10.77.0.2`. Same file, Git commit, row hash, row count and random-file SHA-256; `integrity_check` `ok`. It wrote 54 more rows there, and the first 104 hashed as before |
+| Back to the first node | VolumeAttachment gone 13.8 s after the delete; Pod on `orbit-mr-lab` in 8.3 s, `csi-d9bed501…` again; 158 rows with the same hashes as on the second node, `integrity_check` `ok` |
+| Both VMs stopped and started | `stop.sh` stopped the second VM in 6 s, then the first in 18 s. `start.sh --nodes 2` booted both behind the 3584 MiB guard: SSH after 41 s and 45 s, healthy 2 min 20 s after the start (both nodes `Ready`, Ceph `HEALTH_OK`, the node plugin on both). `two-node.py verify` on the second node found the same 158 rows and hashes, `integrity_check` `ok`. The L0 smoke volume came back on the first node as before |
+| The second VM destroyed and rebuilt | `destroy.sh --yes-destroy-lab --node 2` stopped it, deleted its node and the node's password Secret, and removed its disk and seed; the first VM and Ceph were untouched. `create.sh --nodes 2` built a new one: the node `orbit-mr-lab-2` was back with a new UID, the node plugin was ready 1.5 minutes after the boot, and `two-node.py verify` there found the same 158 rows and hashes |
+| Single-node mode | `smoke.sh run` (run `lab-20261019104803`) with the second VM off and its node cordoned, then `stop.sh`, `start.sh` and `smoke.sh verify`: the same results as L0. Pod recreation and the restart kept the file, Git, 103 SQLite rows and random-file hashes with `integrity_check` `ok`; a second Pod on the same node and RWO claim was admitted and ran; a `ReadWriteOncePod` claim's second Pod stayed `Pending`, the scheduler now counting the cordoned node as unschedulable. `smoke.sh` waits for its own image to be unmapped, no longer for every RBD device of the VM, which the remounted L0 volume kept mapped |
+
+A VolumeAttachment belongs to one volume and one node, so each move deleted the old one before the
+new node's was created; there were never two at once.
+
+### Memory measured
+
+Figures in MiB from 2026-10-19: each unit's cgroup (`memory.current` and `memory.swap.current`), the
+guests' own figures through the balloon (in use = total minus available), and the host's
+`/proc/meminfo` (`two-node.py memory`, `state/memory.jsonl`). Other sessions kept the host busy: one
+session's tests took its `MemAvailable` down to 2.6 GiB for a moment at 10:53 with only the first
+VM up, so the units' figures are the VMs' footprint and the host's are context.
+
+| Moment | First VM: host RAM + swap | First guest in use | Second VM: host RAM + swap | Second guest in use | Host `MemAvailable` |
+| --- | --- | --- | --- | --- | --- |
+| Both off (10:22:38) | – | – | – | – | 7179 |
+| Two-node mode, idle, 5 min after healthy (10:30:32) | 2758 + 4 | 1548 | 1014 + 2 | 533 | 5074 |
+| Two-node mode, idle, 10 min (10:35:33) | 2323 + 428 | 1591 | 724 + 251 | 531 | 6200 |
+| Single-node mode, 5 min after the second VM stopped (10:41:27) | 2332 + 414 | 1581 | – | – | 7179 |
+| Single-node mode, booted, healthy, page cache dropped (10:52:49) | 2971 + 30 | 1509 | – | – | 5642 |
+| Both off again (10:50:22, 10:54:39) | – | – | – | – | 9674, 8788 |
+
+- At rest the first VM costs the host 2.7–3.0 GiB in either mode and the second about 1.0 GiB, so
+  two-node mode holds about 3.7 GiB of host memory; the 9 GiB is their guest RAM, the most they can
+  take.
+- In use in the second guest at rest: k3s agent 191, containerd 164, the CSI node plugin 87 and about
+  100 for the OS; 548 in all. In the first, as in L0: k3s server 527, ceph-mgr 215, containerd 174,
+  three OSDs about 150 each, Ceph-CSI and its operator about 390 together.
+- Peaks: 3675 MiB for the first VM's unit while Ceph and k3s moved; 2779 MiB for the second's on its
+  first boot, which pulled the Ceph-CSI and probe images (about 1.2 GiB in its page cache until
+  `provision.sh trim`), and 1188–1201 on later boots. While the hard-stop test ran, the host swapped
+  out up to 1.7 GiB of the first VM's pages.
+- The guard's floors follow from this: 2048 MiB for the first VM, as before, and 1536 MiB for the
+  second (its footprint at rest plus a margin), so 3584 MiB for both.
+- Timings: `create.sh --nodes 2` took 3.5 minutes in all. The second VM went from its first boot to
+  a `Ready` node with the node plugin in about 2 minutes: SSH after 32 s, the agent 14 s after its
+  token, then 70 s for the plugin's images. Later boots reached `Ready` in 31 s, and its shutdown
+  took 6 s.
+
+### For T02 and T08x
+
+- An image imported into the first VM's containerd (`single-writer.py import`, `runner-image.py
+  import`) is not in the second's: those tools reach only the first VM. Import it into the second as
+  well, over SSH on port 16223 (`sudo k3s ctr images import …` works on the agent), before a runner
+  Pod is scheduled there.
+- Pods on either node reach a test server on the host at `https://10.0.2.2:13711` through their own
+  VM's user network. The admission webhook is called by the API server in the first VM.
+- The manager sets no node for a runner Pod: cordon a node to choose. `start.sh --nodes 2`
+  uncordons the second node, and `stop.sh --node 2` cordons it.
+- The CSI controller plugin stays on the first VM, so attach and detach keep working while the
+  second is down.
+
+## Cross-node migration and takeover (T02)
+
+Recorded 2026-10-19 by task T02, the cross-node part of criterion 2, on the two nodes of [L1](#two-nodes-l1). One
+account's runner (`ann`) ran through the test server's manager, admission guard and fencing gate, in one run of
+`takeover-lab.py`: 31 steps, 175 checks on the passing ones. Two steps were run again after a check's fix (below).
+The records are in [the evidence](evidence/managed-runner-cross-node/2026-10-19/README.md); the procedure it follows is the
+runbook's [Failover](managed-runner-kubernetes-operations.md#failover).
+
+- **Model.** fake-model.py stood in as a DeepSeek-preset key, which is not a model.
+- **Image.** Built from `8055bb568` with the lab CA layer and imported into both VMs' containerd; nothing pushed.
+- **Lab window.** Both VMs were on from 12:25 to 13:12 UTC, after other sessions' pg-spec batches had ended.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t02    # earlier tasks' databases untouched
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh --nodes 2
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+bash docs/evidence/managed-runner-cross-node/2026-10-19/kit/build-image.sh /mnt/data/tmp/t02-cross-node/image   # the archive the run imports
+OUT=/mnt/data/tmp/t02-cross-node/run && mkdir -p $OUT        # a transient unit: a runner outage cannot end the run
+sudo systemd-run --unit=orbit-mr-lab-t02-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR -p WorkingDirectory=$PWD \
+  -p StandardOutput=append:$OUT/run.log -p StandardError=append:$OUT/run.log \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/takeover-lab.py run --out $OUT    # --from-step PHASE/STEP goes on
+python3 scripts/managed-runner/lab/takeover-lab.py report $OUT
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+| Check | Result |
+| --- | --- |
+| Normal move | Generation 1 on the first node, the second cordoned. The owner's sleep: asleep in 15.4 s on the kubelet's report, Pod gone, volume detached, no watcher. With the first node cordoned and the second not, a message woke the runner on the second node, its Pod made in the same second: answered after 24.7 s, READY after 25.8 s. The same runner, PVC, PV, handle, image and workspace; probe data, uploads, worktree, transcripts and the session as before |
+| A second Pod on the other node | With the runner on the second node and its writer committing rows, six Pods on its claim pinned to the first node were refused by the guard: by the cluster admin (`NOT_THE_MANAGER`), by the manager's identity and as a copy of the runner's Pod (`NOT_THE_FIXED_NAME`), under the fixed name (`NOT_RESERVED`), for the next generation (`NOT_THE_RESERVED_GENERATION`), and a Job's Pod (`NOT_THE_MANAGER`). One Pod, one attachment, one RBD client throughout |
+| RWO and RBD alone | A plain claim's second Pod on the other node stayed `Pending`: Kubernetes 1.36's attach/detach controller says "Waiting for detach … already used by pod(s)", which the out-of-service taint overrides on purpose. The RBD image has `layering` only (no `exclusive-lock`) and no lock, and a second Ceph client read it while the other node mapped it |
+| Heartbeat loss | The second node's qemu SIGKILLed while the runner wrote there. For 420 s the mapping stayed `READY` at its generation and nothing took over. The gate saw only reads, the attachment stayed on the dead node, a message waited and the owner's retry was refused. The node went `Unknown` at 52 s, the runner not usable at 114 s, and the taint manager evicted the Pod at 351 s; it stayed `Running`, held by the finalizer |
+| Failover | Receipt (`NODE_POWER_OFF`, `HYPERVISOR`) and `node.kubernetes.io/out-of-service`. The Pod was `Failed` by PodGC and its attachment force-deleted within 6 s, and the mapping `FENCING` 10.3 s after the taint, the old credential refused from then on. With the finalizer taken off, the receipt was accepted and generation 3 was READY on the first node 26.1 s later. The gate saw one Pod create |
+| Data after it | Every row the writer had acknowledged before the cut was there (441), `integrity_check` ok after WAL recovery, the rows read before the cut hashing the same. Fsynced files, uploads, worktree, transcripts and the session were as before; the message sent during the outage was answered |
+| The old node back | Under the taint, it mapped and mounted nothing of the volume and ran nothing of the old Pod; its kubelet could not reach the CSI driver, whose node plugin the taint evicts. The old generation's credential got 401, the old instance 403 `SUPERSEDED`. The taint removed: rejoined, the volume still with generation 3 |
+| At the end | Never more than one Pod on the claim nor one attachment of its PV in the timeline; Ceph `HEALTH_OK`; ann asleep |
+
+Findings, reported to the coordinator:
+
+- **Heartbeat loss leaves the mapping READY.** The runbook and the design said `FENCING`. The manager fences only once
+  the Pod is gone or terminal without its kubelet's report, so the predecessor's credential stays valid until the
+  out-of-service taint; nothing is replaced meanwhile. The runbook now says so.
+- **Git work right before a power loss can be lost.** A Git commit made 14 s before the cut came back as zero-length
+  files, an unreadable repository. A second cut ([kit/git-fsync-cut.py](evidence/managed-runner-cross-node/2026-10-19/kit/git-fsync-cut.py))
+  showed that `core.fsync=committed,index` keeps the objects but not a `HEAD` and a branch ref written 1.5 s before the
+  cut. Fsynced data survived.
+- **The Ceph-CSI node plugin has no tolerations.** The out-of-service taint evicts it from the fenced node, so
+  `status.sh` reports the lab unhealthy until the taint is removed; the run booted that node with `start.sh --no-wait`.
+
+The first run (kept in the evidence's `trial/`) stopped at the move because fake-model.py quoted only T06–T08 markers;
+it now quotes T02's too. The runner had moved and answered there as well. Its database is `test-server-t02-dev`, and its
+runner is asleep on its own claim.
+
+Left in the lab: `test-server-t02` (ann SLEEPING on her claim, generation 4 reserved) and the receipt ConfigMap
+`mr-fence-01a15431-…`; the trial's `test-server-t02-dev`; their claims with PVs and images, as retained test data. The
+plain RWO claim and the Git experiment's claim were deleted with their PVs and images. The webhook is removed, the test
+server and gate are stopped, and both VMs are off.
+
+## Two accounts across two nodes (T08x)
+
+Recorded 2026-10-19 by task T08x, the cross-node part of criterion 8, on the two nodes of [L1](#two-nodes-l1). Two
+accounts' runners (`ann`, `bob`) ran through the test server's manager, admission guard and fencing gate, in one run of
+`cross-node-lab.py`: 32 steps, 412 checks, 31 steps passed. The one failed check was fixed and the run went on from a new
+step (below). The records are in [the evidence](evidence/managed-runner-cross-node-accounts/2026-10-19/README.md); the
+procedures it follows are the runbook's [Failover](managed-runner-kubernetes-operations.md#failover) and planned move.
+
+- **Model.** The owner's DeepSeek key file did not exist, so fake-model.py stood in as a DeepSeek-preset key, which is not
+  a model. A real model session is still to be run.
+- **Image.** T02's build (`8055bb568` plus the lab CA layer), already in both VMs' containerd; nothing under
+  `src/runner-go` or `deploy/managed-runner/image` changed since. Nothing built or pushed.
+- **Lab window.** Both VMs on from 14:20 to 15:01 UTC, after another session's landing merge check had ended.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t08x    # earlier tasks' databases untouched
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh --nodes 2
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+OUT=/mnt/data/tmp/t08x-cross-node/run && mkdir -p $OUT    # LAB_T02_IMAGE_ARCHIVE names the image archive (T02's by default)
+sudo systemd-run --unit=orbit-mr-lab-t08x-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR -p WorkingDirectory=$PWD \
+  -p StandardOutput=append:$OUT/run.log -p StandardError=append:$OUT/run.log \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/cross-node-lab.py run --out $OUT    # --from-step PHASE/STEP goes on
+python3 scripts/managed-runner/lab/cross-node-lab.py report $OUT
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+| Check | Result |
+| --- | --- |
+| Normal move, both accounts | Both runners on the first node (the second cordoned), READY 38 s after the sign-in. Both owners' sleep: asleep within 11 s, on the kubelets' reports. With the first node cordoned and the second not, a message woke ann's and a task run now bob's: the Pods made on the second node in the same second, the work answered after 36 s, READY after 37 s. Each kept its runner, PVC, PV, handle, RBD image and workspace, its probe data, uploads, worktree, transcripts and session |
+| Second Pods on the other node | With both runners writing on the second node, five Pods per claim pinned to the first node (as T02's) and a Job's were refused by the guard, and so were Pods mixing the accounts: bob's Pod with ann's claim (`NOT_THE_FIXED_NAME`), ann's naming bob (`NOT_THE_OWNER`), one Pod on both claims (`MULTIPLE_MANAGED_CLAIMS`) |
+| The node stops | The second node's qemu SIGKILLed with both runners writing there. Before the cut: no Git work for 86 s, a last message answered 20 s before it, ann's volume synced (`sync -f /var/lib/orbit` in her runner container) 26 ms before it, bob's not. For 420 s both mappings stayed `READY` at their generation; the node `Unknown` at 56 s, the runners not usable at 95 s, the Pods evicted at 354 s; demand waited, retries were refused, the gate saw only reads; second Pods on either claim on the first node (the next generation's under the fixed name among them) were refused |
+| Failover | The runbook's query listed both runners on the lost node, its commands showed each Pod and attachment there. Two receipts, one out-of-service taint; bob's finalizer off at once, ann's once she was `FENCING`. Both `FENCING` 9.1 s after the taint (ann on PodGC's `Failed`, bob on his Pod object's removal), both READY on the first node 481 s after the cut; the gate saw two Pod creates |
+| Data after it | Every SQLite row each writer acknowledged, probes p1 and p2 (written 4.5 and 1.6 minutes before the cut, Git included), uploads, worktrees: as before, `integrity_check` ok, `git fsck` clean. ann's transcript kept her last turn; bob's lost it (6 lines, 20 s before the cut), and his session went on from the lines before it |
+| The old node back | Under the taint it mapped and mounted nothing and ran nothing of either old Pod; both old credentials 401, the old instances 403 `SUPERSEDED`; the writers went on from the first node; the taint removed, it rejoined |
+| Drains | The runbook's planned move: `kubectl drain` refused the runners' bare Pods without `--delete-emptydir-data` and `--force`. With them, both runners moved to the second node and back, READY 45–46 s after each drain began |
+| At the end | Never more than one Pod on either claim nor one attachment of either PV in the timeline; Ceph `HEALTH_OK`; both asleep |
+
+How the run went: a first attempt stopped at its Ceph facts 26 s after the boot, the PGs still peering, and the run
+started again from nothing. The first node's drain then evicted, besides both runners, a managed Pod of task T07's test
+server, `Failed` since 2026-10-18 and held by the stop-report finalizer of T07's manager, which was not running. The
+drain waited its full 300 s and exited 1, so that check failed although both runners had moved. With the check judging
+the runners it moves, the run went on with a drain of the first node that passed T07's Pod
+(`--skip-wait-for-delete-timeout=60`) and the drain back.
+
+Findings, reported to the coordinator:
+
+- **The coordinator's decision of 2026-10-19 held for two runners**: `READY` until the out-of-service taint, `FENCING`
+  then. [The design record](managed-runner-design.md#single-pod-and-single-writer-protection) now says so.
+- **The engine's transcript loses the last seconds.** A turn answered 20 s before the power cut was missing from bob's
+  transcript after the takeover. Orbit's server kept it; the engine resumed without it. ann's volume, synced just
+  before, kept hers. Relevant to T02c.
+- **The runbook's drain needed flags**, and a drain finishes only once a manager records each evicted runner's stop.
+  The runbook now gives the command, says what holds it, and adds the failover commands for a node with several runners.
+
+Left in the lab: `test-server-t08x` (ann and bob SLEEPING on their claims); their claims with PVs and images, and the
+receipt ConfigMaps `mr-fence-01a1548e-0f66-…` and `mr-fence-01a1548e-0fc4-…`. T07's Pod `mr-01a14db1-…`, `Failed` before
+the run, is now also `Terminating`, marked by the first drain. It has no VolumeAttachment, and T07's manager takes its
+finalizer off when T07's server runs with the switch on. The webhook is removed, the test server and gate are stopped,
+and both VMs are off. (T02c released T07's Pod on 2026-10-19 with the runbook's patch, [below](#t07s-leftover-pod).)
+
+## Git work and engine sessions through a power cut (T02c)
+
+Recorded 2026-10-19 by task T02c, part of criterion 2, on the two nodes of [L1](#two-nodes-l1). It measured what a node's
+power cut leaves of a managed runner's last seconds, before and after the runner syncs its volume
+([the design record](managed-runner-design.md#implementation-record-git-work-and-engine-sessions-through-a-power-cut)).
+The records are in [the evidence](evidence/managed-runner-power-cut-durability/2026-10-19/README.md). One run of
+`durability-lab.py`: 41 steps, 204 checks. Four steps failed and were fixed or run again (below).
+
+- **Model.** fake-model.py stood in as a DeepSeek-preset key, which is not a model.
+- **Images.** The project line's runner: T02's build from `8055bb568`, in both VMs' containerd. This branch's runner:
+  `0e894464e` for the run after the fix, and `5928c0e0a` for the damaged volume woken at the end. Each was built with
+  the evidence's `kit/build-image.sh` and imported into both VMs; nothing was pushed.
+- **Lab window.** Both VMs were on from 16:38 to 17:52 UTC, after another session's pg-spec matrix had ended.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t02c   # earlier tasks' databases untouched
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh --nodes 2
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+E=docs/evidence/managed-runner-power-cut-durability/2026-10-19
+bash $E/kit/build-image.sh /mnt/data/tmp/t02c/image          # this branch's image (LAB_T02C_AFTER_IMAGE)
+OUT=/mnt/data/tmp/t02c/run && mkdir -p $OUT
+sudo systemd-run --unit=orbit-mr-lab-t02c-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR -p WorkingDirectory=$PWD \
+  -p StandardOutput=append:$OUT/run.txt -p StandardError=append:$OUT/run.txt \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/durability-lab.py run --out $OUT    # --from-step PHASE/STEP goes on
+python3 scripts/managed-runner/lab/durability-lab.py report $OUT
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+| Check | Result |
+| --- | --- |
+| Before (amy, the project line's runner) | The cut came 0.0 s after the runner's merge returned and the last turn was answered, 0.4 s after the engine's commit, 1.5 s after the runner's commit and 2.3 s after an engine commit in a turn still running. Read from a copy of the snapshot: every repository unreadable, `git fsck` exit 11. `master` and both session branches point at commits whose object files are empty; a new worktree's `HEAD`, `gitdir` and `commondir` are empty. The last turn is missing from the engine's transcript. After the failover the session resumed without it, in the same broken repositories |
+| After (bob, this branch's runner) | The cut came 0.0, 0.9, 2.3 and 4.3 s after the same five kinds of Git work. Every repository read, `git fsck` was clean, and there was no empty file or lock. Every returned commit was on its branch, the mid-turn one too, and the last turn was in the transcript. The session resumed with it. The next start said `0 stale lock files removed, 0 branches restored, 0 checkouts damaged` |
+| A damaged volume on the fixed runner | amy's volume woken on `5928c0e0a`: the start logged each unreadable repository with its reason and refused the reclaimed sessions. The next message's session ended `FAILED` with `REPOSITORY_DAMAGED` and the reason; no engine saw it, and nothing was started over the broken repository |
+| Git's commit costs | On a claim of the runner class on the second node, medians: a one-file commit 49 ms with Git's defaults, 299 ms followed by `syncfs`, 893 ms with `core.fsync=all`. A 200-file commit 0.16 s, 1.04 s and 59.2 s |
+| Failover | Both runs went through the runbook's failover as in T02 (receipt, out-of-service taint, finalizer): `FENCING` 7.0 s and 11.4 s after the taint, READY on the first node 26 s after the finalizer came off |
+| At the end | Never more than one Pod on either claim nor one attachment of either PV in the timeline; Ceph `HEALTH_OK`; every account asleep |
+
+How the run went:
+
+- A first attempt at the before run (ann) stopped before its cut: the driver read the last turn by an id the turn's
+  answer does not carry. Its last turn and merge had already run, so ann was put to sleep and the before run was done
+  again with a new account (amy).
+- The read of what amy's cut left failed once in its cleanup (the copy keeps the snapshot `import-diff` writes), and was
+  read again from the same snapshot.
+- The first wake of the damaged volume, on `0e894464e`, found the refusal lost on a claim: the runner logged the damage,
+  refused the reclaimed session, then answered its next message anyway. The fix is `5928c0e0a`, and the wake was run
+  again on its build.
+
+### The after run again for a later runner change (D10)
+
+Task D10 changed the runner's syncs for volumes that share their filesystem (Docker's), so the run after T02c's fix
+was done again on 2026-10-19 with that change, through the phase `again`
+([the evidence](evidence/managed-runner-docker-volume-sync/2026-10-20/README.md#kubernetes-unchanged-t02cs-power-cut-after-the-fix-on-this-change)).
+Both VMs were on from 22:58 to 23:14 UTC.
+
+```sh
+export LAB_TEST_SERVER_DIR=/mnt/data/managed-runner-lab/test-server-t02c
+sudo scripts/managed-runner/lab/status.sh && sudo scripts/managed-runner/lab/start.sh --nodes 2
+bash scripts/worktree-overlay.sh && npm run build -w @orbit/shared && npm run build -w @orbit/apiserver
+bash docs/evidence/managed-runner-power-cut-durability/2026-10-19/kit/build-image.sh /mnt/data/tmp/<task>/lab-image
+OUT=/mnt/data/tmp/<task>/lab-run && mkdir -p $OUT/logs
+sudo systemd-run --unit=orbit-mr-lab-d10-run --collect -p MemoryMax=1G -p Environment=HOME=/root \
+  -p Environment=LAB_TEST_SERVER_DIR=$LAB_TEST_SERVER_DIR \
+  -p Environment=LAB_T02C_AFTER_IMAGE=/mnt/data/tmp/<task>/lab-image/lab.oci.tar \
+  -p Environment=LAB_T02C_AFTER_OWNER=cyd -p Environment=LAB_T02C_BEFORE_OWNER=amy \
+  -p WorkingDirectory=$PWD -p StandardOutput=append:$OUT/logs/run.txt -p StandardError=append:$OUT/logs/run.txt \
+  /usr/bin/python3 -I $PWD/scripts/managed-runner/lab/durability-lab.py run --out $OUT --from again
+sudo scripts/managed-runner/lab/stop.sh
+```
+
+- It restarts what the last teardown stopped with the image pinned, then does the after run with a new account (a run
+  done again takes one). The final checks read `LAB_T02C_BEFORE_OWNER`'s claim too.
+- Its own checks: the runner's start line says it syncs behind every tool with its volume the root of an RBD ext4, and
+  s3's mid-turn commit is on its branch in what the cut left.
+- 15 steps and 90 checks, none failed. The runner on `/dev/rbd0` logged `volume syncs: before reports and behind every
+  tool; the volume is /dev/rbd0 (ext4), a filesystem of its own`. What the cut left was as after T02c's fix, s3's commit
+  3.4 s before the cut included.
+- `test-server-t02c` now has `cyd` asleep on its claim beside ann, amy and bob.
+
+### T07's leftover Pod
+
+`mr-01a14db1-…` (UID `52ed1c8a-…`) was a managed Pod of task T07's test server. It had been held by the stop-report
+finalizer since T07's manager stopped running, and was `Terminating` since T08x's drain. Before it was released:
+
+- T07's database, read in a copy, names the runner `01a14db1-e2b6-…` (owner `t06-root@lab.invalid`) and this Pod's UID
+  as its own.
+- Its kubelet had reported the stop: `Failed`, every container terminated. Its node was `Ready`.
+- Its `DisruptionTarget` was the eviction API's (the drain), not PodGC's or the taint manager's.
+- It had no VolumeAttachment, and no manager was running.
+
+The runbook's patch, the UID-tested one in "The stop-report finalizer", released it, and the Pod was gone within a second.
+
+Left in the lab:
+
+- `test-server-t02c`: ann, amy and bob SLEEPING on their claims, with their claims, PVs and images (`Retain`).
+- The receipt ConfigMaps of amy's and bob's failovers.
+- amy's volume still holds the damage the before run's cut left, as test data.
+- The snapshot copies, their claims and images, and both snapshots were removed.
+- The webhook was removed; the test server, its replica, the gate and the recorder were stopped; both VMs are off.
+
 ## Known limits
 
-- **One physical machine, one node, one failure domain.** The multi-node parts of criterion 2
-  (mounting on a second node, refusing duplicate Pods across nodes, takeover after the old node
-  stops or is fenced) and criterion 8's cross-node migration cannot be verified here; they wait for
-  a multi-machine cluster or another decision by the owner. Single-machine evidence must not be
-  presented as covering them. Criteria 3–7 and the single-node parts of 2 and 8 can be tested here.
+- **One physical machine, one failure domain.** Since L1 the lab has two k3s nodes, so a volume
+  can be mounted by one node after the other and a node can be stopped hard. Both nodes are VMs on
+  one host, with one power supply, one kernel underneath and one HDD; their link is a loopback TCP
+  connection, and Ceph is a single-host cluster inside the first VM (three OSDs on one disk). A
+  failure of the host, its disk or its network takes both nodes and the storage. Nothing here
+  proves high availability across physical machines, and two-node evidence must say so. In
+  single-node mode the lab is what it was before: criteria 3–7 and the single-node parts of 2 and 8.
+- The scripts stop the second node hard (`stop.sh --node 2 --hard`); they offer no network
+  partition that keeps both VMs running.
 - The admission guard is installed only for a test window (`single-writer.py admission install`)
   and removed after it (`admission remove`): with no test server answering, `failurePolicy: Fail`
-  refuses every Pod create in `orbit-mr-test`. No fencing procedure, Rook or CSI snapshots are
-  installed. `ceph-rbd-verify.py`'s live phases need two nodes.
+  refuses every Pod create in `orbit-mr-test`. No Rook or CSI snapshots are installed. Fencing is
+  the runbook's operator procedure; T02 ran it with the hypervisor power-off (`stop.sh --node 2
+  --hard`), not with a storage fence. `ceph-rbd-verify.py`'s live phases were not run; T02's driver
+  covers that ground through the manager.
 - The three replicas share one VM and one HDD: no durability against hardware failure, and I/O is
   bound by that disk.
 - Kernel RBD and OSDs share one kernel. Shutdown ordering is handled; severe memory pressure inside
   the guest can still stall RBD I/O, the reason production keeps them apart.
 - The host can swap guest memory when the host itself runs short (it did during the first
-  provisioning); the VM then slows down. `OOMScoreAdjust=1000` makes the VM, not the runner, the
-  host OOM killer's first choice.
+  provisioning, and in L1 while the two-node checks ran); the VMs then slow down.
+  `OOMScoreAdjust=1000` makes the VMs, not the runner, the host OOM killer's first choice.
 - The kubeconfig is k3s's cluster-admin. The manager's own identity is the ServiceAccount
   `orbit-mr-manager` (`single-writer.py identity`), with only the verbs the Kubernetes backend calls;
   the webhook's caller is k3s's API server, which presents a bearer token from its AdmissionConfiguration.

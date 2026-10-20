@@ -1,0 +1,18 @@
+{
+  "kernel": "7.0.0-34-generic",
+  "os": "Ubuntu 26.04.1 LTS",
+  "rbdModule": "/lib/modules/7.0.0-34-generic/kernel/drivers/block/rbd.ko.zst",
+  "rbdLoaded": "1",
+  "k3s": "k3s version v1.36.5+k3s1 (3dd98cc5)",
+  "server": "https://10.77.0.1:6443",
+  "pageReportingOrder": "3",
+  "link": {
+    "ifname": "lablink0",
+    "mac": "52:54:00:4c:00:02",
+    "operstate": "UP",
+    "mtu": 1500,
+    "addresses": [
+      "10.77.0.2/24"
+    ]
+  }
+}

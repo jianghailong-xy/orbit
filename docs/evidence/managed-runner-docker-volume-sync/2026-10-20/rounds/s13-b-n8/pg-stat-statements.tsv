@@ -1,0 +1,40 @@
+1111	35713.520	32.145	241.294	34.587	SELECT pg_advisory_xact_lock($1, $2)
+54	408.669	7.568	21.699	5.737	SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGenera
+1202	219.791	0.183	4.356	0.175	SELECT "public"."runner"."id", "public"."runner"."name", "public"."runner"."display_name", "public"."runner"."hostname", "public"."runner"."
+4513	160.712	0.036	4.140	0.078	select seq, status, extract($1 from created_at), coalesce(extract($2 from answered_at)::text, $3) from conversation_turn where session_id = 
+377	134.887	0.358	11.434	0.672	UPDATE "public"."session" SET "title" = $1, "title_managed_by_project" = $2, "updated_at" = $3 WHERE ("public"."session"."id" = $4 AND $5=$6
+550	97.764	0.178	2.577	0.119	UPDATE "public"."session" SET "last_turn_at" = $1, "last_tool_use" = $2, "engine_turn_active" = $3, "engine_phase" = $4, "updated_at" = $5 W
+393	87.244	0.222	1.311	0.114	INSERT INTO "public"."run_event" ("id","session_id","seq","type","payload","turn_id","created_at","ingested_at","ingested_by_runner_id","ing
+377	83.521	0.222	1.033	0.069	WITH owned AS MATERIALIZED ( SELECT s.id, s.ctid::text || $46 || s.xmin::text AS v, s.status::text AS status, s.task_id, 
+1111	80.358	0.072	1.970	0.157	UPDATE "session" SET status = $30, -- A stall this claim just disproved. Both markers are written by a preflight that sa
+1111	79.474	0.072	23.449	0.748	SELECT id::text AS id, generation, pod_uid AS "podUid", management_state::text AS "managementState" FROM managed_runner WHERE id = $
+288	69.151	0.240	45.727	2.685	UPDATE "public"."managed_runner" SET "lease_holder" = $1, "lease_expires_at" = $2, "updated_at" = $3 WHERE ("public"."managed_runner"."id" =
+736	58.092	0.079	25.386	0.985	SELECT id, ("inbox_lease_owner" IS NOT DISTINCT FROM $1::uuid) AS "leaseOwnerMatches" FROM "session" WHERE id = $2:
+368	51.636	0.140	16.654	1.152	SELECT id, "inbox_lease_generation" AS "inboxLeaseGeneration", "inbox_lease_owner" AS "inboxLeaseOwner", status, 
+377	49.438	0.131	1.756	0.090	SELECT s.id, s.status, s.title, s.created_at AS "createdAt", s.last_turn_at AS "lastTurnAt", -- When
+460	43.932	0.096	1.469	0.107	INSERT INTO "public"."tool_call" ("id","session_id","name","tool_use_id","input","is_error","started_at") VALUES ($1,$2,$3,$4,$5,$6,$7)
+937	43.818	0.047	1.245	0.044	SELECT count(*) FROM (SELECT id FROM probe ORDER BY id DESC LIMIT $1) recent
+288	42.291	0.147	4.953	0.465	UPDATE "public"."managed_runner" SET "lease_holder" = $1, "lease_expires_at" = $2, "updated_at" = $3 WHERE ("public"."managed_runner"."id" =
+46	41.433	0.901	2.138	0.366	UPDATE "public"."session" SET "status" = CAST($1::text AS "public"."run_status"), "engine_turn_active" = $2, "isolation_status" = $3, "base_
+809	39.518	0.049	0.914	0.034	SELECT "public"."session"."id", "public"."session"."title", "public"."session"."title_managed_by_project", "public"."session"."title_before_
+963	37.461	0.039	0.309	0.020	INSERT INTO probe (at, pad) VALUES (clock_timestamp(), repeat($1, $2))
+208	35.826	0.172	1.187	0.117	INSERT INTO "public"."run_event" ("id","session_id","seq","type","payload","turn_id","created_at","ingested_at","ingested_by_runner_id","ing
+378	31.846	0.084	2.007	0.103	SELECT "public"."runner"."id", "public"."runner"."name", "public"."runner"."display_name", "public"."runner"."version", "public"."runner"."e
+460	28.282	0.061	0.410	0.035	UPDATE "public"."tool_call" SET "output" = $1, "is_error" = $2, "finished_at" = $3 WHERE ("public"."tool_call"."session_id" = $4 AND "public
+38	26.851	0.707	15.928	2.589	UPDATE "public"."session" SET "commit_status" = $1, "commit_requested_at" = $2, "commit_operation_id" = $3, "commit_operation_owner" = $4, "
+386	24.969	0.065	0.249	0.026	SELECT "public"."runner"."id", "public"."runner"."status"::text, "public"."runner"."last_heartbeat_at", "public"."runner"."engines", "public
+684	21.006	0.031	1.398	0.053	select coalesce(commit_status, $1), coalesce(left(commit_result_message, $2), $3), coalesce(left(commit_error, $4), $5) from session where i
+8	20.441	2.555	3.302	0.739	INSERT INTO "public"."session" ("id","title","title_managed_by_project","title_before_project_management","prompt","owner_id","creator_id","
+1202	19.721	0.016	0.056	0.007	SELECT "public"."managed_runner"."id", "public"."managed_runner"."generation", "public"."managed_runner"."pod_uid", "public"."managed_runner
+368	19.432	0.053	0.327	0.049	UPDATE "conversation_turn" SET status = $14, -- The same engine deduplicates a re-delivery of its running turn. Keep
+66	18.774	0.284	0.662	0.122	INSERT INTO "public"."run_event" ("id","session_id","seq","type","payload","turn_id","created_at","ingested_at","ingested_by_runner_id","ing
+1111	17.751	0.016	5.143	0.154	SELECT "public"."session"."id", "public"."session"."owner_id", "public"."session"."provider", "public"."session"."provider_builtin", "public
+1202	17.579	0.015	0.341	0.012	SELECT "public"."user"."id", "public"."user"."disabled_at" FROM "public"."user" WHERE "public"."user"."id" IN ($1) OFFSET $2
+86	16.904	0.197	0.392	0.046	UPDATE "public"."runner" SET "status" = CAST($1::text AS "public"."runner_status"), "version" = $2, "last_heartbeat_at" = $3, "available_com
+38	16.862	0.444	1.265	0.153	UPDATE "public"."session" SET "status" = CAST($1::text AS "public"."run_status"), "last_turn_at" = $2, "last_user_text" = $3, "retry_at" = $
+386	15.763	0.041	0.132	0.013	SELECT "public"."managed_runner"."id", "public"."managed_runner"."owner_id", "public"."managed_runner"."runner_id", "public"."managed_runner
+46	13.578	0.295	3.688	0.772	UPDATE "public"."managed_runner" SET "demand_revision" = ("public"."managed_runner"."demand_revision" + $1), "last_demand_at" = $2, "desired
+378	12.752	0.034	0.167	0.010	SELECT COALESCE( ( SELECT jsonb_build_object( $2, p.id, $3, p.title, $4, p.status, $5, candidate.role ) FROM ( 
+485	11.936	0.025	0.415	0.021	SELECT "public"."session"."id", "public"."session"."owner_id" FROM "public"."session" WHERE "public"."session"."id" = $1 LIMIT $2 OFFSET $3
+288	10.843	0.038	0.129	0.011	SELECT "public"."managed_runner"."id", "public"."managed_runner"."owner_id", "public"."managed_runner"."runner_id", "public"."managed_runner
+36	10.831	0.301	0.416	0.037	UPDATE "public"."session" SET "last_turn_at" = $1, "last_assistant_text" = $2, "last_tool_use" = $3, "context_tokens" = $4, "engine_turn_act

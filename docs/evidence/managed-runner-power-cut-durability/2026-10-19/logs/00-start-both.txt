@@ -1,0 +1,88 @@
+host kernel modules rbd/nbd/ceph/libceph loaded: none
+VM 1: stopped (orbit-mr-lab.service inactive)
+VM 2: stopped (orbit-mr-lab-2.service inactive)
+host: MemAvailable 10374 MiB, SwapFree 33413 MiB
+status exit 0
+16:38:42Z host MemAvailable 10371 MiB (floor 3584 MiB): booting orbit-mr-lab (6144 MiB), orbit-mr-lab-2 (3072 MiB)
+16:38:43Z started orbit-mr-lab.service (cgroup /system.slice/orbit-mr-lab.service)
+16:38:45Z started orbit-mr-lab-2.service (cgroup /system.slice/orbit-mr-lab-2.service)
+16:39:25Z SSH to VM 1 is up: 7.0.0-34-generic
+16:39:32Z SSH to VM 2 is up: 7.0.0-34-generic
+host kernel modules rbd/nbd/ceph/libceph loaded: none
+VM 1: running, qemu pid 2232725, cgroup /system.slice/orbit-mr-lab.service
+VM 1 qemu listens on: 127.0.0.1:16222 127.0.0.1:16230 127.0.0.1:16443
+VM 2: running, qemu pid 2232751, cgroup /system.slice/orbit-mr-lab-2.service
+VM 2 qemu listens on: 127.0.0.1:16223
+link 127.0.0.1:16230: 127.0.0.1:16230 <- 127.0.0.1:40978
+unit orbit-mr-lab: memory.current 1403 MiB, memory.peak 1415 MiB, swap 0 MiB, memory.max 6979321856
+unit orbit-mr-lab-2: memory.current 1028 MiB, memory.peak 1029 MiB, swap 0 MiB, memory.max 3758096384
+host: MemAvailable 7289 MiB, SwapFree 33417 MiB
+guest 1 (virtio-balloon): {"guestMiB": {"stat-available-memory": 5302, "stat-free-memory": 4881, "stat-total-memory": 5920, "stat-disk-caches": 620}, "lastUpdate": 1792427974}
+guest 2 (virtio-balloon): {"guestMiB": {"stat-available-memory": 2454, "stat-free-memory": 2198, "stat-total-memory": 2903, "stat-disk-caches": 445}, "lastUpdate": 1792427977}
+guest 1: {"cephHealth":"HEALTH_WARN","osdsUp":1,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"cephListens":"10.77.0.1","problems":["k3s is not active","Ceph is HEALTH_WARN","not every OSD is up"]}
+guest 2: {"linkRttMs":"0.291","rbdMapped":0,"problems":["k3s-agent is not active"]}
+k3s null
+node orbit-mr-lab Ready: unknown, 
+node orbit-mr-lab-2 Ready: unknown, 
+deployment/ceph-csi-operator-controller-manager: 0/0 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 0/0 available
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab: not ready
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab-2: not ready
+not healthy: VM 1: k3s is not active;VM 1: Ceph is HEALTH_WARN;VM 1: not every OSD is up;VM 2: k3s-agent is not active;node orbit-mr-lab not Ready;node orbit-mr-lab-2 not Ready;deployment/ceph-csi-operator-controller-manager not available;deployment/rbd.csi.ceph.com-ctrlplugin not available;no ready CSI node plugin on orbit-mr-lab;no ready CSI node plugin on orbit-mr-lab-2;no StorageClass runner-data;no namespace orbit-mr-test
+guest 1: {"cephHealth":"HEALTH_WARN","osdsUp":1,"osdsIn":3,"pgStates":[{"state_name":"unknown","count":33}],"cephListens":"10.77.0.1","problems":["Ceph is HEALTH_WARN","not every OSD is up"]}
+guest 2: {"linkRttMs":"10.914","rbdMapped":0,"problems":[]}
+k3s v1.36.5+k3s1
+node orbit-mr-lab Ready: True, internal IP 10.77.0.1
+node orbit-mr-lab-2 Ready: True, internal IP 10.77.0.2, cordoned
+deployment/ceph-csi-operator-controller-manager: 0/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 0/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab: not ready
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab-2: not ready
+not healthy: VM 1: Ceph is HEALTH_WARN;VM 1: not every OSD is up;deployment/ceph-csi-operator-controller-manager not available;deployment/rbd.csi.ceph.com-ctrlplugin not available;no ready CSI node plugin on orbit-mr-lab;no ready CSI node plugin on orbit-mr-lab-2
+guest 1: {"cephHealth":"HEALTH_WARN","osdsUp":1,"osdsIn":3,"pgStates":[{"state_name":"unknown","count":33}],"cephListens":"10.77.0.1","problems":["Ceph is HEALTH_WARN","not every OSD is up"]}
+guest 2: {"linkRttMs":"0.398","rbdMapped":0,"problems":[]}
+k3s v1.36.5+k3s1
+node orbit-mr-lab Ready: True, internal IP 10.77.0.1
+node orbit-mr-lab-2 Ready: True, internal IP 10.77.0.2, cordoned
+deployment/ceph-csi-operator-controller-manager: 0/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 0/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab: not ready
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab-2: ready
+not healthy: VM 1: Ceph is HEALTH_WARN;VM 1: not every OSD is up;deployment/ceph-csi-operator-controller-manager not available;deployment/rbd.csi.ceph.com-ctrlplugin not available;no ready CSI node plugin on orbit-mr-lab
+guest 1: {"cephHealth":"HEALTH_WARN","osdsUp":1,"osdsIn":3,"pgStates":[{"state_name":"unknown","count":33}],"cephListens":"10.77.0.1","problems":["Ceph is HEALTH_WARN","not every OSD is up"]}
+guest 2: {"linkRttMs":"0.352","rbdMapped":0,"problems":[]}
+k3s v1.36.5+k3s1
+node orbit-mr-lab Ready: True, internal IP 10.77.0.1
+node orbit-mr-lab-2 Ready: True, internal IP 10.77.0.2, cordoned
+deployment/ceph-csi-operator-controller-manager: 1/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab: ready
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab-2: ready
+not healthy: VM 1: Ceph is HEALTH_WARN;VM 1: not every OSD is up
+guest 1: {"cephHealth":"HEALTH_WARN","osdsUp":2,"osdsIn":3,"pgStates":[{"state_name":"peering","count":20},{"state_name":"unknown","count":13}],"cephListens":"10.77.0.1","problems":["Ceph is HEALTH_WARN","not every OSD is up"]}
+guest 2: {"linkRttMs":"0.352","rbdMapped":0,"problems":[]}
+k3s v1.36.5+k3s1
+node orbit-mr-lab Ready: True, internal IP 10.77.0.1
+node orbit-mr-lab-2 Ready: True, internal IP 10.77.0.2, cordoned
+deployment/ceph-csi-operator-controller-manager: 1/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab: ready
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab-2: ready
+not healthy: VM 1: Ceph is HEALTH_WARN;VM 1: not every OSD is up
+guest 1: {"cephHealth":"HEALTH_OK","osdsUp":3,"osdsIn":3,"pgStates":[{"state_name":"active+clean","count":33}],"cephListens":"10.77.0.1","problems":[]}
+guest 2: {"linkRttMs":"0.418","rbdMapped":0,"problems":[]}
+k3s v1.36.5+k3s1
+node orbit-mr-lab Ready: True, internal IP 10.77.0.1
+node orbit-mr-lab-2 Ready: True, internal IP 10.77.0.2, cordoned
+deployment/ceph-csi-operator-controller-manager: 1/1 available
+deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab: ready
+daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab-2: ready
+healthy, two nodes: orbit-mr-lab and orbit-mr-lab-2 Ready over the link 10.77.0.0/24; Ceph (3 OSDs, HEALTH_OK) at 10.77.0.1; Ceph-CSI on both nodes; StorageClass runner-data, namespace orbit-mr-test
+16:42:13Z node orbit-mr-lab-2: uncordoned
+16:42:14Z [trim] page cache dropped; 1599 MiB used, 758 MiB cache, 3801 MiB free
+16:42:15Z [trim] page cache dropped; 505 MiB used, 321 MiB cache, 2285 MiB free
+unit orbit-mr-lab: memory.current 2448 MiB, memory.peak 2949 MiB, swap 855 MiB, memory.max 6979321856
+unit orbit-mr-lab-2: memory.current 464 MiB, memory.peak 1280 MiB, swap 810 MiB, memory.max 3758096384
+host: MemAvailable 6328 MiB, SwapFree 31372 MiB
+start exit 0

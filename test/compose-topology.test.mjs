@@ -22,6 +22,13 @@
 // the only holder of the Docker socket — whose whole definition (m) pins, and four lines of the apiserver's,
 // pinned below. An existing deployment's .env names neither, so it runs the same six services as before,
 // its apiserver with the switch off.
+//
+// On 2026-10-19 the account owner decided that a fresh install also firewalls the managed runners' network on the
+// host, the rules applied again after Docker or the host restarts, unless the deployer turns that off (ask_owner
+// 34hXDEryfBDt3Dq5b95wD; task D9, 34iSiGtPrJ0LWSqn17esR). That is one more service, managed-runner-firewall: the host's
+// network and NET_ADMIN, never the Docker socket, under a profile of its own that only the install switches on, whose
+// whole definition (n) pins. A deployment whose .env does not name that profile, every one installed before it
+// included, runs exactly what it ran.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -67,7 +74,10 @@ const WIKI_WORKER = 'wiki-worker';
 // Decided by the account owner on 2026-10-17 (see the top of this file): started only under its profile.
 const DOCKER_CHANNEL = 'docker-channel';
 const MANAGED_RUNNERS_PROFILE = 'managed-runners-docker';
-const APPROVED_ADDITIONS = [WIKI_WORKER, DOCKER_CHANNEL];
+// Decided by the account owner on 2026-10-19 (see the top of this file): started only under its own profile.
+const MANAGED_RUNNER_FIREWALL = 'managed-runner-firewall';
+const FIREWALL_PROFILE = 'managed-runner-firewall';
+const APPROVED_ADDITIONS = [WIKI_WORKER, DOCKER_CHANNEL, MANAGED_RUNNER_FIREWALL];
 const REMOVED_SERVICES = [
   'watchdog', 'outcome-coordinator', 'outcome-coordinator-secondary', 'executable-dead-man',
 ];
@@ -137,9 +147,9 @@ test('the approved configuration commits still have exactly the five surviving s
   assert.deepEqual([...survivingConfigurationServices.keys()], EXPECTED_SERVICES);
 });
 
-test('(a) Compose declares exactly the five surviving services, the wiki worker and the Docker channel', () => {
+test('(a) Compose declares exactly the five surviving services, the wiki worker, the Docker channel and the managed runners\' firewall', () => {
   assert.deepEqual([...currentServices.keys()].sort(), [...EXPECTED_SERVICES, ...APPROVED_ADDITIONS].sort());
-  assert.equal(currentServices.size, 7);
+  assert.equal(currentServices.size, 8);
 });
 
 test('(b) no removed sidecar is named anywhere in Compose', () => {
@@ -164,13 +174,17 @@ test('(c) nothing was added back: no new service, no new always-on process, no i
   assert.deepEqual(alwaysOn(currentServices).sort(),
     [...alwaysOn(baselineServices).filter((name) => currentServices.has(name)), ...APPROVED_ADDITIONS].sort());
   // No one-shot substitute: nothing may declare a run-once profile or a restart policy that
-  // re-runs a job, and no service may be introduced solely to be `docker compose run`. The one
-  // profile is the Docker channel's, which keeps it off where a deployment's .env does not name it.
+  // re-runs a job, and no service may be introduced solely to be `docker compose run`. The two
+  // profiles are the Docker channel's and the managed runners' firewall's, which keep each off where a
+  // deployment's .env does not name it.
   const profiled = [...currentServices]
     .filter(([, block]) => /^\s+profiles:/m.test(block))
     .map(([name, block]) => [name, block.match(/^\s+profiles:.*$/gm)]);
-  assert.deepEqual(profiled, [[DOCKER_CHANNEL, [`    profiles: [${MANAGED_RUNNERS_PROFILE}]`]]]);
-  assert.equal(current.match(/^\s+profiles:/gm).length, 1);
+  assert.deepEqual(profiled, [
+    [DOCKER_CHANNEL, [`    profiles: [${MANAGED_RUNNERS_PROFILE}]`]],
+    [MANAGED_RUNNER_FIREWALL, [`    profiles: [${FIREWALL_PROFILE}]`]],
+  ]);
+  assert.equal(current.match(/^\s+profiles:/gm).length, 2);
   assert.doesNotMatch(current, /^\s+restart: (on-failure|always)$/m);
   assert.doesNotMatch(current, /\bexecutable-acceptance-dead-man\b/);
 });
@@ -292,7 +306,8 @@ function withoutApprovedAdditions(source) {
 // approved blocks are pinned beside them; all are set aside here, so that a line added anywhere else still
 // turns this red exactly as it did before those decisions.
 test('(k) removing the sidecars is subtraction: setting the approved wiki worker aside, Compose lost more lines than it gained', () => {
-  const rest = withoutApprovedAdditions(withoutService(withoutService(current, WIKI_WORKER), DOCKER_CHANNEL));
+  const rest = withoutApprovedAdditions(
+    withoutService(withoutService(withoutService(current, WIKI_WORKER), DOCKER_CHANNEL), MANAGED_RUNNER_FIREWALL));
   const scratch = mkdtempSync(path.join(tmpdir(), 'compose-topology-'));
   try {
     writeFileSync(path.join(scratch, 'baseline.yml'), baseline);
@@ -396,5 +411,51 @@ test('(m) Docker\'s socket is given to the Docker channel and to no other servic
 
 test('(m) Compose names nothing of Kubernetes, Rook, Ceph or CSI', () => {
   assert.doesNotMatch(directives(current).join('\n'),
-    /kube|rook|ceph|\bcsi\b|deploy\/managed-runner\/(?!docker-channel\/)|runner-pod|pod-admission|managed-runner-lab/i);
+    /kube|rook|ceph|\bcsi\b|deploy\/managed-runner\/(?!docker-channel\/|firewall\/)|runner-pod|pod-admission|managed-runner-lab/i);
+});
+
+// The definition the owner's decision of 2026-10-19 allows (see the top of this file), every directive of it in order:
+// the managed runners' host firewall built from its own Dockerfile, under the one profile the install switches on for
+// it, in the host's network namespace — where the rules it keeps live — with every capability dropped but NET_ADMIN
+// and NET_RAW, no privilege escalation and a read-only root filesystem. Two mounts: its directory in the managed
+// runners' (its configuration, and the status the Docker channel reads), and the host's xtables lock, which only the
+// legacy iptables backend takes, /dev/null unless the install names it and never made on the host. No Docker socket and
+// no port. Changing any of it is a new decision, made here.
+test('(n) the managed runners\' firewall is exactly the service the owner allowed on 2026-10-19, off unless its profile is on', () => {
+  assert.deepEqual(directives(currentServices.get(MANAGED_RUNNER_FIREWALL)), [
+    '  managed-runner-firewall:',
+    `    profiles: [${FIREWALL_PROFILE}]`,
+    '    build:',
+    '      context: .',
+    '      dockerfile: deploy/managed-runner/firewall/Dockerfile',
+    '    image: orbit-managed-runner-firewall:local',
+    '    container_name: orbit-managed-runner-firewall',
+    '    restart: unless-stopped',
+    '    network_mode: host',
+    '    cap_drop: [ALL]',
+    '    cap_add: [NET_ADMIN, NET_RAW]',
+    '    security_opt: ["no-new-privileges:true"]',
+    '    read_only: true',
+    '    volumes:',
+    '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-managed-runner-firewall"',
+    '      - type: bind',
+    '        source: "${ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK:-/dev/null}"',
+    '        target: /run/xtables.lock',
+    '        bind:',
+    '          create_host_path: false',
+    '    healthcheck:',
+    '      test: ["CMD", "python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py", "status"]',
+    '      interval: 10s',
+    '      timeout: 5s',
+    '      retries: 3',
+    '      start_period: 10s',
+  ]);
+});
+
+test('(n) the host\'s network and NET_ADMIN are given to the managed runners\' firewall and to no other service', () => {
+  for (const [name, block] of currentServices) {
+    const given = directives(block).filter((line) => /network_mode: host|NET_ADMIN|NET_RAW|privileged/.test(line));
+    assert.deepEqual(given, name === MANAGED_RUNNER_FIREWALL ? ['    network_mode: host', '    cap_add: [NET_ADMIN, NET_RAW]'] : [],
+      `${name} is given ${given.join(', ')}`);
+  }
 });

@@ -1,0 +1,124 @@
+{
+  "label": "r05-b-n4",
+  "variant": "before",
+  "image": "sha256:b0dedb927136095356371ddf018bd6edc8282053a43b1144543a850f87f2ab55",
+  "runners": 4,
+  "loaded": [
+    "u1",
+    "u2",
+    "u3",
+    "u4"
+  ],
+  "loadSeconds": 120,
+  "cycles": 3,
+  "files": 400,
+  "thinkMs": 2000,
+  "tag": "r05bn4",
+  "quietBefore": {
+    "seconds": 15,
+    "utilPercent": 3.23,
+    "writeMBps": 0.104,
+    "readMBps": 0.001,
+    "testHostWriteMBps": 0.062,
+    "testHostReadMBps": 0.0,
+    "journalWriteMBps": 0.012,
+    "othersWriteMBps": 0.03,
+    "othersReadMBps": 0.001,
+    "load": [
+      "6.29",
+      "13.10",
+      "14.17"
+    ],
+    "qemu": "0"
+  },
+  "states": {
+    "u1": {
+      "managementState": "READY",
+      "desiredState": "RUNNING",
+      "heartbeatStatus": "ONLINE",
+      "usable": true,
+      "revision": 43,
+      "reason": null,
+      "httpStatus": null
+    },
+    "u2": {
+      "managementState": "READY",
+      "desiredState": "RUNNING",
+      "heartbeatStatus": "ONLINE",
+      "usable": true,
+      "revision": 43,
+      "reason": null,
+      "httpStatus": null
+    },
+    "u3": {
+      "managementState": "READY",
+      "desiredState": "RUNNING",
+      "heartbeatStatus": "ONLINE",
+      "usable": true,
+      "revision": 43,
+      "reason": null,
+      "httpStatus": null
+    },
+    "u4": {
+      "managementState": "READY",
+      "desiredState": "RUNNING",
+      "heartbeatStatus": "ONLINE",
+      "usable": true,
+      "revision": 43,
+      "reason": null,
+      "httpStatus": null
+    }
+  },
+  "containers": {
+    "u1": "mr-01a155a1-d3c3-76fe-b73f-dfb5b6cd3305",
+    "u2": "mr-01a155a1-d3eb-740d-ba20-9075fe0731d3",
+    "u3": "mr-01a155a1-d422-715e-9e9d-d483a4a84850",
+    "u4": "mr-01a155a1-d45b-7075-bba3-f28d00e4ddbb",
+    "u5": "mr-01a155a1-d48f-70eb-8a15-ad6b40f090d9",
+    "u6": "mr-01a155a1-d4e5-7614-805f-c860e3d77741",
+    "u7": "mr-01a155a1-d52f-702a-a700-f59884b28a25",
+    "u8": "mr-01a155a1-d568-71f0-a360-0b6cd5ef8397"
+  },
+  "cgroups": {
+    "mr-01a155a1-d52f-702a-a700-f59884b28a25": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/50d2ad37de193f2d3533ae20c9f9ba521e5cff9a88c68597e17d58c4d574b749",
+    "mr-01a155a1-d568-71f0-a360-0b6cd5ef8397": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/1f58faac1648b720ca0f73589cd640feb1e57df8071be43b1a738829f9d66291",
+    "mr-01a155a1-d45b-7075-bba3-f28d00e4ddbb": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/c69685b7caf7999384096963c57162b321b7f77008c0951511a6447045123a0b",
+    "mr-01a155a1-d4e5-7614-805f-c860e3d77741": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/5363c0a9d9412e6bbe149d30c862dcb1c9a0100f4ff84e6aba931ab82dc7b30a",
+    "mr-01a155a1-d48f-70eb-8a15-ad6b40f090d9": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/15d35c43ccea07f229c3a46ab2c31439af46da84b104bfae56cd0d6263b31f39",
+    "mr-01a155a1-d3c3-76fe-b73f-dfb5b6cd3305": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/96c47ad64a2933df47b815e15f02e01d8a9f670849c0bdea0bf10f21302ada2f",
+    "mr-01a155a1-d422-715e-9e9d-d483a4a84850": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/51cf3baa69942e7b2f00f687d503de6be87321f32f634d79f82ce03098817c3c",
+    "mr-01a155a1-d3eb-740d-ba20-9075fe0731d3": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/d831802332fa53b44285adb17c85da489d61f6f38813de2c59fad10bd004aab2",
+    "orbit-apiserver": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/c98a3df2813e2d76559c4f57177ee69aa31e2cdcf76bcbe9d555cfe19cce1777",
+    "orbit-gateway": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/edcd9d8cbc77c15adbfca8c29848b30fc13a0f6547428319fa928af80a1800ea",
+    "orbit-postgres": "/sys/fs/cgroup/system.slice/docker-a22f3f9db45bd3de84f8fe2aa2f61daf39755e09d849627f05cc132473595f30.scope/docker/2bdb3a05b796cc13a30af2561361ddeea158630b6303331bc434d0d835a07f76"
+  },
+  "started": "2026-10-19T20:03:48Z",
+  "wall": 1792440228.248,
+  "mono": 1486082.377,
+  "phases": {
+    "probesStarted": {
+      "wall": 1792440228.679,
+      "mono": 1486082.809
+    },
+    "loadStarted": {
+      "wall": 1792440243.679,
+      "mono": 1486097.809
+    },
+    "loadEnded": {
+      "wall": 1792440363.683,
+      "mono": 1486217.813
+    },
+    "drained": {
+      "wall": 1792440386.869,
+      "mono": 1486240.999
+    },
+    "probesStopped": {
+      "wall": 1792440396.869,
+      "mono": 1486250.999
+    }
+  },
+  "ended": "2026-10-19T20:06:38Z",
+  "workerErrors": {},
+  "workersStillRunning": [],
+  "tracedThreads": 0
+}

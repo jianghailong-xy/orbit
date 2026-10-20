@@ -1,0 +1,45 @@
+== the gate at 2026-10-19T07:33:19Z: gate-demo
+-- docker-channel: start-up and refusals
+2026-10-19T07:28:30Z orbit-docker-channel: runner containers start only while the managed runners' host firewall is in force (/var/lib/orbit-managed-runners/firewall/status.json)
+2026-10-19T07:28:30Z orbit-docker-channel: instance orbit-2a58b62b serving on /var/lib/orbit-managed-runners/channel.sock; image sha256:fa2b4d0c005ccb9208e7387e788075e93a4c3c01bba2ea7c49e869f36a91e1a4, network orbit-managed-runners
+2026-10-19T07:29:24Z orbit-docker-channel: container mr-01a15310-a89f-7592-8a0e-190140b17331 created and started
+2026-10-19T07:31:10Z orbit-docker-channel: no runner container is started: the managed runners' host firewall is not in force (the firewall service reports 'stopped': the firewall service stopped; its rules stay)
+2026-10-19T07:31:10Z orbit-docker-channel: POST /v1/containers -> 503 FIREWALL_NOT_ENFORCED
+2026-10-19T07:31:20Z orbit-docker-channel: no runner container is started: the managed runners' host firewall is not in force (the firewall service reports 'stopped': the firewall service stopped; its rules stay)
+2026-10-19T07:31:20Z orbit-docker-channel: POST /v1/containers -> 503 FIREWALL_NOT_ENFORCED
+2026-10-19T07:31:35Z orbit-docker-channel: no runner container is started: the managed runners' host firewall is not in force (the firewall service reports 'stopped': the firewall service stopped; its rules stay)
+2026-10-19T07:31:35Z orbit-docker-channel: POST /v1/containers -> 503 FIREWALL_NOT_ENFORCED
+2026-10-19T07:32:06Z orbit-docker-channel: no runner container is started: the managed runners' host firewall is not in force (the firewall service reports 'stopped': the firewall service stopped; its rules stay)
+2026-10-19T07:32:06Z orbit-docker-channel: POST /v1/containers -> 503 FIREWALL_NOT_ENFORCED
+2026-10-19T07:32:57Z orbit-docker-channel: container mr-01a15310-a89f-7592-8a0e-190140b17331 created and started
+-- managed-runner-firewall
+2026-10-19T07:28:29Z orbit-managed-runner-firewall: network orbit-managed-runners (bridge br-fddeb223c3a0, gateway 172.19.0.1): only the gateway's port 2086, 0 DNS server(s) and 0 allowed destination(s) besides public addresses; checked every 10 s
+2026-10-19T07:28:29Z orbit-managed-runner-firewall: enforced
+2026-10-19T07:30:03Z orbit-managed-runner-firewall: stopped; the rules stay on the host
+2026-10-19T07:30:04Z orbit-managed-runner-firewall: network orbit-managed-runners (bridge br-fddeb223c3a0, gateway 172.19.0.1): only the gateway's port 2086, 0 DNS server(s) and 1 allowed destination(s) besides public addresses; checked every 10 s
+2026-10-19T07:30:04Z orbit-managed-runner-firewall: rules written for IPv4 (nft backend)
+2026-10-19T07:30:04Z orbit-managed-runner-firewall: enforced
+2026-10-19T07:30:40Z orbit-managed-runner-firewall: stopped; the rules stay on the host
+2026-10-19T07:32:37Z orbit-managed-runner-firewall: network orbit-managed-runners (bridge br-fddeb223c3a0, gateway 172.19.0.1): only the gateway's port 2086, 0 DNS server(s) and 1 allowed destination(s) besides public addresses; checked every 10 s
+2026-10-19T07:32:37Z orbit-managed-runner-firewall: enforced
+-- apiserver: managed runner lines
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[InstanceLoader] [39m[32mManagedRunnerModule dependencies initialized[39m[38;5;3m +0ms[39m
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mManagedRunnerController {/api/managed-runner}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner, GET} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner/ensure, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner/retry, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner/wake, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner/sleep, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner/delete, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mManagedRunnerAdmissionController {/api/managed-runner/admission}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/managed-runner/admission, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[RoutesResolver] [39m[32mManagedRunnerAdminController {/api/admin/managed-runners}:[39m[38;5;3m +0ms[39m
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[RouterExplorer] [39m[32mMapped {/api/admin/managed-runners/:id/volume-switch, POST} route[39m[38;5;3m +0ms[39m
+[32m[Nest] 130  - [39m10/19/2026, 7:28:43 AM [32m    LOG[39m [38;5;3m[ProviderEngineMigration] [39m[32mprovider-engine-migration 7966f1cd-0a7e-40ac-9d6e-ff2ad474c3b0 {"step":"check","table":"managed_runner","rowId":null,"ownerId":null,"action":"NOOP","note":"every managed runner starts on a built-in engine; none is rewritten"}[39m
+[33m[Nest] 130  - [39m10/19/2026, 7:30:40 AM [33m   WARN[39m [38;5;3m[ManagedRunnerManager] [39m[33mmanaged runner 01a15310-a8a3-708d-a5a4-b1c1377d2c91: idle and asked to sleep; draining generation 1 to sleep[39m
+[33m[Nest] 130  - [39m10/19/2026, 7:30:55 AM [33m   WARN[39m [38;5;3m[ManagedRunnerManager] [39m[33mmanaged runner 01a15310-a8a3-708d-a5a4-b1c1377d2c91: asleep; generation 1 stopped (OBSERVED_STOP), compute released, volume kept[39m
+[33m[Nest] 130  - [39m10/19/2026, 7:31:10 AM [33m   WARN[39m [38;5;3m[ManagedRunnerManager] [39m[33mmanaged runner 01a15310-a8a3-708d-a5a4-b1c1377d2c91: waking for demand (generation 2)[39m
+[33m[Nest] 130  - [39m10/19/2026, 7:31:10 AM [33m   WARN[39m [38;5;3m[ManagedRunnerManager] [39m[33mmanaged runner 01a15310-a8a3-708d-a5a4-b1c1377d2c91: transient failure 1/5: the managed runners' host firewall is not in force: the firewall service reports 'stopped': the firewall service stopped; its rules stay[39m
+[33m[Nest] 130  - [39m10/19/2026, 7:31:20 AM [33m   WARN[39m [38;5;3m[ManagedRunnerManager] [39m[33mmanaged runner 01a15310-a8a3-708d-a5a4-b1c1377d2c91: transient failure 2/5: the managed runners' host firewall is not in force: the firewall service reports 'stopped': the firewall service stopped; its rules stay[39m
+[33m[Nest] 130  - [39m10/19/2026, 7:31:35 AM [33m   WARN[39m [38;5;3m[ManagedRunnerManager] [39m[33mmanaged runner 01a15310-a8a3-708d-a5a4-b1c1377d2c91: transient failure 3/5: the managed runners' host firewall is not in force: the firewall service reports 'stopped': the firewall service stopped; its rules stay[39m
+[33m[Nest] 130  - [39m10/19/2026, 7:32:06 AM [33m   WARN[39m [38;5;3m[ManagedRunnerManager] [39m[33mmanaged runner 01a15310-a8a3-708d-a5a4-b1c1377d2c91: transient failure 4/5: the managed runners' host firewall is not in force: the firewall service reports 'stopped': the firewall service stopped; its rules stay[39m

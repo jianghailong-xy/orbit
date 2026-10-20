@@ -1,0 +1,84 @@
+{
+ "checks": [
+  {
+   "check": "the runner is READY on the second node with its writer running",
+   "ok": true,
+   "value": {
+    "management_state": "READY",
+    "node_name": "orbit-mr-lab-2"
+   }
+  },
+  {
+   "check": "stop.sh killed the second VM's qemu with SIGKILL",
+   "ok": true,
+   "value": "unit orbit-mr-lab-2: memory.current 1220 MiB, memory.peak 2869 MiB, swap 567 MiB, memory.max 3758096384\nhost: MemAvailable 7170 MiB\n12:52:44Z orbit-mr-lab-2: qemu (pid 4118829) killed with SIGKILL at 2026-10-19T12:52:44.611Z; the guest got no shutdown"
+  },
+  {
+   "check": "the second VM is off: its unit inactive, no qemu process, SSH and QMP refused, the link down",
+   "ok": true,
+   "value": {
+    "activeState": "inactive",
+    "at": "2026-10-19T12:52:45.650+00:00",
+    "linkConnections": [],
+    "mainPid": "0",
+    "qemuProcesses": [],
+    "qmpRefused": true,
+    "sshRefused": true,
+    "subState": "dead",
+    "unit": "orbit-mr-lab-2.service"
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T12:52:45.651+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "takeover",
+ "result": {
+  "killedAt": "2026-10-19T12:52:44.611Z",
+  "lastAcknowledgedRowsRead": 441,
+  "power": {
+   "activeState": "inactive",
+   "at": "2026-10-19T12:52:45.650+00:00",
+   "linkConnections": [],
+   "mainPid": "0",
+   "qemuProcesses": [],
+   "qmpRefused": true,
+   "sshRefused": true,
+   "subState": "dead",
+   "unit": "orbit-mr-lab-2.service"
+  },
+  "stopSh": [
+   "unit orbit-mr-lab-2: memory.current 1220 MiB, memory.peak 2869 MiB, swap 567 MiB, memory.max 3758096384",
+   "host: MemAvailable 7170 MiB",
+   "12:52:44Z orbit-mr-lab-2: qemu (pid 4118829) killed with SIGKILL at 2026-10-19T12:52:44.611Z; the guest got no shutdown"
+  ],
+  "writerBeforeCut": {
+   "acknowledgedRows": 439,
+   "acknowledgedSHA256": "370a5bb538c1d7ddbddbf2c8166603609ebd79d1ec5f4b6d0f89f2b3c5bc4dae",
+   "committedRows": 440,
+   "gitCommit": "13baf0ceadeae9d0b7832147c1a593e9e8bfcd14",
+   "gitFsck": "",
+   "gitStatus": "",
+   "kernel": "7.0.0-34-generic",
+   "mountInfo": [
+    "643 628 251:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=1024"
+   ],
+   "ordinarySHA256": "c5721affdbdf6a19e764307f2dc7ee1eb0a16a40f8435d4eb1a67df355c2bcd8",
+   "prefixRows": 0,
+   "prefixSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "quiesced": false,
+   "randomSHA256": "c2fbe5f075614de33319b379debf3e5b3c8b9fec44f04d12937a4e11d2cc58ad",
+   "rowSHA256": "665e347c7399e1bf6007ff5d8d1d6a75eee873c98d648c2cc7e23050cb119a18",
+   "runID": "t02-writer",
+   "sqliteIntegrity": [
+    "ok"
+   ],
+   "sqliteJournalMode": "wal",
+   "walBytes": 1854032,
+   "walExists": true
+  }
+ },
+ "seconds": 4.0,
+ "startedAt": "2026-10-19T12:52:41.653+00:00",
+ "step": "cut"
+}

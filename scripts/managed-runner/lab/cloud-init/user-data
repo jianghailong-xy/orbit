@@ -1,5 +1,5 @@
 #cloud-config
-# Unattended first boot of the lab VM. create.sh replaces @@LAB_NAME@@, @@LAB_GUEST_IP@@ and
+# Unattended first boot of a lab VM. create.sh replaces @@LAB_NAME@@, @@LINK_IP@@ and
 # @@SSH_PUBLIC_KEY@@; everything else is installed afterwards over SSH by guest/provision.sh.
 hostname: @@LAB_NAME@@
 preserve_hostname: false
@@ -22,4 +22,4 @@ write_files:
   - path: /etc/hosts
     append: true
     content: |
-      @@LAB_GUEST_IP@@ @@LAB_NAME@@
+      @@LINK_IP@@ @@LAB_NAME@@

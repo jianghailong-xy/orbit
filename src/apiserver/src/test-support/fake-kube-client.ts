@@ -257,7 +257,8 @@ export class FakeKubeCluster {
     const pv: PersistentVolume = {
       apiVersion: 'v1',
       kind: 'PersistentVolume',
-      metadata: { name: pvName, uid: randomUUID(), resourceVersion: String(this.version++) },
+      // Made for the claim, so never before it: the API server stamps both.
+      metadata: { name: pvName, uid: randomUUID(), resourceVersion: String(this.version++), creationTimestamp: new Date().toISOString() },
       spec: {
         storageClassName: pvc.spec.storageClassName,
         claimRef: { namespace: this.namespace, name, uid: pvc.metadata.uid },

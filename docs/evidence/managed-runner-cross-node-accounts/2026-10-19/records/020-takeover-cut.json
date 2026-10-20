@@ -1,0 +1,241 @@
+{
+ "checks": [
+  {
+   "check": "ann: READY on orbit-mr-lab-2 with its writer running",
+   "ok": true,
+   "value": {
+    "management_state": "READY",
+    "node_name": "orbit-mr-lab-2"
+   }
+  },
+  {
+   "check": "bob: READY on orbit-mr-lab-2 with its writer running",
+   "ok": true,
+   "value": {
+    "management_state": "READY",
+    "node_name": "orbit-mr-lab-2"
+   }
+  },
+  {
+   "check": "stop.sh killed the second VM's qemu with SIGKILL",
+   "ok": true,
+   "value": "unit orbit-mr-lab-2: memory.current 892 MiB, memory.peak 1974 MiB, swap 965 MiB, memory.max 3758096384\nhost: MemAvailable 6385 MiB\n14:36:42Z orbit-mr-lab-2: qemu (pid 1303960) killed with SIGKILL at 2026-10-19T14:36:42.510Z; the guest got no shutdown"
+  },
+  {
+   "check": "ann's volume was synced (sync -f /var/lib/orbit in her runner container) just before",
+   "ok": true,
+   "value": ""
+  },
+  {
+   "check": "the second VM is off: its unit inactive, no qemu process, SSH and QMP refused, the link down",
+   "ok": true,
+   "value": {
+    "activeState": "inactive",
+    "at": "2026-10-19T14:36:43.555+00:00",
+    "linkConnections": [],
+    "mainPid": "0",
+    "qemuProcesses": [],
+    "qmpRefused": true,
+    "sshRefused": true,
+    "subState": "dead",
+    "unit": "orbit-mr-lab-2.service"
+   }
+  },
+  {
+   "check": "ann: no Git work in the 60 s before the cut",
+   "ok": true,
+   "value": {
+    "lastAnswerToCut": 19.7,
+    "lastGitToCut": 86.4
+   }
+  },
+  {
+   "check": "bob: no Git work in the 60 s before the cut",
+   "ok": true,
+   "value": {
+    "lastAnswerToCut": 20.2,
+    "lastGitToCut": 86.4
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T14:36:43.556+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "takeover",
+ "result": {
+  "annSync": {
+   "endedAt": "2026-10-19T14:36:42.484+00:00",
+   "secondsBeforeTheCut": 0.0,
+   "startedAt": "2026-10-19T14:36:40.902+00:00"
+  },
+  "killedAt": "2026-10-19T14:36:42.510Z",
+  "lastAcknowledgedRowsRead": {
+   "ann": 367,
+   "bob": 367
+  },
+  "power": {
+   "activeState": "inactive",
+   "at": "2026-10-19T14:36:43.555+00:00",
+   "linkConnections": [],
+   "mainPid": "0",
+   "qemuProcesses": [],
+   "qmpRefused": true,
+   "sshRefused": true,
+   "subState": "dead",
+   "unit": "orbit-mr-lab-2.service"
+  },
+  "rightBefore": {
+   "ann": {
+    "at": "2026-10-19T14:36:31.404+00:00",
+    "transcripts": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-ccbb-7578-98d5-3e00fbd897c6/d4a254d7-c4a8-4fa2-87e2-246533d210f5.jsonl": {
+      "bytes": 741248,
+      "endsWithNewline": true,
+      "lines": 42,
+      "prefixes": {},
+      "sha256": "9ce0e7595c48ad99638ee1705e6280e6c5c9df61eb043494bae11ce2fa711481"
+     }
+    },
+    "written": {
+     "files": {
+      ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-ccbb-7578-98d5-3e00fbd897c6/d4a254d7-c4a8-4fa2-87e2-246533d210f5.jsonl": {
+       "bytes": 741248,
+       "mtime": 1792420582.648,
+       "sha256": "9ce0e7595c48ad99638ee1705e6280e6c5c9df61eb043494bae11ce2fa711481"
+      },
+      ".claude/sessions/160.json": {
+       "bytes": 557,
+       "mtime": 1792420582.742,
+       "sha256": "535f479e6e4f257b91b46d82623d11d2fe7a34b485d15d1c829ca09c3700db14"
+      },
+      ".orbit/runs/01a1548e-ccbb-7578-98d5-3e00fbd897c6/meta.json": {
+       "bytes": 250,
+       "mtime": 1792420582.741,
+       "sha256": "340cc341a3889ced41aef0f1174a63fb5bd32271f1a033cf074b51b9a2507e07"
+      },
+      ".orbit/session-credentials/01a1548e-ccbb-7578-98d5-3e00fbd897c6": {
+       "bytes": 345,
+       "mtime": 1792420581.285,
+       "sha256": "bc8aaed7e23f817233bc171b2993596836be04980f1b811d9e20f2a5035427f3"
+      }
+     },
+     "since": 1792420577.80783
+    }
+   },
+   "bob": {
+    "at": "2026-10-19T14:36:36.327+00:00",
+    "transcripts": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-d1e1-7716-94ca-8b2770f29b8a/6001df67-0d8b-4d9b-81c1-425d9c747037.jsonl": {
+      "bytes": 741249,
+      "endsWithNewline": true,
+      "lines": 42,
+      "prefixes": {},
+      "sha256": "e86660c340930fd1422a3a87b6675fb6f3e20291712f0117ea9f01a4e101bb58"
+     },
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-b2c53285-8438-541c-b14b-232d3b04c323/4436b81d-d3a5-4077-961f-774d4f0d5801.jsonl": {
+      "bytes": 731829,
+      "endsWithNewline": true,
+      "lines": 23,
+      "prefixes": {},
+      "sha256": "31f7f22cf5e6ad869113c77c9e1220117a07b0117582fc1bd9002eed994cb2bf"
+     }
+    },
+    "written": {
+     "files": {
+      ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-d1e1-7716-94ca-8b2770f29b8a/6001df67-0d8b-4d9b-81c1-425d9c747037.jsonl": {
+       "bytes": 741249,
+       "mtime": 1792420582.095,
+       "sha256": "e86660c340930fd1422a3a87b6675fb6f3e20291712f0117ea9f01a4e101bb58"
+      },
+      ".claude/sessions/412.json": {
+       "bytes": 557,
+       "mtime": 1792420582.098,
+       "sha256": "acb103c0fd8203e8d950918f42862f8a190eae78339662a3b979e5ac4dd62773"
+      },
+      ".orbit/runs/01a1548e-d1e1-7716-94ca-8b2770f29b8a/meta.json": {
+       "bytes": 250,
+       "mtime": 1792420582.229,
+       "sha256": "484d5ab7a0b6b29d8af05cfa5460e53b0858662e9ce2dfaece24de6c3614cd0a"
+      },
+      ".orbit/session-credentials/01a1548e-d1e1-7716-94ca-8b2770f29b8a": {
+       "bytes": 345,
+       "mtime": 1792420581.017,
+       "sha256": "887f0429a2cfd926b1787509b32f11e7e26a550ab34f9ea1b57c6ba837e2cbca"
+      }
+     },
+     "since": 1792420579.8508344
+    }
+   }
+  },
+  "seconds": {
+   "ann": {
+    "lastAnswerToCut": 19.7,
+    "lastGitToCut": 86.4
+   },
+   "bob": {
+    "lastAnswerToCut": 20.2,
+    "lastGitToCut": 86.4
+   }
+  },
+  "stopSh": [
+   "unit orbit-mr-lab-2: memory.current 892 MiB, memory.peak 1974 MiB, swap 965 MiB, memory.max 3758096384",
+   "host: MemAvailable 6385 MiB",
+   "14:36:42Z orbit-mr-lab-2: qemu (pid 1303960) killed with SIGKILL at 2026-10-19T14:36:42.510Z; the guest got no shutdown"
+  ],
+  "writersBeforeCut": {
+   "ann": {
+    "acknowledgedRows": 364,
+    "acknowledgedSHA256": "5a9c6bd52ccc262b3d1013f9272b0f229f9fbcde0d2854b428ca506fcb19e4e8",
+    "committedRows": 364,
+    "gitCommit": "e620e660124e32eb98e330d72ff4ecd759e6376e",
+    "gitFsck": "",
+    "gitStatus": "",
+    "kernel": "7.0.0-34-generic",
+    "mountInfo": [
+     "673 658 251:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=1024"
+    ],
+    "ordinarySHA256": "ce2f2be20803dbf87c2962de029a3df704c25762cc612e535376dfe30ada6252",
+    "prefixRows": 0,
+    "prefixSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "quiesced": false,
+    "randomSHA256": "3b4298651ccd1440688d948c750fa588f3623cce6ff46afdae5043d4df6f9af6",
+    "rowSHA256": "5a9c6bd52ccc262b3d1013f9272b0f229f9fbcde0d2854b428ca506fcb19e4e8",
+    "runID": "t08x-writer",
+    "sqliteIntegrity": [
+     "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "walBytes": 1536792,
+    "walExists": true
+   },
+   "bob": {
+    "acknowledgedRows": 365,
+    "acknowledgedSHA256": "3b4777bf25f1fa35d1cf303d860fa07abb41988c58ff9c9eb1d709954aa053c5",
+    "committedRows": 365,
+    "gitCommit": "e620e660124e32eb98e330d72ff4ecd759e6376e",
+    "gitFsck": "",
+    "gitStatus": "",
+    "kernel": "7.0.0-34-generic",
+    "mountInfo": [
+     "754 736 251:16 / /var/lib/orbit rw,relatime - ext4 /dev/rbd1 rw,stripe=1024"
+    ],
+    "ordinarySHA256": "ce2f2be20803dbf87c2962de029a3df704c25762cc612e535376dfe30ada6252",
+    "prefixRows": 0,
+    "prefixSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "quiesced": false,
+    "randomSHA256": "41082845612180325da8763f2f0e6a3f3f4d8d397fa9b8f761b0bb865bdbec69",
+    "rowSHA256": "3b4777bf25f1fa35d1cf303d860fa07abb41988c58ff9c9eb1d709954aa053c5",
+    "runID": "t08x-writer",
+    "sqliteIntegrity": [
+     "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "walBytes": 1540912,
+    "walExists": true
+   }
+  }
+ },
+ "seconds": 20.3,
+ "startedAt": "2026-10-19T14:36:23.262+00:00",
+ "step": "cut"
+}
