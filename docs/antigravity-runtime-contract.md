@@ -8,9 +8,9 @@
 得到的结论，这里在 1.2.15 上逐条重测过，差异见 §12。下文标【实测】的结论都来自 1.2.15；只来自官方文档、
 本机没有复现的，标【文档】。
 
-**agy 1.4.3**：runner 上的 `/root/.local/bin/agy` 在 2026-10-20 从 1.4.2 自升级到 1.4.3（`agy --version` 报 `1.4.3`；被替换的 1.4.2
-按 §6.1 留在同目录的 `agy.<随机数>.old`）。与本文在 1.2.15 / 1.2.16 上的实测相比，工具和参数变了：声明给模型的每个工具的 schema
-都是 `additionalProperties: false`，文件工具改了名，`read_url_content` 不再声明，`run_command` 的输出前面多了退出码。§2.1–§2.3、§5.1、
+**agy 1.4.3**：runner `workstation-gpu`（主机名 `workstation`）上的 `/root/.local/bin/agy` 在 2026-10-20 从 1.4.2 自升级到 1.4.3（`agy --version` 报 `1.4.3`；被替换的 1.4.2
+按 §6.1 留在同目录的 `agy.<随机数>.old`）。与本文在 1.2.15 / 1.2.16 上的实测相比，工具和参数变了：声明给模型的每个工具（API key 模式）的 schema
+都是 `additionalProperties: false`，文件工具改了名，`read_url_content` 在 API key 模式下不再声明，`run_command` 的输出前面多了退出码。§2.1–§2.3、§5.1、
 §5.4、§14.1 里讲工具和参数的段落已按 1.4.3 改写，旧的写法留作历史说明，下文记作「1.2.x」，指本文实测过的 1.2.15 / 1.2.16。
 1.4.2 本文没有实测：按 350ab8c8e 的提交说明和 `mockgemini`、`antigravity_contract_test.go` 的注释，它仍用旧的文件工具名，
 `run_command` 要 `Cwd`、每个工具要 `toolAction`；runner 认的「旧一代」名字也覆盖它。1.4.3 的实测与 runner 的对应见 §17。
@@ -145,7 +145,7 @@ agy --gemini_dir=<会话 gemini 目录，绝对路径>
 | `tool` `ACTIVE` | `evToolUse {id: "<conversation_id>:<step_index>", name: 规范名, input: 规范化参数}`（§2.3） |
 | `tool` `DONE` | `evToolResult {toolUseId, content: tool_info.output（没有就是空串）, isError:false}` |
 | `tool` `ERROR` | `evToolResult {toolUseId, content: tool_info.error.message, isError:true}` |
-| 被软拒绝的工具（§5.2：本轮 `result.response` 为空、`denied_actions` 非空、最后一个工具步骤既没有 output 也没有 error，或者它的 error 是 `permission check failed … user denied permission …`） | `evToolResult {isError:true, content:"需要审批的操作在当前权限模式下被拒绝：<权限>"}`，再发 `evError` 说明怎么放行 |
+| 被软拒绝的工具（§5.2：本轮 `result.response` 为空、`denied_actions` 非空、最后一个工具步骤既没有 output 也没有 error，或者它的 error 是 `permission check failed … user denied permission …`） | 最后一个工具步骤是没有输出的 `DONE`：补 `evToolResult {isError:true, content:"Not run: Antigravity refuses the \"<权限>\" permission …"}`（`agyRefusal`）；是带这句 error 的 `ERROR`：工具结果就是上面 `tool` `ERROR` 那一行在步骤结束时发的 agy 自己的消息，不再补第二条。两种都再发 `evError` 说明怎么放行，本轮 `FAILED` / `permission_denied` |
 | 一轮结束时还没有结果的工具步骤（被中断、agy 退出或出错时正在跑的那个，永远走不到 `DONE`，§4.1） | 在 `evTurnEnd` 之前按调用顺序补 `evToolResult {isError:true, content:"Interrupted: the turn was stopped / failed while this tool was running."}`；不补的话，会话还开着时客户端会一直把这张卡片画成运行中 |
 | `error_message` `DONE` | `evError {message: result.error，或 AGY_ERROR.short_error}` |
 | `system_message`、`unknown`、`checkpoint` | 不发 transcript 事件，记日志（`logUnhandledStreamKind` 那一类） |
@@ -179,7 +179,7 @@ agy 的 functionCall id 在流里不出现，所以用 `conversation_id:step_ind
 | `read_file`（`view_file`） | `Read` | `{file_path: Path}`（`AbsolutePath`） |
 | `write_file`（`write_to_file`） | `Write` | `{file_path: Path}`（`TargetFile`） |
 | `edit_file`（`replace_file_content`、`multi_replace_file_content`） | `Edit` | `{file_path: Path}`（`TargetFile`） |
-| 无（1.2.x 的 `read_url_content`；1.4.3 不再声明） | `WebFetch` | `{url: Url}` |
+| 无（1.2.x 的 `read_url_content`；1.4.3 在 API key 模式下不再声明） | `WebFetch` | `{url: Url}` |
 | `search_web` | `WebSearch` | 原样 |
 | `call_mcp_tool` | `mcp__<ServerName>__<ToolName>` | `Arguments` |
 | 其他 | 原名 | 原样 |
@@ -386,7 +386,7 @@ runner 必须比较 `init.conversation_id` 和请求的 id：不一致就发一�
 这里的 `read_file(…)`、`write_file(…)`、`command(…)` 是 agy 的**权限名**，不是工具名。1.4.3 把文件工具改名成 `read_file`、`write_file`、
 `edit_file` 之后，权限名照旧：默认模式下被拒的 `write_file` 与 `edit_file` 调用，`denied_actions` 的 `action` 都是 `write_file`
 （`display_name` 分别是 `WriteFile`、`EditFile`），`run_command` 是 `command`（`RunCommand`），stderr 仍提示 `write_file(<target>)` 那样的规则（§17）；
-`read_file` 与 `mcp` 在 1.4.3 上没有重测。runner 把两代的写、改工具都对到 `write_file` 权限，读工具对到 `read_file`（`antigravity.go#agyPermission`）。
+`read_file`、`read_url`（`search_web`）与 `mcp` 在 1.4.3 上没有重测。runner 把两代的写、改工具都对到 `write_file` 权限，读工具对到 `read_file`（`antigravity.go#agyPermission`）。
 
 ### 5.2 默认模式下的"软拒绝"【实测】
 
@@ -1068,7 +1068,7 @@ runner 上的 `/root/.local/bin/agy` 在 2026-10-20 从 1.4.2 自升级到 1.4.3
 | --- | --- | --- |
 | schema | 声明给模型的每个工具（API key 模式 12 个，配了 MCP 15 个，§2.1）的参数 schema 都是 `additionalProperties: false`（`results/decls.json`、`results/mcp.json`） | — |
 | 带未声明参数的调用 | agy 在 PreToolUse hook **之前**就拒：工具步骤 `ERROR`，`tool_info.error` 为 `{"type":"TOOL_ERROR","message":"invalid arguments:\n- additional properties '<参数名>' not allowed"}`；hook 收不到这次调用，命令不执行，模型收到错误后接着往下走（`results/undeclared.json`：带 `Cwd` 的 `run_command`、带 `toolAction` 的 `read_file`） | — |
-| `run_command` 的参数 | 只声明 `CommandLine`、`IsDaemon`、`WaitMsBeforeAsync`、`toolSummary`（必填 `CommandLine`、`toolSummary`、`WaitMsBeforeAsync`）；`Cwd`、`RunPersistent`、`RequestedTerminalID` 都不在其中（二进制里 `RunPersistent` 字段标着 `jsonschema:"-"`，`results/agy-binary.txt`） | 1.2.15 / 1.2.16 的实验脚本给它带 `Cwd`、`WaitMsBeforeAsync`、`toolSummary`、`toolAction`（`docs/evidence/antigravity-cli-1.2.15/gen_samples.py`、`docs/evidence/antigravity-cli-1.2.16/s_*.json`） |
+| `run_command` 的参数 | 只声明 `CommandLine`、`IsDaemon`、`WaitMsBeforeAsync`、`toolSummary`（必填 `CommandLine`、`toolSummary`、`WaitMsBeforeAsync`）；`Cwd`、`RunPersistent`、`RequestedTerminalID` 都不在其中（二进制的 Go 结构里 `RunPersistent` 与 `RequestedTerminalID` 两个字段都标着 `jsonschema:"-"`，`results/agy-binary.txt`） | 1.2.15 / 1.2.16 的实验脚本给它带 `Cwd`、`WaitMsBeforeAsync`、`toolSummary`、`toolAction`（`docs/evidence/antigravity-cli-1.2.15/gen_samples.py`、`docs/evidence/antigravity-cli-1.2.16/s_*.json`） |
 | `toolAction` / `toolSummary` | 没有哪个工具声明 `toolAction`；`toolSummary` 只有 `run_command` 声明 | 1.4.2 的每个工具都要 `toolAction`（350ab8c8e 的提交说明） |
 | 文件工具 | `read_file {Path}`（可选 `StartLine`、`EndLine`、`ByteOffset`）、`write_file {Path, Content}`（可选 `Append`、`Overwrite`、`ArtifactMetadata`）、`edit_file {Path, Target, Replacement}`（可选 `ArtifactMetadata`）；`multi_replace_file_content` 不声明（1.2.16 也没声明，§14.2） | `view_file`（`AbsolutePath`）、`write_to_file`（`TargetFile`、`CodeContent`）、`replace_file_content`（`TargetFile`、`TargetContent`、`ReplacementContent`）、`multi_replace_file_content`（`TargetFile`、`ReplacementChunks`）——runner 读的参数名 |
 | `read_url_content` | 不再声明给模型（`init.tools` 里仍列着） | 声明（§2.1、§14.2） |
@@ -1088,11 +1088,11 @@ runner 上的 `/root/.local/bin/agy` 在 2026-10-20 从 1.4.2 自升级到 1.4.3
   `write_file`、`command`（`display_name` 为 `WriteFile`、`EditFile`、`RunCommand`），权限名不随工具改名；软拒绝仍是空 `response` 加
   stderr 那一行，被拒的工具步骤有时是没有输出的 `DONE`（`edit_file`、`run_command`），有时是 `ERROR`、消息为
   `permission check failed for write_file … user denied permission …`（`write_file`），runner 的 `agySoftDenied` 两种都认；命令和写入都没有执行
-  （§5.1、§5.2；`results/default-write.json`、`default-edit.json`、`default-command.json`）。`read_file` 与 `mcp` 两个权限没有重测。
+  （§5.1、§5.2；`results/default-write.json`、`default-edit.json`、`default-command.json`）。`read_file`、`read_url` 与 `mcp` 三个权限没有重测。`display_name` 跟着工具名变了（1.2.15 的 `write_to_file` 被拒时是 `WriteToFile`，样本 `denied-default`），不变的只是 `action`，runner 不读 `display_name`。
 - **MCP 的三个工具**：`call_mcp_tool {ServerName, ToolName, Arguments}`、`list_resources {ServerName}`、`read_resource {ServerName, Uri}`，
   同样是 `additionalProperties: false`；`call_mcp_tool` 经过 PreToolUse，名字不变（`results/mcp.json`）。
 - **展示子集**：流里每个工具只给展示用的那几个参数（§2.2），只是换了新名字。
-- 2026-10-20 在本机用 1.4.3 跑 `ORBIT_REQUIRE_REAL_AGY=1 go test -count=1 -run TestAntigravityContract -v .`（`src/runner-go`）：
+- 2026-10-20 在 `workstation-gpu` 上用 1.4.3 跑 `ORBIT_REQUIRE_REAL_AGY=1 go test -count=1 -run TestAntigravityContract -v .`（`src/runner-go`）：
   11 个 `TestAntigravityContract*` 全部通过，没有跳过（`results/contract-tests.txt`）。
 
 ### 17.3 runner 与 mock（main 上的 350ab8c8e）

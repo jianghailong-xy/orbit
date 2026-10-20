@@ -1,11 +1,13 @@
-$ agy --version  (AGY_CLI_DISABLE_AUTO_UPDATE=true, temp HOME)
+$ env -i PATH=/usr/bin:/bin HOME=$(mktemp -d) AGY_CLI_DISABLE_AUTO_UPDATE=true /root/.local/bin/agy --version
 1.4.3
-$ agy.1792471599648467836.old --version  (the binary the 2026-10-20 self-update replaced)
+$ env -i PATH=/usr/bin:/bin HOME=$(mktemp -d) AGY_CLI_DISABLE_AUTO_UPDATE=true /root/.local/bin/agy.1792471599648467836.old --version
 1.4.2
-$ sha512sum (first 32 hex)
-746656e7164cacb454e06f8246d33bea  /root/.local/bin/agy
-f63dd18d9aee3742055452c6eefbc227  /root/.local/bin/agy.1792471599648467836.old
-$ strings -n 6 /root/.local/bin/agy | grep -o RunPersistent/RequestedTerminalID context (1.4.3)
-      2 GetRunPersistent
-      4 RequestedTerminalID
+$ sha512sum /root/.local/bin/agy /root/.local/bin/agy.1792471599648467836.old
+746656e7164cacb454e06f8246d33bea98bc2bc1d22a673e212fea1b867843b41b2953c49517eece95cd1a35d2a301f73b31538a086eb475dc339a237e465701  /root/.local/bin/agy
+f63dd18d9aee3742055452c6eefbc22740ac4cb7bd7ad4c6b5cac2cccbd69d0548058ef5a3f7105d57146f7ce0a3ae07ef9dd89cde84dcac2cba64edc6f8dbdc  /root/.local/bin/agy.1792471599648467836.old
+$ strings -n 6 /root/.local/bin/agy | grep -oE 'RunPersistent[^[:space:]]*( jsonschema:"[^"]*")?|json:"RequestedTerminalID"( jsonschema:"[^"]*")?' | sort | uniq -c
+      1 json:"RequestedTerminalID" jsonschema:"-"
+      5 RunPersistent
+      1 RunPersistenterror_messagePLAN_MODE_OFFCORTEX_CONFIGLANGUAGE_HTMLLANGUAGE_JAVALANGUAGE_JSONLANGUAGE_LESSLANGUAGE_PERLLANGUAGE_RUBYLANGUAGE_RUSTLANGUAGE_SASSLANGUAGE_SCSSLANGUAGE_YAMLLANGUAGE_TOMLLANGUAGE_DARTLANGUAGE_LISPLANGUAGE_HACKLANGUAGE_APEXReadFile
       1 RunPersistent#json:"RunPersistent" jsonschema:"-"
+      1 RunPersistentyprotobuf:"varint,28,opt,name=run_persistent,json=runPersistent,proto3"

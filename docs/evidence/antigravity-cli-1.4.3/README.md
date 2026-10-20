@@ -31,10 +31,11 @@ printf 'module rawmock\n\ngo 1.24\n' > /tmp/rawmock/go.mod
 | `drive.py` | 实验驱动：起 mock，建临时 HOME、`--gemini_dir`、工作区（放一个 `seed.txt`），按参数写 hooks.json / mcp_config.json，发一条剧本消息、关 stdin、等 agy 退出；每个场景一个新的 `runs/<名字>/` 目录 |
 | `hook.py` | 记录负载的 hook：PreToolUse 回 `{"decision":"allow"}`，PreInvocation 什么都不输出 |
 | `fakemcp.py` | 最小的 stdio MCP 服务器，取自 [`../antigravity-cli-1.2.15/`](../antigravity-cli-1.2.15/)，只把日志路径改到 `/var/tmp/agy143-doc/runs` |
-| `summarize.py` | 把一次运行缩成 §17 引用的事实：第一个带工具的请求里的函数声明（名字、属性、必填、`additionalProperties`）、`init.tools`、每个工具步骤、`result`、hook 调用、`/hooks` 列表、运行后的工作区 |
+| `summarize.py` | 把一次运行缩成 §17 引用的事实：第一个带工具的请求里的函数声明（名字、属性、必填、`additionalProperties`）、`init.tools`、每个工具步骤、`result`、hook 调用、`/hooks` 列表、运行后的工作区，以及 `seed.txt` 的内容（summarize 时从那次运行的工作区读） |
 | `s-*.txt` | 各场景的剧本（`@WS@` 换成工作区路径） |
 | `results/*.json` | `summarize.py` 的输出 |
-| `results/agy-binary.txt` | 两个二进制的 `--version` 与 sha512，以及 1.4.3 里 `RunPersistent` / `RequestedTerminalID` 的字符串（`RunPersistent` 字段标着 `jsonschema:"-"`） |
+| `binary-facts.sh` | 读两个二进制的 `--version`（关自升级、临时 HOME）、完整 sha512，以及 1.4.3 Go 结构里 `RunPersistent` / `RequestedTerminalID` 的标签，写进 `results/agy-binary.txt`（每条命令先原样打印） |
+| `results/agy-binary.txt` | `binary-facts.sh` 的输出 |
 | `results/contract-tests.txt` | 同日在这个 agy 上跑 `TestAntigravityContract*` 的 `go test -v` 输出 |
 
 ## 场景
@@ -49,6 +50,7 @@ python3 -I drive.py default-edit s-default-edit.txt --default-mode
 python3 -I drive.py default-command s-default-command.txt --default-mode
 python3 -I drive.py mcp s-mcp.txt --hooks --mcp
 for r in decls tools undeclared default-write default-edit default-command mcp; do python3 -I summarize.py $r > results/$r.json; done
+sh binary-facts.sh
 ```
 
 | 场景 | 看什么 | 结论（§17） |
