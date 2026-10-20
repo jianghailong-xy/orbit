@@ -676,13 +676,14 @@ export async function readSourceLanding(
   landingSessionId: string;
   subject: LandingSubject;
   state: string;
+  phase: string | null;
   settledAs: LandingSettledAs | null;
   targetRef: string;
 } | null> {
   const job = await db.projectIntegrationJob.findFirst({
     where: { sessionId, landingId: { not: null } },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    select: { landingId: true, state: true, targetRef: true },
+    select: { landingId: true, state: true, phase: true, targetRef: true },
   });
   if (!job?.landingId) return null;
   const landing = await db.projectLanding.findUnique({
@@ -694,6 +695,7 @@ export async function readSourceLanding(
     landingSessionId: landing.sessionId,
     subject: landing.subject as LandingSubject,
     state: job.state,
+    phase: job.phase,
     settledAs: (landing.settledAs as LandingSettledAs | null) ?? null,
     targetRef: job.targetRef,
   };

@@ -933,6 +933,10 @@ export interface SessionSourceLanding {
   subject: 'TASK' | 'PROMOTION';
   /** The newest attempt's job state. */
   state: string;
+  /** The step the newest attempt last reported, or the one it stopped at; null before its first
+   *  report. The label reads it where the attempt is RUNNING ("Landing · checking"), and a server
+   *  that predates the field sends none. */
+  phase?: string | null;
   /** LANDED | ALREADY_LANDED | NOTHING_TO_LAND | MERGED | HANDLED | DECLINED | CANCELLED |
    *  DELETED, or null while the subject is open. */
   settledAs: string | null;

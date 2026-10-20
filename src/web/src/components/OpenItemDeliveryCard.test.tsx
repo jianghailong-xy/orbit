@@ -211,3 +211,28 @@ describe('an exception item delivered to the coordinator', () => {
     expect(container.textContent).toContain('待办编号');
   });
 });
+
+/**
+ * The third link (§2.9 LS6, board v4 06 b): the landing the attempt belongs to, AFTER the two main's
+ * card already had. The failed session stays where it was — a reader looking for what broke still
+ * finds it — and the landing is where the attempt is read step by step.
+ */
+describe('an exception item’s landing', () => {
+  const LANDING = '0198f0e2-1c4a-7b31-9a5e-0d2f3c4b5b77';
+
+  it('adds Open the landing after the failed session, pointing at the landing session', async () => {
+    await mount([delivered({ ...CARD, landingSessionId: LANDING })]);
+    const links = [...(card()?.querySelectorAll('.oic-links a') ?? [])];
+    expect(links.map((anchor) => anchor.textContent))
+      .toEqual(['Open the task ↗', 'Open the failed session ↗', 'Open the landing ↗']);
+    // The id goes through the normalizing codec, so either spelling of it lands on the right page.
+    expect(new URL(links[2]!.getAttribute('href')!, 'http://x').pathname).toMatch(/^\/sessions\/[0-9A-Za-z]+$/);
+    expect(links[2]!.getAttribute('href')).not.toBe(links[1]!.getAttribute('href'));
+  });
+
+  it('draws no such link on a delivery whose item recorded no landing', async () => {
+    await mount([delivered({ ...CARD, landingSessionId: null })]);
+    const links = [...(card()?.querySelectorAll('.oic-links a') ?? [])].map((anchor) => anchor.textContent);
+    expect(links).toEqual(['Open the task ↗', 'Open the failed session ↗']);
+  });
+});
