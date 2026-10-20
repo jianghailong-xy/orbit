@@ -475,15 +475,46 @@ public struct LandTaskIntegrationView: Codable, Equatable, Sendable {
     /// is what "Taken over 17:31 · first started 17:03" reads. Absent from a server that predates
     /// it (tolerant decode: the older `TaskIntegrationView` sent none).
     public let startedAt: String?
+    /// The landing session this generation belongs to (§2.9), pre-generated when the subject
+    /// opened. Absent from a server that predates the field.
+    public let landingSessionId: String?
+    /// Why the attempt ended as an error (contract J12), nil unless `state` is `ERROR`.
+    public let errorCode: String?
+    /// Which landing of its subject this attempt is, counting from 1 — a decimal string on the
+    /// wire, as every 64-bit counter crosses this API. Nil on a server that predates the field.
+    public let generation: String?
+    /// Enqueue, the claimer's latest heartbeat, and the terminal write.
+    public let queuedAt: String?
+    public let heartbeatAt: String?
+    public let finishedAt: String?
+    /// Time in the queue: up to the first claim, or to the terminal write of one never claimed.
+    public let waitMs: Int?
+    /// §7.2 V6's read-time liveness, where the task read sends it; nil on the servers that do not.
+    public let liveness: String?
+    /// The runner holding the claim, by name — sent beside `liveness` by the same servers.
+    public let runnerName: String?
 
     public init(jobId: String, state: String, phase: String? = nil, targetRef: String,
-                blockingReason: LandTaskBlockingReason? = nil, startedAt: String? = nil) {
+                blockingReason: LandTaskBlockingReason? = nil, startedAt: String? = nil,
+                landingSessionId: String? = nil, errorCode: String? = nil,
+                generation: String? = nil, queuedAt: String? = nil, heartbeatAt: String? = nil,
+                finishedAt: String? = nil, waitMs: Int? = nil, liveness: String? = nil,
+                runnerName: String? = nil) {
         self.jobId = jobId
         self.state = state
         self.phase = phase
         self.targetRef = targetRef
         self.blockingReason = blockingReason
         self.startedAt = startedAt
+        self.landingSessionId = landingSessionId
+        self.errorCode = errorCode
+        self.generation = generation
+        self.queuedAt = queuedAt
+        self.heartbeatAt = heartbeatAt
+        self.finishedAt = finishedAt
+        self.waitMs = waitMs
+        self.liveness = liveness
+        self.runnerName = runnerName
     }
 
     public init(from decoder: Decoder) throws {
@@ -494,6 +525,20 @@ public struct LandTaskIntegrationView: Codable, Equatable, Sendable {
         targetRef = try c.decodeIfPresent(String.self, forKey: .targetRef) ?? ""
         blockingReason = try c.decodeIfPresent(LandTaskBlockingReason.self, forKey: .blockingReason)
         startedAt = try? c.decodeIfPresent(String.self, forKey: .startedAt)
+        landingSessionId = try? c.decodeIfPresent(String.self, forKey: .landingSessionId)
+        errorCode = try? c.decodeIfPresent(String.self, forKey: .errorCode)
+        // The generation crosses as a decimal string; a number is read as the same fact.
+        if let text = try? c.decodeIfPresent(String.self, forKey: .generation) {
+            generation = text
+        } else {
+            generation = (try? c.decodeIfPresent(Int.self, forKey: .generation)).map(String.init)
+        }
+        queuedAt = try? c.decodeIfPresent(String.self, forKey: .queuedAt)
+        heartbeatAt = try? c.decodeIfPresent(String.self, forKey: .heartbeatAt)
+        finishedAt = try? c.decodeIfPresent(String.self, forKey: .finishedAt)
+        waitMs = try? c.decodeIfPresent(Int.self, forKey: .waitMs)
+        liveness = try? c.decodeIfPresent(String.self, forKey: .liveness)
+        runnerName = try? c.decodeIfPresent(String.self, forKey: .runnerName)
     }
 }
 

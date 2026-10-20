@@ -224,7 +224,23 @@ public enum ProjectPage {
         public let detail: String?
         /// Whether to offer Retry: the server's `retryable`, never inferred from `timedOut`.
         public let retryable: Bool
+        /// The landing session this job belongs to (§2.9), or nil where the server named none.
+        public let landingSessionId: String?
+        /// A round of merging into main: its row carries the word and no "Open landing ›" — the
+        /// merge card is that round's way in.
+        public let mergeJob: Bool
         public var id: String { jobId }
+
+        public init(jobId: String, taskId: String?, line: LandingLine, detail: String?,
+                    retryable: Bool, landingSessionId: String? = nil, mergeJob: Bool = false) {
+            self.jobId = jobId
+            self.taskId = taskId
+            self.line = line
+            self.detail = detail
+            self.retryable = retryable
+            self.landingSessionId = landingSessionId
+            self.mergeJob = mergeJob
+        }
     }
 
     // The job list's words, held to the web's by `ProjectPageSectionsCopyParityTests`.
@@ -456,8 +472,11 @@ public enum ProjectPage {
                            stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
                            typicalMs: job.typicalMs, livenessWord: job.liveness,
                            firstStartedAt: firstStartedAt(view, jobId: job.jobId))
-            return LandingJobLine(jobId: job.jobId, taskId: job.taskId, line: line,
-                                  detail: landingJobDetail(job, main: main), retryable: job.retryable)
+            return LandingJobLine(
+                jobId: job.jobId, taskId: job.taskId, line: line,
+                detail: landingJobDetail(job, main: main), retryable: job.retryable,
+                landingSessionId: job.landingSessionId,
+                mergeJob: ProjectMergeCard.mergeJobKinds.contains(job.kind))
         }
     }
 
@@ -656,7 +675,32 @@ public enum ProjectPage {
             public let retryable: Bool
             /// What a timed-out runner did before it stopped; the job list's own sentence.
             public let detail: String?
+            /// The job's own word — "Landing", "Merge check", "Merge to main" — which its row
+            /// shows in the name slot when it lands no single task.
+            public let word: String
+            /// The landing session this job belongs to (§2.9), or nil where the server named none.
+            public let landingSessionId: String?
+            /// A round of merging into main: its row carries the word and no "Open landing ›" —
+            /// the merge card is that round's way in.
+            public let mergeJob: Bool
             public var id: String { jobId }
+
+            public init(jobId: String, taskId: String?, title: String?, state: String,
+                        running: Bool, timedOut: Bool, retryable: Bool, detail: String?,
+                        word: String = "", landingSessionId: String? = nil,
+                        mergeJob: Bool = false) {
+                self.jobId = jobId
+                self.taskId = taskId
+                self.title = title
+                self.state = state
+                self.running = running
+                self.timedOut = timedOut
+                self.retryable = retryable
+                self.detail = detail
+                self.word = word
+                self.landingSessionId = landingSessionId
+                self.mergeJob = mergeJob
+            }
         }
 
         /// What is in flight, in the landing row's own word: "Landing", "Merge check".
@@ -712,9 +756,15 @@ public enum ProjectPage {
         }
         let jobs = landingJobLines(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
             .map { job in
-                LandingCard.Job(jobId: job.jobId, taskId: job.taskId, title: job.line.what, state: job.line.state,
+                LandingCard.Job(jobId: job.jobId, taskId: job.taskId,
+                                // A merge job lands no single task, so its row is named by its
+                                // word — "Merge to main", "Merge check" — rather than left blank.
+                                title: job.line.what ?? job.line.word, state: job.line.state,
                                 running: job.line.running, timedOut: job.line.timedOut,
-                                retryable: job.retryable, detail: job.detail)
+                                retryable: job.retryable, detail: job.detail,
+                                word: job.line.word,
+                                landingSessionId: job.landingSessionId,
+                                mergeJob: job.mergeJob)
             }
         // The row's own rule for the name slot, one row down: several jobs are a count in the head
         // and a row each in the body; one job is its title in the body.
@@ -1066,7 +1116,8 @@ public enum ProjectPage {
         case .coordinatorQuestion: return .coordinatorQuestion
         case .fusePaused: return .fusePaused
         case .unknown: return .unknown
-        case .integrationConflict, .integrationCheckFailed, .integrationError, .taskFailed:
+        case .integrationConflict, .integrationCheckFailed, .integrationError, .taskFailed,
+             .deliveryReview, .landingLeaseExpired:
             return .escalated
         }
     }

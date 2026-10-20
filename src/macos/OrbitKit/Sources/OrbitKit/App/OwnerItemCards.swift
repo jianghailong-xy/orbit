@@ -893,6 +893,22 @@ public enum ProjectMergeCard {
         guard isMergeJob(view.inFlight) else { return nil }
         return ProjectPage.landingLine(view, now: now, updatedAt: updatedAt, refreshFailed: refreshFailed)
     }
+
+    /// The round's landing session (§2.9 LS6): the candidate's own, or the merge job's while the
+    /// candidate row does not carry one. Web: `promotionLandingSessionId`.
+    public static func roundLandingSessionId(_ promotion: ProjectPromotionView?,
+                                             _ view: ProjectIntegrationView?) -> String? {
+        if let id = promotion?.landingSessionId, !id.isEmpty { return id }
+        return (view?.inFlightJobs ?? [])
+            .first { mergeJobKinds.contains($0.kind) }?
+            .landingSessionId.flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// The landing a MERGED round's receipt opens from its foot (§2.9 LS6): the receipt says the
+    /// merge already happened, and its "Open landing ›" is still the round's.
+    public static func receiptLandingSessionId(_ promotion: ProjectPromotionView?) -> String? {
+        promotion?.landingSessionId.flatMap { $0.isEmpty ? nil : $0 }
+    }
 }
 
 // MARK: - an exception that became the owner's
@@ -1317,6 +1333,10 @@ public enum ExceptionCards {
     /// doors of that map are drawn by cards this one is not: the pause's `Resume`, the merge's
     /// `Review`, and the two the owner's card reaches through its own controls.
     public static let openTaskSession = "Open task session"
+    /// The two landing doors' words (board v4 06, §4.6 X-E5): the way into the landing this item is
+    /// about, and the press that ends a timed-out attempt.
+    public static let openLanding = "Open landing"
+    public static let abandon = "Abandon"
     /// The door that runs the work again, and the same door said of a candidate's check — the
     /// browser's `RETRY_ACTION_LABEL` and `RERUN_CHECK_ACTION_LABEL`. Which of the two a press
     /// wears depends on what it reruns: a row that names a merge candidate re-runs that candidate's
@@ -1334,6 +1354,8 @@ public enum ExceptionCards {
         .retry: retry,
         .cancelTask: "Cancel task",
         .askCoordinatorAgain: askCoordinatorAgain,
+        .openLanding: openLanding,
+        .abandon: abandon,
     ]
 
     /// One line per door saying what pressing it does — the browser's `ACTION_CONSEQUENCES`, and the
@@ -1348,7 +1370,14 @@ public enum ExceptionCards {
         .retry: "A new integration attempt is queued with your reason.",
         .cancelTask: "The task is cancelled and its open item closes.",
         .askCoordinatorAgain: "It goes back to the coordinator with a fresh escalation clock.",
+        .openLanding: "Open the landing: every attempt, step by step.",
+        .abandon: "Ends this attempt. Nothing was pushed, and nothing is queued again.",
     ]
+    /// J12's other half, for a claim Orbit cannot prove never pushed (a legacy claim, a v2 one that
+    /// recorded a push, or a row that predates the facts) — the browser's
+    /// `ABANDON_MAY_HAVE_PUSHED`.
+    public static let abandonMayHavePushed =
+        "Ends this attempt. It may have been pushed, and nothing is queued again."
     /// The same press said of a candidate's check: a re-run re-checks the CURRENT candidate with
     /// the reason the reader gives — the browser's `PROMOTION_RETRY_CONSEQUENCE`.
     public static let promotionRetryConsequence =
@@ -1385,7 +1414,29 @@ public enum ExceptionCards {
             if row.promotionId != nil { return promotionRetryConsequence }
             if row.kind == .taskFailed { return taskRunAgainConsequence }
         }
+        // J12 decides the push half of the sentence, from the claim's own two facts — a check never
+        // pushes, and a v2 claim that recorded no push proves nothing was pushed. Everything else
+        // may have been, and the card says so rather than the softer sentence.
+        if action == .abandon {
+            return pushIsImpossible(row.lease) ? actionConsequences[.abandon]!
+                : abandonMayHavePushed
+        }
         return actionConsequences[action] ?? ""
+    }
+
+    /// J12's rule, read off the claim's own record (§4.6 revision 23 E1): a `CHECK_PROMOTION` never
+    /// pushes, and a v2 claim that never recorded a PUSH proves none happened. A legacy claim
+    /// reports only between steps, so its silence proves nothing — nor does a row without facts.
+    public static func pushIsImpossible(_ lease: ProjectOpenItemRow.OpenItemLease?) -> Bool {
+        if lease?.jobKind == "CHECK_PROMOTION" { return true }
+        return lease?.progressProtocol == "v2" && lease?.pushReported == false
+    }
+
+    /// The way into the landing this item is about (§2.9 LS6), or nil for a row an older build
+    /// opened — the door is then not drawn at all rather than pointed at nothing.
+    public static func landingLink(_ row: ProjectOpenItemRow) -> URL? {
+        guard let id = row.landingSessionId, !id.isEmpty else { return nil }
+        return URL(string: "orbit-session:\(PublicID.toPublic(id))")
     }
 
     /// What a RETRY press carries: the item's own `requiredAction` when the server named one, and
@@ -1437,6 +1488,11 @@ public enum ExceptionCards {
         case .openCoordinator: return row.delivery?.sessionId != nil
         case .openTaskSession: return row.sessionId != nil || row.taskId != nil
         case .resume: return true
+        // A reading door: the landing this item is about, which a row an older build opened names
+        // nowhere — then the door is not drawn rather than pointed at nothing.
+        case .openLanding: return row.landingSessionId != nil && !(row.landingSessionId ?? "").isEmpty
+        // The one job the item is about; a row that names none draws no Abandon.
+        case .abandon: return row.integrationJobId != nil && !(row.integrationJobId ?? "").isEmpty
         case .unknown: return false
         }
     }
@@ -1456,6 +1512,13 @@ public enum ExceptionCards {
     /// server's own list, so a card never offers a door that is not there.
     public static func leadingDoors(_ row: ProjectOpenItemRow,
                                     _ actions: [ProjectOpenItemAction]) -> [ProjectOpenItemAction] {
+        // §4.6 X-E5 is escalated at birth with ABANDON as its lead: a server that sends no
+        // primaryAction (an older build) still leads with the one press that ends the attempt, and
+        // with nothing else.
+        if row.kind == .landingLeaseExpired {
+            let ending = actions.filter { $0 == .abandon }
+            if !ending.isEmpty { return ending + actions.filter { $0 != .abandon } }
+        }
         // T9's `primaryAction` is the server's own decision about the first door, and the browser
         // leads with it whenever the row carries one. The kind fallback below is for rows from a
         // server that predates the field.
@@ -1579,6 +1642,16 @@ public enum ExceptionCards {
     /// `escalationHeading`, verbatim. Nil for an item that was the owner's from the start, which is
     /// every other kind this card draws and says so in its own title.
     public static func heading(_ row: ProjectOpenItemRow, now: Date = Date()) -> String? {
+        // §4.6 X-E5 (revision 23): the item is escalated at birth, so `waitedBeforeEscalation`
+        // would only ever say "1s". Its heading is the fact it is about — how long the claim has
+        // been silent, counted from the last report the runner made and the moment the clock opened
+        // the item (owner 2026-10-19, board v4 06).
+        if row.kind == .landingLeaseExpired {
+            guard let silent = leaseSilentMinutes(row) else {
+                return "Now yours — no report from the runner"
+            }
+            return "Now yours — no report from the runner for \(silent)m"
+        }
         switch row.assigneeReason {
         case .escalated:
             return "Now yours — no one acted on this for \(waitedBeforeEscalation(row))"
@@ -1627,6 +1700,15 @@ public enum ExceptionCards {
         guard let tasks = row.handledBy, !tasks.isEmpty else { return nil }
         return tasks.map { "The coordinator is fixing this in \($0.title)." }
             .joined(separator: " · ")
+    }
+
+    /// The minutes the claim had been silent when the item was opened — the server's own count, off
+    /// the two instants the row carries. Nil when the row predates the facts.
+    public static func leaseSilentMinutes(_ row: ProjectOpenItemRow) -> Int? {
+        guard let reported = row.lease?.lastReportAt.flatMap(RelativeTime.parse),
+              let opened = (row.escalatedAt ?? row.waitingSince).flatMap(RelativeTime.parse)
+        else { return nil }
+        return max(1, Int((opened.timeIntervalSince(reported) / 60).rounded(.down)))
     }
 
     /// How long the coordinator had it before the clock took it away — the window the project set,
