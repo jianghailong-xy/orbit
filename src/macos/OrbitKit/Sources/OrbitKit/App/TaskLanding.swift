@@ -203,12 +203,15 @@ public enum TaskLandingLogic {
         } else {
             receiptLine = nil
         }
+        // A task on a line whose landing has not been queued yet says so, as the web does.
+        let reason = job?.blockingReason?.summary
+            ?? (job == nil && integration.state == "QUEUED" ? TaskLandingCopy.waitingNotQueued : nil)
         return TaskLandingStatus(
             badge: badge,
             generation: job?.generation,
             step: step.map { job?.state == "RUNNING" ? $0 : "\(TaskLandingCopy.stoppedWhile) \($0)" },
             noReport: noReport, legacy: legacy,
-            reason: job?.blockingReason?.summary,
+            reason: reason,
             receipt: receiptLine,
             facts: facts(job),
             landingSessionId: job?.landingSessionId)
