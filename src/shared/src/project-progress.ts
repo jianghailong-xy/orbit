@@ -1127,6 +1127,34 @@ export interface ProjectOpenItemRow<Instant = string> {
    * row's doors needs it. Null for every other kind, and absent from a server that predates it.
    */
   integrationJobId?: string | null;
+  /**
+   * The claim an X-E5 item is about, as the card's heading and its Abandon consequence read it
+   * (§4.6, revision 23): the last report the runner made — the heading's "<N>m" counts from it —
+   * and J12's two facts, the claim's protocol and whether it ever recorded a push. Null on every
+   * other kind, and absent from a server that predates it. A card that does not know them says the
+   * cautious half of J12 ("it may have been pushed") and leaves the heading's number out — never
+   * that nothing was pushed.
+   */
+  lease?: {
+    lastReportAt: Instant | null;
+    /** When the claim's lease ran out — the last report plus the step's limit (§7.2 V6). */
+    leaseExpiredAt?: Instant | null;
+    /** `LAND_TASK`, `CHECK_PROMOTION` or `LAND_PROMOTION`: J12's verdict branches on it. */
+    jobKind: string | null;
+    /** Which generation of the work the claim was on. */
+    generation?: number | null;
+    /** The step the runner last reported, and its sub-step. */
+    phase?: string | null;
+    step?: string | null;
+    /** The claim the job is on, the round inside it, and how many rounds its check has. */
+    claimGeneration?: number | null;
+    round?: number | null;
+    checkCount?: number | null;
+    /** The runner holding the claim, by name. */
+    runner?: string | null;
+    progressProtocol: string | null;
+    pushReported: boolean;
+  } | null;
   promotionId: string | null;
   fuseEpisodeId: string | null;
   delivery: { state: OpenItemDeliveryState; sessionId: string | null; at: Instant | null };

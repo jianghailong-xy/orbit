@@ -316,6 +316,10 @@ export const JOB_WORDS = {
   LAND_PROMOTION: 'Merge to main',
 };
 
+/** The two kinds that are about main: a check of a round, and the round's own push. Their rows are
+ *  the merge card's, and the landing into which they are read is the ROUND's (contract §2.9). */
+const MERGE_JOB_KINDS: ReadonlySet<string> = new Set<string>(['CHECK_PROMOTION', 'LAND_PROMOTION']);
+
 /** The words above for a project whose main branch is `main` by name: a merge names the branch it
  *  goes into. */
 export function jobWords(main: string = DEFAULT_MAIN_BRANCH): typeof JOB_WORDS {
@@ -675,6 +679,12 @@ export interface LandingJobLine {
   detail: string | null;
   /** Whether the owner's Retry takes this job now — the server's answer, not `line.timedOut`. */
   retryable: boolean;
+  /** The landing session this job belongs to (§2.9), or null where the server named none — an
+   *  older build, or a job whose subject opened no session. "Open landing ›" is drawn from it. */
+  landingSessionId: string | null;
+  /** Whether this job is a round of merging into main rather than a task's landing: the card's own
+   *  row for one carries its word and no way into the landing, which the merge card holds. */
+  mergeJob: boolean;
 }
 
 /**
@@ -706,6 +716,8 @@ export function landingJobLines(
     return {
       jobId: job.jobId,
       taskId: job.taskId,
+      landingSessionId: job.landingSessionId ?? null,
+      mergeJob: MERGE_JOB_KINDS.has(job.kind),
       line: !unavailable && job.timedOut
         ? { ...named, ...timedOutLine(job, now) }
         : {
@@ -732,6 +744,14 @@ export interface LandingCardJob {
   jobId: string;
   /** The task the job lands, which its row opens; null for a promotion or a merge check. */
   taskId: string | null;
+  /** The job's own word — "Landing", "Merge check", "Merge to main" — which its row shows in the
+   *  name slot when it lands no single task. */
+  word: string;
+  /** The landing session this job belongs to (§2.9), or null where the server named none. */
+  landingSessionId: string | null;
+  /** A round of merging into main: its row carries the word and no "Open landing ›" — the merge
+   *  card is that round's way in. */
+  mergeJob: boolean;
   title: string | null;
   state: string;
   running: boolean;
@@ -789,6 +809,11 @@ export interface LandingCard {
 export const landingOnto = (ref: string): string => `onto ${ref}`;
 export const LANDING_NOTHING_TO_DO = 'Nothing to do — it lands on its own.';
 export const LANDING_ALL_JOBS = 'All jobs';
+/** The way into a job's landing session (contract §2.9 LS6, board v4 04): beside Retry on a job's
+ *  row, and under a card holding one job. */
+export const LANDING_OPEN = 'Open landing';
+/** The same slot on a server that names no landing session: a fact, not a broken link. */
+export const LANDING_NO_PAGE = 'No landing page on this server yet';
 
 /**
  * The card, or null when nothing is landing — which is what removes it from the page.
@@ -807,7 +832,12 @@ export function landingCard(
   const jobs = landingJobLines(view, now, observation).map((job) => ({
     jobId: job.jobId,
     taskId: job.taskId,
-    title: job.line.what,
+    word: job.line.word,
+    landingSessionId: job.landingSessionId,
+    mergeJob: job.mergeJob,
+    // A merge job lands no single task, so its row is named by its word — "Merge to main",
+    // "Merge check" — rather than left blank beside its state.
+    title: job.line.what ?? job.line.word,
     state: job.line.state,
     running: job.line.running,
     timedOut: job.line.timedOut,

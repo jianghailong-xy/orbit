@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import type { ProjectIntegrationView } from '@orbit/shared';
 import { Link } from 'react-router-dom';
+import { LandingLink } from './LandingLink';
 import { LandTaskStatus } from './LandTaskStatus';
 import { projectTaskPath } from '../lib/projectTaskRoute';
 import {
@@ -181,14 +182,27 @@ export function ProjectIntegrationLine({
           fails. Read-only; the doors that act on a stop are its exception card's. */}
       {view.landTasks && view.landTasks.length > 0 ? (
         <div className="project-land-tasks" aria-label="Current landings">
-          {view.landTasks.map((task) => (
-            <div className="project-land-task" key={task.taskId}>
-              <Link className="project-land-task-title" to={projectTaskPath(projectId, task.taskId)}>
-                {task.taskTitle}
-              </Link>
-              <LandTaskStatus integration={task.integration} main={main} />
-            </div>
-          ))}
+          {view.landTasks.map((task) => {
+            // The title opens the segment's landing session where the server names one (§2.9 LS6,
+            // board v4 04's entry table): the same landing the task page's own link opens. A
+            // generation written before the field, or a task landing that has not opened a subject,
+            // keeps the task as its target.
+            const landingSessionId = task.integration?.landTask?.landingSessionId ?? null;
+            return (
+              <div className="project-land-task" key={task.taskId}>
+                {landingSessionId ? (
+                  <LandingLink className="project-land-task-title" sessionId={landingSessionId}>
+                    {task.taskTitle}
+                  </LandingLink>
+                ) : (
+                  <Link className="project-land-task-title" to={projectTaskPath(projectId, task.taskId)}>
+                    {task.taskTitle}
+                  </Link>
+                )}
+                <LandTaskStatus integration={task.integration} main={main} />
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>

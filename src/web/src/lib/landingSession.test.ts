@@ -323,10 +323,13 @@ describe('J12: what a timed-out attempt can say about the push', () => {
       .toBe(LANDING_PAGE_COPY.MAY_HAVE_PUSHED_AT(landingClockTime(at(15, 42))));
   });
 
-  it('a merge check never pushes and says only that', () => {
+  it('a merge check writes no push sentence at all (owner 2026-10-19)', () => {
     const check = attempt({ kind: 'CHECK_PROMOTION', phase: 'CHECK', liveness: 'LEASE_EXPIRED', timedOut: true });
-    expect(landingPushSentence(landing({ subject: 'PROMOTION', currentAttempt: check }), check))
-      .toBe(LANDING_PAGE_COPY.CHECK_PUSHES_NOTHING_SENTENCE);
+    // A check never pushes, so a sentence about one is noise on a card that already says where the
+    // runner stopped — the facts line stays, the push line does not.
+    expect(landingPushSentence(landing({ subject: 'PROMOTION', currentAttempt: check }), check)).toBeNull();
+    expect(landingTimeoutLine(landing({ subject: 'PROMOTION', currentAttempt: check }), check))
+      .toContain('stopped at checking');
   });
 
   it('ends the section with the runner’s silence as the band words it', () => {
@@ -410,9 +413,9 @@ describe('the ⋯ menu', () => {
     landingMenuItemList(view, gates, {
       hasCoordinator: true,
       hasReview: true,
-      pushSentence: view.currentAttempt?.timedOut
-        ? landingPushSentence(view, view.currentAttempt)
-        : null,
+      nothingPushed: view.currentAttempt?.kind === 'CHECK_PROMOTION'
+        || (view.currentAttempt?.timedOut === true
+          && landingPushSentence(view, view.currentAttempt) === LANDING_PAGE_COPY.NOTHING_PUSHED_SENTENCE),
     });
 
   it('a running task landing has Open Task, Open Source Session, Open Coordinator and Stop Landing', () => {
@@ -455,10 +458,14 @@ describe('the ⋯ menu', () => {
       promotionId: 'promo-1',
       currentAttempt: attempt({ kind: 'CHECK_PROMOTION', liveness: 'LEASE_EXPIRED', timedOut: true }),
     });
-    const actions = labels(timed).map((item) => item.action);
+    const items = labels(timed);
+    const actions = items.map((item) => item.action);
     expect(actions).toContain('RERUN_THE_CHECK');
     expect(actions).toContain('ABANDON');
     expect(actions).not.toContain('RETRY');
+    // A check never pushes: its Abandon ends an attempt that provably never reached main, even
+    // though no push sentence is written on the card for it.
+    expect(items.find((item) => item.action === 'ABANDON')!.sub).toBe('Ends this attempt · nothing was pushed');
   });
 });
 

@@ -1,5 +1,6 @@
 import { useRef, useState, type JSX, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { LandingLink } from './LandingLink';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Alert } from './ui/Alert';
 import type {
@@ -457,6 +458,14 @@ function MergedRows({
             ? `${source} keeps going — ${plural(open, 'task')} still open`
             : `${source} has no open tasks left`}
       </Row>
+      {/* The round's own way into its landing session (§2.9 LS6, board v4 04 c7): the row that
+          opens this receipt is unchanged, and the landing is one press further in. A round that
+          recorded no session — an older server — draws nothing here rather than a dead link. */}
+      {promotion.landingSessionId ? (
+        <div className="project-promotion-landing">
+          <LandingLink className="session-project-merge-link" sessionId={promotion.landingSessionId} />
+        </div>
+      ) : null}
     </>
   );
 }
