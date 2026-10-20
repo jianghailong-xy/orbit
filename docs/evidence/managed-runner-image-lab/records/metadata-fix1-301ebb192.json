@@ -1,0 +1,5 @@
+{
+  "containerimage.digest": "sha256:52517e04e8b5190ad38ac55df1316b8ae0e13a78f8a8c0815b51f0e24a0d5f34",
+  "containerimage.config.digest": "sha256:b0d1b8427aa613ecdb55efdd7d4c71c7107c001a2224a3a73da6a813aa4e566c",
+  "image.name": "docker.io/library/orbit-managed-runner:fix1-301ebb192"
+}

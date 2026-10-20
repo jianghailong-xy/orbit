@@ -1,0 +1,20 @@
+uid=10001(orbit) gid=10001(orbit) groups=10001(orbit)
+CapPrm:	0000000000000000
+CapEff:	0000000000000000
+CapBnd:	0000000000000000
+NoNewPrivs:	1
+Seccomp:	2
+touch: cannot touch '/usr/local/bin/x': Read-only file system
+touch: cannot touch '/etc/x': Read-only file system
+ls: cannot access '/var/run/secrets/kubernetes.io': No such file or directory
+ls: cannot access '/var/run/docker.sock': No such file or directory
+ls: cannot access '/run/docker.sock': No such file or directory
+env-check-done
+/usr/bin/tini -- /usr/local/bin/orbit-container run 
+      7 orbit    orbit run
+HOME=/var/lib/orbit/home
+DISABLE_AUTOUPDATER=1
+SSL_CERT_DIR=/run/orbit-test-ca
+ORBIT_HOME=/var/lib/orbit/home/.orbit
+ORBIT_NO_SELFUPDATE=1
+ORBIT_NO_ENGINE_UPDATE=1

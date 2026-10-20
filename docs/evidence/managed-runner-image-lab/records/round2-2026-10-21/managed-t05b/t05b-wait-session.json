@@ -1,0 +1,66 @@
+{
+  "answers": [
+    "{\"seq\": 19, \"type\": \"assistant\", \"payload\": {\"text\": \"managed-ok (deepseek-v4-pro)\"}, \"turnId\": \"34jQvqkCsuhG5bFSUQuSA\", \"ts\": \"2026-10-20T22:38:23.493Z\", \"turnPublicId\": \"34jQvqkCsuhG5bFSUQuSA\"}"
+  ],
+  "at": "2026-10-20T22:38:25.368+00:00",
+  "events": 9,
+  "fakeModelRequests": [],
+  "owner": "deepkey",
+  "row": [
+    {
+      "assigned_runner_id": "01a15b76-811a-7339-b2d4-51962f5f718b",
+      "created_at": "2026-10-20T22:38:15.594",
+      "engine": "claude",
+      "id": "01a15b77-1e2a-7554-a330-fe45a2303e9b",
+      "model": "deepseek-v4-pro",
+      "provider": "deepseek-2",
+      "provider_builtin": false,
+      "runtime_session_id": "263dc944-389f-472d-8986-6d36483f7aac",
+      "status": "AWAITING_INPUT"
+    }
+  ],
+  "session": "34jQvqJh34jv7n5ZFxyXr",
+  "timedOut": false,
+  "timeline": [
+    [
+      "2026-10-20T22:38:21.247+00:00",
+      {
+        "assignedRunnerId": "34jQup6DEE3hhPfgLu01z",
+        "endReason": null,
+        "engine": "claude",
+        "error": null,
+        "model": "deepseek-v4-pro",
+        "provider": "deepseek-2",
+        "runState": "RUNNING",
+        "runStatus": "RUNNING",
+        "runtimeSessionId": "263dc944-389f-472d-8986-6d36483f7aac",
+        "sessionState": "RUNNING",
+        "status": "RUNNING"
+      }
+    ],
+    [
+      "2026-10-20T22:38:25.294+00:00",
+      {
+        "assignedRunnerId": "34jQup6DEE3hhPfgLu01z",
+        "endReason": null,
+        "engine": "claude",
+        "error": null,
+        "model": "deepseek-v4-pro",
+        "provider": "deepseek-2",
+        "runState": "AWAITING_INPUT",
+        "runStatus": "AWAITING_INPUT",
+        "runtimeSessionId": "263dc944-389f-472d-8986-6d36483f7aac",
+        "sessionState": "AWAITING_INPUT",
+        "status": "AWAITING_INPUT"
+      }
+    ]
+  ],
+  "types": {
+    "assistant": 1,
+    "system": 3,
+    "thinking": 1,
+    "turn_end": 1,
+    "user": 1,
+    "user_delivery": 2
+  }
+}

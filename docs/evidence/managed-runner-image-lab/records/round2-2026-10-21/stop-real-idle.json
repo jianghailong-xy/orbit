@@ -1,0 +1,32 @@
+{
+  "deleteRequestedAt": "2026-10-20T22:22:02.743+00:00",
+  "grace": 240,
+  "log": "/mnt/data/managed-runner-lab/test-server/state/logs/t03-runner-1de08d2d-676e-4b1d-8715-d4befcacd67e.log",
+  "logMarks": {
+    "detached": "2026-10-20T22:22:03.301458840Z",
+    "stopping": "2026-10-20T22:22:02.943426708Z"
+  },
+  "logTail": [
+    "2026-10-20T22:20:05.308742735Z [orbit-runner 2026-10-20T22:20:05.308Z] runner \"t03\" online -> https://10.0.2.2:13711 (max 2 concurrent)",
+    "2026-10-20T22:20:09.422664129Z [orbit-runner 2026-10-20T22:20:09.422Z] reclaiming session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 T03 fake-model persistence session 2",
+    "2026-10-20T22:20:11.208874190Z [orbit-runner 2026-10-20T22:20:11.208Z] session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148ba-a3da-7330-94bc-3ba0bd62959a (branch orbit/t03-fake-model-persistence-session-2-244d43)",
+    "2026-10-20T22:20:11.210193473Z [orbit-runner 2026-10-20T22:20:11.210Z] reclaiming session 01a148d5-9efb-7758-ab03-7ae6a6276ea3 \u2014 T03 git identity check",
+    "2026-10-20T22:20:11.790393334Z [orbit-runner 2026-10-20T22:20:11.790Z] session 01a148d5-9efb-7758-ab03-7ae6a6276ea3 \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148d5-9efb-7758-ab03-7ae6a6276ea3 (branch orbit/t03-git-identity-check-7dded5)",
+    "2026-10-20T22:20:11.791597949Z [orbit-runner 2026-10-20T22:20:11.791Z] reclaiming session 01a148d5-daad-7081-9956-db8a8259f03c \u2014 t03 landing probe",
+    "2026-10-20T22:20:12.394561024Z [orbit-runner 2026-10-20T22:20:12.394Z] session 01a148d5-daad-7081-9956-db8a8259f03c \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148d5-daad-7081-9956-db8a8259f03c (branch orbit/t03-landing-probe-5a6c35)",
+    "2026-10-20T22:21:02.474177980Z [orbit-runner 2026-10-20T22:21:02.474Z] session 01a15b67-58bd-70bc-8f14-ff0b214b5d43 \u2014 isolated in worktree /var/lib/orbit/home/.orbit/worktrees/01a15b67-58bd-70bc-8f14-ff0b214b5d43 (branch orbit/t03-real-deepseek-session-5d6195 @ f75c2d04)",
+    "2026-10-20T22:21:02.527721987Z [orbit-runner 2026-10-20T22:21:02.527Z] > interactive run 01a15b67-58bd-70bc-8f14-ff0b214b5d43 \u2014 T03 real DeepSeek session",
+    "2026-10-20T22:21:05.263113323Z [orbit-runner 2026-10-20T22:21:05.263Z] claude plan-usage unavailable: open /var/lib/orbit/home/.claude/.credentials.json: no such file or directory",
+    "2026-10-20T22:22:02.943426708Z [orbit-runner 2026-10-20T22:22:02.943Z] runner stopping; draining session supervisors...",
+    "2026-10-20T22:22:03.301458840Z [orbit-runner 2026-10-20T22:22:03.301Z] \u23f8 interactive run 01a15b67-58bd-70bc-8f14-ff0b214b5d43 \u2014 detached for shutdown (resumable)"
+  ],
+  "podGoneAt": "2026-10-20T22:22:06.428+00:00",
+  "podUid": "1de08d2d-676e-4b1d-8715-d4befcacd67e",
+  "runnerTerminated": {
+    "containerID": "containerd://8efdc65c829390f33f98a9cb370c16d2d81fa54e415f558fae265e18f8c4684d",
+    "exitCode": 0,
+    "finishedAt": "2026-10-20T22:22:03Z",
+    "reason": "Completed",
+    "startedAt": "2026-10-20T22:20:04Z"
+  }
+}
