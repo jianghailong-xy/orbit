@@ -572,6 +572,8 @@ object LandingSessionModel {
                 " · ${LandingSessionCopy.NOTHING_PUSHED_CLAUSE}"
             attempt.state == "CONFLICT" -> "${LandingSessionCopy.COULD_NOT_MERGE} · ${LandingSessionCopy.CONFLICT}"
             attempt.state == "ERROR" -> "${LandingSessionCopy.STOPPED_WITH_AN_ERROR} · ${LandingSessionCopy.NOTHING_PUSHED_CLAUSE}"
+            // A merge check that ended READY passed and waits for the owner: nothing stopped it.
+            attempt.kind == "CHECK_PROMOTION" && attempt.state == "READY" -> null
             else -> LandingSessionCopy.STOPPED_NOT_LANDED
         }
         val ready = attempt.state == "READY"

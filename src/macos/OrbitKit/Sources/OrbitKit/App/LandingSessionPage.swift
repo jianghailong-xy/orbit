@@ -568,7 +568,7 @@ public extension LandingPageCopy {
         } else {
             clause = LandingPageCopy.stoppedNotLanded
         }
-        let failure: String
+        let failure: String?
         if let failed {
             let head = failed.timedOut == true
                 ? "\(label) \(LandingPageCopy.timedOut.lowercasedFirst()) \(LandingPageCopy.onTheCombinedTree)"
@@ -579,6 +579,9 @@ public extension LandingPageCopy {
             failure = "\(LandingPageCopy.couldNotMerge) · \(LandingPageCopy.conflict)"
         } else if attempt.state == "ERROR" {
             failure = "\(LandingPageCopy.stoppedWithAnError) · \(LandingPageCopy.nothingPushedClause)"
+        } else if attempt.kind == "CHECK_PROMOTION" && attempt.state == "READY" {
+            // A merge check that ended READY passed and waits for the owner: nothing stopped it.
+            failure = nil
         } else {
             failure = LandingPageCopy.stoppedNotLanded
         }

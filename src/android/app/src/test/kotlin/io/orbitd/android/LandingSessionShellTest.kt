@@ -239,6 +239,25 @@ class LandingSessionShellTest {
         assertEquals(listOf("✓", "✗"), marks)
     }
 
+    /** A merge check that ended READY passed and waits for the owner: its card writes no `Stopped · not landed`. */
+    @Test fun aMergeCheckThatEndedReadyWritesNoStoppedLine() {
+        ProjectShell.landing = view(kind = "CHECK_PROMOTION", subject = "PROMOTION", taskId = null, promotionId = "p-1", state = "READY")
+        signIn(); open("orbit-session:$landing")
+        await { text("landing-head:detail") == "Passed the check · waiting for the owner" }
+        assertEquals("Merge check", text("landing-head:title"))
+        assertEquals("Ready", text("landing-head:right"))
+        assertFalse(exists(hasTestTag("landing:failure"), unmerged = true))
+        assertFalse(exists(hasText("Stopped · not landed"), unmerged = true))
+    }
+
+    /** A cancelled landing really stopped, and its card still says so. */
+    @Test fun aCancelledLandingStillSaysItStopped() {
+        ProjectShell.landing = view(state = "CANCELLED")
+        signIn(); open("orbit-session:$landing")
+        await { exists(hasTestTag("landing:failure"), unmerged = true) }
+        assertEquals("Stopped · not landed", text("landing:failure"))
+    }
+
     // MARK: the journey's hands and eyes
 
     private fun app() = compose.activity.application as OrbitApplication

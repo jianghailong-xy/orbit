@@ -460,6 +460,29 @@ describe('the landing session page', () => {
     expect(marks('job-2')).toEqual(['✗:is-failed']);
     expect(marks('job-3')).toEqual(['✓:is-ok', '✓:is-ok']);
   });
+
+  it('a merge check that ended READY writes no Stopped · not landed on its card', async () => {
+    view = landing({
+      subject: 'PROMOTION',
+      taskId: null,
+      promotionId: 'promo-1',
+      currentAttempt: attempt({ kind: 'CHECK_PROMOTION', state: 'READY', phase: null, check: null, liveness: null }),
+    });
+    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    const card = page().querySelector('.landing-status-card')!;
+    expect(card.textContent).toContain('Merge check');
+    expect(card.textContent).toContain('Passed the check · waiting for the owner');
+    expect(card.textContent).not.toContain('Stopped · not landed');
+    expect(card.querySelectorAll('.landing-card-line')).toHaveLength(0);
+  });
+
+  it('a cancelled landing really stopped, and its card still says so', async () => {
+    view = landing({ currentAttempt: attempt({ state: 'CANCELLED', phase: null, check: null, liveness: null }) });
+    await mount(<LandingSessionView sessionId={SESSION} detail={detail(view)} onOpenCoordinator={() => {}} />);
+    const card = page().querySelector('.landing-status-card')!;
+    expect([...card.querySelectorAll('.landing-card-line')].map((line) => line.textContent))
+      .toEqual(['Stopped · not landed']);
+  });
 });
 
 describe('the check in hand', () => {

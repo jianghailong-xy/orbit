@@ -254,6 +254,34 @@ class LandingSessionModelTest {
         assertEquals("Passed the check · waiting for the owner", card(ready)!!.detail)
     }
 
+    private fun ended(kind: String = "LAND_TASK", state: String) = card(if (kind == "LAND_TASK") {
+        view(state = state, check = null, phase = null, liveness = null)
+    } else {
+        view(kind = kind, subject = "PROMOTION", taskId = null, promotionId = "p-1", state = state, check = null, phase = null, liveness = null)
+    })!!
+
+    /** A merge check that ended READY passed and waits for the owner: nothing stopped it, so the card writes no failure line
+     *  (web `landingSession.test.ts`, iOS `LandingSessionPageTests`, the same cases). */
+    @Test fun aMergeCheckThatEndedReadyWritesNoFailureLine() {
+        val card = ended(kind = "CHECK_PROMOTION", state = "READY")
+        assertEquals("Merge check", card.word)
+        assertEquals("Ready", card.state)
+        assertEquals("Ready", card.right)
+        assertEquals("Passed the check · waiting for the owner", card.detail)
+        assertNull(card.failure)
+        assertFalse(card.running)
+    }
+
+    @Test fun aCancelledAttemptReallyStoppedAndStillSaysStoppedNotLanded() {
+        val task = ended(state = "CANCELLED")
+        assertEquals("Not landed", task.right)
+        assertEquals("Stopped · not landed", task.failure)
+        // The merge check's own kind does not hide it: only its READY does.
+        val check = ended(kind = "CHECK_PROMOTION", state = "CANCELLED")
+        assertEquals("Not merged", check.right)
+        assertEquals("Stopped · not landed", check.failure)
+    }
+
     /** The takeover: claim 2 of the same section, and the section's first claim is where `first started` comes from. */
     @Test fun aTakeoverSaysClaimTwoAndKeepsTheFirstStart() {
         val timeline = """{"sections":[{"title":"Generation 1","jobId":"j-1","kind":"LAND_TASK","generation":1,"state":"RUNNING",

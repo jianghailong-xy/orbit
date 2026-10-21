@@ -566,7 +566,9 @@ function terminalCard(
     ? `${failed.timedOut ? `${label} timed out ${LANDING_PAGE_COPY.ON_THE_COMBINED_TREE}` : LANDING_PAGE_COPY.TASK_ACCEPTANCE_EXITED(String(failed.exitCode ?? '—'), String(failed.expectedExitCode ?? 0))} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`
     : attempt.state === 'CONFLICT' ? `${LANDING_PAGE_COPY.COULD_NOT_MERGE} · ${LANDING_PAGE_COPY.CONFLICT}`
       : attempt.state === 'ERROR' ? `${LANDING_PAGE_COPY.STOPPED_WITH_AN_ERROR} · ${LANDING_PAGE_COPY.NOTHING_PUSHED_CLAUSE}`
-        : LANDING_PAGE_COPY.STOPPED_NOT_LANDED;
+        // A merge check that ended READY passed and waits for the owner: nothing stopped it.
+        : attempt.kind === 'CHECK_PROMOTION' && attempt.state === 'READY' ? null
+          : LANDING_PAGE_COPY.STOPPED_NOT_LANDED;
   return {
     word,
     state: attempt.state === 'READY' ? LANDING_PAGE_COPY.READY : clause,

@@ -288,6 +288,36 @@ describe('the status card: five livenesses, three job kinds', () => {
   });
 });
 
+describe('the card of an attempt that has ended: only a stopped one says it stopped', () => {
+  const ended = (over: Partial<SessionLandingAttempt>, view: Partial<SessionLandingView> = {}) =>
+    landingAttemptCard(
+      landing({ ...view, currentAttempt: attempt({ phase: null, check: null, liveness: null, ...over }) }),
+      NOW,
+      { updatedAt: NOW },
+    )!;
+  const round = { subject: 'PROMOTION' as const, taskId: null, promotionId: 'promo-1' };
+
+  it('a merge check that ended READY passed and waits for the owner: no failure line', () => {
+    const card = ended({ kind: 'CHECK_PROMOTION', state: 'READY' }, round);
+    expect(card.word).toBe('Merge check');
+    expect(card.state).toBe('Ready');
+    expect(card.right).toBe('Ready');
+    expect(card.detail).toBe('Passed the check · waiting for the owner');
+    expect(card.failure).toBeNull();
+    expect(card.running).toBe(false);
+  });
+
+  it('a cancelled attempt really stopped, and still says Stopped · not landed', () => {
+    const task = ended({ state: 'CANCELLED' });
+    expect(task.right).toBe('Not landed');
+    expect(task.failure).toBe('Stopped · not landed');
+    // The merge check's own kind does not hide it: only its READY does.
+    const check = ended({ kind: 'CHECK_PROMOTION', state: 'CANCELLED' }, round);
+    expect(check.right).toBe('Not merged');
+    expect(check.failure).toBe('Stopped · not landed');
+  });
+});
+
 describe('a stop that has been asked for and not answered (J-T8 / M-T10)', () => {
   const asked = {
     sections: [section({

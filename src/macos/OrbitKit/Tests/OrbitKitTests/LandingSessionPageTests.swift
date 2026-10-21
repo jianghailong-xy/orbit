@@ -688,6 +688,39 @@ final class LandingSessionPageTests: XCTestCase {
         XCTAssertEqual(error.failure, "Stopped with an error · nothing was pushed")
     }
 
+    private func ended(kind: String = "LAND_TASK", state: String) -> LandingAttemptCard {
+        LandingPageCopy.attemptCard(landing {
+            if kind != "LAND_TASK" {
+                $0.subject = "PROMOTION"; $0.taskId = nil; $0.promotionId = "promo-1"
+            }
+            $0.currentAttempt = attempt {
+                $0.kind = kind; $0.state = state; $0.phase = nil; $0.check = nil; $0.liveness = nil
+            }
+        }, now: now, updatedAt: now)!
+    }
+
+    /// A merge check that ended READY passed and waits for the owner: nothing stopped it, so the
+    /// card writes no failure line. Web: `landingSession.test.ts`, the same cases.
+    func testAMergeCheckThatEndedReadyWritesNoFailureLine() {
+        let card = ended(kind: "CHECK_PROMOTION", state: "READY")
+        XCTAssertEqual(card.word, "Merge check")
+        XCTAssertEqual(card.state, "Ready")
+        XCTAssertEqual(card.right, "Ready")
+        XCTAssertEqual(card.detail, "Passed the check · waiting for the owner")
+        XCTAssertNil(card.failure)
+        XCTAssertFalse(card.running)
+    }
+
+    func testACancelledAttemptReallyStoppedAndStillSaysStoppedNotLanded() {
+        let task = ended(state: "CANCELLED")
+        XCTAssertEqual(task.right, "Not landed")
+        XCTAssertEqual(task.failure, "Stopped · not landed")
+        // The merge check's own kind does not hide it: only its READY does.
+        let check = ended(kind: "CHECK_PROMOTION", state: "CANCELLED")
+        XCTAssertEqual(check.right, "Not merged")
+        XCTAssertEqual(check.failure, "Stopped · not landed")
+    }
+
     // MARK: - the timeline's ✓ reads the line's fields, not its sentence
 
     private func finished(_ data: [String: JSONValue]?,
