@@ -9,7 +9,7 @@ import { AgentProvider, ENGINE_CLI_NAMES } from '@orbit/shared';
 import { RunStatus } from '@prisma/client';
 import { isSessionGenerating } from '../common/session-generating';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
-import { runAccount } from '../providers/plan-usage-accounts';
+import { reportedRunAccount } from '../providers/plan-usage-accounts';
 import { makeBranchName } from './naming';
 import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
 import { branchName } from '../projects/project-criterion-landing';
@@ -206,7 +206,9 @@ export function branchAfterMove(
  * conversation lives in its account's directory (a Claude or Kimi one too). A Cursor CLI conversation
  * lives in the session's own, but is not known to continue on another account (D5,
  * CURSOR_ACCOUNT_MOVE_V1), so it stays where it is too. On another runner the columns are cleared and
- * follow the new workspace — an account id names a slot on one machine only.
+ * follow the new workspace — an account id names a slot on one machine only. The account it runs on is
+ * read off the runner's report alone (reportedRunAccount): one still on a Default its owner removed from
+ * Orbit is written onto that Default, and moved off it, with its transcript told, before its next turn.
  */
 export function accountsAfterMove(args: {
   sameRunner: boolean;
@@ -248,22 +250,22 @@ export function accountsAfterMove(args: {
   const { session } = args;
   if (session.provider === AgentProvider.CLAUDE) {
     const choice = { claudeAccount: session.claudeAccount ?? args.from?.claudeAccount };
-    const current = runAccount(AgentProvider.CLAUDE, args.from?.env, choice, args.runnerEngines);
+    const current = reportedRunAccount(AgentProvider.CLAUDE, args.from?.env, choice, args.runnerEngines);
     return typeof current === 'string' ? { claudeAccount: current } : {};
   }
   if (session.provider === AgentProvider.CODEX) {
     const choice = { codexAccount: session.codexAccount ?? args.from?.codexAccount };
-    const current = runAccount(AgentProvider.CODEX, args.from?.env, choice, args.runnerEngines);
+    const current = reportedRunAccount(AgentProvider.CODEX, args.from?.env, choice, args.runnerEngines);
     return typeof current === 'string' ? { codexAccount: current } : {};
   }
   if (session.provider === AgentProvider.KIMI) {
     const choice = { kimiAccount: session.kimiAccount ?? args.from?.kimiAccount };
-    const current = runAccount(AgentProvider.KIMI, args.from?.env, choice, args.runnerEngines);
+    const current = reportedRunAccount(AgentProvider.KIMI, args.from?.env, choice, args.runnerEngines);
     return typeof current === 'string' ? { kimiAccount: current } : {};
   }
   if (session.provider === AgentProvider.CURSOR) {
     const choice = { cursorAccount: session.cursorAccount ?? args.from?.cursorAccount };
-    const current = runAccount(AgentProvider.CURSOR, args.from?.env, choice, args.runnerEngines);
+    const current = reportedRunAccount(AgentProvider.CURSOR, args.from?.env, choice, args.runnerEngines);
     return typeof current === 'string' ? { cursorAccount: current } : {};
   }
   return {};

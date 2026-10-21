@@ -11933,7 +11933,7 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
     if (runnerIds.length === 0) return { blocked, blind };
     const runners = await this.prisma.runner.findMany({
       where: { id: { in: runnerIds } },
-      select: { id: true, planUsage: true, engines: true },
+      select: { id: true, planUsage: true, engines: true, defaultRemoved: true, accountPauses: true },
     });
     const runnerById = new Map(runners.map((r) => [r.id, r]));
     // Which Codex or Claude account a run spends is its workspace's to say, so only those tasks' are
@@ -12000,14 +12000,16 @@ export class TasksService implements OnModuleInit, OnModuleDestroy {
       const workspace = workspaceById.get(assignee.workspaceId);
       // A task on an engine that keeps accounts, on a workspace that leaves the account to Orbit, gets
       // its session started on the runner's account whose quota resets soonest (automaticAccount), so
-      // that is the quota it waits on.
+      // that is the quota it waits on — and with Default removed from Orbit, the account dispatch runs it
+      // on instead (runAccount).
       const engine = isAccountEngine(assignee.provider) ? assignee.provider : null;
-      const automatic = engine ? automaticAccount(engine, workspace, runner?.engines, usage, now) : null;
+      const automatic = engine ? automaticAccount(engine, workspace, runner, now) : null;
       const account = runAccount(
         assignee.provider,
         workspace?.env,
         workspace && engine ? { ...workspace, [ACCOUNT_CHOICE[engine]]: automatic ?? workspace[ACCOUNT_CHOICE[engine]] } : workspace,
-        runner?.engines,
+        runner,
+        now,
       );
       if (!planUsageReported(usage, assignee.provider, account)) blind.add(t.id);
       const until = planUsageBlockedUntil(usage, assignee.provider, now, account);

@@ -33,6 +33,7 @@ import {
   type RunnerEngineAccount,
   type RunnerEngineHealth,
   type RunnerInstallState,
+  type RunnerRemovedDefault,
 } from '@orbit/shared';
 import { api } from '../api';
 import { accountIsPaused, usePauseClock } from '../lib/accountPause';
@@ -74,6 +75,15 @@ import { formatResetTime } from '../lib/providerPools';
 import { runnersQuery } from '../lib/queries';
 import { listAttentionLine, type AttentionItem } from '../lib/runnerAttention';
 import { RUNNER_ENGINE_NO_QUOTA_LIMIT, RUNNER_ENGINE_RENEW, runnerEngineNext } from '../lib/runnerCopy';
+import {
+  RUNNER_DEFAULT_USE_AGAIN,
+  runnerAccountRemoveDetailAutomatic,
+  runnerAccountRemoveDetailLast,
+  runnerAccountRemoveTitle,
+  runnerDefaultRemoveDetail,
+  runnerDefaultRemovedLine,
+  runnerDefaultUseAgainFailed,
+} from '../lib/runnerAccountCopy';
 import { loginExpiresLine, signedOutNote } from '../lib/accountLogin';
 import { foldFromAnywhere } from '../lib/foldHead';
 import { ago, engineVersionNumber, updateNoteOf, webShowsEngine } from '../lib/runnerEngines';
@@ -301,7 +311,11 @@ function beingRemoved(runner: Runner, engine: RowEngine, account: string): boole
 
 /** The accounts a Codex row lists under itself: every one, once there is more than one — and only
  *  while the probe speaks for the engine, since an install under way is about the binary all of
- *  them share. None otherwise, which leaves the row exactly what it was before accounts. */
+ *  them share. None otherwise, which leaves the row exactly what it was before accounts.
+ *
+ *  While Default is removed from Orbit (`removedDefault`) the accounts that remain are a group even
+ *  when one is left: the row on its own reads the engine's own sign-in, which on the machine is
+ *  Default's, and the group is where the removed Default's line and its way back go. */
 function accountRowsOf(
   engine: RowEngine,
   health: RunnerEngineHealth | undefined,
@@ -309,7 +323,7 @@ function accountRowsOf(
 ): RunnerEngineAccount[] {
   const accounts = engineKeepsAccounts(engine) ? (health?.accounts ?? []) : [];
   const kind = rowKindOf(health, install, engine);
-  return accounts.length >= 2 && (kind === 'in' || kind === 'out' || kind === 'unknown')
+  return accounts.length >= (health?.removedDefault ? 1 : 2) && (kind === 'in' || kind === 'out' || kind === 'unknown')
     ? accounts
     : [];
 }
@@ -441,12 +455,15 @@ function QuotaCell({ kind, quota, next }: { kind: RowKind; quota: Quota; next?: 
 
 /** Routine account maintenance stays in one menu. The pause dialog lives outside the dropdown
  *  so closing the menu does not unmount the operation it just opened. `moreRef` is its button. */
-function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, pause, moreRef }: {
+function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, removesInOrbit, pause, moreRef }: {
   onRename?: () => void;
   onSignIn?: () => void;
   onRemove?: () => void;
   offline: boolean;
   removing?: boolean;
+  /** Remove changes only Orbit's own record (Default's): nothing goes to the machine, so it stays
+   *  enabled with the runner offline. */
+  removesInOrbit?: boolean;
   pause?: { name: string; until?: string | null; endpoint: string };
   moreRef?: RefObject<HTMLButtonElement | null>;
 }) {
@@ -471,7 +488,7 @@ function RunnerAccountMenu({ onRename, onSignIn, onRemove, offline, removing, pa
       ] : []),
       ...(onRemove ? [
         { type: 'separator' as const, key: 'divider' },
-        { key: 'remove', icon: <DeleteOutlined aria-hidden />, label: 'Remove account', danger: true, disabled: offline || removing, onSelect: onRemove },
+        { key: 'remove', icon: <DeleteOutlined aria-hidden />, label: 'Remove account', danger: true, disabled: (offline && !removesInOrbit) || removing, onSelect: onRemove },
       ] : []),
     ];
     if (items.length === 0) return null;
@@ -624,11 +641,13 @@ function EngineRow({
   // Only one runtime's quota is this engine's; the others belong to the other rows. Antigravity's
   // comes with its engine's health, folded in beside the rest.
   const usage = withEnginePlanUsage(runner.planUsage, runner.engines);
-  const single = engineKeepsAccounts(engine) && health?.accounts?.length === 1 ? health.accounts[0] : undefined;
   // More than one Codex account: this row heads their group, and each account is a row of its own
   // below it (AccountRow), with its own state — or, folded, the head says what they come to.
   const grouped = accounts.length > 0;
   const folded = grouped && !open;
+  // The engine's one account, which this row is when it stands alone — not when it heads a group of
+  // one, as it does while Default is removed from Orbit (accountRowsOf).
+  const single = !grouped && engineKeepsAccounts(engine) && health?.accounts?.length === 1 ? health.accounts[0] : undefined;
   // What the head says for its group: how many of its accounts could take a session now, out of
   // those staying — one being removed is counted as gone already.
   const kept = accounts.filter((account) => !beingRemoved(runner, engine, account.id));
@@ -1069,13 +1088,15 @@ function AccountName({
 }
 
 /** One Codex account, under its engine's row: its name (AccountName), where it lives on the machine,
- *  its own sign-in state, its own way back in, and — for every account but Default — the way off
- *  this machine. */
+ *  its own sign-in state, its own way back in, and the way off this machine — for Default, off
+ *  Orbit's list alone, and only while another account is there. */
 function AccountRow({
   runner,
   engine,
   account,
   defaultName,
+  defaultRemoved,
+  others,
   next,
   duplicateOf,
   lastOfGroup,
@@ -1089,6 +1110,12 @@ function AccountRow({
   account: RunnerEngineAccount;
   /** What this engine's Default is called here — where a removed account's workspaces go. */
   defaultName: string;
+  /** This engine's Default is removed from Orbit (`removedDefault`): a removed account's workspaces go
+   *  to Automatic's pick among the others — or, with none left, to Default, which Orbit then uses again. */
+  defaultRemoved?: boolean;
+  /** How many of this engine's other accounts stay on the runner, one on its way out not counted:
+   *  Default's removal needs one. */
+  others: number;
   /** The account a session nobody picked one for starts on next (accountToStartOn). */
   next?: boolean;
   /** The account already signed in above that this slot turned out to hold too
@@ -1123,8 +1150,9 @@ function AccountRow({
         { method: 'DELETE' },
       ),
     onSuccess: (state) => {
-      // A refusal the control plane could make itself (an older runner, or the account that is the
-      // machine's own CODEX_HOME) arrives as an error; anything the machine decided arrives here.
+      // A refusal the control plane could make itself (an older runner, or Default with no other
+      // account beside it) arrives as an error; anything the machine decided arrives here. Default's
+      // removal is Orbit's own and arrives done.
       if (state?.status === 'failed' && state.message) message.error("Couldn't remove the account", state.message);
       void qc.invalidateQueries({ queryKey: runnersQuery().queryKey });
     },
@@ -1137,14 +1165,24 @@ function AccountRow({
   const quota = quotaOf(kind, snapshot, !!runner.online, now, engine);
   const toggle = () => onSignIn(signIn === panel ? null : panel);
   const expiring = envKey ? null : loginExpiresLine(account, now);
-  // Removing deletes the slot's sign-in from the machine, and only signing in again brings it back:
-  // asked first, wherever it is offered — anchored to More once its menu has closed, or to the
-  // duplicate panel's own Remove.
+  // Default comes off Orbit's list, not the machine, and only while another account is there to
+  // run on (RunnersService.removeAccount).
+  const removable = !isDefault || others > 0;
+  const runnerName = runner.displayName || runner.name;
+  // Removing deletes the slot's sign-in from the machine, and only signing in again brings it back;
+  // removing Default stops only Orbit using it, until Use again. Either is asked first, wherever it is
+  // offered — anchored to More once its menu has closed, or to the duplicate panel's own Remove.
   const removeQuestion = {
-    title: `Remove ${accountNameOf(account)}?`,
-    description:
-      `Its sign-in is deleted from ${runner.displayName || runner.name}. ` +
-      `Workspaces set to this account run on ${defaultName}.`,
+    title: runnerAccountRemoveTitle(accountNameOf(account)),
+    description: isDefault
+      ? runnerDefaultRemoveDetail(runnerName, engineNameOf(engine))
+      : !defaultRemoved
+        ? `Its sign-in is deleted from ${runnerName}. ` +
+          `Workspaces set to this account run on ${defaultName}.`
+        : others > 0
+          ? runnerAccountRemoveDetailAutomatic(runnerName)
+          : runnerAccountRemoveDetailLast(runnerName, defaultName),
+    popupClassName: 're-confirm',
     confirmText: 'Remove',
     danger: true,
     onConfirm: () => {
@@ -1158,10 +1196,11 @@ function AccountRow({
     <RunnerAccountMenu
       offline={!runner.online}
       removing={removing}
+      removesInOrbit={isDefault}
       moreRef={more}
       onRename={() => setEditing(true)}
       onSignIn={kind === 'in' && !envKey ? toggle : undefined}
-      onRemove={isDefault ? undefined : () => setConfirmingRemove(true)}
+      onRemove={removable ? () => setConfirmingRemove(true) : undefined}
       pause={(kind === 'in' && !envKey) || accountIsPaused(account.pausedUntil, now) ? {
         name: accountNameOf(account), until: account.pausedUntil,
         endpoint: `/runners/${runner.id}/accounts/${engine}/${account.id}/pause`,
@@ -1202,9 +1241,8 @@ function AccountRow({
             Sign in
           </Button>
         )}
-        {/* Default is the machine's own login and cannot be removed. The confirmation for an
-            added account stays anchored to More after its menu closes. */}
-        {isDefault ? menu : (
+        {/* The confirmation stays anchored to More after its menu closes. */}
+        {removable ? (
           <>
             <span ref={menuAnchor} className="re-menu-anchor">{menu}</span>
             <Popconfirm
@@ -1216,7 +1254,7 @@ function AccountRow({
               returnFocus={more}
             />
           </>
-        )}
+        ) : menu}
       </div>
       {/* The same account, signed in twice. Two rows of quota for one account read as two quotas,
           so the repeat is named on the row that made it — with the one way out right there: this
@@ -1268,6 +1306,37 @@ function AccountRow({
           <RunnerSignIn runnerId={runner.id} engine={engine} account={account.id} />
         </div>
       )}
+    </div>
+  );
+}
+
+/** Where an engine's accounts end while its Default is removed from Orbit: which one it is and where it
+ *  lives on the machine, which keeps it and its sign-in, and Use again, which brings it back. Orbit's
+ *  own record, as the removal is, so it works with the runner offline. */
+function RemovedDefault({ runner, engine, removed }: { runner: Runner; engine: LoginEngine; removed: RunnerRemovedDefault }) {
+  const message = useToast();
+  const qc = useQueryClient();
+  const name = accountNameOf({ id: 'default', name: removed.name });
+  const line = useId();
+  const restore = useMutation({
+    mutationFn: () => api(`/runners/${runner.id}/accounts/${engine}/default/restore`, { method: 'POST' }),
+    // Returned, so the button stays busy until the list carries Default back and this line goes.
+    onSuccess: () => qc.invalidateQueries({ queryKey: runnersQuery().queryKey }),
+    onError: (e: Error) => message.error(runnerDefaultUseAgainFailed(name), e.message),
+  });
+  return (
+    <div className="re-row re-acct re-acct-end re-removed">
+      <div className="re-id">
+        <span className="re-rail" aria-hidden="true" />
+        <div id={line} className="re-removed-line" title={removed.home}>
+          {runnerDefaultRemovedLine(name, tildePath(removed.home))}
+        </div>
+      </div>
+      <div className="re-act">
+        <Button size="small" className="re-action re-use-again" loading={restore.isPending} aria-describedby={line} onClick={() => restore.mutate()}>
+          {RUNNER_DEFAULT_USE_AGAIN}
+        </Button>
+      </div>
     </div>
   );
 }
@@ -1578,12 +1647,15 @@ function RunnerEngineCard({
 }
 
 /** The sign-in panel of an engine's own login on this machine: its row's, or — where the row heads
- *  its accounts — Default's, which is that login. What the machine page's Needs Attention opens for
- *  an engine that is signed out. */
+ *  its accounts — Default's, which is that login. While Default is removed from Orbit the engine's
+ *  sign-in is its remaining accounts' (`removedDefault`), and this is the first of them not signed
+ *  in. What the machine page's Needs Attention opens for an engine that is signed out. */
 export function ownSignInPanel(runner: Runner, engine: LoginEngine): string {
-  return accountRowsOf(engine, engineHealthOf(runner, engine), runner.install).length > 0
-    ? accountPanel(engine, 'default')
-    : engine;
+  const health = engineHealthOf(runner, engine);
+  const accounts = accountRowsOf(engine, health, runner.install);
+  if (accounts.length === 0) return engine;
+  if (!health?.removedDefault) return accountPanel(engine, 'default');
+  return accountPanel(engine, (accounts.find((account) => account.auth !== 'yes') ?? accounts[0]).id);
 }
 
 /**
@@ -1650,12 +1722,19 @@ export function MachineEngines({
         // The accounts under a row are an engine's own, and only an engine that keeps them has
         // any. OpenCode keeps none — its row is the install, and nothing else follows it.
         const accountEngine: AccountEngine | null = engineKeepsAccounts(engine) ? engine : null;
-        // The same question the server asks when a session starts with no account picked.
+        // The same question the server asks when a session starts with no account picked — which a
+        // group of one, as a removed Default can leave, answers with that one.
         const next =
           accountEngine && accounts.length > 0
-            ? accountToStartOn(accountEngine, accounts, withEnginePlanUsage(runner.planUsage, runner.engines), new Date())
+            ? accounts.length === 1
+              ? accounts[0].id
+              : accountToStartOn(accountEngine, accounts, withEnginePlanUsage(runner.planUsage, runner.engines), new Date())
             : null;
         const open = openAccounts.includes(accountsGroup(runner.id, engine));
+        // A Default removed from Orbit ends its engine's group (RemovedDefault).
+        const removed = accounts.length > 0 ? health?.removedDefault : undefined;
+        // What a removal leaves: an account on its way out is as good as gone.
+        const staying = accounts.filter((account) => !beingRemoved(runner, engine, account.id));
         return (
           <Fragment key={engine}>
             <EngineRow
@@ -1677,15 +1756,18 @@ export function MachineEngines({
                 runner={runner}
                 engine={accountEngine}
                 account={account}
-                defaultName={accountNameOf(accounts.find((entry) => entry.id === 'default') ?? { id: 'default' })}
+                defaultName={accountNameOf(accounts.find((entry) => entry.id === 'default') ?? { id: 'default', name: removed?.name })}
+                defaultRemoved={!!removed}
+                others={staying.filter((entry) => entry.id !== account.id).length}
                 next={account.id === next}
                 duplicateOf={repeats.get(account.id)}
-                lastOfGroup={index === accounts.length - 1}
+                lastOfGroup={index === accounts.length - 1 && !removed}
                 envKey={runsOnEnvKey(health, account)}
                 signIn={signIn}
                 onSignIn={onSignIn}
               />
             ))}
+            {accountEngine !== null && open && removed && <RemovedDefault runner={runner} engine={accountEngine} removed={removed} />}
           </Fragment>
         );
   };

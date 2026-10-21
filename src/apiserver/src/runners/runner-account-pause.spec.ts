@@ -13,6 +13,9 @@ const engines = ['codex', 'claude'].map(engine => ({ engine, installed: true, au
   { id: work, home: `/home/test/${engine}-work`, auth: 'yes' },
 ]}));
 const pauses = { codex: { default: until } };
+/** The runner as the account helpers read it: these engines and pauses, nothing reported of its quota, no
+ *  Default removed from Orbit. */
+const runner = { engines, accountPauses: pauses, defaultRemoved: [], planUsage: null };
 
 test('pause request requires an integer duration or explicit null', async () => {
   for (const invalid of [undefined, -1, 0, 10081, 1.5, '120', NaN]) {
@@ -36,13 +39,13 @@ test('server pause expires at its boundary and cannot be supplied by a heartbeat
 });
 
 test('automatic personal accounts skip pauses; pinned and own-key sessions retain their meaning', () => {
-  assert.equal(automaticAccount('codex', {}, engines, null, now, pauses), work);
-  assert.deepEqual(accountBeforeDispatch('codex', { account: 'default' }, {}, engines, null, now, pauses),
+  assert.equal(automaticAccount('codex', {}, runner, now), work);
+  assert.deepEqual(accountBeforeDispatch('codex', { account: 'default' }, {}, runner, now),
     { from: 'default', to: work, paused: true });
-  assert.equal(accountBeforeDispatch('codex', { account: 'default', pinned: true }, {}, engines, null, now, pauses), null);
+  assert.equal(accountBeforeDispatch('codex', { account: 'default', pinned: true }, {}, runner, now), null);
   const session = { provider: 'codex', providerBuiltin: true, codexAccount: 'default' };
-  assert.equal(sessionAccountPausedUntil(session, {}, { engines, accountPauses: pauses }, now)?.toISOString(), until);
-  assert.equal(sessionAccountPausedUntil(session, { env: { OPENAI_API_KEY: 'own-key' } }, { engines, accountPauses: pauses }, now), null);
-  assert.equal(sessionAccountPausedUntil({ ...session, providerBuiltin: false }, {}, { engines, accountPauses: pauses }, now), null);
-  assert.equal(automaticAccount('codex', {}, engines, null, new Date(until), pauses), 'default');
+  assert.equal(sessionAccountPausedUntil(session, {}, runner, now)?.toISOString(), until);
+  assert.equal(sessionAccountPausedUntil(session, { env: { OPENAI_API_KEY: 'own-key' } }, runner, now), null);
+  assert.equal(sessionAccountPausedUntil({ ...session, providerBuiltin: false }, {}, runner, now), null);
+  assert.equal(automaticAccount('codex', {}, runner, new Date(until)), 'default');
 });

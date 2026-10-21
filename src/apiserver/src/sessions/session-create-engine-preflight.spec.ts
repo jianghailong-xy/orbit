@@ -131,6 +131,9 @@ test('a session that brings its own credentials ignores the local sign-in', () =
     status: 'ONLINE',
     lastHeartbeatAt: new Date(),
     engines: SIGNED_OUT,
+    defaultRemoved: [],
+    accountPauses: null,
+    planUsage: null,
   };
   assert.equal(
     signedOutEngineRefusal({ runtime: 'claude', bringsOwnCredentials: true, runner }),
@@ -278,6 +281,9 @@ test('an added Antigravity account that is signed out is refused by its name, wi
       displayName: 'HPC',
       status: 'ONLINE',
       lastHeartbeatAt: new Date(),
+      defaultRemoved: [],
+      accountPauses: null,
+      planUsage: null,
       engines: [
         {
           engine: 'antigravity',
@@ -318,7 +324,10 @@ test('a configured Gemini provider creates a session when the runner has no Gemi
 });
 
 test('Antigravity credential preflight only refuses a definite no on an online runner', () => {
-  const runner = { name: 'build-box', status: 'ONLINE', lastHeartbeatAt: new Date(), engines: [{ engine: 'antigravity', installed: true, auth: 'no' }] };
+  const runner = {
+    name: 'build-box', status: 'ONLINE', lastHeartbeatAt: new Date(), defaultRemoved: [], accountPauses: null, planUsage: null,
+    engines: [{ engine: 'antigravity', installed: true, auth: 'no' }],
+  };
   const check = (overrides: Record<string, unknown> = {}, workspaceEnv?: unknown) => signedOutEngineRefusal({
     runtime: 'antigravity', bringsOwnCredentials: false, runner: { ...runner, ...overrides }, workspaceEnv,
   });
@@ -348,6 +357,9 @@ test('kimi needs both halves of its environment provider to skip the check', () 
     status: 'ONLINE',
     lastHeartbeatAt: new Date(),
     engines: [{ engine: 'kimi', installed: true, auth: 'no' }],
+    defaultRemoved: [],
+    accountPauses: null,
+    planUsage: null,
   };
 
   // The CLI only synthesizes its env-backed provider when the model switch and the key are both

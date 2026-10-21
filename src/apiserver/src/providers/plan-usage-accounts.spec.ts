@@ -32,6 +32,7 @@ import {
   runAccount,
   sanitizePlanUsageAccounts,
 } from './plan-usage-accounts';
+import type { AccountRunner } from './account';
 
 /**
  * Codex plan usage by account. A runner with more than one Codex account reports Default's quota as
@@ -62,6 +63,11 @@ const DEFAULT_RESET = '2099-01-01T08:00:00Z';
 const WORK_RESET = '2099-01-01T09:30:00Z';
 
 const clone = <T>(value: T): T => structuredClone(value);
+
+/** A runner as the account helpers read it: its report, its quota and its pauses, with no Default
+ *  removed from Orbit. */
+const on = (engines: unknown, planUsage: unknown = null, accountPauses: unknown = null): AccountRunner =>
+  ({ engines, defaultRemoved: [], accountPauses, planUsage });
 
 const window = (utilization: number, resetsAt: string) => ({ utilization, resetsAt, label: '5h limit', windowDurationMins: 300 });
 
@@ -363,30 +369,30 @@ test('a session that picked its own account is armed by that account\'s quota, n
 });
 
 test("the gates' question — which account does this run spend — is its workspace's, on its runner", () => {
-  assert.equal(runAccount('codex', null, { codexAccount: null }, ENGINES), 'default');
-  assert.equal(runAccount('codex', { CODEX_HOME: WORK_HOME }, { codexAccount: null }, ENGINES), WORK);
-  assert.equal(runAccount('codex', { CODEX_HOME: '/srv/elsewhere' }, { codexAccount: null }, ENGINES), null);
-  assert.equal(runAccount('codex', { CODEX_API_KEY: 'sk-test' }, { codexAccount: null }, ENGINES), null);
+  assert.equal(runAccount('codex', null, { codexAccount: null }, on(ENGINES)), 'default');
+  assert.equal(runAccount('codex', { CODEX_HOME: WORK_HOME }, { codexAccount: null }, on(ENGINES)), WORK);
+  assert.equal(runAccount('codex', { CODEX_HOME: '/srv/elsewhere' }, { codexAccount: null }, on(ENGINES)), null);
+  assert.equal(runAccount('codex', { CODEX_API_KEY: 'sk-test' }, { codexAccount: null }, on(ENGINES)), null);
   // Accounts are Codex's; any other provider's gate asks as before.
   // Claude keeps a login per directory too: the account its own variable selects is the one judged,
   // and the codex-named variable says nothing about it.
   assert.equal(
-    runAccount('claude', { CLAUDE_CONFIG_DIR: WORK_HOME }, { claudeAccount: WORK }, ENGINES),
+    runAccount('claude', { CLAUDE_CONFIG_DIR: WORK_HOME }, { claudeAccount: WORK }, on(ENGINES)),
     WORK,
   );
   // The workspace's pick wins over the env it sits beside (dispatch injects it the same way), and
   // the codex-named variable says nothing about a Claude account.
-  assert.equal(runAccount('claude', { CODEX_HOME: WORK_HOME }, { claudeAccount: WORK }, ENGINES), WORK);
+  assert.equal(runAccount('claude', { CODEX_HOME: WORK_HOME }, { claudeAccount: WORK }, on(ENGINES)), WORK);
   // With nothing picked, the env's own CLAUDE_CONFIG_DIR is the account.
-  assert.equal(runAccount('claude', { CLAUDE_CONFIG_DIR: WORK_HOME }, {}, ENGINES), WORK);
-  assert.equal(runAccount('claude', { CLAUDE_CONFIG_DIR: '/srv/elsewhere' }, {}, ENGINES), null);
-  assert.equal(runAccount('claude', { ANTHROPIC_AUTH_TOKEN: 'tok' }, { claudeAccount: WORK }, ENGINES), null);
+  assert.equal(runAccount('claude', { CLAUDE_CONFIG_DIR: WORK_HOME }, {}, on(ENGINES)), WORK);
+  assert.equal(runAccount('claude', { CLAUDE_CONFIG_DIR: '/srv/elsewhere' }, {}, on(ENGINES)), null);
+  assert.equal(runAccount('claude', { ANTHROPIC_AUTH_TOKEN: 'tok' }, { claudeAccount: WORK }, on(ENGINES)), null);
   // OpenCode keeps no login of the machine's to choose: there is no account to judge a run by.
-  assert.equal(runAccount('opencode', { HOME: '/root' }, { claudeAccount: WORK }, ENGINES), undefined);
+  assert.equal(runAccount('opencode', { HOME: '/root' }, { claudeAccount: WORK }, on(ENGINES)), undefined);
 
   const usage: PlanUsage = { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } };
   const spent = (env: Record<string, string> | null) =>
-    planUsageBlockedUntil(usage, 'codex', NOW, runAccount('codex', env, { codexAccount: null }, ENGINES));
+    planUsageBlockedUntil(usage, 'codex', NOW, runAccount('codex', env, { codexAccount: null }, on(ENGINES)));
   assert.deepEqual(spent(null), new Date(DEFAULT_RESET));
   assert.equal(spent({ CODEX_HOME: WORK_HOME }), null);
   assert.equal(spent({ CODEX_HOME: '/srv/elsewhere' }), null);
@@ -414,7 +420,7 @@ function dispatchedOn(
     customRow: null,
     workspaceEnv: env,
     codexAccount,
-    runnerEngines: engines,
+    runner: on(engines),
   });
   return codexAccountOfEnv(exec.env, engines.find((engine) => engine.engine === 'codex')?.accounts);
 }
@@ -422,14 +428,14 @@ function dispatchedOn(
 test("a workspace that picked an account its runner reports is judged by that account's snapshot: Default's spent quota does not hold it back", async () => {
   // The pick is what the run spends, whatever CODEX_HOME the workspace's env was given by hand.
   for (const env of [null, { CODEX_HOME: '/root/.codex' }, { CODEX_HOME: '/srv/elsewhere' }]) {
-    assert.equal(runAccount('codex', env, { codexAccount: WORK }, ENGINES), WORK);
+    assert.equal(runAccount('codex', env, { codexAccount: WORK }, on(ENGINES)), WORK);
     assert.equal(dispatchedOn(env, WORK), WORK);
   }
   // A key of the run's own still spends no account, there as at dispatch.
-  assert.equal(runAccount('codex', { CODEX_API_KEY: 'sk-test' }, { codexAccount: WORK }, ENGINES), null);
+  assert.equal(runAccount('codex', { CODEX_API_KEY: 'sk-test' }, { codexAccount: WORK }, on(ENGINES)), null);
   assert.equal(dispatchedOn({ CODEX_API_KEY: 'sk-test' }, WORK), null);
 
-  const onWork = runAccount('codex', null, { codexAccount: WORK }, ENGINES);
+  const onWork = runAccount('codex', null, { codexAccount: WORK }, on(ENGINES));
   assert.equal(planUsageBlockedUntil(DEFAULT_SPENT, 'codex', NOW, onWork), null);
   assert.deepEqual(planUsageBlockedUntil(WORK_SPENT, 'codex', NOW, onWork), new Date(WORK_RESET));
   assert.equal(planUsageReported(DEFAULT_SPENT, 'codex', onWork), true);
@@ -441,17 +447,17 @@ test("a workspace that picked an account its runner reports is judged by that ac
 test('a workspace that picked an account its runner does not report is judged by Default, where dispatch runs it', async () => {
   /** A runner too old to list its accounts. */
   const unlisted: RunnerEngineHealth[] = [{ engine: 'codex', installed: true, auth: 'yes' }];
-  assert.equal(runAccount('codex', null, { codexAccount: GONE }, ENGINES), 'default');
+  assert.equal(runAccount('codex', null, { codexAccount: GONE }, on(ENGINES)), 'default');
   assert.equal(dispatchedOn(null, GONE), 'default');
-  assert.equal(runAccount('codex', null, { codexAccount: WORK }, unlisted), 'default');
+  assert.equal(runAccount('codex', null, { codexAccount: WORK }, on(unlisted)), 'default');
   assert.equal(dispatchedOn(null, WORK, unlisted), 'default');
 
-  const onGone = runAccount('codex', null, { codexAccount: GONE }, ENGINES);
+  const onGone = runAccount('codex', null, { codexAccount: GONE }, on(ENGINES));
   assert.deepEqual(planUsageBlockedUntil(DEFAULT_SPENT, 'codex', NOW, onGone), new Date(DEFAULT_RESET));
   assert.equal(planUsageBlockedUntil(WORK_SPENT, 'codex', NOW, onGone), null);
   assert.ok(withinJitterOf(await retryAtFor(null, DEFAULT_SPENT, GONE), DEFAULT_RESET), 'the run waits for Default');
   // A CODEX_HOME the env was given is then what the run spends, as it is without a pick.
-  assert.equal(runAccount('codex', { CODEX_HOME: WORK_HOME }, { codexAccount: GONE }, ENGINES), WORK);
+  assert.equal(runAccount('codex', { CODEX_HOME: WORK_HOME }, { codexAccount: GONE }, on(ENGINES)), WORK);
   assert.equal(dispatchedOn({ CODEX_HOME: WORK_HOME }, GONE), WORK);
 });
 
@@ -468,7 +474,7 @@ test('a workspace that picked no account is judged by its env, as before account
   for (const env of envs) {
     // No pick, and Default picked by name, are one choice.
     for (const pick of [null, undefined, 'default']) {
-      assert.equal(runAccount('codex', env, { codexAccount: pick }, ENGINES), codexAccountOfEnv(env, accounts), `${JSON.stringify(env)} / ${pick}`);
+      assert.equal(runAccount('codex', env, { codexAccount: pick }, on(ENGINES)), codexAccountOfEnv(env, accounts), `${JSON.stringify(env)} / ${pick}`);
       assert.equal(dispatchedOn(env, pick), codexAccountOfEnv(env, accounts), `${JSON.stringify(env)} / ${pick}`);
     }
   }
@@ -480,15 +486,15 @@ test('a workspace that picked no account is judged by its env, as before account
 test('a new session nothing picked an account for starts on the one Automatic picks, unless the workspace decides', () => {
   const now = new Date();
   const defaultSpent = { codex: { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } } };
-  assert.equal(automaticCodexAccount({ env: null, codexAccount: null }, ENGINES, defaultSpent, now), WORK);
-  assert.equal(automaticCodexAccount(null, ENGINES, defaultSpent, now), WORK, 'a session with no workspace');
+  assert.equal(automaticCodexAccount({ env: null, codexAccount: null }, on(ENGINES, defaultSpent), now), WORK);
+  assert.equal(automaticCodexAccount(null, on(ENGINES, defaultSpent), now), WORK, 'a session with no workspace');
   // The workspace's own pick, Default included, decides; so does a CODEX_HOME or a key in its env.
-  assert.equal(automaticCodexAccount({ env: null, codexAccount: 'default' }, ENGINES, defaultSpent, now), null);
-  assert.equal(automaticCodexAccount({ env: null, codexAccount: WORK }, ENGINES, defaultSpent, now), null);
-  assert.equal(automaticCodexAccount({ env: { CODEX_HOME: WORK_HOME }, codexAccount: null }, ENGINES, defaultSpent, now), null);
-  assert.equal(automaticCodexAccount({ env: { CODEX_API_KEY: 'sk-test' }, codexAccount: null }, ENGINES, defaultSpent, now), null);
+  assert.equal(automaticCodexAccount({ env: null, codexAccount: 'default' }, on(ENGINES, defaultSpent), now), null);
+  assert.equal(automaticCodexAccount({ env: null, codexAccount: WORK }, on(ENGINES, defaultSpent), now), null);
+  assert.equal(automaticCodexAccount({ env: { CODEX_HOME: WORK_HOME }, codexAccount: null }, on(ENGINES, defaultSpent), now), null);
+  assert.equal(automaticCodexAccount({ env: { CODEX_API_KEY: 'sk-test' }, codexAccount: null }, on(ENGINES, defaultSpent), now), null);
   // A runner that has reported nothing has nothing to choose between.
-  assert.equal(automaticCodexAccount({ env: null, codexAccount: null }, null, null, now), null);
+  assert.equal(automaticCodexAccount({ env: null, codexAccount: null }, on(null, null), now), null);
 });
 
 test("a session its account's usage limit stopped moves to another account with room, unless it or its workspace decides", () => {
@@ -496,7 +502,7 @@ test("a session its account's usage limit stopped moves to another account with 
   const defaultSpent = { codex: { provider: AgentProvider.CODEX, primary: window(100, DEFAULT_RESET), accounts: { [WORK]: work(8) } } };
   const automatic = { env: null, codexAccount: null };
   const after = (account: string | null, workspace: Parameters<typeof accountAfterUsageLimit>[2], usage: unknown = defaultSpent, pinned = false, engines: unknown = ENGINES) =>
-    accountAfterUsageLimit('codex', { account, pinned }, workspace, engines, usage, now);
+    accountAfterUsageLimit('codex', { account, pinned }, workspace, on(engines, usage), now);
   // Stopped on Default — picked for it, or the account of an older session that picked none — it moves
   // to Work, which has room.
   assert.deepEqual(after('default', automatic), { from: 'default', to: WORK });
@@ -540,12 +546,12 @@ test("a Claude session is picked and moved by its own accounts' quota, as a Code
     },
   };
   const automatic = { env: null, codexAccount: null, claudeAccount: null };
-  assert.equal(automaticAccount('claude', automatic, ENGINES, claudeUsage, now), WORK);
-  assert.deepEqual(accountAfterUsageLimit('claude', { account: 'default' }, automatic, ENGINES, claudeUsage, now), { from: 'default', to: WORK });
+  assert.equal(automaticAccount('claude', automatic, on(ENGINES, claudeUsage), now), WORK);
+  assert.deepEqual(accountAfterUsageLimit('claude', { account: 'default' }, automatic, on(ENGINES, claudeUsage), now), { from: 'default', to: WORK });
   // The workspace's Claude pick decides for its Claude sessions, and its Codex pick does not.
-  assert.equal(automaticAccount('claude', { ...automatic, claudeAccount: 'default' }, ENGINES, claudeUsage, now), null);
-  assert.equal(automaticAccount('claude', { ...automatic, codexAccount: 'default' }, ENGINES, claudeUsage, now), WORK);
-  assert.equal(accountAfterUsageLimit('claude', { account: 'default', pinned: true }, automatic, ENGINES, claudeUsage, now), null);
+  assert.equal(automaticAccount('claude', { ...automatic, claudeAccount: 'default' }, on(ENGINES, claudeUsage), now), null);
+  assert.equal(automaticAccount('claude', { ...automatic, codexAccount: 'default' }, on(ENGINES, claudeUsage), now), WORK);
+  assert.equal(accountAfterUsageLimit('claude', { account: 'default', pinned: true }, automatic, on(ENGINES, claudeUsage), now), null);
   assert.equal(
     accountSwitchNotice('claude', { from: 'default', to: WORK }, { engines: ENGINES, accountNames: null }),
     'Switched to Work — the usage limit on Default is reached',
@@ -577,30 +583,30 @@ test("a Kimi session is picked, moved and dispatched by its own accounts' quota,
     },
   };
   const automatic = { env: null, kimiAccount: null };
-  assert.equal(automaticAccount('kimi', automatic, engines, kimiUsage, now), WORK);
-  assert.deepEqual(accountBeforeDispatch('kimi', { account: 'default' }, automatic, engines, kimiUsage, now), { from: 'default', to: WORK });
-  assert.deepEqual(accountAfterUsageLimit('kimi', { account: 'default' }, automatic, engines, kimiUsage, now), { from: 'default', to: WORK });
-  assert.equal(accountAfterUsageLimit('kimi', { account: 'default', pinned: true }, automatic, engines, kimiUsage, now), null);
+  assert.equal(automaticAccount('kimi', automatic, on(engines, kimiUsage), now), WORK);
+  assert.deepEqual(accountBeforeDispatch('kimi', { account: 'default' }, automatic, on(engines, kimiUsage), now), { from: 'default', to: WORK });
+  assert.deepEqual(accountAfterUsageLimit('kimi', { account: 'default' }, automatic, on(engines, kimiUsage), now), { from: 'default', to: WORK });
+  assert.equal(accountAfterUsageLimit('kimi', { account: 'default', pinned: true }, automatic, on(engines, kimiUsage), now), null);
   // The workspace's Kimi pick decides for its Kimi sessions, and its Claude pick does not.
-  assert.equal(automaticAccount('kimi', { ...automatic, kimiAccount: 'default' }, engines, kimiUsage, now), null);
-  assert.equal(automaticAccount('kimi', { ...automatic, claudeAccount: 'default' }, engines, kimiUsage, now), WORK);
+  assert.equal(automaticAccount('kimi', { ...automatic, kimiAccount: 'default' }, on(engines, kimiUsage), now), null);
+  assert.equal(automaticAccount('kimi', { ...automatic, claudeAccount: 'default' }, on(engines, kimiUsage), now), WORK);
   // A workspace naming a model and key of its own spends no account: Orbit neither picks nor moves.
   const ownModel = { KIMI_MODEL_NAME: 'kimi-for-coding', KIMI_MODEL_API_KEY: 'sk-test' };
-  assert.equal(automaticAccount('kimi', { env: ownModel }, engines, kimiUsage, now), null);
+  assert.equal(automaticAccount('kimi', { env: ownModel }, on(engines, kimiUsage), now), null);
 
   // What a gate judges is the account dispatch runs the session on, which it hands over as KIMI_CODE_HOME.
-  assert.equal(runAccount('kimi', null, { kimiAccount: WORK }, engines), WORK);
-  assert.equal(runAccount('kimi', { KIMI_CODE_HOME: KIMI_WORK_HOME }, {}, engines), WORK);
-  assert.equal(runAccount('kimi', null, { kimiAccount: GONE }, engines), 'default');
-  assert.equal(runAccount('kimi', ownModel, { kimiAccount: WORK }, engines), null);
-  assert.equal(runAccount('kimi', { KIMI_MODEL_API_KEY: 'sk-test' }, { kimiAccount: WORK }, engines), WORK);
+  assert.equal(runAccount('kimi', null, { kimiAccount: WORK }, on(engines)), WORK);
+  assert.equal(runAccount('kimi', { KIMI_CODE_HOME: KIMI_WORK_HOME }, {}, on(engines)), WORK);
+  assert.equal(runAccount('kimi', null, { kimiAccount: GONE }, on(engines)), 'default');
+  assert.equal(runAccount('kimi', ownModel, { kimiAccount: WORK }, on(engines)), null);
+  assert.equal(runAccount('kimi', { KIMI_MODEL_API_KEY: 'sk-test' }, { kimiAccount: WORK }, on(engines)), WORK);
   const exec = resolveProviderExec({
     declaredProvider: AgentProvider.KIMI,
     declaredProviderBuiltin: true,
     customRow: null,
     workspaceEnv: { KIMI_CODE_HOME: '/srv/hand-typed', ORBIT_TEST: '1' },
     kimiAccount: WORK,
-    runnerEngines: engines,
+    runner: on(engines),
   });
   assert.deepEqual(exec.env, { KIMI_CODE_HOME: KIMI_WORK_HOME, ORBIT_TEST: '1' });
   assert.deepEqual(planUsageBlockedUntil(kimiUsage, 'kimi', now, 'default'), new Date(DEFAULT_RESET));
@@ -623,7 +629,7 @@ test('a session no other account has room for waits for the first account to fre
   });
   const automatic = { env: null, claudeAccount: null };
   const at = (account: string, workspace: Parameters<typeof accountAfterUsageLimitAt>[2] = automatic, workUsed = 100, pinned = false) =>
-    accountAfterUsageLimitAt('claude', { account, pinned }, workspace, ENGINES, usage(workUsed), now);
+    accountAfterUsageLimitAt('claude', { account, pinned }, workspace, on(ENGINES, usage(workUsed)), now);
   // On Work, Default comes back first; on Default, Work is the only other account there is.
   assert.deepEqual(at(WORK), new Date(DEFAULT_RESET));
   assert.deepEqual(at('default'), new Date(WORK_RESET));
@@ -645,7 +651,7 @@ test("a usage limit no other account has room for is armed for the first account
     {} as never,
     { appendFor: async (_tx: unknown, _sessionId: unknown, content?: string) => content } as never,
   );
-  const runner = (planUsage: PlanUsage, capabilities: string[]) => ({ planUsage, engines: ENGINES, accountNames: null, accountPauses: null, capabilities });
+  const runner = (planUsage: PlanUsage, capabilities: string[]) => ({ planUsage, engines: ENGINES, accountNames: null, accountPauses: null, defaultRemoved: [], capabilities });
 
   // Claude's words without the reset time it usually adds, so the snapshot says when: Default's week
   // comes back before Work's.
