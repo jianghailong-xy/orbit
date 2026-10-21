@@ -15,7 +15,7 @@ import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
 import { antigravityGoogleLogin } from '../common/antigravity-readiness';
 
 /** Engine names as the user sees them elsewhere in Orbit (matches the web's RunnerSignIn). */
-const ENGINE_LABELS: Record<LoginEngine, string> = {
+export const ENGINE_LABELS: Record<LoginEngine, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   kimi: 'Kimi Code',

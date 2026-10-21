@@ -1711,7 +1711,8 @@ export interface RunnerAccountRemoveState {
   /** The engine whose account store the removal is about (`codex` on a row written before
    *  accounts-per-engine). */
   engine: LoginEngine;
-  /** The slot being removed (`default` is never it), or null when nothing is in flight. */
+  /** The slot being removed, or null when nothing is in flight. `default` only in the answer to
+   *  removing Default, which is removed from Orbit alone: `done` at once, never relayed to the runner. */
   account: string | null;
   status: 'pending' | 'done' | 'failed' | null;
   /** The machine's own words when it failed: the account is in use by a session, the runner is too

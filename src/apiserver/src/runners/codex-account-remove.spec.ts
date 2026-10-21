@@ -17,8 +17,9 @@ import { RunnersService } from './runners.service';
  * request and leave the account on the machine) is refused in words the person who pressed the
  * button can read, rather than by a request that times out ten minutes later.
  *
- * Default is never removable: it is the CODEX_HOME the machine's own environment selects, the one
- * `codex` typed in a terminal shares.
+ * Default never goes to the runner: it is the CODEX_HOME the machine's own environment selects, the
+ * one `codex` typed in a terminal shares. It is removed from Orbit alone, and only beside another
+ * Codex account (runner-default-remove.spec.ts).
  */
 
 const OWNER = 'owner-1';
@@ -202,14 +203,18 @@ test('a runner whose declared capabilities went stale is refused at the heartbea
   assert.match(h.state().message ?? '', /too old to remove a Codex account/);
 });
 
-test('Default is never removable', async () => {
+test('Default is never handed to the runner: removed from Orbit only, and only beside another Codex account', async () => {
   const h = harness();
   for (const account of ['default', '../../.codex', 'Work', '']) {
     await assert.rejects(
       () => h.remove(account),
       (error: unknown) => {
         assert.ok(error instanceof BadRequestException, `${account}: ${String(error)}`);
-        assert.match(JSON.stringify(error.getResponse()), account === 'default' ? /Default/ : /account/);
+        assert.match(
+          JSON.stringify(error.getResponse()),
+          // A runner that reports no other Codex account: Default is the one Orbit has there.
+          account === 'default' ? /Add another Codex account to this machine before removing Default\./ : /account/,
+        );
         return true;
       },
       `removing ${JSON.stringify(account)}`,
@@ -217,6 +222,20 @@ test('Default is never removable', async () => {
   }
   assert.deepEqual(h.state(), { engine: 'codex', account: null, status: null, message: null });
   assert.equal(await h.beat(), undefined);
+
+  // Beside an added account it is removed from Orbit, at once, and still nothing reaches the machine.
+  h.runner.engines = [{
+    engine: 'codex',
+    installed: true,
+    auth: 'yes',
+    accounts: [
+      { id: 'default', home: '/root/.codex', auth: 'yes' },
+      { id: SLOT, home: `/root/.orbit/codex-accounts/${SLOT}`, auth: 'yes' },
+    ],
+  }];
+  assert.deepEqual(await h.remove('default'), { engine: 'codex', account: 'default', status: 'done', message: null });
+  assert.deepEqual(h.state(), { engine: 'codex', account: null, status: null, message: null }, 'no relay row');
+  assert.equal(await h.beat(), undefined, 'the heartbeat hands the runner nothing to remove');
 });
 
 test('a report about a removal the row has moved past changes nothing', async () => {
