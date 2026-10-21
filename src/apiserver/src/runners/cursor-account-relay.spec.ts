@@ -278,8 +278,10 @@ test('P4a a Cursor CLI account is removed only by a runner that declares cursor-
     await h.removed({ engine: 'cursor', account: SLOT, status: 'done', attempt: (h.row.codexAccountRemoveAt as Date).toISOString() }),
     { ok: true, applied: true },
   );
-  // Default is the runner's own Cursor CLI login, never removed.
-  await assert.rejects(h.remove('default'), BadRequestException);
+  // Default is the runner's own Cursor CLI login, never handed to the runner: it is removed from Orbit
+  // alone, and not while it is the only Cursor CLI account the runner reports (runner-default-remove.spec.ts).
+  await assert.rejects(h.remove('default'), refusedWith('Add another Cursor CLI account to this machine before removing Default.'));
+  assert.equal(h.row.codexAccountRemoveAccount, SLOT, 'a refused removal writes nothing: the relay still names the slot it removed');
 
   // A runner that does not declare it is refused in the words the page shows, and stores nothing.
   const old = harness();

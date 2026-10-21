@@ -795,6 +795,13 @@ model Runner {
   // reported names wherever an account is named (namedRunnerEngines), which is how Default, the one
   // account the machine never names, gets a name at all. NULL until the first rename.
   accountNames   Json?     @map("account_names")
+  /// The engines whose Default the owner removed from Orbit on this runner (migration 0440), each at
+  /// most once. Default is the directory the machine's own environment selects for that engine, and
+  /// it stays on the machine with its sign-in: only Orbit stops listing and using it, and only while
+  /// `engines` reports another account of that engine. Written by RunnersService.removeAccount for
+  /// `default`, taken back out by restoreDefault, and never by the runner. Empty is every Default
+  /// listed and used, as before. NOT NULL DEFAULT '{}' in SQL, like every scalar list here.
+  defaultRemoved String[]  @default([]) @map("default_removed")
 
   // Browser-driven install of one engine CLI, the same one-slot relay shape as the sign-in above
   // (a machine installs one CLI at a time; the request is redelivered until the runner reports).
