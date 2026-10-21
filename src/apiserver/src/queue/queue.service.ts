@@ -53,7 +53,8 @@ import {
   sessionAccountPausedUntil,
   type WorkspaceAccountChoices,
 } from '../providers/plan-usage-accounts';
-import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
+import { ACCOUNT_CHOICE, ACCOUNT_PINNED, type AccountRunner } from '../providers/account';
+import { runnerAccountPausedUntil } from '../common/account-pause';
 import {
   choosePoolMember,
   poolFallbackNotice,
@@ -217,7 +218,9 @@ export class QueueService {
         workspace: {
           select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true },
         },
-        assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
+        assignedRunner: {
+          select: { engines: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true },
+        },
       },
     });
     const blocked: string[] = [];
@@ -239,8 +242,10 @@ export class QueueService {
         const move = canMove && accountBeforeDispatch(slug, {
           account: session[ACCOUNT_CHOICE[slug]],
           pinned: session[ACCOUNT_PINNED[slug]],
-        }, session.workspace, runner.engines, runner.planUsage, now, runner.accountPauses);
-        if (move) until = null;
+        }, session.workspace, runner, now);
+        // Off a Default its owner removed from Orbit the move is to Automatic's pick even when that is
+        // paused too — every account left is — and the session waits for it.
+        if (move && !runnerAccountPausedUntil(runner.accountPauses, slug, move.to, now)) until = null;
       }
       if (!isBuiltinProvider(slug, session.providerBuiltin) && slug) {
         // The key it names, or the one a retired name of it resolves to (migration 0415).
@@ -681,6 +686,10 @@ export class QueueService {
    * The move is a compare-and-set on the account the claim read, so a pick made in between wins; it owes
    * the transcript its line (the one a failure's move says), which the engine this claim starts carries
    * on its first event.
+   *
+   * A session on a Default its owner removed from Orbit is moved too, to the account Automatic picks among
+   * those that remain, on any runner and pinned or not, and is unpinned there: nothing runs on that Default
+   * any more. A runner that cannot carry the conversation rebuilds it there as it can, or says why not.
    */
   private async accountsForClaim(session: {
     id: string;
@@ -697,7 +706,7 @@ export class QueueService {
     cursorAccount: string | null;
     cursorAccountPinned: boolean;
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
-    assignedRunner: { engines: unknown; accountNames: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
+    assignedRunner: (AccountRunner & { accountNames: unknown; capabilities: string[] }) | null;
   }): Promise<WorkspaceAccountChoices> {
     const workspace = session.workspace;
     const accounts: WorkspaceAccountChoices = {
@@ -710,22 +719,22 @@ export class QueueService {
     const engine = isAccountEngine(session.provider) ? session.provider : null;
     const runner = session.assignedRunner;
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !runner) return accounts;
-    if (!(runner.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[engine])) return accounts;
     const column = ACCOUNT_CHOICE[engine];
     const own = session[column];
     const move = accountBeforeDispatch(
       engine,
       { account: own, pinned: session[ACCOUNT_PINNED[engine]] },
       workspace,
-      runner.engines,
-      runner.planUsage,
+      runner,
       new Date(),
-      runner.accountPauses,
     );
-    if (!move) return accounts;
+    if (!move || (!move.defaultRemoved && !(runner.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[engine]))) {
+      return accounts;
+    }
+    const pinned = ACCOUNT_PINNED[engine];
     const { count } = await this.prisma.session.updateMany({
-      where: { id: session.id, [column]: own, [ACCOUNT_PINNED[engine]]: false },
-      data: { [column]: move.to },
+      where: { id: session.id, [column]: own, ...(move.defaultRemoved ? {} : { [pinned]: false }) },
+      data: { [column]: move.to, ...(move.defaultRemoved ? { [pinned]: false } : {}) },
     });
     if (count === 0) return accounts;
     // Owed only when no other line is: one already owed (a pool's) is said first, as PoolNotices.owe keeps it.
@@ -734,8 +743,8 @@ export class QueueService {
       data: { poolSwitchNotice: accountSwitchNotice(engine, move, runner) },
     });
     // A resident engine still holds the previous account's environment. Reload before
-    // the next message so a pause cannot be bypassed by reusing that warm process.
-    if (move.paused) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
+    // the next message so a pause cannot be bypassed by reusing that warm process, nor a removed Default.
+    if (move.paused || move.defaultRemoved) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
     return { ...accounts, [column]: move.to };
   }
 
@@ -771,6 +780,9 @@ export class QueueService {
             // What naming the account it moves to reads (accountSwitchNotice).
             accountNames: true,
             accountPauses: true,
+            // A Default its owner removed from Orbit, which the claim moves a session off (accountsForClaim)
+            // and dispatch never runs one on (resolveProviderExec).
+            defaultRemoved: true,
             // What moving it off a spent account before this start reads (accountsForClaim).
             planUsage: true,
             capabilities: true,
@@ -933,7 +945,7 @@ export class QueueService {
         antigravityAccount: accounts.antigravityAccount,
         kimiAccount: accounts.kimiAccount,
         cursorAccount: accounts.cursorAccount,
-        runnerEngines: session.assignedRunner?.engines,
+        runner: session.assignedRunner,
       });
     let exec = resolveExec(session.model);
     // Snapshot an inherited default on the session at its first claim, and refresh one the runtime

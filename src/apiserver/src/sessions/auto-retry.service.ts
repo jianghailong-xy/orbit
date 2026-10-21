@@ -365,7 +365,10 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         startedAt: true,
         runtimeSessionId: true,
         assignedRunner: {
-          select: { planUsage: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true, accountPauses: true },
+          select: {
+            planUsage: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true, accountPauses: true,
+            defaultRemoved: true,
+          },
         },
         // Which of the runner's Codex, Claude, Antigravity, Kimi or Cursor CLI accounts the run spends:
         // the one picked for the session, else its workspace's. Its quota alone holds back a session
@@ -556,7 +559,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
                   kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
                   cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
                 },
-                session.assignedRunner?.engines,
+                session.assignedRunner,
+                now,
               ),
             );
         // A session on Automatic is not held by its own account alone, on a runner that carries its
@@ -575,10 +579,8 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
               engine,
               { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
               session.workspace,
-              session.assignedRunner?.engines,
-              session.assignedRunner?.planUsage,
+              session.assignedRunner,
               now,
-              session.assignedRunner?.accountPauses,
             )
           : null;
         const blockedUntil = ownBlockedUntil && elsewhere && elsewhere < ownBlockedUntil

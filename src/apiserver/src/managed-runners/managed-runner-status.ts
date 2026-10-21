@@ -104,7 +104,9 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
     firstSessionProvider: managedFirstSessionProvider(
       mapping.initialProvider,
       input.firstSessionKey ?? null,
-      runner ? { engines: runner.engines ?? null, capabilities: runner.capabilities ?? null } : null,
+      runner
+        ? { engines: runner.engines ?? null, defaultRemoved: runner.defaultRemoved ?? null, capabilities: runner.capabilities ?? null }
+        : null,
     ),
     actions: {
       ...actions,

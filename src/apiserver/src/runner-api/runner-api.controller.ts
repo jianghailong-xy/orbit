@@ -50,7 +50,7 @@ import {
   CLAUDE_ACCOUNT_MOVE_V1,
 } from '../providers/account-move-capability';
 import { ACCOUNT_CHOICE, ACCOUNT_PINNED, accountEnvVar } from '../providers/account';
-import { sessionAccountPausedUntil, type WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
+import { onRemovedDefault, sessionAccountPausedUntil, type WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
 import { dispatchCodexResetCommand, receiveCodexResetResult } from './codex-reset-relay';
 import {
   INTEGRATION_RESULT_REFUSAL_STATUS,
@@ -2894,8 +2894,14 @@ export class RunnerApiController {
             },
           },
         },
-        // `engines` for the Codex account the workspace chose, resolved as the claim resolves it.
-        assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
+        // `engines` for the Codex account the workspace chose, resolved as the claim resolves it — and what
+        // decides where a session on a Default its owner removed from Orbit runs instead.
+        assignedRunner: {
+          select: {
+            runtimeDefaultModels: true, modelCatalog: true, engines: true, defaultRemoved: true, accountPauses: true,
+            planUsage: true,
+          },
+        },
         // The account-level permission default and orchestration switch, which replaced the
         // per-workspace ones.
         owner: { select: { preferences: true } },
@@ -3038,7 +3044,7 @@ export class RunnerApiController {
           antigravityAccount: s.antigravityAccount ?? workspace?.antigravityAccount,
           kimiAccount: s.kimiAccount ?? workspace?.kimiAccount,
           cursorAccount: s.cursorAccount ?? workspace?.cursorAccount,
-          runnerEngines: s.assignedRunner?.engines,
+          runner: s.assignedRunner,
         });
       let exec: ReturnType<typeof resolveExec>;
       try {
@@ -3877,6 +3883,8 @@ export class RunnerApiController {
     declaredCapabilities: readonly string[] = [],
   ): Promise<RunInboxResponse | null> {
     let pauseRequeued = false;
+    // Requeued because the engine is resident on a Default its owner removed from Orbit, not for a pause.
+    let defaultRequeued = false;
     // A reload answered without being handed out, its environment one nothing can build any more: the
     // poll goes on to what was queued behind it.
     let reloadRefused = false;
@@ -3887,6 +3895,7 @@ export class RunnerApiController {
     // runner until this returns.
     const outcome = await withTransactionRetry(this.prisma, async (tx) => {
       pauseRequeued = false;
+      defaultRequeued = false;
       reloadRefused = false;
       // More than one inbox poller can briefly exist around a warm activation or runner
       // restart. Serialize them on the Session row so their NOT EXISTS(in-flight) checks
@@ -3974,6 +3983,9 @@ export class RunnerApiController {
       );
       // The pause may have been requested after the claim but before inbox delivery. Only
       // executable work that has not started is held; control messages and the active turn stay.
+      // So may the Default a resident engine runs on have been removed from Orbit by its owner: its
+      // next message waits for the claim that moves the session off it (QueueService.accountsForClaim),
+      // and the turn it is running finishes there.
       if (owned[0].status === RunStatus.RUNNING) {
         if (owned[0].providerBuiltin && isAccountEngine(owned[0].provider)) {
           // Pause writes this same row. Hold the read until the lease commits, so a pause
@@ -3983,7 +3995,7 @@ export class RunnerApiController {
         const candidates = await tx.$queryRaw<Array<{ id: string }>>`
           SELECT s.id FROM "session" s JOIN "runner" r ON r.id = s."assigned_runner_id"
           WHERE s.id = ${sessionId}::uuid
-            AND (r."account_pauses" IS NOT NULL OR NOT s."provider_builtin")
+            AND (r."account_pauses" IS NOT NULL OR cardinality(r."default_removed") > 0 OR NOT s."provider_builtin")
             AND EXISTS (SELECT 1 FROM "conversation_turn" t WHERE t."session_id" = s.id
               AND t.kind = 'message' AND (t.status = 'PENDING'
                 OR (t.status = 'IN_FLIGHT' AND t."lease_deadline_at" < now())))
@@ -4001,7 +4013,7 @@ export class RunnerApiController {
                   env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
                 },
               },
-              assignedRunner: { select: { engines: true, accountPauses: true } },
+              assignedRunner: { select: { engines: true, accountPauses: true, defaultRemoved: true, planUsage: true } },
             },
           });
           const now = new Date();
@@ -4011,7 +4023,8 @@ export class RunnerApiController {
           const pooledUntil = !isBuiltinProvider(session.provider, session.providerBuiltin) && session.provider
             ? await this.queue.pausedPoolMemberUntil(session.ownerId, session.provider, session, now, tx)
             : null;
-          if (until || pooledUntil) {
+          const offDefault = !!session.assignedRunner && onRemovedDefault(session, session.workspace, session.assignedRunner);
+          if (until || pooledUntil || offDefault) {
             // Requeueing alone leaves a warm runner holding its local active-turn permit forever.
             // Retire this process under the same lock, then return a committed ownership-loss 409
             // below. The runner detaches without finalizing; a later claim takes a fresh generation.
@@ -4038,13 +4051,14 @@ export class RunnerApiController {
               where: { id: sessionId },
               data: {
                 status: RunStatus.PENDING,
-                error: `Account paused until ${(until ?? pooledUntil)!.toISOString()}`,
+                ...(until || pooledUntil ? { error: `Account paused until ${(until ?? pooledUntil)!.toISOString()}` } : {}),
                 inboxLeaseGeneration: fence,
                 inboxLeaseOwner: null,
                 engineTurnActive: false,
               },
             });
             pauseRequeued = true;
+            defaultRequeued = !until && !pooledUntil;
             return null;
           }
         }
@@ -4430,7 +4444,9 @@ export class RunnerApiController {
       this.realtime.publishSessionUpdated(sessionId);
       this.queue.notifySessionQueued();
       // Outside the transaction: throwing before commit would roll back the pause and its fence.
-      throw new ConflictException('account is paused; inbox lease ownership was released');
+      throw new ConflictException(defaultRequeued
+        ? 'the account this engine runs on is no longer used by Orbit; inbox lease ownership was released'
+        : 'account is paused; inbox lease ownership was released');
     }
     if (reloadRefused) {
       this.realtime.publishSessionUpdated(sessionId);
@@ -4498,7 +4514,12 @@ export class RunnerApiController {
             cursorAccount: true,
           },
         },
-        assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
+        assignedRunner: {
+          select: {
+            runtimeDefaultModels: true, modelCatalog: true, engines: true, defaultRemoved: true, accountPauses: true,
+            planUsage: true,
+          },
+        },
       },
     });
     if (!session) return {};
@@ -4553,7 +4574,7 @@ export class RunnerApiController {
         antigravityAccount: session.antigravityAccount ?? session.workspace?.antigravityAccount,
         kimiAccount: session.kimiAccount ?? session.workspace?.kimiAccount,
         cursorAccount: session.cursorAccount ?? session.workspace?.cursorAccount,
-        runnerEngines: session.assignedRunner?.engines,
+        runner: session.assignedRunner,
       });
     } catch (error) {
       // Every refusal it makes is of the credential: gone, disabled, on a runtime no engine speaks, or
@@ -5917,6 +5938,7 @@ export class RunnerApiController {
           ...(usageLimit?.move
             ? {
                 ...(usageLimitEngine ? { [ACCOUNT_CHOICE[usageLimitEngine]]: usageLimit.move.to } : {}),
+                ...(usageLimitEngine && usageLimit.move.unpin ? { [ACCOUNT_PINNED[usageLimitEngine]]: false } : {}),
                 poolSwitchNotice: usageLimit.move.notice,
               }
             : {}),
@@ -8082,7 +8104,13 @@ export class RunnerApiController {
     runnerId: string,
     text: string,
     delivered = true,
-  ): Promise<{ retryAt?: Date | null; retryAttempts?: number; claudeAccount?: string; poolSwitchNotice?: string }> {
+  ): Promise<{
+    retryAt?: Date | null;
+    retryAttempts?: number;
+    claudeAccount?: string;
+    claudeAccountPinned?: boolean;
+    poolSwitchNotice?: string;
+  }> {
     const quotaSpent = isUsageLimitErrorText(text);
     const rateLimited = isRateLimitApiErrorText(text);
     if (!quotaSpent && !isRetryableApiErrorText(text)) return { retryAt: null, retryAttempts: 0 };
@@ -8145,23 +8173,23 @@ export class RunnerApiController {
     if (session.provider === AgentProvider.CLAUDE) {
       const runner = await tx.runner.findUnique({
         where: { id: runnerId },
-        select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, capabilities: true },
+        select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, capabilities: true },
       });
       const move = runner?.capabilities.includes(CLAUDE_ACCOUNT_MOVE_V1)
         ? accountAfterUsageLimit(
             'claude',
             { account: session.claudeAccount, pinned: session.claudeAccountPinned },
             session.workspace,
-            runner.engines,
-            runner.planUsage,
+            runner,
             new Date(),
-            runner.accountPauses,
           )
         : null;
       if (move && runner) {
         return {
           ...(delivered ? { retryAt: new Date() } : {}),
           claudeAccount: move.to,
+          // Off a Default its owner removed from Orbit, a session pinned there is pinned nowhere.
+          ...(move.defaultRemoved ? { claudeAccountPinned: false } : {}),
           poolSwitchNotice: accountSwitchNotice('claude', move, runner),
         };
       }
@@ -8170,10 +8198,8 @@ export class RunnerApiController {
             'claude',
             { account: session.claudeAccount, pinned: session.claudeAccountPinned },
             session.workspace,
-            runner.engines,
-            runner.planUsage,
+            runner,
             new Date(),
-            runner.accountPauses,
           )
         : null;
     }
@@ -8209,11 +8235,11 @@ export class RunnerApiController {
       workspaceId: string | null;
     },
     text: string,
-  ): Promise<{ retryAt: Date; move?: { to: string; notice: string } } | null> {
+  ): Promise<{ retryAt: Date; move?: { to: string; notice: string; unpin?: boolean } } | null> {
     const now = new Date();
     const runner = await tx.runner.findUnique({
       where: { id: runnerId },
-      select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, capabilities: true },
+      select: { planUsage: true, engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, capabilities: true },
     });
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
@@ -8224,11 +8250,17 @@ export class RunnerApiController {
     const own = { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] };
     const carries = !!runner?.capabilities.includes(ACCOUNT_MOVE_CAPABILITY[engine]);
     const move = carries
-      ? accountAfterUsageLimit(engine, own, workspace, runner!.engines, runner!.planUsage, now, runner!.accountPauses)
+      ? accountAfterUsageLimit(engine, own, workspace, runner, now)
       : null;
-    if (move && runner) return { retryAt: now, move: { to: move.to, notice: accountSwitchNotice(engine, move, runner) } };
+    if (move && runner) {
+      // Off a Default its owner removed from Orbit, a session pinned there is pinned nowhere.
+      return {
+        retryAt: now,
+        move: { to: move.to, notice: accountSwitchNotice(engine, move, runner), ...(move.defaultRemoved ? { unpin: true } : {}) },
+      };
+    }
     const elsewhere = carries
-      ? accountAfterUsageLimitAt(engine, own, workspace, runner!.engines, runner!.planUsage, now, runner!.accountPauses)
+      ? accountAfterUsageLimitAt(engine, own, workspace, runner, now)
       : null;
     const at = await this.quotaRetryAt(tx, runnerId, session, text, workspace, elsewhere);
     return at ? { retryAt: at } : null;
@@ -8289,7 +8321,7 @@ export class RunnerApiController {
     const now = new Date();
     const runner = await tx.runner.findUnique({
       where: { id: runnerId },
-      select: { planUsage: true, engines: true },
+      select: { planUsage: true, engines: true, defaultRemoved: true, accountPauses: true },
     });
     // Only a configured provider's slug can name a pool.
     const builtin = isBuiltinProvider(
@@ -8318,7 +8350,8 @@ export class RunnerApiController {
             kimiAccount: session.kimiAccount ?? workspace?.kimiAccount,
             cursorAccount: session.cursorAccount ?? workspace?.cursorAccount,
           },
-          runner?.engines,
+          runner,
+          now,
         ),
       ));
     const at = elsewhere && (!own || elsewhere < own) ? elsewhere : own;

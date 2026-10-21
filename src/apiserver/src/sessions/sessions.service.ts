@@ -257,12 +257,19 @@ import {
   accountSwitchNotice,
   accountBeforeDispatch,
   automaticAccount,
-  runAccount,
+  reportedRunAccount,
   workspaceLeavesAccountToOrbit,
   type WorkspaceAccountChoices,
 } from '../providers/plan-usage-accounts';
-import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
-import { namedRunnerEngines, sanitizeRunnerEngines, usedRunnerEngines } from '../common/runner-engines';
+import {
+  ACCOUNT_CHOICE,
+  ACCOUNT_PINNED,
+  DEFAULT_ACCOUNT,
+  defaultRemovedOn,
+  remainingAccount,
+  type AccountRunner,
+} from '../providers/account';
+import { sanitizeRunnerEngines, usedRunnerEngines } from '../common/runner-engines';
 import { runnerAccountPausedUntil } from '../common/account-pause';
 import { ACCOUNT_MOVE_CAPABILITY, cursorMoveRefusal } from '../providers/account-move-capability';
 import { sessionPoolCodexLogin } from '../providers/codex-login';
@@ -696,7 +703,7 @@ function automaticAccountOnSwitch(
   session: {
     numTurns: number;
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
-    assignedRunner: { engines: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
+    assignedRunner: (AccountRunner & { capabilities: string[] }) | null;
   },
   engine: AccountEngine,
   now: Date,
@@ -704,7 +711,7 @@ function automaticAccountOnSwitch(
   const runner = session.assignedRunner;
   if (!runner) return null;
   if (session.numTurns > 0 && !runnerCarriesAccounts(runner, engine)) return null;
-  return automaticAccount(engine, session.workspace, runner.engines, runner.planUsage, now, runner.accountPauses);
+  return automaticAccount(engine, session.workspace, runner, now);
 }
 
 /** Whether `runner` carries a conversation from one of its `engine` accounts to another. */
@@ -1200,7 +1207,10 @@ export class SessionsService {
     // everything this deliberately lets through.
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
-      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true },
+      select: {
+        name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true,
+        accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true,
+      },
     });
     if (runtime === AgentProvider.DSH) {
       if (!targetRunner?.capabilitiesReportedAt || !targetRunner.capabilities?.includes('provider:dsh')) {
@@ -1231,7 +1241,9 @@ export class SessionsService {
     // for it — which pins it there — else, when its workspace leaves the account to Orbit, the runner's
     // account whose quota resets soonest (automaticAccount), which Orbit may move it off when that
     // account's usage limit stops it. Cursor CLI reports no quota yet, so Automatic starts it on Default,
-    // or on the first account signed in when Default is not (accountToStartOn). Stored here; a Codex,
+    // or on the first account signed in when Default is not (accountToStartOn). While the owner has
+    // removed Default from Orbit, Automatic picks among the accounts that remain, the only one too, and a
+    // workspace set to Default is on Automatic (automaticAccount). Stored here; a Codex,
     // Claude or Kimi conversation lives in that account's directory. Null runs on the workspace's. An
     // engine's account is the runner's sign-in to it, so it is read only for a session that runs on that
     // sign-in: a key or a pool brings its own credential, and an account named beside one is not kept
@@ -1240,14 +1252,7 @@ export class SessionsService {
       resolved.credential.kind === 'login' && resolved.credential.engine === engine;
     const automatic = (engine: AccountEngine) =>
       signedInOn(engine) && targetRunner
-        ? automaticAccount(
-            engine,
-            { env: workspaceEnv, ...accountChoices },
-            targetRunner.engines,
-            targetRunner.planUsage,
-            new Date(),
-            targetRunner.accountPauses,
-          )
+        ? automaticAccount(engine, { env: workspaceEnv, ...accountChoices }, targetRunner, new Date())
         : null;
     const picked = (engine: AccountEngine, account: string | undefined) =>
       signedInOn(engine) ? account : undefined;
@@ -5388,6 +5393,11 @@ export class SessionsService {
    *
    * Only an idle session (AWAITING_INPUT): a turn in flight finishes or fails where it is, and a
    * failure there makes the move itself.
+   *
+   * A session on a Default its owner removed from Orbit moves too, to the account Automatic picks among
+   * those that remain, and is unpinned there: whether or not it was pinned, and whether or not its
+   * runner carries the conversation — nothing runs on that Default any more. (A turn in flight finishes
+   * where it is, and the inbox hands its resident engine nothing more there: dequeueTurn.)
    */
   private async accountMoveBeforeTurn(
     tx: Prisma.TransactionClient,
@@ -5398,9 +5408,9 @@ export class SessionsService {
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin)) return null;
     const runner = await tx.runner.findUnique({
       where: { id: session.assignedRunnerId },
-      select: { engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true },
+      select: { engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true },
     });
-    if (!runner || !runnerCarriesAccounts(runner, engine)) return null;
+    if (!runner || (!runnerCarriesAccounts(runner, engine) && !defaultRemovedOn(engine, runner))) return null;
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
           where: { id: session.workspaceId },
@@ -5413,12 +5423,10 @@ export class SessionsService {
       engine,
       { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
       workspace,
-      runner.engines,
-      runner.planUsage,
+      runner,
       new Date(),
-      runner.accountPauses,
     );
-    if (!move) return null;
+    if (!move || (!move.defaultRemoved && !runnerCarriesAccounts(runner, engine))) return null;
     await this.insertTurnLocked(tx, session.id, {
       kind: 'reload',
       content: JSON.stringify({ provider: engine }),
@@ -5426,6 +5434,7 @@ export class SessionsService {
     });
     return {
       [ACCOUNT_CHOICE[engine]]: move.to,
+      ...(move.defaultRemoved ? { [ACCOUNT_PINNED[engine]]: false } : {}),
       // Said on the `resumed` that reload earns, unless another line is already owed.
       ...(session.poolSwitchNotice ? {} : { poolSwitchNotice: accountSwitchNotice(engine, move, runner) }),
     };
@@ -8848,14 +8857,14 @@ export class SessionsService {
             env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
           },
         },
-        assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
+        assignedRunner: { select: { engines: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true } },
       },
     });
     const write = (to: string, pinned: boolean): AccountSwitchWrite =>
       ({ [ACCOUNT_CHOICE[engine]]: to, [ACCOUNT_PINNED[engine]]: pinned });
     const runner = session.assignedRunner;
     if (account === undefined || account === AUTOMATIC_ACCOUNT) {
-      if (account === AUTOMATIC_ACCOUNT && !workspaceLeavesAccountToOrbit(engine, session.workspace, runner?.engines)) {
+      if (account === AUTOMATIC_ACCOUNT && !workspaceLeavesAccountToOrbit(engine, session.workspace, runner)) {
         throw new BadRequestException("this session's workspace decides its account");
       }
       const pinned = session[ACCOUNT_PINNED[engine]];
@@ -8866,7 +8875,8 @@ export class SessionsService {
       if (account === AUTOMATIC_ACCOUNT) return { [ACCOUNT_PINNED[engine]]: false };
       return {};
     }
-    const row = sanitizeRunnerEngines(runner?.engines)
+    // As Orbit uses them: a Default its owner removed from Orbit is no account to switch to.
+    const row = (runner ? usedRunnerEngines({ ...runner, accountNames: null }) : null)
       ?.find((entry) => entry.engine === engine)
       ?.accounts?.find((entry) => entry.id === account);
     if (!runner || !row) throw new BadRequestException("that account is not one this session's runner reports");
@@ -8979,7 +8989,10 @@ export class SessionsService {
         include: {
           workspace: true,
           assignedRunner: {
-            select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true, capabilities: true, capabilitiesReportedAt: true },
+            select: {
+              runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true, defaultRemoved: true,
+              accountPauses: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true,
+            },
           },
           // The account-level permission default, which replaced the per-workspace one.
           owner: { select: { preferences: true } },
@@ -9024,7 +9037,7 @@ export class SessionsService {
           accounts.antigravityAccount ?? session.antigravityAccount ?? session.workspace?.antigravityAccount,
         kimiAccount: accounts.kimiAccount ?? session.kimiAccount ?? session.workspace?.kimiAccount,
         cursorAccount: accounts.cursorAccount ?? session.cursorAccount ?? session.workspace?.cursorAccount,
-        runnerEngines: session.assignedRunner?.engines,
+        runner: session.assignedRunner,
       });
       if (exec.provider === AgentProvider.DSH && (!session.assignedRunner?.capabilitiesReportedAt ||
         !session.assignedRunner.capabilities?.includes('provider:dsh'))) {
@@ -9266,7 +9279,9 @@ export class SessionsService {
               env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
             },
           },
-          assignedRunner: { select: { engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true } },
+          assignedRunner: {
+            select: { engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true },
+          },
         },
       });
       // An engine's accounts are its sign-ins on the runner: only a session whose credential IS that
@@ -9285,9 +9300,12 @@ export class SessionsService {
       const runner = session.assignedRunner;
       const column = ACCOUNT_CHOICE[engine];
       const choice = { [column]: session[column] ?? session.workspace?.[column] };
-      const current = runAccount(engine, session.workspace?.env, choice, runner.engines);
+      // Where it is by the runner's report alone, so a session still on a Default its owner removed from
+      // Orbit is seen to leave it.
+      const current = reportedRunAccount(engine, session.workspace?.env, choice, runner.engines);
       if (!current) throw new BadRequestException("this session spends a key of its own, not one of its runner's accounts");
-      const accounts = namedRunnerEngines(runner)?.find((entry) => entry.engine === engine)?.accounts;
+      // As Orbit uses them: a Default its owner removed is no account to pick or to move to.
+      const accounts = usedRunnerEngines(runner)?.find((entry) => entry.engine === engine)?.accounts;
       // Antigravity's quota travels with its engine health, and is weighed with the rest here.
       const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
       const now = new Date();
@@ -9295,14 +9313,19 @@ export class SessionsService {
       let pinned = true;
       let notice: string | null = null;
       if (account === AUTOMATIC_ACCOUNT) {
-        if (!workspaceLeavesAccountToOrbit(engine, session.workspace, runner.engines)) {
+        if (!workspaceLeavesAccountToOrbit(engine, session.workspace, runner)) {
           throw new BadRequestException("this session's workspace decides its account");
         }
         pinned = false;
+        // Off a Default its owner removed from Orbit, to the account Automatic picks among those left.
+        const offDefault = current === DEFAULT_ACCOUNT ? remainingAccount(engine, runner, now) : null;
         const paused = runnerAccountPausedUntil(runner.accountPauses, engine, current, now) !== null;
         const spent = paused || planUsageBlockedUntil(usage, engine, now, current) != null;
-        const roomier = spent ? accountToMoveTo(engine, accounts, usage, now, current) : null;
-        if (roomier) {
+        const roomier = !offDefault && spent ? accountToMoveTo(engine, accounts, usage, now, current) : null;
+        if (offDefault) {
+          to = offDefault.id;
+          notice = accountSwitchNotice(engine, { from: current, to, defaultRemoved: true }, runner);
+        } else if (roomier) {
           to = roomier;
           notice = accountSwitchNotice(engine, { from: current, to, ...(paused ? { paused: true } : {}) }, runner);
         }

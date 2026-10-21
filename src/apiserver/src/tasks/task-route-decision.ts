@@ -74,6 +74,7 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
       select: {
         modelCatalog: true, runtimeDefaultModels: true, planUsage: true,
         name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true,
+        accountPauses: true, defaultRemoved: true,
       },
     })),
     engine: (provider: string, providerBuiltin: boolean | null) => once(
@@ -242,7 +243,7 @@ function engineState(
   runner: RouteRunner,
   now: Date,
 ): ModelRoutingEngineState {
-  const automatic = automaticAccount(engine, agent, runner.engines, runner.planUsage, now);
+  const automatic = automaticAccount(engine, agent, runner, now);
   const accounts = {
     codexAccount: agent.codexAccount,
     claudeAccount: agent.claudeAccount,
@@ -256,7 +257,7 @@ function engineState(
     runner,
     nowMs: now.getTime(),
   }) !== null;
-  const account = runAccount(engine, agent.env, accounts, runner.engines);
+  const account = runAccount(engine, agent.env, accounts, runner, now);
   const snapshot = account === null ? undefined : spentPlanUsage(runner.planUsage as PlanUsage | null, engine, account);
   const windows: Array<[PlanUsageWindow | undefined, string]> = snapshot
     ? [

@@ -1736,7 +1736,7 @@ export class ManagedRunnerManager {
   private async reportSince(mapping: ManagedRunner, since: Date): Promise<ManagedSupplyRunner | null> {
     const runner = await this.prisma.runner.findUnique({
       where: { id: mapping.runnerId },
-      select: { status: true, lastHeartbeatAt: true, engines: true, capabilities: true },
+      select: { status: true, lastHeartbeatAt: true, engines: true, defaultRemoved: true, capabilities: true },
     });
     const beat = runner?.lastHeartbeatAt;
     if (!runner || !beat || runner.status === 'OFFLINE' || beat < since) return null;
