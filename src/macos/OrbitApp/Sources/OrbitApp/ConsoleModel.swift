@@ -698,6 +698,13 @@ final class ConsoleModel {
     func engineAccounts(_ engine: String) -> [RunnerEngineAccount] {
         runnerEngines?.first { $0.engine == engine }?.accounts ?? []
     }
+    /// Whether the runner's owner removed `engine`'s Default from Orbit, which its accounts then leave
+    /// out (`RunnerEngineHealth.removedDefault`): Automatic picks among the ones that remain, a workspace
+    /// set to Default is on Automatic, and nothing falls back on Default (`CodexAccounts`'s
+    /// `defaultRemoved`).
+    private func defaultRemoved(_ engine: String) -> Bool {
+        runnerEngines?.first { $0.engine == engine }?.removedDefault != nil
+    }
     /// The snapshot the runner's accounts of `engine` read their quota from (`CodexAccounts.usage`):
     /// Antigravity's travels with its engine health rather than in the runner's plan usage.
     private func engineUsage(_ engine: String) -> PlanUsageSnapshot? {
@@ -710,10 +717,12 @@ final class ConsoleModel {
     /// runner has more than one to choose between — a draft's workspace, or a session's.
     func automaticOffered(_ engine: String) -> Bool {
         if isDraft {
-            return CodexAccounts.automaticOffered(engine: engine, agent: draftAgent, accounts: engineAccounts(engine))
+            return CodexAccounts.automaticOffered(engine: engine, agent: draftAgent, accounts: engineAccounts(engine),
+                                                  defaultRemoved: defaultRemoved(engine))
         }
         return CodexAccounts.automaticOffered(engine: engine, pick: workspaceAccount(engine),
-                                              env: workspaceEnv, accounts: engineAccounts(engine))
+                                              env: workspaceEnv, accounts: engineAccounts(engine),
+                                              defaultRemoved: defaultRemoved(engine))
     }
     /// The account picked for this draft under `engine`, if any.
     func draftAccount(_ engine: String) -> String? {
@@ -779,19 +788,22 @@ final class ConsoleModel {
         let pinned = sessionAccountPinned(engine)
         if pinned && pendingResumeAccount == nil { return own }
         if automaticOffered(engine) {
-            return CodexAccounts.toStartOn(engineAccounts(engine), usage: engineUsage(engine))
+            return CodexAccounts.toStartOn(engineAccounts(engine), usage: engineUsage(engine),
+                                           defaultRemoved: defaultRemoved(engine))
         }
         return own ?? workspaceAccount(engine)
     }
     /// The `engine` account this draft or session runs on, as far as its runner reports it: a draft's
     /// pick, else its workspace's, else the one Automatic would choose now; a session's own, else its
-    /// workspace's. Default when the runner lists no such account, as dispatch resolves it.
+    /// workspace's. Default when the runner lists no such account, as dispatch resolves it — or, while
+    /// Default is removed from Orbit, Automatic's pick among the accounts that remain.
     func account(for engine: String) -> String {
         let wanted: String?
         if isDraft {
             wanted = draftAccount(engine) ?? CodexAccounts.workspaceAccount(engine, of: draftAgent)
                 ?? (draftAutomatic(engine)
-                    ? CodexAccounts.toStartOn(engineAccounts(engine), usage: engineUsage(engine))
+                    ? CodexAccounts.toStartOn(engineAccounts(engine), usage: engineUsage(engine),
+                                              defaultRemoved: defaultRemoved(engine))
                     : nil)
         } else if pendingResumeProvider == engine && !isLive {
             // Only while it is held: once the revive lands the session is live and says itself.
@@ -799,7 +811,9 @@ final class ConsoleModel {
         } else {
             wanted = sessionAccount(engine) ?? workspaceAccount(engine)
         }
-        return CodexAccounts.onRunner(wanted, accounts: engineAccounts(engine))
+        return CodexAccounts.onRunner(wanted, accounts: engineAccounts(engine), engine: engine,
+                                      env: isDraft ? draftAgent?.env : workspaceEnv, usage: engineUsage(engine),
+                                      defaultRemoved: defaultRemoved(engine))
     }
     /// The Codex account this draft or session runs on (`account(for:)`).
     var codexAccount: String { account(for: "codex") }
