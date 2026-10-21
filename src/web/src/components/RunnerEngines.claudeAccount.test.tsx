@@ -208,12 +208,13 @@ describe('a runner with two Claude accounts', () => {
     expect(loginPosts()).toEqual([{ engine: 'claude', account: WORK.id }]);
   });
 
-  it('removes an added account on its own route once asked, and never Default', async () => {
+  it('removes an added account on its own route once asked', async () => {
     const page = mount([runner({ accounts: [DEFAULT, WORK] })]);
     const [defaultRow, workRow] = rows(page, '.re-acct');
-    // Default can be renamed like any other account, but never removed: it is the machine's own login.
+    // Default can be renamed like any other account, and removed from Orbit alone: it is the machine's
+    // own login, which stays (RunnerEngines.removeDefault.test.tsx).
     expect(rows(defaultRow, 'button').map(labelOf)).toEqual(['More actions']);
-    expect((await openRunnerMenu(defaultRow)).textContent).not.toContain('Remove account');
+    expect((await openRunnerMenu(defaultRow)).textContent).toContain('Remove account');
 
     // The press asks first: the slot's sign-in is deleted from the machine, and nothing is sent until
     // the question is answered.
