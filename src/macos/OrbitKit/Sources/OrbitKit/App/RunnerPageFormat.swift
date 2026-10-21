@@ -409,17 +409,19 @@ public enum RunnerPageFormat {
 
     /// The quota window an Engines row shows under the engine: the binding one — the window that stops
     /// a login, or will stop it first (`PlanUsageSnapshot.bindingRow`, the one the composer's gauge
-    /// shows). Default's while the engine is signed in and has one account; with several, that of the
-    /// account a new session starts on, which the row names above it (`engineNextAccount`, web's
-    /// "Next: …") so it never reads as the whole machine's. One per row, whether the CLI reports two
-    /// windows or four: every window, and every account's, is the engine page's to list.
+    /// shows). Default's while the engine is signed in and has one account; with several — or while
+    /// Default is removed from Orbit, even one — that of the account a new session starts on, which the
+    /// row names above it (`engineNextAccount`, web's "Next: …") so it never reads as the whole
+    /// machine's, and never as Default's. None for an account signed out. One per row, whether the CLI
+    /// reports two windows or four: every window, and every account's, is the engine page's to list.
     public static func engineWindows(_ runner: Runner, engine: String, now: Date = Date()) -> [PlanUsageRow] {
         guard let health = runner.engines?.first(where: { $0.engine == engine }), health.installed == true else {
             return []
         }
         let account: String
-        if (health.accounts ?? []).count >= 2 {
-            guard let next = nextAccount(runner, health: health, now: now) else { return [] }
+        if (health.accounts ?? []).count >= 2 || health.removedDefault != nil {
+            guard let next = nextAccount(runner, health: health, now: now),
+                  health.accounts?.first(where: { $0.id == next })?.auth != "no" else { return [] }
             account = next
         } else {
             guard health.auth == "yes" else { return [] }
@@ -429,9 +431,11 @@ public enum RunnerPageFormat {
         return CodexAccounts.snapshot(usage, account: account)?.bindingRow(at: now).map { [$0] } ?? []
     }
 
-    /// The account an Engines row names above its window while the engine has several: the one a new
-    /// session starts on, whose window that is. Nil with one account, with none signed in, or when that
-    /// account has no window to show — web's row names it above one only too.
+    /// The account an Engines row names above its window while the engine has several — or while its
+    /// Default is removed from Orbit, when the one that remains is where sessions start (web's folded
+    /// head, "Next: …"): the one a new session starts on, whose window that is. Nil with one account,
+    /// with none signed in, or when that account has no window to show — web's row names it above one
+    /// only too.
     public static func engineNextAccount(_ runner: Runner, engine: String, now: Date = Date()) -> String? {
         guard let health = runner.engines?.first(where: { $0.engine == engine }), health.installed == true,
               let next = nextAccount(runner, health: health, now: now),
@@ -441,17 +445,20 @@ public enum RunnerPageFormat {
 
     /// Whether the engine page marks `account` NEXT beside its name (web `AccountName`'s chip, the
     /// account pools' mark for the same thing): the account a new session nobody picked one for starts
-    /// on (`nextAccount`) — so only where the engine has two accounts or more to choose between.
+    /// on (`nextAccount`) — so only where the engine has two accounts or more to choose between, or
+    /// its Default is removed from Orbit and one remains.
     public static func marksNext(_ runner: Runner, engine: String, account: String, now: Date = Date()) -> Bool {
         guard let health = runner.engines?.first(where: { $0.engine == engine }) else { return false }
         return nextAccount(runner, health: health, now: now) == account
     }
 
     /// Which of an engine's several accounts a new session starts on (`CodexAccounts.toStartOn`, web's
-    /// `accountToStartOn`); nil with one account, or none signed in.
+    /// `accountToStartOn`); nil with one account, or none signed in. While Default is removed from Orbit,
+    /// one of the accounts that remain, the only one too (`toStartOn`'s `defaultRemoved`).
     private static func nextAccount(_ runner: Runner, health: RunnerEngineHealth, now: Date) -> String? {
         let usage = CodexAccounts.usage(health.engine, planUsage: runner.planUsage, engines: runner.engines)
-        return CodexAccounts.toStartOn(health.accounts, usage: usage, now: now)
+        return CodexAccounts.toStartOn(health.accounts, usage: usage, now: now,
+                                       defaultRemoved: health.removedDefault != nil)
     }
 
     /// One account's own windows: Default's are the engine snapshot's, another's its entry under
@@ -519,14 +526,17 @@ public enum RunnerPageFormat {
 
     /// Every account an engine is signed into on that runner, Default first. One line for the
     /// runner's own login when it keeps no others — whose answer is the engine's, unless that is a
-    /// Gemini key's rather than Default's Google sign-in (`runsOnEnvKey`). `usage` is the engine's
-    /// snapshot (`CodexAccounts.usage`), where a Cursor CLI account's plan is read.
+    /// Gemini key's rather than Default's Google sign-in (`runsOnEnvKey`). While Default is removed from
+    /// Orbit (`removedDefault`) the accounts that remain are each a line of their own, the only one too:
+    /// a line of the engine's own login would be Default's, which the machine keeps and Orbit no longer
+    /// uses. `usage` is the engine's snapshot (`CodexAccounts.usage`), where a Cursor CLI account's plan
+    /// is read.
     public static func accountLines(_ health: RunnerEngineHealth, usage: PlanUsageSnapshot? = nil) -> [AccountLine] {
         let accounts = health.accounts ?? []
         let plan = { (account: String) -> String? in
             health.engine == CursorRuntime.engine ? CodexAccounts.reportedSnapshot(usage, account: account)?.planName : nil
         }
-        guard accounts.count >= 2 else {
+        guard accounts.count >= 2 || (health.removedDefault != nil && !accounts.isEmpty) else {
             let own = accounts.first
             let envKey = runsOnEnvKey(health, account: CodexAccounts.defaultID, auth: own?.auth)
             return [AccountLine(id: CodexAccounts.defaultID,
@@ -605,6 +615,80 @@ public enum RunnerPageFormat {
         guard let state, state.engine == engine, state.account == account else { return nil }
         return AccountRemoval(pending: state.status == "pending",
                               refused: state.status == "failed" ? state.message : nil)
+    }
+
+    /// Whether an account's swipe and long-press menu offer Remove: every account the runner added,
+    /// whose sign-in goes from the machine, and Default while another account of that engine stays on
+    /// the runner — which takes Default off Orbit's list alone, and which the control plane refuses with
+    /// no other account to run on (web `AccountRow`'s `removable`). One on its way off the machine
+    /// counts as gone already.
+    public static func offersRemove(_ line: AccountLine, health: RunnerEngineHealth, runner: Runner) -> Bool {
+        !line.isDefault || othersStaying(line, health: health, runner: runner) > 0
+    }
+
+    /// Whether Remove can be pressed: Default's removal is Orbit's own record and asks nothing of the
+    /// machine, so it works with the runner offline; an added account's sign-in is deleted by the
+    /// runner, which has to be online for it.
+    public static func canRemove(_ line: AccountLine, offline: Bool) -> Bool { line.isDefault || !offline }
+
+    /// The question in front of an account's Remove, and what removing it comes to.
+    public struct RemovalQuestion: Equatable, Sendable {
+        public let title: String
+        public let message: String
+    }
+
+    /// Default's says Orbit stops using it there while the machine keeps its sign-in and the CLI in a
+    /// terminal keeps working (the web's words, `RunnerAccountCopy`). An added account's sign-in goes from
+    /// the machine: while Default is removed from Orbit its workspaces go to Automatic, or — for the last
+    /// account Orbit uses there — to Default, by its name, which Orbit then uses again (the web's words
+    /// too), never to a Default as though it were in use; while Default is, the page's own question,
+    /// which says Default is untouched.
+    public static func removalQuestion(_ line: AccountLine, health: RunnerEngineHealth,
+                                       runner: Runner) -> RemovalQuestion {
+        let machine = displayName(runner)
+        if line.isDefault {
+            return RemovalQuestion(title: RunnerAccountCopy.runnerAccountRemoveTitle(name: line.name),
+                                   message: RunnerAccountCopy.runnerDefaultRemoveDetail(
+                                       runner: machine, cli: engineName(health.engine)))
+        }
+        if let name = removedDefaultName(health) {
+            return RemovalQuestion(title: RunnerAccountCopy.runnerAccountRemoveTitle(name: line.name),
+                                   message: othersStaying(line, health: health, runner: runner) > 0
+                                       ? RunnerAccountCopy.runnerAccountRemoveDetailAutomatic(runner: machine)
+                                       : RunnerAccountCopy.runnerAccountRemoveDetailLast(runner: machine, name: name))
+        }
+        let place = line.home ?? "Its sign-in"
+        return RemovalQuestion(title: "Remove “\(line.name)” from \(machine)?",
+                               message: "\(place) goes from this machine, and sessions stop running on it. "
+                                   + "Default is untouched.")
+    }
+
+    /// What a Default removed from Orbit is called: the name it was given in Orbit, else `Default` (web
+    /// `accountNameOf`). Nil while Default is in use.
+    public static func removedDefaultName(_ health: RunnerEngineHealth) -> String? {
+        guard let removed = health.removedDefault else { return nil }
+        return CodexAccounts.label(CodexAccounts.defaultID,
+                                   accounts: [RunnerEngineAccount(id: CodexAccounts.defaultID, name: removed.name)])
+    }
+
+    /// The line that ends an engine's accounts while its Default is removed from Orbit, beside Use again
+    /// (web `RemovedDefault`): which one it is and where it lives on the machine, which keeps it —
+    /// `Default · ~/.codex isn’t used by Orbit`. Nil while Default is in use.
+    public static func removedDefaultLine(_ health: RunnerEngineHealth) -> String? {
+        guard let removed = health.removedDefault, !(health.accounts ?? []).isEmpty,
+              let name = removedDefaultName(health) else { return nil }
+        return RunnerAccountCopy.runnerDefaultRemovedLine(name: name, dir: tildePath(removed.home))
+    }
+
+    /// How many of the engine's accounts other than `line`'s stay on the runner: one whose removal is
+    /// under way, or done and not yet read again, is as good as gone (web `beingRemoved`).
+    private static func othersStaying(_ line: AccountLine, health: RunnerEngineHealth, runner: Runner) -> Int {
+        (health.accounts ?? []).filter { account in
+            guard account.id != line.id else { return false }
+            guard let state = runner.accountRemove, state.engine == health.engine,
+                  state.account == account.id else { return true }
+            return state.status != "pending" && state.status != "done"
+        }.count
     }
 
     /// Whether an Update Engines Now the runner has not finished is under way.

@@ -1,0 +1,8 @@
+  50 "GET /api/projects/sidebar HTTP/1.1" 404 -
+  13 "GET /api/wiki/spaces HTTP/1.1" 404 -
+  13 "GET /api/users/me HTTP/1.1" 404 -
+  13 "GET /api/tasks/page?limit=1&listId=none&projectId=none&counts=total HTTP/1.1" 404 -
+  13 "GET /api/events HTTP/1.1" 404 -
+  13 "GET /api/auth/capabilities HTTP/1.1" 404 -
+  13 "GET /api/access-tokens HTTP/1.1" 404 -
+   9 "GET /dl/version.json HTTP/1.1" 404 -
