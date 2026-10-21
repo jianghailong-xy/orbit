@@ -291,11 +291,12 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     public let installed: Bool?
     /// Whatever `<engine> --version` printed; absent when not installed or the CLI wouldn't say.
     public let version: String?
-    /// The CLI's own answer to "am I signed in": `yes` / `no` / `unknown`.
+    /// The CLI's own answer to "am I signed in": `yes` / `no` / `unknown`. While Default is removed from
+    /// Orbit (`removedDefault`), the answer of the accounts that remain instead.
     public let auth: String?
     /// The accounts this engine is signed into on the runner, Default first — reported for an engine
     /// whose CLI keeps a login per directory (Codex, Claude, Antigravity, Kimi). Absent from an older
-    /// runner.
+    /// runner. Default is left out while it is removed from Orbit (`removedDefault`).
     /// `auth` above stays the engine's answer: for Antigravity that may be a GEMINI_API_KEY, while its
     /// Default account is the runner's Google sign-in alone (`RunnerPageFormat.runsOnEnvKey`).
     public let accounts: [RunnerEngineAccount]?
@@ -313,6 +314,12 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     /// Kimi only: the site its login is on, `mainland-cn` (kimi.com) or `global` (kimi.ai) — see
     /// `KimiSite`. Absent before the first Kimi sign-in on that machine, and from an older runner.
     public let kimiRegion: String?
+    /// The Default the owner removed from Orbit on this runner (`DELETE /runners/:id/accounts/:engine/
+    /// default`), which `POST …/default/restore` brings back (shared `RunnerEngineHealth.removedDefault`).
+    /// Present only while the runner reports another account of this engine: Default is then left out
+    /// of `accounts`, and what sums up sign-in here — `auth`, `authSource`, `kimiRegion`, the quota —
+    /// speaks for the accounts that remain. The machine keeps Default and its sign-in.
+    public let removedDefault: RunnerRemovedDefault?
     public var id: String { engine }
     /// Only the CLI's own "yes" counts — the third state exists precisely so an engine that
     /// wouldn't answer is never shown as signed in (web's `rowKindOf`).
@@ -321,11 +328,13 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
     public init(engine: String, installed: Bool? = nil, version: String? = nil, auth: String? = nil,
                 accounts: [RunnerEngineAccount]? = nil, update: RunnerEngineUpdate? = nil,
                 authSource: String? = nil, planUsage: PlanUsageSnapshot? = nil,
-                installationError: String? = nil, dsh: DshRuntimeHealth? = nil, kimiRegion: String? = nil) {
+                installationError: String? = nil, dsh: DshRuntimeHealth? = nil, kimiRegion: String? = nil,
+                removedDefault: RunnerRemovedDefault? = nil) {
         self.engine = engine
         self.installationError = installationError
         self.dsh = dsh
         self.kimiRegion = kimiRegion
+        self.removedDefault = removedDefault
         self.installed = installed
         self.version = version
         self.auth = auth
@@ -333,6 +342,24 @@ public struct RunnerEngineHealth: Codable, Equatable, Sendable, Identifiable {
         self.update = update
         self.authSource = authSource
         self.planUsage = planUsage
+    }
+}
+
+/// The Default an engine leaves out while it is removed from Orbit (shared `RunnerRemovedDefault`):
+/// what the line that offers it back names it by.
+public struct RunnerRemovedDefault: Codable, Equatable, Sendable {
+    /// Its directory on that machine, absolute, as the runner reports it: the one the machine's own
+    /// environment selects (~/.codex for Codex).
+    public let home: String
+    /// The name it was given in Orbit. Absent for a Default never renamed, which is "Default".
+    public let name: String?
+    /// As on its account (`RunnerEngineAccount.fingerprintPrefix`). Absent where the runner read none.
+    public let fingerprintPrefix: String?
+
+    public init(home: String, name: String? = nil, fingerprintPrefix: String? = nil) {
+        self.home = home
+        self.name = name
+        self.fingerprintPrefix = fingerprintPrefix
     }
 }
 

@@ -1576,9 +1576,18 @@ public final class APIClient: @unchecked Sendable {
         try await delete("runners/\(id)/login")
     }
 
+    /// An added account comes off the machine, by the runner. Default (`account: "default"`) comes off
+    /// Orbit's list alone, answered `done` at once with nothing sent to the machine, and is refused while
+    /// the runner reports no other account of that engine.
     public func removeRunnerAccount(_ id: String, engine: LoginEngine,
                                     account: String) async throws -> RunnerAccountRemoveState {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
+    }
+
+    /// Bring back the Default `removeRunnerAccount` took off Orbit's list: Orbit's own record, as the
+    /// removal is, so it works with the runner offline.
+    public func restoreRunnerDefault(_ id: String, engine: LoginEngine) async throws {
+        try await postRaw("runners/\(id)/accounts/\(engine.rawValue)/default/restore", body: Optional<Empty>.none)
     }
 
     public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,
