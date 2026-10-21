@@ -998,7 +998,9 @@ Left to later work, or not shown here:
 - A real engine session, and its continuation across a sleep and a wake, in a Docker container (D4).
   The owner's DeepSeek key file was not there, and the test network reaches no model; the turns the
   woken runners claimed could not be answered. A deployment's network must also let the runner reach
-  its model's endpoint; this run's network reached only the apiserver.
+  its model's endpoint; this run's network reached only the apiserver. (Shown since D4, on 2026-10-21 on this host's own
+  Docker: a new account's first session answered through the owner's DeepSeek key, and the same engine session
+  answering again after two sleeps and wakes; [evidence](evidence/managed-runner-docker-e2e/2026-10-21/README.md).)
 - The deployment's wiring (D3): the channel as a service, its network and token, the Docker profile.
   No default deployment entry changed here.
 - Backup, restore and the failure handbook for local volumes (D5).
@@ -1056,7 +1058,8 @@ working image from the branch's own `deploy/managed-runner/image`
 Left to later work, or not shown here:
 
 - A real engine session on a managed runner (D4); the channel's refusals, the containers' limits, backups and
-  failure handling (D5).
+  failure handling (D5). (D4's end-to-end run on this host's own Docker:
+  [evidence](evidence/managed-runner-docker-e2e/2026-10-21/README.md).)
 - An upgrade does not rebuild the managed runner image, whose runner does not update itself: a deployment's
   runners keep the image `channel.json` and `profile.json` name until an administrator builds another and names
   its ID in both. (Since D6 it does: "Implementation record: image upgrades".)

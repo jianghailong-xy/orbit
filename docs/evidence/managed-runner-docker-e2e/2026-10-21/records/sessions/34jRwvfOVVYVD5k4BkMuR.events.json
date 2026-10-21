@@ -1,0 +1,369 @@
+[
+ {
+  "seq": 1,
+  "type": "user",
+  "payload": {
+   "text": "D4 first session on a managed runner. Please do exactly this, and nothing else:\n1. Run one shell command that writes the single line D4-MARKER-7Q2K into a file named d4-first.txt in the current directory, then prints the current directory, the user id and that file's contents (for example: printf 'D4-MARKER-7Q2K\\n' > d4-first.txt && pwd && id -u && cat d4-first.txt).\n2. Reply in one short sentence that names the file, the directory and repeats the marker.\nKeep the marker in mind: I will ask you about it later in this conversation.\n",
+   "delivery": "enqueued"
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:43.461Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 2,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34jRwvihrfIbzn4cg4AMZ",
+   "delivery": "written",
+   "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:43.461Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 3,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-flash",
+   "subtype": "init",
+   "sessionId": "3OUjsdN9vxCI0VGi2dglwn",
+   "sessionPublicId": "3OUjsdN9vxCI0VGi2dglwn"
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:43.740Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 5,
+  "type": "system",
+  "payload": {
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"deepseek-flash\",\"query_source\":\"sdk\"}\n"
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:43.748Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 6,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34jRwvihrfIbzn4cg4AMZ",
+   "delivery": "acknowledged",
+   "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:44.352Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 7,
+  "type": "thinking",
+  "payload": {
+   "text": ""
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:45.576Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 8,
+  "type": "system",
+  "payload": {
+   "subtype": "context",
+   "contextTokens": 72579
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:45.576Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 9,
+  "type": "tool_use",
+  "payload": {
+   "id": "call_00_ET_Wel3xeOr6hH7mkBKILRb2529",
+   "name": "Bash",
+   "input": {
+    "command": "printf 'D4-MARKER-7Q2K\\n' > d4-first.txt && pwd && id -u && cat d4-first.txt",
+    "description": "Write marker file and print directory, uid, contents"
+   }
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:45.798Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 10,
+  "type": "tool_result",
+  "payload": {
+   "content": "/var/lib/orbit/home/.orbit/worktrees/01a15b9d-13d7-75a9-bf7f-0718c5fe80c3\n10001\nD4-MARKER-7Q2K",
+   "isError": false,
+   "toolUseId": "call_00_ET_Wel3xeOr6hH7mkBKILRb2529"
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:45.878Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 12,
+  "type": "thinking",
+  "payload": {
+   "text": ""
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:46.878Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 81,
+  "type": "assistant",
+  "payload": {
+   "text": "I wrote `d4-first.txt` containing `D4-MARKER-7Q2K` in `/var/lib/orbit/home/.orbit/worktrees/01a15b9d-13d7-75a9-bf7f-0718c5fe80c3` (uid 10001)."
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:47.071Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 82,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0.3087992,
+   "subtype": "success",
+   "numTurns": 2,
+   "contextTokens": 72753
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:47.089Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 83,
+  "type": "prompt_suggestion",
+  "payload": {
+   "text": "what was the marker?",
+   "source": "engine"
+  },
+  "turnId": "34jRwvihrfIbzn4cg4AMZ",
+  "ts": "2026-10-20T23:19:49.906Z",
+  "turnPublicId": "34jRwvihrfIbzn4cg4AMZ"
+ },
+ {
+  "seq": 84,
+  "type": "user",
+  "payload": {
+   "text": "Without running any tool or reading any file: what was the marker you wrote earlier in this conversation, and in which file and directory did you write it? Answer in one sentence.\n",
+   "delivery": "enqueued"
+  },
+  "turnId": "34jS27YCbqYARWwD7rEnI",
+  "ts": "2026-10-20T23:23:08.858Z",
+  "turnPublicId": "34jS27YCbqYARWwD7rEnI"
+ },
+ {
+  "seq": 85,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34jS27YCbqYARWwD7rEnI",
+   "delivery": "written",
+   "turnPublicId": "34jS27YCbqYARWwD7rEnI"
+  },
+  "turnId": "34jS27YCbqYARWwD7rEnI",
+  "ts": "2026-10-20T23:23:08.858Z",
+  "turnPublicId": "34jS27YCbqYARWwD7rEnI"
+ },
+ {
+  "seq": 86,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-flash",
+   "subtype": "init",
+   "sessionId": "3OUjsdN9vxCI0VGi2dglwn",
+   "sessionPublicId": "3OUjsdN9vxCI0VGi2dglwn"
+  },
+  "turnId": "34jS27YCbqYARWwD7rEnI",
+  "ts": "2026-10-20T23:23:09.349Z",
+  "turnPublicId": "34jS27YCbqYARWwD7rEnI"
+ },
+ {
+  "seq": 88,
+  "type": "system",
+  "payload": {
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"deepseek-flash\",\"query_source\":\"sdk\"}\n"
+  },
+  "turnId": "34jS27YCbqYARWwD7rEnI",
+  "ts": "2026-10-20T23:23:09.356Z",
+  "turnPublicId": "34jS27YCbqYARWwD7rEnI"
+ },
+ {
+  "seq": 89,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34jS27YCbqYARWwD7rEnI",
+   "delivery": "acknowledged",
+   "turnPublicId": "34jS27YCbqYARWwD7rEnI"
+  },
+  "turnId": "34jS27YCbqYARWwD7rEnI",
+  "ts": "2026-10-20T23:23:10.039Z",
+  "turnPublicId": "34jS27YCbqYARWwD7rEnI"
+ },
+ {
+  "seq": 104,
+  "type": "thinking",
+  "payload": {
+   "text": "No tools. Answer from conversation.",
+   "thinkingMs": 138
+  },
+  "turnId": "34jS27YCbqYARWwD7rEnI",
+  "ts": "2026-10-20T23:23:10.754Z",
+  "turnPublicId": "34jS27YCbqYARWwD7rEnI"
+ },
+ {
+  "seq": 105,
+  "type": "system",
+  "payload": {
+   "subtype": "context",
+   "contextTokens": 72878
+  },
+  "turnId": "34jS27YCbqYARWwD7rEnI",
+  "ts": "2026-10-20T23:23:10.754Z",
+  "turnPublicId": "34jS27YCbqYARWwD7rEnI"
+ },
+ {
+  "seq": 170,
+  "type": "assistant",
+  "payload": {
+   "text": "The marker was `D4-MARKER-7Q2K`, written to `d4-first.txt` in `/var/lib/orbit/home/.orbit/worktrees/01a15b9d-13d7-75a9-bf7f-0718c5fe80c3`."
+  },
+  "turnId": "34jS27YCbqYARWwD7rEnI",
+  "ts": "2026-10-20T23:23:10.917Z",
+  "turnPublicId": "34jS27YCbqYARWwD7rEnI"
+ },
+ {
+  "seq": 171,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0.016676800000000002,
+   "subtype": "success",
+   "numTurns": 1,
+   "contextTokens": 72878
+  },
+  "turnId": "34jS27YCbqYARWwD7rEnI",
+  "ts": "2026-10-20T23:23:10.944Z",
+  "turnPublicId": "34jS27YCbqYARWwD7rEnI"
+ },
+ {
+  "seq": 172,
+  "type": "prompt_suggestion",
+  "payload": {
+   "text": "Show me the file contents again",
+   "source": "engine"
+  },
+  "turnId": "34jS27YCbqYARWwD7rEnI",
+  "ts": "2026-10-20T23:23:13.908Z",
+  "turnPublicId": "34jS27YCbqYARWwD7rEnI"
+ },
+ {
+  "seq": 173,
+  "type": "user",
+  "payload": {
+   "text": "One more question, again without running any tool: repeat the marker from earlier in this conversation, and say how many times I have asked you about it before this message.\n",
+   "delivery": "enqueued"
+  },
+  "turnId": "34jSLB618hHcmlVpoudj1",
+  "ts": "2026-10-20T23:35:40.380Z",
+  "turnPublicId": "34jSLB618hHcmlVpoudj1"
+ },
+ {
+  "seq": 174,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34jSLB618hHcmlVpoudj1",
+   "delivery": "written",
+   "turnPublicId": "34jSLB618hHcmlVpoudj1"
+  },
+  "turnId": "34jSLB618hHcmlVpoudj1",
+  "ts": "2026-10-20T23:35:40.380Z",
+  "turnPublicId": "34jSLB618hHcmlVpoudj1"
+ },
+ {
+  "seq": 175,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-flash",
+   "subtype": "init",
+   "sessionId": "3OUjsdN9vxCI0VGi2dglwn",
+   "sessionPublicId": "3OUjsdN9vxCI0VGi2dglwn"
+  },
+  "turnId": "34jSLB618hHcmlVpoudj1",
+  "ts": "2026-10-20T23:35:40.768Z",
+  "turnPublicId": "34jSLB618hHcmlVpoudj1"
+ },
+ {
+  "seq": 177,
+  "type": "system",
+  "payload": {
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"deepseek-flash\",\"query_source\":\"sdk\"}\n"
+  },
+  "turnId": "34jSLB618hHcmlVpoudj1",
+  "ts": "2026-10-20T23:35:40.776Z",
+  "turnPublicId": "34jSLB618hHcmlVpoudj1"
+ },
+ {
+  "seq": 178,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34jSLB618hHcmlVpoudj1",
+   "delivery": "acknowledged",
+   "turnPublicId": "34jSLB618hHcmlVpoudj1"
+  },
+  "turnId": "34jSLB618hHcmlVpoudj1",
+  "ts": "2026-10-20T23:35:41.384Z",
+  "turnPublicId": "34jSLB618hHcmlVpoudj1"
+ },
+ {
+  "seq": 471,
+  "type": "thinking",
+  "payload": {
+   "text": "The marker: D4-MARKER-7Q2K. How many times asked about it before this message? The user asked in the first message to \"keep the marker in mind: I will ask you about it later\" \u2014 that was a mention, not a question about it. Then the second user turn asked \"what was the marker you wrote earlier...\" \u2014 that's one question. So before this message: one time.\n\nShould I count the first message's instruction? \"how many times I have asked you about it before this message\" \u2014 asked about the marker: once (the previous message). The first message wasn't asking a question; it asked me to keep it in mind. I'll answer one.",
+   "thinkingMs": 729
+  },
+  "turnId": "34jSLB618hHcmlVpoudj1",
+  "ts": "2026-10-20T23:35:42.493Z",
+  "turnPublicId": "34jSLB618hHcmlVpoudj1"
+ },
+ {
+  "seq": 472,
+  "type": "system",
+  "payload": {
+   "subtype": "context",
+   "contextTokens": 73004
+  },
+  "turnId": "34jSLB618hHcmlVpoudj1",
+  "ts": "2026-10-20T23:35:42.493Z",
+  "turnPublicId": "34jSLB618hHcmlVpoudj1"
+ },
+ {
+  "seq": 509,
+  "type": "assistant",
+  "payload": {
+   "text": "The marker is `D4-MARKER-7Q2K`, and you have asked me about it once before this message (your previous message asking me to recall it)."
+  },
+  "turnId": "34jSLB618hHcmlVpoudj1",
+  "ts": "2026-10-20T23:35:42.585Z",
+  "turnPublicId": "34jSLB618hHcmlVpoudj1"
+ },
+ {
+  "seq": 510,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0.0189144,
+   "subtype": "success",
+   "numTurns": 1,
+   "contextTokens": 73004
+  },
+  "turnId": "34jSLB618hHcmlVpoudj1",
+  "ts": "2026-10-20T23:35:42.604Z",
+  "turnPublicId": "34jSLB618hHcmlVpoudj1"
+ }
+]
