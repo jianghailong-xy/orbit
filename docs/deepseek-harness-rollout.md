@@ -19,7 +19,7 @@
 | apiserver + web | 最终候选 a5d3d20d7（迁移至 `0382_pool_credential_throttle`；dsh 领取保护 0377；派发前读取心跳 `engines[dsh]` 的安装门禁） | 早于 P1b 的服务端：没有 dsh 门禁，不得与本文的 runner 混用 |
 | runner | 由最终候选构建，心跳声明 `provider:dsh`（`X-Orbit-Supported-Providers: claude,codex,opencode,antigravity,dsh`），并上报 `engines[dsh]` | ≤ 0.1.211（D1 修复之前的发布版，不声明 dsh）：服务端不派发 dsh，dsh 工作停在 PENDING 并提示升级 |
 | DeepSeek Harness CLI | `@deepseek-ai/dsh@0.2.0-rc.2`（官方标签 dsh-v0.2.0-rc.2），`lib/bin.js` sha256 `1a03dee18683483ff6a1b27b2a1e650230da6bcca9a0f55f7d81b3308c3f307f`，安装在 `${ORBIT_HOME}/engines/dsh/0.2.0-rc.2` | 用户 PATH 上的 dsh、npm latest 以及其他版本都不会被使用 |
-| 平台 | Linux x64，服务 PATH 中为 Node 26（实测 v26.10.0） | macOS、Windows、arm64 及其他 Node 主版本：runner 返回 `DSH_PLATFORM_UNSUPPORTED` / `DSH_NODE_UNSUPPORTED`（未在真实 macOS runner 上实测，见第 6 节） |
+| 平台 | Linux x64 上的 Node 26（实测 v26.10.0）：服务 PATH 中有就用它，没有时安装先下载官方 v26.10.0 到 `${ORBIT_HOME}/engines/node/v26.10.0`（见[运行时环境](deepseek-harness-runtime-environment.md#固定版本安装)） | macOS、Windows、arm64：runner 返回 `DSH_PLATFORM_UNSUPPORTED`（未在真实 macOS runner 上实测，见第 6 节）；官方 Node 26 构建在本机起不来时，安装返回 `DSH_NODE_UNSUPPORTED` |
 | 凭据【解耦后】 | DeepSeek API key：preset `deepseek`，或自定义且主机为 `api.deepseek.com`；Anthropic 方言，不是 Claude 订阅 token（Web 表单、`POST /api/providers/mine`；CLI/MCP 建的自定义 key 只要主机是它也算）。同一把 key 同时用于 Claude Code、OpenCode 和 DeepSeek Harness；DeepSeek Harness 会话可以在多把 DeepSeek key 之间选择和切换。原 preset `deepseek-harness`、runtime `dsh` 的配置由存量迁移并入 DeepSeek key，旧 slug 仍解析为该 key + DeepSeek Harness | DeepSeek 账号登录（第三阶段） |
 | 模型 | 运行时目录实测返回 deepseek-v4-flash（默认） | — |
 | 任务判据 | EXECUTABLE（验收命令由 runner 在工作区执行，不经过 dsh 和模型）、EVIDENCE_JUDGMENT、OWNER_CONFIRMED | 用户手动输入的 `!` shell 在 dsh 上仍被拒绝 |
@@ -30,7 +30,7 @@
 ## 2. 启用前提（逐台 runner 核对）
 
 1. 服务端已部署最终候选：`GET /api/health` 返回 ok；`_prisma_migrations` 的最新一条与候选版本一致。
-2. runner 主机为 Linux x64，服务账户 PATH 中的 `node --version` 为 v26.x；`npm ci` 能访问 registry（安装使用内嵌锁文件）。
+2. runner 主机为 Linux x64；`npm ci` 能访问 registry（安装使用内嵌锁文件）。服务账户 PATH 中没有 Node 26 时，安装还要能访问 nodejs.org，下载官方 Node v26.10.0。
 3. runner 未开启 AutoInstallEngines（默认就是关闭）。dsh 必须显式安装：在 Web 的 Infrastructure 页点 DeepSeek Harness 的 Install（按机器列出；机器详情页的 DeepSeek Harness 行只读）、调用 `POST /api/runners/:id/install {"engine":"dsh"}`，或在 runner 上运行 `orbit doctor`。
 4. 获准使用 dsh 的用户已连接 DeepSeek key（与 Claude Code、OpenCode 共用同一把）。Key 只能经加密存储和派发进入 runner，不得写入 runner 环境、日志、文档或证据。
 

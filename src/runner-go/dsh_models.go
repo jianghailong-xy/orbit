@@ -89,17 +89,17 @@ func dshCLIAvailable() bool {
 }
 
 func fetchDshModelCatalog(ctx context.Context) ([]ModelInfo, error) {
-	executable, err := dshExecutablePath()
+	node, executable, err := dshRuntime()
 	if err != nil {
 		noteDshCatalogRead(false)
 		return nil, err
 	}
-	return fetchDshModelCatalogWithExecutable(ctx, executable)
+	return fetchDshModelCatalogWithExecutable(ctx, node, executable)
 }
 
 // The catalogue needs no key. It is read in a disposable private DSH_HOME so the
 // probe cannot change the user's profile or add sessions to a recoverable home.
-func fetchDshModelCatalogWithExecutable(ctx context.Context, executable string) (models []ModelInfo, resultErr error) {
+func fetchDshModelCatalogWithExecutable(ctx context.Context, node, executable string) (models []ModelInfo, resultErr error) {
 	noteDshCatalogRead(false)
 	probeRoot, err := os.MkdirTemp("", "orbit-dsh-catalog-")
 	if err != nil {
@@ -118,7 +118,8 @@ func fetchDshModelCatalogWithExecutable(ctx context.Context, executable string) 
 	}
 	cctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(cctx, spec.Executable, spec.Args...)
+	name, args := dshCommand(node, spec.Executable, spec.Args...)
+	cmd := exec.CommandContext(cctx, name, args...)
 	configureSessionProcessTree(cmd)
 	cmd.Dir, cmd.Env = spec.Cwd, spec.Env
 	diagnostics := &dshProbeDiagnostics{}
