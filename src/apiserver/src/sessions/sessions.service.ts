@@ -262,7 +262,7 @@ import {
   type WorkspaceAccountChoices,
 } from '../providers/plan-usage-accounts';
 import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
-import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
+import { namedRunnerEngines, sanitizeRunnerEngines, usedRunnerEngines } from '../common/runner-engines';
 import { runnerAccountPausedUntil } from '../common/account-pause';
 import { ACCOUNT_MOVE_CAPABILITY, cursorMoveRefusal } from '../providers/account-move-capability';
 import { sessionPoolCodexLogin } from '../providers/codex-login';
@@ -710,6 +710,14 @@ function automaticAccountOnSwitch(
 /** Whether `runner` carries a conversation from one of its `engine` accounts to another. */
 function runnerCarriesAccounts(runner: { capabilities: string[] }, engine: AccountEngine): boolean {
   return (runner.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[engine]);
+}
+
+/** A session's runner as its detail serves it: the engines as the runner list serves them — named,
+ *  paused, without a Default removed from Orbit (usedRunnerEngines) — and none of the columns they
+ *  are read from. */
+function servedRunner<R extends { engines: unknown; accountNames: unknown; accountPauses: unknown; defaultRemoved: unknown }>(row: R) {
+  const { accountNames: _accountNames, accountPauses: _accountPauses, defaultRemoved: _defaultRemoved, ...runner } = row;
+  return { ...runner, engines: usedRunnerEngines(row) };
 }
 
 /** The account columns a provider switch writes (accountOnProviderSwitch); empty writes none. */
@@ -3611,7 +3619,11 @@ export class SessionsService {
       include: {
         workspace: true,
         assignedRunner: {
-          select: { id: true, name: true, displayName: true, version: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true },
+          select: {
+            id: true, name: true, displayName: true, version: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true,
+            // What its engines are served with (servedRunner), and served without.
+            accountNames: true, accountPauses: true, defaultRemoved: true,
+          },
         },
         tagLinks: {
           include: {
@@ -3768,6 +3780,7 @@ export class SessionsService {
     const landing = session.sessionKind === SESSION_KIND_LANDING
       ? await readLandingView(this.prisma, ownerId, session.id)
       : undefined;
+    const assignedRunner = session.assignedRunner && servedRunner(session.assignedRunner);
     return withSessionCapabilities({
       ...rest,
       // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
@@ -3775,13 +3788,13 @@ export class SessionsService {
       engine: await sessionEngine(this.prisma, session),
       workspace: session.workspace ? {
         ...session.workspace,
-        antigravityKeyAvailableByRunner: session.assignedRunner ? {
-          [session.assignedRunner.id]: hasGeminiEnvKey(session.workspace.env) || antigravityState(session.assignedRunner).envKeyAvailable,
+        antigravityKeyAvailableByRunner: assignedRunner ? {
+          [assignedRunner.id]: hasGeminiEnvKey(session.workspace.env) || antigravityState(assignedRunner).envKeyAvailable,
         } : {},
       } : null,
-      assignedRunner: session.assignedRunner ? {
-        ...session.assignedRunner,
-        antigravity: antigravityState(session.assignedRunner),
+      assignedRunner: assignedRunner ? {
+        ...assignedRunner,
+        antigravity: antigravityState(assignedRunner),
       } : null,
       route,
       poolCodexLogin,

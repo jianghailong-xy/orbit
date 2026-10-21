@@ -477,7 +477,9 @@ export interface PlanUsageSnapshot {
   /** The snapshot of every other account on the runner — of Codex, Claude Code, Antigravity, Kimi
    *  Code or Cursor CLI — keyed by its id (RunnerEngineAccount.id); the windows beside it are Default's
    *  (codexAccountSnapshot). An entry never carries a reset block — reset is Default's alone. Absent
-   *  from older runners, and until the runner has read an account other than Default. */
+   *  from older runners, and until the runner has read an account other than Default. On a runner
+   *  Orbit serves with that engine's Default removed (RunnerEngineHealth.removedDefault), the windows
+   *  beside it are the one remaining account's, and there are none when two or more remain. */
   accounts?: Record<string, PlanUsageSnapshot>;
   /** Antigravity only: the Google account's quota buckets from the runner's `/usage` probe
    *  (docs/antigravity-runtime-contract.md §16.6), flattened across agy's model groups. */
@@ -1490,13 +1492,15 @@ export interface RunnerEngineHealth {
   installationError?: string;
   /** Harness session keys arrive with dispatch; the runner's own report leaves validation unknown. */
   dsh?: DshRuntimeHealth;
-  /** The CLI's own answer to "am I signed in", with `unknown` for anything ambiguous. */
+  /** The CLI's own answer to "am I signed in", with `unknown` for anything ambiguous. While Default is
+   *  removed from Orbit (`removedDefault`), the answer of the accounts that remain instead. */
   auth: 'yes' | 'no' | 'unknown';
   /** What the runner's updater last did to this engine. Absent from an older runner, and until
    *  the first pass — shown as "not reported yet", never as a problem. */
   update?: RunnerEngineUpdate;
   /** Codex, Claude Code, Antigravity, Kimi Code and Cursor CLI: every account signed into this
-   *  machine's CLI, Default first, each with its own sign-in state. `auth` above stays the engine's answer, which is
+   *  machine's CLI, Default first (left out while it is removed from Orbit: `removedDefault`), each
+   *  with its own sign-in state. `auth` above stays the engine's answer, which is
    *  what every reader older than accounts takes it for — for Antigravity that may be a GEMINI_API_KEY,
    *  while its Default account is the runner's Google sign-in alone. Absent from an older runner, and
    *  whenever the runner couldn't list its accounts — read as the one account every machine had
@@ -1515,6 +1519,28 @@ export interface RunnerEngineHealth {
    *  on this machine (an installer's default is not a sign-in), after a logout, and from an older
    *  runner. */
   kimiRegion?: KimiRegion;
+  /** Codex, Claude Code, Antigravity, Kimi Code and Cursor CLI: the Default the owner removed from
+   *  Orbit on this runner (`DELETE /runners/:id/accounts/:engine/default`), which `POST
+   *  /runners/:id/accounts/:engine/default/restore` brings back. Present only while the runner reports
+   *  another account of this engine. Default is then left out of `accounts`, and what sums up sign-in
+   *  here (`auth`, `authSource`, `kimiRegion` and Antigravity's `planUsage`, beside the engine's part
+   *  of the runner's planUsage) speaks for the accounts that remain, as if the machine had only them.
+   *  The machine keeps Default and its sign-in, and the CLI in a terminal there still uses it. Absent
+   *  otherwise: with no other account reported, Default is listed and used as reported, removed or not. */
+  removedDefault?: RunnerRemovedDefault;
+}
+
+/** The Default an engine leaves out while it is removed from Orbit (RunnerEngineHealth.removedDefault):
+ *  what a client names it by on the line that offers it back. */
+export interface RunnerRemovedDefault {
+  /** Its directory on that machine, absolute, as the runner reports it: the one the machine's own
+   *  environment selects (~/.codex for Codex). */
+  home: string;
+  /** The name it was given in Orbit. Absent for a Default never renamed, which is "Default". */
+  name?: string;
+  /** As on its account (RunnerEngineAccount.fingerprintPrefix): a remaining account showing the same
+   *  one is the same login. Absent where the runner read none. */
+  fingerprintPrefix?: string;
 }
 
 export interface DshRuntimeHealth {

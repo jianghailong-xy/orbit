@@ -18,7 +18,7 @@ import type {
 } from '@orbit/shared';
 import { LOGIN_FAILURE_REASONS } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
-import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
+import { namedRunnerEngines, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
 import {
   antigravityGoogleLoginRefusal,
   antigravitySignInUnderWay,
@@ -164,10 +164,12 @@ export class RunnersService {
         heartbeatDraining: true,
         // Per-engine health, and any install the user started for one of them — both drive the
         // engine rows under each machine on Infrastructure. The accounts carry the names given
-        // them here (namedRunnerEngines), not only the ones the runner reports.
+        // them here, not only the ones the runner reports, and leave out a Default removed from
+        // Orbit (usedRunnerEngines).
         engines: true,
         accountNames: true,
         accountPauses: true,
+        defaultRemoved: true,
         installStatus: true,
         installEngine: true,
         installCommand: true,
@@ -197,6 +199,10 @@ export class RunnersService {
     // A runner heartbeats every 30s; treat a missed window as offline so the UI
     // reflects dropouts without waiting for a background reaper.
     const now = Date.now();
+    // Each runner's engines as Orbit uses them (usedRunnerEngines): named, paused, and without a
+    // Default removed from Orbit. null (not []) for a runner that has never reported: "we don't know
+    // yet" and "nothing is installed" are different answers, and only one of them is ours to make up.
+    const used = runners.map((runner) => usedRunnerEngines(runner));
     return runners.map(({
       availableCommands,
       availableSkills,
@@ -204,6 +210,7 @@ export class RunnersService {
       engines,
       accountNames,
       accountPauses,
+      defaultRemoved,
       installStatus,
       installEngine,
       installCommand,
@@ -215,15 +222,15 @@ export class RunnersService {
       codexAccountRemoveMessage,
       selfUpdate,
       ...r
-    }) => ({
+    }, index) => ({
       ...r,
+      // Without the part of a removed Default, as the engines are.
+      planUsage: usedPlanUsage(r.planUsage, used[index]),
       // Never expose null or malformed JSON: clients can always index this as a provider map.
       runtimeDefaultModels: sanitizeRuntimeDefaultModels(runtimeDefaultModels),
       selfUpdate: sanitizeRunnerSelfUpdate(selfUpdate),
-      // null (not []) for a runner that has never reported: "we don't know yet" and "nothing is
-      // installed" are different answers, and only one of them is ours to make up.
-      engines: namedRunnerEngines({ engines, accountNames, accountPauses }),
-      antigravity: antigravityState({ capabilities: r.capabilities, engines }),
+      engines: used[index],
+      antigravity: antigravityState({ capabilities: r.capabilities, engines: used[index] }),
       install: installStateOf({
         installStatus,
         installEngine,

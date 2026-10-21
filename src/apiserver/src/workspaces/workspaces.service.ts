@@ -12,6 +12,7 @@ import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
 import { lastProviderByWorkspace, withProviderSeed } from './workspace-provider';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
+import { usedRunnerEngines } from '../common/runner-engines';
 import {
   isBlockingRepoState,
   readRunnerRepoHealth,
@@ -36,9 +37,13 @@ export class WorkspacesService {
   private async withAntigravityKeys<T extends { env?: unknown }>(ownerId: string, workspaces: T[]) {
     const runners = await this.prisma.runner.findMany({
       where: { ownerId },
-      select: { id: true, engines: true },
+      select: { id: true, engines: true, defaultRemoved: true },
     });
-    const runnerKeys = runners.map((runner) => [runner.id, antigravityState(runner).envKeyAvailable] as const);
+    // Read as the runner list reads them: a Default removed from Orbit is no credential Orbit runs on.
+    const runnerKeys = runners.map(({ id, engines, defaultRemoved }) => [
+      id,
+      antigravityState({ engines: usedRunnerEngines({ engines, accountNames: null, defaultRemoved }) }).envKeyAvailable,
+    ] as const);
     return workspaces.map((workspace) => ({
       ...workspace,
       antigravityKeyAvailableByRunner: Object.fromEntries(
