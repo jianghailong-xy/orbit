@@ -135,6 +135,28 @@ internal object AccountCopy {
     fun next(account: String) = "Next: $account"
 }
 
+/** Removing a runner's Default from Orbit and bringing it back, in the web's words: src/web/src/lib/runnerAccountCopy.ts, which
+ * RunnerAccountCopyParityTest reads as text — the web's, not Swift's, so the order the native clients land in changes nothing. Its two
+ * lines for the workspace form's account field have no counterpart here: no Android page sets a workspace's account. */
+internal object RunnerAccountCopy {
+    /** The question in front of Default's Remove…, and an added account's while Default is removed. */
+    fun removeTitle(name: String) = "Remove $name?"
+    /** Removing Default, which only Orbit stops using; [cli] is the CLI's own name (Codex, Claude Code). */
+    fun defaultRemoveDetail(runner: String, cli: String) = "Orbit stops using it on $runner. Its sign-in stays on the machine, and $cli in a " +
+        "terminal there keeps working. Workspaces set to it run on Automatic."
+    /** Removing an added account while Default is removed from Orbit, with another account left. */
+    fun removeDetailAutomatic(runner: String) = "Its sign-in is deleted from $runner. Workspaces set to this account run on Automatic."
+    /** Removing the last account Orbit uses while Default is removed: the removal holds only while another account is there, so Default
+     * ([name]) comes back into use. */
+    fun removeDetailLast(runner: String, name: String) = "Its sign-in is deleted from $runner. Without it, Orbit uses $name there again, " +
+        "and workspaces set to this account run on it."
+    /** The line that ends an engine's accounts while its Default is removed: its name, and its directory as a terminal spells it. */
+    fun defaultRemovedLine(name: String, dir: String) = "$name · $dir isn’t used by Orbit"
+    /** That line's button, which brings Default back. */
+    const val USE_AGAIN = "Use again"
+    fun useAgainFailed(name: String) = "Couldn’t use $name again"
+}
+
 /**
  * CodexAccounts: a runner's accounts of an engine that keeps several (Claude Code, Codex, Antigravity, Kimi Code) — whose
  * quota each one reads, which one a new session starts on, and what moves a session between them. Shared by the runner
@@ -176,10 +198,13 @@ internal object EngineAccounts {
     }
 
     /** CodexAccounts.automaticOffered (web `automaticOfferedOn`): Automatic is on offer for [engine] where the workspace picked
-     * none of its accounts ([pick]), its [env] selects no other config directory and no key of its own — for Kimi Code, no model of
-     * its own either, which only both of its variables together are — and the runner has two accounts or more to choose between. */
-    fun automaticOffered(engine: String, pick: String?, env: JsonObject?, accounts: Int): Boolean {
-        if (accounts < 2 || !pick.isNullOrEmpty()) return false
+     * none of its accounts ([pick]), its [env] leaves the account to Orbit, and the runner has two accounts or more to choose between. */
+    fun automaticOffered(engine: String, pick: String?, env: JsonObject?, accounts: Int): Boolean =
+        accounts >= 2 && pick.isNullOrEmpty() && envLeavesAccount(engine, env)
+
+    /** Whether a workspace's [env] leaves [engine]'s account to Orbit: it selects no other config directory and no key of its own — for
+     * Kimi Code, no model of its own either, which only both of its variables together are. */
+    fun envLeavesAccount(engine: String, env: JsonObject?): Boolean {
         fun set(key: String) = (env?.get(key) as? JsonPrimitive)?.contentOrNull?.isNotBlank() == true
         if (engine == "kimi" && set("KIMI_MODEL_NAME") && set("KIMI_MODEL_API_KEY")) return false
         val deciding = when (engine) {
@@ -276,11 +301,16 @@ internal object EngineAccounts {
      * waste first. Signed-out accounts are no candidates; one with a spent window, or paused by hand, waits until it frees
      * up; one nearly spent comes after the rest; then the soonest-expiring, then the roomiest by its tightest window; ties
      * go to Default, then the lower id. Every candidate held: the one that frees up first. Null with fewer than two.
+     *
+     * With [defaultRemoved] — the owner removed this engine's Default from Orbit (shared accountToStartOn's option) — Default is no
+     * candidate, and the choice is among the accounts that remain, the only one included; with every one of them signed out, the first
+     * by id, whose sign-in the session waits on. Null only when none remains.
      */
-    fun toStartOn(accounts: List<JsonObject>, usage: JsonObject?, nowMs: Long): String? {
-        if (accounts.size < 2) return null
+    fun toStartOn(accounts: List<JsonObject>, usage: JsonObject?, nowMs: Long, defaultRemoved: Boolean = false): String? {
+        val pool = if (defaultRemoved) accounts.filter { it.str("id") != DEFAULT } else accounts
+        if (pool.size < (if (defaultRemoved) 1 else 2)) return null
         class Candidate(val id: String, val nearLimit: Boolean, val expiresAt: Double, val tightest: Double, val spentUntil: Double?)
-        val candidates = accounts.filter { it.str("auth") != "no" }.map { account ->
+        val candidates = pool.filter { it.str("auth") != "no" }.map { account ->
             val own = accountSnapshot(usage, account.text("id"))
             val windows = own?.let(::windows).orEmpty()
             val spent = own?.let(::spendingWindows).orEmpty().filter { window -> resetMs(window)?.let { it <= nowMs } != true && used(window) >= 100 }
@@ -294,6 +324,7 @@ internal object EngineAccounts {
         if (usable.isNotEmpty()) return usable.sortedWith(compareBy<Candidate> { it.nearLimit }.thenBy { it.expiresAt }.thenBy { it.tightest }
             .then(byId)).first().id
         return candidates.sortedWith(compareBy<Candidate> { it.spentUntil ?: 0.0 }.then(byId)).firstOrNull()?.id
+            ?: if (defaultRemoved) pool.map { it.text("id") }.sorted().first() else null
     }
 }
 
@@ -858,20 +889,22 @@ internal object RunnerPage {
     }
 
     /** The one quota window an Engines row shows: the binding one (bindingRow, the composer gauge's) — Default's while the
-     * engine is signed in with one account; with several, that of the account a new session starts on, which the row names
-     * above it (engineNextAccount). Every window, and every account's, is the engine page's to list. */
+     * engine is signed in with one account; with several, or the one a removed Default leaves, that of the account a new session
+     * starts on, which the row names above it (engineNextAccount), while it is not signed out. Every window, and every account's, is
+     * the engine page's to list. */
     fun engineWindows(runner: JsonObject, engine: String, nowMs: Long = System.currentTimeMillis()): List<UsageRow> {
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return emptyList()
         val account = when {
-            health.list("accounts").size >= 2 -> nextAccount(runner, health, nowMs) ?: return emptyList()
+            health.list("accounts").size >= 2 || removedDefault(health) != null -> nextAccount(runner, health, nowMs)
+                ?.takeIf { id -> health.list("accounts").none { it.str("id") == id && it.str("auth") == "no" } } ?: return emptyList()
             health.str("auth") == "yes" -> EngineAccounts.DEFAULT
             else -> return emptyList()
         }
         return accountSnapshot(EngineAccounts.usage(engine, runner), account)?.let { bindingRow(it, nowMs) }?.let(::listOf).orEmpty()
     }
 
-    /** The account an Engines row names above its window while the engine has several: the one a new session starts on.
-     * Null with one account, none signed in, or no window to show for it. */
+    /** The account an Engines row names above its window while the engine has several, or the one a removed Default leaves: the
+     * one a new session starts on. Null with one account of its own, none signed in, or no window to show for it. */
     fun engineNextAccount(runner: JsonObject, engine: String, nowMs: Long = System.currentTimeMillis()): String? {
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return null
         val next = nextAccount(runner, health, nowMs) ?: return null
@@ -880,14 +913,15 @@ internal object RunnerPage {
     }
 
     /** Whether the engine page marks [account] NEXT beside its name, as the account pools mark theirs: the account a new
-     * session nobody picked one for starts on — so only where the engine has two accounts or more to choose between. */
+     * session nobody picked one for starts on — so only where the engine has two accounts or more to choose between, or, while its
+     * Default is removed from Orbit, the one that remains. */
     fun marksNext(runner: JsonObject, engine: String, account: String, nowMs: Long = System.currentTimeMillis()): Boolean {
         val health = engineHealth(runner, engine) ?: return false
         return nextAccount(runner, health, nowMs) == account
     }
 
-    private fun nextAccount(runner: JsonObject, health: JsonObject, nowMs: Long) =
-        EngineAccounts.toStartOn(health.list("accounts"), EngineAccounts.usage(health.text("engine"), runner), nowMs)
+    private fun nextAccount(runner: JsonObject, health: JsonObject, nowMs: Long) = EngineAccounts.toStartOn(health.list("accounts"),
+        EngineAccounts.usage(health.text("engine"), runner), nowMs, defaultRemoved = removedDefault(health) != null)
 
     /** One account's own windows, all of them: Default's are the engine snapshot's, another's its entry under `accounts`. */
     fun accountWindows(runner: JsonObject, engine: String, account: String): List<UsageRow> =
@@ -922,14 +956,16 @@ internal object RunnerPage {
     }
 
     /** Every account an engine is signed into, Default first; one line when it keeps no others, whose answer is the
-     * engine's unless that is a Gemini key's rather than Default's Google sign-in (runsOnEnvKey). A Cursor CLI account says the plan
-     * Cursor names it on, read off the runner's [usage] of the engine (EngineAccounts.usage). */
+     * engine's unless that is a Gemini key's rather than Default's Google sign-in (runsOnEnvKey). While Default is removed from Orbit,
+     * the accounts that remain, each with its own state — the only one too, which on its own would read the engine's sign-in, on the
+     * machine Default's. A Cursor CLI account says the plan Cursor names it on, read off the runner's [usage] of the engine
+     * (EngineAccounts.usage). */
     fun accountLines(health: JsonObject, usage: JsonObject? = null): List<AccountLine> {
         val accounts = health.list("accounts")
         val kimi = health.str("engine") == "kimi"
         fun plan(account: String) = if (health.str("engine") != ProviderEngines.CURSOR) null
             else accountSnapshotReported(usage, account)?.str("planName")?.takeIf { it.isNotBlank() }
-        if (accounts.size < 2) {
+        if (accounts.size < 2 && removedDefault(health) == null) {
             val own = accounts.firstOrNull()
             val envKey = runsOnEnvKey(health, EngineAccounts.DEFAULT, own?.str("auth"))
             return listOf(AccountLine("default", accountLabel("default", accounts), (own?.str("home") ?: own?.str("codexHome"))?.let(::tildePath),
@@ -975,6 +1011,41 @@ internal object RunnerPage {
     fun removal(state: JsonObject?, engine: String, account: String): Pair<Boolean, String?>? {
         if (state == null || state.str("engine") != engine || state.str("account") != account) return null
         return (state.str("status") == "pending") to (if (state.str("status") == "failed") state.str("message") else null)
+    }
+
+    /** The Default an engine leaves out while its owner removed it from Orbit (`removedDefault`: its directory, and its name if it was
+     * renamed), which the engine page names after the accounts that remain, with the way back. The server marks an engine only while
+     * the runner reports another account of it, so this is null whenever Default is in use. */
+    fun removedDefault(health: JsonObject): JsonObject? = health.obj("removedDefault")
+
+    /** What a removed Default goes by: the name it was given in Orbit, else Default. */
+    fun removedDefaultName(removed: JsonObject) = removed.str("name")?.takeIf { it.isNotEmpty() } ?: "Default"
+
+    /** The line that ends an engine's accounts while its Default is removed from Orbit. */
+    fun removedDefaultLine(removed: JsonObject) = RunnerAccountCopy.defaultRemovedLine(removedDefaultName(removed), tildePath(removed.text("home")))
+
+    /** How many of the engine's accounts besides [account] stay on the runner: one asked to be removed is as good as gone, though it is
+     * listed until the check-in after the machine's "done" drops it (web beingRemoved). */
+    fun othersStaying(runner: JsonObject, health: JsonObject, account: String): Int {
+        val going = runner.obj("accountRemove")?.takeIf { it.str("engine") == health.str("engine") && it.str("status") in setOf("pending", "done") }
+        return health.list("accounts").count { it.text("id") != account && it.text("id") != going?.str("account") }
+    }
+
+    /** Whether [line]'s menu offers Remove…: every added account's; Default's while another account of its engine stays to run on
+     * (RunnersService.removeAccount) — which takes it off Orbit's list alone, the machine keeping it — and not when it is the only one. */
+    fun offersRemove(runner: JsonObject, health: JsonObject, line: AccountLine) = !line.isDefault || othersStaying(runner, health, line.id) > 0
+
+    /** The question before [line]'s Remove…, title and body. Default's, and an added account's while Default is removed, are the web's:
+     * that only Orbit stops using Default; that the added account's workspaces then run on Automatic, or, for the last account Orbit
+     * uses there, that Orbit uses Default again. An added account's while Default is in use is the page's own, as it was. */
+    fun removeQuestion(runner: JsonObject, health: JsonObject, line: AccountLine): Pair<String, String> {
+        val name = displayName(runner)
+        val title = RunnerAccountCopy.removeTitle(line.name)
+        if (line.isDefault) return title to RunnerAccountCopy.defaultRemoveDetail(name, engineName(health.text("engine")))
+        val removed = removedDefault(health) ?: return "Remove “${line.name}” from $name?" to
+            "${line.home ?: "Its sign-in"} goes from this machine, and sessions stop running on it. Default is untouched."
+        return title to if (othersStaying(runner, health, line.id) > 0) RunnerAccountCopy.removeDetailAutomatic(name)
+            else RunnerAccountCopy.removeDetailLast(name, removedDefaultName(removed))
     }
 
     fun engineUpdateInFlight(install: JsonObject?) = install?.str("mode") == "update" && install.str("status") in setOf("pending", "installing")

@@ -313,20 +313,35 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
      * session's next turn, a session's own `<engine>AccountPinned`; else on the account it names — that pick, the session's own, the
      * workspace's — and on Default where the runner lists no such account. [detail] is the session's read, or the draft's workspace,
      * with what is held over it.
+     *
+     * While Default is removed from Orbit nothing runs on it (the server's accountOnRunner): a workspace set to it leaves the account to
+     * Orbit, and Default — or an account the runner no longer reports — is Automatic's pick among the accounts that remain, a pin to it
+     * included, wherever the workspace's env leaves the account to Orbit.
      */
     fun accountOn(engine: String, detail: JsonObject, held: JsonObject, draft: Boolean): AccountOn {
         val accounts = accounts(engine)
         val workspace = if (draft) detail else detail["workspace"] as? JsonObject
+        val env = workspace?.get("env") as? JsonObject
         val pick = held.text("account")
-        val offered = EngineAccounts.automaticOffered(engine, workspace?.text("${engine}Account"), workspace?.get("env") as? JsonObject, accounts.size)
+        val remaining = removedDefaultPick(engine)?.takeIf { EngineAccounts.envLeavesAccount(engine, env) }
+        val offered = EngineAccounts.automaticOffered(engine,
+            workspace?.text("${engine}Account")?.takeUnless { remaining != null && it == EngineAccounts.DEFAULT }, env, accounts.size)
+        val named = pick?.takeIf { it != EngineAccounts.AUTOMATIC } ?: detail.text("${engine}Account") ?: workspace?.text("${engine}Account")
+        val reported = named?.takeIf { id -> accounts.any { it.text("id") == id } }
         val automatic = offered && when {
+            remaining != null && reported == null -> true
             pick != null -> pick == EngineAccounts.AUTOMATIC
             // A draft with nothing picked, and an ended session's switch onto the sign-in naming no account, start on Automatic's.
             draft || held.text("provider") == engine -> true
             else -> detail.flag("${engine}AccountPinned") != true
         }
-        val named = pick?.takeIf { it != EngineAccounts.AUTOMATIC } ?: detail.text("${engine}Account") ?: workspace?.text("${engine}Account")
-        return AccountOn(automatic, named?.takeIf { id -> accounts.any { it.text("id") == id } } ?: EngineAccounts.DEFAULT)
+        return AccountOn(automatic, reported ?: remaining ?: EngineAccounts.DEFAULT)
+    }
+
+    /** While [engine]'s Default is removed from Orbit (`removedDefault`), Automatic's pick among the accounts that remain (shared
+     * accountToStartOn's `defaultRemoved`); null while Default is in use. */
+    private fun removedDefaultPick(engine: String): String? = health(engine)?.takeIf { RunnerPage.removedDefault(it) != null }?.let {
+        EngineAccounts.toStartOn(accounts(engine), EngineAccounts.usage(engine, runner), System.currentTimeMillis(), defaultRemoved = true)
     }
 
     /** What the Provider row says the session (or draft) is on (A07-19 (d); OrbitKit `SessionProviderChoices.providerValue`, web

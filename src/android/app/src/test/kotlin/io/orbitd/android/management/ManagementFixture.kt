@@ -82,6 +82,13 @@ object ManagementFixture {
     @Volatile var onCode: () -> Unit = {}
     val loginBodies = CopyOnWriteArrayList<JsonObject>()
     val pauseBodies = CopyOnWriteArrayList<String>()
+    /** DELETE runners/:id/accounts/:engine/default answers done at once, as the server records Default's removal from Orbit without the
+     * runner — or, given a sentence, refuses it in those words, as the server does with no other account of the engine. POST
+     * …/default/restore answers ok, or fails while [restoreFails]. Each that goes through runs [onAccountWrite] with its path, as what
+     * GET runners serves then changes. */
+    @Volatile var defaultRemoveRefusal: String? = null
+    @Volatile var restoreFails = false
+    @Volatile var onAccountWrite: (String) -> Unit = {}
     /** POST runners/:id/install's bodies, in order; each answers the relay as pending for its engine. */
     val installBodies = CopyOnWriteArrayList<JsonObject>()
     /** A Cursor key's Check Again (POST providers/mine/:id/key-check): what it answers, and what it does to GET providers/mine first —
@@ -99,6 +106,7 @@ object ManagementFixture {
         secondRunner = false; runnerOnline = true; runnerTwoOnline = true; runnerOrder = listOf(RUNNER, RUNNER_TWO); removedRunners = emptySet(); selfUpdate = null
         runnerEngines = "[]"; runnerExtra = ""; runnerTwoExtra = ""; loginRelay = """{"status":null}"""; loginStarted = """{"status":"pending"}"""
         codeSent = """{"status":"done"}"""; onCode = {}; loginBodies.clear(); pauseBodies.clear(); installBodies.clear()
+        defaultRemoveRefusal = null; restoreFails = false; onAccountWrite = {}
         drop = CompletableDeferred(); opened = 0
         queries.clear(); modelRouting = null; recaps = null; accessTokens = emptyList(); accessTokensFail = false; providerCatalog = "[]"; providersMine = "[]"
         balances.clear(); balanceGates.clear(); task = "{}"
@@ -217,6 +225,11 @@ object ManagementFixture {
             "providers/shared-pools/$POOL" -> if (accessFails) fail(503, "pool read failed") else ok(access())
             else -> when {
                 path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/pause") -> { pauseBodies += "$path ${api.body!!.decodeToString()}"; ok("{}") }
+                path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default/restore") ->
+                    if (restoreFails) fail(404, "runner not found") else { onAccountWrite(path); ok("""{"ok":true}""") }
+                path.startsWith("runners/$RUNNER/accounts/") && path.endsWith("/default") && api.method == HttpMethod.DELETE ->
+                    defaultRemoveRefusal?.let { fail(400, it) }
+                        ?: run { onAccountWrite(path); ok("""{"engine":"${path.split('/')[3]}","account":"default","status":"done","message":null}""") }
                 path.startsWith("access-tokens/") && api.method == HttpMethod.DELETE -> {
                     val id = path.removePrefix("access-tokens/")
                     accessTokens = accessTokens.map { if (it["id"]?.jsonPrimitive?.content == id) JsonObject(it + mapOf("state" to JsonPrimitive("REVOKED"),

@@ -688,6 +688,14 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
     suspend fun pause(line: RunnerPage.AccountLine, minutes: Int?) = model.press {
         api.post("runners/$id/accounts/$engine/${line.id}/pause", buildJsonObject { put("durationMinutes", minutes?.let(::JsonPrimitive) ?: JsonNull) })
     }
+    // Use again brings a removed Default back: Orbit's own record, as its removal is, so it works with the runner offline. Busy until the
+    // list carries Default back and its line goes.
+    var restoring by remember(id, engine) { mutableStateOf(false) }
+    fun useAgain(name: String) = scope.launch {
+        restoring = true
+        model.press { api.post("runners/$id/accounts/$engine/default/restore") }?.let { notice.show("${RunnerAccountCopy.useAgainFailed(name)} — $it") }
+        restoring = false
+    }
     fun install() = scope.launch { show(model.press { api.post("runners/$id/install", buildJsonObject { put("engine", engine) }) }) }
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -725,10 +733,16 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
                         if (index > 0) HorizontalDivider()
                         AccountRow(api, runner, engine, line, offline, now, signingIn == line.id, next = RunnerPage.marksNext(runner, engine, line.id, now),
                             canPause = RunnerPage.keepsAccounts(engine) && health.list("accounts").any { it.str("id") == line.id }, alone = alone,
+                            removable = RunnerPage.offersRemove(runner, health, line),
                             foldsBack = signingIn == line.id && landedHere == line.id && line.auth == "yes" && RunnerPage.loginExpiresLine(line, now) == null,
                             signIn = { signingIn = line.id }, close = ::closeSignIn, landed = { landed(line.id) },
                             rename = { renaming = line }, remove = { removing = line }, pause = { pausing = line },
                             resume = { scope.launch { show(pause(line, null)) } })
+                    }
+                    // A Default removed from Orbit ends the accounts that remain, with the way back.
+                    RunnerPage.removedDefault(health)?.let { removed ->
+                        HorizontalDivider()
+                        RemovedDefaultRow(RunnerPage.removedDefaultLine(removed), busy = restoring) { useAgain(RunnerPage.removedDefaultName(removed)) }
                     }
                     if (RunnerPage.canAddAccount(runner, engine)) {
                         HorizontalDivider()
@@ -776,8 +790,9 @@ private fun RunnerEnginePage(api: ManagementApi, id: String, engine: String, rev
         }) { Text("Save") } }, dismissButton = { TextButton(onClick = { renaming = null }) { Text("Cancel") } })
     }
     removing?.let { line ->
-        AlertDialog(onDismissRequest = { removing = null }, title = { Text("Remove “${line.name}” from ${RunnerPage.displayName(runner)}?") },
-            text = { Text("${line.home ?: "Its sign-in"} goes from this machine, and sessions stop running on it. Default is untouched.") },
+        // Default's removal is Orbit's own: the same DELETE, answered at once, or refused in the server's words with no other account.
+        val question = health?.let { RunnerPage.removeQuestion(runner, it, line) }
+        if (question != null) AlertDialog(onDismissRequest = { removing = null }, title = { Text(question.first) }, text = { Text(question.second) },
             confirmButton = { TextButton(onClick = { removing = null; scope.launch {
                 try {
                     val state = api.delete("runners/$id/accounts/$engine/${line.id}") as? JsonObject
@@ -836,11 +851,12 @@ private const val PAUSE_SCOPE = "Personal account · This runner. Paused session
  * One account: its name — NEXT beside it where a new session starts on it ([next]) — and where it lives, where it stands,
  * its windows — a login about to lapse, a pause, what being signed out costs — and its way (back) in where it is out. Its
  * presses are its ⋯ menu's (the swipe iOS gives it): Rename…, Sign In Again, Pause… or Resume Now and Change Duration…,
- * Remove… for an added one. None reach an offline machine but Rename… and the pause, which Orbit keeps.
+ * Remove… where it is [removable] — an added one, and Default while another account stays. None reach an offline machine but
+ * Rename…, the pause and Default's Remove…, which Orbit keeps.
  */
 @Composable
 private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, line: RunnerPage.AccountLine, offline: Boolean, now: Long,
-                       signingIn: Boolean, next: Boolean, canPause: Boolean, alone: Boolean, foldsBack: Boolean, signIn: () -> Unit,
+                       signingIn: Boolean, next: Boolean, canPause: Boolean, alone: Boolean, removable: Boolean, foldsBack: Boolean, signIn: () -> Unit,
                        close: () -> Unit, landed: () -> Unit, rename: () -> Unit, remove: () -> Unit, pause: () -> Unit, resume: () -> Unit) {
     val windows = RunnerPage.accountWindows(runner, engine, line.id)
     val removal = RunnerPage.removal(runner.obj("accountRemove"), engine, line.id)
@@ -878,9 +894,11 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
                             DropdownMenuItem(text = { Text(AccountCopy.CHANGE_DURATION) }, onClick = { menu = false; pause() })
                         } else if (line.auth == "yes") DropdownMenuItem(text = { Text(AccountCopy.PAUSE) }, onClick = { menu = false; pause() })
                     }
-                    if (!line.isDefault) {
+                    if (removable) {
+                        // Default comes off Orbit's list, not the machine: nothing goes to the runner, so it is offered offline too.
+                        val enabled = line.isDefault || !offline
                         HorizontalDivider()
-                        DropdownMenuItem(text = { Text(AccountCopy.REMOVE, color = if (offline) Ink.muted else Ink.red) }, enabled = !offline,
+                        DropdownMenuItem(text = { Text(AccountCopy.REMOVE, color = if (enabled) Ink.red else Ink.muted) }, enabled = enabled,
                             onClick = { menu = false; remove() })
                     }
                 }
@@ -916,6 +934,17 @@ private fun AccountRow(api: ManagementApi, runner: JsonObject, engine: String, l
                 Text(if (line.envKey) AccountCopy.SIGN_IN_WITH_GOOGLE else RunnerCopy.SIGN_IN)
             }
         }
+    }
+}
+
+/** Where an engine's accounts end while its Default is removed from Orbit (web RemovedDefault): which one it is and where it lives on
+ * the machine, which keeps it and its sign-in, and Use again, which brings it back. */
+@Composable
+private fun RemovedDefaultRow(line: String, busy: Boolean, useAgain: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp).testTag("removed-default"), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(line, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = Ink.muted)
+        OutlinedButton(onClick = useAgain, enabled = !busy) { Text(RunnerAccountCopy.USE_AGAIN) }
     }
 }
 
