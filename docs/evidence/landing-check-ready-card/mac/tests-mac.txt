@@ -1,0 +1,6 @@
+Test Case '-[LandingSessionMacProbeUITests.LandingReadyCardTests testMacMergeCheckThatEndedReadyWritesNoStoppedLine]' started.
+Test Case '-[LandingSessionMacProbeUITests.LandingReadyCardTests testMacMergeCheckThatEndedReadyWritesNoStoppedLine]' passed (34.623 seconds).
+	 Executed 1 test, with 0 failures (0 unexpected) in 34.623 (34.625) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 34.623 (34.626) seconds
+	 Executed 1 test, with 0 failures (0 unexpected) in 34.623 (34.629) seconds
+** TEST SUCCEEDED **
