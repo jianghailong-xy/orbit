@@ -16338,7 +16338,8 @@ button.chat-jump-start:hover {
   margin-top: 10px;
 }
 /* An offline runner's rows describe its last check-in, not its present state. Server-side account
-   actions remain available in More; operations that need the machine are disabled in its menu. */
+   actions remain available in More and a removed Default's Use again; operations that need the
+   machine are disabled in its menu. */
 .re-card.offline {
   background: var(--bg-subtle);
 }
@@ -16348,7 +16349,7 @@ button.chat-jump-start:hover {
 .re-card.offline .re-name > * {
   opacity: 0.62;
 }
-.re-card.offline .re-row > .re-act:has(.re-more) {
+.re-card.offline .re-row > .re-act:has(.re-more, .re-use-again) {
   opacity: 1;
 }
 .re-head {
@@ -17012,6 +17013,25 @@ button.chat-jump-start:hover {
 .re-acct-end .re-rail {
   bottom: auto;
   height: 28px;
+}
+/* A Default removed from Orbit ends its engine's accounts (RemovedDefault): one line in a name's place,
+   across the status and quota columns, and its Use again where an account's actions are. */
+.re-removed > .re-id {
+  grid-column: 1 / -2;
+}
+.re-removed > .re-act {
+  grid-column: -2 / -1;
+}
+.re-removed-line {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
+/* The question before an account's removal, Default's three sentences included, at a reading width. */
+.orbit-popconfirm.re-confirm {
+  max-width: min(420px, 100vw - 16px);
 }
 /* A mark beside a name: NEXT, where the next session starts — on a pool, or among a runner's accounts. */
 .re-chip {

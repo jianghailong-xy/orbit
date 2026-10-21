@@ -1,0 +1,45 @@
+[
+  {
+    "name": "removed-two-light",
+    "head": "0.156.0 · 2 of 2 accounts available",
+    "accounts": [
+      "Work",
+      "Personal"
+    ],
+    "removed": "Default · ~/.codex isn’t used by Orbit\nUse again",
+    "unhandledApiCalls": []
+  },
+  {
+    "name": "removed-one-light",
+    "head": "0.156.0 · 1 of 1 accounts available",
+    "accounts": [
+      "Work"
+    ],
+    "removed": "Default · ~/.codex isn’t used by Orbit\nUse again",
+    "unhandledApiCalls": []
+  },
+  {
+    "name": "removed-one-dark",
+    "head": "0.156.0 · 1 of 1 accounts available",
+    "accounts": [
+      "Work"
+    ],
+    "removed": "Default · ~/.codex isn’t used by Orbit\nUse again",
+    "unhandledApiCalls": []
+  },
+  {
+    "name": "removed-two-phone",
+    "head": "0.156.0 · 2 of 2 accounts available",
+    "accounts": [
+      "Work",
+      "Personal"
+    ],
+    "removed": "Default · ~/.codex isn’t used by Orbit\nUse again",
+    "unhandledApiCalls": []
+  },
+  {
+    "name": "confirm-remove-default-light",
+    "dialog": "Remove Default?\nOrbit stops using it on wikova. Its sign-in stays on the machine, and Codex in a terminal there keeps working. Workspaces set to it run on Automatic.\nCancel\nRemove",
+    "unhandledApiCalls": []
+  }
+]

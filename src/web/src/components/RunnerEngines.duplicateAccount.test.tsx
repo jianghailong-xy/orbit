@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { RunnerEngines } from './RunnerEngines';
-import { openRunnerCards, openRunnerMenu, runnerMenuItem } from './RunnerEngines.test-helpers';
+import { openRunnerCards, runnerMenuItem } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
 /**
@@ -249,7 +249,8 @@ describe('two slots that are two accounts', () => {
 
     expect(rows(page, '.re-dup')).toHaveLength(0);
     expect(accountsOf(page)).toHaveLength(2);
-    expect((await openRunnerMenu(defaultRow)).textContent).not.toContain('Remove account');
+    // Default's own Remove takes it off Orbit's list alone (RunnerEngines.removeDefault.test.tsx).
+    expect(await runnerMenuItem(defaultRow, 'Remove account')).toBeTruthy();
     expect(await runnerMenuItem(workRow, 'Remove account')).toBeTruthy();
   });
 });
@@ -270,7 +271,7 @@ describe('a fingerprint nobody has read', () => {
       const [defaultRow, addedRow] = accountsOf(page);
 
       expect(rows(page, '.re-dup')).toHaveLength(0);
-      expect((await openRunnerMenu(defaultRow)).textContent).not.toContain('Remove account');
+      expect(await runnerMenuItem(defaultRow, 'Remove account')).toBeTruthy();
       expect(await runnerMenuItem(addedRow, 'Remove account')).toBeTruthy();
     });
   }

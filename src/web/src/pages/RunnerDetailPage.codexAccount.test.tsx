@@ -49,6 +49,22 @@ const runner = (accounts?: RunnerEngineAccount[]): Runner => ({
   engines: [{ engine: 'claude', installed: true, auth: 'yes' }, codex(accounts)],
 });
 
+const PERSONAL: RunnerEngineAccount = {
+  id: '7c21de40',
+  name: 'Personal',
+  home: '/root/.orbit/codex-accounts/7c21de40',
+  codexHome: '/root/.orbit/codex-accounts/7c21de40',
+  auth: 'yes',
+};
+
+/** The runner as served once its Codex Default is removed from Orbit: the accounts that remain, marked,
+ *  and none of Default's quota. */
+const withoutDefault = (accounts: RunnerEngineAccount[]): Runner => ({
+  ...runner(accounts),
+  planUsage: { provider: 'codex', accounts: {} } as PlanUsage,
+  engines: [{ engine: 'claude', installed: true, auth: 'yes' }, { ...codex(accounts), removedDefault: { home: '/root/.codex' } }],
+});
+
 const workspace = (codexAccount: string | null, env: Record<string, string> = {}) => ({
   id: WORKSPACE_ID,
   name: 'orbit',
@@ -283,5 +299,55 @@ describe('which Codex account a workspace runs on', () => {
     mount(runner([DEFAULT, WORK]), workspace(null, { CODEX_HOME: '/root/.codex-b' }));
     await openAdvanced();
     expect(field()?.textContent).toContain('sessions run in ~/.codex-b, not on an automatic pick');
+  });
+});
+
+describe('a runner whose Codex Default is removed from Orbit', () => {
+  it('draws the remaining accounts on its page, ending with Default’s line and the way back', async () => {
+    mount(withoutDefault([WORK]), workspace(null));
+    await settle();
+    // A group of one, as any group, starts folded: open it.
+    await click(document.body.querySelector<HTMLElement>('.re-row[data-engine="codex"] .re-grp-toggle')!);
+    const group = [...document.body.querySelectorAll<HTMLElement>('.re-acct')];
+    expect(group.map((row) => row.querySelector('.re-name-text')?.textContent ?? row.textContent?.trim())).toEqual([
+      'Work',
+      'Default · ~/.codex isn’t used by OrbitUse again',
+    ]);
+  });
+
+  it('offers no Default for a workspace, only Automatic and the accounts that remain', async () => {
+    mount(withoutDefault([WORK, PERSONAL]), workspace(null));
+    await openAdvanced();
+    expect(picker()?.textContent).toContain('Automatic');
+
+    const offered = await options();
+    expect(offered.map((o) => o.text)).toEqual([
+      ['Automatic', 'each new session starts on the account whose quota resets soonest'],
+      ['Work', 'signed in'],
+      ['Personal', 'signed in'],
+    ]);
+  });
+
+  it('says a workspace set to Default now runs on Automatic, and saves Automatic as no account', async () => {
+    const { patches } = mount(withoutDefault([WORK]), workspace('default'));
+    await openAdvanced();
+    expect(picker()?.textContent).toContain('Default');
+
+    const offered = await options();
+    expect(offered.map((o) => o.text)).toEqual([
+      ['Automatic', 'each new session starts on the account whose quota resets soonest'],
+      ['Work', 'signed in'],
+      ['Default', 'removed from Orbit — sessions run on Automatic'],
+    ]);
+    await press(offered[0].el);
+    await click(byText('button', 'Save'));
+    expect(patches[0].codexAccount).toBeNull();
+  });
+
+  it('says an account the runner no longer reports runs on Automatic, not on Default', async () => {
+    mount(withoutDefault([WORK, PERSONAL]), workspace('5e6f7a8b'));
+    await openAdvanced();
+    const offered = await options();
+    expect(offered.at(-1)?.text).toEqual(['Account 5e6f7a8b', 'not on this runner — sessions run on Automatic']);
   });
 });
