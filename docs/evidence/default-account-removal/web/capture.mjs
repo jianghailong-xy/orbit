@@ -1,4 +1,4 @@
-// A runner's card on the Providers page (/providers, which Infrastructure draws) with Codex's Default
+// A runner's card on the Providers page (Infrastructure, where /providers lands) with Codex's Default
 // removed from Orbit, and the question asked before it is. The production build, with its own routes,
 // components and CSS; only the REST data is synthetic: src/web/ui-migration/fixtures.mjs signs in and
 // answers the app's reads, and the runner below is served as the control plane serves it with Default
@@ -89,7 +89,8 @@ try {
   ]) {
     const phone = width < 700;
     const context = await browser.newContext({
-      viewport: { width, height: 1400 },
+      // Tall enough that the card's Codex group is in view without scrolling, a phone's included.
+      viewport: { width, height: phone ? 2400 : 1400 },
       deviceScaleFactor: 2,
       isMobile: phone,
       hasTouch: phone,
@@ -116,11 +117,19 @@ try {
       if (pathname === '/api/providers/mine') return json([]);
       return route.fallback();
     });
-    await page.goto(`${base}/providers`);
+    // Bare /providers lands on the page's API keys (#keys); the runner cards head the page itself.
+    await page.goto(`${base}/infrastructure`);
     const card = page.locator('.re-runner-card').first();
     await card.locator('.re-row[data-engine="codex"]').waitFor({ state: 'visible', timeout: 60_000 });
     await page.waitForFunction(() => !document.getElementById('boot'));
     await page.evaluate(() => document.fonts.ready);
+    // The page's other sections load beside the card and move it: measure once it has stopped moving.
+    for (let last = null, same = 0; same < 3; ) {
+      await page.waitForTimeout(200);
+      const now = JSON.stringify(await card.boundingBox());
+      same = now === last ? same + 1 : 0;
+      last = now;
+    }
 
     // The card from its head to the end of the Codex group: the engines after it say nothing here.
     const cardBox = await card.boundingBox();
@@ -149,6 +158,7 @@ try {
       });
     }
     const pad = 12;
+    assert.ok(clip.y >= pad && clip.y + clip.height + pad <= page.viewportSize().height, `${name}: the card is not wholly in view`);
     await page.screenshot({
       path: `${out}${name}.png`,
       animations: 'disabled',

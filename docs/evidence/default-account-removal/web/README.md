@@ -1,8 +1,8 @@
 # Web: Remove Default, its removed state and Use again
 
 Task 34jpFWMMTBMQu7Ceyp6zk of project 34jjcdca6uuW0qHCjTdKg ("Remove a runner's Default account from
-Orbit"). Frames of a runner's card on the Providers page (`/providers`, drawn by Infrastructure), from the
-production build: real routes, components and CSS. Only the REST data is synthetic —
+Orbit"). Frames of a runner's card on the Providers page (`/infrastructure`, where `/providers` lands),
+from the production build: real routes, components and CSS. Only the REST data is synthetic —
 `src/web/ui-migration/fixtures.mjs` plus a runner served the way the control plane serves it with Codex's
 Default removed (`usedRunnerEngines`: the remaining accounts, `removedDefault`, the engine's sign-in and
 quota theirs). The clock is the fixtures' frozen 2026-09-28 12:00Z, shown in Asia/Shanghai.
