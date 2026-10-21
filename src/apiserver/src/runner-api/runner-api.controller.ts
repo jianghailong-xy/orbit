@@ -351,7 +351,7 @@ import {
   NON_REPLAYABLE_EVENT_TYPES,
   replayableEventSql,
 } from '../common/system-noise';
-import { isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines } from '../common/runner-engines';
+import { isInstallEngine, isKimiRegion, isLoginEngine, sanitizeRunnerEngines, usedRunnerEngines } from '../common/runner-engines';
 import { antigravityGoogleLoginRefusal, antigravitySignInUnderWay } from '../common/antigravity-readiness';
 import { RUNNER_OS_HEADER, withRunnerOs } from '../common/runner-platform';
 import { loginCodeRelay } from '../runners/login-code-relay';
@@ -1285,11 +1285,17 @@ export class RunnerApiController {
       ...(dto?.expiredCommitErrors ?? []).map((e) => e?.sessionId),
     ], (runner as { ownerId?: string }).ownerId);
     const reportedEngines = dto?.engines == null ? null : (sanitizeRunnerEngines(dto.engines) ?? []);
+    // Whether each engine is signed in, as the runner list says it: an engine whose Default the owner
+    // removed from Orbit is signed in or out by the accounts that remain (usedRunnerEngines), so the
+    // Default nobody uses signing out is no news. Read off the row this runner authenticated with.
+    const defaultRemoved = (runner as { defaultRemoved?: unknown }).defaultRemoved;
+    const signInsOf = (engines: unknown) => usedRunnerEngines({ engines, accountNames: null, defaultRemoved });
+    const signIns = reportedEngines && signInsOf(reportedEngines);
     // Read the engine health this heartbeat is about to overwrite, but only when the incoming
     // report actually claims a signed-out engine — otherwise there is no transition to find and
     // every beat would pay for the lookup.
-    const priorEngines = reportedEngines?.some((e) => e.installed && e.auth === 'no')
-      ? sanitizeRunnerEngines(
+    const priorEngines = signIns?.some((e) => e.installed && e.auth === 'no')
+      ? signInsOf(
           (
             await this.prisma.runner.findUnique({
               where: { id: runner.id },
@@ -1458,7 +1464,7 @@ export class RunnerApiController {
     // edge counts — 'unknown' means the probe couldn't answer, which is not a claim of a sign-out,
     // and an engine that was already signed out was reported last beat too.
     if (priorEngines) {
-      for (const current of reportedEngines ?? []) {
+      for (const current of signIns ?? []) {
         if (!current.installed || current.auth !== 'no') continue;
         if (!isLoginEngine(current.engine)) continue;
         if (priorEngines.find((was) => was.engine === current.engine)?.auth !== 'yes') continue;
