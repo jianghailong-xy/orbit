@@ -81,12 +81,6 @@ final class RdrShotTests: ProbeCase {
         return true
     }
 
-    /// Put an open menu away with a tap above it.
-    private func closeMenu(_ app: XCUIApplication) {
-        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.06)).tap()
-        settle(1.2)
-    }
-
     /// The question an alert asks, and whether it says `body` word for word.
     private func expectQuestion(_ app: XCUIApplication, title: String, body: String, _ name: String) -> XCUIElement? {
         let alert = app.alerts.firstMatch
@@ -261,7 +255,8 @@ final class RdrShotTests: ProbeCase {
     }
 
     /// The runner offline: Default's Remove stays enabled — nothing goes to the machine — where an added
-    /// account's is greyed; and Use again works offline too.
+    /// account's is greyed (each menu in a launch of its own: a second long press right after a menu was
+    /// put away met a row not yet hittable); and Use again works offline too.
     func test10OfflineDefaultsRemoveStaysEnabled() {
         let app = open(state: #"{"online": false}"#, until: "~/.codex", "offline")
         guard openMenu(app, "Default", "offline-default") else { return }
@@ -269,11 +264,15 @@ final class RdrShotTests: ProbeCase {
         note("offline: Default's Remove… \(describe(remove))")
         if !remove.exists || !remove.isEnabled { XCTFail("offline: Default's Remove… is not offered enabled") }
         shot("ios-11-offline-default-menu")
-        closeMenu(app)
+    }
+
+    func test10bOfflineAnAddedAccountsRemoveIsGreyed() {
+        let app = open(state: #"{"online": false}"#, until: "~/.codex", "offline-work")
         guard openMenu(app, "Work", "offline-work") else { return }
-        let workRemove = exactButton(app, "Remove…")
-        note("offline: Work's Remove… \(describe(workRemove))")
-        if workRemove.exists && workRemove.isEnabled { XCTFail("offline: an added account's Remove… is enabled offline") }
+        let remove = exactButton(app, "Remove…")
+        note("offline: Work's Remove… \(describe(remove))")
+        if !remove.exists { XCTFail("offline: Work's menu offers no Remove…") }
+        if remove.exists && remove.isEnabled { XCTFail("offline: an added account's Remove… is enabled offline") }
         shot("ios-12-offline-work-menu")
     }
 
