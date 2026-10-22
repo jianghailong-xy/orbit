@@ -272,6 +272,10 @@ class ComposerModel(val auth: AuthSession, val handle: SessionHandle, val sessio
     /** The failed message again, through the retry door: the server re-sends it under a key of its own, so a second press is the
      * turn already queued. */
     fun retryFailed() = control("retry-message", body = retryIdentity())
+    /** The composer's Stop (A07-20; iOS f4e1b0efa `ConsoleModel.interrupt`): the turn, and the background work the session left running
+     * with it — the runner's jobs, a dev server or watcher among them, and the engine's own shells, Monitors and background workflows.
+     * The session is not ended: its next turn runs in it. The one interrupt that asks for this; a bare one kills nothing. */
+    fun stop() = control("interrupt", body = buildJsonObject { put("stopBackgroundWork", true) })
     fun control(endpoint: String, method: HttpMethod = HttpMethod.POST, body: JsonObject? = null) {
         if (state.value.busy || state.value.waiting) return
         mutable.update { it.copy(busy = true, error = null) }

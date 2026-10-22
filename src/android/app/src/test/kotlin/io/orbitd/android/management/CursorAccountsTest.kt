@@ -102,8 +102,11 @@ class CursorAccountsTest {
         assertEquals(listOf("Free plan · ~/.orbit/cursor/default", "Pro plan · ~/.orbit/cursor-accounts/5c2e91a0"), lines.map { it.subtitle })
         assertEquals(emptyList<UsageRow>(), RunnerPage.accountWindows(runner, "cursor", "default"))
         assertEquals(listOf(34), RunnerPage.accountWindows(runner, "cursor", "5c2e91a0").map { it.percent })
-        assertEquals("Cursor doesn’t report how much of the Free plan’s usage is left, so Orbit shows no number rather than 0%.",
-            CursorCopy.usageUnavailable("Free"))
+        // Why, as the board's iOS 2 ③ says it (OrbitKit CursorRuntime.usageUnavailable): the Free plan's requests by their own name.
+        assertEquals("Cursor doesn’t report how many of the Free plan’s requests are left.", CursorCopy.usageUnavailable("Free"))
+        assertEquals("Cursor doesn’t report how much of the Pro plan’s usage is left.", CursorCopy.usageUnavailable("Pro"))
+        assertEquals("Cursor doesn’t report how much of this account’s usage is left.", CursorCopy.usageUnavailable(null))
+        assertEquals("Cursor doesn’t report how much of this account’s usage is left.", CursorCopy.usageUnavailable(""))
         // An account a turn met the limit on is spent until its reset.
         val spent = hpc(team = """"percentUsed":34,"limitReachedAt":"2026-10-18T09:00:00Z"""")
         assertEquals(CursorSpent("2026-11-03T00:00:00Z"), RunnerPage.cursorSpent(spent, "5c2e91a0", now))
@@ -185,6 +188,9 @@ class CursorAccountsTest {
             "keyCheckState":${state?.let { "\"$it\"" } ?: "null"},"keyCheckedAt":${at?.let { "\"$it\"" } ?: "null"}}""")
         assertTrue(CursorCopy.isKey(key("VALID")))
         assertFalse(CursorCopy.isKey(json("""{"runtime":"claude"}""")))
+        // Connected from the Cursor preset, whatever its row's runtime says (OrbitKit CursorRuntime.isKey).
+        assertTrue(CursorCopy.isKey(json("""{"runtime":null,"presetSlug":"cursor-api"}""")))
+        assertFalse(CursorCopy.isKey(json("""{"runtime":"claude","presetSlug":"glm"}""")))
         assertEquals("Valid · 4 min ago", CursorCopy.lastCheck(key("VALID"), now))
         assertEquals("Rejected · 4 min ago", CursorCopy.lastCheck(key("INVALID"), now))
         assertEquals("Couldn’t check · 4 min ago", CursorCopy.lastCheck(key("UNREACHABLE"), now))

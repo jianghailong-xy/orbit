@@ -116,7 +116,7 @@ class CursorEnginePageTest {
         await("Free plan · ~/.orbit/cursor/default")
         await("Pro plan · ~/.orbit/cursor-accounts/5c2e91a0")
         compose.onNodeWithTag("cursor-usage-unavailable")
-            .assertTextEquals("Free plan · Usage unavailable — Cursor doesn’t report how much of the Free plan’s usage is left, so Orbit shows no number rather than 0%.")
+            .assertTextEquals("Free plan · Usage unavailable — Cursor doesn’t report how many of the Free plan’s requests are left.")
         assertEquals("NEXT beside Team", 1, shown("NEXT"))
         assertEquals(1, shown("Monthly limit"))
         assertEquals("never a 0% drawn", 0, compose.onAllNodesWithText("0%").fetchSemanticsNodes().size)

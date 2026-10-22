@@ -53,7 +53,7 @@ class CursorSessionShellTest : ComposerShellTest() {
         // Picked, it lands on its own sign-in, on Auto.
         compose.onNodeWithTag("engine:cursor").performClick()
         await { ComposerShell.calls.any { it == "GET workspaces/${ComposerShell.WORKSPACE}" } }
-        await { has(hasContentDescription("Model Auto, effort Default")) }
+        await { has(hasContentDescription("Model Auto")) }
     }
 
     @Test fun theEngineListLeavesCursorCliOutWhileNoRunnerKnowsIt() {
@@ -68,7 +68,7 @@ class CursorSessionShellTest : ComposerShellTest() {
     @Test fun theModelMenuIsAutoThenTheCatalogueWithEachModelsOwnParameters() {
         cursorRunner(); onCursor()
         signIn(); openSession()
-        await { has(hasContentDescription("Model Auto, effort Default")) }
+        await { has(hasContentDescription("Model Auto")) }
         openModelMenu()
         await { has(inDialog("Auto picks a model for each request.")) }
         assertTrue(has(hasTestTag("composer-engine-title") and hasText("Cursor CLI")))
@@ -97,8 +97,25 @@ class CursorSessionShellTest : ComposerShellTest() {
         press("composer-cursor-context:1m")
         await { ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config") != null }
         assertEquals(buildJsonObject { put("model", "claude-opus-5-5[context=1m,fast=true]") }, ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config"))
-        // The chip names the model, its effort and what the session set (the board's "Opus 5.5 High · 1M · Fast"): here, Fast.
+        // The chip names the model, its effort and what the session set (the board's "Opus 5.5 High · 1M · Fast"): here, Fast — and says
+        // each once aloud.
         await { has(hasTestTag("composer-model") and hasText("Claude Opus 5.5 High · Fast")) }
+        assertTrue(has(hasTestTag("composer-model") and hasContentDescription("Model Claude Opus 5.5, effort High, Fast")))
+    }
+
+    /** A context the model doesn't offer reads as the model's own (shared cursorModels.ts, iOS 8629bebf3): the menu ticks 300K and the
+     * chip says nothing of it; a pick writes the value afresh, in the order of the ids and without what is the model's own. */
+    @Test fun aValueTheModelDoesNotOfferReadsAsItsOwn() {
+        cursorRunner(); onCursor("claude-opus-5-5[fast=true,context=2m]", "effort" to JsonPrimitive("high"))
+        signIn(); openSession(); openModelMenu()
+        await { has(hasTestTag("composer-cursor-context:300k")) }
+        assertTrue(has(inDialog("✓ 300K")))
+        assertTrue("the model it names is the one ticked", has(inDialog("✓ Claude Opus 5.5")))
+        // The chip, once the catalogue is read: Fast, and nothing of the 2M.
+        await { has(hasTestTag("composer-model") and hasText("Claude Opus 5.5 High · Fast")) }
+        press("composer-cursor-speed:false")
+        await { ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config") != null }
+        assertEquals(buildJsonObject { put("model", "claude-opus-5-5[context=2m]") }, ComposerShell.body("PATCH sessions/${ComposerShell.SESSION}/config"))
     }
 
     /** iOS 6 ④⑤ (D5, P6b): a session that has talked, on a runner that can't carry its conversation, lists its other accounts and
