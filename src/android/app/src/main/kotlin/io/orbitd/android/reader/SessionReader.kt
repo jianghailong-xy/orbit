@@ -12,7 +12,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -29,7 +28,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -58,7 +56,6 @@ import io.orbitd.android.wiki.PageBar
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.obj
 import io.orbitd.android.core.cards.text
-import io.orbitd.android.core.cards.OwnerReview
 import io.orbitd.android.core.cards.AntigravityRepair
 import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.core.cards.SessionRunStart
@@ -233,8 +230,8 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         if (!state.denied) worktree.poll { (worktree.state.value.detail ?: snapshotDetail)?.let { it.string("runStatus") ?: it.string("status") } in
             setOf("RUNNING", "AWAITING_INPUT", "INTERRUPTED") }
     }
-    // A06-5: the viewport changing size under a pinned reader (keyboard, a taller composer, the sticky
-    // header) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
+    // A06-5: the viewport changing size under a pinned reader (keyboard, a taller composer, the reconnect
+    // line) asks for the tail again; nothing else re-anchors the bottom of a list that shrank.
     val viewport = remember(model) { TranscriptViewport() }
     var repin by remember(model) { mutableIntStateOf(0) }
     LaunchedEffect(state.window.events, transcript?.textDrafts, transcript?.thinkingDrafts, transcript?.toolOutputs, follow, placed, repin,
@@ -289,13 +286,22 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         val composerHeight = if (otherInputHasKeyboard) 0.dp else if (maxHeight < 320.dp) maxHeight else maxHeight * 0.65f
         val compact = maxWidth < 600.dp
         // iOS `ConsoleView.foldsChrome`: on a phone, while the composer holds the keyboard the conversation gets the
-        // screen. The shell's bar, the rows under it and the cards above the composer fold away together, and come
+        // screen. The shell's bar, the needs-you bar, the reconnect line and the cards above the composer fold away together, and come
         // back when the keyboard goes; a wide page keeps all of it.
         val foldsChrome = composerFocused && compact
+        // A06-18 (iOS d87e5fa67, e9c1552f5): the bar names no session. Between back and the ⋯ it carries the question above the
+        // fold, as a capsule, only while the reader is off the live tail — scrolled up, or reading a window opened at a record —
+        // which is when the jump row shows too; at the tail the reader is following the answer to what they just asked, and the
+        // bar's middle stays empty. Only the capsule reads the named question, so a scroll past one redraws it alone; and the bar
+        // keeps the content it is first handed, so both are states the content reads as it draws.
+        val question = rememberStuckQuestion(rows, list)
+        val offTail by rememberUpdatedState(!state.denied && (!follow || state.window.newerAfter != null))
         // A05-3: the session's ⋯ in the bar, where its Share button was (iOS d2858a5e8), bound while this page shows.
-        PageBar.Bind(route, title = null, folds = foldsChrome, actions = {
+        PageBar.Bind(route, title = null, folds = foldsChrome, center = {
+            if (offTail) question.value?.let { QuestionCapsule(it) { row -> model.show(row.event.seq) } }
+        }, actions = {
             SessionMenu(listed.takeUnless { state.denied }, state.session?.snapshot?.detail, link, state.session?.fresh == true && data.fresh,
-                actions, open, { action = it }, leave)
+                actions, open, { action = it }, { details = true }, leave)
         })
         Column(Modifier.fillMaxSize()) {
             val session = state.session
@@ -304,26 +310,6 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 StatusMessage("Session unavailable", if (session?.error?.httpStatus == 403) "You don't have permission to access this item." else "This item is no longer available.", model::retry)
             } else {
                 Column(Modifier.weight(1f).fillMaxWidth()) {
-                // Folded away with the bar while a phone types (`foldsChrome`), so the dots the reader opened and
-                // the line they read stay under the keyboard without the two rows pushing them off it.
-                if (!foldsChrome) {
-                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        TextButton(onClick = { details = true }, enabled = detail != null) { Text(detail?.string("title") ?: "Session details") }
-                    }
-                    // Connection changes must not insert/remove a banner above the reading viewport.
-                    val reconnecting = session?.fresh != true && state.window.seeded
-                    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp),
-                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        Text(if (reconnecting) "Saved messages · Reconnecting…" else sessionLabel(session,
-                                data.sessions["open"]?.firstOrNull { ObjectId.same(it.id, route.id) }),
-                            Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
-                        // Reserve the scaled button's height even while fresh, including 200% text.
-                        TextButton(onClick = model::retry, enabled = reconnecting,
-                            modifier = Modifier.alpha(if (reconnecting) 1f else 0f)
-                                .then(if (reconnecting) Modifier else Modifier.clearAndSetSemantics { })) { Text("Retry") }
-                    }
-                }
                 state.error?.let { StatusMessage("Couldn't load messages", it, model::retry) }
                 // The needs-you bar, under the header and over the transcript (iOS `NeedsYouBannerView` in the console's top
                 // inset). Its press here unpins the reader and shows the waiting card, which the card rail brings into view.
@@ -346,8 +332,6 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                 val live = transcript.takeIf { displayedWindow.newerAfter == null }
                 val displayedLoading = state.loading
                 val targetSeq = state.targetSeq
-                // Folds away while a phone's composer holds the keyboard, with the rest of the chrome.
-                StickyQuestion(displayedRows, list, hidden = foldsChrome) { row -> model.show(row.event.seq) }
                 LazyColumn(Modifier.weight(1f).fillMaxWidth().fadesIntoComposerBand().onSizeChanged {
                     if (viewport.resized(it.height, placed && follow && state.window.newerAfter == null)) repin++
                 }.nestedScroll(nested).pointerInput(model) {
@@ -404,6 +388,15 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                     }, enabled = rows.any { it.event.type == "user" }) { Text("Last question") }
                     TextButton(onClick = { follow = true; model.latest() }) { Text("Jump to latest") }
                 }
+                // Android's own, as iOS's console shows no connection: only while the stream is being made again (A06-18), under
+                // the list so its coming and going never moves the line being read, and folded with the chrome while a phone types.
+                val reconnecting = session?.fresh != true && state.window.seeded
+                if (reconnecting && !foldsChrome) Row(Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 16.dp).testTag("reconnecting"),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("Saved messages · Reconnecting…", Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall)
+                    TextButton(onClick = model::retry) { Text("Retry") }
+                }
                 }
                 // A08-5: a run that never started says why, first in the band above the composer — and stays while a phone types.
                 SessionRunStartCard(app, handle, state.session?.snapshot?.detail, state.session?.fresh == true,
@@ -452,18 +445,6 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
             // Deleted for good from its own page: the page goes with it, as iOS's console does.
             if (dialog is DirectoryDialog.Purge) leave()
         } }
-    }
-}
-
-private fun sessionLabel(session: SessionState?, row: DirectorySession? = null): String {
-    val snapshot = session?.snapshot
-    return when {
-        snapshot?.approvals?.isNotEmpty() == true -> "Waiting for your reply"
-        // Its report is with its reviewer (A08-1; iOS `SessionHeader`), after anything waiting on the reader.
-        row != null && row.pendingApprovals == 0 && row.confirmationUnderReview != null -> OwnerReview.underReview
-        session?.error != null -> "Disconnected · Retrying"
-        snapshot != null -> snapshot.detail.string("runState") ?: snapshot.detail.string("status") ?: "Session"
-        else -> "Connecting…"
     }
 }
 

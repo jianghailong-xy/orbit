@@ -148,26 +148,36 @@ class TranscriptDeviceTest {
     }
 
     /**
-     * A06c over fixture mode A06C, through the real login, directory and reader: the sticky question header and
-     * its jump, the Orbit context card, engine stderr/notice/transient rows, a workflow's agents, an image file
-     * link, the worktree bar's merge and changed files (a binary file's preview), and the tail kept in view when
-     * the keyboard rises.
+     * A06c over fixture mode A06C, through the real login, directory and reader: the sticky question — since A06-18 a
+     * capsule in the bar, off the live tail only — and its jump, the Orbit context card, engine stderr/notice/transient
+     * rows, a workflow's agents, an image file link, the worktree bar's merge and changed files (a binary file's
+     * preview), and the tail kept in view when the keyboard rises.
      */
     @Test fun a06cReaderIncrements() = journey("a06c") {
         login(); control("{\"reset\":true,\"mode\":\"A06C\"}")
         openSession(); awaitText("Latest answer A06C", substring = true)
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Reconnecting", substring = true).fetchSemanticsNodes().isEmpty() }
         val list = compose.onNodeWithTag("transcript-list")
-        val bar = hasAnyAncestor(hasContentDescription("Jump to your last question"))
+        val bar = hasAnyAncestor(hasTestTag("question-capsule"))
         // The phone-sized reader shows a few lines between its chrome: bring each target into view before tapping it.
         fun tap(target: SemanticsMatcher) { list.performScrollToNode(target); compose.onNode(target).performClick() }
+        // A06-18: at the live tail the bar carries no question and no title, between back and the ⋯.
+        compose.waitForIdle()
+        assertTrue("no capsule at the tail", compose.onAllNodesWithTag("question-capsule").fetchSemanticsNodes().isEmpty())
+        assertTrue("nothing written in the bar at the tail", compose.onAllNodes(hasAnyAncestor(hasTestTag("app-bar")) and
+            hasText("", substring = true), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+        capture("a06f-tail-bar-empty")
+        // Scrolled back a little — a slow drag that stops before it lifts — the capsule names the question above the fold.
+        list.performTouchInput { down(center); repeat(10) { moveBy(androidx.compose.ui.geometry.Offset(0f, height / 40f)) }; advanceEventTime(200); up() }
         compose.waitUntil(15_000) { compose.onAllNodes(hasText("Second question: ship the reader") and bar, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
-        compose.onNode(hasText("↑ Your question") and bar, useUnmergedTree = true).assertIsDisplayed()
+        compose.onNode(hasText("↑") and bar, useUnmergedTree = true).assertIsDisplayed()
         capture("a06c-sticky-question")
+        measureCapsule("second-question")
         compose.onNodeWithContentDescription("Jump to your last question").performClick()
         compose.waitUntil(15_000) { compose.onAllNodes(hasText("First question: plan the reader increments") and bar, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Second question: ship the reader").assertIsDisplayed()
         capture("a06c-sticky-jumped")
+        measureCapsule("first-question")
         // A06-9: what delivery appended is a card under the person's words, not part of them.
         list.performScrollToNode(hasText("Attached · referenced task"))
         compose.onNodeWithText("Attached · referenced task", useUnmergedTree = true).assertIsDisplayed()
@@ -238,7 +248,7 @@ class TranscriptDeviceTest {
         compose.onNodeWithText("Context:", substring = true).assertExists()
         compose.onNodeWithTag("composer-input").performClick()
         compose.waitUntil(15_000) { imeVisible() }
-        compose.waitUntil(15_000) { compose.onAllNodesWithText("Session").fetchSemanticsNodes().isEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("app-bar").fetchSemanticsNodes().isEmpty() }
         compose.waitUntil(15_000) { compose.onAllNodesWithText("Context:", substring = true).fetchSemanticsNodes().isEmpty() }
         compose.waitUntil(15_000) { compose.onAllNodesWithContentDescription("Jump to your last question").fetchSemanticsNodes().isEmpty() }
         SystemClock.sleep(1_500)
@@ -251,9 +261,41 @@ class TranscriptDeviceTest {
         // The keyboard going gives the chrome back, as it was.
         shell("input keyevent KEYCODE_BACK")
         compose.waitUntil(15_000) { !imeVisible() }
-        awaitText("Session")
+        compose.waitUntil(15_000) { compose.onAllNodesWithTag("app-bar").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("Context:", substring = true).assertExists()
         capture("a06c-tail-restored")
+    }
+    /**
+     * A06-18 at this script's 360 dp: what the bar leaves the capsule beside back, ⋯, ☰ and refresh, and how much of the line
+     * shows — the line's laid-out width against its whole width — with the room a card's label would leave it, measured in
+     * the device's own font at the capsule's label style (13 sp medium).
+     */
+    private fun measureCapsule(name: String) {
+        val density = app.resources.displayMetrics.density
+        fun dp(px: Float) = "%.1f".format(px / density)
+        val capsule = compose.onNodeWithTag("question-capsule").fetchSemanticsNode().boundsInWindow
+        val texts = compose.onAllNodes(hasAnyAncestor(hasTestTag("question-capsule")) and hasText("", substring = true), useUnmergedTree = true)
+        val lines = texts.fetchSemanticsNodes().indices.map { index ->
+            val node = texts[index].fetchSemanticsNode()
+            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+            node.config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+            val whole = layouts.firstOrNull()?.multiParagraph?.intrinsics?.maxIntrinsicWidth ?: 0f
+            val text = node.config[androidx.compose.ui.semantics.SemanticsProperties.Text].joinToString("") { it.text }
+            "text=\"$text\" widthDp=${dp(node.boundsInWindow.width)} wholeDp=${dp(whole)} cut=${node.boundsInWindow.width < kotlin.math.ceil(whole)}"
+        }
+        val measurer = androidx.compose.ui.text.TextMeasurer(androidx.compose.ui.text.font.createFontFamilyResolver(app),
+            androidx.compose.ui.unit.Density(app), androidx.compose.ui.unit.LayoutDirection.Ltr)
+        val style = androidx.compose.ui.text.TextStyle(fontSize = androidx.compose.ui.unit.TextUnit(13f, androidx.compose.ui.unit.TextUnitType.Sp),
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium)
+        // The capsule's padding (12 dp a side) and the gap between its label and its line (6 dp) are the rest of its width.
+        val inner = capsule.width - 30f * density
+        val cards = listOf("↑ Task started", "↑ Project started", "↑ Exception item", "↑ From Planner").joinToString("\n") { label ->
+            val width = measurer.measure(label, style).size.width.toFloat()
+            "card label=\"$label\" labelDp=${dp(width)} lineRoomDp=${dp((inner - width).coerceAtLeast(0f))}"
+        }
+        File(evidence, "a06f-capsule-$name.txt").writeText(shell("wm size") + shell("wm density") +
+            "windowWidthDp=${dp(compose.onRoot().fetchSemanticsNode().boundsInWindow.width)}\ncapsuleLeftDp=${dp(capsule.left)} capsuleWidthDp=${dp(capsule.width)}" +
+            " capsuleHeightDp=${dp(capsule.height)}\n" + lines.joinToString("\n") + "\n" + cards + "\n")
     }
     private fun shell(command: String): String =
         ParcelFileDescriptor.AutoCloseInputStream(instrument.uiAutomation.executeShellCommand(command)).bufferedReader().use { it.readText() }
