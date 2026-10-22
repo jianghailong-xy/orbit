@@ -56,7 +56,7 @@ Each file is in `light/` and `dark/`; the board column names the v4 frame it is 
 | `07-task-menu` | 任务段，⋯ 菜单打开：`Open task`、`Open source session`、`Open coordinator`、`Stop landing`（后果 `Before the push only · nothing pushed yet`）；没有 Copy Link、Rename、Share、Move、Tags、Trash | 07 11:05 |
 | `08-merge-checking` | 合入轮检查中（无菜单）：`Merge check`、`2m 40s of 60m`、`usually ~18m`、`Output 6s ago · Updated just now`、`Merges on its own when it passes.`、页脚 `A clean pass merges on its own · Review card ›` | 05 a |
 | `09-failed-check` | 检查没过（A11-20 b）：卡 `checks failed · exit 1 after 3m 52s`；时间线第三行 ✗ 与 `Log ›`，下面内联它最后 6 行非空输出，深色块（与运行中检查同一块） | 05 g |
-| `10-log-open` | 同一行的 `Log ›` 展开：整页 log，字色是主题的 `onSurface`（深色主题下为浅色字），底为它的 4%；测试按像素核对字色随主题（`ink-landing:log-text.txt`） | 05 g |
+| `10-log-open` | 同一行的 `Log ›` 展开：整页 log，字色是主题的 `onSurface`（深色主题下为浅色字），底为它的 4%；测试按像素核对字色随主题（`ink-landing-log-text.txt`） | 05 g |
 | `11-offline-frozen` | 服务端读不到时再开这一页（A11-20 e）：卡用这一页上次读到的 `inFlightJobs` 条目画冻结头——`Landing`、时钟停在那次读取、`Update unavailable`、`Updated 0m ago`；没有门、没有 ⋯、没有时间线与页脚 | 05（iOS `offlineCard`） |
 
 Two differences that are not the page's:

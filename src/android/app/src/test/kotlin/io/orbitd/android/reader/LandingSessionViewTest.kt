@@ -295,7 +295,7 @@ abstract class LandingSessionFrames {
                 if (luma > 170) light++ else if (luma < 85) dark++
             }
         bitmap.recycle()
-        File(output, "ink-$tag.txt").writeText("theme=$theme light=$light dark=$dark bounds=$bounds\n")
+        File(output, "ink-${tag.replace(':', '-')}.txt").writeText("theme=$theme light=$light dark=$dark bounds=$bounds\n")
         if (theme == "dark") assertTrue("light ink on the dark theme: $light light and $dark dark pixels", light > 50)
         else assertTrue("dark ink on the light theme: $light light and $dark dark pixels", dark > 50)
     }
