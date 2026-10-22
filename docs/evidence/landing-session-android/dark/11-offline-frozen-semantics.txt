@@ -1,0 +1,143 @@
+Printing with useUnmergedTree = 'false'
+Node #1 at (l=0.0, t=0.0, r=824.0, b=1830.0)px
+ |-Node #59 at (l=0.0, t=0.0, r=824.0, b=1830.0)px
+ | IsContainer = 'true'
+ |  |-Node #770 at (l=0.0, t=128.0, r=824.0, b=1830.0)px, Tag: 'landing-page'
+ |  |  |-Node #771 at (l=0.0, t=128.0, r=824.0, b=1830.0)px, Tag: 'landing-page-list'
+ |  |    CollectionInfo = 'androidx.compose.ui.semantics.CollectionInfo@6ca6627'
+ |  |    IsTraversalGroup = 'true'
+ |  |    VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+ |  |    Actions = [GetScrollViewportLength, IndexForKey, ScrollBy, ScrollByOffset, ScrollToIndex]
+ |  |     |-Node #775 at (l=32.0, t=160.0, r=651.0, b=207.0)px, Tag: 'landing:title'
+ |  |     | Text = '[Landing]'
+ |  |     | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |     |-Node #776 at (l=683.0, t=169.0, r=776.0, b=199.0)px, Tag: 'landing:chip'
+ |  |     | Text = '[Landing]'
+ |  |     | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |     |-Node #777 at (l=32.0, t=211.0, r=194.0, b=246.0)px, Tag: 'landing:sub'
+ |  |     | Text = '[Run by Orbit]'
+ |  |     | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |     |-Node #779 at (l=56.0, t=294.0, r=768.0, b=427.0)px, Tag: 'landing-status-card'
+ |  |        |-Node #781 at (l=56.0, t=294.0, r=768.0, b=381.0)px, Tag: 'landing-head'
+ |  |        |  |-Node #782 at (l=56.0, t=308.0, r=116.0, b=368.0)px
+ |  |        |  |  |-Node #783 at (l=71.0, t=323.0, r=101.0, b=353.0)px, Tag: 'landing-ring:still'
+ |  |        |  |-Node #786 at (l=138.0, t=294.0, r=652.0, b=342.0)px, Tag: 'landing-head:title'
+ |  |        |  | Text = '[Landing]'
+ |  |        |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |        |  |-Node #787 at (l=668.0, t=301.0, r=768.0, b=336.0)px, Tag: 'landing-head:right'
+ |  |        |  | Text = '[3m 20s]'
+ |  |        |  | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |        |  |-Node #788 at (l=138.0, t=346.0, r=391.0, b=381.0)px, Tag: 'landing-head:detail'
+ |  |        |    Text = '[Update unavailable]'
+ |  |        |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |        |-Node #789 at (l=56.0, t=397.0, r=249.0, b=427.0)px, Tag: 'landing:live'
+ |  |          Text = '[Updated 0m ago]'
+ |  |          Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |  |-Node #122 at (l=412.0, t=144.0, r=412.0, b=144.0)px
+ |  |-Node #124 at (l=412.0, t=160.0, r=412.0, b=160.0)px
+ |  |-Node #98 at (l=0.0, t=0.0, r=824.0, b=128.0)px, Tag: 'app-bar'
+ |    IsTraversalGroup = 'true'
+ |     |-Node #99 at (l=0.0, t=0.0, r=824.0, b=128.0)px
+ |        |-Node #101 at (l=16.0, t=24.0, r=96.0, b=104.0)px
+ |        | ContentDescription = '[Back]'
+ |        | Focused = 'false'
+ |        | Role = 'Button'
+ |        | Actions = [OnClick, RequestFocus]
+ |        | MergeDescendants = 'true'
+ |        |-Node #103 at (l=112.0, t=44.0, r=234.0, b=84.0)px
+ |        |  |-Node #104 at (l=112.0, t=44.0, r=234.0, b=84.0)px
+ |        |    Text = '[Session]'
+ |        |    Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+ |        |-Node #766 at (l=632.0, t=24.0, r=712.0, b=104.0)px
+ |        | ContentDescription = '[Open navigation]'
+ |        | Focused = 'false'
+ |        | Role = 'Button'
+ |        | Actions = [OnClick, RequestFocus]
+ |        | MergeDescendants = 'true'
+ |        |-Node #107 at (l=728.0, t=24.0, r=808.0, b=104.0)px
+ |          ContentDescription = '[Refresh directory]'
+ |          Focused = 'false'
+ |          Role = 'Button'
+ |          Actions = [OnClick, RequestFocus]
+ |          MergeDescendants = 'true'
+ |-Node #62 at (l=-720.0, t=0.0, r=0.0, b=1830.0)px
+   PaneTitle = 'Navigation menu'
+    |-Node #63 at (l=-720.0, t=0.0, r=0.0, b=1830.0)px
+      IsContainer = 'true'
+       |-Node #64 at (l=-720.0, t=0.0, r=0.0, b=1830.0)px
+          |-Node #65 at (l=-720.0, t=0.0, r=0.0, b=1830.0)px
+            IsTraversalGroup = 'true'
+            VerticalScrollAxisRange = 'ScrollAxisRange(value=0.0, maxValue=0.0, reverseScrolling=false)'
+            Actions = [ScrollBy, ScrollByOffset]
+             |-Node #67 at (l=-696.0, t=46.0, r=-600.0, b=98.0)px
+             | Text = '[Orbit]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+             |-Node #68 at (l=-112.0, t=32.0, r=-32.0, b=112.0)px
+             | ContentDescription = '[Search sessions]'
+             | Focused = 'false'
+             | Role = 'Button'
+             | Actions = [OnClick, RequestFocus]
+             | MergeDescendants = 'true'
+             |-Node #70 at (l=-696.0, t=120.0, r=-24.0, b=232.0)px
+             | Focused = 'false'
+             | Role = 'Tab'
+             | Selected = 'false'
+             | Text = '[Projects]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #77 at (l=-696.0, t=232.0, r=-24.0, b=344.0)px
+             | Focused = 'false'
+             | Role = 'Tab'
+             | Selected = 'false'
+             | Text = '[Tasks]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #83 at (l=-664.0, t=368.0, r=-520.0, b=398.0)px
+             | Text = '[Workspaces]'
+             | [Heading]
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+             |-Node #129 at (l=-696.0, t=422.0, r=-24.0, b=534.0)px
+             | Focused = 'false'
+             | Role = 'Tab'
+             | Selected = 'false'
+             | Text = '[Alpha, Fixture runner · 1 running]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #137 at (l=-696.0, t=534.0, r=-24.0, b=646.0)px
+             | Focused = 'false'
+             | Role = 'Tab'
+             | Selected = 'false'
+             | Text = '[Beta, Fixture runner · 1 need you]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #145 at (l=-664.0, t=670.0, r=-538.0, b=700.0)px, Tag: 'drawer-group:Projects'
+             | Text = '[Projects, 2]'
+             | [Heading]
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #148 at (l=-696.0, t=724.0, r=-24.0, b=836.0)px
+             | Focused = 'false'
+             | Role = 'Tab'
+             | Selected = 'false'
+             | Text = '[Launch]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #152 at (l=-696.0, t=836.0, r=-24.0, b=948.0)px
+             | Focused = 'false'
+             | Role = 'Tab'
+             | Selected = 'false'
+             | Text = '[Quiet]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #88 at (l=-696.0, t=1004.0, r=-406.0, b=1084.0)px
+             | Focused = 'false'
+             | Role = 'Button'
+             | Text = '[New session]'
+             | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+             | MergeDescendants = 'true'
+             |-Node #91 at (l=-696.0, t=1100.0, r=-458.0, b=1180.0)px
+               Focused = 'false'
+               Role = 'Button'
+               Text = '[Settings]'
+               Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+               MergeDescendants = 'true'

@@ -88,6 +88,10 @@ internal object ProjectShell {
     @Volatile var sourceLanding: String? = null
     /** What `GET sessions/<LANDING>/landing/log` answers, one page. */
     @Volatile var landingLog = """{"jobId":"j-1","entries":[],"nextCursor":null}"""
+    /** The status `GET sessions/<LANDING>` and its log answer with: 200 serves them, anything else is a server this device cannot
+     *  read (A11-20 e and b). */
+    @Volatile var landingStatus = 200
+    @Volatile var landingLogStatus = 200
     /** The title `GET tasks/t-landing` answers, for a landing whose row does not exist to title itself. */
     @Volatile var taskTitle = "Wire the page"
     /** How many landing details were served as a landing (a diagnostics counter for tests). */
@@ -118,6 +122,7 @@ internal object ProjectShell {
         landTasks = null; plan = null; landing = null; landingTitle = null; inFlightJobs = null
         landings = null; needsYouItems = null; sourceLanding = null
         landingLog = """{"jobId":"j-1","entries":[],"nextCursor":null}"""; taskTitle = "Wire the page"
+        landingStatus = 200; landingLogStatus = 200
         coordinatorStatus = "{\"state\":\"NEVER_OPENED\"}"; doorStatus = 200; doorMessage = "The job is no longer running."
         landingServed = 0
         // An earlier test's held request is dropped, never answered: answered now, it would write into this test's server state.
@@ -217,10 +222,13 @@ internal object ProjectShell {
                 answer
             }
             path == "sessions" -> ok(when (view) { "open" -> list(COORD, WORKER, WAITING, PLAIN); "completed" -> list(DONE); else -> "[]" })
+            path == "sessions/$LANDING" && method == "GET" && landingStatus != 200 ->
+                ApiResponse(landingStatus, """{"message":"The server is unavailable"}""".encodeToByteArray())
             // A landing id reached by a link or a row: the detail is a landing's whenever the fixture says this id is one.
             api.path.size == 2 && path.startsWith("sessions/") && method == "GET" && landing != null &&
                 landingIds.any { ObjectId.same(it, path.removePrefix("sessions/")) } -> ok(landingDetail(path.removePrefix("sessions/")))
-            path == "sessions/$LANDING/landing/log" -> ok(landingLog)
+            path == "sessions/$LANDING/landing/log" ->
+                if (landingLogStatus == 200) ok(landingLog) else ApiResponse(landingLogStatus, """{"message":"The log is unavailable"}""".encodeToByteArray())
             path == "tasks/t-landing" -> ok("""{"id":"t-landing","title":"$taskTitle"}""")
             api.path.size == 2 && path.startsWith("sessions/") && method == "GET" -> ok(session(path.removePrefix("sessions/")))
             api.path.size == 2 && path.startsWith("sessions/") && method == "DELETE" -> {

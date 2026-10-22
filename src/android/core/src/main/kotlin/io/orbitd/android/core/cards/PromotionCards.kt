@@ -84,6 +84,17 @@ object PromotionCards {
     const val onPassMerges = "Merges on its own when it passes."
     /** The same line when a candidate that passes becomes the card that asks. */
     const val onPassAsks = "Asks you when it passes."
+    /** A confirmed merge the owner has asked to stop, before the push (§3.3 M-T10): the card's title and its one status line. */
+    const val cancellingTheMerge = "Cancelling the merge…"
+    const val cancelStopsSoon = "Stops at the runner’s next report, within 30 s · nothing has been pushed"
+    /** The ask that came after the push boundary: the push is the fact now. */
+    const val tooLateToCancel = "Too late to cancel — the push has started"
+    /** And that a pre-push cancel is not yet an outcome. */
+    const val cancelMayStillMerge = "If the push starts before it stops, the merge goes through and this card says so."
+    /** The cancelled-in-progress card's press, which is no longer a press. */
+    const val cancelRequestedLabel = "Cancel requested"
+    /** The head's clause while a stop has been asked for and the runner has not answered. */
+    const val stopRequestedClause = "stop requested"
 
     /** `refs/heads/x` and `x` are the same branch. */
     fun shortRef(ref: String) = ref.removePrefix("refs/heads/")
@@ -225,6 +236,28 @@ object PromotionCards {
 
     /** A merge is called back only before its job pushes. */
     fun cancellable(view: JsonObject) = job(view)?.text("phase") != "PUSH"
+
+    /** The owner asked this merge's job to stop and it has not ended yet (`cancelRequested`, §3.3 M-T10): the card draws it as
+     * cancelling, never off the job's phase. False from a server older than the field. */
+    fun cancelRequested(view: JsonObject?) = view?.flag("cancelRequested") == true
+
+    /** The job's claim has passed the push boundary (`pushBoundaryPassed`, §2.2 J-T4): a stop asked for now comes too late. */
+    fun pushBoundaryPassed(view: JsonObject?) = view?.flag("pushBoundaryPassed") == true
+
+    /** The merging card's title: the moment's own, or — once a stop was asked for — that the merge is being cancelled, or that the
+     * ask came after the push started (iOS `ProjectMergeCardView.merging`, web `ProjectMergeStrip`). */
+    fun mergingCardTitle(view: JsonObject): String = when {
+        !cancelRequested(view) -> pageTitle(view)
+        pushBoundaryPassed(view) -> tooLateToCancel
+        else -> cancellingTheMerge
+    }
+
+    /** The merging card's status line: when a stop asked for before the push takes effect, else where the merge's job stands. */
+    fun mergingCardStatus(view: JsonObject): String =
+        if (cancelRequested(view) && !pushBoundaryPassed(view)) cancelStopsSoon else mergingStatusLine(view)
+
+    /** The merging card's note: a stop asked for is not yet an outcome, else there is nothing to do. */
+    fun mergingCardNote(view: JsonObject): String = if (cancelRequested(view)) cancelMayStillMerge else pageNothingToDo
 
     /** C's commit row: what landed, who merged it, and when. */
     fun mergedLine(view: JsonObject, now: Instant = Instant.now()): String {

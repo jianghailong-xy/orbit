@@ -320,6 +320,68 @@ class LandingSessionModelTest {
         assertTrue(LandingSessionModel.readUnavailable(now, now.minusSeconds(91), false))
     }
 
+    // MARK: a page no read has answered (A11-20 e)
+
+    /** One `inFlightJobs` entry as the project's integration read lists it (`ProjectIntegrationJob`). */
+    private fun jobJson(kind: String = "LAND_TASK", step: Long = 400, timedOut: Boolean = false, liveness: String = "LIVE") =
+        json("""{"jobId":"j-1","kind":"$kind","state":"RUNNING","phase":"CHECK",
+            "taskId":${if (kind == "LAND_TASK") "\"t-landing\"" else "null"},"taskTitle":${if (kind == "LAND_TASK") "\"Wire the page\"" else "null"},
+            "promotionId":${if (kind == "LAND_TASK") "null" else "\"pr-1\""},"generation":2,"startedAt":"${iso(step)}",
+            "queuedAt":"${iso(step + 60)}","heartbeatAt":"${iso(200)}","runnerName":"wikova","retriedBy":null,"timedOut":$timedOut,
+            "limitSeconds":600,"progressProtocol":"v2","claim":1,"round":1,"check":${checkJson(step)},"stepStartedAt":"${iso(step)}",
+            "outputMovedAt":"${iso(210)}","typicalMs":null,"liveness":"$liveness","blockingReason":null,"landingSessionId":"s-landing"}""")
+
+    /** iOS `offlinePlaceholder`: the job an integration read listed is the page's attempt, frozen at that read — the clock stops
+     *  where the read left it, the head says the update is unavailable and how old the facts are, and no door opens on it. */
+    @Test fun aPageNoReadHasAnsweredDrawsTheJobItWasLastReadAsFrozenWithNoDoor() {
+        val job = jobJson()
+        val placeholder = LandingSessionModel.offlinePlaceholder("s-landing", job)
+        assertEquals(listOf("s-landing", "TASK", "t-landing"), listOf(placeholder.sessionId, placeholder.subject, placeholder.taskId))
+        assertNull(placeholder.settledAt); assertNull(placeholder.timeline); assertTrue(placeholder.checks.isEmpty())
+        val attempt = placeholder.currentAttempt!!
+        assertEquals(listOf("j-1", "LAND_TASK", "RUNNING", "CHECK", "wikova"), listOf(attempt.jobId, attempt.kind, attempt.state, attempt.phase, attempt.runnerName))
+        assertEquals(2, attempt.generation); assertEquals(1, attempt.claim); assertEquals("TASK_ACCEPTANCE", attempt.check?.name)
+        assertNull("the job carries no source session", attempt.sourceSessionId)
+
+        // The read that listed the job answered three minutes ago, 3m 40s into the step: the clock stays there however long the
+        // page waits, and "Updated" counts the minutes since that read.
+        val readAt = now.minusSeconds(180)
+        val facts = LandingFacts(job.text("stepStartedAt"), null, "main")
+        fun frozen(at: Instant) = LandingSessionModel.attemptCard(placeholder, at, readAt, failed = true, facts)!!
+        val card = frozen(now)
+        assertEquals("Landing", card.word)
+        assertEquals("Update unavailable", card.state); assertEquals("Update unavailable", card.detail)
+        assertEquals("3m 40s", card.right); assertTrue(card.rightIsClock)
+        assertEquals("Updated 3m ago", card.live)
+        assertFalse(card.fresh); assertFalse(card.running); assertFalse(card.timedOut)
+        val later = frozen(now.plusSeconds(61))
+        assertEquals("the clock is frozen at the read", "3m 40s", later.right)
+        assertEquals("Updated 4m ago", later.live)
+        assertEquals(LandingGates(), LandingSessionModel.gates(placeholder, now, readAt, failed = true))
+        assertTrue(LandingSessionModel.menuItems(placeholder, LandingGates(), false, false, false).none { it.danger })
+
+        // A job the read judged timed out is frozen the same way: this device cannot say what the server says now.
+        val silent = LandingSessionModel.offlinePlaceholder("s-landing", jobJson(timedOut = true, liveness = "LEASE_EXPIRED"))
+        val timedOut = LandingSessionModel.attemptCard(silent, now, readAt, failed = true, facts)!!
+        assertEquals("Update unavailable", timedOut.state); assertFalse(timedOut.timedOut)
+        assertEquals(LandingGates(), LandingSessionModel.gates(silent, now, readAt, failed = true))
+
+        // A merge round's job: its own word, its candidate, and no task.
+        val merge = LandingSessionModel.offlinePlaceholder("s-landing", jobJson(kind = "CHECK_PROMOTION"))
+        assertEquals(listOf("PROMOTION", null, "pr-1"), listOf(merge.subject, merge.taskId, merge.promotionId))
+        assertEquals("Merge check", LandingSessionModel.attemptCard(merge, now, readAt, failed = true, facts)!!.word)
+    }
+
+    /** The live block's and a failed check's inline tail (iOS and web `LandingInlineOutput`): the last six lines that are not blank,
+     *  carriage returns gone, and nothing at all when nothing was printed. */
+    @Test fun aChecksTailIsItsLastSixLinesThatAreNotBlank() {
+        val printed = (1..9).joinToString("\r\n") { "line $it" } + "\n\n   \n\t\n"
+        assertEquals((4..9).joinToString("\n") { "line $it" }, LandingSessionModel.tail(printed))
+        assertEquals("only\ntwo", LandingSessionModel.tail("\nonly\n\ntwo\n"))
+        assertEquals("", LandingSessionModel.tail(""))
+        assertEquals("", LandingSessionModel.tail(" \n\t\r\n"))
+    }
+
     // MARK: the timeline
 
     @Test fun theTimelineDecodesSectionsAndTheirSectionsState() {

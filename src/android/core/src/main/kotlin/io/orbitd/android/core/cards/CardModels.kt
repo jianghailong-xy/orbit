@@ -275,7 +275,8 @@ object CardCatalog {
                 if ("CANCEL_TASK" in verbs && row.text("taskId") != null) add(CardVerb.CANCEL_TASK)
                 // §2.9 LS6's reading door opens a session, so it carries no verb; J-T10's Abandon ends the one job the item names.
                 if ("ABANDON" in verbs && !row.text("integrationJobId").isNullOrEmpty()) add(CardVerb.ABANDON)
-                if (kind in setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "LANDING_LEASE_EXPIRED")) add(CardVerb.MARK_HANDLED)
+                if (kind in setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "DELIVERY_REVIEW",
+                        "LANDING_LEASE_EXPIRED")) add(CardVerb.MARK_HANDLED)
             }
             add(InteractionCard("item:$itemId", if (kind == "COORDINATOR_QUESTION") CardFamily.OWNER_QUESTION else CardFamily.EXCEPTION,
                 if (kind == "FUSE_PAUSED") "Project paused" else row.text("title") ?: "Project item", row, session, project, itemId,

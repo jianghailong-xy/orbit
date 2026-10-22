@@ -16,6 +16,7 @@ import io.orbitd.android.management.usageRows
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.reader.WorktreeBarLogic
 
 internal fun JsonObject.text(key: String) = (get(key) as? JsonPrimitive)?.contentOrNull
 internal fun JsonObject.flag(key: String) = (get(key) as? JsonPrimitive)?.booleanOrNull
@@ -291,9 +292,9 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         val judge = if (engine == ProviderEngines.DSH) engine else row?.let { ProviderEngines.nativeEngine(it.text("runtime")) } ?: engine
         val offered = catalogRows(judge).orEmpty()
         if (offered.isEmpty() || (runner["runtimeDefaultModels"] as? JsonObject)?.text(judge) == model) return model
-        // A Cursor CLI model is offered by its name, whatever parameters it carries.
-        val name = if (judge == ProviderEngines.CURSOR) CursorRuntime.modelBase(model) else model
-        return model.takeIf { offered.any { it.text("value") == name } }
+        // A Cursor CLI variant (`claude-opus-5-5[context=1m]`) is live while its model is.
+        val name = if (judge == ProviderEngines.CURSOR) CursorRuntime.decodeModel(model).model else model
+        return model.takeIf { offered.any { it.text("value") == model || it.text("value") == name } }
     }
 
     /** The model a new session on [engine] with [provider] starts on (A07-19 (e); OrbitKit `AgentDefaults.newSessionModel`, web
@@ -362,10 +363,14 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         else -> option.label
     }
 
-    /** [model]'s row among the pair's models: a Cursor CLI model's by its name, whatever parameters the value carries beside it. */
+    /** [model]'s row among the pair's models: the value's own, else — a Cursor CLI variant the catalogue doesn't list as it stands
+     * (`claude-opus-5-5[context=1m]`) — its model's (shared `runnerCatalogRow`). Another engine's brackets are its own ids. */
     fun modelRow(engine: String, provider: String, model: String?): JsonObject? {
-        val value = if (engine == ProviderEngines.CURSOR) model?.let(CursorRuntime::modelBase) else model
-        return models(engine, provider).firstOrNull { it.text("value") == value }
+        val rows = models(engine, provider)
+        rows.firstOrNull { it.text("value") == model }?.let { return it }
+        if (engine != ProviderEngines.CURSOR) return null
+        val name = CursorRuntime.decodeModel(model).model
+        return rows.firstOrNull { it.text("value") == name }
     }
 
     /** A model as its row names it, or the id itself; an empty one is the runtime's own pick. */
@@ -649,6 +654,21 @@ internal fun effortLabel(effort: String?) = when {
 }
 
 private val PARKED_STATES = setOf("AWAITING_INPUT", "INTERRUPTED", "SUCCEEDED", "ENDED", "CANCELLED")
+
+/**
+ * Whether the composer's Stop has something to stop (A07-20; OrbitKit `ComposerLogic.hasSomethingToStop`, iOS 593920cea; web
+ * `showStop`'s first clause): a turn is running — the dispatched one, or one the engine started for itself while parked
+ * (AWAITING_INPUT with `engineTurnActive`) — or work the session started is still running under a parked turn: a sub-agent, or a
+ * background process (web `outlivingSessionWork`). Read off the session's detail, where those are `runningSubagents` and
+ * `runningBgShells` (a list row's `runningSubagentCount` and `runningBgCount`); an older server's missing ones count as none.
+ */
+internal fun hasSomethingToStop(detail: JsonObject): Boolean {
+    if (detail.text("runState") == "RUNNING" || detail.text("status") == "RUNNING") return true
+    val state = detail.text("runState") ?: detail.text("runStatus") ?: detail.text("status")
+    if (state == "AWAITING_INPUT" && detail.flag("engineTurnActive") == true) return true
+    val background = (detail["runningBgShells"] as? JsonArray)?.size ?: (detail["runningBgCount"] as? JsonPrimitive)?.intOrNull
+    return (WorktreeBarLogic.runningSubagents(detail) ?: 0) > 0 || (background ?: 0) > 0
+}
 
 /** The engine's guess at the next message, if the empty box offers it (docs/prompt-suggestions-design.md
  * §4.4; web `offeredPromptSuggestion`, OrbitKit `ComposerLogic.offeredPromptSuggestion`): nothing typed,

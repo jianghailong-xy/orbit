@@ -94,29 +94,68 @@ class CursorComposerTest {
         assertEquals("default", catalog.newSessionModel("cursor", "cursor", mapOf("cursor:cursor" to "retired-model")))
     }
 
-    /** The coordinator's convention (2026-10-18): a model's context and speed travel in the model value, as Cursor writes them; a
-     * value at the model's own default is left out, so a model on every default is its bare name; Auto carries none. */
+    /** A model's context and speed travel in the model value by shared cursorModels.ts's rules (iOS 8629bebf3; the shared spec's own
+     * cases are CursorModelVariantsSpecTest's): a value at the model's own default is left out, so a model on every default is its bare
+     * name; Auto carries none; anything not written as a variant is a model name as it stands. */
     @Test fun contextAndSpeedTravelInTheModelValue() {
         val row = obj(opus)
-        assertEquals("claude-opus-5-5", CursorRuntime.modelBase("claude-opus-5-5[context=1m,fast=true]"))
-        assertEquals(mapOf("context" to "1m", "fast" to "true"), CursorRuntime.modelParameters("claude-opus-5-5[context=1m,fast=true]"))
-        assertEquals(emptyMap<String, String>(), CursorRuntime.modelParameters("claude-opus-5-5"))
-        assertEquals("claude-opus-5-5[context=1m,fast=true]", CursorRuntime.withParameters("claude-opus-5-5", mapOf("fast" to "true", "context" to "1m"), row))
-        assertEquals("claude-opus-5-5[fast=true]", CursorRuntime.withParameters("claude-opus-5-5", mapOf("context" to "300k", "fast" to "true"), row))
-        assertEquals("claude-opus-5-5", CursorRuntime.withParameters("claude-opus-5-5", mapOf("context" to "300k", "fast" to "false"), row))
-        // The chip's words after the name: a context set away from its default, and Fast while the lane is on.
-        assertEquals(listOf("1M", "Fast"), CursorRuntime.chipParameters("claude-opus-5-5[context=1m,fast=true]", row))
-        assertEquals(emptyList<String>(), CursorRuntime.chipParameters("claude-opus-5-5", row))
-        // The name the chip and the context sheet give it: the catalogue's, the effort set on it, then those words — never the brackets.
+        assertEquals(CursorRuntime.Variant("claude-opus-5-5", mapOf("context" to "1m", "fast" to "true")),
+            CursorRuntime.decodeModel("claude-opus-5-5[context=1m,fast=true]"))
+        assertEquals(CursorRuntime.Variant("claude-opus-5-5", emptyMap()), CursorRuntime.decodeModel("claude-opus-5-5"))
+        // Read strictly: no `default[...]` is Auto, and a repeated or malformed setting makes the whole value a name.
+        assertEquals(CursorRuntime.Variant("default[]", emptyMap()), CursorRuntime.decodeModel("default[]"))
+        assertEquals(CursorRuntime.Variant("claude-opus-5-5[context=1m,context=300k]", emptyMap()),
+            CursorRuntime.decodeModel("claude-opus-5-5[context=1m,context=300k]"))
+        assertFalse(CursorRuntime.onAuto("cursor", "default[]"))
+        assertTrue(CursorRuntime.onAuto("cursor", " default "))
+        // Written in the order of the ids, and without what is the model's own.
+        assertEquals("claude-opus-5-5[context=1m,fast=true]", CursorRuntime.encodeModel("claude-opus-5-5", mapOf("fast" to "true", "context" to "1m"), row))
+        assertEquals("claude-opus-5-5[fast=true]", CursorRuntime.encodeModel("claude-opus-5-5", mapOf("context" to "300k", "fast" to "true"), row))
+        assertEquals("claude-opus-5-5", CursorRuntime.encodeModel("claude-opus-5-5", mapOf("context" to "300k", "fast" to "false"), row))
+        assertEquals("default", CursorRuntime.encodeModel("default", mapOf("fast" to "true"), row))
+
+        // The menu's rows and the chip's words after the effort (web cursorSettingRows, cursorChipSettings).
         val catalog = ComposerCatalog(runner(), emptyList())
+        val pick = CursorRuntime.pick("claude-opus-5-5[context=1m,fast=true]", catalog)
+        assertEquals(CursorRuntime.Pick("claude-opus-5-5", row, mapOf("context" to "1m", "fast" to "true")), pick)
+        val rows = CursorRuntime.settingRows(pick)
+        assertEquals(listOf("Context" to "1M", "Speed" to "Fast"), rows.map { it.title to it.label })
+        assertEquals(listOf("300k" to "300K", "1m" to "1M"), rows[0].values)
+        assertEquals(listOf("false" to "Standard", "true" to "Fast"), rows[1].values)
+        assertEquals(listOf("1M", "Fast"), CursorRuntime.chipSettings(rows))
+        assertEquals(emptyList<String>(), CursorRuntime.chipSettings(CursorRuntime.settingRows(CursorRuntime.pick("claude-opus-5-5", catalog))))
+        // A value the model doesn't offer reads as the model's own: the menu ticks 300K and the chip says nothing of it.
+        val unoffered = CursorRuntime.settingRows(CursorRuntime.pick("claude-opus-5-5[context=2m]", catalog))
+        assertEquals("300k", unoffered[0].value)
+        assertEquals(emptyList<String>(), CursorRuntime.chipSettings(unoffered))
+        assertEquals("Claude Opus 5.5 High", CursorRuntime.modelName(catalog, "cursor", "claude-opus-5-5[context=2m]", "high"))
+        assertEquals(emptyList<CursorRuntime.SettingRow>(), CursorRuntime.settingRows(CursorRuntime.pick("default", catalog)))
+
+        // The name the chip and the context sheet give it: the catalogue's, the effort set on it, then those words — never the brackets.
         assertEquals("Claude Opus 5.5 High · 1M · Fast", CursorRuntime.modelName(catalog, "cursor", "claude-opus-5-5[context=1m,fast=true]", "high"))
         assertEquals("Claude Opus 5.5", CursorRuntime.modelName(catalog, "cursor", "claude-opus-5-5", ""))
         assertEquals("Auto", CursorRuntime.modelName(catalog, "cursor", "default", ""))
         assertEquals("claude-opus-5-5", CursorRuntime.modelName(null, "cursor", "claude-opus-5-5[context=1m]", null))
-        assertEquals(listOf("300K", "1M"), CursorRuntime.values(CursorRuntime.parameter(row, "context")!!).map { CursorRuntime.valueLabel(CursorRuntime.parameter(row, "context")!!, it) })
-        assertEquals(listOf("Standard", "Fast"), CursorRuntime.values(CursorRuntime.parameter(row, "fast")!!).map { CursorRuntime.speedLabel(CursorRuntime.parameter(row, "fast")!!, it) })
-        assertTrue(CursorRuntime.onAuto("cursor", "default"))
-        assertNull(CursorRuntime.parameter(obj("""{"value":"default","label":"Auto"}"""), "context"))
+        // Aloud, the effort once (iOS `chipAccessibilityLabel`), and Auto, which has none, by its name alone.
+        assertEquals("Model Claude Opus 5.5, effort High, 1M, Fast", CursorRuntime.spokenName(catalog, "cursor", "claude-opus-5-5[context=1m,fast=true]", "high"))
+        assertEquals("Model Claude Opus 5.5, effort Default", CursorRuntime.spokenName(catalog, "cursor", "claude-opus-5-5", null))
+        assertEquals("Model Auto", CursorRuntime.spokenName(catalog, "cursor", "default", ""))
+    }
+
+    /** A value the catalogue lists as it stands is a model of its own (shared `runnerCatalogRow`, web `cursorModelPick`): its row is found
+     * by the whole value before the model it names, and it names no settings. Another engine's brackets are its own ids. */
+    @Test fun aRowIsTheValuesOwnBeforeItsModels() {
+        val own = """{"value":"gpt-5.5[fast=true]","label":"GPT-5.5 Fast"}"""
+        val catalog = ComposerCatalog(runner(extra = ""","modelCatalog":{"cursor":[{"value":"default","label":"Auto"},{"value":"gpt-5.5","label":"GPT-5.5"},$own],
+            "claude":[{"value":"claude-opus-5-5","label":"Opus 5.5"}]}"""), emptyList())
+        assertEquals(CursorRuntime.Pick("gpt-5.5[fast=true]", obj(own), emptyMap()), CursorRuntime.pick("gpt-5.5[fast=true]", catalog))
+        assertEquals("GPT-5.5 Fast", catalog.modelLabel("cursor", "cursor", "gpt-5.5[fast=true]"))
+        assertEquals("GPT-5.5", catalog.modelLabel("cursor", "cursor", "gpt-5.5[context=272k]"))
+        assertNull(catalog.modelRow("cursor", "cursor", "gemini-3.1-pro[fast=true]"))
+        assertNull(catalog.modelRow("claude", "claude", "claude-opus-5-5[context=1m]"))
+        // A variant remembered for the next session is live while its model is.
+        assertEquals("gpt-5.5[context=272k]", catalog.newSessionModel("cursor", "cursor", mapOf("cursor:cursor" to "gpt-5.5[context=272k]")))
+        assertEquals("default", catalog.newSessionModel("cursor", "cursor", mapOf("cursor:cursor" to "grok-9[fast=true]")))
     }
 
     /** iOS 6 ①: every mode but Default, which the server refuses on Cursor CLI (D6); Bypass goes on a root runner, as on every engine. */

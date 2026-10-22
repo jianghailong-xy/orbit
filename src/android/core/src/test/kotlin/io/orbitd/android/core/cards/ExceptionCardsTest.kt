@@ -320,7 +320,7 @@ class ExceptionCardsTest {
         assertTrue(ExceptionCards.markable(row()))
         assertFalse(ExceptionCards.markable(row(assignee = "COORDINATOR")))
         listOf("COORDINATOR_QUESTION", "PROMOTION_APPROVAL", "FUSE_PAUSED").forEach { assertFalse(it, ExceptionCards.markable(row(kind = it))) }
-        listOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED").forEach {
+        listOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "DELIVERY_REVIEW").forEach {
             assertTrue(it, ExceptionCards.markable(row(kind = it)))
             assertTrue(it, CardVerb.MARK_HANDLED in cards(row(kind = it)).single().actions)
         }
@@ -331,6 +331,22 @@ class ExceptionCardsTest {
         assertEquals(listOf("projects", "p1", "open-items", "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4", "resolve"), handled.path)
         assertEquals("landed by hand", body(handled).text("note"))
         assertEquals(2_000, ExceptionCards.markHandledMaxLength)
+    }
+
+    /** A delivery review is closed by hand like the other exceptions (iOS 262153779): the server's `HAND_CLOSABLE_RESOLUTIONS` and
+     * OrbitKit's `handClosableKinds` take it, and a coordinator's item of the kind is still not the owner's to close. */
+    @Test fun aDeliveryReviewIsClosedByHandAsTheServerAndOrbitKitHaveIt() {
+        val server = File(root(), "src/apiserver/src/projects/project-open-item.service.ts").readText()
+            .substringAfter("const HAND_CLOSABLE_RESOLUTIONS").substringBefore("};")
+        assertTrue("the server no longer closes a delivery review by hand", server.contains("[DELIVERY_REVIEW_KIND]: 'HANDLED'"))
+        val swift = File(root(), "src/macos/OrbitKit/Sources/OrbitKit/App/OwnerItemCards.swift").readText()
+            .substringAfter("static let handClosableKinds").substringBefore("]")
+        assertTrue("OrbitKit no longer closes a delivery review by hand", swift.contains(".deliveryReview,"))
+        val review = row(kind = "DELIVERY_REVIEW", actions = listOf("ASK_COORDINATOR_AGAIN", "RETRY"))
+        assertTrue(ExceptionCards.markable(review))
+        assertTrue(CardVerb.MARK_HANDLED in cards(review).single().actions)
+        assertFalse(ExceptionCards.markable(row(kind = "DELIVERY_REVIEW", assignee = "COORDINATOR")))
+        assertFalse(CardVerb.MARK_HANDLED in cards(row(kind = "DELIVERY_REVIEW", assignee = "COORDINATOR")).single().actions)
     }
 
     // MARK: the facts

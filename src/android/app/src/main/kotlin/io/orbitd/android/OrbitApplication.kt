@@ -22,6 +22,7 @@ import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.attachments.clearAttachmentHandoffs
 import io.orbitd.android.attachments.clearAttachmentImports
 import io.orbitd.android.directory.TrashingSessions
+import io.orbitd.android.reader.LandingJobSnapshots
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.toast.OrbitToasts
 
@@ -34,6 +35,9 @@ open class OrbitApplication : Application() {
     val realtime: RealtimeStore by lazy { RealtimeStore(session, processScope).also { RealtimeLifecycle(this, it) } }
     /** The sessions on their way to Trash from this device, kept out of every list until their move has settled (A05-9). */
     internal val trashing = TrashingSessions()
+    /** Each landing job as the last integration read described it: a landing page opened while the server cannot be read draws it,
+     *  frozen (A11-20 e, iOS `landingInFlightCache`). */
+    internal val landingJobs = LandingJobSnapshots()
     val push: io.orbitd.android.push.PushController by lazy { createPush() }
     val updates: io.orbitd.android.update.AppUpdater by lazy { createUpdates() }
     private var composerHandle: SessionHandle? = null

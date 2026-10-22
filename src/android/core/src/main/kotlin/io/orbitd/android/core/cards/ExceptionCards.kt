@@ -85,9 +85,10 @@ object ExceptionCards {
     /** The next step a kind asks for where the design names one; any other kind keeps the server's order. */
     private val kindNextStep = mapOf("INTEGRATION_CONFLICT" to "OPEN_TASK_SESSION", "INTEGRATION_CHECK_FAILED" to "OPEN_TASK_SESSION",
         "TASK_FAILED" to "RETRY")
-    /** The kinds the owner closes by hand (the server's `HAND_CLOSABLE_RESOLUTIONS`); X-E5's silence is theirs to judge as dealt
-     * with (§4.6). */
-    private val handClosableKinds = setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "LANDING_LEASE_EXPIRED")
+    /** The kinds the owner closes by hand (the server's `HAND_CLOSABLE_RESOLUTIONS`, OrbitKit's `handClosableKinds`): a delivery
+     * review among them, and X-E5's silence, theirs to judge as dealt with (§4.6). */
+    private val handClosableKinds = setOf("INTEGRATION_CONFLICT", "INTEGRATION_CHECK_FAILED", "INTEGRATION_ERROR", "TASK_FAILED", "DELIVERY_REVIEW",
+        "LANDING_LEASE_EXPIRED")
 
     /** What one door is called: a RETRY on a row that names a merge candidate re-runs that candidate's check. Null for a door the
      * browser has no label for, which is never drawn. */

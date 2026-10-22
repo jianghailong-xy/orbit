@@ -10,7 +10,8 @@ import java.io.File
 /**
  * Cursor CLI's words on Android are the web's (P7a), read out of the sources that say them there — `lib/cursorRuntime.ts`,
  * `components/RunnerSignIn.tsx`, `components/RunnerEngines.tsx` and `components/Transcript.tsx` — with the web's names for Cursor CLI and
- * its pinned build put back as words. A missing source fails, never skips.
+ * its pinned build put back as words — but for why an account's usage is unavailable, which is the board's iOS 2 ③ and OrbitKit's (the
+ * coordinator's ruling, A13-20). A missing source fails, never skips.
  */
 class CursorCopyParityTest {
     private val root: File by lazy {
@@ -18,6 +19,7 @@ class CursorCopyParityTest {
         assertNotNull("the repository root was not found above the test's working directory", found)
         found!!
     }
+    private fun read(path: String) = File(root, path).also { assertTrue("$path is missing", it.isFile) }.readText()
     private val web by lazy {
         listOf("lib/cursorRuntime.ts", "components/RunnerSignIn.tsx", "components/RunnerEngines.tsx", "components/Transcript.tsx").joinToString("\n") { path ->
             File(root, "src/web/src/$path").also { assertTrue("$path is missing", it.isFile) }.readText()
@@ -48,5 +50,15 @@ class CursorCopyParityTest {
         listOf(CursorCopy.COPY_LINK, CursorCopy.LINK_COPIED, CursorCopy.GET_A_NEW_LINK).forEach {
             assertTrue("the web says \"$it\"", web.contains("'$it'", ignoreCase = true))
         }
+    }
+
+    /** "Usage unavailable — …" as the board's iOS 2 ③ draws it, which Android follows, and as OrbitKit `CursorRuntime.usageUnavailable`
+     * says it: the Free plan's requests by name, another plan's usage, or this account's. */
+    @Test fun whyTheUsageIsUnavailableIsTheBoardsAndIOSs() {
+        fun line(plan: String?) = "${CursorCopy.USAGE_UNAVAILABLE} — ${CursorCopy.usageUnavailable(plan)}"
+        val board = read("docs/mocks/cursor-engine/ios-2-infrastructure.html") + read("docs/mocks/cursor-engine/kit.js")
+        assertTrue("the board says \"${line("Free")}\"", board.contains(line("Free")))
+        val ios = read("src/macos/OrbitKit/Sources/OrbitKit/App/CursorRuntime.swift")
+        listOf(line("Free"), line(null), line("\\(plan)")).forEach { assertTrue("iOS says \"$it\"", ios.contains(it)) }
     }
 }

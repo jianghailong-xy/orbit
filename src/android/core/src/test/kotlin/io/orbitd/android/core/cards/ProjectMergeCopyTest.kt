@@ -1,5 +1,6 @@
 package io.orbitd.android.core.cards
 
+import java.io.File
 import java.time.Instant
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
@@ -237,5 +238,63 @@ class ProjectMergeCopyTest {
             .filter { it.family == CardFamily.PROMOTION }
         listOf("READY", "CONFIRMED", "RECHECKING", "BLOCKED").forEach { assertEquals(it, 1, cards(it).size) }
         listOf("CHECKING", "MERGED", "DECLINED", "CANCELLED", "SUPERSEDED").forEach { assertEquals(it, 0, cards(it).size) }
+    }
+
+    // MARK: the cancelling card (§3.3 M-T10)
+
+    /** The six words the merging card wears once the owner asked it to stop are OrbitKit's and the web's, byte for byte and each
+     * under its own name there (iOS 262153779: `PromotionCards` in OwnerItemCards.swift; web `src/web/src/lib/projectMerge.ts`). */
+    @Test fun theCancellingWordsAreOrbitKitsAndTheWebsOwn() {
+        val root = generateSequence(File(System.getProperty("user.dir"))) { it.parentFile }
+            .first { File(it, "src/web/src/lib/projectMerge.ts").isFile }
+        val swift = File(root, "src/macos/OrbitKit/Sources/OrbitKit/App/OwnerItemCards.swift").readText()
+        val web = File(root, "src/web/src/lib/projectMerge.ts").readText()
+        listOf(
+            Triple("cancellingTheMerge", "CANCELLING_THE_MERGE", PromotionCards.cancellingTheMerge),
+            Triple("cancelStopsSoon", "CANCEL_STOPS_SOON", PromotionCards.cancelStopsSoon),
+            Triple("tooLateToCancel", "TOO_LATE_TO_CANCEL", PromotionCards.tooLateToCancel),
+            Triple("cancelMayStillMerge", "CANCEL_MAY_STILL_MERGE", PromotionCards.cancelMayStillMerge),
+            Triple("cancelRequestedLabel", "CANCEL_REQUESTED", PromotionCards.cancelRequestedLabel),
+            Triple("stopRequestedClause", "STOP_REQUESTED", PromotionCards.stopRequestedClause),
+        ).forEach { (swiftName, webName, word) ->
+            assertTrue("OwnerItemCards.swift no longer declares $swiftName as \"$word\"",
+                Regex("public static let $swiftName =\\s*\"${Regex.escape(word)}\"").containsMatchIn(swift))
+            assertTrue("projectMerge.ts no longer declares $webName as '$word'",
+                Regex("export const $webName =\\s*'${Regex.escape(word)}';").containsMatchIn(web))
+        }
+    }
+
+    /** M-T10 on the merging card: the server's `cancelRequested` turns it into the cancelling card, and `pushBoundaryPassed` decides
+     * which of the two it is — before the push, when the runner stops; past it, that the ask came too late and where the job is. */
+    @Test fun theMergingCardSaysWhatAStopAskedForDoesOnEitherSideOfThePush() {
+        val pushing = """{"state":"RUNNING","phase":"PUSH","startedAt":"2026-10-06T03:20:00Z"}"""
+        fun merging(cancel: Boolean?, pastPush: Boolean?, execution: String = running("CHECK")) = candidate("CONFIRMED", execution = execution,
+            extra = listOfNotNull(cancel?.let { ""","cancelRequested":$it""" }, pastPush?.let { ""","pushBoundaryPassed":$it""" }).joinToString(""))
+
+        // Nothing asked: the moment's own words, whichever side of the push the job is on — and a server older than the fields.
+        for (view in listOf(merging(cancel = false, pastPush = false), merging(cancel = false, pastPush = true), merging(cancel = null, pastPush = null))) {
+            assertFalse(PromotionCards.cancelRequested(view))
+            assertEquals("Re-checking before merging into main…", PromotionCards.mergingCardTitle(view))
+            assertEquals("re-checking the combined tree", PromotionCards.mergingCardStatus(view))
+            assertEquals(PromotionCards.pageNothingToDo, PromotionCards.mergingCardNote(view))
+        }
+
+        // Asked before the push: cancelling, the runner stops at its next report, and it is not an outcome yet.
+        val before = merging(cancel = true, pastPush = false)
+        assertTrue(PromotionCards.cancelRequested(before)); assertFalse(PromotionCards.pushBoundaryPassed(before))
+        assertEquals("Cancelling the merge…", PromotionCards.mergingCardTitle(before))
+        assertEquals("Stops at the runner’s next report, within 30 s · nothing has been pushed", PromotionCards.mergingCardStatus(before))
+        assertEquals("If the push starts before it stops, the merge goes through and this card says so.", PromotionCards.mergingCardNote(before))
+
+        // Asked past the push boundary: too late, and the status is the job's own step — the push is the fact now.
+        val after = merging(cancel = true, pastPush = true, execution = pushing)
+        assertTrue(PromotionCards.pushBoundaryPassed(after))
+        assertEquals("Too late to cancel — the push has started", PromotionCards.mergingCardTitle(after))
+        assertEquals("confirmed — publishing the tested tree to main", PromotionCards.mergingCardStatus(after))
+        assertEquals(PromotionCards.cancelMayStillMerge, PromotionCards.mergingCardNote(after))
+
+        assertEquals("Cancel requested", PromotionCards.cancelRequestedLabel)
+        assertEquals("stop requested", PromotionCards.stopRequestedClause)
+        assertFalse(PromotionCards.cancelRequested(null)); assertFalse(PromotionCards.pushBoundaryPassed(null))
     }
 }
