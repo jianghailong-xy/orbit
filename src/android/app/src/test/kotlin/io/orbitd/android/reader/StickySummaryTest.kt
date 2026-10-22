@@ -80,4 +80,13 @@ class StickySummaryTest {
         assertEquals("event:5", questions.above("event:6")?.key)
         assertEquals("event:5", questions.last?.key)
     }
+
+    /** The bar's capsule keeps the arrow and drops "Your question" — the words beside it are the reader's own — and leaves every
+     * card's label as the card has it (OrbitKit `testTheCompactLabelDropsOnlyWhoseQuestionItIs`, d87e5fa67). */
+    @Test fun theCompactLabelDropsOnlyWhoseQuestionItIs() {
+        assertEquals("↑", StickySummary.compactLabel(StickySummary.of(user(1, text("部署"))).first))
+        listOf("↑ Task started", "↑ Project started", "↑ Exception item", "↑ From Planner").forEach { card ->
+            assertEquals(card, StickySummary.compactLabel(card))
+        }
+    }
 }

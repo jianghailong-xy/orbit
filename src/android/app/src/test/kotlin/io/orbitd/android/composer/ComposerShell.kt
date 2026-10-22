@@ -36,6 +36,8 @@ internal object ComposerShell {
     @Volatile var sharedPools = "[]"
     /** The transcript's durable events, as GET …/events/page answers them. */
     @Volatile var events: List<JsonObject> = emptyList()
+    /** The page GET …/events/page?around= answers — the window a record link opens — when a test sets one. */
+    @Volatile var around: JsonObject? = null
     /** GET …/retry-message. */
     @Volatile var retryMessage = """{"text":""}"""
     /** Attachment bytes by id. */
@@ -47,7 +49,7 @@ internal object ComposerShell {
         while (frames.tryReceive().isSuccess) Unit
         calls.clear(); bodies.clear(); answers.clear(); disk.clear()
         session = emptyMap(); workspace = emptyMap(); providers = "[]"; pools = "[]"; sharedPools = "[]"
-        events = emptyList(); retryMessage = """{"text":""}"""; attachments = emptyMap()
+        events = emptyList(); around = null; retryMessage = """{"text":""}"""; attachments = emptyMap()
         runner = obj("""{"id":"$RUNNER","name":"Fixture runner","online":true,"status":"ONLINE","version":"0.1.230",
             "engines":[{"engine":"claude","installed":true,"auth":"yes"},{"engine":"codex","installed":true,"auth":"yes"}],
             "modelCatalog":{"claude":[{"value":"claude-opus-5-5","label":"Opus 5.5"}],"codex":[{"value":"gpt-6","label":"GPT-6"}]}}""")
@@ -90,9 +92,9 @@ internal object ComposerShell {
             path == "sessions" && method == "POST" -> ok("""{"id":"$SESSION"}""")
             path == "sessions/$SESSION" && method == "GET" -> ok(detail().toString())
             path == "sessions/$SESSION" || path == "sessions/$SESSION/config" || path == "sessions/$SESSION/account" -> ok(detail().toString())
-            path == "sessions/$SESSION/events/page" -> ok(buildJsonObject {
+            path == "sessions/$SESSION/events/page" -> ok((around?.takeIf { api.query.any { it.first == "around" } } ?: buildJsonObject {
                 put("events", JsonArray(events)); put("hasMore", false)
-            }.toString())
+            }).toString())
             path == "sessions/$SESSION/retry-message" && method == "GET" -> ok(retryMessage)
             path == "sessions/$SESSION/turns" && method == "POST" || path == "sessions/$SESSION/resume" ->
                 ok("""{"turnId":"turn-1","kind":"message","status":"PENDING"}""")

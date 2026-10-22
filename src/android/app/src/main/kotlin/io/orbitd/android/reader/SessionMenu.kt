@@ -35,10 +35,13 @@ private val LIVE = setOf("QUEUED", "RUNNING", "AWAITING_INPUT", "INTERRUPTED")
  * Permanently. What would stop a live run says so. Its writes wait for a fresh session and directory ([writable]), as
  * every Android write does; [left] takes the page away once the session is completed, and on the press of Move to Trash —
  * before its request goes, as the row leaves every list then (A05-9).
+ *
+ * Android's own Session details ([details]) heads the group that opens what the session is part of, and comes before
+ * Move to Open in a trashed one's: the session's name under the bar opened it until that row went with iOS's title (A06-18).
  */
 @Composable
 internal fun SessionMenu(session: DirectorySession?, detail: JsonObject?, link: String, writable: Boolean, actions: SessionActions,
-    open: (OrbitRoute) -> Unit, dialog: (DirectoryDialog) -> Unit, left: () -> Unit) {
+    open: (OrbitRoute) -> Unit, dialog: (DirectoryDialog) -> Unit, details: () -> Unit, left: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
     Box {
@@ -49,6 +52,8 @@ internal fun SessionMenu(session: DirectorySession?, detail: JsonObject?, link: 
             val restorable = writable && session.capabilities?.allows(SessionAction.RESTORE) != false
             val restore = press { actions.restore(session.id, session.title) }
             if (view == SessionView.TRASH) {
+                Item("Session details", onClick = press(details))
+                HorizontalDivider()
                 Item("Move to Open", restorable, onClick = restore)
                 HorizontalDivider()
                 Item("Delete Permanently", writable, danger = true, onClick = press { dialog(DirectoryDialog.Purge(session)) })
@@ -63,11 +68,10 @@ internal fun SessionMenu(session: DirectorySession?, detail: JsonObject?, link: 
                 Item("Tags…", writable, onClick = press { dialog(DirectoryDialog.Tags(session)) })
                 val task = detail?.string("taskId")
                 val project = detail?.string("projectId")
-                if (task != null || project != null) {
-                    HorizontalDivider()
-                    if (task != null) Item("Open Task", onClick = press { open(OrbitRoute(Destination.TASK, task, origin = Origin.LINK)) })
-                    else Item("Open Project", onClick = press { open(OrbitRoute(Destination.PROJECT, project, origin = Origin.LINK)) })
-                }
+                HorizontalDivider()
+                Item("Session details", onClick = press(details))
+                if (task != null) Item("Open Task", onClick = press { open(OrbitRoute(Destination.TASK, task, origin = Origin.LINK)) })
+                else if (project != null) Item("Open Project", onClick = press { open(OrbitRoute(Destination.PROJECT, project, origin = Origin.LINK)) })
                 HorizontalDivider()
                 if (view == SessionView.COMPLETED) Item("Move to Open", restorable, onClick = restore)
                 else Item("Complete Session", writable && session.capabilities?.allows(SessionAction.COMPLETE) != false, stops,

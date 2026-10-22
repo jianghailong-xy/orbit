@@ -378,7 +378,7 @@ class ComposerDeviceTest {
         compose.onNodeWithText("Close").performClick()
         compose.waitUntil(10000) { compose.onNodeWithTag("composer-send").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Disabled)==null }
         clickSendWhenEnabled()
-        awaitText("Created conversation")
+        awaitCreatedSession()
         val request=stats()["creations"]!!.jsonArray.single().jsonObject
         assertEquals(workspace,request["workspaceId"]!!.jsonPrimitive.content)
         assertEquals("新会话的首条消息",request["prompt"]!!.jsonPrimitive.content)
@@ -470,7 +470,7 @@ class ComposerDeviceTest {
         quota("Primary: 11%")
         choose("Claude account","claude-model"); quota("No quota reported for this account.")
         choose("Automatic","claude-model"); clickSendWhenEnabled()
-        awaitText("Created conversation")
+        awaitCreatedSession()
         val request=stats()["creations"]!!.jsonArray.single().jsonObject
         assertEquals("claude",request["engine"]!!.jsonPrimitive.content)
         assertEquals("claude",request["provider"]!!.jsonPrimitive.content)
@@ -578,7 +578,7 @@ class ComposerDeviceTest {
         awaitText("✓ DeepSeek Chat")
         compose.onNodeWithText("Close").performClick()
         compose.onNodeWithTag("composer-input").performTextInput("A07-6 on OpenCode with the DeepSeek key")
-        clickSendWhenEnabled(); awaitText("Created conversation")
+        clickSendWhenEnabled(); awaitCreatedSession()
         val created = stats()["creations"]!!.jsonArray.single().jsonObject
         assertEquals("opencode", created["engine"]!!.jsonPrimitive.content)
         assertEquals("deepseek", created["provider"]!!.jsonPrimitive.content)
@@ -786,6 +786,10 @@ class ComposerDeviceTest {
     }
     private fun ready() { compose.waitUntil(10000) { app.realtime.state.value.session?.fresh==true && !model.state.value.busy };compose.waitForIdle() }
     private fun awaitText(text:String) { compose.waitUntil(15000) { compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty() } }
+    /** The created session's page is up: its ⋯ in the bar has the session to act on — the page draws no title since A06-18. */
+    private fun awaitCreatedSession() {
+        compose.waitUntil(15000) { compose.onAllNodes(hasContentDescription("Session actions") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
+    }
     private fun request(path:String,body:String?=null):String = (URL(server+path).openConnection() as HttpURLConnection).run {
         connectTimeout=5000;readTimeout=5000
         if(body!=null) { requestMethod="POST";doOutput=true;outputStream.use { it.write(body.toByteArray()) } }
