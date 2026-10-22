@@ -430,7 +430,9 @@ class TranscriptDeviceTest {
         compose.onNodeWithText("Close subagent transcript").assertIsDisplayed()
         capture("subagent")
         compose.onNodeWithText("Close subagent transcript").performClick()
-        compose.onNodeWithText("Long conversation").performClick()
+        // Session details are the ⋯ menu's since A06-18 (the session's name under the bar opened them).
+        compose.onNodeWithContentDescription("Session actions").performClick()
+        compose.onNode(hasText("Session details") and hasAnyAncestor(isPopup()) and hasClickAction()).performClick()
         compose.onNodeWithText("View changed files and diff").performClick()
         awaitText("reader.kt")
         capture("diff")
