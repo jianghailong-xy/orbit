@@ -142,35 +142,53 @@ internal object CursorRuntime {
     fun moveBlocked(engine: String, session: JsonObject?, runner: JsonObject?, draft: Boolean): Boolean =
         engine == ENGINE && !draft && conversationStarted(session) && !movesConversations(runner)
 
-    /** Cursor CLI on Auto: its catalogue's `default`, or no model named at all, which runs as Auto. */
-    fun onAuto(engine: String, model: String?): Boolean = engine == ENGINE && (model.isNullOrEmpty() || modelBase(model) == AUTO_MODEL)
+    /** Cursor CLI on Auto: its catalogue's `default`, or no model named at all, which runs as Auto — read off the model the value names
+     * (web `cursorAuto`), so `default[]` is a model's name as it stands, not Auto. */
+    fun onAuto(engine: String, model: String?): Boolean = engine == ENGINE && decodeModel(model).model.let { it.isEmpty() || it == AUTO_MODEL }
 
-    // A model's parameters (the coordinator's convention for the board's iOS 5 ③④, 2026-10-18)
+    // A model's settings (shared `cursorModels.ts`, contract §10; iOS 8629bebf3)
 
-    /** The parameters a session's Cursor model value carries beside its model — the context and the speed, each a parameter of the model
-     * in the runner's catalogue (`parameters`). Its effort stays in the session's effort field, and Auto takes none. */
+    /** The settings a Cursor model value carries, by Cursor's option ids (shared `CURSOR_VARIANT_PARAMETERS`): the context size and the
+     * fast lane, each a parameter of the model in the runner's catalogue (`parameters`). Its effort stays in the session's effort field,
+     * and Auto takes none. */
+    val VARIANT_PARAMETERS = listOf("context", "fast")
     const val CONTEXT = "context"
     const val FAST = "fast"
 
-    /** The model a Cursor model value names, without the parameters it carries: `claude-opus-5-5[context=1m]` is `claude-opus-5-5`. */
-    fun modelBase(model: String): String = model.substringBefore('[')
+    /** A Cursor model value read apart: the model's bare name and the settings it names, by id (shared `CursorModelVariant`). */
+    data class Variant(val model: String, val parameters: Map<String, String>)
 
-    /** The parameters a Cursor model value carries, in Cursor's own bracket notation (`claude-opus-5-5[context=1m,fast=true]`), by id. */
-    fun modelParameters(model: String?): Map<String, String> {
-        val inside = model?.substringAfter('[', "")?.removeSuffix("]").orEmpty()
-        return inside.split(',').mapNotNull { pair -> pair.split('=', limit = 2).takeIf { it.size == 2 && it[0].isNotBlank() }?.let { it[0].trim() to it[1].trim() } }
-            .toMap()
+    /** One side of an `id=value` (shared `PAIR`): not empty, and holding nothing the syntax itself is made of. */
+    private fun plain(side: String) = side.isNotEmpty() && side.none { it.isWhitespace() || it in "=,[]" }
+    private fun pair(text: String): Pair<String, String>? =
+        text.split('=').takeIf { it.size == 2 && plain(it[0]) && plain(it[1]) }?.let { it[0] to it[1] }
+
+    /** Reads a Cursor model value (shared `decodeCursorModel`): `name[id=value,…]`, with at least one setting, is the model `name` with
+     * those settings; anything else is a model's name as it stands, naming no settings — `default[]` and every other empty `[]`, Claude
+     * Code's `claude-opus-5[1m]`, a value with an empty name, a malformed or repeated setting. */
+    fun decodeModel(value: String?): Variant {
+        val text = value.orEmpty().trim()
+        val asIs = Variant(text, emptyMap())
+        val open = text.indexOf('[')
+        if (open <= 0 || !text.endsWith(']') || text.indexOf(']') != text.length - 1 || text.lastIndexOf('[') != open) return asIs
+        val parameters = linkedMapOf<String, String>()
+        for (piece in text.substring(open + 1, text.length - 1).split(',')) {
+            val (id, setting) = pair(piece)?.takeIf { it.first !in parameters } ?: return asIs
+            parameters[id] = setting
+        }
+        return Variant(text.substring(0, open), parameters)
     }
 
-    /** [base] carrying [parameters], in the catalogue's order of them: a value at the model's own default is left out, so a model on
-     * every default is its bare name. */
-    fun withParameters(base: String, parameters: Map<String, String>, row: JsonObject?): String {
-        val order = parameters(row)
-        val set = order.mapNotNull { parameter ->
-            val id = parameter.string("id") ?: return@mapNotNull null
-            parameters[id]?.takeIf { it != parameter.string("default") }?.let { "$id=$it" }
-        }
-        return if (set.isEmpty()) base else "$base[${set.joinToString(",")}]"
+    /** Writes a Cursor model value (shared `encodeCursorModel`): the model's bare name, followed by the settings given, in the order of
+     * their ids. A setting with no value, one at the model's own default (where its catalogue [row] says what that is) and one the syntax
+     * can't hold are left out; Auto, or no model at all, takes none. [decodeModel] reads back the name and the settings written. */
+    fun encodeModel(model: String, parameters: Map<String, String?> = emptyMap(), row: JsonObject? = null): String {
+        val name = model.trim()
+        if (name.isEmpty() || name == AUTO_MODEL) return name
+        val defaults = this.parameters(row).associate { it.string("id") to it.string("default") }
+        val pairs = parameters.mapNotNull { (id, value) -> value?.takeIf { it != defaults[id] && pair("$id=$it") != null }?.let { id to it } }
+            .sortedBy { it.first }
+        return if (pairs.isEmpty()) name else "$name[${pairs.joinToString(",") { "${it.first}=${it.second}" }}]"
     }
 
     /** A catalogue row's parameters — `{id, label, category, default, values: [{value, label}]}` — as the runner reports them. */
@@ -179,34 +197,62 @@ internal object CursorRuntime {
     /** One of a catalogue row's parameters, by its id: the context, the speed. */
     fun parameter(row: JsonObject?, id: String): JsonObject? = parameters(row).firstOrNull { it.string("id") == id }
 
-    /** A parameter's value as its row names it: "1M", "Fast". */
-    fun valueLabel(parameter: JsonObject, value: String): String =
-        (parameter["values"] as? JsonArray)?.filterIsInstance<JsonObject>()?.firstOrNull { it.string("value") == value }?.string("label") ?: value
+    /** A Cursor CLI session's model value read against the runner's catalogue (web `cursorModelPick`): the model the menu checks, its
+     * row, and the settings the value names beside it. A value the catalogue lists as it stands is a model of its own. */
+    data class Pick(val model: String, val row: JsonObject?, val parameters: Map<String, String>)
 
-    /** The values a parameter takes, in its row's order. */
-    fun values(parameter: JsonObject): List<String> =
-        (parameter["values"] as? JsonArray)?.filterIsInstance<JsonObject>()?.mapNotNull { it.string("value") }.orEmpty()
-
-    /** What the model menu's Speed row calls the fast lane off and on (the board's Standard / Fast). */
-    fun speedLabel(parameter: JsonObject, value: String) = if (value == "true") valueLabel(parameter, value) else "Standard"
-
-    /** The model chip's words after the model's name (the board's "Opus 5.5 High · 1M · Fast"): a context the session set away from the
-     * model's default, and Fast while the fast lane is on. */
-    fun chipParameters(model: String?, row: JsonObject?): List<String> {
-        val set = modelParameters(model)
-        return listOfNotNull(
-            parameter(row, CONTEXT)?.let { context -> set[CONTEXT]?.takeIf { it != context.string("default") }?.let { valueLabel(context, it) } },
-            parameter(row, FAST)?.let { fast -> (set[FAST] ?: fast.string("default")).takeIf { it == "true" }?.let { valueLabel(fast, it) } },
-        )
+    fun pick(value: String, catalog: ComposerCatalog?, provider: String = ENGINE): Pick {
+        val row = catalog?.modelRow(ENGINE, provider, value)
+        if (row != null && row.string("value") == value) return Pick(value, row, emptyMap())
+        val decoded = decodeModel(value)
+        return Pick(decoded.model, row, decoded.parameters)
     }
 
+    /** A row of the model menu for one of a Cursor model's own settings (web `CursorSettingRow`): what it is called there, the value in
+     * effect — the one the model value names when the model offers it, else the model's own — and the values to pick from with their
+     * labels, as the runner's catalogue lists them. */
+    data class SettingRow(val id: String, val title: String, val value: String, val label: String, val defaultValue: String,
+        val values: List<Pair<String, String>>)
+
+    /** The menu's rows for a Cursor model's context size and fast lane, in the board's order (web `cursorSettingRows`): Context, then
+     * Speed — Cursor's `fast`, which reads Standard or Fast as every engine's Speed row does — each only where the model's row lists it.
+     * Auto has none. */
+    fun settingRows(pick: Pick?): List<SettingRow> {
+        pick ?: return emptyList()
+        return listOf(CONTEXT to "Context", FAST to "Speed").mapNotNull { (id, title) ->
+            val parameter = parameter(pick.row, id) ?: return@mapNotNull null
+            val values = (parameter["values"] as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty().mapNotNull { option ->
+                val value = option.string("value")?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                value to (if (id == FAST && value != "true") "Standard" else option.string("label") ?: value)
+            }
+            if (values.isEmpty()) return@mapNotNull null
+            val defaultValue = parameter.string("default").orEmpty()
+            val value = pick.parameters[id]?.takeIf { named -> values.any { it.first == named } } ?: defaultValue
+            SettingRow(id, title, value, values.firstOrNull { it.first == value }?.second ?: value, defaultValue, values)
+        }
+    }
+
+    /** What the chip says after a Cursor model's effort (web `cursorChipSettings`, the board's "Claude Opus 5.5 High · 1M · Fast"): a
+     * context other than the model's own, then the fast lane when it is on. */
+    fun chipSettings(rows: List<SettingRow>): List<String> =
+        rows.filter { if (it.id == FAST) it.value == "true" else it.value != it.defaultValue }.map { it.label }
+
     /** A session's Cursor model as the chip and the context sheet name it (the board's iOS 5 ①②④): Auto, or the catalogue's name for
-     * the model with the effort set on it, then [chipParameters] — "Claude Opus 5.5 High · 1M · Fast". Never the bracketed value. */
+     * the model with the effort set on it, then [chipSettings] — "Claude Opus 5.5 High · 1M · Fast". Never the bracketed value. */
     fun modelName(catalog: ComposerCatalog?, provider: String, model: String, effort: String?): String {
         if (onAuto(ENGINE, model)) return AUTO
-        val row = catalog?.modelRow(ENGINE, provider, model)
-        val name = row?.string("label") ?: modelBase(model)
-        return (listOf(if (effort.isNullOrEmpty()) name else "$name ${effortLabel(effort)}") + chipParameters(model, row)).joinToString(" · ")
+        val pick = pick(model, catalog, provider)
+        val name = pick.row?.string("label") ?: pick.model
+        return (listOf(if (effort.isNullOrEmpty()) name else "$name ${effortLabel(effort)}") + chipSettings(settingRows(pick))).joinToString(" · ")
+    }
+
+    /** The chip's name aloud (iOS `chipAccessibilityLabel`): the model, its effort and what the session set, each said once — "Model
+     * Claude Opus 5.5, effort High, 1M, Fast" — and Auto, which has no effort, by its name alone. */
+    fun spokenName(catalog: ComposerCatalog?, provider: String, model: String, effort: String?): String {
+        if (onAuto(ENGINE, model)) return "Model $AUTO"
+        val pick = pick(model, catalog, provider)
+        return "Model ${pick.row?.string("label") ?: pick.model}, effort ${effortLabel(effort)}" +
+            chipSettings(settingRows(pick)).joinToString("") { ", $it" }
     }
 
     // Words, the web's (lib/cursorRuntime.ts)

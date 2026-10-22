@@ -310,7 +310,13 @@ private fun ProjectDetail(app: OrbitApplication, handle: SessionHandle, id: Stri
                     if (failure is ApiError && failure.status in setOf(403, 404)) { state.missing = true; state.document = null } else state.loadFailed = true
                 }
                 panorama.await()?.let { state.panorama = it }
-                integration.await().let { if (it != null) { state.integration = it; state.integrationReadAt = Instant.now(); state.integrationReadFailed = false } else state.integrationReadFailed = true }
+                integration.await().let {
+                    if (it != null) {
+                        state.integration = it; state.integrationReadAt = Instant.now(); state.integrationReadFailed = false
+                        // Each landing job's description, for its landing page to draw frozen when the server cannot be read (A11-20 e).
+                        app.landingJobs.remember(handle, it)
+                    } else state.integrationReadFailed = true
+                }
                 openItems.await().let { if (it != null) { state.openItems = it; state.openItemsUnread = false } else state.openItemsUnread = state.openItems == null }
                 coordinator.await()?.let { state.coordinator = it }
                 graph.await()?.let { state.graph = it }

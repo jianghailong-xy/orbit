@@ -305,23 +305,25 @@ object LandingSessionModel {
     /** The landing view a session detail carries — present on a landing, absent on a conversation and an older server. */
     fun view(detail: JsonObject?): LandingView? = detail?.obj("landing")?.let(::read)
 
+    /** One attempt, from the view's `currentAttempt` or an integration read's `inFlightJobs` entry (the same names): every field an
+     *  older server — or the job's shorter shape — omits reads as the fact it did not send. */
+    private fun attempt(a: JsonObject) = LandingAttempt(
+        jobId = a.text("jobId").orEmpty(), kind = a.text("kind").orEmpty(), state = a.text("state").orEmpty(),
+        generation = a.number("generation") ?: 1, phase = a.text("phase"), round = a.number("round"), step = a.text("step"),
+        claim = a.number("claim") ?: 0, runnerName = a.text("runnerName"), sourceSessionId = a.text("sourceSessionId"),
+        targetRef = a.text("targetRef").orEmpty(), startedAt = a.text("startedAt").orEmpty(), heartbeatAt = a.text("heartbeatAt"),
+        outputMovedAt = a.text("outputMovedAt"), progressProtocol = a.text("progressProtocol"),
+        check = a.obj("check")?.let { c -> LandingAttemptCheck(c.text("name"), c.number("index") ?: 1, c.number("count") ?: 1,
+            c.number("budgetSeconds") ?: 0, c.text("startedAt")) },
+        liveness = a.text("liveness"), timedOut = a.flag("timedOut"), limitSeconds = a.number("limitSeconds"),
+        retryable = a.flag("retryable"), pushBoundaryPassed = a.flag("pushBoundaryPassed"),
+        blockingSummary = a.obj("blockingReason")?.text("summary")?.takeIf { it.isNotEmpty() },
+    )
+
     /** Decode the landing view. The timeline and its slots are optional (a server that predates them), and every attempt
      *  field an older server omits reads as the fact it did not send. */
     fun read(json: JsonObject): LandingView {
-        val attempt = json.obj("currentAttempt")?.let { a ->
-            LandingAttempt(
-                jobId = a.text("jobId").orEmpty(), kind = a.text("kind").orEmpty(), state = a.text("state").orEmpty(),
-                generation = a.number("generation") ?: 1, phase = a.text("phase"), round = a.number("round"), step = a.text("step"),
-                claim = a.number("claim") ?: 0, runnerName = a.text("runnerName"), sourceSessionId = a.text("sourceSessionId"),
-                targetRef = a.text("targetRef").orEmpty(), startedAt = a.text("startedAt").orEmpty(), heartbeatAt = a.text("heartbeatAt"),
-                outputMovedAt = a.text("outputMovedAt"), progressProtocol = a.text("progressProtocol"),
-                check = a.obj("check")?.let { c -> LandingAttemptCheck(c.text("name"), c.number("index") ?: 1, c.number("count") ?: 1,
-                    c.number("budgetSeconds") ?: 0, c.text("startedAt")) },
-                liveness = a.text("liveness"), timedOut = a.flag("timedOut"), limitSeconds = a.number("limitSeconds"),
-                retryable = a.flag("retryable"), pushBoundaryPassed = a.flag("pushBoundaryPassed"),
-                blockingSummary = a.obj("blockingReason")?.text("summary")?.takeIf { it.isNotEmpty() },
-            )
-        }
+        val attempt = json.obj("currentAttempt")?.let(::attempt)
         val timeline = json.obj("timeline")?.let { t ->
             LandingTimeline(
                 sections = t.objects("sections").map { s ->
@@ -347,6 +349,21 @@ object LandingSessionModel {
             currentAttempt = attempt, timeline = timeline,
         )
     }
+
+    /**
+     * What a device that cannot reach the server draws for a landing page it has not read yet (iOS `offlinePlaceholder`): the job
+     * an integration read last described, as the page's attempt — nothing settled, no timeline, no door. [attemptCard] draws it as
+     * a failed read, its clock frozen at that read and `Update unavailable` in its head, and [gates] opens nothing on a failed read.
+     */
+    fun offlinePlaceholder(sessionId: String, job: JsonObject): LandingView = LandingView(
+        sessionId = sessionId, projectId = "", subject = if (job.text("taskId").isNullOrEmpty()) "PROMOTION" else "TASK",
+        taskId = job.text("taskId"), promotionId = job.text("promotionId"), episode = 1, openedAt = job.text("startedAt").orEmpty(),
+        settledAt = null, settledAs = null, checks = emptyList(), currentAttempt = attempt(job), timeline = null,
+    )
+
+    /** The last six lines a check printed that are not blank (the live block's and a failed check's inline tail; iOS and web keep
+     *  the same six). Carriage returns go; an empty answer is no tail at all. */
+    fun tail(text: String): String = text.replace("\r", "").split("\n").filter { it.isNotBlank() }.takeLast(6).joinToString("\n")
 
     /** One page of a check's output. */
     fun logPage(json: JsonObject): LandingLogPage = LandingLogPage(json.text("jobId"), json.objects("entries").map {

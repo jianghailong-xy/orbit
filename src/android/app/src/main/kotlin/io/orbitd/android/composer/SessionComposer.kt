@@ -270,11 +270,18 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                     effective.text("provider") ?: shownEngine, effective.text("model").orEmpty(), effective.text("effort")) else null
                 ModelChip(cursorModel ?: if (dsh && effective.text("model").isNullOrBlank()) DshRuntime.PICKED_BY else effective.text("model")?.ifBlank { "Runtime default" } ?: "Model",
                     effortLabel(effective.text("effort")), smart != null,
-                    enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null, modifier = Modifier.weight(1f)) {
+                    enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null, modifier = Modifier.weight(1f),
+                    // …and aloud with its effort said once (iOS `chipAccessibilityLabel`): the name above already holds it.
+                    spokenName = if (cursorModel == null) null else CursorRuntime.spokenName(state.catalog,
+                        effective.text("provider") ?: shownEngine, effective.text("model").orEmpty(), effective.text("effort"))) {
                     models = true; model.loadCatalog()
                 }
                 val hasDraft = draft.text.isNotBlank() || draft.attachments.isNotEmpty()
-                val sendEnabled = usable && !state.busy && !state.waiting && draft.createdSessionId == null && (if (running && !hasDraft) true else hasDraft && draft.pending == null)
+                // With nothing typed, Send is Stop wherever there is something to stop — a turn running, one the engine started for
+                // itself, or work left running under a parked turn (A07-20, iOS 593920cea). Steer and Queue for next turn still ask for
+                // a running turn.
+                val stop = hasSomethingToStop(detail) && !hasDraft
+                val sendEnabled = usable && !state.busy && !state.waiting && draft.createdSessionId == null && (if (stop) true else hasDraft && draft.pending == null)
                 // Held while a turn runs, Send offers the other way to send it: queued for the next turn instead of into this one (decided
                 // 2026-10-16, docs/mocks/steer-tray; iOS's context menu on Send, the web's ⌥Enter). Only where the engine would otherwise
                 // take it into the turn, and never for a `!cmd`, which always waits.
@@ -282,11 +289,11 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                 var queueMenu by remember { mutableStateOf(false) }
                 LaunchedEffect(queueOffered) { if (!queueOffered) queueMenu = false }
                 Box {
-                    Button(enabled = sendEnabled, onClick = { if (running && !hasDraft) model.control("interrupt") else send(false) },
+                    Button(enabled = sendEnabled, onClick = { if (stop) model.stop() else send(false) },
                         modifier = Modifier.testTag("composer-send").holdToOffer(queueOffered) { queueMenu = true }.semantics {
                             if (queueOffered) customActions = listOf(CustomAccessibilityAction(PendingTray.QUEUE_FOR_NEXT_TURN) { send(true); true })
                         }) {
-                        Text(if (state.waiting) "Uploading…" else if (state.busy) "Sending…" else if (running && !hasDraft) "Stop" else "Send")
+                        Text(if (state.waiting) "Uploading…" else if (state.busy) "Sending…" else if (stop) "Stop" else "Send")
                     }
                     DropdownMenu(queueMenu, onDismissRequest = { queueMenu = false }) {
                         DropdownMenuItem(text = { Text(PendingTray.QUEUE_FOR_NEXT_TURN) }, modifier = Modifier.testTag("composer-queue-next-turn"),
@@ -415,11 +422,13 @@ internal fun Modifier.holdToOffer(enabled: Boolean, offer: () -> Unit): Modifier
 }
 
 /** The model chip (iOS `modelChipLabel`): the model's name, and — on a task run still on the model smart selection picked — a ✦ before
- * it on a light tint of the accent. Named aloud "Model X, effort Y", and ", picked by smart selection" while it carries the ✦. */
+ * it on a light tint of the accent. Named aloud "Model X, effort Y" — or [spokenName], where the name already says its effort — and
+ * ", picked by smart selection" while it carries the ✦. */
 @Composable
-internal fun ModelChip(name: String, effort: String, smart: Boolean, enabled: Boolean, modifier: Modifier = Modifier, open: () -> Unit) {
+internal fun ModelChip(name: String, effort: String, smart: Boolean, enabled: Boolean, modifier: Modifier = Modifier, spokenName: String? = null,
+    open: () -> Unit) {
     val accent = MaterialTheme.colorScheme.primary
-    val spoken = "Model $name, effort $effort" + if (smart) TaskDetailCopy.chipPickedBySmartSelection else ""
+    val spoken = (spokenName ?: "Model $name, effort $effort") + if (smart) TaskDetailCopy.chipPickedBySmartSelection else ""
     TextButton(enabled = enabled, modifier = modifier.testTag("composer-model").semantics { contentDescription = spoken }, onClick = open) {
         Row(if (smart) Modifier.background(accent.copy(alpha = 0.12f), RoundedCornerShape(50)).padding(horizontal = 7.dp, vertical = 2.dp) else Modifier,
             verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -480,8 +489,9 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
             if (state.catalogLoading) CircularProgressIndicator()
             state.catalogError?.let { Text(it); TextButton(onClick = model::loadCatalog) { Text("Retry model catalog") } }
             val rows = catalog?.models(engine, provider).orEmpty()
-            // A Cursor CLI model is the one named, whatever context or speed its value carries.
-            val chosenName = if (engine == CursorRuntime.ENGINE) CursorRuntime.modelBase(chosen) else chosen
+            // A Cursor CLI model is the one its value names, whatever context or speed it carries beside it (`CursorRuntime.pick`).
+            val cursorPick = if (engine == CursorRuntime.ENGINE) CursorRuntime.pick(chosen, catalog, provider) else null
+            val chosenName = cursorPick?.model ?: chosen
             rows.forEach { row ->
                 TextButton(enabled = enabled, onClick = {
                     val id = row.text("value") ?: return@TextButton
@@ -505,28 +515,15 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
             if (levels.isNotEmpty()) { Text("Effort"); (listOf("") + levels).forEach { effort ->
                 TextButton(enabled = enabled, onClick = { change("effort", effort) }) { Text(effort.ifBlank { "Default" }) }
             } }
-            // A Cursor CLI model's own context and speed (iOS 5 ③), each where the runner's catalogue says the model takes it, carried in the
-            // session's model value as Cursor writes it (`claude-opus-5-5[context=1m,fast=true]`).
-            if (engine == CursorRuntime.ENGINE) catalog?.modelRow(engine, provider, chosen)?.let { row ->
-                val set = CursorRuntime.modelParameters(chosen)
-                fun pick(id: String, value: String) = change("model", CursorRuntime.withParameters(chosenName, set + (id to value), row))
-                CursorRuntime.parameter(row, CursorRuntime.CONTEXT)?.let { context ->
-                    val current = set[CursorRuntime.CONTEXT] ?: context.text("default")
-                    Text("Context")
-                    CursorRuntime.values(context).forEach { value ->
-                        TextButton(enabled = enabled, onClick = { pick(CursorRuntime.CONTEXT, value) }, modifier = Modifier.testTag("composer-cursor-context:$value")) {
-                            Text((if (value == current) "✓ " else "") + CursorRuntime.valueLabel(context, value))
-                        }
-                    }
-                }
-                CursorRuntime.parameter(row, CursorRuntime.FAST)?.let { fast ->
-                    val current = set[CursorRuntime.FAST] ?: fast.text("default")
-                    Text("Speed")
-                    CursorRuntime.values(fast).forEach { value ->
-                        TextButton(enabled = enabled, onClick = { pick(CursorRuntime.FAST, value) }, modifier = Modifier.testTag("composer-cursor-speed:$value")) {
-                            Text((if (value == current) "✓ " else "") + CursorRuntime.speedLabel(fast, value))
-                        }
-                    }
+            // A Cursor CLI model's own context and speed (iOS 5 ③, web `cursorSettingRows`), each where the runner's catalogue says the
+            // model takes it, carried in the session's model value by shared cursorModels.ts's rules (`claude-opus-5-5[context=1m,fast=true]`):
+            // a value the model doesn't offer reads as its own, and one picked back at its default is taken out.
+            if (cursorPick != null && !CursorRuntime.onAuto(engine, chosen)) CursorRuntime.settingRows(cursorPick).forEach { setting ->
+                Text(setting.title)
+                setting.values.forEach { (value, label) ->
+                    TextButton(enabled = enabled, modifier = Modifier.testTag("composer-cursor-${setting.title.lowercase()}:$value"), onClick = {
+                        change("model", CursorRuntime.encodeModel(cursorPick.model, cursorPick.parameters + (setting.id to value), cursorPick.row))
+                    }) { Text((if (value == setting.value) "✓ " else "") + label) }
                 }
             }
             // Asked of the engine: DeepSeek Harness enforces Default, Auto and Don't Ask alone, as the server does. Cursor CLI lists Default

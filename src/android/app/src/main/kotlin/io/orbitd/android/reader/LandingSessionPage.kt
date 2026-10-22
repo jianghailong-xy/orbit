@@ -62,7 +62,8 @@ import kotlinx.serialization.json.JsonObject
  * never the reader — its own poll, no composer, no session menu and no `sessions/:id/events` subscription — and a
  * conversation gets the reader as it always did. A session the directory does not list is asked for once (a landing link
  * reaches its subject before the session row exists, and a flat list never carries a landing), so the answer is the
- * server's, never a guess from an id.
+ * server's, never a guess from an id. When that one read fails, an id an integration read named as a landing job's
+ * ([LandingJobSnapshots]) still gets the landing page, which draws that job frozen; any other id gets the reader.
  */
 @Composable
 fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: OrbitRoute, api: DirectoryApi, data: DirectoryData,
@@ -74,7 +75,7 @@ fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: Orbi
         if (listed) { landing = false; return@LaunchedEffect }
         if (landing != null) return@LaunchedEffect
         landing = try { LandingSessionModel.isLanding(api.objectRead(listOf("sessions", id))) }
-        catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { false }
+        catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { app.landingJobs.snapshot(handle, id) != null }
     }
     when (landing) {
         null -> Box(Modifier.fillMaxSize().testTag("session-opening"), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -85,7 +86,8 @@ fun SessionDestination(app: OrbitApplication, handle: SessionHandle, route: Orbi
 
 /** What the page holds between reads: the session detail and its landing view, when this device last got an answer, the
  *  project facts the head and the gates take (V6's step start and usual duration, the main branch, the coordinator and the
- *  round's candidate), and a refusal the server wrote for the last press. */
+ *  round's candidate), a refusal the server wrote for the last press, and — while no read has answered and the last one
+ *  failed — the job an integration read last described, which the card draws frozen. */
 internal data class LandingSessionRead(
     val view: LandingView? = null,
     val rowTitle: String? = null,
@@ -98,6 +100,7 @@ internal data class LandingSessionRead(
     val mergedPromotions: List<JsonObject> = emptyList(),
     val refusal: String? = null,
     val acting: Boolean = false,
+    val offline: LandingJobSnapshot? = null,
 ) {
     /** The coordinator conversation that decides this work, when the project has a live one to open. */
     val coordinatorId: String? get() = coordinator?.obj("coordination")?.obj("session")?.text("id")
@@ -129,11 +132,11 @@ internal fun LandingSessionPage(app: OrbitApplication, handle: SessionHandle, ro
     val scope = rememberCoroutineScope()
     val zone = remember { ZoneId.systemDefault() }
 
-    suspend fun readOnce() = LandingSessionReads.read(api, projects, id, state) { state = it }
+    suspend fun readOnce() = LandingSessionReads.read(api, projects, id, state, app.landingJobs, handle) { state = it }
 
     LaunchedEffect(id) {
         while (isActive) {
-            LandingSessionReads.read(api, projects, id, state) { state = it }
+            LandingSessionReads.read(api, projects, id, state, app.landingJobs, handle) { state = it }
             val next = LandingSessionModel.nextReadMs(state.view) ?: break
             delay(next)
         }
@@ -220,18 +223,18 @@ internal object LandingSessionReads {
     private suspend fun <T> attempt(read: suspend () -> T): T? =
         try { read() } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
 
-    suspend fun read(api: DirectoryApi, projects: ProjectApi, id: String, state: LandingSessionRead,
-        publish: (LandingSessionRead) -> Unit) {
+    suspend fun read(api: DirectoryApi, projects: ProjectApi, id: String, state: LandingSessionRead, snapshots: LandingJobSnapshots,
+        handle: SessionHandle, publish: (LandingSessionRead) -> Unit) {
         val readAt = Instant.now()
         val detail = attempt { api.objectRead(listOf("sessions", id)) }
         var next = if (detail != null) state.copy(view = LandingSessionModel.view(detail) ?: state.view,
-            rowTitle = detail.text("title") ?: state.rowTitle, updatedAt = readAt, failed = false)
-        else state.copy(failed = true)
+            rowTitle = detail.text("title") ?: state.rowTitle, updatedAt = readAt, failed = false, offline = null)
+        else state.copy(failed = true, offline = if (state.view == null) snapshots.snapshot(handle, id) else null)
         publish(next)
         val landing = next.view ?: return
         if (landing.projectId.isEmpty()) return
         if (landing.settledAt == null) {
-            attempt { projects.integration(landing.projectId) }?.let { next = next.copy(integration = it) }
+            attempt { projects.integration(landing.projectId) }?.let { snapshots.remember(handle, it); next = next.copy(integration = it) }
             attempt { projects.coordinator(landing.projectId) }?.let { next = next.copy(coordinator = it) }
             if (landing.subject == "PROMOTION") attempt { projects.currentPromotion(landing.projectId) }?.let { next = next.copy(promotion = it) }
         } else if (landing.subject == "PROMOTION") {
@@ -354,6 +357,17 @@ private fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, car
     Column(Modifier.fillMaxWidth().background(wash, shape).border(1.dp, stroke, shape).padding(12.dp).testTag("landing-status-card"),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (view == null) {
+            // A first read that failed draws the job an integration read last described, frozen at that read, with no door
+            // (iOS `offlineCard`); with none kept, the note says only that the update is unavailable.
+            val frozen = state.offline?.let { kept ->
+                LandingSessionModel.attemptCard(LandingSessionModel.offlinePlaceholder(kept.job.text("landingSessionId").orEmpty(), kept.job),
+                    now, kept.readAt, failed = true, kept.facts)
+            }
+            if (frozen != null) {
+                ProjectLandingHead(frozen.word, LandingHead(frozen.right, frozen.rightIsClock, frozen.detail), running = false, timedOut = false)
+                frozen.live?.let { Text(it, Modifier.testTag("landing:live"), style = MaterialTheme.typography.bodySmall, color = muted) }
+                return@Column
+            }
             val text = if (state.failed) LandingSessionCopy.UPDATE_UNAVAILABLE else LandingSessionCopy.LOADING_LANDING
             Text(text, Modifier.testTag("landing:status-note"), style = MaterialTheme.typography.bodyMedium, color = muted)
             return@Column
@@ -415,15 +429,22 @@ private fun LandingStatusCard(state: LandingSessionRead, view: LandingView?, car
                     modifier = Modifier.testTag("landing:retry")) { Text(LandingSessionCopy.RETRY) }
                 if (gates.recheck) Button(onClick = { onPress(LandingMenuAction.RERUN_THE_CHECK) }, enabled = !state.acting,
                     modifier = Modifier.testTag("landing:rerun")) { Text(LandingSessionCopy.RERUN_THE_CHECK) }
-                if (gates.abandon) OutlinedButton(onClick = { onPress(LandingMenuAction.ABANDON) }, enabled = !state.acting,
-                    modifier = Modifier.testTag("landing:abandon"), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) {
-                    Text(LandingSessionCopy.ABANDON)
-                }
+                if (gates.abandon) AbandonButton({ onPress(LandingMenuAction.ABANDON) }, !state.acting, Modifier.testTag("landing:abandon"))
             }
             doorHint(gates, push, attempt)?.let {
                 Text(it, Modifier.testTag("landing:door-hint"), style = MaterialTheme.typography.bodySmall, color = muted)
             }
         }
+    }
+}
+
+/** Abandon beside a timed-out attempt's solid door, on this page's card and the merge card: boards v4 04 and 05's light red
+ *  secondary (`cap4.red`) — a red wash and red ink, no outline. */
+@Composable
+internal fun AbandonButton(onClick: () -> Unit, enabled: Boolean, modifier: Modifier = Modifier) {
+    FilledTonalButton(onClick = onClick, enabled = enabled, modifier = modifier, colors = ButtonDefaults.filledTonalButtonColors(
+        containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f), contentColor = MaterialTheme.colorScheme.error)) {
+        Text(LandingSessionCopy.ABANDON)
     }
 }
 
@@ -486,7 +507,7 @@ private fun LandingTimelineSectionView(section: LandingSection, view: LandingVie
                 }
                 when {
                     selectors != null && openLog == selectors -> LandingLogBlock(selectors, onLog)
-                    selectors != null && !LandingSessionModel.checkPassed(entry) -> LandingLogBlock(selectors, onLog)
+                    selectors != null && !LandingSessionModel.checkPassed(entry) -> LandingInlineOutput(selectors, onLog)
                 }
             }
         }
@@ -519,7 +540,7 @@ private fun landingMark(entry: LandingEntry, jobKind: String, entries: List<Land
     else -> "↻" to Color(0xFF0066BE)
 }
 
-/** One finished check's tail, loaded once and shown dark; the block a failed check dies on (mockup 05 g). */
+/** One finished check's output as `Log ›` opens it: read page by page, in the theme's own ink. */
 @Composable
 private fun LandingLogBlock(selectors: LandingLogSelectors, onLog: suspend (LandingLogSelectors, String?) -> LandingLogPage?) {
     var page by remember(selectors) { mutableStateOf<LandingLogPage?>(null) }
@@ -545,7 +566,7 @@ private fun LandingLiveCheck(selectors: LandingLogSelectors, title: String, onLo
     var text by remember(selectors) { mutableStateOf("") }
     LaunchedEffect(selectors) {
         while (isActive) {
-            onLog(selectors, null)?.let { page -> text = tail(page.entries.joinToString("") { it.text }) }
+            onLog(selectors, null)?.let { page -> text = LandingSessionModel.tail(page.entries.joinToString("") { it.text }) }
             delay(4_000)
         }
     }
@@ -555,12 +576,22 @@ private fun LandingLiveCheck(selectors: LandingLogSelectors, title: String, onLo
     }
 }
 
-private fun tail(text: String): String = text.replace("\r", "").split("\n").filter { it.isNotBlank() }.takeLast(6).joinToString("\n")
+/** A failed check's last lines, inline: the failure's own words, read once from the log `Log ›` opens, in the dark block the
+ *  running check wears (mockup 05 g; iOS and web `LandingInlineOutput`). A read that fails or finds nothing draws nothing here;
+ *  `Log ›` still opens the whole log. */
+@Composable
+private fun LandingInlineOutput(selectors: LandingLogSelectors, onLog: suspend (LandingLogSelectors, String?) -> LandingLogPage?) {
+    var text by remember(selectors) { mutableStateOf("") }
+    LaunchedEffect(selectors) { onLog(selectors, null)?.let { page -> text = LandingSessionModel.tail(page.entries.joinToString("") { it.text }) } }
+    if (text.isNotEmpty()) Box(Modifier.padding(start = 24.dp).testTag("landing:inline-output")) { LandingDarkOutput(text) }
+}
 
 @Composable
 private fun LandingLogBody(page: LandingLogPage?, failed: Boolean, loading: Boolean, more: (String) -> Unit) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    Column(Modifier.padding(start = 24.dp).fillMaxWidth().background(Color.Black.copy(alpha = 0.04f), RoundedCornerShape(8.dp)).padding(8.dp)
+    // The theme's own ink on a faint wash of it, as iOS's `Color.primary` does: readable on a dark theme as on a light one.
+    val ink = MaterialTheme.colorScheme.onSurface
+    Column(Modifier.padding(start = 24.dp).fillMaxWidth().background(ink.copy(alpha = 0.04f), RoundedCornerShape(8.dp)).padding(8.dp)
         .testTag("landing:log-block"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         when {
             failed -> Text("${LandingSessionCopy.LOG_UNAVAILABLE}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
@@ -569,7 +600,7 @@ private fun LandingLogBody(page: LandingLogPage?, failed: Boolean, loading: Bool
             else -> page.entries.forEach { entry ->
                 if (entry.truncatedBytes > 0) Text(LandingSessionCopy.bytesOmitted(entry.truncatedBytes), style = MaterialTheme.typography.bodySmall, color = muted)
                 Text(entry.text, Modifier.testTag("landing:log-text"), style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    color = Color(0xFF1A1A1A))
+                    color = ink)
             }
         }
         if (page?.nextCursor != null) TextButton(onClick = { more(page.nextCursor) }, enabled = !loading,

@@ -109,7 +109,7 @@ class CursorDeviceTest {
         engines()
         capture("ios1-engines-$pass")
         click(hasTestTag("engine:cursor"))
-        compose.waitUntil(15_000) { compose.onAllNodes(hasContentDescription("Model Auto, effort Default")).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(15_000) { compose.onAllNodes(hasContentDescription("Model Auto")).fetchSemanticsNodes().isNotEmpty() }
         capture("ios1-new-session-$pass")
         for (state in listOf("not-installed", "signed-out", "update-runner", "wrong-version")) {
             cursorState = state; cursorKeys = state != "signed-out"

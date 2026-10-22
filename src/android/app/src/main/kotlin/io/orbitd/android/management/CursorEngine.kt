@@ -39,9 +39,13 @@ internal object CursorCopy {
     fun plan(name: String) = "$name plan"
     /** A signed-in account Cursor reports no usage for, or only 0%, which is no reading (contract §11): never a 0% drawn. */
     const val USAGE_UNAVAILABLE = "Usage unavailable"
-    /** Why there is no number (web's title on the same words). */
-    fun usageUnavailable(plan: String?) =
-        "Cursor doesn’t report how much of ${plan?.let { "the $it plan’s" } ?: "this account’s"} usage is left, so Orbit shows no number rather than 0%."
+    /** Why there is no number, after "Usage unavailable — " (the board's iOS 2 ③, which Android follows; OrbitKit
+     * `CursorRuntime.usageUnavailable`): the Free plan's requests by their own name. */
+    fun usageUnavailable(plan: String?) = when {
+        plan.isNullOrEmpty() -> "Cursor doesn’t report how much of this account’s usage is left."
+        plan == "Free" -> "Cursor doesn’t report how many of the Free plan’s requests are left."
+        else -> "Cursor doesn’t report how much of the $plan plan’s usage is left."
+    }
     /** An account a turn met Cursor's usage limit on this period: until when, when Cursor said (web statusOf). */
     fun spent(resets: String?) = if (resets == null) "Spent" else "Spent · resets $resets"
     /** A build other than the pinned one is put back the way a missing one is put there (iOS 2: the engine page's press). */
@@ -87,9 +91,12 @@ internal object CursorCopy {
     const val UNREACHABLE_FOOTER = "Couldn’t reach Cursor from the runner that checks keys. The key itself may be fine."
     /** A Cursor key's protocol (web `runtimeSummary`). */
     const val PROTOCOL = "Cursor API"
+    /** Where Cursor's API lives, as a key's page names it when the key's own address says no host (iOS `CursorRuntime.keyEndpoint`). */
+    const val ENDPOINT = "api2.cursor.sh"
 
-    /** A Cursor User API Key among the account's own keys: its row's runtime is Cursor's dialect. */
-    fun isKey(key: JsonObject) = key.str("runtime") == ProviderEngines.CURSOR
+    /** A Cursor User API Key among the account's own keys: its row's runtime is Cursor's dialect, or it was connected from the Cursor
+     * preset (OrbitKit `CursorRuntime.isKey`). */
+    fun isKey(key: JsonObject) = key.str("runtime") == ProviderEngines.CURSOR || key.str("presetSlug") == CursorRuntime.KEY_PRESET
 
     /** The value Last check says: what Cursor answered the key's last check, and how long ago — "Valid · 4m ago". */
     fun lastCheck(key: JsonObject, nowMs: Long): String {
@@ -153,6 +160,9 @@ internal fun CursorKeyPage(api: ManagementApi, revision: Long, providerId: Strin
     val scope = rememberCoroutineScope()
     val now = rememberNow(30_000)
     var key by remember(providerId) { mutableStateOf<JsonObject?>(null) }
+    // The model a session on it starts on (iOS 4 ③): Cursor CLI's default, by its catalogue's name on the first machine online that runs
+    // it — Auto with none, and while none has been read.
+    var model by remember(providerId) { mutableStateOf(CursorRuntime.AUTO) }
     var gone by remember(providerId) { mutableStateOf(false) }
     var failure by remember(providerId) { mutableStateOf<String?>(null) }
     var checking by remember { mutableStateOf(false) }
@@ -164,6 +174,8 @@ internal fun CursorKeyPage(api: ManagementApi, revision: Long, providerId: Strin
             key = found; gone = found == null; failure = null
             found?.let { rememberProviderKeyTitle(providerId, it.str("label") ?: it.text("slug")) }
         } catch (e: CancellationException) { throw e } catch (e: Exception) { failure = personalFailure(e) }
+        try { model = Infrastructure.cursorModel(providerObjects(api.get("runners")).filter { it.bool("online") == true }) }
+        catch (e: CancellationException) { throw e } catch (_: Exception) { }
     }
     LaunchedEffect(providerId, revision, rememberResumed()) { load() }
     fun checkAgain() {
@@ -210,10 +222,10 @@ internal fun CursorKeyPage(api: ManagementApi, revision: Long, providerId: Strin
         FormSection(KeyEngines.KEY, footer = KeyEngines.footer(listOf(CursorRuntime.CLI))) {
             Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) { Text(KeyEngines.PROTOCOL, Modifier.weight(1f)); Text(CursorCopy.PROTOCOL, color = Ink.muted) }
             HorizontalDivider()
-            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) { Text(DeepSeekBalance.DEFAULT_MODEL, Modifier.weight(1f)); Text(CursorRuntime.AUTO, color = Ink.muted) }
-            DeepSeekBalance.endpointHost(provider)?.let { host ->
-                HorizontalDivider()
-                Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) { Text(DeepSeekBalance.ENDPOINT, Modifier.weight(1f)); Text(host, color = Ink.muted) }
+            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) { Text(DeepSeekBalance.DEFAULT_MODEL, Modifier.weight(1f)); Text(model, color = Ink.muted) }
+            HorizontalDivider()
+            Row(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                Text(DeepSeekBalance.ENDPOINT, Modifier.weight(1f)); Text(DeepSeekBalance.endpointHost(provider) ?: CursorCopy.ENDPOINT, color = Ink.muted)
             }
         }
         Spacer(Modifier.height(48.dp))
