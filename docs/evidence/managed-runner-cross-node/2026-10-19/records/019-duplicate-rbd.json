@@ -1,0 +1,87 @@
+{
+ "checks": [
+  {
+   "check": "the image has the layering feature only: no exclusive-lock",
+   "ok": true,
+   "value": [
+    "layering"
+   ]
+  },
+  {
+   "check": "no RBD lock is held on it",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "one watcher before and after: the kernel client of orbit-mr-lab-2",
+   "ok": true,
+   "value": {
+    "after": [
+     {
+      "address": "10.77.0.2:0/2935771823",
+      "client": 284177,
+      "cookie": 18446462598732840961
+     }
+    ],
+    "before": [
+     {
+      "address": "10.77.0.2:0/2935771823",
+      "client": 284177,
+      "cookie": 18446462598732840961
+     }
+    ]
+   }
+  },
+  {
+   "check": "a second client opened the image and read 1 MiB: Ceph refused nothing",
+   "ok": true,
+   "value": "bench  type read io_size 4096 io_threads 1 bytes 1048576 pattern sequential\n  SEC       OPS   OPS/SEC   BYTES/SEC\nelapsed: 0   ops: 256   ops/sec: 771.079   bytes/sec: 3.0 MiB/s\nexit=0"
+  }
+ ],
+ "endedAt": "2026-10-19T12:51:12.043+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "duplicate",
+ "result": {
+  "image": "orbit-mr-rbd/csi-vol-6b461c68-73b8-4dd6-9cf9-d8c194663bb6",
+  "locks": [],
+  "rbdInfo": {
+   "access_timestamp": "Mon Oct 19 12:45:21 2026",
+   "block_name_prefix": "rbd_data.455e916bbf11b",
+   "create_timestamp": "Mon Oct 19 12:45:21 2026",
+   "features": [
+    "layering"
+   ],
+   "flags": [],
+   "format": 2,
+   "id": "455e916bbf11b",
+   "modify_timestamp": "Mon Oct 19 12:45:21 2026",
+   "name": "csi-vol-6b461c68-73b8-4dd6-9cf9-d8c194663bb6",
+   "object_size": 4194304,
+   "objects": 512,
+   "op_features": [],
+   "order": 22,
+   "size": 2147483648,
+   "snapshot_count": 0
+  },
+  "secondClientRead": "bench  type read io_size 4096 io_threads 1 bytes 1048576 pattern sequential\n  SEC       OPS   OPS/SEC   BYTES/SEC\nelapsed: 0   ops: 256   ops/sec: 771.079   bytes/sec: 3.0 MiB/s\nexit=0",
+  "secondClientSeconds": 2.0,
+  "watchersAfter": [
+   {
+    "address": "10.77.0.2:0/2935771823",
+    "client": 284177,
+    "cookie": 18446462598732840961
+   }
+  ],
+  "watchersBefore": [
+   {
+    "address": "10.77.0.2:0/2935771823",
+    "client": 284177,
+    "cookie": 18446462598732840961
+   }
+  ]
+ },
+ "seconds": 21.9,
+ "startedAt": "2026-10-19T12:50:50.167+00:00",
+ "step": "rbd"
+}

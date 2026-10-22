@@ -263,13 +263,13 @@ describe('two Google accounts on one runner', () => {
     open.mockRestore();
   });
 
-  it('re-signs in, renames, pauses and removes from each account’s menu — never removing Default', async () => {
+  it('re-signs in, renames, pauses and removes from each account’s menu — Default from Orbit alone', async () => {
     const page = mount(runner());
     const [defaultRow, workRow] = accountRows(page);
     expect(buttons(defaultRow)).toEqual(['More actions']);
     const items = async (row: HTMLElement) =>
       all(await openRunnerMenu(row), '[role="menuitem"]').map((item) => item.textContent?.trim());
-    expect(await items(defaultRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…']);
+    expect(await items(defaultRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
     expect(await items(workRow)).toEqual(['Rename', 'Re-sign in', 'Pause account…', 'Remove account']);
 
     await clickRunnerMenuItem(workRow, 'Remove account');
@@ -346,9 +346,9 @@ describe('a runner that runs agy on its Gemini key', () => {
     const [defaultRow, workRow] = accountRows(page);
     expect(tags(defaultRow)).toEqual(['Signed in']);
     expect(defaultRow.querySelector('.re-quota')?.textContent).toBe('env key · runs on your Gemini key');
-    // Nothing to sign in or pause: it is no Google sign-in at all.
+    // Nothing to sign in or pause: it is no Google sign-in at all. Removing it from Orbit is still there.
     expect(buttons(defaultRow)).toEqual(['More actions']);
-    expect(all(await openRunnerMenu(defaultRow), '[role="menuitem"]').map((item) => item.textContent?.trim())).toEqual(['Rename']);
+    expect(all(await openRunnerMenu(defaultRow), '[role="menuitem"]').map((item) => item.textContent?.trim())).toEqual(['Rename', 'Remove account']);
     // Automatic starts on a Google account, the only one with a quota to spend first.
     expect([defaultRow, workRow].map((row) => row.querySelector('.re-name')?.textContent)).toEqual(['Default', 'WorkNEXT']);
     expect(summaryOf(box)).toBe('All signed in');

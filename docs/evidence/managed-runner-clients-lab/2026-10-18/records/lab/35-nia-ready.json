@@ -1,0 +1,38 @@
+{
+  "at": "2026-10-18T06:14:52.269+00:00",
+  "changes": [
+    [
+      "2026-10-18T06:14:50.093+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 2,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 2,
+        "management_state": "STARTING",
+        "pod": "0b5fda80",
+        "reason": null,
+        "revision": 32
+      }
+    ],
+    [
+      "2026-10-18T06:14:52.269+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 2,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 2,
+        "management_state": "READY",
+        "pod": "0b5fda80",
+        "reason": null,
+        "revision": 33
+      }
+    ]
+  ],
+  "owner": "nia",
+  "reached": {
+    "reason": null,
+    "state": "READY"
+  }
+}

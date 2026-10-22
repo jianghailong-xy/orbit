@@ -1,0 +1,7 @@
+[orbit-runner 2026-10-18T04:21:18.645Z] managed runner instance identity read; it is sent with every request
+[orbit-runner 2026-10-18T04:21:18.652Z] runner "orbit-managed" online -> https://10.0.2.2:13711 (max 2 concurrent)
+[orbit-runner 2026-10-18T04:21:25.354Z] reclaiming session 01a14d28-86e3-779e-a191-0fe345bd2b7c — T06B-AMY-S1 the first session, sent while the runner sleeps
+[orbit-runner 2026-10-18T04:21:25.825Z] session 01a14d28-86e3-779e-a191-0fe345bd2b7c — re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a14d28-86e3-779e-a191-0fe345bd2b7c (branch orbit/t06b-amy-s1-the-first-session-sent-while-94c1b2)
+[orbit-runner 2026-10-18T04:21:25.826Z] reclaiming session 4fdb59fb-f5ac-5c97-91d1-3d2d8a4f7886 — Task: T06-B-AMY-T1 a task run, Run Now, while the runner sleeps
+[orbit-runner 2026-10-18T04:21:26.331Z] session 4fdb59fb-f5ac-5c97-91d1-3d2d8a4f7886 — re-attached worktree /var/lib/orbit/home/.orbit/worktrees/4fdb59fb-f5ac-5c97-91d1-3d2d8a4f7886 (branch orbit/task-t06-b-amy-t1-a-task-run-run-now-whi-5e8103)
+[orbit-runner 2026-10-18T04:21:27.218Z] > interactive run 01a14d28-86e3-779e-a191-0fe345bd2b7c — T06B-AMY-S1 the first session, sent while the runner sleeps

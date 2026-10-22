@@ -1,0 +1,5 @@
++ 2026-10-19T07:45:20Z docker restart d9-dind (the test host: a new network namespace, its iptables empty)
++ 2026-10-19T07:45:30Z the test host's container is running again
++ 2026-10-19T07:45:36Z dockerd answers
+host listeners on 0.0.0.0:2222, 127.0.0.1:2223, 172.17.0.5:2224, [::]:2225, udp 0.0.0.0:2226; internal model endpoint 10.77.0.2:18080
++ 2026-10-19T07:45:41Z the API answers

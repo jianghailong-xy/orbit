@@ -25,7 +25,9 @@ export interface SessionProjectSession extends GroupableSession {
 
 export interface SessionProjectLine {
   text: string;
-  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
+  /** `warning` is a fact the row states in amber without asking anything: a landing the server
+   *  judged timed out. It is deliberately not `approval`, which lights the row's needs-you dot. */
+  tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review' | 'warning';
 }
 
 export interface SessionProjectRow<T> extends GroupableSession {
@@ -114,6 +116,92 @@ export function landingSilentWord(minutes: number | null): string {
   return minutes === null ? 'no report yet' : `no report for ${minutes}m`;
 }
 
+/**
+ * The derived landing label a source work session carries at its bottom (owner 2026-10-19, board v4
+ * 06 e): what the platform did with the work this conversation produced — `Landing · checking ›`,
+ * `On project/x ✓ ›`, `Landing · checks failed ›`. The words are the integration line's, never the
+ * session-merge vocabulary (a code session's own merge bar says something else), and the label opens
+ * the landing session the generation belongs to.
+ */
+export const SESSION_SOURCE_LANDING_COPY = {
+  LANDING: 'Landing',
+  ON: 'On',
+  NOTHING_TO_LAND: 'Nothing to land',
+  CHECKS_FAILED: 'checks failed',
+  CONFLICT: 'conflict',
+  ERROR: 'error',
+  QUEUED: 'queued',
+  RUNNING: 'running',
+} as const;
+
+export interface SourceLandingLabel {
+  text: string;
+  /** Blue while it moves, green once it landed, red where it stopped — the same three inks the
+   *  project page's landing rows wear. */
+  tone: 'run' | 'landed' | 'failed' | 'quiet';
+}
+
+/**
+ * The label for a session's `sourceLanding` (§2.9 LS1's derived field), or null when this
+ * conversation produced no landing work. A settled subject says where the work went; an open one
+ * says what the platform is doing — the attempt's own step where the server names it (`checking`,
+ * `rebasing`), else its state.
+ */
+export function sourceLandingLabel(
+  landing: {
+    subject: 'TASK' | 'PROMOTION';
+    state: string;
+    phase?: string | null;
+    settledAs: string | null;
+    targetRef: string;
+  } | null | undefined,
+  main: string = DEFAULT_MAIN_BRANCH,
+): SourceLandingLabel | null {
+  if (!landing) return null;
+  const branch = branchOf(landing.targetRef) || branchOf(main);
+  switch (landing.settledAs) {
+    case 'LANDED':
+    case 'ALREADY_LANDED':
+      return { text: `${SESSION_SOURCE_LANDING_COPY.ON} ${branch} ✓`, tone: 'landed' };
+    case 'MERGED':
+      return { text: `${SESSION_SOURCE_LANDING_COPY.ON} ${mainBranchName(main)} ✓`, tone: 'landed' };
+    case 'NOTHING_TO_LAND':
+      return { text: SESSION_SOURCE_LANDING_COPY.NOTHING_TO_LAND, tone: 'quiet' };
+    case 'HANDLED':
+    case 'DECLINED':
+    case 'CANCELLED':
+    case 'DELETED':
+      return { text: `${SESSION_SOURCE_LANDING_COPY.LANDING} · ${landing.settledAs.toLowerCase()}`, tone: 'quiet' };
+    default:
+      break;
+  }
+  const stopped = landing.state === 'CHECK_FAILED'
+    ? SESSION_SOURCE_LANDING_COPY.CHECKS_FAILED
+    : landing.state === 'CONFLICT' ? SESSION_SOURCE_LANDING_COPY.CONFLICT
+      : landing.state === 'ERROR' ? SESSION_SOURCE_LANDING_COPY.ERROR
+        : null;
+  if (stopped) return { text: `${SESSION_SOURCE_LANDING_COPY.LANDING} · ${stopped}`, tone: 'failed' };
+  const step = landing.state === 'RUNNING'
+    ? (landing.phase ? jobPhases(main)[landing.phase as keyof typeof JOB_PHASES] : null)
+      ?? SESSION_SOURCE_LANDING_COPY.RUNNING
+    : landing.state === 'QUEUED' ? SESSION_SOURCE_LANDING_COPY.QUEUED
+      : landing.state.toLowerCase();
+  return { text: `${SESSION_SOURCE_LANDING_COPY.LANDING} · ${step}`, tone: 'run' };
+}
+
+/** `refs/heads/project/x` as a branch is spoken of. */
+function branchOf(ref: string | null | undefined): string {
+  return (ref ?? '').replace(/^refs\/heads\//, '');
+}
+
+/** §7.2 V6 in the row's own scale: the server judged the claim timed out — "timed out · no report
+ *  for 23m", in amber words and with no needs-you dot, because a stopped landing is a fact, not a
+ *  question. OrbitKit: `SessionProjectCopy.landingTimedOut`. */
+export const SESSION_PROJECT_TIMED_OUT = 'timed out';
+/** The server's SILENT claim in the row's scale: "no word from runner · 4m" — inside the lease,
+ *  so not a timeout. OrbitKit: `SessionProjectCopy.landingNoWordFromRunner`. */
+export const SESSION_PROJECT_NO_WORD = 'no word from runner';
+
 /** The project page's landing line, shortened for a row that is not redrawn every second:
  *  "Merge to main · queued · 13m", "Landing · checking · 4m · <task>". Null when nothing is in
  *  flight; a server that sends only the count gets "Landing · N jobs".
@@ -134,19 +222,235 @@ export function sessionProjectLandingLine(
   if (!job) return count > 0 ? { text: `Landing · ${count} ${count === 1 ? 'job' : 'jobs'}`, tone: 'queued' } : null;
   const heartbeat = Date.parse(job.heartbeatAt ?? '');
   const reported = Number.isFinite(heartbeat);
-  // The runner has gone quiet — the same claim lease the project page's landing row reads the same
-  // fact with (`LANDING_NO_REPORT`): how long it has been silent, never a verdict about the work.
+  const word = (job.kind && jobWords(main)[job.kind as keyof typeof JOB_WORDS]) || 'Integration';
+  const head = count > 1 ? `${word} ${count} jobs` : word;
+  const since = Number.isFinite(heartbeat) ? heartbeat : Date.parse(job.startedAt);
+  const minutes = Number.isFinite(since) ? Math.max(0, Math.floor((now - since) / 60_000)) : 0;
+  // §7.2 V6: a server that derives the claim's liveness hands this row the fact, so it no longer
+  // reads the heartbeat against the claim lease by itself. A timeout is the server's verdict and
+  // is said in amber words — not the needs-you ink, and not its dot: nothing here is a question.
+  const liveness = job.liveness;
+  if (liveness && job.state === 'RUNNING') {
+    if (liveness === 'LEASE_EXPIRED') {
+      return { text: [head, SESSION_PROJECT_TIMED_OUT, landingSilentWord(minutes)].join(' · '), tone: 'warning' };
+    }
+    if (liveness === 'SILENT') {
+      return { text: [head, `${SESSION_PROJECT_NO_WORD} · ${minutes}m`].join(' · '), tone: 'queued' };
+    }
+    // LIVE, QUIET and LEGACY: the runner is reporting (or reports only between steps, so its
+    // quiet is not silence). A healthy long check stays "checking".
+    return {
+      text: [head, (job.phase && jobPhases(main)[job.phase]) || 'running', elapsedLabel(job.startedAt, now),
+        count > 1 ? null : job.taskTitle].filter(Boolean).join(' · '),
+      tone: 'running',
+    };
+  }
+  // An older server: the runner has gone quiet — the same claim lease the project page's landing
+  // row reads the same fact with (`LANDING_NO_REPORT`): how long it has been silent, never a
+  // verdict about the work.
   const silent = job.state === 'RUNNING' && (!reported || now - heartbeat > INTEGRATION_CLAIM_STALE_MS);
   const running = job.state === 'RUNNING' && !silent;
-  const word = (job.kind && jobWords(main)[job.kind as keyof typeof JOB_WORDS]) || 'Integration';
   const state = job.state !== 'RUNNING' ? 'queued'
     : silent ? landingSilentWord(reported ? Math.max(0, Math.floor((now - heartbeat) / 60_000)) : null)
       : (job.phase && jobPhases(main)[job.phase as keyof typeof JOB_PHASES]) || 'running';
   return {
-    text: [count > 1 ? `${word} ${count} jobs` : word, state, elapsedLabel(job.startedAt, now),
+    text: [head, state, elapsedLabel(job.startedAt, now),
       count > 1 ? null : job.taskTitle].filter(Boolean).join(' · '),
     tone: running ? 'running' : 'queued',
   };
+}
+
+/** The Landings group's heading, its fold, and the two words for who holds a landing waiting on
+ *  somebody (owner 2026-10-19, board v4 04 c1). */
+export const SESSION_LANDINGS_COPY = {
+  TITLE: 'Landings',
+  EARLIER: 'Earlier',
+  LANDED: 'landed',
+  NOTHING_TO_LAND: 'nothing to land',
+  WITH_YOU: 'with you',
+  WITH_COORDINATOR: 'with the coordinator',
+  WAITING: 'Waiting for a decision',
+} as const;
+
+/** How far back a settled landing is still listed in the group: 24 hours (owner 2026-10-19). */
+export const LANDINGS_SETTLED_WINDOW_MS = 24 * 60 * 60 * 1_000;
+
+/**
+ * What a LANDING session row says about its subject, as `GET /sessions?projectId=&includeLanding=1`
+ * carries it (contract §2.9 LS6). Absent from a conversation's row, and from a server that predates
+ * the field.
+ */
+export interface LandingSessionSummary {
+  subject: 'TASK' | 'PROMOTION';
+  state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED';
+  settledAs: string | null;
+  settledAt: string | null;
+}
+
+/** The part of a session row the group reads. */
+export interface LandingSessionRow {
+  id: string;
+  title?: string | null;
+  createdAt?: string | null;
+  lastTurnAt?: string | null;
+  landing?: LandingSessionSummary | null;
+}
+
+/** What the row a landing is waiting on says: its kind's outcome, and whose it is. */
+export interface LandingHolder {
+  /** `Checks failed`, `Merge conflict`, `Integration error`, `Task failed`, … */
+  reason: string | null;
+  assignee: 'OWNER' | 'COORDINATOR' | null;
+}
+
+export interface LandingGroupRow {
+  id: string;
+  title: string;
+  /** The right-hand slot: how long it has waited, or how long ago it settled. */
+  time: string;
+  detail: string;
+  /** The mark the row's head carries: ✕ stopped, ✓ landed, ⇢ merged, ◌ nothing to land. */
+  tone: 'fail' | 'ok' | 'merge' | 'quiet';
+}
+
+export interface LandingGroup {
+  waiting: LandingGroupRow[];
+  settled: LandingGroupRow[];
+  /** Everything older than the window, folded into one row; null when there is none. Both counts
+   *  are 0 when every older one settled some other way (handled, cancelled, declined, deleted…):
+   *  the fold is still there, and reads a bare `Earlier`. */
+  earlier: { landed: number; nothing: number } | null;
+  /** Those same older landings, newest first — what the fold opens to. Empty exactly when
+   *  `earlier` is null. */
+  older: LandingGroupRow[];
+}
+
+/** How a settled subject ended, in the group's own words. */
+function settledWord(settledAs: string | null): { text: string; tone: LandingGroupRow['tone'] } {
+  switch (settledAs) {
+    case 'LANDED': return { text: 'Landed', tone: 'ok' };
+    case 'ALREADY_LANDED': return { text: 'Already landed', tone: 'ok' };
+    case 'MERGED': return { text: 'Merged into main', tone: 'merge' };
+    case 'NOTHING_TO_LAND': return { text: 'Nothing to land', tone: 'quiet' };
+    case 'HANDLED': return { text: 'Handled', tone: 'quiet' };
+    case 'DECLINED': return { text: 'Declined', tone: 'quiet' };
+    case 'CANCELLED': return { text: 'Cancelled', tone: 'quiet' };
+    case 'DELETED': return { text: 'Deleted', tone: 'quiet' };
+    default: return { text: settledAs ?? 'Settled', tone: 'quiet' };
+  }
+}
+
+/**
+ * The Landings group of a project's sessions page (owner 2026-10-19, board v4 04 c1; contract §2.9
+ * LS6): the landings waiting on a decision and the ones that settled within the last 24 hours, plus
+ * a folded count of everything older.
+ *
+ * What is NEVER here: a landing still in flight — it lives on the Landing card and in the jobs list
+ * — and a round of merging into main that merged, because the page's own timeline already draws
+ * "Merged into main" at the moment it happened. Empty is no group at all.
+ *
+ * `holders` is what the project's open items say about a landing that is waiting (§4.7): its kind's
+ * outcome and which side is holding it. A landing with no item still says it is waiting, because
+ * the server's AWAITING_DECISION is the fact that put it here.
+ */
+export function landingGroup(
+  rows: readonly LandingSessionRow[],
+  opts: { now?: number; holders?: ReadonlyMap<string, LandingHolder> } = {},
+): LandingGroup | null {
+  const now = opts.now ?? Date.now();
+  const waiting: Array<LandingGroupRow & { at: number }> = [];
+  const settled: Array<LandingGroupRow & { at: number }> = [];
+  const before: Array<LandingGroupRow & { at: number }> = [];
+  let landed = 0;
+  let nothing = 0;
+  let older = 0;
+  for (const row of rows) {
+    const landing = row.landing;
+    if (!landing) continue;
+    if (landing.state === 'IN_FLIGHT') continue;
+    const title = row.title ?? SESSION_LANDINGS_COPY.TITLE;
+    if (landing.state === 'AWAITING_DECISION') {
+      const holder = opts.holders?.get(row.id) ?? null;
+      const outcome = holder?.reason ?? SESSION_LANDINGS_COPY.WAITING;
+      const who = holder?.assignee === 'OWNER' ? SESSION_LANDINGS_COPY.WITH_YOU
+        : holder?.assignee === 'COORDINATOR' ? SESSION_LANDINGS_COPY.WITH_COORDINATOR
+          : null;
+      waiting.push({
+        id: row.id,
+        title,
+        time: elapsedLabel(row.createdAt ?? null, now) ?? '',
+        detail: [outcome, who].filter(Boolean).join(' · '),
+        // An item names what stopped it, and that is the red mark; a waiting landing with no item
+        // yet says only that it is waiting.
+        tone: holder?.reason ? 'fail' : 'quiet',
+        at: instant(row.createdAt),
+      });
+      continue;
+    }
+    // A round of merging that merged is the timeline's own row, not this group's.
+    if (landing.subject === 'PROMOTION' && landing.settledAs === 'MERGED') continue;
+    const at = Date.parse(landing.settledAt ?? '');
+    const word = settledWord(landing.settledAs);
+    if (!Number.isFinite(at) || now - at > LANDINGS_SETTLED_WINDOW_MS) {
+      older += 1;
+      if (landing.settledAs === 'LANDED' || landing.settledAs === 'ALREADY_LANDED') landed += 1;
+      if (landing.settledAs === 'NOTHING_TO_LAND') nothing += 1;
+      before.push({
+        id: row.id,
+        title,
+        time: elapsedLabel(landing.settledAt ?? null, now) ?? '',
+        detail: word.text,
+        tone: word.tone,
+        at: Number.isFinite(at) ? at : Number.NEGATIVE_INFINITY,
+      });
+      continue;
+    }
+    settled.push({
+      id: row.id,
+      title,
+      time: elapsedLabel(landing.settledAt ?? null, now) ?? '',
+      detail: word.text,
+      tone: word.tone,
+      at,
+    });
+  }
+  if (waiting.length === 0 && settled.length === 0 && older === 0) return null;
+  // The waiting ones first, longest wait first: the page answers "what is stuck, and on whom".
+  waiting.sort((a, b) => a.at - b.at);
+  settled.sort((a, b) => b.at - a.at);
+  before.sort((a, b) => b.at - a.at);
+  // The fold is there whenever something older is, and opens to all of it; it counts only what
+  // landed and what had nothing to land, so with both at 0 it reads a bare `Earlier`.
+  return {
+    waiting: waiting.map(({ at: _at, ...row }) => row),
+    settled: settled.map(({ at: _at, ...row }) => row),
+    earlier: older > 0 ? { landed, nothing } : null,
+    older: before.map(({ at: _at, ...row }) => row),
+  };
+}
+
+/** What an open item about a landing is about, in the group's words; null for a kind that is not
+ *  a landing's outcome. The item says whose it is, which is the other half of the row's line. */
+export function landingItemReason(kind: string): string | null {
+  switch (kind) {
+    case 'INTEGRATION_CONFLICT': return 'Merge conflict';
+    case 'INTEGRATION_CHECK_FAILED': return 'Checks failed';
+    case 'INTEGRATION_ERROR': return 'Integration error';
+    case 'TASK_FAILED': return 'Task failed';
+    case 'DELIVERY_REVIEW': return 'Delivery review';
+    case 'LANDING_LEASE_EXPIRED': return 'No report from the runner';
+    default: return null;
+  }
+}
+
+/** `Earlier · 31 landed · 3 nothing to land` — the fold's one line. A segment whose count is 0 is
+ *  left out: `Earlier · 2 landed`, and with both at 0 the line is the bare `Earlier`. */
+export function landingEarlierLine(earlier: { landed: number; nothing: number }): string {
+  return [
+    SESSION_LANDINGS_COPY.EARLIER,
+    earlier.landed > 0 ? `${earlier.landed} ${SESSION_LANDINGS_COPY.LANDED}` : null,
+    earlier.nothing > 0 ? `${earlier.nothing} ${SESSION_LANDINGS_COPY.NOTHING_TO_LAND}` : null,
+  ].filter(Boolean).join(' · ');
 }
 
 const instant = (at: string | null | undefined): number => {

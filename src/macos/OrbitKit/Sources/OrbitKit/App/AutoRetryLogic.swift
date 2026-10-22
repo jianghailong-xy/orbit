@@ -26,6 +26,28 @@ public enum AutoRetryLogic {
         }
     }
 
+    /// A Cursor CLI session's quota card, in Orbit's words for the account rather than the engine's slug
+    /// (board iOS 5 ⑧, web `CursorQuotaHelp`): Cursor says only "Upgrade your plan to continue" (contract
+    /// §12), so the card names whose plan that is and until when, and — since a conversation that has
+    /// started can't move to another account yet (D5) — where a new session could go instead.
+    public struct CursorQuota: Equatable, Sendable {
+        /// The account (or key) the session ran on, by its name in Orbit.
+        public let account: String
+        /// Its plan, as Cursor names it, when the runner read one.
+        public let plan: String?
+        /// When its included usage comes back, when Cursor said.
+        public let resetsAt: String?
+        /// Another of the runner's Cursor CLI accounts with room, by name. Nil when there is none.
+        public let elsewhere: String?
+
+        public init(account: String, plan: String? = nil, resetsAt: String? = nil, elsewhere: String? = nil) {
+            self.account = account
+            self.plan = plan
+            self.resetsAt = resetsAt
+            self.elsewhere = elsewhere
+        }
+    }
+
     public struct State: Equatable, Sendable {
         public var title: String
         public var body: String
@@ -80,6 +102,13 @@ public enum AutoRetryLogic {
         /// card because it is the card's own claim ("this failed and can be re-sent") that has
         /// stopped being true: somebody else is already doing it.
         public var takenOver: TaskRunHandoff.Conflict?
+        /// A Cursor CLI quota card's own sentence: what Cursor answered, whose plan ran out and until
+        /// when — "Cursor answered “Upgrade your plan to continue”: Default’s Free plan has no requests
+        /// left until Oct 3." Nil on every other card.
+        public var cursorAnswer: String? = nil
+        /// The Cursor CLI account a new session could start on instead, which the conversation can't
+        /// move to yet (D5): the card's "start a new session on …". Nil without one.
+        public var cursorElsewhere: String? = nil
     }
 
     /// - Parameters:
@@ -102,8 +131,12 @@ public enum AutoRetryLogic {
                              nothingToResend: Bool = false,
                              now: Date,
                              takenOver: TaskRunHandoff.Conflict? = nil,
+                             cursor: CursorQuota? = nil,
+                             timeZone: TimeZone = .current,
                              rand: () -> Double = { .random(in: 0..<1) }) -> State {
         let quota = notice.variant == .quota
+        // Cursor CLI's card names the account and quotes Cursor (web parity: only a live quota card).
+        let cursor = quota && live ? cursor : nil
         // Read once: the body, the labels and the two controls all branch on it, and they must
         // never disagree about which verb this card is offering.
         let continues = live && nothingToResend
@@ -146,7 +179,8 @@ public enum AutoRetryLogic {
                 : "Tried \(attempts) times — the API is still failing. Over to you."
         } else if quota {
             let on = runnerName.map { $0.isEmpty ? "" : " on “\($0)”" } ?? ""
-            body = "\(window.what) for \(provider)\(on) is used up."
+            let whose = cursor.map { "\($0.account) (\(CursorRuntime.name))" } ?? provider
+            body = "\(window.what) for \(whose)\(on) is used up."
                 + (continues ? " \(nothingToSend)" : needsYou ? " Auto-retry is off." : "")
         } else {
             body = "The \(provider) API could not answer — nothing about your message caused it."
@@ -195,7 +229,49 @@ public enum AutoRetryLogic {
                 : nil,
             quotesRetryText: live && !firing && hasRetryText && !notice.afterUserMsg
                 && takenOver == nil,
-            takenOver: takenOver)
+            takenOver: takenOver,
+            cursorAnswer: cursor.map { cursorAnswer($0, message: notice.message, timeZone: timeZone) },
+            cursorElsewhere: cursor?.elsewhere)
+    }
+
+    /// What Cursor answered, as the runner quoted it (`Cursor said: "…"`), and whose plan has nothing
+    /// left until when (web `AutoRetryCard`'s Cursor line). Cursor's Free plan runs out of requests;
+    /// any other plan, of its included usage.
+    static func cursorAnswer(_ cursor: CursorQuota, message: String, timeZone: TimeZone) -> String {
+        let said = cursorSaid(message) ?? "Upgrade your plan to continue"
+        guard cursor.plan != nil || cursor.resetsAt != nil else { return "Cursor answered “\(said)”." }
+        let plan = cursor.plan.map { "\($0) plan" } ?? "plan"
+        let what = cursor.plan == "Free" ? "requests" : "included usage"
+        let until = cursor.resetsAt.flatMap { day($0, timeZone: timeZone) }.map { " until \($0)" } ?? ""
+        return "Cursor answered “\(said)”: \(cursor.account)’s \(plan) has no \(what) left\(until)."
+    }
+
+    /// The card's way to another account, after Cursor's answer (web parity): the conversation stays,
+    /// a new session goes there. The link's words are `cursorElsewhereLink`.
+    public static func cursorElsewhereLead(_ account: String) -> String {
+        "This conversation can’t move to \(account) yet — "
+    }
+
+    public static func cursorElsewhereLink(_ account: String) -> String {
+        "start a new session on \(account)"
+    }
+
+    /// The words the runner quotes Cursor in, without its closing full stop: `Cursor said: "…."`.
+    static func cursorSaid(_ message: String) -> String? {
+        guard let regex = try? NSRegularExpression(pattern: #"Cursor said: "(.+?)\.?""#),
+              let match = regex.firstMatch(in: message, range: NSRange(message.startIndex..., in: message)),
+              let range = Range(match.range(at: 1), in: message) else { return nil }
+        return String(message[range])
+    }
+
+    /// "Oct 3": the day a plan's usage comes back, in the reader's time zone.
+    private static func day(_ iso: String, timeZone: TimeZone) -> String? {
+        guard let at = RelativeTime.parse(iso) else { return nil }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "MMM d"
+        return formatter.string(from: at)
     }
 
     /// Which of an account's quota windows a usage-limit failure says ran out — web's

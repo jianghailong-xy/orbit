@@ -268,7 +268,3 @@ function firstLine(text: string | null | undefined): string | null {
 /** Activity with one run's call log open: where View run goes for a run the server's job made (it has no session). */
 export const wikiActivityRunPath = (spaceSlug: string, jobId: string): string =>
   `${wikiActivityPath(spaceSlug)}?run=${encodeURIComponent(jobId)}`;
-
-/** Whether Activity draws the Runs card: the server runs this account's wiki, or ran something for the space. */
-export const wikiRunsShown = (serverExecutes: boolean, jobs: readonly WikiJobView[] | null | undefined): boolean =>
-  serverExecutes || (jobs?.length ?? 0) > 0;

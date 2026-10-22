@@ -796,7 +796,7 @@ test('GET /users/me and GET /admin/users answer signInMethods with only §6\'s f
   assert.equal(list.status, 200, list.text);
   assert.deepEqual(list.json.map((row: Row) => toUuid(row.id)), [root.id, ada.id, gina.id, nora.id], 'oldest first, as before');
   for (const row of list.json) {
-    assert.deepEqual(Object.keys(row).sort(), ['createdAt', 'email', 'id', 'lastActive', 'name', 'publicId', 'role', 'signInMethods'], row.email);
+    assert.deepEqual(Object.keys(row).sort(), ['avatarUpdatedAt', 'createdAt', 'email', 'id', 'lastActive', 'name', 'publicId', 'role', 'signInMethods'], row.email);
     assert.equal(row.lastActive, null, row.email);
     assert.deepEqual(row.signInMethods, expected.get(toUuid(row.id)), row.email);
     if (row.signInMethods.google) assert.deepEqual(Object.keys(row.signInMethods.google), ['email']);

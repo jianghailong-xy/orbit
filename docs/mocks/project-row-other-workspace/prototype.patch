@@ -1,0 +1,38 @@
+diff --git a/src/web/src/components/WorkspaceView.tsx b/src/web/src/components/WorkspaceView.tsx
+index df1b0ae..e3cecd4 100644
+--- a/src/web/src/components/WorkspaceView.tsx
++++ b/src/web/src/components/WorkspaceView.tsx
+@@ -3321,10 +3321,20 @@ export function WorkspaceView({
+     [openFolder, visibleSessions, workspaceFolders, projectsQ.data, projectData.coordinators, projectData.contentSessions,
+       effectiveView, listByTag, runner.online, watchingBySession, selectedSession, recapsEnabled],
+   );
++  // A project's entry stands for its coordinator only in the workspace the coordinator runs in.
++  // Elsewhere it holds that workspace's own members, as a folder row holds its sessions: the arrow keys
++  // pass over it and a landing never picks it, because opening the coordinator would swap this list for
++  // the coordinator's workspace. A click still opens the project's sessions page.
++  const entrySession = useCallback(
++    (entry: { coordinator: SessionListItem | null }): SessionListItem[] =>
++      entry.coordinator && (!resolvedWorkspaceId || entry.coordinator.workspace?.id === resolvedWorkspaceId)
++        ? [entry.coordinator] : [],
++    [resolvedWorkspaceId],
++  );
+   const listedSessions = useMemo(
+     () => openProjectId ? projectMembers : folderListing.entries.flatMap((entry) => entry.kind === 'project'
+-      ? entry.coordinator ? [entry.coordinator] : [] : [entry]),
+-    [folderListing, openProjectId, projectMembers],
++      ? entrySession(entry) : [entry]),
++    [folderListing, openProjectId, projectMembers, entrySession],
+   );
+   // Where a session opened from this list lives. On a folder's page the page goes along, so the
+   // list stays on it while the conversations it lists are opened one after another.
+@@ -3422,8 +3432,8 @@ export function WorkspaceView({
+   // and tag grouping regroups outright — so anything that moves the cursor by a row (Up/Down,
+   // "open the next one after completing") has to walk this, not the pre-section list.
+   const orderedSessions = useMemo(() => sections.flatMap((s) => s.sessions.flatMap((entry) =>
+-    entry.kind === 'merge' ? [] : entry.kind === 'project' ? entry.coordinator ? [entry.coordinator] : [] : [entry],
+-  )), [sections]);
++    entry.kind === 'merge' ? [] : entry.kind === 'project' ? entrySession(entry) : [entry],
++  )), [sections, entrySession]);
+ 
+   // Right-pane mode. A real session (/sessions/<id>) shows its conversation; with
+   // none selected we're composing a new session — explicitly (/workspaces/<id>/new),

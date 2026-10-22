@@ -1,0 +1,94 @@
+{
+ "checks": [
+  {
+   "check": "the image has no watcher: nothing maps it",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "the archive arrived on the host intact",
+   "ok": true,
+   "value": {
+    "guest": "1b9899115d969df3",
+    "host": "1b9899115d969df3"
+   }
+  },
+  {
+   "check": "the backup is outside the VM, on the host's /mnt/data",
+   "ok": true,
+   "value": "/mnt/data/managed-runner-lab/backups/t08-20261018T125553Z"
+  }
+ ],
+ "endedAt": "2026-10-18T12:56:04.249+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "backup",
+ "result": {
+  "copySeconds": 0.3,
+  "destination": "/mnt/data/managed-runner-lab/backups/t08-20261018T125553Z",
+  "exportSeconds": 7.8,
+  "manifest": {
+   "createdAt": "2026-10-18T12:56:04.208+00:00",
+   "file": "volume.img.gz",
+   "format": "rbd export (raw image), gzip -1",
+   "gzipBytes": 26976011,
+   "gzipSha256": "1b9899115d969df32ff99f9daf2c84fd84bce4c6646576228cb3d95af9b3e267",
+   "kind": "orbit-managed-runner-rbd-export",
+   "quiescence": {
+    "accountDisabled": true,
+    "mappingState": "SLEEPING",
+    "watchers": []
+   },
+   "rawSha256": "4a5777903d90cfb3e17c57a14793951aaea39a50b76893fc1d8c72a9561de04a",
+   "schemaVersion": 1,
+   "source": {
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "features": [
+     "layering"
+    ],
+    "generationAtBackup": 6,
+    "image": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+    "imageId": "2f67fd3d8d0a2",
+    "namespace": "orbit-mr-test",
+    "owner": "34i3N7YWPyZxFmU3WOzzQ",
+    "pool": "orbit-mr-rbd",
+    "pv": {
+     "name": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154",
+     "uid": "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc"
+    },
+    "pvc": {
+     "name": "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+     "uid": "4caa2267-5150-455d-9fc8-e9efd7e63154"
+    },
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "sizeBytes": 2147483648,
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834"
+   }
+  },
+  "rbdInfo": {
+   "access_timestamp": "Sun Oct 18 12:36:59 2026",
+   "block_name_prefix": "rbd_data.2f67fd3d8d0a2",
+   "create_timestamp": "Sun Oct 18 12:36:59 2026",
+   "features": [
+    "layering"
+   ],
+   "flags": [],
+   "format": 2,
+   "id": "2f67fd3d8d0a2",
+   "modify_timestamp": "Sun Oct 18 12:36:59 2026",
+   "name": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "object_size": 4194304,
+   "objects": 512,
+   "op_features": [],
+   "order": 22,
+   "size": 2147483648,
+   "snapshot_count": 0
+  },
+  "rbdStatus": {
+   "watchers": []
+  }
+ },
+ "seconds": 11.2,
+ "startedAt": "2026-10-18T12:55:53.096+00:00",
+ "step": "export"
+}

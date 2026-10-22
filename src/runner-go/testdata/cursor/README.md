@@ -34,3 +34,10 @@ SHELL 包装（`shell-wrapper-env/wrapper`）、仓库配置（`repo-config-base
 后台命令和提交（`background-shell-and-commit/background`）、agent 和 plan 模式下的提问（`ask-question/ask`、`ask-question-plan-mode/ask`）。
 上一级的同名样本是 P0a 的录制，没有改动；例如 `background-shell-and-commit/background` 仍是额度用尽的那一轮。场景断言在
 [`docs/evidence/cursor-cli/2026.10.14-941492e/p0c/scenarios/`](../../../../docs/evidence/cursor-cli/2026.10.14-941492e/p0c/scenarios/)。
+
+P5c（2026-10-17）在 [`p5c/`](p5c/README.md) 下补了一组不同性质的样本：录的是 **Orbit 自己的 runner**（启动参数、ACP 驱动、权限桥、
+Orbit MCP）跑在真 CLI 上，审批卡由控制面桩按场景应答；每个场景带一份 `summary.json`（检查项、事实、审批卡、进程）。恶意仓库夹具在
+`p5c/fixtures/malicious-repo/`，手工构造的 `cursor/ask_question` 样本在 `p5c/synthetic/`。
+
+P8（2026-10-19）在 [`p8/`](p8/README.md) 下放了一份线上录制：本地全栈里 Orbit 的 runner 跑在真 CLI 上，用 strace 从 CLI 进程启动起截取。
+样本是 `key-allow-reject/session`：一条命令被允许，一条被拒。被拒的那条只以 `completed` 结束，没有 rawOutput（D-P8-1）。

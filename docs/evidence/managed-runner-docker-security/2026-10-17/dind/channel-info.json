@@ -1,0 +1,35 @@
+{
+  "info": {
+    "diskCheckSeconds": 120,
+    "host": {
+      "cpus": 24,
+      "disk": {
+        "freeBytes": 15310801907712,
+        "path": "/var/lib/orbit-managed-runners/state",
+        "totalBytes": 15873633447936
+      },
+      "managedVolumeBytes": 0,
+      "memoryBytes": 16102998016,
+      "name": "d5-host",
+      "serverVersion": "29.8.2"
+    },
+    "image": "sha256:e70dc4770beb31947330a29364cf3f722da2243cb71fd7c91b0cfb2c7336e906",
+    "instanceId": "orbit-e08a3eef",
+    "limits": {
+      "maxConcurrent": 8,
+      "maxCpuMillis": 4000,
+      "maxMemoryBytes": 8589934592,
+      "maxPids": 4096,
+      "maxTmpBytes": 2147483648,
+      "maxVolumeBytes": 107374182400
+    },
+    "network": {
+      "interContainer": false,
+      "internal": false,
+      "name": "orbit-managed-runners"
+    },
+    "schemaVersion": 1,
+    "stopGraceSeconds": 240
+  },
+  "status": 200
+}

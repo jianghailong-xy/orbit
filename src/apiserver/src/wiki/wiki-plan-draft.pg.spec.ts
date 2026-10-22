@@ -1,23 +1,25 @@
 /**
- * The plan's jobs (criterion 11; contracts/wiki.contract.json `plan.jobs`, migration 0338), over real
- * HTTP and against a real PostgreSQL.
+ * The plan's jobs (criterion 11; contracts/wiki.contract.json `plan.jobs`, migrations 0338 and 0401), over real
+ * HTTP and against a real PostgreSQL: how a job is asked for, made, held and ended. Every job is made as the
+ * wiki-worker's (`plan.jobs.server`) — a draft a plan_draft wiki_job, a revision a plan_revise one — and no task
+ * and no session are made for one; how the worker drafts is wiki-worker/wiki-plan-draft-job.pg.spec.ts's.
  *
  * What the task's verification asks, each read back from the doors and from the database:
  *
- *   1. a new space makes a drafting task: in the space's maintenance list, pinned to the maintenance
- *      workspace and provider, runAt now — and a space a session's proposal made asks for one too;
+ *   1. a new space makes its first draft at once, as the wiki-worker's job — and a space a session's proposal
+ *      made asks for one too;
  *   2. the owner's redraft through the JWT door makes one; with a session header it is refused 403;
- *   3. a space with a draft that has not ended makes no second; a list whose maintenance task has not
- *      ended queues the job, and that task's end makes it;
- *   4. a space whose maintenance is not set up makes none and says why; the settings supplied make it;
- *   5. the new reads are a maintenance run's alone, and another tenant's is a 404, every one of them;
+ *   3. a space with a draft that has not ended makes no second, one request after another or two at once;
+ *   4. a space whose maintenance names no workspace makes none and says why; the workspace supplied makes it;
+ *   5. what a draft reads of Orbit besides the repository is the owner's, redacted, and another tenant's plan
+ *      doors are a 404, every one of them;
  *   6. a draft landing again under its idempotency key (migration 0339, contract `plan.idempotency`) is
  *      answered with the version it stored and writes none; another draft under the key is a 409; a
  *      draft with no key is as it was.
  *
- * and beside them what the design leans on: the run's start, rounds and end, and the check its task's
- * acceptance command asks; a job is no maintenance run (the day's count, the day's limit, maintenance
- * off); and the migration's CHECKs are the contract's closed sets.
+ * and beside them what the design leans on: the run's rounds and its end, as the worker reports them; a job
+ * is no maintenance run (the day's count, the day's limit, maintenance off); and the migration's CHECKs are
+ * the contract's closed sets.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-plan-draft.pg.spec.ts
  *
@@ -28,21 +30,18 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 
-import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
+import { HttpException, type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { PrismaClient } from '@prisma/client';
 import {
-  RunEventType,
   toUuid,
-  uuidToBase62,
-  WIKI_MAINTENANCE_RUN,
   WIKI_PLAN_JOB_HELD_REASONS,
   WIKI_PLAN_JOB_KINDS,
   WIKI_PLAN_JOB_OUTCOMES,
   WIKI_PLAN_JOB_STORED_STATES,
   WIKI_PLAN_JOB_TRIGGERS,
-  type NormalizedRunEvent,
+  WIKI_PLAN_SERVER_JOB,
 } from '@orbit/shared';
 import { Client } from 'pg';
 
@@ -51,15 +50,11 @@ import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { prismaClientFor } from '../prisma/prisma-client';
 import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
-import { encryptSecret } from '../providers/provider-crypto';
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
-import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { RunnerWikiPlanController } from '../runner-api/runner-wiki-plan.controller';
-import { wikiMaintenanceRunOf, wikiMaintenanceRunsToday } from './wiki-maintenance-session';
-import { isWikiMaintenanceSession } from './wiki-maintenance-settings';
+import { wikiMaintenanceRunsToday } from './wiki-maintenance-run';
 import { WikiPlans } from './wiki-plan';
-import { WikiPlanJobFacts } from './wiki-plan-job';
+import { progressWikiPlanJobOfJob, wikiPlanMaterials } from './wiki-plan-job';
 import { WikiPlanController } from './wiki-plan.controller';
 import { WikiRetrieval } from './wiki-retrieval';
 import { WikiController } from './wiki.controller';
@@ -67,8 +62,6 @@ import { WikiService } from './wiki.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
-// The providers these fixtures configure keep their keys encrypted, as every provider does.
-process.env.PROVIDER_SECRET_KEY ??= 'wiki-plan-draft-spec';
 
 interface Harness {
   base: string;
@@ -77,9 +70,8 @@ interface Harness {
   app: INestApplication;
   bearers: Map<string, string>;
   service: WikiService;
-  facts: WikiPlanJobFacts;
-  /** Every task the doors published as changed, in order. */
-  published: string[];
+  /** The plan's service: what the wiki-worker's plan job stores its draft and ends its job through. */
+  plans: WikiPlans;
   /** Every space the doors announced `wiki.changed` for, in order. */
   changed: string[];
 }
@@ -94,24 +86,21 @@ function boot(): Promise<Harness> {
     await verifyCoordinatorPgIdentity(sql);
     const prisma = prismaClientFor(URL);
     const bearers = new Map<string, string>();
-    const published: string[] = [];
     const changed: string[] = [];
     const hub = {
       publishWikiChanged: (_owner: string, spaceId: string) => changed.push(spaceId),
-      publishForUser: (_owner: string, _type: string, payload: { taskIds?: string[] }) => published.push(...(payload.taskIds ?? [])),
+      publishForUser: () => undefined,
     } as unknown as RealtimeService;
     const service = new WikiService(prisma as unknown as PrismaService, hub, {} as unknown as PushService);
     const plans = new WikiPlans(prisma as unknown as PrismaService, hub);
-    const facts = new WikiPlanJobFacts(prisma as unknown as PrismaService);
 
     @Module({
-      controllers: [WikiController, WikiPlanController, RunnerWikiPlanController],
+      controllers: [WikiController, WikiPlanController],
       providers: [
         { provide: WikiService, useValue: service },
         { provide: WikiPlans, useValue: plans },
         { provide: WikiRetrieval, useValue: new WikiRetrieval(prisma as unknown as PrismaService) },
         { provide: PrismaService, useValue: prisma },
-        RunnerAuthGuard,
         JwtAuthGuard,
         Reflector,
         {
@@ -133,7 +122,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, bearers, service, facts, published, changed };
+    return { base: await app.getUrl(), sql, prisma, app, bearers, service, plans, changed };
   })();
   return harness;
 }
@@ -180,6 +169,19 @@ async function call(h: Harness, who: Caller, method: string, route: string, body
   return { status: response.status, body: parsed };
 }
 
+/**
+ * A call of the server's own writer, answered as a door would answer it: what it returned as a 200, or the status and
+ * body of what it threw — so a refusal reads here exactly as it reads on any door.
+ */
+async function served(run: () => Promise<unknown>): Promise<Answer> {
+  try {
+    return { status: 200, body: JSON.parse(JSON.stringify(await run())) };
+  } catch (error) {
+    if (error instanceof HttpException) return { status: error.getStatus(), body: error.getResponse() };
+    throw error;
+  }
+}
+
 function expectStatus(answer: Answer, status: number, why: string): void {
   assert.equal(answer.status, status, `${why}: answered ${answer.status} ${JSON.stringify(answer.body).slice(0, 1200)}`);
 }
@@ -220,24 +222,6 @@ async function workspace(h: Harness, ownerId: string, repoUrl: string | null = n
   return id;
 }
 
-/** A configured provider of the owner's: the local model on the Claude Code runtime. */
-async function provider(h: Harness, ownerId: string, slug = `local-vllm-${randomUUID().slice(0, 8)}`): Promise<string> {
-  await h.prisma.modelProvider.create({
-    data: {
-      slug,
-      label: 'Local vLLM',
-      runtime: 'claude',
-      baseUrl: 'http://127.0.0.1:8000',
-      apiKeyEnc: encryptSecret(`vllm-key-${randomUUID()}`),
-      models: [{ value: 'qwen3.8-27b-fp8', label: 'Qwen3.8 27B', contextWindow: 131072 }],
-      defaultModel: 'qwen3.8-27b-fp8',
-      enabled: true,
-      ownerId,
-    },
-  });
-  return slug;
-}
-
 async function session(h: Harness, ownerId: string, workspaceId: string, runnerId: string, taskId: string | null = null, title = 'a session'): Promise<string> {
   const id = randomUUID();
   await h.sql.query(
@@ -249,29 +233,6 @@ async function session(h: Harness, ownerId: string, workspaceId: string, runnerI
   return id;
 }
 
-/** A maintenance run of the list, as the maintenance trigger would have made it, still open. */
-async function maintenanceTask(h: Harness, ownerId: string, listId: string, assigneeId: string): Promise<string> {
-  const id = randomUUID();
-  await h.sql.query(
-    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","status","assignee_id","list_id",
-                         "completion_criterion","updated_at")
-     VALUES ($1,'Wiki maintenance: a space',$2,'USER',$2,'OPEN'::task_status,$3,$4,'OWNER_CONFIRMED',now())`,
-    [id, ownerId, assigneeId, listId],
-  );
-  return id;
-}
-
-async function settle(h: Harness, taskId: string, status: 'DONE' | 'FAILED' | 'CANCELLED'): Promise<void> {
-  await h.sql.query(`UPDATE "task" SET "status" = $2::task_status, "updated_at" = now() WHERE "id" = $1`, [taskId, status]);
-}
-
-/** A task change, as the tasks module publishes it, taken by the job facts and waited for. */
-async function taskChanged(h: Harness, ownerId: string, taskIds: string[]): Promise<void> {
-  const event: NormalizedRunEvent = { seq: 0, type: RunEventType.TASK_CHANGED, ts: new Date().toISOString(), payload: { taskIds, resync: false } };
-  h.facts.take(`user:${ownerId}`, event);
-  await h.facts.idle();
-}
-
 interface JobRow {
   id: string;
   kind: string;
@@ -280,88 +241,66 @@ interface JobRow {
   held_reason: string | null;
   held_at: Date | null;
   task_id: string | null;
+  job_id: string | null;
   instructions: string | null;
   outcome: string | null;
+  error: string | null;
 }
 
 async function jobs(h: Harness, spaceId: string): Promise<JobRow[]> {
   return (await h.sql.query<JobRow>(
-    `SELECT "id","kind","trigger","state","held_reason","held_at","task_id","instructions","outcome"
+    `SELECT "id","kind","trigger","state","held_reason","held_at","task_id","job_id","instructions","outcome","error"
        FROM "wiki_plan_job" WHERE "space_id" = $1 ORDER BY "created_at", "id"`,
     [spaceId],
   )).rows;
 }
 
-interface TaskRow {
+interface WikiJobRow {
   id: string;
-  title: string;
-  description: string | null;
-  status: string;
-  list_id: string | null;
-  assignee_id: string | null;
-  provider: string | null;
-  run_at: Date | null;
-  creator_type: string;
-  creator_id: string;
-  completion_criterion: string;
-  acceptance_command: string | null;
-  acceptance_expected_exit_code: number | null;
+  kind: string;
+  priority: number;
+  state: string;
+  input: unknown;
 }
 
-async function taskRow(h: Harness, taskId: string): Promise<TaskRow> {
-  const rows = await h.sql.query<TaskRow>(
-    `SELECT "id","title","description","status","list_id","assignee_id","provider","run_at","creator_type","creator_id",
-            "completion_criterion","acceptance_command","acceptance_expected_exit_code"
-       FROM "task" WHERE "id" = $1`,
-    [taskId],
+/** The wiki_job a plan job was made as. */
+async function wikiJobOf(h: Harness, planJobId: string): Promise<WikiJobRow> {
+  const rows = await h.sql.query<WikiJobRow>(
+    `SELECT j."id", j."kind", j."priority", j."state", j."input" FROM "wiki_job" j JOIN "wiki_plan_job" p ON p."job_id" = j."id" WHERE p."id" = $1`,
+    [planJobId],
   );
-  assert.equal(rows.rowCount, 1, `task ${taskId} is not stored`);
+  assert.equal(rows.rowCount, 1, `plan job ${planJobId} names no wiki_job`);
   return rows.rows[0];
 }
 
-/**
- * A plan job's task gives its one Bash call the clean start's five hours, never less, and says that a call the
- * tool cut off is not run again — the maintenance run of 2026-10-03 gave 600000, was cut off, and ran it again
- * (contract `maintenance.run.bashCall`).
- */
-function assertBashCall(description: string | null, what: string): void {
-  const text = description ?? '';
-  assert.equal(WIKI_MAINTENANCE_RUN.bashTimeoutMs, 18_000_000, 'the run\'s Bash timeout is five hours');
-  assert.ok(text.includes('Give that Bash call `timeout: 18000000` (five hours), never a shorter one'),
-    `${what} does not give its Bash call five hours: ${text}`);
-  assert.ok(text.includes('If the Bash tool comes back before the command has ended — it timed out, or was cut off — do not run it '
-    + 'again, with this timeout or any other, and spend no retry on it: report what it printed up to there, say it was cut off, '
-    + 'and end; the job ends failed, and its owner can ask for another.'), `${what} does not say a call the tool cut off is not run again: ${text}`);
+/** A wiki_job ended the way its worker ends one that did not say how its plan job went. */
+async function endWikiJob(h: Harness, wikiJobId: string, state: 'failed' | 'cancelled'): Promise<void> {
+  await h.sql.query(`UPDATE "wiki_job" SET "state" = $2, "ended_at" = now(), "updated_at" = now() WHERE "id" = $1`, [wikiJobId, state]);
 }
 
-async function listTasks(h: Harness, listId: string): Promise<string[]> {
-  return (await h.sql.query<{ id: string }>(`SELECT "id" FROM "task" WHERE "list_id" = $1 ORDER BY "created_at", "id"`, [listId])).rows.map((r) => r.id);
-}
-
-async function settingsOf(h: Harness, spaceId: string): Promise<{ enabled?: boolean; listId?: string; workspaceId?: string; provider?: string }> {
+async function settingsOf(h: Harness, spaceId: string): Promise<{ enabled?: boolean; workspaceId?: string }> {
   const rows = await h.sql.query<{ settings: { maintenance?: Record<string, unknown> } }>(`SELECT "settings" FROM "wiki_space" WHERE "id" = $1`, [spaceId]);
-  return (rows.rows[0]?.settings?.maintenance ?? {}) as { enabled?: boolean; listId?: string; workspaceId?: string; provider?: string };
+  return (rows.rows[0]?.settings?.maintenance ?? {}) as { enabled?: boolean; workspaceId?: string };
 }
 
-/** One owner with a runner, a workspace and a provider a maintenance run could start on. */
+/** One owner with a runner and a workspace the space's maintenance can name. */
 interface World {
   owner: Account;
   machine: { id: string; token: string };
   ws: string;
-  slug: string;
 }
 
 async function world(h: Harness, name: string): Promise<World> {
   const owner = await account(h, name);
-  return { owner, machine: await runner(h, owner.id), ws: await workspace(h, owner.id), slug: await provider(h, owner.id) };
+  return { owner, machine: await runner(h, owner.id), ws: await workspace(h, owner.id) };
 }
 
-/** A space its owner created with its maintenance set up from the start, bound to their workspace. */
+/** A space its owner created with its maintenance workspace named from the start, bound to their workspace. */
 async function plannedSpace(h: Harness, w: World, extra: Record<string, unknown> = {}): Promise<{ spaceId: string; answer: Answer }> {
   const answer = await call(h, { bearer: w.owner.bearer }, 'POST', '/wiki/spaces', {
     title: 'A planned space',
     repoUrl: `https://github.com/spec/planned-${randomUUID().slice(0, 8)}`,
-    maintenance: { workspaceId: w.ws, provider: w.slug, ...extra },
+    maintenance: { workspaceId: w.ws, ...extra },
   });
   expectStatus(answer, 201, 'the owner creates a space with its maintenance set up');
   const spaceId = toUuid(answer.body.id as string);
@@ -375,12 +314,13 @@ async function planState(h: Harness, w: World, spaceId: string): Promise<Answer>
   return answer;
 }
 
-/** The only job a space has, made: its row and its task. */
-async function madeJob(h: Harness, spaceId: string): Promise<{ job: JobRow; task: TaskRow }> {
+/** The only job a space has, made: its row and the wiki_job it was made as. */
+async function madeJob(h: Harness, spaceId: string): Promise<{ job: JobRow; wikiJob: WikiJobRow }> {
   const rows = await jobs(h, spaceId);
   assert.equal(rows.length, 1, `the space has ${rows.length} jobs: ${JSON.stringify(rows)}`);
   assert.equal(rows[0].state, 'made', `the job is ${rows[0].state} (${rows[0].held_reason ?? 'not held'})`);
-  return { job: rows[0], task: await taskRow(h, rows[0].task_id!) };
+  assert.equal(rows[0].task_id, null, 'a task was made for a job the server runs');
+  return { job: rows[0], wikiJob: await wikiJobOf(h, rows[0].id) };
 }
 
 /** A plan the server's gate lets through: twenty documents, one category for the agents' conventions. */
@@ -415,56 +355,34 @@ function planOf(count = 20): Record<string, unknown> {
 
 // ── 1. a new space ──────────────────────────────────────────────────────────────────────────────
 
-test('a new space makes its first draft at once: a task of its maintenance list, pinned to the workspace and the provider, runAt now', { skip }, async () => {
+test('a new space makes its first draft at once, as the wiki-worker\'s job at the owner\'s priority — no task, no session, maintenance left off', { skip }, async () => {
   const h = await boot();
   const w = await world(h, 'creator');
-  const before = Date.now();
   const { spaceId, answer } = await plannedSpace(h, w);
-  const after_ = Date.now();
   // Maintenance itself stays off: a plan is drafted before the owner turns maintenance on.
   assert.equal(answer.body.settings.maintenance.enabled, false);
-  const settings = await settingsOf(h, spaceId);
-  assert.ok(settings.listId, 'the space has no maintenance list: the job made none');
-  const { job, task } = await madeJob(h, spaceId);
+  const { job, wikiJob } = await madeJob(h, spaceId);
   assert.deepEqual([job.kind, job.trigger, job.instructions], ['draft', 'space_created', null]);
-
-  // The task, as the maintenance trigger makes its own: in the hidden list, pinned, due now, the owner's.
-  assert.equal(task.list_id, settings.listId);
-  assert.equal(task.assignee_id, w.ws, 'pinned to the maintenance workspace');
-  assert.equal(task.provider, w.slug, 'pinned to the maintenance provider');
-  // Read through Prisma: `run_at` is a timestamp without a zone, which pg would read as the host's local time.
-  const { runAt } = await h.prisma.task.findUniqueOrThrow({ where: { id: task.id }, select: { runAt: true } });
-  assert.ok(runAt && runAt.getTime() >= before - 1_000 && runAt.getTime() <= after_ + 1_000, `runAt is not now: ${runAt?.toISOString()}`);
-  assert.deepEqual([task.creator_type, task.creator_id, task.status], ['USER', w.owner.id, 'OPEN']);
-  assert.equal(task.title, 'Wiki plan draft: A planned space');
-  assert.equal(task.completion_criterion, 'EXECUTABLE');
-  assert.equal(task.acceptance_command, `orbit wiki plan check --space ${uuidToBase62(spaceId)} --job ${uuidToBase62(job.id)}`);
-  assert.equal(task.acceptance_expected_exit_code, 0);
-  assert.match(task.description ?? '', new RegExp(`orbit wiki plan draft --space ${uuidToBase62(spaceId)}`, 'u'));
-  assert.match(task.description ?? '', /token spend/u, 'the description does not ask for the token spend');
-  assertBashCall(task.description, 'the draft task');
-  const list = await h.sql.query<{ hidden: boolean; title: string; max_concurrent: number }>(
-    `SELECT "hidden","title","max_concurrent" FROM "task_list" WHERE "id" = $1`,
-    [settings.listId],
+  assert.deepEqual(
+    [wikiJob.kind, wikiJob.priority, wikiJob.state, wikiJob.input],
+    [WIKI_PLAN_SERVER_JOB.kinds.draft, WIKI_PLAN_SERVER_JOB.priority, 'queued', { planJobId: job.id }],
   );
-  assert.deepEqual(list.rows[0], { hidden: true, title: 'Wiki maintenance', max_concurrent: 1 });
-  assert.ok(h.published.includes(task.id), 'the task made was not published');
-
-  // Its session is a maintenance session, and is claimed as one although maintenance is off.
-  const run = await session(h, w.owner.id, w.ws, w.machine.id, task.id);
-  assert.equal(await isWikiMaintenanceSession(h.prisma, { ownerId: w.owner.id, sessionId: run, spaceId }), true);
-  const claimed = await wikiMaintenanceRunOf(h.prisma, { id: run, taskId: task.id, workspaceId: w.ws, provider: w.slug });
-  assert.ok(claimed, 'the plan job\'s session is not claimed as a maintenance run');
-  assert.equal(claimed!.refusal, undefined, `the plan job's run was refused: ${claimed!.refusal}`);
-  assert.equal(claimed!.provider, w.slug);
+  // No task, no session and no hidden list: the server runs it.
+  const { rows: [made] } = await h.sql.query<{ tasks: number; sessions: number; lists: number }>(
+    `SELECT (SELECT count(*)::int FROM "task" WHERE "owner_id" = $1) AS "tasks",
+            (SELECT count(*)::int FROM "session" WHERE "owner_id" = $1) AS "sessions",
+            (SELECT count(*)::int FROM "task_list" WHERE "owner_id" = $1) AS "lists"`,
+    [w.owner.id],
+  );
+  assert.deepEqual(made, { tasks: 0, sessions: 0, lists: 0 });
 
   // The plan's read says it runs.
   const state = await planState(h, w, spaceId);
   assert.equal(state.body.job.state, 'running');
   assert.equal(state.body.job.kind, 'draft');
   assert.equal(state.body.job.trigger, 'space_created');
-  assert.equal(toUuid(state.body.job.taskId), task.id);
-  assert.equal(state.body.job.provider, w.slug);
+  assert.equal(toUuid(state.body.job.id), job.id);
+  assert.deepEqual([state.body.job.taskId, state.body.job.provider, state.body.job.sessionId], [null, null, null]);
   assert.equal(state.body.job.attemptsMax, 3);
   assert.equal(state.body.job.held, null);
 
@@ -473,8 +391,8 @@ test('a new space makes its first draft at once: a task of its maintenance list,
   const repoUrl = `https://github.com/spec/implicit-${randomUUID().slice(0, 8)}`;
   const proposing = await session(h, w.owner.id, await workspace(h, w.owner.id, repoUrl), w.machine.id);
   const implicit = await h.service.resolveSpaceForCall(w.owner.id, proposing);
-  const made = await jobs(h, implicit);
-  assert.deepEqual(made.map((row) => [row.kind, row.trigger, row.state, row.held_reason]), [['draft', 'space_created', 'held', 'no_maintenance_workspace']]);
+  const asked = await jobs(h, implicit);
+  assert.deepEqual(asked.map((row) => [row.kind, row.trigger, row.state, row.held_reason]), [['draft', 'space_created', 'held', 'no_maintenance_workspace']]);
   // …and only once: the space found again asks for nothing more.
   await h.service.resolveSpaceForCall(w.owner.id, proposing);
   assert.equal((await jobs(h, implicit)).length, 1);
@@ -482,43 +400,42 @@ test('a new space makes its first draft at once: a task of its maintenance list,
 
 // ── 2. the owner's redraft ──────────────────────────────────────────────────────────────────────
 
-test('the owner asks for a redraft through the owner channel and a job is made; with a session header it is refused', { skip }, async () => {
+test('the owner asks for a redraft through the owner channel and a job is made on the server; with a session header it is refused', { skip }, async () => {
   const h = await boot();
   const w = await world(h, 'redrafter');
   const { spaceId } = await plannedSpace(h, w);
   const first = await madeJob(h, spaceId);
-  // The first draft's run: it drafts, the gate lets it through, and it says so; its task then ends.
-  const run = await session(h, w.owner.id, w.ws, w.machine.id, first.task.id);
-  const maintainer: Caller = { runner: w.machine.token, session: run };
-  expectStatus(await call(h, maintainer, 'GET', `/runner/wiki/spaces/${spaceId}/plan/job`), 200, 'the run reads its job');
-  const drafted = await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/drafts`, {
+  // The first draft's run, as the worker reports it: it stores a draft the gate lets through, and ends with it.
+  const drafted = await h.plans.submitServerDraft({ ownerId: w.owner.id, spaceId, wikiJobId: first.wikiJob.id }, {
     baseVersion: null,
     plan: planOf(),
     repoCheck: { sha: 'a'.repeat(40), checked: 40, missing: [] },
     model: 'qwen3.8-27b-fp8',
   });
-  expectStatus(drafted, 200, 'the run drafts');
-  expectStatus(await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'succeeded', version: 1, attempt: 1 }), 200, 'the run ends');
-  await settle(h, first.task.id, 'DONE');
+  assert.equal(drafted.version, 1);
+  const ended = await h.plans.finishServerJob(
+    { ownerId: w.owner.id, spaceId, planJobId: first.job.id, wikiJobId: first.wikiJob.id },
+    { outcome: 'succeeded', version: 1, attempt: 1 },
+  );
+  assert.equal(ended, true, 'the run did not end its plan job');
 
   // A request with a session header is refused before anything is read, and makes nothing.
-  const headed = await call(h, { bearer: w.owner.bearer, session: run }, 'POST', `/wiki/spaces/${spaceId}/plan/redraft`, {});
+  const headed = await call(h, { bearer: w.owner.bearer, session: await session(h, w.owner.id, w.ws, w.machine.id) }, 'POST', `/wiki/spaces/${spaceId}/plan/redraft`, {});
   expectRefusal(headed, 403, 'WIKI_OWNER_CHANNEL_ONLY', 'a redraft with a session header');
   assert.equal((await jobs(h, spaceId)).length, 1, 'a redraft with a session header made a job');
 
-  // The owner, on the owner channel: a draft, made at once.
+  // The owner, on the owner channel: a draft, made at once as a plan_draft wiki_job.
   const redraft = await call(h, { bearer: w.owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/plan/redraft`, {});
   expectStatus(redraft, 200, 'the owner asks for a redraft');
   assert.equal(redraft.body.created, true);
-  assert.deepEqual([redraft.body.job.kind, redraft.body.job.trigger, redraft.body.job.state], ['draft', 'owner', 'running']);
+  assert.deepEqual([redraft.body.job.kind, redraft.body.job.trigger, redraft.body.job.state, redraft.body.job.taskId], ['draft', 'owner', 'running', null]);
   const second = (await jobs(h, spaceId))[1];
   assert.equal(second.state, 'made');
-  const secondTask = await taskRow(h, second.task_id!);
-  assert.deepEqual([secondTask.list_id, secondTask.assignee_id, secondTask.provider], [first.task.list_id, w.ws, w.slug]);
-  assert.match(secondTask.description ?? '', /orbit wiki plan draft --space/u);
+  assert.equal((await wikiJobOf(h, second.id)).kind, WIKI_PLAN_SERVER_JOB.kinds.draft);
 
-  // With instructions, a revision: the owner's words ride on the job and are quoted in the task.
-  await settle(h, second.task_id!, 'CANCELLED');
+  // Its wiki_job ends without saying how the plan job went; with instructions the owner then asks for a revision:
+  // the owner's words ride on the job, made as a plan_revise wiki_job.
+  await endWikiJob(h, second.job_id!, 'cancelled');
   const words = '合并到 30 篇左右；给 agent 的开发约定单列一类；3.1 的节一节都不许移出。';
   const revise = await call(h, { bearer: w.owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/plan/redraft`, { instructions: `  ${words}\n` });
   expectStatus(revise, 200, 'the owner asks for a revision');
@@ -526,15 +443,13 @@ test('the owner asks for a redraft through the owner channel and a job is made; 
   assert.equal(revise.body.job.kind, 'revise');
   assert.equal(revise.body.job.instructions, words);
   const third = (await jobs(h, spaceId))[2];
-  assert.deepEqual([third.kind, third.trigger, third.instructions], ['revise', 'owner', words]);
-  const thirdTask = await taskRow(h, third.task_id!);
-  assert.equal(thirdTask.title, 'Wiki plan redraft: A planned space');
-  assert.match(thirdTask.description ?? '', /orbit wiki plan revise --space/u);
-  assert.ok((thirdTask.description ?? '').includes(`> ${words}`), 'the owner\'s instructions are not quoted in the task');
-  assertBashCall(thirdTask.description, 'the revision task');
-  // The job the cancelled task left made was ended when the next request found it: failed, with why.
-  const ended = (await jobs(h, spaceId))[1];
-  assert.deepEqual([ended.state, ended.outcome], ['ended', 'failed']);
+  assert.deepEqual([third.kind, third.trigger, third.instructions, third.state], ['revise', 'owner', words, 'made']);
+  const reviseJob = await wikiJobOf(h, third.id);
+  assert.deepEqual([reviseJob.kind, reviseJob.priority], [WIKI_PLAN_SERVER_JOB.kinds.revise, WIKI_PLAN_SERVER_JOB.priority]);
+  // The job its cancelled wiki_job left made was ended when the next request found it: failed, with why.
+  const left = (await jobs(h, spaceId))[1];
+  assert.deepEqual([left.state, left.outcome], ['ended', 'failed']);
+  assert.match(left.error ?? '', /its server job ended cancelled before it said how it went/u);
 
   // What the owner may send: an object with instructions, and nothing else.
   for (const [body, why] of [
@@ -548,12 +463,13 @@ test('the owner asks for a redraft through the owner channel and a job is made; 
 
 // ── 3. one at a time ────────────────────────────────────────────────────────────────────────────
 
-test('a draft that has not ended answers a second request; a maintenance task not ended queues the job, and its end makes it', { skip }, async () => {
+test('a draft that has not ended answers a second request, one after another and two at once', { skip }, async () => {
   const h = await boot();
   const w = await world(h, 'queued');
   const { spaceId } = await plannedSpace(h, w);
   const first = await madeJob(h, spaceId);
-  const listId = first.task.list_id!;
+  const serverJobs = async (): Promise<number> =>
+    (await h.sql.query<{ n: number }>(`SELECT count(*)::int AS "n" FROM "wiki_job" WHERE "space_id" = $1`, [spaceId])).rows[0].n;
 
   // Asked again while it runs: the same job, and nothing new.
   const again = await call(h, { bearer: w.owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/plan/redraft`, { instructions: 'Keep it to thirty documents.' });
@@ -562,55 +478,27 @@ test('a draft that has not ended answers a second request; a maintenance task no
   assert.equal(toUuid(again.body.job.id), first.job.id);
   assert.equal(again.body.job.kind, 'draft', 'a second request changed the job that answered it');
   assert.equal((await jobs(h, spaceId)).length, 1);
-  assert.deepEqual(await listTasks(h, listId), [first.task.id]);
+  assert.equal(await serverJobs(), 1, 'a second request made a second wiki_job');
   // …and two at once still leave one.
   const pair = await Promise.all([1, 2].map(() => call(h, { bearer: w.owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/plan/redraft`, {})));
   for (const answer of pair) expectStatus(answer, 200, 'one of two requests at once');
+  assert.deepEqual(pair.map((answer) => [answer.body.created, toUuid(answer.body.job.id)]), [[false, first.job.id], [false, first.job.id]]);
   assert.equal((await jobs(h, spaceId)).length, 1);
-
-  // The draft's task ends; a maintenance run of the space is under way when the owner asks again.
-  await settle(h, first.task.id, 'FAILED');
-  await taskChanged(h, w.owner.id, [first.task.id]);
-  assert.deepEqual((await jobs(h, spaceId)).map((row) => [row.state, row.outcome]), [['ended', 'failed']], 'the ended task did not end its job');
-  const maintenance = await maintenanceTask(h, w.owner.id, listId, w.ws);
-  const maintenanceRun = await session(h, w.owner.id, w.ws, w.machine.id, maintenance);
-  await h.sql.query(
-    `INSERT INTO "wiki_maintenance_run"("id","space_id","owner_id","task_id","session_id","started_at") VALUES ($1,$2,$3,$4,$5,now())`,
-    [randomUUID(), spaceId, w.owner.id, maintenance, maintenanceRun],
-  );
-  const queued = await call(h, { bearer: w.owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/plan/redraft`, {});
-  expectStatus(queued, 200, 'a request while a maintenance run is under way');
-  assert.equal(queued.body.created, true);
-  assert.equal(queued.body.job.state, 'queued');
-  assert.equal(toUuid(queued.body.job.waitingFor.taskId), maintenance, 'it does not say what it waits for');
-  assert.equal(toUuid(queued.body.job.waitingFor.sessionId), maintenanceRun);
-  assert.ok(queued.body.job.waitingFor.startedAt);
-  assert.deepEqual(await listTasks(h, listId), [first.task.id, maintenance], 'a task was made beside the maintenance run');
-  // A task change that frees nothing moves nothing.
-  await taskChanged(h, w.owner.id, [randomUUID()]);
-  assert.equal((await jobs(h, spaceId))[1].state, 'queued');
-
-  // The maintenance run's task ends: that fact makes the job.
-  await settle(h, maintenance, 'FAILED');
-  await taskChanged(h, w.owner.id, [maintenance]);
-  const made = (await jobs(h, spaceId))[1];
-  assert.equal(made.state, 'made', `the job is ${made.state} after the list was freed`);
-  const task = await taskRow(h, made.task_id!);
-  assert.deepEqual([task.list_id, task.assignee_id, task.provider, task.status], [listId, w.ws, w.slug, 'OPEN']);
-  assert.equal((await planState(h, w, spaceId)).body.job.state, 'running');
+  assert.equal(await serverJobs(), 1);
 });
 
 // ── 4. held until the settings are there ────────────────────────────────────────────────────────
 
-test('a space whose maintenance names no workspace, or a provider no run could start on, makes no task and says why; the settings supplied make it', { skip }, async () => {
+test('a space whose maintenance names no workspace makes no job and says why; the workspace supplied makes it, maintenance left off', { skip }, async () => {
   const h = await boot();
   const w = await world(h, 'held');
   const made = await call(h, { bearer: w.owner.bearer }, 'POST', '/wiki/spaces', { title: 'A space nobody set up', repoUrl: `https://github.com/spec/held-${randomUUID().slice(0, 8)}` });
   expectStatus(made, 201, 'the owner creates a space');
   const spaceId = toUuid(made.body.id as string);
   let [job] = await jobs(h, spaceId);
-  assert.deepEqual([job.kind, job.trigger, job.state, job.held_reason, job.task_id], ['draft', 'space_created', 'held', 'no_maintenance_workspace', null]);
-  assert.equal((await settingsOf(h, spaceId)).listId ?? null, null, 'a held job made a list');
+  assert.deepEqual([job.kind, job.trigger, job.state, job.held_reason, job.job_id], ['draft', 'space_created', 'held', 'no_maintenance_workspace', null]);
+  const { rows: [{ n }] } = await h.sql.query<{ n: number }>(`SELECT count(*)::int AS "n" FROM "wiki_job" WHERE "space_id" = $1`, [spaceId]);
+  assert.equal(n, 0, 'a held job was made a wiki_job');
   let state = await planState(h, w, spaceId);
   assert.equal(state.body.job.state, 'held');
   assert.equal(state.body.job.held.reason, 'no_maintenance_workspace');
@@ -621,36 +509,23 @@ test('a space whose maintenance names no workspace, or a provider no run could s
   expectStatus(again, 200, 'asked again while held');
   assert.deepEqual([again.body.created, again.body.job.state, again.body.job.held.at], [false, 'held', heldAt]);
 
-  // A workspace, and a provider no run could start on yet: held for the provider now.
-  const missing = `local-vllm-missing-${randomUUID().slice(0, 6)}`;
-  expectStatus(await call(h, { bearer: w.owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { workspaceId: w.ws, provider: missing } }), 200, 'the owner names a workspace');
+  // The workspace named: that fact makes the job, as the wiki-worker's.
+  const saved = await call(h, { bearer: w.owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { workspaceId: w.ws } });
+  expectStatus(saved, 200, 'the owner names a workspace');
   [job] = await jobs(h, spaceId);
-  assert.deepEqual([job.state, job.held_reason, job.task_id], ['held', 'maintenance_provider_unusable', null]);
+  assert.deepEqual([job.state, job.held_reason, job.held_at, job.task_id], ['made', null, null, null]);
+  assert.equal((await wikiJobOf(h, job.id)).kind, WIKI_PLAN_SERVER_JOB.kinds.draft);
+  assert.equal((await settingsOf(h, spaceId)).enabled, false, 'making the job turned maintenance on');
   state = await planState(h, w, spaceId);
-  assert.equal(state.body.job.held.reason, 'maintenance_provider_unusable');
-
-  // The provider set up, and the settings saved again: that fact makes the job.
-  await provider(h, w.owner.id, missing);
-  const saved = await call(h, { bearer: w.owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { provider: missing } });
-  expectStatus(saved, 200, 'the owner saves the maintenance settings');
-  [job] = await jobs(h, spaceId);
-  assert.deepEqual([job.state, job.held_reason, job.held_at], ['made', null, null]);
-  const task = await taskRow(h, job.task_id!);
-  const settings = await settingsOf(h, spaceId);
-  assert.deepEqual([task.list_id, task.assignee_id, task.provider], [settings.listId, w.ws, missing]);
-  assert.equal(settings.enabled, false, 'making the job turned maintenance on');
-  assert.equal((await planState(h, w, spaceId)).body.job.state, 'running');
+  assert.deepEqual([state.body.job.state, state.body.job.held], ['running', null]);
 });
 
-// ── 5. the new reads, and who may use the job's routes ───────────────────────────────────────────
+// ── 5. what a draft reads of Orbit, and whose it is ─────────────────────────────────────────────
 
-test('the plan job\'s routes and the materials are a maintenance run\'s alone, and another tenant\'s is a 404', { skip }, async () => {
+test('what a draft reads of Orbit besides the repository is the owner\'s, redacted; another tenant\'s plan doors are a 404', { skip }, async () => {
   const h = await boot();
   const w = await world(h, 'materials');
   const { spaceId } = await plannedSpace(h, w);
-  const { task } = await madeJob(h, spaceId);
-  const run = await session(h, w.owner.id, w.ws, w.machine.id, task.id);
-  const maintainer: Caller = { runner: w.machine.token, session: run };
   // What the materials count: a project with a task and its session, sessions of the bound workspace (one
   // whose title carries a secret), a topic and its entry.
   const projectId = randomUUID();
@@ -671,112 +546,60 @@ test('the plan job\'s routes and the materials are a maintenance run\'s alone, a
     [randomUUID(), w.owner.id, spaceId],
   );
 
-  const materials = await call(h, maintainer, 'GET', `/runner/wiki/spaces/${spaceId}/plan/materials`);
-  expectStatus(materials, 200, 'the plan job reads its materials');
-  assert.equal(materials.body.title, 'A planned space');
-  assert.equal(toUuid(materials.body.workspace.id), w.ws);
-  assert.equal(materials.body.workspace.workDir, '~/orbit');
-  const project = materials.body.projects.find((p: { title: string }) => p.title === 'Orbit Wiki · 阶段 2');
+  // What the wiki-worker's plan job reads when its run starts.
+  const materials = await wikiPlanMaterials(h.prisma as unknown as PrismaService, w.owner.id, spaceId);
+  assert.equal(materials.title, 'A planned space');
+  assert.equal(materials.workspace?.id, w.ws);
+  assert.equal(materials.workspace?.workDir, '~/orbit');
+  const project = materials.projects.find((p) => p.title === 'Orbit Wiki · 阶段 2')!;
   assert.deepEqual([project.tasks, project.sessions], [1, 1]);
-  assert.equal(materials.body.sessions.days, 90);
-  assert.ok(materials.body.sessions.total >= 3, `sessions counted ${materials.body.sessions.total}`);
-  const titles: string[] = materials.body.sessions.items.map((s: { title: string }) => s.title);
+  assert.equal(materials.sessions.days, 90);
+  assert.ok(materials.sessions.total >= 2, `sessions counted ${materials.sessions.total}`);
+  const titles = materials.sessions.items.map((s) => s.title);
   assert.ok(titles.includes('执行任务：Wiki plan · 起草'), JSON.stringify(titles));
-  assert.ok(!JSON.stringify(materials.body).includes(secret), 'a secret in a session title left the server');
-  const withProject = materials.body.sessions.items.find((s: { project: string | null }) => s.project === 'Orbit Wiki · 阶段 2');
+  assert.ok(!JSON.stringify(materials).includes(secret), 'a secret in a session title left the server');
+  const withProject = materials.sessions.items.find((s) => s.project === 'Orbit Wiki · 阶段 2')!;
   assert.equal(withProject.task, true);
-  assert.deepEqual(materials.body.entries, [{ kind: 'pitfall', status: 'active', count: 1 }]);
-  assert.deepEqual(materials.body.topics.map((t: { slug: string; active: number; recent: unknown[] }) => [t.slug, t.active, t.recent.length]), [['wiki', 1, 1]]);
+  assert.deepEqual(materials.entries, [{ kind: 'pitfall', status: 'active', count: 1 }]);
+  assert.deepEqual(materials.topics.map((t) => [t.slug, t.active, t.recent.length]), [['wiki', 1, 1]]);
 
-  // Another session of the owner is not a maintenance run; a call with no session names nobody.
-  const ordinary: Caller = { runner: w.machine.token, session: await session(h, w.owner.id, w.ws, w.machine.id) };
-  for (const [method, route, body] of [
-    ['GET', `/runner/wiki/spaces/${spaceId}/plan/materials`, undefined],
-    ['GET', `/runner/wiki/spaces/${spaceId}/plan/job`, undefined],
-    ['POST', `/runner/wiki/spaces/${spaceId}/plan/job/progress`, { attempt: 1 }],
-    ['POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'failed' }],
-    ['GET', `/runner/wiki/spaces/${spaceId}/plan/check?jobId=${uuidToBase62((await jobs(h, spaceId))[0].id)}`, undefined],
-  ] as const) {
-    expectRefusal(await call(h, ordinary, method, route, body), 403, 'WIKI_NOT_MAINTENANCE_SESSION', `an ordinary session: ${method} ${route}`);
-  }
-  for (const [method, route, body] of [
-    ['GET', `/runner/wiki/spaces/${spaceId}/plan/materials`, undefined],
-    ['GET', `/runner/wiki/spaces/${spaceId}/plan/job`, undefined],
-    ['POST', `/runner/wiki/spaces/${spaceId}/plan/job/progress`, { attempt: 1 }],
-    ['POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'failed' }],
-  ] as const) {
-    expectStatus(await call(h, { runner: w.machine.token }, method, route, body), 400, `a headless call: ${method} ${route}`);
-  }
-  // A maintenance run whose task was made for no job reads the materials, and runs no job.
-  const listId = task.list_id!;
-  const maintenanceRun: Caller = { runner: w.machine.token, session: await session(h, w.owner.id, w.ws, w.machine.id, await maintenanceTask(h, w.owner.id, listId, w.ws)) };
-  expectStatus(await call(h, maintenanceRun, 'GET', `/runner/wiki/spaces/${spaceId}/plan/materials`), 200, 'a maintenance run reads the materials');
-  expectRefusal(await call(h, maintenanceRun, 'GET', `/runner/wiki/spaces/${spaceId}/plan/job`), 409, 'WIKI_PLAN_NO_JOB', 'a maintenance run with no job');
-  expectRefusal(await call(h, maintenanceRun, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'failed' }), 409, 'WIKI_PLAN_NO_JOB', 'a maintenance run ending no job');
-
-  // Another owner: through their own maintenance run and runner, and with their bearer, every route is a 404.
+  // Another owner, with their bearer: every plan door of this space is a 404, and nothing is made.
   const them = await world(h, 'another owner');
-  const theirs = await plannedSpace(h, them);
-  const theirTask = (await madeJob(h, theirs.spaceId)).task;
-  const theirRun: Caller = { runner: them.machine.token, session: await session(h, them.owner.id, them.ws, them.machine.id, theirTask.id) };
-  const jobId = uuidToBase62((await jobs(h, spaceId))[0].id);
-  for (const [method, route, body] of [
-    ['GET', `/runner/wiki/spaces/${spaceId}/plan/materials`, undefined],
-    ['GET', `/runner/wiki/spaces/${spaceId}/plan/job`, undefined],
-    ['POST', `/runner/wiki/spaces/${spaceId}/plan/job/progress`, { attempt: 1 }],
-    ['POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'failed' }],
-    ['GET', `/runner/wiki/spaces/${spaceId}/plan/check?jobId=${jobId}`, undefined],
-  ] as const) {
-    const answer = await call(h, theirRun, method, route, body);
-    expectStatus(answer, 404, `another owner's run: ${method} ${route}`);
-    assert.ok(!JSON.stringify(answer.body).includes('A planned space'), `another owner's run: ${method} ${route} told something of the space`);
-  }
-  // Their runner with no session, asking for the check of a job of this space, or of theirs through this space.
-  expectStatus(await call(h, { runner: them.machine.token }, 'GET', `/runner/wiki/spaces/${spaceId}/plan/check?jobId=${jobId}`), 404, 'another owner\'s runner checks this job');
-  const theirJob = uuidToBase62((await jobs(h, theirs.spaceId))[0].id);
-  expectStatus(await call(h, { runner: w.machine.token }, 'GET', `/runner/wiki/spaces/${spaceId}/plan/check?jobId=${theirJob}`), 404, 'a job of another space, through this one');
   for (const [method, route, body] of [
     ['POST', `/wiki/spaces/${spaceId}/plan/redraft`, {}],
     ['GET', `/wiki/spaces/${spaceId}/plan`, undefined],
   ] as const) {
-    expectStatus(await call(h, { bearer: them.owner.bearer }, method, route, body), 404, `another owner: ${method} ${route}`);
+    const answer = await call(h, { bearer: them.owner.bearer }, method, route, body);
+    expectStatus(answer, 404, `another owner: ${method} ${route}`);
+    assert.ok(!JSON.stringify(answer.body).includes('A planned space'), `another owner: ${method} ${route} told something of the space`);
   }
   assert.equal((await jobs(h, spaceId)).length, 1, 'another owner\'s request made a job here');
 });
 
-// ── the run's start, rounds and end, and its check ──────────────────────────────────────────────
+// ── the run's rounds and its end ────────────────────────────────────────────────────────────────
 
-test('a run reports its rounds and how it ended; the check passes only for a draft the gate let through; a failed run keeps its errors and its last draft', { skip }, async () => {
+test('a run reports its rounds and how it ended: a success names a draft this job stored, a failure keeps its errors and its last draft, and the first end stands', { skip }, async () => {
   const h = await boot();
   const w = await world(h, 'reporter');
   const { spaceId } = await plannedSpace(h, w);
-  const { job, task } = await madeJob(h, spaceId);
-  const run = await session(h, w.owner.id, w.ws, w.machine.id, task.id);
-  const maintainer: Caller = { runner: w.machine.token, session: run };
-  const check = () => call(h, { runner: w.machine.token }, 'GET', `/runner/wiki/spaces/${spaceId}/plan/check?jobId=${uuidToBase62(job.id)}`);
+  const { job, wikiJob } = await madeJob(h, spaceId);
+  const db = h.prisma as unknown as PrismaService;
+  const by = { ownerId: w.owner.id, spaceId, planJobId: job.id, wikiJobId: wikiJob.id };
+  const finish = (body: Record<string, unknown>, as = by): Promise<Answer> => served(() => h.plans.finishServerJob(as, body));
 
-  const context = await call(h, maintainer, 'GET', `/runner/wiki/spaces/${spaceId}/plan/job`);
-  expectStatus(context, 200, 'the run reads its job');
-  assert.equal(toUuid(context.body.job.id), job.id);
-  assert.equal(context.body.job.kind, 'draft');
-  assert.equal(toUuid(context.body.job.sessionId), run);
-  assert.ok(context.body.job.startedAt, 'the start was not recorded');
-  assert.equal(toUuid(context.body.space.workspace.id), w.ws);
-  assert.match(context.body.space.repo.urlNorm, /^github\.com\/spec\/planned-/u);
-
-  let checked = await check();
-  expectStatus(checked, 200, 'the headless check before the run ended');
-  assert.equal(checked.body.ok, false);
-  assert.match(checked.body.problems.join(' '), /has not said how it ended/u);
-
-  expectStatus(await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/progress`, { attempt: 2 }), 200, 'round 2');
+  // The run starts, then says the gate round it is on: what the plan page shows while it runs.
+  assert.equal(await progressWikiPlanJobOfJob(db, { planJobId: job.id, wikiJobId: wikiJob.id, attempt: null }), true, 'the start');
   let state = await planState(h, w, spaceId);
+  assert.ok(state.body.job.startedAt, 'the start was not recorded');
+  assert.equal(await progressWikiPlanJobOfJob(db, { planJobId: job.id, wikiJobId: wikiJob.id, attempt: 2 }), true, 'round 2');
+  state = await planState(h, w, spaceId);
   assert.deepEqual([state.body.job.state, state.body.job.attempt, state.body.job.attemptsMax], ['running', 2, 3]);
-  expectRefusal(await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/progress`, { attempt: 4 }), 400, 'WIKI_SCHEMA', 'a round past the last');
+  // Another wiki_job's word about it moves nothing: the plan job is the one wiki_job's it was made with.
+  assert.equal(await progressWikiPlanJobOfJob(db, { planJobId: job.id, wikiJobId: randomUUID(), attempt: 3 }), false, 'another job\'s round');
 
   // A run that says it succeeded names a draft it stored, or is refused.
-  expectRefusal(await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'succeeded', version: 1 }), 400, 'WIKI_SCHEMA', 'a success with no draft stored');
-  expectRefusal(await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'succeeded' }), 400, 'WIKI_SCHEMA', 'a success naming no version');
+  expectRefusal(await finish({ outcome: 'succeeded', version: 1 }), 400, 'WIKI_SCHEMA', 'a success with no draft stored');
+  expectRefusal(await finish({ outcome: 'succeeded' }), 400, 'WIKI_SCHEMA', 'a success naming no version');
 
   // It failed: the gate's errors on its last round, why, its report and the last draft it had are kept.
   const errors = [
@@ -789,10 +612,11 @@ test('a run reports its rounds and how it ended; the check passes only for a dra
     repo: { sha: 'b'.repeat(40), checked: 5566, missing: 47 }, tokens: { input: 1_300_000, output: 150_000, calls: 70 }, seconds: 6400, model: 'qwen3.8-27b-fp8',
   };
   const lastDraft = planOf(40);
-  const failed = await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, {
+  const failed = await finish({
     outcome: 'failed', errors, error: `the gate refused the third round (token ${`AKIA${'Z'.repeat(16)}`})`, report, draft: lastDraft, attempt: 3,
   });
   expectStatus(failed, 200, 'the run ends failed');
+  assert.equal(failed.body, true, 'the failed end was not kept');
   state = await planState(h, w, spaceId);
   const shown = state.body.job;
   assert.deepEqual([shown.state, shown.attempt, shown.version], ['failed', 3, null]);
@@ -801,35 +625,26 @@ test('a run reports its rounds and how it ended; the check passes only for a dra
   assert.equal(shown.draft.docs.length, 40, 'the last draft was not kept');
   assert.match(shown.error, /the gate refused the third round/u);
   assert.ok(!shown.error.includes('AKIA'), 'a secret in the error was kept');
-  checked = await check();
-  assert.equal(checked.body.ok, false);
-  assert.match(checked.body.problems.join(' '), /ended failed.*2 errors/u);
-  // Ended once. The same end said again — the runner sends it again when the answer to its first send was
-  // lost — is answered with what was kept, and changes none of it; another end, and a later round, are refused.
-  const again = await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'failed' });
-  expectStatus(again, 200, 'the same end again');
-  assert.deepEqual([again.body.state, again.body.attempt, again.body.errors, again.body.draft.docs.length], ['failed', 3, errors, 40]);
-  expectRefusal(await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'succeeded', version: 1 }), 409, 'WIKI_PLAN_NO_JOB', 'another end');
-  expectRefusal(await call(h, maintainer, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/progress`, { attempt: 1 }), 409, 'WIKI_PLAN_NO_JOB', 'a round after the end');
+  // Ended once: a later end, and a later round, are not kept — what the run said first stands.
+  assert.equal((await finish({ outcome: 'failed', error: 'a second end' })).body, false, 'a second end was kept');
+  assert.equal(await progressWikiPlanJobOfJob(db, { planJobId: job.id, wikiJobId: wikiJob.id, attempt: 1 }), false, 'a round after the end');
+  state = await planState(h, w, spaceId);
+  assert.deepEqual([state.body.job.attempt, state.body.job.errors, state.body.job.draft.docs.length], [3, errors, 40]);
+  await endWikiJob(h, wikiJob.id, 'failed');
 
-  // The next job succeeds: it drafts, the gate lets it through, and the check passes.
-  await settle(h, task.id, 'FAILED');
+  // The next job succeeds: it drafts, the gate lets it through, and it ends with that version.
   const next = await call(h, { bearer: w.owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/plan/redraft`, {});
   expectStatus(next, 200, 'the owner asks again');
   const nextJob = (await jobs(h, spaceId))[1];
-  const nextRun: Caller = { runner: w.machine.token, session: await session(h, w.owner.id, w.ws, w.machine.id, nextJob.task_id) };
-  expectStatus(await call(h, nextRun, 'GET', `/runner/wiki/spaces/${spaceId}/plan/job`), 200, 'the next run reads its job');
-  expectStatus(await call(h, nextRun, 'POST', `/runner/wiki/spaces/${spaceId}/plan/drafts`, {
+  const nextBy = { ownerId: w.owner.id, spaceId, planJobId: nextJob.id, wikiJobId: nextJob.job_id! };
+  await h.plans.submitServerDraft({ ownerId: w.owner.id, spaceId, wikiJobId: nextJob.job_id! }, {
     baseVersion: null, plan: planOf(), repoCheck: { sha: 'c'.repeat(40), checked: 40, missing: [] }, model: 'qwen3.8-27b-fp8',
-  }), 200, 'the next run drafts');
-  // Another run's draft is not this one's to claim.
-  const otherRun: Caller = { runner: w.machine.token, session: run };
-  expectRefusal(await call(h, otherRun, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'succeeded', version: 1 }), 409, 'WIKI_PLAN_NO_JOB', 'the ended run claims a draft');
-  expectStatus(await call(h, nextRun, 'POST', `/runner/wiki/spaces/${spaceId}/plan/job/finish`, { outcome: 'succeeded', version: 1, attempt: 1, report }), 200, 'the next run ends');
-  const passed = await call(h, { runner: w.machine.token }, 'GET', `/runner/wiki/spaces/${spaceId}/plan/check?jobId=${uuidToBase62(nextJob.id)}`);
-  expectStatus(passed, 200, 'the check');
-  assert.deepEqual([passed.body.ok, passed.body.outcome, passed.body.version, passed.body.problems], [true, 'succeeded', 1, []]);
-  assert.equal(toUuid(passed.body.jobId), nextJob.id);
+  });
+  // Another job's draft is not this one's to claim: the ended job naming it is refused.
+  expectRefusal(await finish({ outcome: 'succeeded', version: 1 }), 400, 'WIKI_SCHEMA', 'the ended job claims the next one\'s draft');
+  const passed = await finish({ outcome: 'succeeded', version: 1, attempt: 1, report }, nextBy);
+  expectStatus(passed, 200, 'the next run ends');
+  assert.equal(passed.body, true);
   state = await planState(h, w, spaceId);
   assert.deepEqual([state.body.job.state, state.body.job.version, state.body.job.draft], ['succeeded', 1, null]);
   assert.equal(state.body.draft.version, 1);
@@ -862,9 +677,9 @@ test('a draft landing again under its idempotency key is answered with the versi
   const h = await boot();
   const w = await world(h, 'replayer');
   const { spaceId } = await plannedSpace(h, w);
-  const { task } = await madeJob(h, spaceId);
-  const maintainer: Caller = { runner: w.machine.token, session: await session(h, w.owner.id, w.ws, w.machine.id, task.id) };
-  const drafts = `/runner/wiki/spaces/${spaceId}/plan/drafts`;
+  // The space's first draft job, as the wiki-worker runs it, stores every draft below.
+  const drafter = { ownerId: w.owner.id, spaceId, wikiJobId: (await madeJob(h, spaceId)).wikiJob.id };
+  const draft = (body: unknown): Promise<Answer> => served(() => h.plans.submitServerDraft(drafter, body));
   const repoCheck = { sha: 'd'.repeat(40), checked: 40, missing: [] };
   // What the drafts announced: the space's creation and binding may have been announced before them.
   const since = h.changed.length;
@@ -872,7 +687,7 @@ test('a draft landing again under its idempotency key is answered with the versi
 
   // The first landing stores version 1 under its key, with the digest of its request.
   const keyed = { baseVersion: null, plan: planOf(), repoCheck, model: 'qwen3.8-27b-fp8', idempotencyKey: `wiki-plan-${randomUUID()}` };
-  const first = await call(h, maintainer, 'POST', drafts, keyed);
+  const first = await draft(keyed);
   expectStatus(first, 200, 'the first landing of a draft under a key');
   assert.deepEqual([first.body.version, first.body.status, first.body.replayed], [1, 'draft', false]);
   let rows = await versionsOf(h, spaceId);
@@ -883,7 +698,7 @@ test('a draft landing again under its idempotency key is answered with the versi
 
   // The same draft again — the answer to its first landing lost on the way back — spelled otherwise: the
   // version it stored, replayed, where without its key it would be WIKI_PLAN_STALE; nothing written or announced.
-  const again = await call(h, maintainer, 'POST', drafts, respelled(keyed));
+  const again = await draft(respelled(keyed));
   expectStatus(again, 200, 'the same draft landing again under its key');
   assert.equal(again.body.replayed, true);
   assert.deepEqual({ ...again.body, replayed: false }, first.body, 'the replay answered another version, or another way');
@@ -896,13 +711,13 @@ test('a draft landing again under its idempotency key is answered with the versi
     [{ ...keyed, baseVersion: 1 }, 'the same plan built on another version'],
     [{ ...keyed, model: 'another-model' }, 'the same plan from another model'],
   ] as const) {
-    expectRefusal(await call(h, maintainer, 'POST', drafts, other), 409, 'WIKI_IDEMPOTENCY_KEY_REUSED', `${why} under the key`);
+    expectRefusal(await draft(other), 409, 'WIKI_IDEMPOTENCY_KEY_REUSED', `${why} under the key`);
   }
   assert.deepEqual(await versionsOf(h, spaceId), rows, 'a key reused wrote a version');
 
   // Two landings of one draft at once are one version: the second, under the space's lock, finds the first's.
   const pair = { baseVersion: 1, plan: planOf(22), repoCheck, model: 'qwen3.8-27b-fp8', idempotencyKey: `wiki-plan-${randomUUID()}` };
-  const both = await Promise.all([1, 2].map(() => call(h, maintainer, 'POST', drafts, pair)));
+  const both = await Promise.all([1, 2].map(() => draft(pair)));
   for (const answer of both) expectStatus(answer, 200, 'one of two landings at once');
   assert.deepEqual(both.map((answer) => answer.body.version), [2, 2]);
   assert.deepEqual(both.map((answer) => answer.body.replayed).sort(), [false, true]);
@@ -910,36 +725,33 @@ test('a draft landing again under its idempotency key is answered with the versi
   assert.deepEqual(rows.map((row) => [row.version, row.status, row.idempotency_key]), [[1, 'superseded', keyed.idempotencyKey], [2, 'draft', pair.idempotencyKey]]);
   assert.equal(announced(), 2, 'two landings at once announced other than one version');
   // The replay answers the version as it stands now: version 1, since superseded.
-  const late = await call(h, maintainer, 'POST', drafts, keyed);
+  const late = await draft(keyed);
   expectStatus(late, 200, 'the first draft again after it was superseded');
   assert.deepEqual([late.body.version, late.body.status, late.body.replayed], [1, 'superseded', true]);
 
   // With no key, a draft is what it was: stored with neither key nor digest, and the same draft again is STALE.
   const plain = { baseVersion: 2, plan: planOf(23), repoCheck, model: 'qwen3.8-27b-fp8' };
-  const stored = await call(h, maintainer, 'POST', drafts, plain);
+  const stored = await draft(plain);
   expectStatus(stored, 200, 'a draft with no key');
   assert.deepEqual([stored.body.version, stored.body.replayed], [3, false]);
-  expectRefusal(await call(h, maintainer, 'POST', drafts, plain), 409, 'WIKI_PLAN_STALE', 'the same draft with no key, again');
+  expectRefusal(await draft(plain), 409, 'WIKI_PLAN_STALE', 'the same draft with no key, again');
   rows = await versionsOf(h, spaceId);
   assert.deepEqual(rows.map((row) => [row.version, row.status, row.idempotency_key, row.request_sha256]).at(-1), [3, 'draft', null, null]);
   assert.equal(rows.length, 3, 'a draft with no key landing again wrote a version');
 
   // A key the schema refuses is a refusal of the gate, like every other field of a draft, and writes nothing.
   for (const [key, why] of [[42, 'a key that is not words'], ['  ', 'an empty key'], ['k'.repeat(201), 'a key past 200 characters']] as const) {
-    const refused = await call(h, maintainer, 'POST', drafts, { ...plain, baseVersion: 3, idempotencyKey: key });
+    const refused = await draft({ ...plain, baseVersion: 3, idempotencyKey: key });
     expectRefusal(refused, 422, 'WIKI_PLAN_GATE', why);
     assert.deepEqual(refused.body.errors.map((e: { check: string; path: string }) => [e.check, e.path]), [['schema', 'idempotencyKey']], why);
   }
   assert.equal((await versionsOf(h, spaceId)).length, 3, 'a refused key wrote a version');
 
-  // The key is the owner's: another owner's run may use the same one for a draft of their own.
+  // The key is the owner's: another owner's job may use the same one for a draft of their own.
   const them = await world(h, 'another replayer');
   const theirs = await plannedSpace(h, them);
-  const theirRun: Caller = {
-    runner: them.machine.token,
-    session: await session(h, them.owner.id, them.ws, them.machine.id, (await madeJob(h, theirs.spaceId)).task.id),
-  };
-  const theirDraft = await call(h, theirRun, 'POST', `/runner/wiki/spaces/${theirs.spaceId}/plan/drafts`, keyed);
+  const theirJob = (await madeJob(h, theirs.spaceId)).wikiJob.id;
+  const theirDraft = await served(() => h.plans.submitServerDraft({ ownerId: them.owner.id, spaceId: theirs.spaceId, wikiJobId: theirJob }, keyed));
   expectStatus(theirDraft, 200, 'another owner\'s draft under the same key');
   assert.deepEqual([theirDraft.body.version, theirDraft.body.replayed], [1, false]);
   assert.equal(toUuid(theirDraft.body.spaceId), theirs.spaceId);
@@ -947,35 +759,39 @@ test('a draft landing again under its idempotency key is answered with the versi
 
 // ── a job is no maintenance run ─────────────────────────────────────────────────────────────────
 
-test('a plan job is no maintenance run: it does not count against the day, the day does not hold it, and it runs with maintenance off', { skip }, async () => {
+test('a plan job is no maintenance run: it does not count against the day, the day does not hold it, and it is made with maintenance off', { skip }, async () => {
   const h = await boot();
   const w = await world(h, 'daily');
+  const db = h.prisma as unknown as PrismaService;
   const { spaceId } = await plannedSpace(h, w, { enabled: true, dailyRunLimit: 1 });
-  const { task } = await madeJob(h, spaceId);
-  const listId = task.list_id!;
-  let today = await wikiMaintenanceRunsToday(h.prisma, w.owner.id, spaceId);
+  const { wikiJob } = await madeJob(h, spaceId);
+  let today = await wikiMaintenanceRunsToday(db, w.owner.id, spaceId);
   assert.deepEqual([today.used, today.remaining], [0, 1], 'the plan job counted against the day');
 
-  // A maintenance run uses the day up; the draft's task ended meanwhile.
-  await settle(h, task.id, 'CANCELLED');
-  const maintenance = await maintenanceTask(h, w.owner.id, listId, w.ws);
-  today = await wikiMaintenanceRunsToday(h.prisma, w.owner.id, spaceId);
+  // A maintenance run of the space uses the day up — the run row its maintain job made — and the draft's job ended meanwhile.
+  await endWikiJob(h, wikiJob.id, 'failed');
+  const runJob = randomUUID();
+  await h.sql.query(`INSERT INTO "wiki_job"("id","owner_id","space_id","kind","state","started_at","ended_at") VALUES ($1,$2,$3,'maintain','succeeded',now(),now())`, [
+    runJob, w.owner.id, spaceId,
+  ]);
+  await h.sql.query(`INSERT INTO "wiki_maintenance_run"("id","space_id","owner_id","job_id","started_at","outcome","ended_at") VALUES ($1,$2,$3,$4,now(),'succeeded',now())`, [
+    randomUUID(), spaceId, w.owner.id, runJob,
+  ]);
+  today = await wikiMaintenanceRunsToday(db, w.owner.id, spaceId);
   assert.deepEqual([today.used, today.remaining], [1, 0]);
-  await settle(h, maintenance, 'FAILED');
   const redraft = await call(h, { bearer: w.owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/plan/redraft`, {});
   expectStatus(redraft, 200, 'a redraft on a used-up day');
-  assert.equal(redraft.body.job.state, 'running', 'the day\'s limit held the plan job back');
-  today = await wikiMaintenanceRunsToday(h.prisma, w.owner.id, spaceId);
+  assert.deepEqual([redraft.body.created, redraft.body.job.state], [true, 'running'], 'the day\'s limit held the plan job back');
+  today = await wikiMaintenanceRunsToday(db, w.owner.id, spaceId);
   assert.deepEqual([today.used, today.remaining], [1, 0], 'the second plan job counted against the day');
 
-  // Maintenance off: the plan job's session is still claimed, a maintenance run's is refused.
+  // Maintenance off: the owner's next draft is made on the server all the same.
   expectStatus(await call(h, { bearer: w.owner.bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: false } }), 200, 'maintenance off');
-  const planTask = (await jobs(h, spaceId))[1].task_id!;
-  const planRun = await wikiMaintenanceRunOf(h.prisma, { id: await session(h, w.owner.id, w.ws, w.machine.id, planTask), taskId: planTask, workspaceId: w.ws, provider: w.slug });
-  assert.equal(planRun?.refusal, undefined, `the plan job's run was refused: ${planRun?.refusal}`);
-  const other = await maintenanceTask(h, w.owner.id, listId, w.ws);
-  const maintenanceRun = await wikiMaintenanceRunOf(h.prisma, { id: await session(h, w.owner.id, w.ws, w.machine.id, other), taskId: other, workspaceId: w.ws, provider: w.slug });
-  assert.match(maintenanceRun?.refusal ?? '', /maintenance is off/u);
+  await endWikiJob(h, (await jobs(h, spaceId))[1].job_id!, 'failed');
+  const off = await call(h, { bearer: w.owner.bearer }, 'POST', `/wiki/spaces/${spaceId}/plan/redraft`, {});
+  expectStatus(off, 200, 'a redraft with maintenance off');
+  assert.deepEqual([off.body.created, off.body.job.state], [true, 'running'], 'maintenance off held the plan job back');
+  assert.equal((await wikiJobOf(h, toUuid(off.body.job.id as string))).kind, WIKI_PLAN_SERVER_JOB.kinds.draft);
 });
 
 // ── the schema ──────────────────────────────────────────────────────────────────────────────────

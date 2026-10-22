@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { MANAGED_RUNNER_INSTANCE_CAPABILITY, MANAGED_RUNNER_SLEEP_CAPABILITY } from '@orbit/shared';
 import { Prisma, type ManagedRunner, type PrismaClient } from '@prisma/client';
 
-import { ManagedRunnerManager, type ReconcileOutcome } from '../managed-runners/managed-runner-manager';
+import { ManagedRunnerManager, type ManagedRunnerManagerOptions, type ReconcileOutcome } from '../managed-runners/managed-runner-manager';
 import type { ManagedRunnerProfile } from '../managed-runners/managed-runner-profile';
 import type { ManagedRunnerRuntime } from '../managed-runners/managed-runner-runtime';
 import { managedPodName } from '../managed-runners/managed-runner-resources';
@@ -35,6 +35,8 @@ export interface WorldOptions {
   capacity?: Partial<ManagedRunnerProfile['capacity']>;
   /** Another cluster key is another capacity pool. Default: one of the world's own. */
   clusterKey?: string;
+  /** Where the managers' warnings go. Default: nowhere. */
+  log?: ManagedRunnerManagerOptions['log'];
 }
 
 export function managedRunnerWorld(db: PrismaClient, options: WorldOptions = {}) {
@@ -48,7 +50,7 @@ export function managedRunnerWorld(db: PrismaClient, options: WorldOptions = {})
   const clock = { ms: Date.now() };
   const now = () => new Date(clock.ms);
   const manager = (holder: string, delayMs = 0) =>
-    new ManagedRunnerManager(prisma, cluster.client({ delayMs }), profile, { holder, now, random: () => 0.5, log: quiet });
+    new ManagedRunnerManager(prisma, cluster.client({ delayMs }), profile, { holder, now, random: () => 0.5, log: options.log ?? quiet });
   const primary = manager('replica-a');
   const runtime: ManagedRunnerRuntime = { available: true, profile, manager: primary, worker: new ManagedRunnerWorker(primary, 60_000, quiet) };
   const service = new ManagedRunnerService(prisma, ON, runtime);

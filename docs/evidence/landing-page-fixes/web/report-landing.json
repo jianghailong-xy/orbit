@@ -1,0 +1,180 @@
+[
+  {
+    "theme": "light",
+    "frame": "ready",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #9",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Merge checkReady",
+    "detail": "Passed the check · waiting for the owner",
+    "card": "Merge checkReadyPassed the check · waiting for the ownerStopped · not landed",
+    "sections": [
+      "Merge check · 1"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. Merging is decided on the merge card · Review Card ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "marks": [
+      {
+        "job": "job-c1",
+        "lines": [
+          "≡ is-queued · Merge check queued · project/34bmzOkov3xN2yLPrnsCk → main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "↻ is-running · Round 1",
+          "✓ is-ok · Fetched · synced main",
+          "↻ is-running · Merge check started · claim 1 · workstation-gpu",
+          "✓ is-ok · Merge check passed · 17m 02s",
+          "✓ is-ok · Ready to merge into main",
+          "↻ is-running · Asked the owner to merge into main"
+        ]
+      }
+    ],
+    "unhandled": []
+  },
+  {
+    "theme": "light",
+    "frame": "ready-round",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #9",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Merge checkReady",
+    "detail": "Passed the check · waiting for the owner",
+    "card": "Merge checkReadyPassed the check · waiting for the ownerStopped · not landed",
+    "sections": [
+      "Merge check · 1",
+      "Merge to main · 1",
+      "Merge check · 2"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. Merging is decided on the merge card · Review Card ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "marks": [
+      {
+        "job": "job-c1",
+        "lines": [
+          "≡ is-queued · Merge check queued · project/34bmzOkov3xN2yLPrnsCk → main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "↻ is-running · Round 1",
+          "✓ is-ok · Fetched · synced main",
+          "↻ is-running · Merge check started · claim 1 · workstation-gpu",
+          "✓ is-ok · Merge check passed · 17m 02s",
+          "✓ is-ok · Ready to merge into main"
+        ]
+      },
+      {
+        "job": "job-l1",
+        "lines": [
+          "↻ is-running · Merge to main confirmed by the owner",
+          "≡ is-queued · Queued to merge into main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "✗ is-failed · Push refused · main moved 1 commit, 1 from outside the queue (fix(web): a table that scrolls)",
+          "✗ is-failed · Ready to merge into main",
+          "↻ is-running · main moved 1 commit since the check — checking again on the new main"
+        ]
+      },
+      {
+        "job": "job-c2",
+        "lines": [
+          "≡ is-queued · Merge check queued · project/34bmzOkov3xN2yLPrnsCk → main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "↻ is-running · Round 1",
+          "✓ is-ok · Fetched · synced main",
+          "↻ is-running · Merge check started · claim 1 · workstation-gpu",
+          "✓ is-ok · Merge check passed · 17m 02s",
+          "✓ is-ok · Ready to merge into main",
+          "↻ is-running · Asked the owner to merge into main"
+        ]
+      }
+    ],
+    "unhandled": []
+  },
+  {
+    "theme": "dark",
+    "frame": "ready",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #9",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Merge checkReady",
+    "detail": "Passed the check · waiting for the owner",
+    "card": "Merge checkReadyPassed the check · waiting for the ownerStopped · not landed",
+    "sections": [
+      "Merge check · 1"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. Merging is decided on the merge card · Review Card ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "marks": [
+      {
+        "job": "job-c1",
+        "lines": [
+          "≡ is-queued · Merge check queued · project/34bmzOkov3xN2yLPrnsCk → main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "↻ is-running · Round 1",
+          "✓ is-ok · Fetched · synced main",
+          "↻ is-running · Merge check started · claim 1 · workstation-gpu",
+          "✓ is-ok · Merge check passed · 17m 02s",
+          "✓ is-ok · Ready to merge into main",
+          "↻ is-running · Asked the owner to merge into main"
+        ]
+      }
+    ],
+    "unhandled": []
+  },
+  {
+    "theme": "dark",
+    "frame": "ready-round",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #9",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Merge checkReady",
+    "detail": "Passed the check · waiting for the owner",
+    "card": "Merge checkReadyPassed the check · waiting for the ownerStopped · not landed",
+    "sections": [
+      "Merge check · 1",
+      "Merge to main · 1",
+      "Merge check · 2"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. Merging is decided on the merge card · Review Card ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "marks": [
+      {
+        "job": "job-c1",
+        "lines": [
+          "≡ is-queued · Merge check queued · project/34bmzOkov3xN2yLPrnsCk → main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "↻ is-running · Round 1",
+          "✓ is-ok · Fetched · synced main",
+          "↻ is-running · Merge check started · claim 1 · workstation-gpu",
+          "✓ is-ok · Merge check passed · 17m 02s",
+          "✓ is-ok · Ready to merge into main"
+        ]
+      },
+      {
+        "job": "job-l1",
+        "lines": [
+          "↻ is-running · Merge to main confirmed by the owner",
+          "≡ is-queued · Queued to merge into main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "✗ is-failed · Push refused · main moved 1 commit, 1 from outside the queue (fix(web): a table that scrolls)",
+          "✗ is-failed · Ready to merge into main",
+          "↻ is-running · main moved 1 commit since the check — checking again on the new main"
+        ]
+      },
+      {
+        "job": "job-c2",
+        "lines": [
+          "≡ is-queued · Merge check queued · project/34bmzOkov3xN2yLPrnsCk → main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "↻ is-running · Round 1",
+          "✓ is-ok · Fetched · synced main",
+          "↻ is-running · Merge check started · claim 1 · workstation-gpu",
+          "✓ is-ok · Merge check passed · 17m 02s",
+          "✓ is-ok · Ready to merge into main",
+          "↻ is-running · Asked the owner to merge into main"
+        ]
+      }
+    ],
+    "unhandled": []
+  }
+]

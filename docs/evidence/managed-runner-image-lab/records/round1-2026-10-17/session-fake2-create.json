@@ -1,0 +1,15 @@
+{
+  "attachments": [
+    {
+      "fileName": "t03-attachment-3.txt",
+      "id": "34hMMR3XnCXW55CQtVzJd",
+      "sha256": "d952062eb1d2c3923ef856749cc1f7bdec05f7d37fae42ffd8ef8b8a96589f33"
+    }
+  ],
+  "branch": "orbit/t03-fake-model-persistence-session-2-244d43",
+  "engine": "claude",
+  "id": "34hMMR4oLkyMJMDiLqA8I",
+  "model": "deepseek-v4-flash",
+  "provider": "deepseek-2",
+  "status": "PENDING"
+}

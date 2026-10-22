@@ -536,7 +536,7 @@ test('the worker\'s pass settles failed the running operations whose job ended o
     const justClaimed = await running(ended, 5);
     const { id: stillQueued } = await h.ops.enqueueWikiRepoOp({ jobId: ended, kind: 'read', input: { sha: 'b'.repeat(40), items: [{ path: 'y.md' }] } });
 
-    // The worker's pass — the one it runs every few seconds, under any switch (here: none, the runner path's).
+    // The worker's pass — the one it runs every few seconds.
     const worker = new WikiJobExecutor(service, {} as unknown as WikiModelRequestQueue, {}, {});
     await worker.runOnce();
 

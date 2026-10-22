@@ -78,8 +78,8 @@ struct WikiActivityPage: View {
                     .listRowSeparator(.hidden)
             }
         case .runs:
-            // Drawn while the server executes the account's wiki, or once it ran something for the space.
-            if WikiRunsLogic.shown(serverExecutes: content.health?.serverExecutes == true, jobs: jobs) {
+            // Drawn while the health read says the server executes the account's wiki.
+            if content.health?.serverExecutes == true {
                 Section {
                     runsHeader
                     if let jobs, !jobs.isEmpty {

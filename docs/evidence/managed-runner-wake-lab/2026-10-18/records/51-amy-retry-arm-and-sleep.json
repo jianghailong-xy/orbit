@@ -1,0 +1,424 @@
+{
+ "sessionId": "01a14c9e-80a2-768d-b2f1-d41e9341b277",
+ "log": [
+  {
+   "created": {
+    "at": "2026-10-18T01:26:58.460+00:00",
+    "kind": "session",
+    "status": 201,
+    "managedState": "READY",
+    "answer": {
+     "id": "34hn3UMRRtUwiALoatSxr",
+     "status": "PENDING",
+     "provider": "deepseek",
+     "engine": "claude",
+     "assignedRunnerId": "34hlwBWrKOm4SMrYIA6An",
+     "code": null,
+     "message": null
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:26:58.553+00:00",
+   "session": {
+    "status": "RUNNING",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "error": null
+   }
+  },
+  {
+   "at": "2026-10-18T01:26:59.587+00:00",
+   "session": {
+    "status": "FAILED",
+    "retry_at": "2026-10-18T01:27:32.547",
+    "retry_attempts": 0,
+    "error": "API Error: 529 {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded (FAKE MODEL AMYRT 1/2)\"}}"
+   }
+  },
+  {
+   "at": "2026-10-18T01:27:44.496+00:00",
+   "session": {
+    "status": "RUNNING",
+    "retry_at": null,
+    "retry_attempts": 1,
+    "error": null
+   }
+  },
+  {
+   "at": "2026-10-18T01:27:45.538+00:00",
+   "session": {
+    "status": "RUNNING",
+    "retry_at": "2026-10-18T01:29:54.595",
+    "retry_attempts": 1,
+    "error": null
+   }
+  },
+  {
+   "at": "2026-10-18T01:27:46.579+00:00",
+   "session": {
+    "status": "FAILED",
+    "retry_at": "2026-10-18T01:29:54.595",
+    "retry_attempts": 1,
+    "error": "API Error: 529 {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded (FAKE MODEL AMYRT 2/2)\"}}"
+   }
+  },
+  {
+   "at": "2026-10-18T01:30:13.792+00:00",
+   "session": {
+    "status": "FAILED",
+    "retry_at": "2026-10-18T01:30:43.646",
+    "retry_attempts": 1,
+    "error": "API Error: 529 {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded (FAKE MODEL AMYRT 2/2)\"}}"
+   }
+  },
+  {
+   "at": "2026-10-18T01:30:44.076+00:00",
+   "session": {
+    "status": "RUNNING",
+    "retry_at": null,
+    "retry_attempts": 2,
+    "error": null
+   }
+  },
+  {
+   "at": "2026-10-18T01:30:45.117+00:00",
+   "session": {
+    "status": "AWAITING_INPUT",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "error": null
+   }
+  },
+  {
+   "at": "2026-10-18T01:33:59.360+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:34:04.376+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:34:09.390+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:34:14.396+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:34:19.401+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:34:24.405+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:34:29.411+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:34:34.425+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:34:39.440+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:34:44.446+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:34:49.460+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:34:54.474+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:34:59.483+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:35:04.502+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:35:09.508+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:35:14.525+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:35:19.540+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:35:24.553+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:35:29.560+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:35:34.566+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:35:39.573+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:35:44.588+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:35:49.603+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:35:54.617+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:35:59.631+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:36:04.637+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:36:09.650+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:36:14.664+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:36:19.678+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  },
+  {
+   "at": "2026-10-18T01:36:24.687+00:00",
+   "ownerSleep": {
+    "status": 409,
+    "state": "SLEEPING",
+    "answer": {
+     "code": "MANAGED_RUNNER_TRANSITION_REFUSED",
+     "message": "A SLEEPING managed runner is not put to sleep."
+    }
+   }
+  }
+ ]
+}

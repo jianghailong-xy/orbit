@@ -128,6 +128,38 @@ class ProjectLandingCardTest {
         assertNull(card.target); assertNull(card.retryJobId)
     }
 
+    /** A card led by a merge into main — a merge check, or the merge itself — says so, read off the lead's own kind on `inFlight`, so a
+     * server that lists no jobs says it too. That job lands no task, and the card holding only it draws no "Nothing to do" (board v4 04). */
+    @Test fun aCardLedByAMergeIntoMainSaysSoFromTheLeadsOwnKind() {
+        for (kind in listOf("CHECK_PROMOTION", "LAND_PROMOTION")) {
+            val lone = running(listOf(job("j-m", kind = kind, taskId = null, title = null)), landTasks = emptyList())
+            assertTrue(kind, ProjectPage.landingCard(lone, now, now, false)!!.mergeJob)
+            val older = buildJsonObject {
+                put("integratingCount", 1); put("queuedCount", 0)
+                putJsonObject("inFlight") { put("taskTitle", null as String?); put("state", "RUNNING"); put("startedAt", iso(66)); put("kind", kind)
+                    put("phase", "CHECK"); put("heartbeatAt", iso(0)) }
+            }
+            assertTrue(kind, ProjectPage.landingCard(older, now, now, false)!!.mergeJob)
+            // The same server counting two jobs: the card holds more than the merge job, so it keeps the sentence it says about them.
+            val olderTwo = buildJsonObject {
+                put("integratingCount", 1); put("queuedCount", 1)
+                putJsonObject("inFlight") { put("taskTitle", null as String?); put("state", "RUNNING"); put("startedAt", iso(66)); put("kind", kind)
+                    put("phase", "CHECK"); put("heartbeatAt", iso(0)) }
+            }
+            assertFalse(kind, ProjectPage.landingCard(olderTwo, now, now, false)!!.mergeJob)
+        }
+        // A task landing is none, even with a merge queued behind it, and nor is a job of no kind.
+        assertFalse(ProjectPage.landingCard(running(listOf(job("j-c5"))), now, now, false)!!.mergeJob)
+        val behind = running(listOf(job("j-c5"), job("j-m", kind = "LAND_PROMOTION", state = "QUEUED", phase = null, taskId = null, title = null,
+            heartbeat = null, runner = null, limit = null)))
+        assertFalse(ProjectPage.landingCard(behind, now, now, false)!!.mergeJob)
+        val unnamed = buildJsonObject {
+            put("integratingCount", 1); put("queuedCount", 0)
+            putJsonObject("inFlight") { put("taskTitle", null as String?); put("state", "RUNNING"); put("startedAt", iso(66)); put("heartbeatAt", iso(0)) }
+        }
+        assertFalse(ProjectPage.landingCard(unnamed, now, now, false)!!.mergeJob)
+    }
+
     /** The branch is the job's own landing, short — absent when the job is not one of the project's landings at all, and when the
      * landing names no ref. */
     @Test fun theBranchIsTheJobsOwnLandingAndAbsentWhenNothingNamesIt() {
@@ -185,5 +217,35 @@ class ProjectLandingCardTest {
         }
         val read = ProjectPage.landingLine(check, now, now, false)!!
         assertEquals("Merge check", read.word); assertEquals(LandingHead("2m 40s", true, "checking · updated just now"), read.head)
+    }
+
+    /** §7.2 V6: once the server sends the step, claim and liveness facts, the card's head and the jobs list's rows draw them — and a
+     * server that sends none keeps the card above, word for word. */
+    @Test fun theV6FactsReachTheCardAndEveryRow() {
+        val v6 = { liveness: String -> buildJsonObject {
+            put("taskTitle", "C5 · 托管 runner"); put("state", "RUNNING"); put("kind", "LAND_TASK"); put("phase", "CHECK")
+            put("startedAt", iso(110)); put("heartbeatAt", iso(0)); put("jobId", "j-c5"); put("taskId", "t-c5"); put("runner", "workstation-gpu")
+            put("claim", 1); put("round", 1)
+            put("check", Json.parseToJsonElement("""{"name":"TASK_ACCEPTANCE","index":1,"count":3,"budgetSeconds":3600,"startedAt":"${iso(110)}"}"""))
+            put("stepStartedAt", iso(110)); put("outputMovedAt", iso(6)); put("progressProtocol", "v2"); put("typicalMs", null)
+            put("liveness", liveness)
+        } }
+        val view = { liveness: String -> buildJsonObject {
+            put("integratingCount", 1); put("queuedCount", 0)
+            put("inFlight", v6(liveness))
+            put("landTasks", JsonArray(listOf(landing("j-c5"))))
+            put("inFlightJobs", JsonArray(listOf(Json.parseToJsonElement(v6(liveness).toString()))))
+        } }
+        val card = ProjectPage.landingCard(view("LIVE"), now, now, false)!!
+        val expected = LandingHead("1m 50s of 60m", true, "checking · output 6s ago · claim 1 · round 1 of 3")
+        assertEquals(expected, card.head)
+        assertEquals("1m 50s of 60m", card.clock); assertEquals(true, card.liveness?.ticking)
+        assertEquals(expected, ProjectPage.landingJobLines(view("LIVE"), now, now, false).single().line.head)
+        // LEGACY keeps its clock but never infers silence; the head says why it is quiet.
+        assertEquals(LandingHead("1m 50s of 60m", true, "checking · reports only between steps · claim 1 · round 1 of 3"),
+            ProjectPage.landingCard(view("LEGACY"), now, now, false)!!.head)
+        // A server without the fields: the card is the one this file's first test draws, unchanged.
+        val older = running(listOf(job("j-c5")))
+        assertEquals(LandingHead("1m 6s", true, "checking · updated just now"), ProjectPage.landingCard(older, now, now, false)!!.head)
     }
 }

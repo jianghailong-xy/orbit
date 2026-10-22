@@ -62,19 +62,19 @@ class WikiDocsContractTest {
             listOf("unsourced", "unverified", "withdrawn", "sourced", "transition", "disputed").map { WikiDocLogic.mark(WikiDocSentence("x", it)) })
     }
 
-    /** The owner reads on the user door; a maintenance run reads what is written and writes on the runner door, and
-     * nothing on the user door writes a document. The client reads those three routes. */
+    /** The owner reads on the user door; the runner door has no route of the documents, and nothing on the user door
+     * writes one. The client reads those three routes. */
     @Test fun theOwnersReadsAreOnTheUserDoor() {
         val routes = docs.obj("routes")
         val doors = contract.obj("agentSurface").obj("doors")
         val user = doors.obj("user").arr("routes").texts
-        val maintenance = doors.obj("runner").arr("maintenanceRoutes").texts.toSet()
+        val runner = doors.obj("runner").values.filterIsInstance<JsonArray>().flatMap { it.texts }
         for (name in listOf("directory", "doc", "index")) {
             val route = requireNotNull(routes.str(name)) { name }
             assertTrue("$route is not a route the user door declares", route in user)
             assertTrue(route, route.startsWith("GET "))
         }
-        for (name in listOf("writerState", "write")) assertTrue(name, routes.str(name) in maintenance)
+        assertFalse("the runner door has a route of the documents: $runner", runner.any { it.contains("/docs") })
         assertFalse(user.any { it.startsWith("POST") && it.contains("/docs") })
         val asked = mutableListOf<List<String>>()
         val (auth, handle) = wikiSignedIn { path ->

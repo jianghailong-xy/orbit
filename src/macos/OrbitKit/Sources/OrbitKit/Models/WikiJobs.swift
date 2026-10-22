@@ -19,8 +19,8 @@ public enum WikiExecutorMode: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// What a read tells the account that asks about the switch (contract `jobs.executor.read`): the mode, and whether
-/// the server executes this account's wiki. A control plane older than P9 sends none, which reads as runner.
+/// What a read tells the account that asks who executes its wiki (contract `jobs.executor.read`): the mode, and
+/// whether the server does — always, since P11. A control plane older than P9 sends none: nothing of the server's is drawn.
 public struct WikiExecutorView: Codable, Equatable, Sendable {
     public let mode: WikiExecutorMode
     public let serverExecutes: Bool

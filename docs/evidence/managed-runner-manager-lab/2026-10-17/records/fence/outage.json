@@ -1,0 +1,7 @@
+{
+  "probeWhileRemoved": "000 Failed to connect to 127.0.0.1 port 16443 after 0 ms: Could not connect to server",
+  "readyAgainAt": "2026-10-17T22:09:59.694+00:00",
+  "removedAt": "2026-10-17T22:08:59.627+00:00",
+  "restoredAt": "2026-10-17T22:09:59.646+00:00",
+  "seconds": 60
+}

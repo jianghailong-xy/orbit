@@ -132,8 +132,10 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     val midTurn = SteerDelivery.runtimeTakesMidTurnSteer(engine)
     // The tray above the box (docs/mocks/steer-tray): the reader's steers nothing has read yet and their messages still on the queue.
     val trayRows = if (target != null) emptyList() else PendingTray.rows(unreadSteers, waiting, state, steerOffered = usable && running && midTurn)
+    // The engine the box's picks run on: the session's, or a draft's pick.
+    val shownEngine = ProviderChoices.engine(effective, state.catalog?.providers.orEmpty())
     // DeepSeek Harness takes no ! command, and picks its own model until the runner reports one (A07-5).
-    val dsh = ProviderChoices.engine(effective, state.catalog?.providers.orEmpty()) == DshRuntime.ENGINE
+    val dsh = shownEngine == DshRuntime.ENGINE
     // The decision behind this task run, while the chip still shows the model it picked (A11-1).
     val smart = smartRoute(detail.text("taskId"), detail["route"] as? JsonObject, effective.text("model").orEmpty(), LocalSmartSelection.current)
     // The engine's guess at the next message, offered in the empty box and taken with a double-tap on it,
@@ -169,7 +171,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
     // Directly above the box, and not folded while a phone types: it is about the messages being typed into. It takes what room the
     // box leaves, scrolling past about four rows.
     PendingTrayCard(trayRows, enabled = usable, steer = { model.steer(it.turnId) },
-        withdraw = { model.withdraw(it.turnId, it.restores, it.steer, engine) }, modifier = Modifier.weight(1f, fill = false))
+        withdraw = { model.withdraw(it.turnId, it.restores, it.steer, engine) }, modifier = Modifier.weight(1f, fill = false),
+        // Cursor CLI takes no message mid-turn — one would stop the turn — so the tray says why its rows wait (iOS 5 ⑤).
+        note = if (engine == CursorRuntime.ENGINE) CursorRuntime.QUEUE_NOTE else null)
     Surface(tonalElevation = 2.dp) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).testTag("session-composer")) {
             Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
@@ -226,7 +230,9 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                         }, enabled = state.loaded,
                     placeholder = {
                         if (suggestion != null) SuggestionPlaceholder(suggestion)
-                        else Text("Message…", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        // Cursor CLI takes no message mid-turn: one written now waits for the turn to end (iOS 5 ⑥).
+                        else Text(if (target == null && running && engine == CursorRuntime.ENGINE) CursorRuntime.RUNNING_PLACEHOLDER else "Message…",
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
                     minLines = 1, maxLines = 4,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default))
@@ -259,7 +265,10 @@ internal fun SessionComposer(app: OrbitApplication, handle: SessionHandle, sessi
                             onClick = { menu = false; model.control("auto-retry", HttpMethod.DELETE) })
                     }
                 }
-                ModelChip(if (dsh && effective.text("model").isNullOrBlank()) DshRuntime.PICKED_BY else effective.text("model")?.ifBlank { "Runtime default" } ?: "Model",
+                // Cursor CLI's model by its catalogue's name, its effort and what the session set (iOS 5 ①②).
+                val cursorModel = if (shownEngine == CursorRuntime.ENGINE) CursorRuntime.modelName(state.catalog,
+                    effective.text("provider") ?: shownEngine, effective.text("model").orEmpty(), effective.text("effort")) else null
+                ModelChip(cursorModel ?: if (dsh && effective.text("model").isNullOrBlank()) DshRuntime.PICKED_BY else effective.text("model")?.ifBlank { "Runtime default" } ?: "Model",
                     effortLabel(effective.text("effort")), smart != null,
                     enabled = usable && !state.busy && draft.pending == null && draft.createdSessionId == null, modifier = Modifier.weight(1f)) {
                     models = true; model.loadCatalog()
@@ -471,6 +480,8 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
             if (state.catalogLoading) CircularProgressIndicator()
             state.catalogError?.let { Text(it); TextButton(onClick = model::loadCatalog) { Text("Retry model catalog") } }
             val rows = catalog?.models(engine, provider).orEmpty()
+            // A Cursor CLI model is the one named, whatever context or speed its value carries.
+            val chosenName = if (engine == CursorRuntime.ENGINE) CursorRuntime.modelBase(chosen) else chosen
             rows.forEach { row ->
                 TextButton(enabled = enabled, onClick = {
                     val id = row.text("value") ?: return@TextButton
@@ -481,19 +492,57 @@ private fun ModelChoices(model: ComposerModel, state: ComposerState, detail: Jso
                         put("model", id)
                         val effort = detail.text("effort") ?: ""
                         if (row.strings("reasoningLevels").isNotEmpty() && effort !in row.strings("reasoningLevels")) put("effort", row.text("defaultReasoningLevel") ?: "")
+                        // A Cursor CLI model with no effort of its own — Auto among them — runs with none.
+                        else if (engine == CursorRuntime.ENGINE && row.strings("reasoningLevels").isEmpty() && effort.isNotEmpty()) put("effort", "")
                     })
-                }) { Text((if (row.text("value") == chosen) "✓ " else "") + (row.text("label") ?: row.text("value").orEmpty())) }
+                }) { Text((if (row.text("value") == chosenName) "✓ " else "") + (row.text("label") ?: row.text("value").orEmpty())) }
             }
             if (catalog != null && rows.isEmpty()) Text("This provider has not reported available models.")
+            // Cursor CLI's Auto takes no parameters (contract §10): no Effort to offer, and a line on what it does instead (iOS 5 ②).
+            if (CursorRuntime.onAuto(engine, chosen)) Text(CursorRuntime.AUTO_NOTE, Modifier.padding(vertical = 6.dp).testTag("composer-cursor-auto-note"),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             val levels = catalog?.efforts(engine, provider, chosen).orEmpty()
             if (levels.isNotEmpty()) { Text("Effort"); (listOf("") + levels).forEach { effort ->
                 TextButton(enabled = enabled, onClick = { change("effort", effort) }) { Text(effort.ifBlank { "Default" }) }
             } }
-            // Asked of the engine: DeepSeek Harness enforces Default, Auto and Don't Ask alone, as the server does.
+            // A Cursor CLI model's own context and speed (iOS 5 ③), each where the runner's catalogue says the model takes it, carried in the
+            // session's model value as Cursor writes it (`claude-opus-5-5[context=1m,fast=true]`).
+            if (engine == CursorRuntime.ENGINE) catalog?.modelRow(engine, provider, chosen)?.let { row ->
+                val set = CursorRuntime.modelParameters(chosen)
+                fun pick(id: String, value: String) = change("model", CursorRuntime.withParameters(chosenName, set + (id to value), row))
+                CursorRuntime.parameter(row, CursorRuntime.CONTEXT)?.let { context ->
+                    val current = set[CursorRuntime.CONTEXT] ?: context.text("default")
+                    Text("Context")
+                    CursorRuntime.values(context).forEach { value ->
+                        TextButton(enabled = enabled, onClick = { pick(CursorRuntime.CONTEXT, value) }, modifier = Modifier.testTag("composer-cursor-context:$value")) {
+                            Text((if (value == current) "✓ " else "") + CursorRuntime.valueLabel(context, value))
+                        }
+                    }
+                }
+                CursorRuntime.parameter(row, CursorRuntime.FAST)?.let { fast ->
+                    val current = set[CursorRuntime.FAST] ?: fast.text("default")
+                    Text("Speed")
+                    CursorRuntime.values(fast).forEach { value ->
+                        TextButton(enabled = enabled, onClick = { pick(CursorRuntime.FAST, value) }, modifier = Modifier.testTag("composer-cursor-speed:$value")) {
+                            Text((if (value == current) "✓ " else "") + CursorRuntime.speedLabel(fast, value))
+                        }
+                    }
+                }
+            }
+            // Asked of the engine: DeepSeek Harness enforces Default, Auto and Don't Ask alone, as the server does. Cursor CLI lists Default
+            // too, greyed with why (D6, iOS 6 ①).
             val modes = catalog?.permissions(engine, provider, chosen).orEmpty()
-            if (modes.isNotEmpty()) { Text("Permissions"); modes.forEach { mode ->
-                TextButton(enabled = enabled, onClick = { change("permissionMode", mode) }, modifier = Modifier.testTag("composer-mode:$mode")) {
-                    Text((if (mode == detail.text("permissionMode")) "✓ " else "") + (personalPermissions.firstOrNull { it.first == mode }?.second ?: mode))
+            val listed = if (engine == CursorRuntime.ENGINE && modes.isNotEmpty()) listOf("default") + modes else modes
+            val current = detail.text("permissionMode")
+            if (listed.isNotEmpty()) { Text("Permissions"); listed.forEach { mode ->
+                TextButton(enabled = enabled && mode in modes, onClick = { change("permissionMode", mode) }, modifier = Modifier.testTag("composer-mode:$mode")) {
+                    Column {
+                        Text((if (mode == current) "✓ " else "") + (personalPermissions.firstOrNull { it.first == mode }?.second ?: mode))
+                        // What the mode does there, in the shared table's words, where it does less than its name says.
+                        (if (engine == CursorRuntime.ENGINE) CursorRuntime.modeNote(mode) else null)?.let {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
             } }
             if (catalog?.fast(engine, provider, chosen) == true) TextButton(enabled = enabled, onClick = { model.config(buildJsonObject { put("fastMode", detail.flag("fastMode") != true) }) }) {
@@ -529,6 +578,9 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
     val amber = LocalOrbitColors.current.needsYou
     val draft = model.target != null
     val remembered = LocalDefaultModels.current
+    // A Cursor CLI session that has talked, on a runner that can't carry its conversation: its other accounts and keys are listed but
+    // can't be picked, and the menu says why (D5, iOS 6 ④⑤) — the move the server would refuse.
+    val moveBlocked = CursorRuntime.moveBlocked(engine, detail, catalog.runner, draft)
     fun pick(option: ProviderOption, account: String? = null) = model.config(buildJsonObject {
         put("provider", option.id); put("engine", engine)
         account?.let { put("account", it) }
@@ -542,7 +594,8 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
         val here = option.id == provider
         val blocked = option.unavailable != null && !here
         val repair = option.fixEngine?.takeIf { blocked && fix != null }
-        TextButton(enabled = enabled && (!blocked || repair != null), onClick = { if (repair != null) fix?.invoke(repair) else if (!here) pick(option) },
+        TextButton(enabled = enabled && (!blocked || repair != null) && !(moveBlocked && !here),
+            onClick = { if (repair != null) fix?.invoke(repair) else if (!here) pick(option) },
             modifier = Modifier.testTag("composer-provider:${option.id}")) {
             // What a sign-in is (`opencode auth`, a Google account) goes under its name, as the boards' menus put it.
             Column {
@@ -576,23 +629,28 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
             // moves between — a draft starts on any of them, a session moves only where the runner carries it across; a draft on
             // another credential of this engine lands on the one picked.
             val here = option.id == provider
+            // Cursor CLI's are listed for a session on any runner: one that has not talked moves between them (D5), and one that has lists
+            // them greyed.
             val accounts = if (option.kind != CredentialKind.LOGIN || option.unavailable != null && !here) emptyList()
-                else catalog.accountChoices(engine).takeIf { it.size >= 2 && (draft || here && catalog.movesAccounts(engine)) }.orEmpty()
+                else catalog.accountChoices(engine).takeIf { it.size >= 2 &&
+                    (draft || here && (catalog.movesAccounts(engine) || engine == CursorRuntime.ENGINE)) }.orEmpty()
             if (accounts.isEmpty()) { row(option); return@forEach }
             // The account this session (or draft) is on, as the Provider row names it (A07-19 (d)): Automatic while Orbit picks it,
             // else the one picked, its own, its workspace's — Default, which dispatch resolves a sign-in with no account named to.
             val on = if (here) catalog.accountOn(engine, detail, held, draft) else null
             fun mark(account: String) = if (on != null && account == (if (on.automatic) EngineAccounts.AUTOMATIC else on.account)) "✓ " else ""
             fun take(account: String) = if (here) model.config(buildJsonObject { put("account", account) }, true) else pick(option, account)
-            AccountRow(mark(EngineAccounts.AUTOMATIC) + EngineCopy.AUTOMATIC, EngineCopy.AUTOMATIC_DETAIL, enabled,
-                spoken = "Automatic: starts on the ${ProviderEngines.cliName(engine)} account whose quota resets soonest, and switches when it hits its limit") {
+            // A Cursor conversation that has started stays on its account: Automatic only picks where one starts.
+            AccountRow(mark(EngineAccounts.AUTOMATIC) + EngineCopy.AUTOMATIC, EngineCopy.AUTOMATIC_DETAIL, enabled && !moveBlocked,
+                spoken = "Automatic: starts on the ${ProviderEngines.cliName(engine)} account whose quota resets soonest" +
+                    if (engine == CursorRuntime.ENGINE) "" else ", and switches when it hits its limit") {
                 take(EngineAccounts.AUTOMATIC)
             }
             accounts.forEach { account ->
                 // Its own quota under it: "5h 12%", or what an Antigravity bucket has left, "gemini-5h 4% left". A signed-out account is a
                 // request for its sign-in, on the runner's page for the engine.
                 AccountRow(mark(account.id) + account.label, account.unavailable?.let { "$it, sign in →" } ?: account.quota,
-                    enabled && (account.unavailable == null || fix != null), nearLimit = account.nearLimit && account.unavailable == null) {
+                    enabled && !moveBlocked && (account.unavailable == null || fix != null), nearLimit = account.nearLimit && account.unavailable == null) {
                     if (account.unavailable == null) take(account.id) else fix?.invoke(engine)
                 }
             }
@@ -600,6 +658,8 @@ private fun ProviderChoices(model: ComposerModel, catalog: ComposerCatalog, engi
     }
     options.filter { it.kind == CredentialKind.POOL }.takeIf { it.isNotEmpty() }?.let { pools -> header(EngineCopy.ACCOUNT_POOLS); pools.forEach { row(it) } }
     options.filter { it.kind == CredentialKind.KEY }.takeIf { it.isNotEmpty() }?.let { keys -> header(EngineCopy.API_KEYS); keys.forEach { row(it) } }
+    if (moveBlocked) Text(CursorRuntime.MOVE_BLOCKED_NOTE, Modifier.padding(top = 8.dp).testTag("composer-provider-move-blocked"),
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     // A Claude subscription token is the one key on Anthropic's protocol OpenCode does not run: its absence there is said.
     if (engine == ProviderEngines.OPENCODE) catalog.providers.filter { it.flag("pool") != true && it.text("runtime") == ProviderEngines.CLAUDE &&
         it["engines"] is JsonArray && catalog.providerEngines(it.text("slug")) == listOf(ProviderEngines.CLAUDE) }.mapNotNull { it.text("label") ?: it.text("slug") }.takeIf { it.isNotEmpty() }?.let {
@@ -646,8 +706,10 @@ internal fun EngineChoices(model: ComposerModel, state: ComposerState, detail: J
                         // The model last picked for the engine and where it lands, while still offered (A07-19 (e), iOS `pickDraft`).
                         val next = catalog.newSessionModel(option.engine, landing.id, remembered)
                         put("model", next); put("effort", "")
-                        // A mode the new engine refuses is not carried over: DeepSeek Harness takes Default, Auto and Don't Ask.
-                        detail.text("permissionMode")?.takeIf { it !in catalog.permissions(option.engine, landing.id, next) }?.let { put("permissionMode", "default") }
+                        // A mode the new engine refuses is not carried over: DeepSeek Harness takes Default, Auto and Don't Ask; Cursor CLI
+                        // has no Default, and starts in Accept Edits (D6).
+                        detail.text("permissionMode")?.takeIf { it !in catalog.permissions(option.engine, landing.id, next) }
+                            ?.let { put("permissionMode", CursorRuntime.fallbackMode(option.engine)) }
                     })
                     close()
                 }.padding(vertical = 10.dp).testTag("engine:${option.engine}"), verticalAlignment = Alignment.CenterVertically,

@@ -1,0 +1,35 @@
+{
+  "deleteRequestedAt": "2026-10-17T07:49:47.311+00:00",
+  "grace": 240,
+  "log": "/mnt/data/managed-runner-lab/test-server/state/logs/t03-runner-5e60f0c8-005b-48cc-8d36-96ff14ebf4a2.log",
+  "logMarks": {
+    "detached": "2026-10-17T07:49:47.328375528Z",
+    "stopping": "2026-10-17T07:49:47.328415581Z"
+  },
+  "logTail": [
+    "2026-10-17T07:48:41.944498119Z [orbit-runner 2026-10-17T07:48:41.944Z] session 01a148d5-9efb-7758-ab03-7ae6a6276ea3 \u2014 created missing workDir \"/var/lib/orbit/home/orbit-repos/identity-check\"",
+    "2026-10-17T07:48:42.165928979Z [orbit-runner 2026-10-17T07:48:42.165Z] session 01a148d5-9efb-7758-ab03-7ae6a6276ea3 \u2014 auto-initialized git repo at \"/var/lib/orbit/home/orbit-repos/identity-check\" (autoInitGit)",
+    "2026-10-17T07:48:42.178308190Z [orbit-runner 2026-10-17T07:48:42.178Z] session 01a148d5-9efb-7758-ab03-7ae6a6276ea3 \u2014 isolated in worktree /var/lib/orbit/home/.orbit/worktrees/01a148d5-9efb-7758-ab03-7ae6a6276ea3 (branch orbit/t03-git-identity-check-7dded5 @ 1ca8b73f)",
+    "2026-10-17T07:48:42.255962709Z [orbit-runner 2026-10-17T07:48:42.255Z] > interactive run 01a148d5-9efb-7758-ab03-7ae6a6276ea3 \u2014 T03 git identity check",
+    "2026-10-17T07:48:57.572413161Z [orbit-runner 2026-10-17T07:48:57.572Z] session 01a148d5-daad-7081-9956-db8a8259f03c \u2014 isolated in worktree /var/lib/orbit/home/.orbit/worktrees/01a148d5-daad-7081-9956-db8a8259f03c (branch orbit/t03-landing-probe-5a6c35 @ f75c2d04)",
+    "2026-10-17T07:48:57.611496571Z [orbit-runner 2026-10-17T07:48:57.611Z] reclaiming session 02a86ce8-5f30-5ae6-b543-03b2bc72083b \u2014 Task: T03 landing probe: add LANDED.txt (late claim check)",
+    "2026-10-17T07:48:57.616404750Z [orbit-runner 2026-10-17T07:48:57.616Z] > interactive run 01a148d5-daad-7081-9956-db8a8259f03c \u2014 t03 landing probe",
+    "2026-10-17T07:48:57.769853838Z [orbit-runner 2026-10-17T07:48:57.769Z] session 02a86ce8-5f30-5ae6-b543-03b2bc72083b \u2014 isolated in worktree /var/lib/orbit/home/.orbit/worktrees/02a86ce8-5f30-5ae6-b543-03b2bc72083b (branch orbit/task-t03-landing-probe-add-landed-txt-61600f @ pinned f75c2d04)",
+    "2026-10-17T07:48:57.990998235Z [orbit-runner 2026-10-17T07:48:57.990Z] > interactive run 02a86ce8-5f30-5ae6-b543-03b2bc72083b \u2014 Task: T03 landing probe: add LANDED.txt",
+    "2026-10-17T07:48:58.043207730Z [orbit-runner 2026-10-17T07:48:58.043Z] \u25cb interactive engine 01a148d5-9efb-7758-ab03-7ae6a6276ea3 recycled (session remains resumable)",
+    "2026-10-17T07:49:12.060465238Z [orbit-runner 2026-10-17T07:49:12.060Z] \u25a0 interactive run 02a86ce8-5f30-5ae6-b543-03b2bc72083b \u2192 SUCCEEDED",
+    "2026-10-17T07:49:14.906531403Z [orbit-runner 2026-10-17T07:49:14.906Z] integration job 79107358-e647-416c-89ad-e17c34bbf8f1 LAND_TASK refs/heads/orbit/task-t03-landing-probe-add-landed-txt-61600f -> refs/heads/project/34hN5f2XmUTCDFMGa5mTR",
+    "2026-10-17T07:49:47.328375528Z [orbit-runner 2026-10-17T07:49:47.328Z] \u23f8 interactive run 01a148d5-9efb-7758-ab03-7ae6a6276ea3 \u2014 detached for shutdown (resumable)",
+    "2026-10-17T07:49:47.328415581Z [orbit-runner 2026-10-17T07:49:47.328Z] runner stopping; draining session supervisors...",
+    "2026-10-17T07:49:47.351864418Z [orbit-runner 2026-10-17T07:49:47.351Z] \u23f8 interactive run 01a148d5-daad-7081-9956-db8a8259f03c \u2014 detached for shutdown (resumable)"
+  ],
+  "podGoneAt": "2026-10-17T07:53:48.659+00:00",
+  "podUid": "5e60f0c8-005b-48cc-8d36-96ff14ebf4a2",
+  "runnerTerminated": {
+    "containerID": "containerd://5cb672b28287209536ca1fd7d47204b61a37b0669e9a6b71bfc1ee9be0ae20c0",
+    "exitCode": 137,
+    "finishedAt": "2026-10-17T07:53:47Z",
+    "reason": "Error",
+    "startedAt": "2026-10-17T07:47:55Z"
+  }
+}

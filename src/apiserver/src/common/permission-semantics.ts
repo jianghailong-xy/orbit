@@ -28,15 +28,16 @@ export function assertDshPermissionMode(permissionMode: string): PermissionMode 
 /**
  * The server half of Cursor CLI's permission table (CURSOR_PERMISSION_MODES), on the same terms as
  * DeepSeek Harness's above: a mode it cannot be held to is refused, never substituted. Default would
- * need a write inside the workspace to ask, which no setting makes Cursor CLI do over ACP, and Auto has
- * no review there Orbit can rely on (docs/cursor-runtime-contract.md §5.4, §16.5). A session nobody
- * named a mode for is given one Cursor CLI keeps when it is created (SessionsService.create).
+ * need a write inside the workspace to ask, which no setting makes Cursor CLI do over ACP
+ * (docs/cursor-runtime-contract.md §5.4, §16.5); Auto is the runner's own review of each request
+ * Cursor CLI asks about. A session nobody named a mode for is given one Cursor CLI keeps when it is
+ * created (SessionsService.create).
  */
 export function assertCursorPermissionMode(permissionMode: string): PermissionMode {
   if (!(CURSOR_PERMISSION_MODES as readonly string[]).includes(permissionMode)) {
     throw new BadRequestException(
       `${ENGINE_CLI_NAMES[AgentProvider.CURSOR]} cannot enforce permission mode "${permissionMode}"; ` +
-        "use Accept Edits, Plan, Don't Ask or Bypass",
+        "use Accept Edits, Plan, Auto, Don't Ask or Bypass",
     );
   }
   return permissionMode as PermissionMode;

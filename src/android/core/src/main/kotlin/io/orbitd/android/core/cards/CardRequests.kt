@@ -90,6 +90,9 @@ object CardRequests {
             CardVerb.RERUN_CHECK -> request(projectPath("promotions", required("promotionId"), "integration", "retry"),
                 buildJsonObject { put("reason", ExceptionCards.retryReason(row)) })
             CardVerb.CANCEL_TASK -> request(listOf("tasks", required("taskId")), buildJsonObject { put("status", "CANCELLED") }, HttpMethod.PATCH)
+            // J-T10's owner end of a timed-out attempt (§4.6 X-E5): the one job the item names, through the same door the landing
+            // page's menu presses. It ends it, and nothing is queued again.
+            CardVerb.ABANDON -> request(projectPath("integration", "jobs", required("integrationJobId"), "abandon"))
             // The task panel's own Reopen task (`TaskReopen`): back to Open, both retirement fields cleared in the one request.
             CardVerb.REOPEN_TASK -> request(listOf("tasks", card.objectId), buildJsonObject {
                 put("status", "OPEN"); put("supersededByTaskId", JsonNull); put("terminalReason", JsonNull)

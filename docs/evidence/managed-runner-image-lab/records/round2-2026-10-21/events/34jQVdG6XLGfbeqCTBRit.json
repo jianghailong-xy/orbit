@@ -1,0 +1,477 @@
+[
+ {
+  "seq": 1,
+  "type": "user",
+  "payload": {
+   "text": "This is an Orbit lab acceptance test. Read the attached file and find its marker. Create a file named REAL.md in the current directory whose only line is that marker, commit it with git using the message 'T03 real session adds REAL.md', then reply in one short line with the marker and the new commit's short hash.",
+   "delivery": "enqueued",
+   "attachments": [
+    {
+     "id": "34jQVd6kNURq9hBaAg6pu",
+     "mime": "text/plain",
+     "name": "t03-real-attachment.txt",
+     "publicId": "34jQVd6kNURq9hBaAg6pu"
+    }
+   ]
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:02.634Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 2,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+   "delivery": "written",
+   "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:02.634Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 3,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-v4-pro",
+   "subtype": "init",
+   "sessionId": "6oh6MLh2wJAQOwB21ahEdV",
+   "sessionPublicId": "6oh6MLh2wJAQOwB21ahEdV"
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:02.850Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 5,
+  "type": "system",
+  "payload": {
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"deepseek-v4-pro\",\"query_source\":\"sdk\"}\n"
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:02.861Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 6,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+   "delivery": "acknowledged",
+   "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:03.519Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 29,
+  "type": "thinking",
+  "payload": {
+   "text": "Let me read the attached file to find the marker.",
+   "thinkingMs": 233
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:09.988Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 30,
+  "type": "system",
+  "payload": {
+   "subtype": "context",
+   "contextTokens": 72643
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:09.988Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 31,
+  "type": "tool_use",
+  "payload": {
+   "id": "call_00_wGUINYugsz3NVCwu0Tei0926",
+   "name": "Read",
+   "input": {
+    "file_path": "/var/lib/orbit/home/.orbit/uploads/01a15b67-58bd-70bc-8f14-ff0b214b5d43/t03-real-attachment.txt"
+   }
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:10.267Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 32,
+  "type": "tool_result",
+  "payload": {
+   "content": "1\tT03 real-session attachment.\n2\tThe marker for this test is: marker-7659a9b5\n3\tCreated 2026-10-20T22:17:01Z on the lab host.\n4\t",
+   "isError": null,
+   "toolUseId": "call_00_wGUINYugsz3NVCwu0Tei0926"
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:10.290Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 86,
+  "type": "thinking",
+  "payload": {
+   "text": "The marker is `marker-7659a9b5`. Create REAL.md with that line, commit, then reply.",
+   "thinkingMs": 267
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:11.866Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 87,
+  "type": "tool_use",
+  "payload": {
+   "id": "call_00_Y4hVMujrlGREE7x4z1DH2734",
+   "name": "Write",
+   "input": {
+    "content": "marker-7659a9b5\n",
+    "file_path": "/var/lib/orbit/home/.orbit/worktrees/01a15b67-58bd-70bc-8f14-ff0b214b5d43/REAL.md"
+   }
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:12.257Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 88,
+  "type": "tool_result",
+  "payload": {
+   "content": "File created successfully at: /var/lib/orbit/home/.orbit/worktrees/01a15b67-58bd-70bc-8f14-ff0b214b5d43/REAL.md (file state is current in your context \u2014 no need to Read it back)",
+   "isError": null,
+   "toolUseId": "call_00_Y4hVMujrlGREE7x4z1DH2734"
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:12.310Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 90,
+  "type": "thinking",
+  "payload": {
+   "text": ""
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:14.190Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 91,
+  "type": "tool_use",
+  "payload": {
+   "id": "call_00_ET_KFJWSWIYrKoKwpIHfGSI8808",
+   "name": "Bash",
+   "input": {
+    "command": "git add REAL.md && git commit -m \"T03 real session adds REAL.md\"",
+    "description": "Commit REAL.md"
+   }
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:14.609Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 93,
+  "type": "tool_result",
+  "payload": {
+   "content": "[orbit/t03-real-deepseek-session-5d6195 be34204] T03 real session adds REAL.md\n 1 file changed, 1 insertion(+)\n create mode 100644 REAL.md",
+   "isError": false,
+   "toolUseId": "call_00_ET_KFJWSWIYrKoKwpIHfGSI8808"
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:14.707Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 95,
+  "type": "thinking",
+  "payload": {
+   "text": ""
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:15.970Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 108,
+  "type": "assistant",
+  "payload": {
+   "text": "marker-7659a9b5 be34204"
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:16.040Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 109,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0.34338080000000004,
+   "subtype": "success",
+   "numTurns": 4,
+   "contextTokens": 73220
+  },
+  "turnId": "34jQVdl6UsmUcKdZAkLeZ",
+  "ts": "2026-10-20T22:21:16.094Z",
+  "turnPublicId": "34jQVdl6UsmUcKdZAkLeZ"
+ },
+ {
+  "seq": 110,
+  "type": "user",
+  "payload": {
+   "text": "The container running you was just recreated. Without running any tool, answer from our conversation in one short line: which marker did the attached file contain, and which short commit hash did you create?",
+   "delivery": "enqueued"
+  },
+  "turnId": "34jQYn9RiYSVgwSzKdYX8",
+  "ts": "2026-10-20T22:23:06.899Z",
+  "turnPublicId": "34jQYn9RiYSVgwSzKdYX8"
+ },
+ {
+  "seq": 111,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34jQYn9RiYSVgwSzKdYX8",
+   "delivery": "written",
+   "turnPublicId": "34jQYn9RiYSVgwSzKdYX8"
+  },
+  "turnId": "34jQYn9RiYSVgwSzKdYX8",
+  "ts": "2026-10-20T22:23:06.899Z",
+  "turnPublicId": "34jQYn9RiYSVgwSzKdYX8"
+ },
+ {
+  "seq": 112,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-v4-pro",
+   "subtype": "init",
+   "sessionId": "6oh6MLh2wJAQOwB21ahEdV",
+   "sessionPublicId": "6oh6MLh2wJAQOwB21ahEdV"
+  },
+  "turnId": "34jQYn9RiYSVgwSzKdYX8",
+  "ts": "2026-10-20T22:23:07.224Z",
+  "turnPublicId": "34jQYn9RiYSVgwSzKdYX8"
+ },
+ {
+  "seq": 114,
+  "type": "system",
+  "payload": {
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"deepseek-v4-pro\",\"query_source\":\"sdk\"}\n"
+  },
+  "turnId": "34jQYn9RiYSVgwSzKdYX8",
+  "ts": "2026-10-20T22:23:07.233Z",
+  "turnPublicId": "34jQYn9RiYSVgwSzKdYX8"
+ },
+ {
+  "seq": 115,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34jQYn9RiYSVgwSzKdYX8",
+   "delivery": "acknowledged",
+   "turnPublicId": "34jQYn9RiYSVgwSzKdYX8"
+  },
+  "turnId": "34jQYn9RiYSVgwSzKdYX8",
+  "ts": "2026-10-20T22:23:07.851Z",
+  "turnPublicId": "34jQYn9RiYSVgwSzKdYX8"
+ },
+ {
+  "seq": 116,
+  "type": "thinking",
+  "payload": {
+   "text": ""
+  },
+  "turnId": "34jQYn9RiYSVgwSzKdYX8",
+  "ts": "2026-10-20T22:23:08.449Z",
+  "turnPublicId": "34jQYn9RiYSVgwSzKdYX8"
+ },
+ {
+  "seq": 117,
+  "type": "system",
+  "payload": {
+   "subtype": "context",
+   "contextTokens": 73304
+  },
+  "turnId": "34jQYn9RiYSVgwSzKdYX8",
+  "ts": "2026-10-20T22:23:08.449Z",
+  "turnPublicId": "34jQYn9RiYSVgwSzKdYX8"
+ },
+ {
+  "seq": 130,
+  "type": "assistant",
+  "payload": {
+   "text": "marker-7659a9b5 be34204"
+  },
+  "turnId": "34jQYn9RiYSVgwSzKdYX8",
+  "ts": "2026-10-20T22:23:08.456Z",
+  "turnPublicId": "34jQYn9RiYSVgwSzKdYX8"
+ },
+ {
+  "seq": 131,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0.015255200000000002,
+   "subtype": "success",
+   "numTurns": 1,
+   "contextTokens": 73304
+  },
+  "turnId": "34jQYn9RiYSVgwSzKdYX8",
+  "ts": "2026-10-20T22:23:08.504Z",
+  "turnPublicId": "34jQYn9RiYSVgwSzKdYX8"
+ },
+ {
+  "seq": 132,
+  "type": "prompt_suggestion",
+  "payload": {
+   "text": "marker-7659a9b5 be34204",
+   "source": "engine"
+  },
+  "turnId": "34jQYn9RiYSVgwSzKdYX8",
+  "ts": "2026-10-20T22:23:10.022Z",
+  "turnPublicId": "34jQYn9RiYSVgwSzKdYX8"
+ },
+ {
+  "seq": 133,
+  "type": "user",
+  "payload": {
+   "text": "Use your Bash tool to run exactly this command: sleep 40 && echo drained-ok. When it finishes, reply with only its output.",
+   "delivery": "enqueued"
+  },
+  "turnId": "34jQZIP3aEEPi7gHNKTr5",
+  "ts": "2026-10-20T22:23:26.589Z",
+  "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+ },
+ {
+  "seq": 134,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34jQZIP3aEEPi7gHNKTr5",
+   "delivery": "written",
+   "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+  },
+  "turnId": "34jQZIP3aEEPi7gHNKTr5",
+  "ts": "2026-10-20T22:23:26.590Z",
+  "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+ },
+ {
+  "seq": 135,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-v4-pro",
+   "subtype": "init",
+   "sessionId": "6oh6MLh2wJAQOwB21ahEdV",
+   "sessionPublicId": "6oh6MLh2wJAQOwB21ahEdV"
+  },
+  "turnId": "34jQZIP3aEEPi7gHNKTr5",
+  "ts": "2026-10-20T22:23:26.601Z",
+  "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+ },
+ {
+  "seq": 137,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34jQZIP3aEEPi7gHNKTr5",
+   "delivery": "acknowledged",
+   "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+  },
+  "turnId": "34jQZIP3aEEPi7gHNKTr5",
+  "ts": "2026-10-20T22:23:27.374Z",
+  "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+ },
+ {
+  "seq": 138,
+  "type": "thinking",
+  "payload": {
+   "text": ""
+  },
+  "turnId": "34jQZIP3aEEPi7gHNKTr5",
+  "ts": "2026-10-20T22:23:28.292Z",
+  "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+ },
+ {
+  "seq": 139,
+  "type": "tool_use",
+  "payload": {
+   "id": "call_00_ET_kTOWxAsQ5yEd1JhLoWB38033",
+   "name": "Bash",
+   "input": {
+    "command": "sleep 40 && echo drained-ok",
+    "description": "Sleep then echo marker"
+   }
+  },
+  "turnId": "34jQZIP3aEEPi7gHNKTr5",
+  "ts": "2026-10-20T22:23:28.527Z",
+  "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+ },
+ {
+  "seq": 140,
+  "type": "system",
+  "payload": {
+   "subtype": "context",
+   "contextTokens": 73377
+  },
+  "turnId": "34jQZIP3aEEPi7gHNKTr5",
+  "ts": "2026-10-20T22:23:28.527Z",
+  "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+ },
+ {
+  "seq": 143,
+  "type": "tool_result",
+  "payload": {
+   "content": "drained-ok",
+   "isError": false,
+   "toolUseId": "call_00_ET_kTOWxAsQ5yEd1JhLoWB38033"
+  },
+  "turnId": "34jQZIP3aEEPi7gHNKTr5",
+  "ts": "2026-10-20T22:24:08.631Z",
+  "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+ },
+ {
+  "seq": 145,
+  "type": "thinking",
+  "payload": {
+   "text": ""
+  },
+  "turnId": "34jQZIP3aEEPi7gHNKTr5",
+  "ts": "2026-10-20T22:24:10.041Z",
+  "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+ },
+ {
+  "seq": 146,
+  "type": "system",
+  "payload": {
+   "subtype": "context",
+   "contextTokens": 73490
+  },
+  "turnId": "34jQZIP3aEEPi7gHNKTr5",
+  "ts": "2026-10-20T22:24:10.041Z",
+  "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+ },
+ {
+  "seq": 151,
+  "type": "assistant",
+  "payload": {
+   "text": "drained-ok"
+  },
+  "turnId": "34jQZIP3aEEPi7gHNKTr5",
+  "ts": "2026-10-20T22:24:10.078Z",
+  "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+ },
+ {
+  "seq": 152,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0.0638904,
+   "subtype": "success",
+   "numTurns": 2,
+   "contextTokens": 73490
+  },
+  "turnId": "34jQZIP3aEEPi7gHNKTr5",
+  "ts": "2026-10-20T22:24:10.126Z",
+  "turnPublicId": "34jQZIP3aEEPi7gHNKTr5"
+ }
+]

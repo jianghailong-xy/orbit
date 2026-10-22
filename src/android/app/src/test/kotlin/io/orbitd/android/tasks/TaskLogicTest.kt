@@ -93,6 +93,20 @@ class TaskLogicTest {
             task(""","completionPolicy":"VERIFICATION_PASSED","verificationState":"RUNNING""""), true))
     }
 
+    @Test fun aRunThatIsTheTasksOnlyStartSaysNothingElseStartsIt() {
+        // Auto-run never picks up an OPEN task in no project that has no prerequisites, so the press is its only start.
+        assertEquals("Nothing starts this task by itself: auto-run needs a prerequisite or a project, and it has neither.",
+            TaskDetailLogic.runNowHint(task(""","projectId":null,"runAt":null,"dependsOn":[]""")))
+        // A project or a prerequisite is something that can start it, and so is a schedule.
+        assertNull(TaskDetailLogic.runNowHint(task(""","projectId":"p","dependsOn":[]""")))
+        assertNull(TaskDetailLogic.runNowHint(task(""","dependsOn":[{"dependsOnTask":{"id":"a","status":"DONE"}}]""")))
+        assertNull(TaskDetailLogic.runNowHint(task(""","runAt":"2026-10-18T09:00:00.000Z","dependsOn":[]""")))
+        // A task that is not OPEN is waiting for no press, and a row without its prerequisites is told nothing new.
+        for (status in listOf("IN_PROGRESS", "DONE", "FAILED", "CANCELLED"))
+            assertNull(status, TaskDetailLogic.runNowHint(task(""","status":"$status","dependsOn":[]""")))
+        assertNull(TaskDetailLogic.runNowHint(task()))
+    }
+
     @Test fun ownerConfirmationIsOnePlaceToAnswer() {
         val owned = task(""","completionCriterion":"OWNER_CONFIRMED"""")
         assertEquals(OwnerPanelAction.Pointer("run"), OwnerConfirmations.panelAction(json("""{"waiting":{"sessionId":"run","requestId":"r"}}"""), owned))

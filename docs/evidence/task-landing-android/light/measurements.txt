@@ -1,0 +1,7 @@
+checking: badge=Landing | step=checking
+running cadence: 2 reads in 9 s of page time; offsets 0, 1208, 1828, 4491 ms
+checks failed: badge=Landing checks failed | step=stopped while checking
+landed: badge=Landed | open=false
+queued: badge=Waiting to land | reason=Waiting to land: next for the runner, which claims it on its next heartbeat
+queued cadence: 2 reads at quarter-minute steps; offsets 0, 932, 2181, 6364 ms
+open landing: title=Land · P10 · Wire the landing | sub=Run by Orbit · runner wikova

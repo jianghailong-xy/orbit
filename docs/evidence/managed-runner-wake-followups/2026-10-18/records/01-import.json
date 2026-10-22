@@ -1,0 +1,16 @@
+{
+ "archive": "/mnt/data/tmp/34hpKqWRaAJbUXoikQ3U4/image/lab.oci.tar",
+ "archiveSha256": "1cebe5ec40d227e1e2b1171f402e64bea235ddd031c0101aaed6144d46237a18",
+ "source": "ebf54ab8ddcb35224a4d8f0c1feae0e480186b38",
+ "productManifest": "sha256:9844c08e26f18dddbdd3a19351aed44c4f827fb43c53dfa2994b0a85cc4658b8",
+ "labManifest": "sha256:3bba6216764f0d09a7f4398be04c3a0c8a00b30cfeb77f0cd8ed90f45795fdd2",
+ "pinned": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+ "cri": {
+  "id": "sha256:1a46bd5c8af6a4d997b2b124a78968f4aa2ad3b4f96b9db6aa9875b3d4611a90",
+  "repoTags": [
+   "docker.io/library/orbit-managed-runner-lab:t06b-ebf54ab8d"
+  ],
+  "size": "500247056"
+ },
+ "note": "single-writer.py import ran the import; its own check expects one digest reference of the image name and found two, T02a's and this one"
+}

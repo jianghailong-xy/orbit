@@ -1,0 +1,138 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": [
+    {
+      "input": {
+        "command": "git push origin HEAD:refs/heads/p5c-probe"
+      },
+      "toolName": "Bash",
+      "toolUseId": "call-<UUID_4>-1\nfc_<UUID_5>_0",
+      "withdrawn": false
+    }
+  ],
+  "checks": [
+    {
+      "name": "routine-command-ran-unasked",
+      "pass": true,
+      "detail": "auto-routine.txt exists"
+    },
+    {
+      "name": "routine-allowed-by-orbit",
+      "pass": true,
+      "detail": "touch requests [[\"`touch auto-routine.txt`\" \"allow-once\"]]"
+    },
+    {
+      "name": "push-asked-and-refused",
+      "pass": true,
+      "detail": "push requests [[\"`git push origin HEAD:refs/heads/p5c-probe`\" \"reject-once\"]], cards [\"Bash {\\\"command\\\":\\\"git push origin HEAD:refs/heads/p5c-probe\\\"}\"]"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.config/cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.config/cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.local/share/cursor-agent",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.local/share/cursor-agent: no such file or directory)"
+    }
+  ],
+  "completions": [
+    {
+      "error": "",
+      "result": "I'll run the two commands in order, starting with creating `auto-routine.txt`.\n\nThe first command succeeded and the second was refused.\n\n1. `touch auto-routine.txt` completed with exit code 0, so the file was created.\n2. `git push origin HEAD:refs/heads/p5c-probe` was rejected and was not retried.",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-1"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+        "input": {
+          "command": "touch auto-routine.txt"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Auto allows a routine command in the workspace",
+        "subtype": "permission_auto_allowed",
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_4>-1\nfc_<UUID_5>_0",
+        "input": {
+          "command": "git push origin HEAD:refs/heads/p5c-probe"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_4>-1\nfc_<UUID_5>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    }
+  ],
+  "facts": {},
+  "mode": "auto",
+  "process": "session",
+  "processes": [
+    "<CLI>/cursor-agent --use-system-ca <CLI>/index.js acp --disable-auto-update --disable-indexing --disable-project-configs",
+    "<ORBIT> mcp",
+    "<CLI>/node <CLI>/index.js worker-server"
+  ],
+  "prompts": [
+    6
+  ],
+  "scenario": "auto",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}

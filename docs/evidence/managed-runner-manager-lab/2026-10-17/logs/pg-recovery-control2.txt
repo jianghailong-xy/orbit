@@ -1,0 +1,158 @@
+==> reusing this worktree's lockfile-compatible installation
+==> tsc /root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/node_modules/.bin/tsc (Version 7.0.2)
+==> building @orbit/shared
+==> require.resolve('@orbit/shared') from src/apiserver = /root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/src/shared/dist/index.js
+==> require.resolve('@orbit/shared') from src/web = /root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/src/shared/dist/index.js
+==> OK: /root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f is ready to build and test
+==> building the test tree (rm -rf build first)
+==> provisioning pccspec-pg-275398-20813 (postgres:16-alpine, PGDATA on tmpfs)
+==> PostgreSQL 16.15 on 127.0.0.1:34124, system_identifier=7697748555843792938
+==> prisma migrate deploy (template pccspec_tpl)
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+==> 428 migrations applied
+########## managed-runner-recovery.pg.spec.ts ##########
+TAP version 13
+# coordinator-pg-isolation database=pccspec_1 user=pccspec_ server=172.17.0.4/32:5432 system_identifier=7697748555843792938 version=16.15
+# Subtest: managed runner recovery: restarts, visibility, a held volume and a restored one, on both backends
+    # Subtest: (1) an instance its host reports stopped is started again by itself: the next generation, the same volume and runner [kubernetes]
+    ok 1 - (1) an instance its host reports stopped is started again by itself: the next generation, the same volume and runner [kubernetes]
+      ---
+      duration_ms: 239.840024
+      type: 'test'
+      ...
+    # Subtest: (1) an instance its host reports stopped is started again by itself: the next generation, the same volume and runner [docker]
+    ok 2 - (1) an instance its host reports stopped is started again by itself: the next generation, the same volume and runner [docker]
+      ---
+      duration_ms: 59.567538
+      type: 'test'
+      ...
+    # Subtest: (2) a crash loop spends the attempt budget and ends FAILED; the retry starts afresh; a runner that stayed up starts its count again [kubernetes]
+    ok 3 - (2) a crash loop spends the attempt budget and ends FAILED; the retry starts afresh; a runner that stayed up starts its count again [kubernetes]
+      ---
+      duration_ms: 355.610207
+      type: 'test'
+      ...
+    # Subtest: (2) a crash loop spends the attempt budget and ends FAILED; the retry starts afresh; a runner that stayed up starts its count again [docker]
+    ok 4 - (2) a crash loop spends the attempt budget and ends FAILED; the retry starts afresh; a runner that stayed up starts its count again [docker]
+      ---
+      duration_ms: 107.269718
+      type: 'test'
+      ...
+    # Subtest: (3) out of memory is logged and said to the owner while it restarts and once the budget is spent [kubernetes]
+    ok 5 - (3) out of memory is logged and said to the owner while it restarts and once the budget is spent [kubernetes]
+      ---
+      duration_ms: 221.531606
+      type: 'test'
+      ...
+    # Subtest: (3) out of memory is logged and said to the owner while it restarts and once the budget is spent [docker]
+    ok 6 - (3) out of memory is logged and said to the owner while it restarts and once the budget is spent [docker]
+      ---
+      duration_ms: 61.063233
+      type: 'test'
+      ...
+    # Subtest: (4) an instance that stops after its owner asked it to sleep goes to sleep [kubernetes]
+    ok 7 - (4) an instance that stops after its owner asked it to sleep goes to sleep [kubernetes]
+      ---
+      duration_ms: 73.546413
+      type: 'test'
+      ...
+    # Subtest: (4) an instance that stops after its owner asked it to sleep goes to sleep [docker]
+    ok 8 - (4) an instance that stops after its owner asked it to sleep goes to sleep [docker]
+      ---
+      duration_ms: 23.133866
+      type: 'test'
+      ...
+    # Subtest: (5) a wake while something else holds the volume waits, and completes by itself once the volume is free [kubernetes]
+    ok 9 - (5) a wake while something else holds the volume waits, and completes by itself once the volume is free [kubernetes]
+      ---
+      duration_ms: 156.95797
+      type: 'test'
+      ...
+    # Subtest: (5) a wake while something else holds the volume waits, and completes by itself once the volume is free [docker]
+    ok 10 - (5) a wake while something else holds the volume waits, and completes by itself once the volume is free [docker]
+      ---
+      duration_ms: 76.094867
+      type: 'test'
+      ...
+    # Subtest: (6) a volume lost while asleep fails the wake; restored as recorded, it can be retried and the runner continues on it [kubernetes]
+    ok 11 - (6) a volume lost while asleep fails the wake; restored as recorded, it can be retried and the runner continues on it [kubernetes]
+      ---
+      duration_ms: 146.40396
+      type: 'test'
+      ...
+    # Subtest: (6) a volume lost while asleep fails the wake; restored as recorded, it can be retried and the runner continues on it [docker]
+    ok 12 - (6) a volume lost while asleep fails the wake; restored as recorded, it can be retried and the runner continues on it [docker]
+      ---
+      duration_ms: 53.507465
+      type: 'test'
+      ...
+    # Subtest: (7) a start at the channel's cap on containers waits for room, and starts by itself once a container is removed [docker]
+    ok 13 - (7) a start at the channel's cap on containers waits for room, and starts by itself once a container is removed [docker]
+      ---
+      duration_ms: 85.112855
+      type: 'test'
+      ...
+    # Subtest: (8) a backend that does not answer spends nothing while the runner only looks; one that cannot be reached at all spends nothing while it is started either [kubernetes]
+    ok 14 - (8) a backend that does not answer spends nothing while the runner only looks; one that cannot be reached at all spends nothing while it is started either [kubernetes]
+      ---
+      duration_ms: 547.978804
+      type: 'test'
+      ...
+    # Subtest: (8) a backend that does not answer spends nothing while the runner only looks; one that cannot be reached at all spends nothing while it is started either [docker]
+    ok 15 - (8) a backend that does not answer spends nothing while the runner only looks; one that cannot be reached at all spends nothing while it is started either [docker]
+      ---
+      duration_ms: 224.810578
+      type: 'test'
+      ...
+    # Subtest: (9) a Pod an operator deletes keeps its kubelet's report until the manager has used it; one gone without a report still fences [kubernetes]
+    not ok 16 - (9) a Pod an operator deletes keeps its kubelet's report until the manager has used it; one gone without a report still fences [kubernetes]
+      ---
+      duration_ms: 49.905479
+      type: 'test'
+      location: '/root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:692:13'
+      failureType: 'testCodeFailure'
+      error: |-
+        Expected values to be strictly equal:
+        + actual - expected
+        
+        + 'FENCING'
+        - 'BACKOFF'
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 'BACKOFF'
+      actual: 'FENCING'
+      operator: 'strictEqual'
+      stack: |-
+        TestContext.<anonymous> (/root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:722:26)
+        process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        async Test.run (node:internal/test_runner/test:1409:7)
+        async TestContext.<anonymous> (/root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:692:5)
+        async Test.run (node:internal/test_runner/test:1409:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3)
+      ...
+    1..16
+not ok 1 - managed runner recovery: restarts, visibility, a held volume and a restored one, on both backends
+  ---
+  duration_ms: 2530.249402
+  type: 'test'
+  location: '/root/.orbit/worktrees/d13e7278-4d58-5a48-b982-cb8e9806d18f/src/apiserver/build/managed-runners/managed-runner-recovery.pg.spec.js:78:22'
+  failureType: 'subtestsFailed'
+  error: '1 subtest failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 17
+# suites 0
+# pass 15
+# fail 2
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2715.684694
+SPEC_EXIT=1
+==== managed-runner-recovery.pg.spec.ts tests=17 pass=15 fail=2 skipped=0 node exited rc=1; 2 failing
+RED: managed-runner-recovery.pg.spec.ts: node exited rc=1; 2 failing
+==> removing pccspec-pg-275398-20813

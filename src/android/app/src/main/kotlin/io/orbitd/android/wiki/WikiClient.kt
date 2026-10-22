@@ -108,10 +108,9 @@ internal class WikiClient(private val api: OrbitApi, private val handle: Session
      * pages is the one bound to it (design §12.3.4). Null from a server that did not say. */
     suspend fun coordinatorWorkspace(projectId: String): String? = json(listOf("projects", projectId))["coordinatorWorkspaceId"].text()
 
-    /** The options a maintenance form offers: the account's workspaces and runners, and its providers. */
+    /** The options a maintenance form offers: the account's workspaces and runners. */
     suspend fun workspaces(): JsonArray = json(listOf("workspaces")) as? JsonArray ?: JsonArray(emptyList())
     suspend fun runners(): JsonArray = json(listOf("runners")) as? JsonArray ?: JsonArray(emptyList())
-    suspend fun providers(): JsonArray = json(listOf("providers")) as? JsonArray ?: JsonArray(emptyList())
 }
 
 /** What the server said when it refused a write — its own sentence — or, when it said none, what kind of failure it was

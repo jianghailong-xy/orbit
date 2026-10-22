@@ -39,17 +39,17 @@ import {
 } from './wiki-docs-writer';
 
 /**
- * One input, one deterministic answer on both paths (project criterion: "the deterministic results agree on the
- * old path and the new"): `src/shared/src/wiki-docs-build.fixture.json` holds what the runner's Go code
- * (src/runner-go/wiki_docs_build.go) makes of a confirmed document's sections on a checkout of the fixture's files —
+ * One input, one deterministic answer (project criterion: "the deterministic results agree on the old path and the
+ * new"): `src/shared/src/wiki-docs-build.fixture.json` holds what the runner's Go code
+ * (src/runner-go/wiki_docs_build.go) made of a confirmed document's sections on a checkout of the fixture's files —
  * the material, the filter and the cap, the fingerprint, the prompts, a scripted merge and draft as read, the
  * footnotes with their quotes found in the files, the quote repair and the rewrite asked for, the ledger and the
  * overview — and of a quote's lines, a line's sentences and a sentence's fact tokens. This holds the server's port
- * to the same bytes, step for step in the order the build takes them. The Go side holds itself to the same file
- * (wiki_docs_build_fixture_test.go), and writes it.
+ * to the same bytes, step for step in the order the build takes them. The Go side's test
+ * (wiki_docs_build_fixture_test.go) wrote the file; P11 deleted it with the Go code, and the file is frozen since.
  *
  * The fingerprint matters most: a section whose stored fingerprint is the one its material gives is not written
- * again, so a space moved from the runner's build to the server's keeps every section the runner wrote.
+ * again, so a space moved from the runner's build to the server's kept every section the runner wrote.
  */
 
 // From build/wiki-worker back to src/shared.
@@ -98,7 +98,7 @@ const repo = new WikiDocsSnapshotRepo(
   async (wanted) => new Map(wanted.map((file): [string, WikiRepoFileRead] => [file, { path: file, state: 'found', text: FIXTURE.files[file], sizeBytes: sizes.get(file) ?? 0 }])),
 );
 
-/** The document as the runner decodes the plan read (`wikiDocsPlanDoc`). */
+/** The document as the runner decoded the plan read (`wikiDocsPlanDoc`). */
 const doc = FIXTURE.doc as unknown as WikiDocsPlanDoc;
 
 /** A record as the material read hands it out, with only what the fixture names set. */

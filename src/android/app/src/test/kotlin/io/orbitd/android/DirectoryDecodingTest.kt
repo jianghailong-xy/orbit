@@ -42,6 +42,23 @@ class DirectoryDecodingTest {
         workspaces = rows(workspaces), sessions = sessions.mapValues { rows(it.value) },
         folders = rows(folders), tags = rows(tags), runners = rows(runners))), trashing)
 
+    /** §2.9 LS6: a flat read that happens to carry a LANDING row still decodes — the row's two optional fields are read, and its kind
+     * is what the project's pages sort it by. One unknown row must never make the whole directory unreadable. */
+    @Test fun aLandingRowInAFlatReadStillDecodes() {
+        val landing = """{"id":"l1","status":"AWAITING_INPUT","title":"Land · Wire the page","sessionKind":"LANDING",
+            "landing":{"subject":"TASK","state":"AWAITING_DECISION","settledAs":null,"settledAt":null},
+            "projectMembership":{"projectId":"p1","projectTitle":"Launch","projectStatus":"OPEN","role":"LANDING"}}"""
+        val data = directoryData(RealtimeState(directoryFresh = true, directory = DirectorySnapshot(
+            workspaces = rows(workspaces), sessions = mapOf("open" to rows("[$landing,${session("s1", "Directory check")}]")),
+            folders = rows(folders), tags = rows(tags), runners = rows(runners))))
+        assertNull(data.error)
+        val row = data.sessions.getValue("open").first { it.id == "l1" }
+        assertTrue(row.isLanding); assertTrue(row.projectMembership!!.isLanding)
+        assertEquals("AWAITING_DECISION", row.landing?.state); assertNull(row.landing?.settledAs)
+        assertEquals(listOf("l1", "s1"), data.sessions.getValue("open").map { it.id })
+        assertEquals("a conversation row is not a landing", false, data.sessions.getValue("open").last().isLanding)
+    }
+
     /** A05-9: a session on its way to Trash is in no view of the decoded directory — whichever read the snapshot came from — so
      * nothing drawn from it lists or counts it; every other row is as the server sent it. */
     @Test fun aSessionOnItsWayToTrashIsInNoViewOfTheDirectory() {

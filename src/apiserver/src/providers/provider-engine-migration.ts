@@ -1038,7 +1038,9 @@ async function ownersToMigrate(db: Prisma.TransactionClient, fullScan: boolean):
  */
 async function backfillLines(db: Prisma.TransactionClient): Promise<ReportLine[]> {
   const sessions = await db.session.findMany({
-    where: { engine: null },
+    // LANDING rows have no engine by design (0436, contract §2.9 LS1): they are platform
+    // containers, never a conversation an engine ran, so "no engine recorded" is not UNRESOLVED.
+    where: { engine: null, sessionKind: 'CONVERSATION' },
     select: { id: true, ownerId: true, provider: true, providerBuiltin: true, engine: true, runtimeSessionId: true },
     orderBy: { id: 'asc' },
   });

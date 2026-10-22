@@ -9,7 +9,9 @@ import io.orbitd.android.management.RunnerCopy
 import io.orbitd.android.management.RunnerPage
 import io.orbitd.android.management.UsageRow
 import io.orbitd.android.management.accountSnapshot
+import io.orbitd.android.management.accountSnapshotReported
 import io.orbitd.android.management.bindingRow
+import io.orbitd.android.management.cursorUsageLimit
 import io.orbitd.android.management.usageRows
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
@@ -140,10 +142,12 @@ data class PoolAccount(val pool: String, val label: String, val usage: JsonObjec
  * What the composer's pickers judge by: the runner a session runs on (its engines, accounts, model catalogue and quotas) and the
  * account's keys and pools ([providers]: GET /providers with each key's `engines`, and the pools read as providers). [own] is the
  * account's own keys turned off included (GET /providers/mine), read only when a session's key is no longer listed: it tells a
- * key turned off from one deleted. Everything here is asked of an engine — the session's, fixed for its life — and of a credential
- * that engine runs (docs/provider-engine-contract.md §2).
+ * key turned off from one deleted. [fleet] is every runner of the account as GET /runners listed them, which says whether Cursor CLI
+ * is drawn at all (ProviderEngines.androidShowsEngine); without it, the runner above decides. Everything here is asked of an engine —
+ * the session's, fixed for its life — and of a credential that engine runs (docs/provider-engine-contract.md §2).
  */
-data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObject>, val own: List<JsonObject>? = null) {
+data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObject>, val own: List<JsonObject>? = null,
+    val fleet: List<JsonObject>? = null) {
     /** The key or pool [provider] names. An engine's own sign-in and OpenCode's own config never match one. */
     fun row(provider: String?): JsonObject? = provider?.takeIf { it !in ProviderEngines.LOGIN_ENGINES && it != ProviderEngines.OPENCODE }
         ?.let { slug -> providers.firstOrNull { it.text("slug") == slug } }
@@ -209,12 +213,13 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         return PoolAccount(pool.label, member.label, member.planUsage, current, accounts, shared)
     }
     /** The runner's slash commands and skills for a session on [engine] (web `slashAssetMatchesEngine`): asked of the engine, never of
-     * the provider — a DeepSeek key on Claude Code has Claude Code's. Codex, OpenCode, Antigravity and DeepSeek Harness take none. */
+     * the provider — a DeepSeek key on Claude Code has Claude Code's. Codex, OpenCode, Antigravity and DeepSeek Harness take none; Kimi
+     * Code and Cursor CLI list their own, which the runner reports as the CLI announces them, tagged with the engine. */
     fun slashItems(engine: String, agentId: String?): List<JsonObject> =
         (runner.objects("commands") + runner.objects("skills")).filter { item ->
             (item.text("agentId").isNullOrEmpty() || item.text("agentId") == agentId) && when (engine) {
                 ProviderEngines.CODEX, ProviderEngines.OPENCODE, ProviderEngines.ANTIGRAVITY, ProviderEngines.DSH -> false
-                ProviderEngines.KIMI -> item.text("provider") == "kimi"
+                ProviderEngines.KIMI, ProviderEngines.CURSOR -> item.text("provider") == engine
                 else -> item.text("provider") in listOf(null, "claude")
             }
         }.sortedWith(compareBy({ it.flag("builtin") == true }, { it.text("name")?.lowercase() }))
@@ -227,6 +232,9 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
      */
     fun models(engine: String, provider: String): List<JsonObject> {
         if (engine == ProviderEngines.DSH) return catalogRows(ProviderEngines.DSH).orEmpty()
+        // Cursor CLI's catalogue on its own sign-in and on a Cursor key alike (contract §10). Until a runner reports one, the one choice
+        // that is true is naming no model, which a session runs as Cursor's own Auto.
+        if (engine == ProviderEngines.CURSOR) return catalogRows(ProviderEngines.CURSOR)?.takeIf { it.isNotEmpty() } ?: listOf(CURSOR_AUTO_FALLBACK)
         val row = row(provider)
         if (row != null) {
             val live = if (row.flag("modelsFromRuntime") == true && row.text("runtime") != ProviderEngines.DSH)
@@ -245,6 +253,9 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         val row = row(provider)
         return when {
             engine == ProviderEngines.DSH -> reported(ProviderEngines.DSH) ?: first
+            // Cursor CLI starts a session on Auto (contract §10, §16.3): its catalogue's Auto row where it has one, else none named.
+            engine == ProviderEngines.CURSOR -> reported(ProviderEngines.CURSOR)
+                ?: models(engine, provider).firstOrNull { it.text("value") == CursorRuntime.AUTO_MODEL }?.text("value") ?: first
             row != null -> if (row.flag("modelsFromRuntime") == true && row.text("runtime") != ProviderEngines.DSH)
                 reported(ProviderEngines.nativeEngine(row.text("runtime"))) ?: first
                 else row.text("defaultModel")?.takeIf { it.isNotEmpty() } ?: first
@@ -280,7 +291,9 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         val judge = if (engine == ProviderEngines.DSH) engine else row?.let { ProviderEngines.nativeEngine(it.text("runtime")) } ?: engine
         val offered = catalogRows(judge).orEmpty()
         if (offered.isEmpty() || (runner["runtimeDefaultModels"] as? JsonObject)?.text(judge) == model) return model
-        return model.takeIf { offered.any { it.text("value") == model } }
+        // A Cursor CLI model is offered by its name, whatever parameters it carries.
+        val name = if (judge == ProviderEngines.CURSOR) CursorRuntime.modelBase(model) else model
+        return model.takeIf { offered.any { it.text("value") == name } }
     }
 
     /** The model a new session on [engine] with [provider] starts on (A07-19 (e); OrbitKit `AgentDefaults.newSessionModel`, web
@@ -300,20 +313,35 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
      * session's next turn, a session's own `<engine>AccountPinned`; else on the account it names — that pick, the session's own, the
      * workspace's — and on Default where the runner lists no such account. [detail] is the session's read, or the draft's workspace,
      * with what is held over it.
+     *
+     * While Default is removed from Orbit nothing runs on it (the server's accountOnRunner): a workspace set to it leaves the account to
+     * Orbit, and Default — or an account the runner no longer reports — is Automatic's pick among the accounts that remain, a pin to it
+     * included, wherever the workspace's env leaves the account to Orbit.
      */
     fun accountOn(engine: String, detail: JsonObject, held: JsonObject, draft: Boolean): AccountOn {
         val accounts = accounts(engine)
         val workspace = if (draft) detail else detail["workspace"] as? JsonObject
+        val env = workspace?.get("env") as? JsonObject
         val pick = held.text("account")
-        val offered = EngineAccounts.automaticOffered(engine, workspace?.text("${engine}Account"), workspace?.get("env") as? JsonObject, accounts.size)
+        val remaining = removedDefaultPick(engine)?.takeIf { EngineAccounts.envLeavesAccount(engine, env) }
+        val offered = EngineAccounts.automaticOffered(engine,
+            workspace?.text("${engine}Account")?.takeUnless { remaining != null && it == EngineAccounts.DEFAULT }, env, accounts.size)
+        val named = pick?.takeIf { it != EngineAccounts.AUTOMATIC } ?: detail.text("${engine}Account") ?: workspace?.text("${engine}Account")
+        val reported = named?.takeIf { id -> accounts.any { it.text("id") == id } }
         val automatic = offered && when {
+            remaining != null && reported == null -> true
             pick != null -> pick == EngineAccounts.AUTOMATIC
             // A draft with nothing picked, and an ended session's switch onto the sign-in naming no account, start on Automatic's.
             draft || held.text("provider") == engine -> true
             else -> detail.flag("${engine}AccountPinned") != true
         }
-        val named = pick?.takeIf { it != EngineAccounts.AUTOMATIC } ?: detail.text("${engine}Account") ?: workspace?.text("${engine}Account")
-        return AccountOn(automatic, named?.takeIf { id -> accounts.any { it.text("id") == id } } ?: EngineAccounts.DEFAULT)
+        return AccountOn(automatic, reported ?: remaining ?: EngineAccounts.DEFAULT)
+    }
+
+    /** While [engine]'s Default is removed from Orbit (`removedDefault`), Automatic's pick among the accounts that remain (shared
+     * accountToStartOn's `defaultRemoved`); null while Default is in use. */
+    private fun removedDefaultPick(engine: String): String? = health(engine)?.takeIf { RunnerPage.removedDefault(it) != null }?.let {
+        EngineAccounts.toStartOn(accounts(engine), EngineAccounts.usage(engine, runner), System.currentTimeMillis(), defaultRemoved = true)
     }
 
     /** What the Provider row says the session (or draft) is on (A07-19 (d); OrbitKit `SessionProviderChoices.providerValue`, web
@@ -325,17 +353,31 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
             val accounts = accounts(engine)
             if (option.id != engine || accounts.size < 2) option.label
             else accountOn(engine, detail, held, draft).let { on ->
-                // Automatic is said where the account rows offer it: a draft's, or a session's on a runner that moves it between them.
-                if (on.automatic && (draft || movesAccounts(engine))) EngineCopy.AUTOMATIC else RunnerPage.accountLabel(on.account, accounts)
+                // Automatic is said where the account rows offer it: a draft's, or a session's on a runner that moves it between them —
+                // and every Cursor CLI session's, whose rows are listed whether or not it may still move (D5).
+                if (on.automatic && (draft || movesAccounts(engine) || engine == ProviderEngines.CURSOR)) EngineCopy.AUTOMATIC
+                else RunnerPage.accountLabel(on.account, accounts)
             }
         }
         else -> option.label
     }
 
+    /** [model]'s row among the pair's models: a Cursor CLI model's by its name, whatever parameters the value carries beside it. */
+    fun modelRow(engine: String, provider: String, model: String?): JsonObject? {
+        val value = if (engine == ProviderEngines.CURSOR) model?.let(CursorRuntime::modelBase) else model
+        return models(engine, provider).firstOrNull { it.text("value") == value }
+    }
+
     /** A model as its row names it, or the id itself; an empty one is the runtime's own pick. */
     fun modelLabel(engine: String, provider: String, model: String): String =
-        models(engine, provider).firstOrNull { it.text("value") == model }?.let { it.text("label") ?: model }
-            ?: model.ifEmpty { if (engine == ProviderEngines.OPENCODE) "Managed by OpenCode" else "Runtime default" }
+        modelRow(engine, provider, model)?.let { it.text("label") ?: model }
+            // Cursor CLI's Auto, which its catalogue names `default` and no model named runs too.
+            ?: if (CursorRuntime.onAuto(engine, model)) CursorRuntime.AUTO
+            else model.ifEmpty { if (engine == ProviderEngines.OPENCODE) "Managed by OpenCode" else "Runtime default" }
+
+    /** Whether this runner can start a Cursor CLI session, as the server admits one (web `cursorRunnerState`): null when it can, else why
+     * not, most fundamental first — whichever credential it spends, a key as much as its own sign-in. */
+    fun cursorBlocker(): String? = CursorRuntime.state(runner).label
 
     /** Whether this runner can start a DeepSeek Harness session, as the server admits one (web `dshRunnerState`): null when it can,
      * else why not, most fundamental first. A runner that has not reported Harness claims nothing. */
@@ -365,11 +407,13 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
     fun credentials(engine: String, antigravityKey: Boolean = false): List<ProviderOption> {
         val health = health(engine)
         val reported = runner["engines"] is JsonArray
-        if (reported && health == null && engine != ProviderEngines.DSH && engine != ProviderEngines.OPENCODE) return emptyList()
+        // Cursor CLI always has its own sign-in to list: a runner that can't run it lists it with why (web `engineProviders`).
+        if (reported && health == null && engine != ProviderEngines.DSH && engine != ProviderEngines.OPENCODE && engine != ProviderEngines.CURSOR) return emptyList()
         // What a credential that brings its own key needs from this runner: the engine's CLI — Antigravity's on its own terms, a
-        // runner too old for it included — and for Harness what the server admits it on. An engine page fixes the first two.
+        // runner too old for it included — and for Harness and Cursor CLI what the server admits them on. An engine page fixes the rest.
         val carried = when (engine) {
             ProviderEngines.DSH -> dshBlocker()
+            ProviderEngines.CURSOR -> cursorBlocker()
             ProviderEngines.ANTIGRAVITY -> ProviderChoices.antigravityBlocker(runner["antigravity"] as? JsonObject, health)
             ProviderEngines.OPENCODE -> if (reported && health?.flag("installed") != true) RunnerCopy.NOT_INSTALLED else null
             else -> if (health?.flag("installed") == false) RunnerCopy.NOT_INSTALLED else null
@@ -408,7 +452,9 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
                 if (googleAccount) "Google account" else AccountCopy.ENV_KEY, engine.takeIf { blocker != null })
         }
         val signedOut = health?.text("auth") == "no" && health.objects("accounts").none { it.text("auth") == "yes" }
-        val blocker = if (health?.flag("installed") == false) RunnerCopy.NOT_INSTALLED else if (signedOut) "Not signed in" else null
+        // Cursor CLI's runner has to run the pinned build first (web `cursorBlocker`), then the sign-in is every engine's.
+        val blocker = (if (engine == ProviderEngines.CURSOR) cursorBlocker() else null)
+            ?: if (health?.flag("installed") == false) RunnerCopy.NOT_INSTALLED else if (signedOut) "Not signed in" else null
         return ProviderOption(engine, signInLabel(engine), CredentialKind.LOGIN, models(engine, engine), blocker, fixEngine = engine.takeIf { blocker != null })
     }
 
@@ -450,14 +496,15 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
     }
 
     /**
-     * The New Session's engines, in ALL_ENGINES order (Claude Code, Codex, Kimi Code, Antigravity CLI, OpenCode, DeepSeek Harness),
-     * each with its credentials and the one a pick of it lands on: the first of [preferred] it holds that can run (the draft's pick,
+     * The New Session's engines, in ALL_ENGINES order (Claude Code, Codex, Kimi Code, Antigravity CLI, OpenCode, DeepSeek Harness, Cursor
+     * CLI), each with its credentials and the one a pick of it lands on: the first of [preferred] it holds that can run (the draft's pick,
      * then what the workspace last ran), else its own sign-in, else the first credential that can run. An engine with nothing to run
      * on here is left out — except DeepSeek Harness on a runner that could run it: with no DeepSeek key yet it offers the connection.
-     * One this app does not draw yet (ProviderEngines.androidShowsEngine) is never listed.
+     * Cursor CLI always has its own sign-in to list, so a runner that can't run it lists it greyed with why; and it is listed at all only
+     * once a runner of the account knows it (ProviderEngines.androidShowsEngine, over [fleet]).
      */
     fun engines(preferred: List<Pair<String?, String?>> = emptyList(), antigravityKey: Boolean = false): List<EngineOption> =
-        ProviderEngines.ALL_ENGINES.filter(ProviderEngines::androidShowsEngine).mapNotNull { engine ->
+        ProviderEngines.ALL_ENGINES.filter { ProviderEngines.androidShowsEngine(it, fleet ?: listOf(runner)) }.mapNotNull { engine ->
             val options = credentials(engine, antigravityKey)
             if (options.isEmpty()) {
                 return@mapNotNull if (engine == ProviderEngines.DSH && dshBlocker() != "Update runner")
@@ -492,6 +539,11 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
             val label = RunnerPage.accountLabel(id, accounts)
             // Antigravity's Default on the runner's own Gemini key runs, on the key, with no quota of its own: not signed out.
             if (RunnerPage.runsOnEnvKey(health, id, account.text("auth"))) return@map AccountChoice(id, label, AccountCopy.ENV_KEY)
+            // A Cursor CLI account is spent once a turn on it met Cursor's limit, which no reading says (web `accountChoices`).
+            if (provider == ProviderEngines.CURSOR && account.text("auth") == "yes" &&
+                cursorUsageLimit(accountSnapshotReported(usage, id), System.currentTimeMillis()) != null) {
+                return@map AccountChoice(id, label, CursorRuntime.SPENT, nearLimit = true)
+            }
             val own = if (account.text("auth") == "yes") accountSnapshot(usage, id) else null
             val rows = own?.let(::usageRows).orEmpty()
             // The window closest to its limit; a bucket's row counts what is left, so its tightest is the binding one.
@@ -510,6 +562,10 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
     fun permissions(engine: String, provider: String, model: String): List<String> {
         val modes = listOf("default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions")
         if (engine == ProviderEngines.DSH) return modes.filter { it in ProviderEngines.DSH_PERMISSION_MODES }
+        // Cursor CLI keeps every mode but Default, which can't ask before an edit (the owner's choice D6; the server refuses it). Auto is
+        // the runner's own review of each request, on any model; Bypass goes on a root runner, as everywhere.
+        if (engine == ProviderEngines.CURSOR) return modes.filter { it in CursorRuntime.PERMISSION_MODES &&
+            !(runner.flag("runsAsRoot") == true && it == "bypassPermissions") }
         val reported = models(engine, provider).firstOrNull { it.text("value") == model }
         return modes.filterNot { mode ->
             (runner.flag("runsAsRoot") == true && mode == "bypassPermissions") ||
@@ -523,7 +579,7 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
      * under OpenCode the same key's model is OpenCode's to describe, and says none here (contract §2.3). */
     fun efforts(engine: String, provider: String, model: String): List<String> {
         if (engine == ProviderEngines.OPENCODE && row(provider) != null) return emptyList()
-        return models(engine, provider).firstOrNull { it.text("value") == model }?.strings("reasoningLevels").orEmpty()
+        return modelRow(engine, provider, model)?.strings("reasoningLevels").orEmpty()
     }
 
     /** Whether [model] has a fast lane on [engine] (@orbit/shared `fastModeAvailable`): Claude Code's where its row says so, Codex's
@@ -537,6 +593,9 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         }
     }
 }
+
+/** Cursor CLI's one model while a runner has reported no catalogue: naming none, which runs Auto. */
+private val CURSOR_AUTO_FALLBACK = buildJsonObject { put("value", ""); put("label", CursorRuntime.AUTO) }
 
 /** One account's tightest window, compactly: "5h 100%" — or, for an Antigravity bucket, which counts what is left, its bucket
  * and that: "gemini-5h 4% left". */

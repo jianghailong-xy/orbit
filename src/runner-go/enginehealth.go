@@ -322,6 +322,23 @@ type engineHealthProbe struct {
 	// sign-in the catalog has to hear about even though the engine was never signed out
 	// (kimi_region.go).
 	kimiRegions map[string]string
+	// Closed once a probe has completed (`probed`), made on first use; kept under mu.
+	done chan struct{}
+}
+
+// probed is closed once a probe has completed: what a managed instance's first heartbeat waits for
+// (managedStartupBeat), so that it reports this machine's engines rather than nothing.
+func (p *engineHealthProbe) probed() <-chan struct{} {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.doneLocked()
+}
+
+func (p *engineHealthProbe) doneLocked() chan struct{} {
+	if p.done == nil {
+		p.done = make(chan struct{})
+	}
+	return p.done
 }
 
 func (p *engineHealthProbe) refresh() {
@@ -338,6 +355,11 @@ func (p *engineHealthProbe) refreshLocked() {
 	next := probe()
 	p.mu.Lock()
 	p.snapshot = next
+	select {
+	case <-p.doneLocked():
+	default:
+		close(p.done)
+	}
 	p.mu.Unlock()
 	// Only now, so the refresh this asks for already reads the engine as signed in.
 	if p.signedInSinceLastProbe(next) && p.onSignIn != nil {

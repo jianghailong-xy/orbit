@@ -38,11 +38,11 @@ data class WikiAnchor(
 
 // MARK: a space
 
-/** Contract `space.settings.maintenance`; a key left out reads as its default, a null look-back is all history. */
-data class WikiMaintenanceSettings(val enabled: Boolean, val workspaceId: String?, val provider: String,
-    val dailyRunLimit: Int, val lookbackDays: Int?, val listId: String?) {
+/** Contract `space.settings.maintenance`; a key left out reads as its default, a null look-back is all history. Its
+ * `provider` and `listId` are history the server keeps from before server execution, which this client does not read. */
+data class WikiMaintenanceSettings(val enabled: Boolean, val workspaceId: String?, val dailyRunLimit: Int, val lookbackDays: Int?) {
     companion object {
-        val default = WikiMaintenanceSettings(false, null, "local-vllm", 8, 14, null)
+        val default = WikiMaintenanceSettings(false, null, 8, 14)
         val dailyRunLimitRange = 1..48
         val lookbackDaysRange = 0..365
         fun read(element: JsonElement?): WikiMaintenanceSettings? {
@@ -50,8 +50,7 @@ data class WikiMaintenanceSettings(val enabled: Boolean, val workspaceId: String
             val limit = c["dailyRunLimit"].integer()?.takeIf { it in dailyRunLimitRange }
             val lookback = if (c.containsKey("lookbackDays") && c["lookbackDays"] is JsonNull) null
                 else c["lookbackDays"].integer()?.takeIf { it in lookbackDaysRange } ?: default.lookbackDays
-            return WikiMaintenanceSettings(c["enabled"].bool() ?: default.enabled, c["workspaceId"].text(),
-                c["provider"].text() ?: default.provider, limit ?: default.dailyRunLimit, lookback, c["listId"].text())
+            return WikiMaintenanceSettings(c["enabled"].bool() ?: default.enabled, c["workspaceId"].text(), limit ?: default.dailyRunLimit, lookback)
         }
     }
 }
@@ -267,7 +266,7 @@ data class WikiSpaceRepoHealth(val look: String, val pending: Int = 0) {
 }
 
 /** Whether the server runs this account's wiki (contract `jobs.executor.read`): a control plane older than P9 sends
- * none, which reads as runner. */
+ * none, and the server-only parts are then not drawn. */
 data class WikiExecutorView(val mode: String, val serverExecutes: Boolean) {
     companion object {
         fun read(element: JsonElement?): WikiExecutorView? {

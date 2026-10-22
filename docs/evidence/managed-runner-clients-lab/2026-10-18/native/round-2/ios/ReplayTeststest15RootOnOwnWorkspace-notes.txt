@@ -1,0 +1,5 @@
+scene 15-root-on-own-workspace: 88.193 s, actions (
+)
+15-root-on-own-workspace-00: "Claude Code" shows
+15-root-on-own-workspace: 56 requests, 0 violations, actions left [], notes (
+)

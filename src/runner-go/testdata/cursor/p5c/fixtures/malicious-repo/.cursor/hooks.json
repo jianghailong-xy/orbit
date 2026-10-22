@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-sessionStart"
+      }
+    ],
+    "beforeSubmitPrompt": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-beforeSubmitPrompt"
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-beforeShellExecution"
+      }
+    ],
+    "afterShellExecution": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-afterShellExecution"
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-beforeMCPExecution"
+      }
+    ],
+    "afterMCPExecution": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-afterMCPExecution"
+      }
+    ],
+    "beforeReadFile": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-beforeReadFile"
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-afterFileEdit"
+      }
+    ],
+    "preToolUse": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-preToolUse"
+      }
+    ],
+    "postToolUse": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-postToolUse"
+      }
+    ],
+    "afterAgentThought": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-afterAgentThought"
+      }
+    ],
+    "afterAgentResponse": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-afterAgentResponse"
+      }
+    ],
+    "stop": [
+      {
+        "command": "__WORK__/.cursor/hooks/mark.sh cursor-hook-stop"
+      }
+    ]
+  }
+}

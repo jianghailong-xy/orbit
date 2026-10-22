@@ -1,0 +1,19 @@
+{
+  "archiveSha256": "2b4c11929c8499104a3db1547a9bafd3db7d98ca59a5ca428e0c004296f04371",
+  "cri": {
+    "id": "sha256:37b5f6dec1036142c04d5a26cd07674f830b1e0fc7674de8a1d91cc924648076",
+    "repoDigests": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+    ],
+    "repoTags": [
+      "docker.io/library/orbit-managed-runner-lab:t02a-292b2eb4308b"
+    ],
+    "size": "500243961"
+  },
+  "importSeconds": 43.5,
+  "pinned": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+  "references": [
+    "docker.io/library/orbit-managed-runner-lab:t02a-292b2eb4308b",
+    "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+  ]
+}

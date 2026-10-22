@@ -1,0 +1,11 @@
+{
+  "integration": {
+    "line": "PROJECT_BRANCH",
+    "mergeCheckCommand": "echo \"merge check started $(date -u +%FT%TZ) in $PWD\"; sleep 330; echo \"merge check finished $(date -u +%FT%TZ)\"",
+    "ref": "project/34hN5f2XmUTCDFMGa5mTR",
+    "repository": "remotes/default",
+    "upstreamRef": "master"
+  },
+  "projectId": "34hN5f2XmUTCDFMGa5mTR",
+  "repoUrl": "/var/lib/orbit/home/remotes/default.git"
+}

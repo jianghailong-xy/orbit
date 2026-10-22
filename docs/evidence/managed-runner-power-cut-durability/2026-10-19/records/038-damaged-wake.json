@@ -1,0 +1,22 @@
+{
+ "checks": [
+  {
+   "check": "amy: the next generation runs the after image",
+   "ok": true,
+   "value": {
+    "spec": [
+     "docker.io/library/orbit-managed-runner-lab@sha256:76635be14a5d535d874944f046f0277053e56a4eba01faeafd9cd8b625365e40"
+    ],
+    "uid": "b50d75c9-cec5-4d8e-95e4-646354087c3a"
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T17:39:56.133+00:00",
+ "error": "Failed: no run event carrying REPOSITORY_DAMAGED within 240 s",
+ "ok": false,
+ "phase": "damaged",
+ "result": null,
+ "seconds": 257.8,
+ "startedAt": "2026-10-19T17:35:38.353+00:00",
+ "step": "wake"
+}

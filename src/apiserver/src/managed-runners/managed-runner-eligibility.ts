@@ -7,9 +7,10 @@ import type { PrismaService } from '../prisma/prisma.service';
  * sign-in (ManagedRunnerService.signedIn) and an explicit ensure — and that the status read reports
  * (docs/managed-runner-design.md, "Resource admission model supply and isolation").
  *
- * Asked only while the switch is on. Today every account is eligible, which is what switching the
- * feature on means. Sign-up is open on deployments with Google sign-in, while the first version's
- * isolation is meant for invited testers only, so this is where a narrower rule goes: a change to
+ * Asked only while the switch is on. Every account is eligible, which is what switching the feature
+ * on means: the account owner decided on 2026-10-17 that a new deployment gives every account one,
+ * those created by open sign-up included, accepting that a container shares the host's kernel
+ * (docs/self-hosting.md, "Isolation and its limits"). A narrower rule would go here: a change to
  * `EVERY_ACCOUNT`, or another implementation provided under the token, and nowhere else. It reads
  * no configuration of its own.
  *

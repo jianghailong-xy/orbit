@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
@@ -79,6 +80,8 @@ private class TaskDetailData {
     var lists by mutableStateOf<List<JsonObject>>(emptyList())
     var share by mutableStateOf<JsonObject?>(null)
     var runner by mutableStateOf<JsonObject?>(null)
+    /** Every runner of the account: whether Cursor CLI is offered as a pin at all (ProviderEngines.androidShowsEngine). */
+    var runners by mutableStateOf<List<JsonObject>>(emptyList())
     var providers by mutableStateOf<List<JsonObject>>(emptyList())
     var busy by mutableStateOf(false)
     /** A refusal of what an open sheet sent, said on the sheet: the page's banner is behind it. */
@@ -132,6 +135,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 // The keys with the engines each runs on, and the account pools read as providers: what a pin can name.
                 fun rows(vararg path: String) = async { runCatching { (api.read(path.toList()) as? JsonArray).orEmpty().filterIsInstance<JsonObject>() }.getOrNull() }
                 val providers = rows("providers")
+                val runners = rows("runners")
                 val pools = rows("providers", "pools")
                 val sharedPools = rows("providers", "shared-pools")
                 data.owner = owner.await()
@@ -141,6 +145,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                 lists.await()?.let { data.lists = it }
                 share.await()?.let { data.share = it }
                 runner.await()?.let { data.runner = it }
+                runners.await()?.let { data.runners = it }
                 providers.await()?.let { keys ->
                     data.providers = (keys + pools.await().orEmpty().map { ProviderEngines.poolRow(it, ProviderEngines.CLAUDE) } +
                         sharedPools.await().orEmpty().map { ProviderEngines.poolRow(it, ProviderEngines.CODEX) }).distinctBy { it.text("slug") }
@@ -163,6 +168,10 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     val busyRun = data.task?.let(TaskListLogic::isBusy) == true
     // While a run of it is going, the page follows it: that is when its owner may be asked something.
     LaunchedEffect(handle, id, busyRun) { while (busyRun) { delay(4000); load() } }
+    // §2.7a's cadence, while the landing is live: 4 s for one that runs, 15 s for one that waits.
+    // A busy run already re-reads every 4 s, which covers a running landing too.
+    val landingEvery = if (busyRun) null else TaskLandingLogic.refetchInterval(TaskIntegrationView.of(data.task))
+    LaunchedEffect(handle, id, landingEvery) { while (landingEvery != null) { delay(landingEvery); load() } }
     LaunchedEffect(data.notice) { if (data.notice != null) { delay(3000); data.notice = null } }
 
     /** A write belongs to the app, not to this page (iOS's model-owned Task): leaving does not cancel it,
@@ -280,6 +289,11 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
                         mutate { api.execute(id, trigger, revisionOf(task)) }
                     }, confirmDone = { mutate { api.confirmOwner(id, revisionOf(task)) } }, reopen = { confirm = DetailConfirm.Reopen })
                 }
+            }
+            // Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it
+            // waits or where it stopped, apart from the status above — the web's first block.
+            TaskLandingLogic.status(TaskIntegrationView.of(task))?.let { landing ->
+                item(key = "landing") { LandingSection(landing, open) }
             }
             if (TaskJudgment.isGateRow(task) || task.obj("verifier") != null) item(key = "verifier") {
                 TaskSectionHeader(TaskJudgmentCopy.verifierCardHeading)
@@ -466,7 +480,7 @@ internal fun TaskDetail(app: OrbitApplication, handle: SessionHandle, id: String
     }
 }
 
-/** The two presses under the title, and the reason a run cannot start when it cannot. */
+/** The two presses under the title, and the reason a run cannot start when it cannot — or, when it can, that it is the task's only start. */
 @Composable
 private fun ActionRow(row: TaskActionRow, canStart: Boolean, enabled: Boolean, task: JsonObject, assigneeHasRunner: Boolean,
     open: (OrbitRoute) -> Unit, run: () -> Unit, confirmDone: () -> Unit, reopen: () -> Unit) {
@@ -501,10 +515,55 @@ private fun ActionRow(row: TaskActionRow, canStart: Boolean, enabled: Boolean, t
             trailing?.invoke(Modifier.weight(1f), true)
         }
         val trailingKind = row.trailing
-        if (trailingKind != null && trailingKind !is TaskActionRow.Trailing.OpenRun && !canStart)
-            TaskDetailLogic.runDisabledHint(task, assigneeHasRunner)?.let { Text(it, Modifier.testTag("task-run-hint"), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (trailingKind != null && trailingKind !is TaskActionRow.Trailing.OpenRun)
+            (if (canStart) TaskDetailLogic.runNowHint(task) else TaskDetailLogic.runDisabledHint(task, assigneeHasRunner))?.let {
+                Text(it, Modifier.testTag("task-run-hint"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
+}
+
+/** The task's Landing section (§2.7a, web `LandTaskStatus`): the badge, the generation, the step it
+ * is on or stopped at, a silent runner's report, the reason and the receipt, the six facts — then
+ * the one way into its landing session. Read-only: no retry, merge or release door lives here. */
+@Composable
+private fun LandingSection(status: TaskLandingStatus, open: (OrbitRoute) -> Unit) {
+    TaskSectionHeader(TaskLandingCopy.landingSection, status.generation?.let { "${TaskLandingCopy.generation} $it" })
+    Column(Modifier.fillMaxWidth().testTag("task-landing"), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            status.badge?.let { badge ->
+                val ink = landingInk(badge.tone)
+                Text(badge.label, Modifier.testTag("task-landing-badge").background(ink.copy(alpha = 0.14f), RoundedCornerShape(50))
+                    .padding(horizontal = 8.dp, vertical = 2.dp), style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold, color = ink)
+            }
+            status.step?.let { Text(it, Modifier.testTag("task-landing-step"), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2) }
+        }
+        status.noReport?.let { Text(it, Modifier.testTag("task-landing-no-report"), style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold, color = LocalOrbitColors.current.needsYou) }
+        status.reason?.let { Text(it, Modifier.testTag("task-landing-reason"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        status.receipt?.let { Text(it, Modifier.testTag("task-landing-receipt"), style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (status.facts.isNotEmpty()) Column(Modifier.testTag("task-landing-facts"), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            status.facts.forEach { fact ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(fact.label, Modifier.width(92.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(fact.value, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        TaskLandingLogic.route(status)?.let { route ->
+            TextButton(onClick = { open(route) }, modifier = Modifier.testTag("task-landing-open")) { Text("${TaskLandingCopy.openLanding} ›") }
+        }
+    }
+}
+
+@Composable
+private fun landingInk(tone: String): Color = when (tone) {
+    "amber" -> LocalOrbitColors.current.needsYou
+    "blue" -> LocalOrbitColors.current.running
+    "green" -> LocalOrbitColors.current.success
+    "red" -> MaterialTheme.colorScheme.error
+    else -> MaterialTheme.colorScheme.onSurfaceVariant
 }
 
 @Composable
@@ -535,7 +594,9 @@ private fun DetailsSection(task: JsonObject, data: TaskDetailData, workspaces: L
         PickerRow(EngineCopy.ENGINE, if (pinnedEngine == null && pinnedProvider == null) "${EngineCopy.ASSIGNEES} · ${ProviderEngines.cliName(assigneeEngine)}"
             else ProviderEngines.cliName(runEngine), enabled,
             listOf<Pair<String?, String>>(null to EngineCopy.ASSIGNEES) +
-                ProviderEngines.ALL_ENGINES.filter(ProviderEngines::androidShowsEngine).map { it to ProviderEngines.cliName(it) },
+                // Cursor CLI once a runner of the account knows it, as every list of engines offers it.
+                ProviderEngines.ALL_ENGINES.filter { ProviderEngines.androidShowsEngine(it, data.runners + listOfNotNull(data.runner)) }
+                    .map { it to ProviderEngines.cliName(it) },
             details = mapOf(null to ProviderEngines.cliName(assigneeEngine)), tag = "task-engine") { engine ->
             TaskPins.engine(engine, pinnedEngine, pinnedProvider, ProviderEngines.providerEngines(pinnedProvider, data.providers))?.let(pin)
         }

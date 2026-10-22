@@ -1,0 +1,278 @@
+{
+ "run": "default-write",
+ "agy_exit": 0,
+ "flags": [
+  "--default-mode"
+ ],
+ "files_under_home": [],
+ "workspace_after": [
+  "seed.txt"
+ ],
+ "seed_txt_after": "alpha\nbeta\n",
+ "declared_tools": [
+  {
+   "name": "read_file",
+   "additionalProperties": false,
+   "properties": [
+    "ByteOffset",
+    "EndLine",
+    "Path",
+    "StartLine"
+   ],
+   "required": [
+    "Path"
+   ]
+  },
+  {
+   "name": "run_command",
+   "additionalProperties": false,
+   "properties": [
+    "CommandLine",
+    "IsDaemon",
+    "WaitMsBeforeAsync",
+    "toolSummary"
+   ],
+   "required": [
+    "CommandLine",
+    "toolSummary",
+    "WaitMsBeforeAsync"
+   ]
+  },
+  {
+   "name": "manage_task",
+   "additionalProperties": false,
+   "properties": [
+    "Action",
+    "Input",
+    "TaskId"
+   ],
+   "required": [
+    "Action"
+   ]
+  },
+  {
+   "name": "send_message",
+   "additionalProperties": false,
+   "properties": [
+    "Message",
+    "Recipient"
+   ],
+   "required": [
+    "Recipient",
+    "Message"
+   ]
+  },
+  {
+   "name": "schedule",
+   "additionalProperties": false,
+   "properties": [
+    "CronExpression",
+    "DurationSeconds",
+    "IsDaemon",
+    "MaxIterations",
+    "Prompt",
+    "TimerCondition"
+   ],
+   "required": [
+    "Prompt"
+   ]
+  },
+  {
+   "name": "invoke_subagent",
+   "additionalProperties": false,
+   "properties": [
+    "Model",
+    "Prompt",
+    "Role",
+    "TypeName",
+    "Workspace"
+   ],
+   "required": [
+    "TypeName",
+    "Role",
+    "Prompt"
+   ]
+  },
+  {
+   "name": "define_subagent",
+   "additionalProperties": false,
+   "properties": [
+    "Description",
+    "EnableMCPTools",
+    "EnableSubagentTools",
+    "EnableWriteTools",
+    "Name",
+    "SystemPrompt"
+   ],
+   "required": [
+    "Name",
+    "Description",
+    "SystemPrompt"
+   ]
+  },
+  {
+   "name": "manage_subagents",
+   "additionalProperties": false,
+   "properties": [
+    "Action",
+    "ConversationIds"
+   ],
+   "required": [
+    "Action"
+   ]
+  },
+  {
+   "name": "write_file",
+   "additionalProperties": false,
+   "properties": [
+    "Append",
+    "ArtifactMetadata",
+    "Content",
+    "Overwrite",
+    "Path"
+   ],
+   "required": [
+    "Path",
+    "Content"
+   ]
+  },
+  {
+   "name": "edit_file",
+   "additionalProperties": false,
+   "properties": [
+    "ArtifactMetadata",
+    "Path",
+    "Replacement",
+    "Target"
+   ],
+   "required": [
+    "Path",
+    "Target",
+    "Replacement"
+   ]
+  },
+  {
+   "name": "search_web",
+   "additionalProperties": false,
+   "properties": [
+    "domain",
+    "query"
+   ],
+   "required": [
+    "query"
+   ]
+  },
+  {
+   "name": "ask_question",
+   "additionalProperties": false,
+   "properties": [
+    "questions"
+   ],
+   "required": [
+    "questions"
+   ]
+  }
+ ],
+ "init_tools": [
+  "ask_custom_permission",
+  "ask_permission",
+  "ask_question",
+  "browser_click_element",
+  "browser_drag_pixel_to_pixel",
+  "browser_get_dom",
+  "browser_get_network_request",
+  "browser_input",
+  "browser_list_network_requests",
+  "browser_mouse_down",
+  "browser_mouse_up",
+  "browser_move_mouse",
+  "browser_press_key",
+  "browser_refresh_page",
+  "browser_resize_window",
+  "browser_scroll",
+  "browser_scroll_dom",
+  "browser_select_option",
+  "browser_subagent",
+  "call_mcp_tool",
+  "capture_browser_console_logs",
+  "capture_browser_screenshot",
+  "click_browser_pixel",
+  "command_status",
+  "define_subagent",
+  "delete_knowledge",
+  "execute_browser_javascript",
+  "find_by_name",
+  "finish",
+  "generate_image",
+  "grep_search",
+  "invoke_subagent",
+  "list_browser_pages",
+  "list_dir",
+  "list_permissions",
+  "list_plugin_accounts",
+  "list_resources",
+  "manage_inbox",
+  "manage_subagents",
+  "manage_task",
+  "multi_replace_file_content",
+  "notebook_edit",
+  "notebook_execution",
+  "open_browser_url",
+  "read_browser_page",
+  "read_resource",
+  "read_url_content",
+  "replace_file_content",
+  "run_command",
+  "run_workflow",
+  "schedule",
+  "search_marketplace",
+  "search_web",
+  "sed_file",
+  "send_command_input",
+  "send_message",
+  "view_file",
+  "wait",
+  "wait_5_seconds",
+  "write_to_file"
+ ],
+ "permission_mode": "request-review",
+ "tool_steps": [
+  {
+   "state": "ACTIVE",
+   "tool_name": "write_file",
+   "info_name": "write_file",
+   "parameters": {
+    "Path": "/var/tmp/agy143-doc/runs/default-write/ws-k5pi6qkl/denied.txt"
+   },
+   "output": null,
+   "error": null
+  },
+  {
+   "state": "ERROR",
+   "tool_name": "write_file",
+   "info_name": "write_file",
+   "parameters": {
+    "Path": "/var/tmp/agy143-doc/runs/default-write/ws-k5pi6qkl/denied.txt"
+   },
+   "output": null,
+   "error": {
+    "type": "TOOL_ERROR",
+    "message": "permission check failed for write_file \"/var/tmp/agy143-doc/runs/default-write/ws-k5pi6qkl/denied.txt\": user denied permission for write_file(/var/tmp/agy143-doc/runs/default-write/ws-k5pi6qkl/denied.txt)\nDo not attempt to circumvent this denial by rephrasing the command, using alternative tools/scripts (e.g. python, sh, curl), or accessing the same target resource. Proceed without performing this action."
+   }
+  }
+ ],
+ "result": {
+  "status": "SUCCESS",
+  "response": "",
+  "error": null,
+  "denied_actions": [
+   {
+    "action": "write_file",
+    "display_name": "WriteFile"
+   }
+  ]
+ },
+ "stderr_permission_lines": [
+  "jetski: no output produced — a tool required the \"write_file\" permission that headless mode cannot prompt for, so it was auto-denied. Add an allow-rule under permissions.allow in settings.json (e.g. write_file(<target>)). Alternatively, re-run with --dangerously-skip-permissions to auto-approve all tools."
+ ]
+}

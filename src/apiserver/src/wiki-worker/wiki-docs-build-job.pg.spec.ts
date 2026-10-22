@@ -4,30 +4,29 @@
  * Node http server, and the space's runner played here: it claims the job's repository operations as a heartbeat
  * would and answers them from a tree of files at one commit, the way src/runner-go/wiki_repo_ops.go reads a checkout.
  *
- *   1. canary: the owner's confirmation makes a `docs_build` job and no task of the hidden list; the worker reads the
+ *   1. the owner's confirmation makes a `docs_build` job and no task; the worker reads the
  *      repository at the snapshot's commit through the runner, writes every section through the queue with the
  *      System model, and the plan job says how far it got and how it ended — the plan page's «Writing documents»;
  *   2. the next build: a section whose material did not change is left as it is and nothing is asked of the model for
  *      it — only the section whose definition changed, and the overview over it, are written again;
- *   3. runner mode, and an account the canary does not list: the confirmation makes the build's task, word for word as
- *      it always did, and no job;
- *   4. the runner door: the documents' routes answer a maintenance session as ever under runner, and
- *      WIKI_SERVER_EXECUTES for an account the server runs, before anything is read — so an older runner's
- *      `orbit wiki docs build` asks its session's model nothing;
- *   5. a space whose maintenance names no workspace holds the build, on the server path too; and a build the server
- *      never started is cancelled when the switch goes back to runner, by the next confirmation's request;
+ *   5. a space whose maintenance names no workspace holds the build, on the server path too, and naming the workspace
+ *      again makes the next one;
  *   6. a worker that stops mid-build: the next one finishes it, asking no call twice and writing each section once;
  *   7. a plan of version 27's shape (2026-10-09): sections of one document that name the same article are built side
  *      by side, and each is shown the article only once its read landed;
  *   8. a session condition whose projects are { id, title } — the read's spelling — is read as ids by every reader on
- *      the way: the plan's reads, the runner door's material and the build's own;
+ *      the way: the plan's reads, the material's and the build's own;
  *  11. a worker that stops while the build waits for its reads hands the job back (design §5.4): no REPO_OP_FAILED,
  *      no read asked again — the third read, waiting for a slot, is never asked — nothing counted, and the next worker
  *      takes the job over;
  *  12. a worker stopped once the build's first section is written hands the job back, and the next one finishes it: the
  *      report the replay ends with — the job's and the plan job's — is the whole build's (contract `jobs.carry`): the
  *      section written before the stop is written, not unchanged, every section once and every call once, exactly what
- *      the same build reports when nothing stops it.
+ *      the same build reports when nothing stops it;
+ *  13. a build of the version in force that ended failed, as production's did on 2026-10-15 (10 attempts on a checkout
+ *      the runner could not read), asked for again on the plan page (contract `plan.jobs.rebuild`): a build of its own,
+ *      the worker writes every document with the System model, no task is made, and a second ask while it is on its
+ *      way answers the same job.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki-worker/wiki-docs-build-job.pg.spec.ts
  *
@@ -54,12 +53,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import type { PushService } from '../push/push.service';
 import type { RealtimeService } from '../realtime/realtime.service';
-import { RunnerAuthGuard } from '../runner-api/runner-auth.guard';
-import { RunnerWikiDocsController } from '../runner-api/runner-wiki-docs.controller';
-import { RunnerWikiPlanController } from '../runner-api/runner-wiki-plan.controller';
-import { RunnerWikiController } from '../runner-api/runner-wiki.controller';
 import { WikiDocs } from '../wiki/wiki-docs';
+import { gatherDocMaterial, storedSessionCondition } from '../wiki/wiki-docs-material';
 import { WikiDocsController } from '../wiki/wiki-docs.controller';
+import { ownerEnvLiterals } from '../wiki/wiki-dossier';
 import { WikiPlans } from '../wiki/wiki-plan';
 import { WikiPlanController } from '../wiki/wiki-plan.controller';
 import { WikiRetrieval } from '../wiki/wiki-retrieval';
@@ -177,6 +174,8 @@ interface Harness {
   app: INestApplication;
   service: WikiService;
   docs: WikiDocs;
+  /** The plan's service: what the server's plan job stores a draft through. */
+  plans: WikiPlans;
   model: FakeModel;
   bearers: Map<string, string>;
 }
@@ -198,14 +197,13 @@ function boot(): Promise<Harness> {
     const docs = new WikiDocs(prisma as unknown as PrismaService, service, hub);
 
     @Module({
-      controllers: [WikiController, WikiPlanController, WikiDocsController, RunnerWikiController, RunnerWikiPlanController, RunnerWikiDocsController],
+      controllers: [WikiController, WikiPlanController, WikiDocsController],
       providers: [
         { provide: WikiService, useValue: service },
         { provide: WikiPlans, useValue: plans },
         { provide: WikiDocs, useValue: docs },
         { provide: WikiRetrieval, useValue: new WikiRetrieval(prisma as unknown as PrismaService) },
         { provide: PrismaService, useValue: prisma },
-        RunnerAuthGuard,
         JwtAuthGuard,
         Reflector,
         {
@@ -227,7 +225,7 @@ function boot(): Promise<Harness> {
     app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: false }));
     app.useGlobalInterceptors(new PublicIdInterceptor());
     await app.listen(0, '127.0.0.1');
-    return { base: await app.getUrl(), sql, prisma, app, service, docs, model: await fakeModel(), bearers };
+    return { base: await app.getUrl(), sql, prisma, app, service, docs, plans, model: await fakeModel(), bearers };
   })();
   return harness;
 }
@@ -235,8 +233,6 @@ function boot(): Promise<Harness> {
 after(async () => {
   if (!harness) return;
   const { app, prisma, sql, model } = await harness;
-  delete process.env.ORBIT_WIKI_EXECUTOR;
-  delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
   await sql.query('DELETE FROM "wiki_model_status"').catch(() => undefined);
   await app.close().catch(() => undefined);
   await prisma.$disconnect().catch(() => undefined);
@@ -244,19 +240,10 @@ after(async () => {
   await model.close().catch(() => undefined);
 });
 
-/** The executor switch, as the apiserver and the worker read it from the environment at each call. */
-function executor(mode: 'runner' | 'canary', owners: string[] = []): void {
-  if (mode === 'runner') {
-    delete process.env.ORBIT_WIKI_EXECUTOR;
-    delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
-    return;
-  }
-  process.env.ORBIT_WIKI_EXECUTOR = mode;
-  process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS = owners.join(',');
-}
-
 const live: Array<{ queue: WikiModelRequestQueue; executor: WikiJobExecutor }> = [];
 const players: Array<{ stop: () => Promise<void> }> = [];
+/** Every account a scene made: the worker claims every account's jobs, and these are the run's own. */
+const accounts: string[] = [];
 
 afterEach(async () => {
   for (const one of live.splice(0)) {
@@ -264,7 +251,15 @@ afterEach(async () => {
     await one.queue.onModuleDestroy().catch(() => undefined);
   }
   for (const player of players.splice(0)) await player.stop();
-  executor('runner');
+  // A build a case left on its way is not the next case's: the next worker claims every account's jobs, so it is
+  // cancelled here rather than taken up there.
+  const h = harness ? await harness : undefined;
+  await h?.sql.query(
+    `UPDATE "wiki_job" SET "state" = 'cancelled', "ended_at" = now(), "updated_at" = now(), "waiting_for" = NULL,
+            "lease_owner" = NULL, "lease_generation" = NULL, "lease_deadline_at" = NULL
+      WHERE "kind" = 'docs_build' AND "state" IN ('queued', 'running', 'waiting') AND "owner_id" = ANY($1::uuid[])`,
+    [accounts],
+  );
 });
 
 function config(h: Harness): WikiSystemModelConfig {
@@ -440,13 +435,14 @@ interface Scene {
   runner: { id: string; token: string };
   workspaceId: string;
   spaceId: string;
-  listId: string;
-  maintainer: Caller;
+  /** The wiki_job the space's first draft was made as: the author of the plan versions drafted here. */
+  drafter: { ownerId: string; spaceId: string; wikiJobId: string };
   projectId: string;
 }
 
 async function scene(h: Harness, name: string): Promise<Scene> {
   const ownerId = randomUUID();
+  accounts.push(ownerId);
   await h.sql.query(`INSERT INTO "user"("id","email","name","password_hash") VALUES ($1,$2,$3,'x')`, [ownerId, `wiki-docs-build-job-${ownerId}@wiki.invalid`, name]);
   const bearer = `bearer-${ownerId}`;
   h.bearers.set(bearer, ownerId);
@@ -467,19 +463,12 @@ async function scene(h: Harness, name: string): Promise<Scene> {
   expectStatus(await call(h, { bearer }, 'POST', `/wiki/spaces/${spaceId}/workspaces`, { workspaceId }), 200, 'the owner binds the workspace');
   const on = await call(h, { bearer }, 'PATCH', `/wiki/spaces/${spaceId}`, { maintenance: { enabled: true, workspaceId } });
   expectStatus(on, 200, 'the owner turns maintenance on');
-  const listId = toUuid(on.body.settings.maintenance.listId as string);
-  const taskId = randomUUID();
-  await h.sql.query(
-    `INSERT INTO "task"("id","title","owner_id","creator_type","creator_id","status","assignee_id","list_id","completion_criterion","updated_at")
-     VALUES ($1,'Wiki maintenance run',$2,'USER',$2,'DONE'::task_status,$3,$4,'OWNER_CONFIRMED',now())`,
-    [taskId, ownerId, workspaceId, listId],
+  // The draft the space's creation asked for waited for a maintenance workspace; named now, it is made as a wiki_job.
+  const drafting = await h.sql.query<{ job_id: string }>(
+    `SELECT "job_id" FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" = 'draft' AND "state" = 'made' AND "job_id" IS NOT NULL`,
+    [spaceId],
   );
-  const maintenanceSession = randomUUID();
-  await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","task_id","status","dispatch_origin","updated_at")
-     VALUES ($1,'Wiki maintenance run','p',$2,$2,$3,$4,$5,'RUNNING'::run_status,'USER',now())`,
-    [maintenanceSession, ownerId, workspaceId, runnerId, taskId],
-  );
+  assert.equal(drafting.rowCount, 1, 'the space\'s first draft is made on the server');
   // A project whose coordinator heard the owner's words, and whose task carries a delivery comment.
   const coordinator = randomUUID();
   await h.sql.query(
@@ -504,8 +493,8 @@ async function scene(h: Harness, name: string): Promise<Scene> {
     randomUUID(), projectTask, ownerId, DELIVERY,
   ]);
   return {
-    owner: { id: ownerId, bearer }, runner: { id: runnerId, token }, workspaceId, spaceId, listId,
-    maintainer: { runner: token, session: maintenanceSession }, projectId,
+    owner: { id: ownerId, bearer }, runner: { id: runnerId, token }, workspaceId, spaceId,
+    drafter: { ownerId, spaceId, wikiJobId: drafting.rows[0].job_id }, projectId,
   };
 }
 
@@ -547,25 +536,14 @@ function planFor(s: Scene): Record<string, unknown> {
 }
 
 /**
- * The space's first draft, stored by a maintenance run as a plan job's run stores one — under the runner switch,
- * whatever the test's: drafting is the plan's pipeline, not the documents'.
+ * The space's first draft, stored as the server's plan job stores one (`submitServerDraft`): drafting is the plan's
+ * pipeline, not the documents'.
  */
 async function draft(h: Harness, s: Scene, plan: Record<string, unknown>): Promise<number> {
-  const mode = process.env.ORBIT_WIKI_EXECUTOR;
-  const owners = process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
-  executor('runner');
-  try {
-    const drafted = await call(h, s.maintainer, 'POST', `/runner/wiki/spaces/${s.spaceId}/plan/drafts`, {
-      baseVersion: null, target: { min: 1, max: 10 }, plan, repoCheck: { sha: 'a'.repeat(40), checked: 3, missing: [] }, model: MODEL,
-    });
-    expectStatus(drafted, 200, 'the maintenance run drafts the plan');
-    return drafted.body.version as number;
-  } finally {
-    if (mode === undefined) delete process.env.ORBIT_WIKI_EXECUTOR;
-    else process.env.ORBIT_WIKI_EXECUTOR = mode;
-    if (owners === undefined) delete process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS;
-    else process.env.ORBIT_WIKI_EXECUTOR_CANARY_OWNERS = owners;
-  }
+  const drafted = await h.plans.submitServerDraft(s.drafter, {
+    baseVersion: null, target: { min: 1, max: 10 }, plan, repoCheck: { sha: 'a'.repeat(40), checked: 3, missing: [] }, model: MODEL,
+  });
+  return drafted.version;
 }
 
 /** The owner's edit of the overview's covers: a new draft on the newest version. */
@@ -621,8 +599,9 @@ async function job(h: Harness, id: string): Promise<JobRow> {
   return (await h.sql.query<JobRow>('SELECT "id","kind","priority","state","input","report","error" FROM "wiki_job" WHERE "id" = $1', [id])).rows[0];
 }
 
-async function buildTasks(h: Harness, s: Scene): Promise<number> {
-  return (await h.sql.query<{ n: number }>(`SELECT count(*)::int AS n FROM "task" WHERE "list_id" = $1 AND "title" LIKE 'Wiki documents:%'`, [s.listId])).rows[0].n;
+/** The owner's tasks outside the scene's project: a build makes none. */
+async function tasksMade(h: Harness, s: Scene): Promise<number> {
+  return (await h.sql.query<{ n: number }>(`SELECT count(*)::int AS n FROM "task" WHERE "owner_id" = $1 AND "project_id" IS NULL`, [s.owner.id])).rows[0].n;
 }
 
 async function runToEnd(h: Harness, w: { queue: WikiModelRequestQueue; executor: WikiJobExecutor }, jobId: string): Promise<JobRow> {
@@ -631,15 +610,14 @@ async function runToEnd(h: Harness, w: { queue: WikiModelRequestQueue; executor:
   return job(h, jobId);
 }
 
-// ── 1 and 2. canary: two builds ──────────────────────────────────────────────────────────────────────
+// ── 1 and 2. two builds ──────────────────────────────────────────────────────────────────────────────
 
-test('canary: the confirmation makes a docs_build job and no task; the worker builds every section with the System model, and the next build leaves what did not change', { skip, timeout: 180_000 }, async () => {
+test('the confirmation makes a docs_build job and no task; the worker builds every section with the System model, and the next build leaves what did not change', { skip, timeout: 180_000 }, async () => {
   const h = await boot();
   await modelUp(h);
   h.model.hits.length = 0;
-  const s = await scene(h, 'canary');
+  const s = await scene(h, 'two builds');
   const v1 = await draft(h, s, planFor(s));
-  executor('canary', [s.owner.id]);
   await confirm(h, s, v1);
 
   // The build is the worker's: a job of the documents' kind, owner-initiated, naming its plan job — and no task.
@@ -648,7 +626,7 @@ test('canary: the confirmation makes a docs_build job and no task; the worker bu
   assert.ok(first.job_id, 'the plan job is made by a wiki job');
   const made = await job(h, first.job_id!);
   assert.deepEqual([made.kind, made.priority, made.state, made.input], [WIKI_DOCS_BUILD_JOB.kind, WIKI_DOCS_BUILD_JOB.priority, 'queued', { planJobId: first.id }]);
-  assert.equal(await buildTasks(h, s), 0, 'no task of the hidden list was made for the build');
+  assert.equal(await tasksMade(h, s), 0, 'no task was made for the build');
   const page = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
   assert.deepEqual([page.body.job.kind, page.body.job.state, page.body.job.taskId, page.body.job.provider], ['build', 'running', null, null],
     'the plan page reads the build as writing the documents');
@@ -723,75 +701,12 @@ test('canary: the confirmation makes a docs_build job and no task; the worker bu
   assert.deepEqual(runner.ops.filter((op) => op.kind === 'snapshot').map((op) => op.input.skipSha), [null, HEAD]);
 });
 
-// ── 3. runner mode, and an account the canary does not list ──────────────────────────────────────────
+// ── 5. held until the workspace is named ─────────────────────────────────────────────────────────────
 
-test('under runner, and for an account the canary does not list, the confirmation makes the build\'s task as it always did, and no job', { skip, timeout: 60_000 }, async () => {
-  const h = await boot();
-  for (const mode of ['runner', 'canary-unlisted'] as const) {
-    const s = await scene(h, mode);
-    const version = await draft(h, s, planFor(s));
-    executor(mode === 'runner' ? 'runner' : 'canary', [randomUUID()]);
-    await confirm(h, s, version);
-    // The runner path's own check ran — the space names a provider no run could start on, which the server path
-    // does not ask about — and the server was asked for nothing. (The task it makes once the provider is usable is
-    // wiki-maintenance.pg.spec.ts's.)
-    const [row] = await builds(h, s.spaceId);
-    assert.deepEqual([row.state, row.job_id], ['held', null], `${mode}: the build waits on the runner path`);
-    const reason = (await h.sql.query<{ held_reason: string }>('SELECT "held_reason" FROM "wiki_plan_job" WHERE "id" = $1', [row.id])).rows[0].held_reason;
-    assert.equal(reason, 'maintenance_provider_unusable', `${mode}: held for the provider`);
-    const jobs = (await h.sql.query<{ n: number }>('SELECT count(*)::int AS n FROM "wiki_job" WHERE "space_id" = $1', [s.spaceId])).rows[0].n;
-    assert.equal(jobs, 0, `${mode}: no wiki job`);
-  }
-});
-
-// ── 4. the runner door ───────────────────────────────────────────────────────────────────────────────
-
-test('the documents\' runner door: a maintenance session reads as ever under runner, and is refused WIKI_SERVER_EXECUTES for an account the server runs', { skip, timeout: 60_000 }, async () => {
-  const h = await boot();
-  const s = await scene(h, 'door');
-  const version = await draft(h, s, planFor(s));
-  await confirm(h, s, version);
-  const state = await call(h, s.maintainer, 'GET', `/runner/wiki/spaces/${s.spaceId}/plan`);
-  const key = state.body.confirmed.docs[0].sections[2].key as string;
-  const routes: Array<[string, string, unknown?]> = [
-    ['GET', `/runner/wiki/spaces/${s.spaceId}/docs`],
-    ['GET', `/runner/wiki/spaces/${s.spaceId}/docs/${SLUG}/material?section=${key}`],
-    ['GET', `/runner/wiki/spaces/${s.spaceId}/maintenance/docs`],
-    ['POST', `/runner/wiki/spaces/${s.spaceId}/docs/${SLUG}`, { planVersion: version, repoSha: 'a'.repeat(40), sections: [] }],
-  ];
-  // Under the default runner: answered as ever (the empty write is the schema's refusal, not the switch's).
-  executor('runner');
-  for (const [method, route, body] of routes) {
-    const answer = await call(h, s.maintainer, method, route, body);
-    assert.notEqual(answer.body?.code, 'WIKI_SERVER_EXECUTES', `${method} ${route} under runner: ${JSON.stringify(answer.body).slice(0, 300)}`);
-    assert.ok(answer.status === 200 || answer.body?.code === 'WIKI_DOC_INVALID', `${method} ${route} under runner answered ${answer.status}`);
-  }
-  // For an account the server runs: refused before anything is read, so an older runner's command asks no model.
-  executor('canary', [s.owner.id]);
-  for (const [method, route, body] of routes) {
-    const answer = await call(h, s.maintainer, method, route, body);
-    expectStatus(answer, 409, `${method} ${route} for a canary account`);
-    assert.equal(answer.body.code, 'WIKI_SERVER_EXECUTES');
-    assert.match(answer.body.message, /Nothing was read or written/u);
-  }
-  // Another session of the owner is still not a maintenance run, whatever the switch says.
-  const ordinary = randomUUID();
-  await h.sql.query(
-    `INSERT INTO "session"("id","title","prompt","owner_id","creator_id","workspace_id","assigned_runner_id","status","dispatch_origin","updated_at")
-     VALUES ($1,'an ordinary session','p',$2,$2,$3,$4,'RUNNING'::run_status,'USER',now())`,
-    [ordinary, s.owner.id, s.workspaceId, s.runner.id],
-  );
-  const other = await call(h, { runner: s.runner.token, session: ordinary }, 'GET', `/runner/wiki/spaces/${s.spaceId}/docs`);
-  assert.equal(other.body.code, 'WIKI_NOT_MAINTENANCE_SESSION');
-});
-
-// ── 5. held, and cancelled by the switch going back ──────────────────────────────────────────────────
-
-test('a space whose maintenance names no workspace holds the build on the server path too; a build the server never started is cancelled when the switch goes back to runner', { skip, timeout: 60_000 }, async () => {
+test('a space whose maintenance names no workspace holds the build on the server path too, and naming the workspace again makes the next one', { skip, timeout: 60_000 }, async () => {
   const h = await boot();
   const s = await scene(h, 'held');
   const v1 = await draft(h, s, planFor(s));
-  executor('canary', [s.owner.id]);
   await h.sql.query(`UPDATE "wiki_space" SET "settings" = jsonb_set("settings", '{maintenance,workspaceId}', 'null') WHERE "id" = $1`, [s.spaceId]);
   await confirm(h, s, v1);
   let [row] = await builds(h, s.spaceId);
@@ -802,16 +717,7 @@ test('a space whose maintenance names no workspace holds the build on the server
   await confirm(h, s, v2);
   [row] = await builds(h, s.spaceId);
   assert.deepEqual([row.state, row.version, row.task_id !== null, row.job_id !== null], ['made', v2, false, true]);
-  // The switch goes back to runner before any worker took the job: the next confirmation ends it — its job
-  // cancelled — and makes its own build the runner's way.
-  executor('runner');
-  const v3 = await editOverview(h, s, v2, '第三稿。');
-  await confirm(h, s, v3);
-  const rows = await builds(h, s.spaceId);
-  assert.deepEqual([rows[0].state, rows[0].outcome], ['ended', 'failed']);
-  assert.match(rows[0].error ?? '', /no longer executes this account's wiki/u);
-  assert.equal((await job(h, row.job_id!)).state, 'cancelled');
-  assert.equal(rows[1].job_id, null, 'the new build is the runner\'s');
+  assert.equal((await job(h, row.job_id!)).kind, WIKI_DOCS_BUILD_JOB.kind);
 });
 
 // ── 6. a worker that stops mid-build ─────────────────────────────────────────────────────────────────
@@ -822,7 +728,6 @@ test('a worker that stops mid-build: the next one finishes it, asking again only
   h.model.hits.length = 0;
   const s = await scene(h, 'restart');
   const v1 = await draft(h, s, planFor(s));
-  executor('canary', [s.owner.id]);
   await confirm(h, s, v1);
   const [row] = await builds(h, s.spaceId);
   const HEAD = createHash('sha1').update(`head-${randomUUID()}`).digest('hex');
@@ -914,7 +819,6 @@ test('a plan of version 27\'s shape builds: sections that name one article each 
   await modelUp(h);
   const s = await scene(h, 'v27');
   const version = await draft(h, s, articlePlanFor(s));
-  executor('canary', [s.owner.id]);
   await confirm(h, s, version);
   const [row] = await builds(h, s.spaceId);
   const HEAD = createHash('sha1').update(`head-${randomUUID()}`).digest('hex');
@@ -951,7 +855,7 @@ async function nameProjects(h: Harness, s: Scene, version: number): Promise<void
   assert.equal(updated.rowCount, 1, 'the conventions section is the one with a session condition');
 }
 
-test('a session condition whose projects are { id, title } is read as ids: the plan\'s reads, the runner door\'s material and the build', { skip, timeout: 180_000 }, async () => {
+test('a session condition whose projects are { id, title } is read as ids: the plan\'s reads, the material and the build', { skip, timeout: 180_000 }, async () => {
   const h = await boot();
   await modelUp(h);
   const s = await scene(h, 'projects');
@@ -964,14 +868,14 @@ test('a session condition whose projects are { id, title } is read as ids: the p
   const conventions = page.body.confirmed.docs[0].sections[2];
   assert.deepEqual(conventions.sources.sessions.projects.map((project: { id: string; title: string }) => [toUuid(project.id), project.title]),
     [[s.projectId, 'Runner 托管后台作业']]);
-  // The runner door's material — what the runner path's build reads: the condition's projects found the owner's words.
-  const material = await call(h, s.maintainer, 'GET', `/runner/wiki/spaces/${s.spaceId}/docs/${SLUG}/material?section=${conventions.key}`);
-  expectStatus(material, 200, 'the runner path reads the conventions\' material');
-  assert.deepEqual(material.body.condition.projects.map((project: { id: string }) => toUuid(project.id)), [s.projectId]);
-  assert.ok(material.body.records.some((record: { text: string }) => record.text.includes(KEYWORD)), JSON.stringify(material.body.records));
+  // The material, from the read's spelling: its projects read as ids, and they find the owner's words.
+  const db = h.prisma as unknown as PrismaService;
+  const condition = storedSessionCondition(conventions.sources.sessions);
+  assert.deepEqual(condition?.projects.map((id) => toUuid(id)), [s.projectId]);
+  const material = await gatherDocMaterial(db, h.service, { ownerId: s.owner.id, spaceId: s.spaceId, condition, literals: await ownerEnvLiterals(db, s.owner.id) });
+  assert.ok(material.records.some((record) => record.text.includes(KEYWORD)), JSON.stringify(material.records));
   // The server's build reads the same condition the same way. (The owner's edit carried it as ids — the plan's gate read
   // the stored objects as their ids — so the new version is spelled the read's way again.)
-  executor('canary', [s.owner.id]);
   const second = await editOverview(h, s, version, '这篇讲一个会话怎么运转。');
   const carried = await h.sql.query<{ projects: unknown }>(
     `SELECT x."sources"->'sessions'->'projects' AS "projects" FROM "wiki_plan_section" x JOIN "wiki_plan_doc" d ON d."id" = x."doc_id"
@@ -1004,7 +908,6 @@ test('a section whose code has a raw NUL in it builds: the model is shown the co
   await modelUp(h);
   const s = await scene(h, 'nul');
   const version = await draft(h, s, planFor(s));
-  executor('canary', [s.owner.id]);
   await confirm(h, s, version);
   const [row] = await builds(h, s.spaceId);
   const HEAD = createHash('sha1').update(`head-${randomUUID()}`).digest('hex');
@@ -1060,7 +963,6 @@ test('a NUL in the model\'s answer, raw or as \\u0000: the build succeeds, the a
   await modelUp(h);
   const s = await scene(h, 'nul-answer');
   const version = await draft(h, s, planFor(s));
-  executor('canary', [s.owner.id]);
   await confirm(h, s, version);
   const [row] = await builds(h, s.spaceId);
   const HEAD = createHash('sha1').update(`head-${randomUUID()}`).digest('hex');
@@ -1139,7 +1041,6 @@ test('a worker that stops while the build waits for its reads hands the job back
   await modelUp(h);
   const s = await scene(h, 'stop-on-read');
   const version = await draft(h, s, threeReadsPlanFor(s));
-  executor('canary', [s.owner.id]);
   await confirm(h, s, version);
   const [row] = await builds(h, s.spaceId);
   const jobId = row.job_id!;
@@ -1217,7 +1118,6 @@ test('a worker stopped once the first section is written hands the build back, a
     // What the build reports when nothing stops it.
     const straight = await scene(h, 'straight');
     const straightPlan = await draft(h, straight, planFor(straight));
-    executor('canary', [straight.owner.id]);
     await confirm(h, straight, straightPlan);
     const [wholeRow] = await builds(h, straight.spaceId);
     playRunner(h, straight.runner.id, () => tree(HEAD));
@@ -1231,7 +1131,6 @@ test('a worker stopped once the first section is written hands the build back, a
     // first call while the section read from the repository is written; then the worker stops.
     const stopped = await scene(h, 'stopped');
     const stoppedPlan = await draft(h, stopped, planFor(stopped));
-    executor('canary', [straight.owner.id, stopped.owner.id]);
     await confirm(h, stopped, stoppedPlan);
     const [row] = await builds(h, stopped.spaceId);
     playRunner(h, stopped.runner.id, () => tree(HEAD));
@@ -1288,4 +1187,61 @@ test('a worker stopped once the first section is written hands the build back, a
   } finally {
     h.model.before = async () => undefined;
   }
+});
+
+// ── 13. a build that failed, asked for again ─────────────────────────────────────────────────────────
+
+test('a build that failed is asked for again on the plan page: the worker writes every document, and a second ask answers the same job', { skip, timeout: 180_000 }, async () => {
+  const h = await boot();
+  await modelUp(h);
+  h.model.hits.length = 0;
+  const s = await scene(h, 'rebuild');
+  const v1 = await draft(h, s, planFor(s));
+  await confirm(h, s, v1);
+  // Its one build ends as production's did on 2026-10-15, before it read anything: ten attempts on a checkout the
+  // space's runner could not read, the job ended failed/infra and its plan job with it (settleWikiJobRows).
+  const [first] = await builds(h, s.spaceId);
+  const fault = 'Ended after 10 attempts: REPO_OP_FAILED: the snapshot of origin/main failed: /tmp/docs-build-spec is not a git checkout: exit status 128';
+  await h.sql.query(`UPDATE "wiki_job" SET "state" = 'failed', "attempts" = 10, "failure_kind" = 'infra', "error" = $2, "ended_at" = now() WHERE "id" = $1`, [first.job_id, fault]);
+  await h.sql.query(`UPDATE "wiki_plan_job" SET "state" = 'ended', "outcome" = 'failed', "error" = $2, "ended_at" = now() WHERE "id" = $1`, [first.id, fault]);
+  // Production's space had no draft on its way: the one the space's creation asked for (made on the server when the
+  // scene named its workspace) is not this case's, and would be the job the plan's read shows.
+  await h.sql.query(`DELETE FROM "wiki_plan_job" WHERE "space_id" = $1 AND "kind" IN ('draft', 'revise')`, [s.spaceId]);
+  const page = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  assert.deepEqual([page.body.job.kind, page.body.job.state, page.body.job.error], ['build', 'failed', fault], 'the plan page shows the writing stopped short');
+  const unwritten = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs`);
+  assert.deepEqual(unwritten.body.docs, { total: 1, written: 0 });
+
+  // The owner asks again: a build of its own, the server's, and a second ask while it waits answers it.
+  const asked = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/versions/${v1}/build`, {});
+  expectStatus(asked, 200, 'the owner asks for the documents again');
+  assert.deepEqual([asked.body.created, asked.body.job.kind, asked.body.job.trigger, asked.body.job.state, asked.body.job.version],
+    [true, 'build', 'owner', 'running', v1]);
+  const again = await call(h, { bearer: s.owner.bearer }, 'POST', `/wiki/spaces/${s.spaceId}/plan/versions/${v1}/build`, {});
+  expectStatus(again, 200, 'the owner asks once more');
+  assert.deepEqual([again.body.created, again.body.job.id], [false, asked.body.job.id], 'the same job');
+  const [, second, third] = await builds(h, s.spaceId);
+  assert.equal(third, undefined, 'one build asked for again, not two');
+  assert.deepEqual([second.state, second.version, second.task_id], ['made', v1, null]);
+  const made = await job(h, second.job_id!);
+  assert.deepEqual([made.kind, made.priority, made.state, made.input], [WIKI_DOCS_BUILD_JOB.kind, WIKI_DOCS_BUILD_JOB.priority, 'queued', { planJobId: second.id }]);
+  assert.equal(await tasksMade(h, s), 0, 'no task');
+
+  // The worker writes every document of the version in force with the System model, through the space's runner.
+  const HEAD = createHash('sha1').update(`rebuild-${randomUUID()}`).digest('hex');
+  playRunner(h, s.runner.id, () => tree(HEAD));
+  const w = worker(h);
+  const ended = await runToEnd(h, w, made.id);
+  assert.equal(ended.state, 'succeeded', JSON.stringify(ended));
+  assert.deepEqual([(ended.report as Record<string, unknown>).written, (ended.report as Record<string, unknown>).failed], [3, 0]);
+  assert.ok(h.model.hits.length >= 3, `${h.model.hits.length} calls`);
+  const [, built] = await builds(h, s.spaceId);
+  assert.deepEqual([built.state, built.outcome, built.version], ['ended', 'succeeded', v1]);
+  const written = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs`);
+  assert.deepEqual(written.body.docs, { total: 1, written: 1 }, 'the document is written');
+  const doc = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/docs/${SLUG}`);
+  assert.deepEqual(doc.body.sections.map((section: { written: boolean; repoSha: string }) => [section.written, section.repoSha]),
+    [[true, HEAD], [true, HEAD], [true, HEAD]]);
+  const after = await call(h, { bearer: s.owner.bearer }, 'GET', `/wiki/spaces/${s.spaceId}/plan`);
+  assert.deepEqual([after.body.job.id, after.body.job.state], [asked.body.job.id, 'succeeded']);
 });

@@ -20,8 +20,9 @@ import {
 /**
  * The whole-file half of the documents build's golden fixture (owner 2026-10-08): one section and one footnote
  * quote taken from PAST the 22,000-character window of this repository's own docs/wiki-contract.md, held to
- * what src/runner-go/wiki_docs_build.go makes of the same whole file
- * (src/runner-go/wiki_docs_wholefile_fixture_test.go writes src/shared/src/wiki-docs-wholefile.fixture.json).
+ * what src/runner-go/wiki_docs_build.go made of the same whole file
+ * (src/runner-go/wiki_docs_wholefile_fixture_test.go wrote src/shared/src/wiki-docs-wholefile.fixture.json; P11
+ * deleted both, and the fixture is frozen since).
  *
  * THE DOCUMENT IS FROZEN, NOT THE LIVE ONE. Both sides read src/shared/src/wiki-docs-wholefile.source.md —
  * a copy of docs/wiki-contract.md taken at 04b5101e — so a task that edits the live contract (the project
@@ -29,8 +30,8 @@ import {
  * fixture records and what the section names; only the bytes come from the frozen copy.
  *
  * WHY THIS IS A CASE OF ITS OWN. A read that answers only the first 22,000 characters finds neither the section
- * nor the quote: the server's docs build would report the section missing and the footnote unlocatable while the
- * runner's own path, which has the whole file, writes it — the two paths the project requires to agree. So both
+ * nor the quote: the server's docs build would report the section missing and the footnote unlocatable where the
+ * runner's own path, which had the whole file, wrote it — the two paths the project required to agree. So both
  * sides read the real document (144,000 characters) and this holds the server's section text, its lines, what
  * survives the filter and the cap, the section's fingerprint and the two places the quote is found to the bytes
  * the Go side recorded.
@@ -117,7 +118,7 @@ test('a section and a footnote past the old 22,000-character window come out of 
   };
 
   // The point of the fixture: a read of the first 22,000 characters of this document has neither the section
-  // nor the quote in it, so a server that only ever holds that much cannot answer what the runner answers.
+  // nor the quote in it, so a server that only ever holds that much cannot answer what the runner answered.
   assert.ok(FIXTURE.sectionOffset > WIKI_REPO_OPS.boundedChars, `the section stands at ${FIXTURE.sectionOffset}`);
   assert.ok(FIXTURE.quoteOffset > WIKI_REPO_OPS.boundedChars, `the quote stands at ${FIXTURE.quoteOffset}`);
   assert.equal(content.slice(0, FIXTURE.sectionOffset).includes(FIXTURE.section), false, 'the section is not in the old window');
@@ -134,7 +135,7 @@ test('a section and a footnote past the old 22,000-character window come out of 
   assert.ok(pieces[0].text.includes(FIXTURE.section), 'the piece carries the heading of its own section');
 
   // The cap and the filter, then the fingerprint that decides whether the section is written again — the
-  // number a space moved from the runner's build to the server's keeps every section the runner wrote by.
+  // number a space moved from the runner's build to the server's kept every section the runner wrote by.
   wikiDocFilter(pieces);
   wikiDocSelect(section.kind, pieces);
   assert.deepEqual(shaped(pieces), FIXTURE.selected, 'what survives the filter and the cap');

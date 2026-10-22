@@ -1,4 +1,5 @@
 import type { ProjectIntegrationInFlight, ProjectLandTask, ProjectPromotionView } from '@orbit/shared';
+import { api } from '../api';
 import { jobPhases } from '../components/ProjectPanoramaHeader';
 import { mainBranchName } from './projectStart';
 import { sessionTimeSections, type GroupableSession } from './sessionGrouping';
@@ -39,6 +40,67 @@ export const PAGE_NOTHING_TO_DO =
 export const ON_PASS_MERGES = 'Merges on its own when it passes.';
 /** The checking card's last line when a pass puts the asking card in front of the reader. */
 export const ON_PASS_ASKS = 'Asks you when it passes.';
+
+/** The way into the round's landing session (contract §2.9 LS6, board v4 04, owner 2026-10-19):
+ *  under the merge card while it is confirmed, and beside Cancel while it is being cancelled. The
+ *  same words the Landing card and the jobs list use for the same door. */
+export const OPEN_LANDING = 'Open landing';
+/** The others beside the merge job, when the card does not list them: `+1 job queued`. */
+export function moreJobsQueued(count: number): string | null {
+  const others = count - 1;
+  if (others <= 0) return null;
+  return `+${others} job${others === 1 ? '' : 's'} queued`;
+}
+/** The card's title once the owner has asked a confirmed merge to stop (§3.3 M-T10). */
+export const CANCELLING_THE_MERGE = 'Cancelling the merge…';
+/** And when the ask came too late: the push is the fact now. */
+export const TOO_LATE_TO_CANCEL = 'Too late to cancel — the push has started';
+/** What a cancel asked before the push does: the runner stops at its next report. */
+export const CANCEL_STOPS_SOON =
+  'Stops at the runner’s next report, within 30 s · nothing has been pushed';
+/** And that this is not yet an outcome: the push may still start first. */
+export const CANCEL_MAY_STILL_MERGE =
+  'If the push starts before it stops, the merge goes through and this card says so.';
+/** The cancelled-in-progress card's one press, no longer a press. */
+export const CANCEL_REQUESTED = 'Cancel requested';
+/** The head's clause while a stop has been asked for and not yet answered. */
+export const STOP_REQUESTED = 'stop requested';
+/** The owner's re-check of a timed-out merge check (J-T9, revision 16), on the merge card. */
+export const RERUN_THE_CHECK = 'Re-run the check';
+/** And the owner's one press that ends a timed-out round (J-T10, §4.6 X-E5). */
+export const ABANDON = 'Abandon';
+/** What the re-check records as its reason: the card's own door, not a decision made elsewhere. */
+export const RERUN_CHECK_REASON = 'Re-run the timed-out check from the merge card.';
+/** The landing page's own Re-run the check (§2.9 LS6): the same door and the same record, naming the page it
+ *  was pressed on. The owner route takes a reason (`RetryIntegrationDto.reason`), so a page that pressed it
+ *  without one was refused. */
+export const RERUN_LANDING_CHECK_REASON = 'Re-run the timed-out check from the landing page.';
+
+/** The owner's abandon of one running job (J-T10): it ends, and nothing is queued again. */
+export function abandonJob(projectId: string, jobId: string): Promise<unknown> {
+  return api(`/projects/${encodeURIComponent(projectId)}/integration/jobs/${encodeURIComponent(jobId)}/abandon`,
+    { method: 'POST' });
+}
+
+/** The owner's re-check of a candidate's failed-or-timed-out check (J-T9, §4.7 H1). */
+export function recheckPromotion(projectId: string, promotionId: string): Promise<unknown> {
+  return api(`/projects/${encodeURIComponent(projectId)}/promotions/${encodeURIComponent(promotionId)}/integration/retry`,
+    { method: 'POST', body: { reason: RERUN_CHECK_REASON } });
+}
+
+/**
+ * The landing session THIS ROUND of merging into main belongs to (§2.9 LS1, LS6): the candidate's
+ * own while it carries one (`CHECKING`, `CONFIRMED`, `RECHECKING`), else the active merge job's —
+ * the same session, read from the job while the candidate row does not name it.
+ */
+export function promotionLandingSessionId(
+  promotion: ProjectPromotionView | null | undefined,
+  integration: { inFlightJobs?: readonly ProjectIntegrationInFlight[] } | null | undefined,
+): string | null {
+  if (promotion?.landingSessionId) return promotion.landingSessionId;
+  const job = (integration?.inFlightJobs ?? []).find((entry) => isMergeJob(entry));
+  return job?.landingSessionId ?? null;
+}
 
 type Stage = 'asking' | 'merging' | 'merged' | 'blocked';
 

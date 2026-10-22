@@ -209,6 +209,24 @@ describe('the landing of a DONE task, apart from its status (§2.7a)', () => {
     if (state !== 'QUEUED' && state !== 'RUNNING') expect(block).toContain(`dateTime="${FINISHED_AT}"`);
   });
 
+  it('offers the way into the segment’s landing session from the task read, and nothing else', () => {
+    const LANDING = '0195c0de-0000-7000-8000-00000000d001';
+    const base = integration('CHECK_FAILED');
+    const withLanding: TaskIntegrationView = {
+      ...base, landTask: { ...base.landTask!, landingSessionId: LANDING },
+    };
+    const block = section(renderPanel(task({ status: 'DONE', integration: withLanding })))!;
+    // The task's read gives the newest generation, and a segment's attempts share one session
+    // (§2.9 LS6): one link, at the end of the section, and the facts above it stay read-only.
+    const links = block.match(/<a [^>]*href="([^"]+)"[^>]*>([^<]*)<\/a>/g) ?? [];
+    expect(links).toHaveLength(1);
+    expect(links[0]).toContain(`href="/sessions/${encodeId(LANDING)}"`);
+    expect(links[0]).toContain('Open landing ›');
+    expect(block).not.toContain('<button');
+    // A server that names no session draws no link at all.
+    expect(section(renderPanel(task({ status: 'DONE', integration: base })))).not.toMatch(/<button|<a /);
+  });
+
   it('a newer attempt after a receipt keeps saying where the work already is', () => {
     const view = integration('QUEUED');
     view.state = 'ON_UPSTREAM';
@@ -689,6 +707,30 @@ describe('runNowHint — what the header button says on hover', () => {
     for (const none of [undefined, null, '']) {
       expect(runNowHint({ ...runnable, scheduledLocal: none })).toBe('');
     }
+  });
+
+  it('says that nothing else starts an OPEN task in no project that has no prerequisites', () => {
+    // Auto-run never picks one up — the dependency sweep wants a prerequisite, the independent
+    // release a project — so it looks ready and waits for this press, which is what the hover says.
+    const unfiled = { ...runnable, status: 'OPEN', projectId: null, prerequisites: 0 };
+    const nothingStartsIt =
+      'Nothing starts this task by itself: auto-run needs a prerequisite or a project, and it has neither.';
+    expect(runNowHint(unfiled)).toBe(nothingStartsIt);
+    expect(runNowHint({ ...unfiled, projectId: undefined })).toBe(nothingStartsIt);
+    // Either one is something that can start it, and a settled task is waiting for nothing.
+    expect(runNowHint({ ...unfiled, projectId: 'p1' })).toBe('');
+    expect(runNowHint({ ...unfiled, prerequisites: 1 })).toBe('');
+    for (const status of ['IN_PROGRESS', 'DONE', 'FAILED', 'CANCELLED']) {
+      expect(runNowHint({ ...unfiled, status })).toBe('');
+    }
+    // A caller that does not say how many prerequisites there are is told nothing new.
+    expect(runNowHint({ ...unfiled, prerequisites: undefined })).toBe('');
+    // A schedule does start it by itself, so its sentence wins; every gate still outranks both.
+    expect(runNowHint({ ...unfiled, scheduledLocal: 'Sep 1, 9:00 AM' })).toBe(
+      'Starts immediately and clears the start scheduled for Sep 1, 9:00 AM.',
+    );
+    expect(runNowHint({ ...unfiled, canExecute: false })).toBe('Assign a workspace first');
+    expect(runNowHint({ ...unfiled, running: true })).toBe('Task running…');
   });
 
   it('puts the reasons the button is disabled ahead of the schedule', () => {

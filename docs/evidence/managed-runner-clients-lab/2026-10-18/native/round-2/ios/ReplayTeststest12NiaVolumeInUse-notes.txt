@@ -1,0 +1,18 @@
+scene 12-nia-volume-in-use: 81 s, actions (
+        {
+        body =         {
+            content = "T07-NIA-V1 wake while an attachment of the volume is left behind";
+            kind = message;
+        };
+        m = POST;
+        path = "/api/sessions/34hu0yWhtIlaZz1eVBWTZ/turns";
+        t = "15.932";
+    }
+)
+12-nia-volume-in-use-00: "Managed runner asleep" shows
+12-nia-volume-in-use-01: typed into 52 label="" value="T07-NIA-V1 wake while an attachment of the volume is left behind" frame=(32.00000000000003, 431.0, 338.0, 44.0) hittable=true
+12-nia-volume-in-use-01: send 9 label="Arrow Up Circle" value="" frame=(346.0, 489.0, 32.0, 32.0) hittable=true
+12-nia-volume-in-use-02: "Something else is using this runner's data volume" shows
+12-nia-volume-in-use-03: "Answering: T07-NIA-V1" shows
+12-nia-volume-in-use: 118 requests, 0 violations, actions left [], notes (
+)

@@ -45,7 +45,9 @@ describe('Cursor CLI accounts', () => {
     // CURSOR_API_KEY or CURSOR_AUTH_TOKEN signs the CLI in by itself (contract §2.3), each alone.
     for (const env of [{ CURSOR_API_KEY: 'key_x' }, { CURSOR_AUTH_TOKEN: 'token_x' }]) {
       expect(accountOfEnv('cursor', env, accounts())).toBeNull();
-      expect(accountOfEnv('cursor', { ...env, ORBIT_CURSOR_ACCOUNT_DIR: WORK_DIR }, accounts())).toBeNull();
+      // Not beside an added account the run names: the runner hands the CLI that account's login in
+      // their place (contract §16.3), so the run spends it (P6a, cursor-plan-usage.spec.ts).
+      expect(accountOfEnv('cursor', { ...env, ORBIT_CURSOR_ACCOUNT_DIR: WORK_DIR }, accounts())).toBe(WORK);
     }
     // A blank one is no credential.
     expect(accountOfEnv('cursor', { CURSOR_API_KEY: '  ' }, accounts())).toBe('default');

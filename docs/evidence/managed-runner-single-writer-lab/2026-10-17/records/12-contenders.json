@@ -1,0 +1,209 @@
+{
+  "after": {
+    "at": "2026-10-17T19:54:05.252+00:00",
+    "guestRbdMounts": [
+      "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd /dev/rbd0 ext4",
+      "/var/lib/kubelet/pods/b1a4fd21-2843-4aa3-96b0-84897f626678/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount /dev/rbd0 ext4",
+      "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/a58831d827951719efbddea2b07ff834312fb022eb617f3d1d6794b70d8f4701/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-73e7db32-b44a-49cb-a146-f42de6fe5c27 /dev/rbd1 ext4",
+      "/var/lib/kubelet/pods/38693fcf-9066-4dfa-9c27-c39b2124f3c9/volumes/kubernetes.io~csi/pvc-d5299c21-8be0-4e61-91dd-33636ccda9ab/mount /dev/rbd1 ext4"
+    ],
+    "objects": {
+      "podsUsingTheClaim": [
+        "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799"
+      ],
+      "volumeAttachments": [
+        {
+          "attached": true,
+          "deletionTimestamp": null,
+          "name": "csi-415eea4c5576a6142d81bffd518127b5eedd687b459f98f75cd3cf2ac47e0746",
+          "node": "orbit-mr-lab"
+        }
+      ]
+    },
+    "pod": {
+      "containers": [
+        {
+          "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+          "name": "private-volume-directories",
+          "restartCount": 0,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://d6c7ca811dd63f97fd84abb36fe1b74a29b83245f71ee3b6317caf941f72dea8",
+              "exitCode": 0,
+              "finishedAt": "2026-10-17T19:52:09Z",
+              "reason": "Completed",
+              "startedAt": "2026-10-17T19:52:08Z"
+            }
+          }
+        },
+        {
+          "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+          "name": "runner",
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-10-17T19:52:10Z"
+            }
+          }
+        }
+      ],
+      "deletionTimestamp": null,
+      "generation": "1",
+      "images": [
+        "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+      ],
+      "name": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "node": "orbit-mr-lab",
+      "phase": "Running",
+      "uid": "38693fcf-9066-4dfa-9c27-c39b2124f3c9"
+    },
+    "runnerLastHeartbeatAt": "2026-10-17T19:53:40.689",
+    "runnerStatus": "ONLINE",
+    "writerCommittedRows": [
+      211
+    ]
+  },
+  "attempts": [
+    {
+      "admitted": false,
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_MANAGER: only the managed runner manager may create a Pod that uses a managed runner volume",
+      "at": "2026-10-17T19:53:49.183+00:00",
+      "case": "unlabelled Pod, another name, same node and claim, by the cluster admin",
+      "identity": "lab cluster-admin",
+      "labels": null,
+      "name": "t02a-second-admin",
+      "node": "orbit-mr-lab"
+    },
+    {
+      "admitted": false,
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: the one Pod of this volume is mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "at": "2026-10-17T19:53:49.237+00:00",
+      "case": "unlabelled Pod, another name, same node and claim, by the manager identity",
+      "identity": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+      "labels": null,
+      "name": "t02a-second-manager",
+      "node": "orbit-mr-lab"
+    },
+    {
+      "admitted": false,
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_FIXED_NAME: the one Pod of this volume is mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "at": "2026-10-17T19:53:49.334+00:00",
+      "case": "copy of the authorized Pod (labels, annotations, image, volumes) under another name, by the manager",
+      "identity": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+      "labels": {
+        "app.kubernetes.io/name": "orbit-managed-runner",
+        "orbit-test-environment": "orbit-mr-lab"
+      },
+      "name": "t02a-second-copy",
+      "node": "orbit-mr-lab"
+    },
+    {
+      "admitted": false,
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_RESERVED: generation 1 has no Pod creation reserved (STARTING)",
+      "at": "2026-10-17T19:53:49.436+00:00",
+      "case": "copy of the authorized Pod under its own fixed name, same generation, by the manager",
+      "identity": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+      "labels": {
+        "app.kubernetes.io/name": "orbit-managed-runner",
+        "orbit-test-environment": "orbit-mr-lab"
+      },
+      "name": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "node": "orbit-mr-lab"
+    },
+    {
+      "admitted": false,
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_RESERVED_GENERATION: the reserved generation is 1",
+      "at": "2026-10-17T19:53:49.534+00:00",
+      "case": "the fixed name for the next generation, unreserved, by the manager",
+      "identity": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+      "labels": {
+        "app.kubernetes.io/name": "orbit-managed-runner",
+        "orbit-test-environment": "orbit-mr-lab"
+      },
+      "name": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "node": "orbit-mr-lab"
+    },
+    {
+      "at": "2026-10-17T19:54:01.730+00:00",
+      "case": "a Job's Pod on the claim, created by the Job controller",
+      "events": [
+        "FailedCreate: Error creating: admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_MANAGER: only the managed runner manager may create a Pod that uses a managed runner volume"
+      ],
+      "identity": "system:serviceaccount:kube-system:job-controller",
+      "jobCreated": true,
+      "podsCreated": []
+    },
+    {
+      "admitted": false,
+      "answer": "Error from server (Forbidden): admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: EPHEMERAL_CONTAINER: no container may be added to a managed runner Pod",
+      "at": "2026-10-17T19:54:01.836+00:00",
+      "case": "an ephemeral container mounting the volume, added to the authorized Pod by the cluster admin",
+      "identity": "lab cluster-admin"
+    }
+  ],
+  "before": {
+    "at": "2026-10-17T19:53:49.024+00:00",
+    "guestRbdMounts": [
+      "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd /dev/rbd0 ext4",
+      "/var/lib/kubelet/pods/b1a4fd21-2843-4aa3-96b0-84897f626678/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount /dev/rbd0 ext4",
+      "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/a58831d827951719efbddea2b07ff834312fb022eb617f3d1d6794b70d8f4701/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-73e7db32-b44a-49cb-a146-f42de6fe5c27 /dev/rbd1 ext4",
+      "/var/lib/kubelet/pods/38693fcf-9066-4dfa-9c27-c39b2124f3c9/volumes/kubernetes.io~csi/pvc-d5299c21-8be0-4e61-91dd-33636ccda9ab/mount /dev/rbd1 ext4"
+    ],
+    "objects": {
+      "podsUsingTheClaim": [
+        "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799"
+      ],
+      "volumeAttachments": [
+        {
+          "attached": true,
+          "deletionTimestamp": null,
+          "name": "csi-415eea4c5576a6142d81bffd518127b5eedd687b459f98f75cd3cf2ac47e0746",
+          "node": "orbit-mr-lab"
+        }
+      ]
+    },
+    "pod": {
+      "containers": [
+        {
+          "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+          "name": "private-volume-directories",
+          "restartCount": 0,
+          "state": {
+            "terminated": {
+              "containerID": "containerd://d6c7ca811dd63f97fd84abb36fe1b74a29b83245f71ee3b6317caf941f72dea8",
+              "exitCode": 0,
+              "finishedAt": "2026-10-17T19:52:09Z",
+              "reason": "Completed",
+              "startedAt": "2026-10-17T19:52:08Z"
+            }
+          }
+        },
+        {
+          "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+          "name": "runner",
+          "restartCount": 0,
+          "state": {
+            "running": {
+              "startedAt": "2026-10-17T19:52:10Z"
+            }
+          }
+        }
+      ],
+      "deletionTimestamp": null,
+      "generation": "1",
+      "images": [
+        "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+      ],
+      "name": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "node": "orbit-mr-lab",
+      "phase": "Running",
+      "uid": "38693fcf-9066-4dfa-9c27-c39b2124f3c9"
+    },
+    "runnerLastHeartbeatAt": "2026-10-17T19:53:40.689",
+    "runnerStatus": "ONLINE",
+    "writerCommittedRows": [
+      151
+    ]
+  },
+  "sameAuthorizedPod": true
+}

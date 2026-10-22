@@ -1,0 +1,18 @@
+{
+  "created": true,
+  "owner": "jack",
+  "signIn": {
+    "at": "2026-10-17T23:42:23.780+00:00",
+    "ms": 31.9,
+    "port": 13710,
+    "status": 201
+  },
+  "user": {
+    "email": "t05-jack@lab.invalid",
+    "id": "34hkUMtoZmljQeItZXjQs"
+  },
+  "usersMe": {
+    "id": "34hkUMtoZmljQeItZXjQs",
+    "status": 200
+  }
+}

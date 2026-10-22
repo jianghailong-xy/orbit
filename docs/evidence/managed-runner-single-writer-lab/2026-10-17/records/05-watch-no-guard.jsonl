@@ -1,0 +1,2 @@
+{"at": "2026-10-17T19:50:48.735+00:00", "attachments": 0, "attempt": 0, "desired": "RUNNING", "generation": 1, "operation": "CREATE_PVC:COMPLETED", "pod": null, "podUid": null, "proof": null, "proofRetired": false, "reason": null, "secretGeneration": null, "state": "PROVISIONING"}
+{"at": "2026-10-17T19:50:54.772+00:00", "attachments": 0, "attempt": 0, "desired": "RUNNING", "generation": 1, "operation": "CREATE_SECRET:COMPLETED", "pod": null, "podUid": null, "proof": null, "proofRetired": false, "reason": "ADMISSION_GUARD_MISSING", "secretGeneration": "1", "state": "FAILED"}

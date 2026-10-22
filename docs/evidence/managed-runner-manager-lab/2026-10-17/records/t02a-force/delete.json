@@ -1,0 +1,48 @@
+{
+  "answer": "pod \"mr-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4\" force deleted from orbit-mr-test namespace",
+  "finalizersRightAfter": [
+    "orbit.dev/managed-runner-stop-report"
+  ],
+  "force": true,
+  "generation": 2,
+  "objectRightAfter": {
+    "containers": [
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+        "name": "private-volume-directories",
+        "restartCount": 0,
+        "state": {
+          "terminated": {
+            "containerID": "containerd://0f95b18affead3e37d7af10aec1420701bef38c1a58fc0a97ec8493c9055127a",
+            "exitCode": 0,
+            "finishedAt": "2026-10-17T21:50:15Z",
+            "reason": "Completed",
+            "startedAt": "2026-10-17T21:50:14Z"
+          }
+        }
+      },
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+        "name": "runner",
+        "restartCount": 0,
+        "state": {
+          "running": {
+            "startedAt": "2026-10-17T21:50:16Z"
+          }
+        }
+      }
+    ],
+    "deletionTimestamp": "2026-10-17T21:52:13Z",
+    "generation": "2",
+    "images": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+    ],
+    "name": "mr-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4",
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "ec8ae7ff-9902-4ca5-acd9-7aa703193c35"
+  },
+  "owner": "bob",
+  "pod": "ec8ae7ff-9902-4ca5-acd9-7aa703193c35",
+  "requestedAt": "2026-10-17T21:52:13.041+00:00"
+}

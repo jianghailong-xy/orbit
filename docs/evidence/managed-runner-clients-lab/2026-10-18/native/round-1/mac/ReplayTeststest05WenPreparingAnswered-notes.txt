@@ -1,0 +1,8 @@
+scene 05-wen-preparing-answered: 120 s, actions (
+)
+05-wen-preparing-answered: no window after launch; File > New Window
+05-wen-preparing-answered-00: "Waiting for capacity" shows
+05-wen-preparing-answered-01: "Preparing your managed runner" shows
+05-wen-preparing-answered-02: "Answering: T07-WEN-S1" shows
+05-wen-preparing-answered: 95 requests, 0 violations, actions left [], notes (
+)

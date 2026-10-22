@@ -1,0 +1,241 @@
+#0 building with "t03-capped" instance using docker-container driver
+
+#1 [internal] booting buildkit
+#1 starting container buildx_buildkit_t03-capped0
+#1 starting container buildx_buildkit_t03-capped0 0.4s done
+#1 DONE 0.4s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 9.30kB done
+#2 DONE 0.0s
+
+#3 resolve image config for docker-image://docker.io/docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#3 DONE 1.3s
+
+#4 docker-image://docker.io/docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#4 resolve docker.io/docker/dockerfile:1.7.1@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e 0.0s done
+#4 CACHED
+
+#5 [internal] load metadata for docker.io/library/node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
+#5 DONE 1.0s
+
+#6 [internal] load metadata for docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#6 DONE 1.7s
+
+#7 [orbit-build 1/4] FROM docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#7 resolve docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5 0.0s done
+#7 DONE 0.0s
+
+#8 [stage-3  1/11] FROM docker.io/library/node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1
+#8 resolve docker.io/library/node:26.10.0-trixie-slim@sha256:ec7758ee051e457b468b32bde57b0879010b325bb9862718e9615225ce4aaae1 0.0s done
+#8 DONE 0.0s
+
+#9 [internal] load build context
+#9 transferring context: 6.18MB 0.0s done
+#9 DONE 0.1s
+
+#7 [orbit-build 1/4] FROM docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#7 DONE 0.2s
+
+#7 [orbit-build 1/4] FROM docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#7 sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 0B / 32B 0.2s
+#7 sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 32B / 32B 0.3s done
+#7 sha256:0f84d036a45371878e3498c1b82b1da44b27f7c50ad6c36b9c7662dc084bce8f 0B / 126B 0.2s
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 0B / 71.08MB 0.2s
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 0B / 67.81MB 0.2s
+#7 sha256:0f84d036a45371878e3498c1b82b1da44b27f7c50ad6c36b9c7662dc084bce8f 126B / 126B 0.3s done
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 0B / 102.34MB 0.2s
+#7 sha256:42f0cc32f2e355552fbfad163210ddc51f7b8bc7cfaddb2a41bd9c4a7c5e3c49 0B / 25.64MB 0.2s
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 10.49MB / 71.08MB 0.6s
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 4.19MB / 67.81MB 0.6s
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 22.02MB / 71.08MB 0.8s
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 8.39MB / 67.81MB 0.8s
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 30.41MB / 71.08MB 0.9s
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 13.63MB / 67.81MB 0.9s
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 8.39MB / 102.34MB 0.8s
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 35.65MB / 71.08MB 1.1s
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 18.87MB / 67.81MB 1.1s
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 40.89MB / 71.08MB 1.2s
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 23.07MB / 67.81MB 1.2s
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 16.78MB / 102.34MB 1.1s
+#7 sha256:42f0cc32f2e355552fbfad163210ddc51f7b8bc7cfaddb2a41bd9c4a7c5e3c49 4.19MB / 25.64MB 0.9s
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 45.09MB / 71.08MB 1.4s
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 27.26MB / 67.81MB 1.4s
+#7 sha256:42f0cc32f2e355552fbfad163210ddc51f7b8bc7cfaddb2a41bd9c4a7c5e3c49 9.44MB / 25.64MB 1.1s
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 50.33MB / 71.08MB 1.5s
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 25.17MB / 102.34MB 1.4s
+#7 sha256:42f0cc32f2e355552fbfad163210ddc51f7b8bc7cfaddb2a41bd9c4a7c5e3c49 14.68MB / 25.64MB 1.2s
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 54.53MB / 71.08MB 1.7s
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 35.65MB / 67.81MB 1.7s
+#7 sha256:42f0cc32f2e355552fbfad163210ddc51f7b8bc7cfaddb2a41bd9c4a7c5e3c49 18.87MB / 25.64MB 1.4s
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 58.72MB / 71.08MB 1.8s
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 39.85MB / 67.81MB 1.8s
+#7 sha256:42f0cc32f2e355552fbfad163210ddc51f7b8bc7cfaddb2a41bd9c4a7c5e3c49 25.64MB / 25.64MB 1.6s done
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 62.91MB / 71.08MB 2.0s
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 45.09MB / 67.81MB 2.0s
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 34.60MB / 102.34MB 1.7s
+#7 sha256:6eefb2f5d3e91a6cfc577476bbec26bb63f0d0fc31f904493f400833783aa2c2 0B / 49.38MB 0.2s
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 68.16MB / 71.08MB 2.1s
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 53.48MB / 67.81MB 2.1s
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 39.85MB / 102.34MB 1.8s
+#7 sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 71.08MB / 71.08MB 2.2s done
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 60.82MB / 67.81MB 2.3s
+#7 sha256:6eefb2f5d3e91a6cfc577476bbec26bb63f0d0fc31f904493f400833783aa2c2 5.24MB / 49.38MB 0.5s
+#7 sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 67.81MB / 67.81MB 2.5s done
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 50.33MB / 102.34MB 2.1s
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 56.62MB / 102.34MB 2.3s
+#7 sha256:6eefb2f5d3e91a6cfc577476bbec26bb63f0d0fc31f904493f400833783aa2c2 25.17MB / 49.38MB 0.8s
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 61.87MB / 102.34MB 2.4s
+#7 sha256:6eefb2f5d3e91a6cfc577476bbec26bb63f0d0fc31f904493f400833783aa2c2 36.70MB / 49.38MB 0.9s
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 67.11MB / 102.34MB 2.6s
+#7 sha256:6eefb2f5d3e91a6cfc577476bbec26bb63f0d0fc31f904493f400833783aa2c2 47.19MB / 49.38MB 1.1s
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 90.18MB / 102.34MB 2.9s
+#7 sha256:6eefb2f5d3e91a6cfc577476bbec26bb63f0d0fc31f904493f400833783aa2c2 49.38MB / 49.38MB 1.1s done
+#7 extracting sha256:6eefb2f5d3e91a6cfc577476bbec26bb63f0d0fc31f904493f400833783aa2c2
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 102.34MB / 102.34MB 3.0s
+#7 sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 102.34MB / 102.34MB 3.0s done
+#7 extracting sha256:6eefb2f5d3e91a6cfc577476bbec26bb63f0d0fc31f904493f400833783aa2c2 0.4s done
+#7 DONE 3.7s
+
+#7 [orbit-build 1/4] FROM docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#7 extracting sha256:42f0cc32f2e355552fbfad163210ddc51f7b8bc7cfaddb2a41bd9c4a7c5e3c49
+#7 extracting sha256:42f0cc32f2e355552fbfad163210ddc51f7b8bc7cfaddb2a41bd9c4a7c5e3c49 0.2s done
+#7 DONE 3.9s
+
+#7 [orbit-build 1/4] FROM docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#7 extracting sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460
+#7 extracting sha256:38985a14f2b1b8215895ecb448f3dfc4067cb494aa00b547c78c9a012e9b2460 0.6s done
+#7 DONE 4.5s
+
+#7 [orbit-build 1/4] FROM docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#7 extracting sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728
+#7 extracting sha256:0069ea6125d297a10b4b4bc7dc56696fd2f9177b6641779483b72b53923de728 0.9s done
+#7 DONE 5.4s
+
+#7 [orbit-build 1/4] FROM docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#7 extracting sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095
+#7 extracting sha256:ef1dbfdbb5d59bdeac07b1398a9f0808b453513bf6a76eb3ffd509a284483095 1.1s done
+#7 DONE 6.5s
+
+#7 [orbit-build 1/4] FROM docker.io/library/golang:1.27.1-trixie@sha256:3b77fc618ec235a1ab412de7737f120dd507c57e8d87de4cbb7994fb94275ed5
+#7 extracting sha256:0f84d036a45371878e3498c1b82b1da44b27f7c50ad6c36b9c7662dc084bce8f 0.0s done
+#7 extracting sha256:4f4fb700ef54461cfa02571ae0db9a0dc1e0cdb5577484a6d75e68dc38e8acc1 0.0s done
+#7 DONE 6.5s
+
+#10 [orbit-build 2/4] WORKDIR /src/runner-go
+#10 DONE 0.3s
+
+#11 [orbit-build 3/4] COPY src/runner-go/ ./
+#11 DONE 0.1s
+
+#12 [orbit-build 4/4] RUN test "$(go env GOVERSION)" = go1.27.1  && printf '%s\n' "2b187b370ace1c68722871a26f6087289a4e7e39" | grep -Eq '^[0-9a-f]{40}$'  && go build -buildvcs=false -trimpath       -ldflags="-s -w -X main.sourceSHA=2b187b370ace1c68722871a26f6087289a4e7e39 -X main.version=managed-2b187b370ace1c68722871a26f6087289a4e7e39"       -o /out/orbit .
+#12 DONE 7.8s
+
+#13 [codex 2/2] RUN test "$(node --version)" = v26.10.0  && npm install --global --ignore-scripts --no-audit --no-fund @openai/codex@0.158.0  && mv /usr/local/lib/node_modules/@openai/codex/node_modules/@openai/codex-linux-*/vendor/*-unknown-linux-musl /opt/codex  && test -x /opt/codex/bin/codex  && test -x /opt/codex/codex-path/rg
+#13 CACHED
+
+#14 [stage-3  4/11] COPY --from=codex /opt/codex/ /opt/codex/
+#14 CACHED
+
+#15 [claude 2/2] RUN test "$(node --version)" = v26.10.0  && npm install --global --ignore-scripts --no-audit --no-fund @anthropic-ai/claude-code@2.1.300  && install -D -m 0755       "/usr/local/lib/node_modules/@anthropic-ai/claude-code/node_modules/@anthropic-ai/claude-code-linux-$(node -p process.arch)/claude"       /opt/claude/bin/claude
+#15 CACHED
+
+#16 [stage-3  2/11] RUN mkdir -p /etc/ssl/certs  && node -p "require('tls').rootCertificates.join('\n')" > /etc/ssl/certs/ca-certificates.crt  && rm -f /etc/apt/sources.list /etc/apt/sources.list.d/*  && printf '%s\n'       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260928T000000Z/ trixie main'       'deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260928T000000Z/ trixie-security main'       > /etc/apt/sources.list  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt update  && apt-get -o Acquire::https::CAInfo=/etc/ssl/certs/ca-certificates.crt install --no-install-recommends -y       bash ca-certificates curl git openssh-client ripgrep sqlite3 python3 procps tini  && rm -rf /var/lib/apt/lists/*  && groupadd --gid 10001 orbit  && useradd --uid 10001 --gid 10001 --home-dir /var/lib/orbit/home --no-create-home --shell /bin/bash orbit  && install -d -o 10001 -g 10001 -m 0700 /var/lib/orbit /var/lib/orbit/home
+#16 CACHED
+
+#17 [stage-3  3/11] COPY --from=orbit-build /usr/local/go/ /usr/local/go/
+#17 CACHED
+
+#18 [stage-3  5/11] COPY --from=claude /opt/claude/ /opt/claude/
+#18 CACHED
+
+#19 [stage-3  6/11] COPY --chmod=0644 deploy/managed-runner/image/pins.json /usr/local/share/orbit/pins.json
+#19 DONE 0.0s
+
+#20 [stage-3  7/11] RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex  && ln -s /opt/claude/bin/claude /usr/local/bin/claude  && chown -R root:root /opt/codex /opt/claude /usr/local/go /usr/local/share/orbit  && chmod -R go-w /opt/codex /opt/claude /usr/local/go /usr/local/share/orbit  && chmod 0755 /usr/local/share/orbit  && git config --system user.name 'Orbit Runner'  && git config --system user.email runner@orbit.invalid
+#20 DONE 76.4s
+
+#21 [stage-3  8/11] COPY --from=orbit-build --chmod=0755 /out/orbit /usr/local/bin/orbit
+#21 DONE 0.1s
+
+#22 [stage-3  9/11] COPY --chmod=0755 deploy/managed-runner/image/entrypoint.py /usr/local/bin/orbit-container
+#22 DONE 0.0s
+
+#23 [stage-3 10/11] RUN <<'SH' (set -eu...)
+#23 0.166 WARNING: proceeding, even though we could not create PATH aliases: CODEX_HOME points to "/tmp/orbit-version-check/.codex", but that path does not exist
+#23 DONE 0.2s
+
+#24 [stage-3 11/11] WORKDIR /var/lib/orbit
+#24 DONE 0.0s
+
+#25 exporting to oci image format
+#25 exporting layers
+#25 exporting layers 0.6s done
+#25 exporting manifest sha256:716c65e78baf1cbdc895811ce7aac715f4e8600f25f3d34d56bd39d990e6d8e3 0.0s done
+#25 exporting config sha256:6a63467ceffb3138354ad6016886d5c33f727d06a1df9d95a2540f501b6f4986 0.0s done
+#25 sending tarball
+#25 ...
+
+#26 importing to docker
+#26 DONE 0.0s
+
+#25 exporting to oci image format
+#25 sending tarball 5.2s done
+#25 DONE 5.9s
+runner image build: 102 s
+#0 building with "t03-capped" instance using docker-container driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 854B 0.0s done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.13-alpine
+#2 DONE 2.2s
+
+#3 [internal] load build context
+#3 transferring context: 84.76kB 0.0s done
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
+#4 resolve docker.io/library/python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a 0.0s done
+#4 DONE 0.1s
+
+#4 [1/2] FROM docker.io/library/python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
+#4 sha256:82c48d7f22df9ea2f3393a3daf83a7abb5e933e5fb7f4d1b701dc8f71ebff248 0B / 247B 0.2s
+#4 sha256:82c48d7f22df9ea2f3393a3daf83a7abb5e933e5fb7f4d1b701dc8f71ebff248 247B / 247B 0.3s done
+#4 sha256:6f4c23997e2db272b9d27917c421c0322c90ce90f0b4eeecd39ce268bdb688d0 0B / 15.24MB 0.2s
+#4 sha256:48f6a258842734fe23e0e4c69db9996cbaefd41c1cde2372b95449f9fc5601eb 0B / 416.27kB 0.2s
+#4 sha256:e2de96513ba9eb53b431787ec8a65cdde380ac4772a3e4c4b714dcfde2a102b5 0B / 3.85MB 0.2s
+#4 sha256:6f4c23997e2db272b9d27917c421c0322c90ce90f0b4eeecd39ce268bdb688d0 14.68MB / 15.24MB 0.6s
+#4 sha256:6f4c23997e2db272b9d27917c421c0322c90ce90f0b4eeecd39ce268bdb688d0 15.24MB / 15.24MB 0.6s done
+#4 sha256:48f6a258842734fe23e0e4c69db9996cbaefd41c1cde2372b95449f9fc5601eb 416.27kB / 416.27kB 0.7s done
+#4 sha256:e2de96513ba9eb53b431787ec8a65cdde380ac4772a3e4c4b714dcfde2a102b5 3.85MB / 3.85MB 0.7s done
+#4 extracting sha256:e2de96513ba9eb53b431787ec8a65cdde380ac4772a3e4c4b714dcfde2a102b5 0.1s done
+#4 extracting sha256:48f6a258842734fe23e0e4c69db9996cbaefd41c1cde2372b95449f9fc5601eb
+#4 extracting sha256:48f6a258842734fe23e0e4c69db9996cbaefd41c1cde2372b95449f9fc5601eb 0.0s done
+#4 extracting sha256:6f4c23997e2db272b9d27917c421c0322c90ce90f0b4eeecd39ce268bdb688d0
+#4 extracting sha256:6f4c23997e2db272b9d27917c421c0322c90ce90f0b4eeecd39ce268bdb688d0 0.2s done
+#4 DONE 1.2s
+
+#4 [1/2] FROM docker.io/library/python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
+#4 extracting sha256:82c48d7f22df9ea2f3393a3daf83a7abb5e933e5fb7f4d1b701dc8f71ebff248 0.0s done
+#4 DONE 1.2s
+
+#5 [2/2] COPY deploy/managed-runner/docker-channel/channel.py /opt/orbit-docker-channel/channel.py
+#5 DONE 0.4s
+
+#6 exporting to oci image format
+#6 exporting layers 0.1s done
+#6 exporting manifest sha256:a736336fcc54c46775ba8fd70114c98a7155a96fedab1358972420ed0efb7596 0.0s done
+#6 exporting config sha256:42faeb3ea3d3bd34ed94f3a6d268fd8d87db5c9a7d23d11ca737992eabf6a930 0.0s done
+#6 sending tarball
+#6 sending tarball 0.5s done
+#6 DONE 0.6s
+
+#7 importing to docker
+#7 DONE 0.0s
+channel image build: 5 s
+orbit-managed-runner:d4-2b187b370 sha256:716c65e78baf1cbdc895811ce7aac715f4e8600f25f3d34d56bd39d990e6d8e3 revision=2b187b370ace1c68722871a26f6087289a4e7e39
+
+template parsing error: template: :1:54: executing "" at <.Config.Labels>: map has no entry for key "Labels"
+exit 1

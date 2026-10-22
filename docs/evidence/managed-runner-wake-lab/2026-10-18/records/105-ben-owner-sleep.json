@@ -1,0 +1,36 @@
+{
+  "action": "sleep",
+  "answer": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hnbXI6qV0xWJ7xVZrHY",
+    "contractVersion": 1,
+    "desiredState": "SLEEPING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": "deepseek-2",
+    "lastHeartbeatAt": "2026-10-18T02:12:36.416Z",
+    "managementState": "READY",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 97,
+    "runnerId": "34hnbXHuslJMtj0Qb2S5w",
+    "runnerPublicId": "34hnbXHuslJMtj0Qb2S5w",
+    "usable": true,
+    "workspaceId": "34hnbXI6qV0xWJ7xVZrHY",
+    "workspacePublicId": "34hnbXI6qV0xWJ7xVZrHY"
+  },
+  "at": "2026-10-18T02:12:59.390+00:00",
+  "before": {
+    "desiredState": "RUNNING",
+    "managementState": "READY",
+    "revision": 96
+  },
+  "owner": "ben",
+  "status": 202
+}

@@ -1,5 +1,6 @@
 package io.orbitd.android.management
 
+import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.serialization.json.*
@@ -134,6 +135,28 @@ internal object AccountCopy {
     fun next(account: String) = "Next: $account"
 }
 
+/** Removing a runner's Default from Orbit and bringing it back, in the web's words: src/web/src/lib/runnerAccountCopy.ts, which
+ * RunnerAccountCopyParityTest reads as text — the web's, not Swift's, so the order the native clients land in changes nothing. Its two
+ * lines for the workspace form's account field have no counterpart here: no Android page sets a workspace's account. */
+internal object RunnerAccountCopy {
+    /** The question in front of Default's Remove…, and an added account's while Default is removed. */
+    fun removeTitle(name: String) = "Remove $name?"
+    /** Removing Default, which only Orbit stops using; [cli] is the CLI's own name (Codex, Claude Code). */
+    fun defaultRemoveDetail(runner: String, cli: String) = "Orbit stops using it on $runner. Its sign-in stays on the machine, and $cli in a " +
+        "terminal there keeps working. Workspaces set to it run on Automatic."
+    /** Removing an added account while Default is removed from Orbit, with another account left. */
+    fun removeDetailAutomatic(runner: String) = "Its sign-in is deleted from $runner. Workspaces set to this account run on Automatic."
+    /** Removing the last account Orbit uses while Default is removed: the removal holds only while another account is there, so Default
+     * ([name]) comes back into use. */
+    fun removeDetailLast(runner: String, name: String) = "Its sign-in is deleted from $runner. Without it, Orbit uses $name there again, " +
+        "and workspaces set to this account run on it."
+    /** The line that ends an engine's accounts while its Default is removed: its name, and its directory as a terminal spells it. */
+    fun defaultRemovedLine(name: String, dir: String) = "$name · $dir isn’t used by Orbit"
+    /** That line's button, which brings Default back. */
+    const val USE_AGAIN = "Use again"
+    fun useAgainFailed(name: String) = "Couldn’t use $name again"
+}
+
 /**
  * CodexAccounts: a runner's accounts of an engine that keeps several (Claude Code, Codex, Antigravity, Kimi Code) — whose
  * quota each one reads, which one a new session starts on, and what moves a session between them. Shared by the runner
@@ -147,6 +170,8 @@ internal object EngineAccounts {
     /** The same for Kimi Code: an account Orbit names signs in, on the site the sign-in names, into a KIMI_CODE_HOME of its
      * own rather than Default's. */
     const val KIMI_ACCOUNT_LOGIN = "kimi-account-login/v1"
+    /** The same for Cursor CLI: an account Orbit names signs in into a directory of its own (CursorRuntime.ACCOUNT_LOGIN_CAPABILITY). */
+    const val CURSOR_ACCOUNT_LOGIN = CursorRuntime.ACCOUNT_LOGIN_CAPABILITY
     private const val NEAR_LIMIT = 90.0
     private const val SHORT_WINDOW_NEAR_LIMIT = 80.0
     private const val SHORT_WINDOW_MINS = 5 * 60
@@ -165,23 +190,29 @@ internal object EngineAccounts {
 
     /** What a runner declares when a session there can move to another of its accounts of [engine]: Codex, Claude Code and
      * Kimi Code carry the conversation across; Antigravity's lives in the session's own directory, so a runner that keeps
-     * its accounts at all moves one. */
+     * its accounts at all moves one; Cursor CLI's only once a runner can carry it (D5), which none declares yet. */
     fun moveCapability(engine: String) = when (engine) {
         "claude" -> "claude-account-move/v1"; "antigravity" -> ANTIGRAVITY_ACCOUNT_LOGIN; "kimi" -> "kimi-account-move/v1"
+        ProviderEngines.CURSOR -> CursorRuntime.ACCOUNT_MOVE_CAPABILITY
         else -> "codex-account-move/v1"
     }
 
     /** CodexAccounts.automaticOffered (web `automaticOfferedOn`): Automatic is on offer for [engine] where the workspace picked
-     * none of its accounts ([pick]), its [env] selects no other config directory and no key of its own — for Kimi Code, no model of
-     * its own either, which only both of its variables together are — and the runner has two accounts or more to choose between. */
-    fun automaticOffered(engine: String, pick: String?, env: JsonObject?, accounts: Int): Boolean {
-        if (accounts < 2 || !pick.isNullOrEmpty()) return false
+     * none of its accounts ([pick]), its [env] leaves the account to Orbit, and the runner has two accounts or more to choose between. */
+    fun automaticOffered(engine: String, pick: String?, env: JsonObject?, accounts: Int): Boolean =
+        accounts >= 2 && pick.isNullOrEmpty() && envLeavesAccount(engine, env)
+
+    /** Whether a workspace's [env] leaves [engine]'s account to Orbit: it selects no other config directory and no key of its own — for
+     * Kimi Code, no model of its own either, which only both of its variables together are. */
+    fun envLeavesAccount(engine: String, env: JsonObject?): Boolean {
         fun set(key: String) = (env?.get(key) as? JsonPrimitive)?.contentOrNull?.isNotBlank() == true
         if (engine == "kimi" && set("KIMI_MODEL_NAME") && set("KIMI_MODEL_API_KEY")) return false
         val deciding = when (engine) {
             "claude" -> listOf("CLAUDE_CONFIG_DIR", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN")
             "antigravity" -> listOf("ORBIT_ANTIGRAVITY_GOOGLE_DIR", "GEMINI_API_KEY")
             "kimi" -> listOf("KIMI_CODE_HOME")
+            // A key or token signs Cursor CLI in by itself, and the runner's own variable names the account (shared accountOfEnv).
+            ProviderEngines.CURSOR -> listOf(CursorRuntime.ACCOUNT_DIR_VAR, "CURSOR_API_KEY", "CURSOR_AUTH_TOKEN")
             else -> listOf("CODEX_HOME", "CODEX_API_KEY", "OPENAI_API_KEY", "OPENAI_BASE_URL")
         }
         return deciding.none(::set)
@@ -195,19 +226,57 @@ internal object EngineAccounts {
         bucketWindowMins[bucket.str("window")]?.let { put("windowDurationMins", it) }
     }
 
+    /** How long a Cursor CLI period is, from Cursor's own name for it (shared CURSOR_PERIOD_MINS). */
+    private val cursorPeriodMins = mapOf("weekly" to WEEK_MINS, "monthly" to MONTH_MINS)
+
+    /**
+     * A Cursor CLI account's included usage as the windows the rest of this weighs (shared cursorWindows), each as long as its period
+     * when Cursor names one: [limit] when a turn on the account met Cursor's usage limit this period — spent until the included usage
+     * resets, or with no reset to go by when none is named after that turn; a limit met before the period began is over — and [reading],
+     * the share used, which Cursor reports only above 0 to mean anything. A reading orders accounts and never says one is spent.
+     */
+    fun cursorWindows(snapshot: JsonObject): Pair<JsonObject?, JsonObject?> {
+        val included = snapshot.obj("includedUsage") ?: return null to null
+        val mins = cursorPeriodMins[included.str("period")]
+        val resets = isoMs(included.str("resetsAt"))
+        val reached = isoMs(included.str("limitReachedAt"))
+        val starts = isoMs(included.str("startsAt"))
+        val limit = if (reached == null || (starts != null && reached < starts)) null else buildJsonObject {
+            put("utilization", 100)
+            if (resets != null && resets > reached) put("resetsAt", included.str("resetsAt"))
+            mins?.let { put("windowDurationMins", it) }
+        }
+        val used = included.dbl("percentUsed")?.takeIf { it.isFinite() && it > 0 }
+        val reading = used?.let {
+            buildJsonObject {
+                put("utilization", it)
+                if (resets != null) put("resetsAt", included.str("resetsAt"))
+                mins?.let { put("windowDurationMins", it) }
+            }
+        }
+        return limit to reading
+    }
+
     /** Every window of one snapshot with its length in minutes: Claude's and Kimi Code's named ones by their names — Kimi's
-     * monthly pair both weighed, as shared weighs them — Codex's as reported, Antigravity's buckets as the windows they are. */
-    fun withLength(snapshot: JsonObject): List<Pair<JsonObject, Int?>> {
+     * monthly pair both weighed, as shared weighs them — Codex's as reported, Antigravity's buckets as the windows they are, and a Cursor
+     * CLI account's usage limit met and its reading, as long as its period (shared windowsWithLength). */
+    fun withLength(snapshot: JsonObject): List<Pair<JsonObject, Int?>> = withLength(snapshot, reading = true)
+
+    private fun withLength(snapshot: JsonObject, reading: Boolean): List<Pair<JsonObject, Int?>> {
         val named = listOf("fiveHour" to 5 * 60, "sevenDay" to WEEK_MINS, "sevenDayOpus" to WEEK_MINS, "sevenDaySonnet" to WEEK_MINS,
             "month" to MONTH_MINS, "monthCode" to MONTH_MINS)
             .mapNotNull { (key, mins) -> snapshot.obj(key)?.let { it to (it.int("windowDurationMins") ?: mins) } }
+        val cursor = cursorWindows(snapshot)
         val reported = listOfNotNull(snapshot.obj("primary"), snapshot.obj("secondary")) +
             snapshot.list("rateLimits").flatMap { listOfNotNull(it.obj("primary"), it.obj("secondary")) } +
-            snapshot.list("buckets").map(::bucketWindow)
+            snapshot.list("buckets").map(::bucketWindow) + listOfNotNull(cursor.first, cursor.second?.takeIf { reading })
         return named + reported.map { it to it.int("windowDurationMins") }
     }
 
     fun windows(snapshot: JsonObject): List<JsonObject> = withLength(snapshot).map { it.first }
+
+    /** The windows that can say an account is spent (shared windowsOf): every one but a Cursor CLI reading, which only orders accounts. */
+    private fun spendingWindows(snapshot: JsonObject): List<JsonObject> = withLength(snapshot, reading = false).map { it.first }
 
     private fun resetMs(window: JsonObject) = isoMs(window.str("resetsAt"))
     private fun used(window: JsonObject) = window.dbl("utilization") ?: 0.0
@@ -232,14 +301,19 @@ internal object EngineAccounts {
      * waste first. Signed-out accounts are no candidates; one with a spent window, or paused by hand, waits until it frees
      * up; one nearly spent comes after the rest; then the soonest-expiring, then the roomiest by its tightest window; ties
      * go to Default, then the lower id. Every candidate held: the one that frees up first. Null with fewer than two.
+     *
+     * With [defaultRemoved] — the owner removed this engine's Default from Orbit (shared accountToStartOn's option) — Default is no
+     * candidate, and the choice is among the accounts that remain, the only one included; with every one of them signed out, the first
+     * by id, whose sign-in the session waits on. Null only when none remains.
      */
-    fun toStartOn(accounts: List<JsonObject>, usage: JsonObject?, nowMs: Long): String? {
-        if (accounts.size < 2) return null
+    fun toStartOn(accounts: List<JsonObject>, usage: JsonObject?, nowMs: Long, defaultRemoved: Boolean = false): String? {
+        val pool = if (defaultRemoved) accounts.filter { it.str("id") != DEFAULT } else accounts
+        if (pool.size < (if (defaultRemoved) 1 else 2)) return null
         class Candidate(val id: String, val nearLimit: Boolean, val expiresAt: Double, val tightest: Double, val spentUntil: Double?)
-        val candidates = accounts.filter { it.str("auth") != "no" }.map { account ->
+        val candidates = pool.filter { it.str("auth") != "no" }.map { account ->
             val own = accountSnapshot(usage, account.text("id"))
             val windows = own?.let(::windows).orEmpty()
-            val spent = windows.filter { window -> resetMs(window)?.let { it <= nowMs } != true && used(window) >= 100 }
+            val spent = own?.let(::spendingWindows).orEmpty().filter { window -> resetMs(window)?.let { it <= nowMs } != true && used(window) >= 100 }
             var spentUntil = spent.maxOfOrNull { resetMs(it)?.toDouble() ?: Double.POSITIVE_INFINITY }
             isoMs(account.str("pausedUntil"))?.takeIf { it > nowMs }?.let { pause -> spentUntil = maxOf(pause.toDouble(), spentUntil ?: 0.0) }
             Candidate(account.text("id"), own?.let { nearlySpent(it, nowMs) } ?: false, own?.let { expiresAt(it, nowMs) } ?: Double.POSITIVE_INFINITY,
@@ -250,6 +324,7 @@ internal object EngineAccounts {
         if (usable.isNotEmpty()) return usable.sortedWith(compareBy<Candidate> { it.nearLimit }.thenBy { it.expiresAt }.thenBy { it.tightest }
             .then(byId)).first().id
         return candidates.sortedWith(compareBy<Candidate> { it.spentUntil ?: 0.0 }.then(byId)).firstOrNull()?.id
+            ?: if (defaultRemoved) pool.map { it.text("id") }.sorted().first() else null
     }
 }
 
@@ -295,11 +370,13 @@ internal object RunnerPage {
     private const val STALE_UPDATE_MS = 7 * DAY
     /** Keep Free's choices: what PATCH /runners/:id sends as minFreeDiskMb, and what the picker says. */
     val KEEP_FREE_TIERS = listOf<Pair<Int?, String>>(null to "Off", 10_240 to "10 GB", 20_480 to "20 GB", 51_200 to "50 GB")
-    /** The engines a runner reports on, in the page's order, with each CLI's own name. */
+    /** The engines a runner reports on, in the page's order, with each CLI's own name. Cursor CLI's row comes after them all
+     * ([engines]), where a machine draws it at all. */
     val engineOrder = listOf("claude", "codex", "kimi", "opencode", "antigravity", "dsh")
     /** The engines Orbit signs in on a runner (LoginEngine), in the Engines list's order. */
-    val loginEngines = listOf("claude", "codex", "kimi", "antigravity")
-    private val loginNames = mapOf("claude" to "Claude", "codex" to "Codex", "kimi" to "Kimi", "antigravity" to "Antigravity")
+    val loginEngines = listOf("claude", "codex", "kimi", "antigravity", ProviderEngines.CURSOR)
+    private val loginNames = mapOf("claude" to "Claude", "codex" to "Codex", "kimi" to "Kimi", "antigravity" to "Antigravity",
+        ProviderEngines.CURSOR to ProviderEngines.cliName(ProviderEngines.CURSOR))
     /** Antigravity's buckets by the label usageRows gives the window agy names for each. */
     private val antigravityWindows = mapOf("5-hour" to "5-hour limit", "Weekly" to "weekly limit")
     private val stuckIn = mapOf("unmerged" to "a conflict", "merge" to "a merge", "rebase" to "a rebase",
@@ -314,7 +391,8 @@ internal object RunnerPage {
     /** The engines whose CLI keeps a login per directory, so one machine holds several accounts of them (shared
      * ACCOUNT_ENGINES): an Antigravity account is a Google sign-in in a Gemini directory of its own, a Kimi Code account a
      * KIMI_CODE_HOME of its own. */
-    fun keepsAccounts(engine: String) = engine == "claude" || engine == "codex" || engine == "antigravity" || engine == "kimi"
+    fun keepsAccounts(engine: String) = engine == "claude" || engine == "codex" || engine == "antigravity" || engine == "kimi" ||
+        engine == ProviderEngines.CURSOR
     fun isLoginEngine(engine: String) = engine in loginEngines
 
     // version
@@ -393,8 +471,10 @@ internal object RunnerPage {
         }
     }
 
-    /** What an engine row says about being kept current; warn means only a person can say why. */
-    fun updateNoteOf(update: JsonObject?, nowMs: Long): Pair<String, String>? {
+    /** What an engine row says about being kept current; warn means only a person can say why. [pinned]: an engine Orbit keeps on one
+     * build rather than the newest (Cursor CLI, whose version a runner release moves) — its routine note says so, since "checked" alone
+     * would read as "and it is the latest" (web `updateNoteOf`'s `pinned`). */
+    fun updateNoteOf(update: JsonObject?, nowMs: Long, pinned: Boolean = false): Pair<String, String>? {
         update ?: return null
         if (update.str("status") == "skipped") return "quiet" to "not auto-updated"
         val latest = update.str("latest")?.takeIf { it.isNotEmpty() }
@@ -414,7 +494,7 @@ internal object RunnerPage {
         if (lastOk != null && nowMs - lastOk <= STALE_UPDATE_MS) {
             if (update.str("status") == "failed") return "quiet" to "last update failed · retrying every 30 min"
             val verb = if (update.str("status") == "checked") "checked" else "updated"
-            return "quiet" to "$verb ${ago(update.str("at").orEmpty(), nowMs)}"
+            return "quiet" to "${if (pinned) "pinned · " else ""}$verb ${ago(update.str("at").orEmpty(), nowMs)}"
         }
         lastOk ?: return "warn" to "never updated"
         return "warn" to "not updated in ${maxOf(1, (nowMs - lastOk) / DAY)}d"
@@ -586,7 +666,7 @@ internal object RunnerPage {
         return state != "disabledByEnv" && state != "dirNotWritable" && !isOffline(runner, nowMs)
     }
 
-    private fun engineUpdateItems(runner: JsonObject, nowMs: Long) = engineOrder.mapNotNull { engine ->
+    private fun engineUpdateItems(runner: JsonObject, nowMs: Long) = (engineOrder + ProviderEngines.CURSOR).mapNotNull { engine ->
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return@mapNotNull null
         val note = updateNoteOf(health.obj("update"), nowMs)?.takeIf { it.first == "warn" } ?: return@mapNotNull null
         val summary = "${engineName(engine)} update failed"
@@ -665,17 +745,20 @@ internal object RunnerPage {
     }
 
     // engines
-    /** The engines a runner reports on, in the page's order, then any the page doesn't know yet as reported — but not one this
-     * app does not draw yet (ProviderEngines.androidShowsEngine). A runner predating Antigravity keeps its row too, from what
-     * the server says of it (`runner.antigravity`), so the page can say it needs an update. */
-    fun engines(runner: JsonObject): List<JsonObject> {
+    /** The engines a runner reports on, in the page's order, then any the page doesn't know yet as reported, then Cursor CLI's row
+     * (the board's Web 2 ②: last) — on every machine once a runner of the account knows it ([fleet], this machine alone without them;
+     * ProviderEngines.androidShowsEngine), a machine that predates it included, whose row says it needs an update. A runner predating
+     * Antigravity keeps its row too, from what the server says of it (`runner.antigravity`), so the page can say it needs an update. */
+    fun engines(runner: JsonObject, fleet: List<JsonObject>? = null): List<JsonObject> {
         var reported = runner.list("engines")
         if (reported.none { it.str("engine") == "antigravity" }) reported = reported + buildJsonObject {
             put("engine", "antigravity")
             runner.obj("antigravity")?.let { state -> state.bool("installed")?.let { put("installed", it) }; state.str("version")?.let { put("version", it) } }
         }
+        val cursor = if (!ProviderEngines.androidShowsEngine(ProviderEngines.CURSOR, fleet ?: listOf(runner))) null
+            else reported.firstOrNull { it.str("engine") == ProviderEngines.CURSOR } ?: buildJsonObject { put("engine", ProviderEngines.CURSOR) }
         return engineOrder.mapNotNull { engine -> reported.firstOrNull { it.str("engine") == engine } } +
-            reported.filter { it.str("engine") !in engineOrder && ProviderEngines.androidShowsEngine(it.str("engine")) }
+            reported.filter { it.str("engine") !in engineOrder && it.str("engine") != ProviderEngines.CURSOR } + listOfNotNull(cursor)
     }
 
     /** Antigravity's Default on a runner that runs agy on its own GEMINI_API_KEY (web runsOnEnvKey): the engine answers yes —
@@ -689,23 +772,37 @@ internal object RunnerPage {
         "available" -> null; "unsupported_platform" -> AccountCopy.HINT_UNSUPPORTED; else -> AccountCopy.HINT_UPDATE
     }
     /** Why the engine page cannot sign [engine] in here, where a sentence says it: only Antigravity's Google sign-in. */
-    fun signInHint(runner: JsonObject, engine: String) = if (engine == "antigravity") antigravityLoginHint(runner.obj("antigravity")?.str("googleLogin")) else null
+    fun signInHint(runner: JsonObject, engine: String) = when (engine) {
+        "antigravity" -> antigravityLoginHint(runner.obj("antigravity")?.str("googleLogin"))
+        // Cursor CLI's is the server's refusal of a sign-in it would not hand this runner, said while one is needed.
+        ProviderEngines.CURSOR -> CursorCopy.SIGN_IN_TOO_OLD.takeIf {
+            !CursorRuntime.signsIn(runner) && CursorRuntime.state(runner) == CursorRuntime.RunnerState.READY &&
+                CursorRuntime.health(runner)?.str("auth") == "no"
+        }
+        else -> null
+    }
     fun antigravityCanSignIn(runner: JsonObject) = runner.obj("antigravity")?.str("googleLogin") == "available" &&
         engineHealth(runner, "antigravity")?.bool("installed") == true
     /** Every engine Orbit signs in, and Antigravity only where the runner offers its Google sign-in. */
-    fun canSignIn(runner: JsonObject, engine: String) = engine != "antigravity" || antigravityCanSignIn(runner)
+    fun canSignIn(runner: JsonObject, engine: String) = when (engine) {
+        "antigravity" -> antigravityCanSignIn(runner)
+        ProviderEngines.CURSOR -> CursorRuntime.signsIn(runner)
+        else -> true
+    }
     /** Add Account: an engine that keeps accounts — Antigravity's only on a runner that keeps an added Google account apart
      * from Default's (antigravity-account-login/v1), Kimi's only on one that signs the account it adds into a KIMI_CODE_HOME
      * of its own (kimi-account-login/v1); an older one would sign Default in again in its place. */
     fun canAddAccount(runner: JsonObject, engine: String) = keepsAccounts(engine) && when (engine) {
         "antigravity" -> antigravityCanSignIn(runner) && EngineAccounts.ANTIGRAVITY_ACCOUNT_LOGIN in runner.strings("capabilities")
         "kimi" -> EngineAccounts.KIMI_ACCOUNT_LOGIN in runner.strings("capabilities")
+        // Cursor CLI's only on a runner that signs a named account into its own directory (a Linux one today, D4), and runs it at all.
+        ProviderEngines.CURSOR -> CursorRuntime.signsIn(runner) && !CursorRuntime.state(runner).blocksRow
         else -> true
     }
     /** The engine page's name for its section of logins: Accounts where the engine keeps several on this runner, Sign-In
-     * where it has the one — as Kimi does on a runner that cannot add a second, whose page reads as it always has. */
-    fun accountsTitle(runner: JsonObject, engine: String) =
-        if (keepsAccounts(engine) && (engine != "kimi" || canAddAccount(runner, engine))) "Accounts" else "Sign-In"
+     * where it has the one — as Kimi and Cursor CLI do on a runner that cannot add a second, whose page reads as it always has. */
+    fun accountsTitle(runner: JsonObject, engine: String) = if (keepsAccounts(engine) &&
+        (engine != "kimi" && engine != ProviderEngines.CURSOR || canAddAccount(runner, engine))) "Accounts" else "Sign-In"
     /** Which of Kimi's two sites its login is on, said after the version on its Engines row (`2.1.1 · kimi.ai`): the same
      * CLI signs in to either, and a session spends that site's subscription. Null for every other engine, before Kimi's
      * first sign-in — and with several accounts, which can be on different sites: each says its own on the engine page. */
@@ -731,9 +828,14 @@ internal object RunnerPage {
     }
 
     /** With several accounts the engine is signed in only when every one of them is. An Antigravity that can't sign in with
-     * Google here says why (given its [runner]); one on the machine's Gemini key says "env key", whose Default counts as in. */
+     * Google here says why (given its [runner]); one on the machine's Gemini key says "env key", whose Default counts as in. A Cursor
+     * CLI this runner can't run at all says why, in the tone the web's badge has (CursorRuntime.state). */
     fun engineStatus(health: JsonObject, runner: JsonObject? = null): Pair<String, String>? {
         if (health.text("engine") == ProviderEngines.DSH) return dshStatus(health, runner)
+        if (health.text("engine") == ProviderEngines.CURSOR && runner != null) {
+            val state = CursorRuntime.state(runner)
+            if (state.blocksRow) return state.label!! to "warn"
+        }
         if (health.text("engine") == "antigravity" && runner != null && health.bool("installed") != false && health.str("auth") != "yes") {
             when (runner.obj("antigravity")?.str("googleLogin")) {
                 "unsupported_platform" -> return AccountCopy.NOT_SUPPORTED_YET to "muted"
@@ -763,8 +865,10 @@ internal object RunnerPage {
         else -> RunnerCopy.USES_API_KEYS to "muted"
     }
 
-    /** The Engines row's Sign In: a login it needs is out — never an Antigravity Default on the machine's Gemini key. */
-    fun needsSignIn(health: JsonObject): Boolean = health.bool("installed") == true && isLoginEngine(health.text("engine")) &&
+    /** The Engines row's Sign In: a login it needs is out — never an Antigravity Default on the machine's Gemini key, nor a Cursor CLI
+     * the [runner] can't run at all, which signing in would not help. */
+    fun needsSignIn(health: JsonObject, runner: JsonObject? = null): Boolean = health.bool("installed") == true && isLoginEngine(health.text("engine")) &&
+        !(health.text("engine") == ProviderEngines.CURSOR && runner != null && CursorRuntime.state(runner).blocksRow) &&
         (health.str("auth") == "no" || health.list("accounts").any { it.str("auth") == "no" && !runsOnEnvKey(health, it.text("id"), it.str("auth")) })
 
     fun updateFailedLine(health: JsonObject, nowMs: Long, zone: ZoneId = ZoneId.systemDefault()): String? {
@@ -785,20 +889,22 @@ internal object RunnerPage {
     }
 
     /** The one quota window an Engines row shows: the binding one (bindingRow, the composer gauge's) — Default's while the
-     * engine is signed in with one account; with several, that of the account a new session starts on, which the row names
-     * above it (engineNextAccount). Every window, and every account's, is the engine page's to list. */
+     * engine is signed in with one account; with several, or the one a removed Default leaves, that of the account a new session
+     * starts on, which the row names above it (engineNextAccount), while it is not signed out. Every window, and every account's, is
+     * the engine page's to list. */
     fun engineWindows(runner: JsonObject, engine: String, nowMs: Long = System.currentTimeMillis()): List<UsageRow> {
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return emptyList()
         val account = when {
-            health.list("accounts").size >= 2 -> nextAccount(runner, health, nowMs) ?: return emptyList()
+            health.list("accounts").size >= 2 || removedDefault(health) != null -> nextAccount(runner, health, nowMs)
+                ?.takeIf { id -> health.list("accounts").none { it.str("id") == id && it.str("auth") == "no" } } ?: return emptyList()
             health.str("auth") == "yes" -> EngineAccounts.DEFAULT
             else -> return emptyList()
         }
         return accountSnapshot(EngineAccounts.usage(engine, runner), account)?.let { bindingRow(it, nowMs) }?.let(::listOf).orEmpty()
     }
 
-    /** The account an Engines row names above its window while the engine has several: the one a new session starts on.
-     * Null with one account, none signed in, or no window to show for it. */
+    /** The account an Engines row names above its window while the engine has several, or the one a removed Default leaves: the
+     * one a new session starts on. Null with one account of its own, none signed in, or no window to show for it. */
     fun engineNextAccount(runner: JsonObject, engine: String, nowMs: Long = System.currentTimeMillis()): String? {
         val health = engineHealth(runner, engine)?.takeIf { it.bool("installed") == true } ?: return null
         val next = nextAccount(runner, health, nowMs) ?: return null
@@ -807,18 +913,23 @@ internal object RunnerPage {
     }
 
     /** Whether the engine page marks [account] NEXT beside its name, as the account pools mark theirs: the account a new
-     * session nobody picked one for starts on — so only where the engine has two accounts or more to choose between. */
+     * session nobody picked one for starts on — so only where the engine has two accounts or more to choose between, or, while its
+     * Default is removed from Orbit, the one that remains. */
     fun marksNext(runner: JsonObject, engine: String, account: String, nowMs: Long = System.currentTimeMillis()): Boolean {
         val health = engineHealth(runner, engine) ?: return false
         return nextAccount(runner, health, nowMs) == account
     }
 
-    private fun nextAccount(runner: JsonObject, health: JsonObject, nowMs: Long) =
-        EngineAccounts.toStartOn(health.list("accounts"), EngineAccounts.usage(health.text("engine"), runner), nowMs)
+    private fun nextAccount(runner: JsonObject, health: JsonObject, nowMs: Long) = EngineAccounts.toStartOn(health.list("accounts"),
+        EngineAccounts.usage(health.text("engine"), runner), nowMs, defaultRemoved = removedDefault(health) != null)
 
     /** One account's own windows, all of them: Default's are the engine snapshot's, another's its entry under `accounts`. */
     fun accountWindows(runner: JsonObject, engine: String, account: String): List<UsageRow> =
         accountSnapshot(EngineAccounts.usage(engine, runner), account)?.let(::usageRows).orEmpty()
+
+    /** A Cursor CLI account's usage limit met this period, and until when (cursorUsageLimit), off the runner's report of the engine. */
+    fun cursorSpent(runner: JsonObject, account: String, nowMs: Long): CursorSpent? =
+        cursorUsageLimit(accountSnapshotReported(EngineAccounts.usage(ProviderEngines.CURSOR, runner), account), nowMs)
 
     /** Kimi only: [account]'s quota was read and its plan carries no limit — said as "No quota limit" where a read that
      * failed or never ran says "No quota reported" (web kimiNoQuotaLimit). Resolves the engine's usage exactly as
@@ -835,31 +946,37 @@ internal object RunnerPage {
      * the account's own, Default's being the engine's. */
     data class AccountLine(val id: String, val name: String, val home: String?, val auth: String?,
                            val signInAccount: String?, val pausedUntil: String?, val envKey: Boolean = false, val loginExpiresAt: String? = null,
-                           val site: KimiSite? = null) {
+                           val site: KimiSite? = null, val plan: String? = null) {
         val isDefault get() = id == "default"
-        /** Where its login lives — a Kimi account's after the site it is on (`kimi.com · ~/.orbit/kimi-accounts/5c2e91a0`) —
-         * and, for a Default renamed in Orbit, that it is still the machine's own login. */
-        val subtitle get() = listOfNotNull(site?.domain, home, "Default".takeIf { isDefault && name != "Default" })
+        /** Where its login lives — a Kimi account's after the site it is on (`kimi.com · ~/.orbit/kimi-accounts/5c2e91a0`), a Cursor CLI
+         * account's after its plan (`Free plan · ~/.orbit/cursor/default`) — and, for a Default renamed in Orbit, that it is still the
+         * machine's own login. */
+        val subtitle get() = listOfNotNull(site?.domain, plan?.let(CursorCopy::plan), home, "Default".takeIf { isDefault && name != "Default" })
             .takeIf { it.isNotEmpty() }?.joinToString(" · ")
     }
 
     /** Every account an engine is signed into, Default first; one line when it keeps no others, whose answer is the
-     * engine's unless that is a Gemini key's rather than Default's Google sign-in (runsOnEnvKey). */
-    fun accountLines(health: JsonObject): List<AccountLine> {
+     * engine's unless that is a Gemini key's rather than Default's Google sign-in (runsOnEnvKey). While Default is removed from Orbit,
+     * the accounts that remain, each with its own state — the only one too, which on its own would read the engine's sign-in, on the
+     * machine Default's. A Cursor CLI account says the plan Cursor names it on, read off the runner's [usage] of the engine
+     * (EngineAccounts.usage). */
+    fun accountLines(health: JsonObject, usage: JsonObject? = null): List<AccountLine> {
         val accounts = health.list("accounts")
         val kimi = health.str("engine") == "kimi"
-        if (accounts.size < 2) {
+        fun plan(account: String) = if (health.str("engine") != ProviderEngines.CURSOR) null
+            else accountSnapshotReported(usage, account)?.str("planName")?.takeIf { it.isNotBlank() }
+        if (accounts.size < 2 && removedDefault(health) == null) {
             val own = accounts.firstOrNull()
             val envKey = runsOnEnvKey(health, EngineAccounts.DEFAULT, own?.str("auth"))
             return listOf(AccountLine("default", accountLabel("default", accounts), (own?.str("home") ?: own?.str("codexHome"))?.let(::tildePath),
                 if (envKey) null else health.str("auth"), null, own?.str("pausedUntil"), envKey, own?.str("loginExpiresAt"),
-                if (kimi) KimiSite.of(health.str("kimiRegion")) else null))
+                if (kimi) KimiSite.of(health.str("kimiRegion")) else null, plan(EngineAccounts.DEFAULT)))
         }
         return accounts.map { account ->
             val envKey = runsOnEnvKey(health, account.text("id"), account.str("auth"))
             AccountLine(account.text("id"), accountLabel(account.text("id"), accounts), (account.str("home") ?: account.str("codexHome"))?.let(::tildePath),
                 if (envKey) null else account.str("auth"), account.text("id"), account.str("pausedUntil"), envKey, account.str("loginExpiresAt"),
-                if (kimi) KimiSite.of(account.str("kimiRegion")) else null)
+                if (kimi) KimiSite.of(account.str("kimiRegion")) else null, plan(account.text("id")))
         }
     }
 
@@ -894,6 +1011,41 @@ internal object RunnerPage {
     fun removal(state: JsonObject?, engine: String, account: String): Pair<Boolean, String?>? {
         if (state == null || state.str("engine") != engine || state.str("account") != account) return null
         return (state.str("status") == "pending") to (if (state.str("status") == "failed") state.str("message") else null)
+    }
+
+    /** The Default an engine leaves out while its owner removed it from Orbit (`removedDefault`: its directory, and its name if it was
+     * renamed), which the engine page names after the accounts that remain, with the way back. The server marks an engine only while
+     * the runner reports another account of it, so this is null whenever Default is in use. */
+    fun removedDefault(health: JsonObject): JsonObject? = health.obj("removedDefault")
+
+    /** What a removed Default goes by: the name it was given in Orbit, else Default. */
+    fun removedDefaultName(removed: JsonObject) = removed.str("name")?.takeIf { it.isNotEmpty() } ?: "Default"
+
+    /** The line that ends an engine's accounts while its Default is removed from Orbit. */
+    fun removedDefaultLine(removed: JsonObject) = RunnerAccountCopy.defaultRemovedLine(removedDefaultName(removed), tildePath(removed.text("home")))
+
+    /** How many of the engine's accounts besides [account] stay on the runner: one asked to be removed is as good as gone, though it is
+     * listed until the check-in after the machine's "done" drops it (web beingRemoved). */
+    fun othersStaying(runner: JsonObject, health: JsonObject, account: String): Int {
+        val going = runner.obj("accountRemove")?.takeIf { it.str("engine") == health.str("engine") && it.str("status") in setOf("pending", "done") }
+        return health.list("accounts").count { it.text("id") != account && it.text("id") != going?.str("account") }
+    }
+
+    /** Whether [line]'s menu offers Remove…: every added account's; Default's while another account of its engine stays to run on
+     * (RunnersService.removeAccount) — which takes it off Orbit's list alone, the machine keeping it — and not when it is the only one. */
+    fun offersRemove(runner: JsonObject, health: JsonObject, line: AccountLine) = !line.isDefault || othersStaying(runner, health, line.id) > 0
+
+    /** The question before [line]'s Remove…, title and body. Default's, and an added account's while Default is removed, are the web's:
+     * that only Orbit stops using Default; that the added account's workspaces then run on Automatic, or, for the last account Orbit
+     * uses there, that Orbit uses Default again. An added account's while Default is in use is the page's own, as it was. */
+    fun removeQuestion(runner: JsonObject, health: JsonObject, line: AccountLine): Pair<String, String> {
+        val name = displayName(runner)
+        val title = RunnerAccountCopy.removeTitle(line.name)
+        if (line.isDefault) return title to RunnerAccountCopy.defaultRemoveDetail(name, engineName(health.text("engine")))
+        val removed = removedDefault(health) ?: return "Remove “${line.name}” from $name?" to
+            "${line.home ?: "Its sign-in"} goes from this machine, and sessions stop running on it. Default is untouched."
+        return title to if (othersStaying(runner, health, line.id) > 0) RunnerAccountCopy.removeDetailAutomatic(name)
+            else RunnerAccountCopy.removeDetailLast(name, removedDefaultName(removed))
     }
 
     fun engineUpdateInFlight(install: JsonObject?) = install?.str("mode") == "update" && install.str("status") in setOf("pending", "installing")
@@ -1015,11 +1167,13 @@ internal object RunnerPage {
  * its `accounts`: its own windows are Default's, every other account's snapshot sits beside them (web planUsageSnapshotForProvider). */
 internal fun planUsageSnapshot(usage: JsonObject?, provider: String): JsonObject? {
     usage ?: return null
-    val flat = JsonObject(usage.filterKeys { it !in setOf("claude", "codex", "kimi") })
+    val flat = JsonObject(usage.filterKeys { it !in setOf("claude", "codex", "kimi", ProviderEngines.CURSOR) })
     return when (provider) {
         "codex" -> usage.obj("codex") ?: flat.takeIf { it.str("provider") == "codex" || it.obj("primary") != null || it.obj("secondary") != null || it.list("rateLimits").isNotEmpty() }
         "kimi" -> usage.obj("kimi") ?: flat.takeIf { it.str("provider") == "kimi" }
         "claude" -> usage.obj("claude") ?: flat.takeIf { it.str("provider") == null || it.str("provider") == "claude" }
+        // Cursor CLI's is only ever nested (PlanUsage.cursor); a flat one names itself.
+        ProviderEngines.CURSOR -> usage.obj(ProviderEngines.CURSOR) ?: flat.takeIf { it.str("provider") == ProviderEngines.CURSOR }
         else -> null
     }
 }
@@ -1050,6 +1204,36 @@ internal fun accountSnapshotReported(usage: JsonObject?, account: String): JsonO
  * that reports it has a limit. */
 internal fun kimiNoQuotaLimit(snapshot: JsonObject?): Boolean =
     snapshot != null && snapshot.str("provider") == "kimi" && EngineAccounts.windows(snapshot).isEmpty()
+
+/**
+ * A Cursor CLI account's included usage as rows (web cursorRows): one window, its period's — a paid plan's week, else the billing month —
+ * and only while Cursor reports some of it used. Its 0% is no reading (docs/cursor-runtime-contract.md §11: the Free plan's requests and
+ * Auto never move it), so an account with none has no row, and every reader says "Usage unavailable" rather than draw 0%. Whether the
+ * account is spent is not a reading at all but a turn that met the limit ([cursorUsageLimit]).
+ */
+private fun cursorUsageRows(snapshot: JsonObject): List<UsageRow> {
+    val included = snapshot.obj("includedUsage") ?: return emptyList()
+    val used = included.dbl("percentUsed")?.takeIf { it.isFinite() && it > 0 } ?: return emptyList()
+    return listOf(UsageRow("included", if (included.str("period") == "weekly") "Weekly limit" else "Monthly limit", null, buildJsonObject {
+        put("utilization", used); included.str("resetsAt")?.let { put("resetsAt", it) }
+    }))
+}
+
+/**
+ * When a Cursor CLI account met Cursor's usage limit this period ("Upgrade your plan to continue", contract §12): spent until its included
+ * usage resets — [CursorSpent.resetsAt] when Cursor named that — and not at all once that has passed, or for a limit met before this period began
+ * (web cursorUsageLimit). Null for an account that can run.
+ */
+internal data class CursorSpent(val resetsAt: String?)
+
+internal fun cursorUsageLimit(snapshot: JsonObject?, nowMs: Long): CursorSpent? {
+    val included = snapshot?.obj("includedUsage") ?: return null
+    val reached = isoMs(included.str("limitReachedAt")) ?: return null
+    if (isoMs(included.str("startsAt"))?.let { reached < it } == true) return null
+    val resets = isoMs(included.str("resetsAt"))
+    if (resets != null && resets <= nowMs) return null
+    return CursorSpent(included.str("resetsAt")?.takeIf { resets != null && resets > reached })
+}
 
 /** `usageRows` as they stand at [nowMs]: a window whose reset has passed reads as the fresh window it now is — nothing used,
  * no reset to name. An Antigravity bucket stays as agy read it. */
@@ -1091,6 +1275,7 @@ private fun codexWindowLabel(window: JsonObject, secondary: Boolean): String {
  * by what it has left ("Weekly" / "5-hour", grouped by the bucket's id), and Kimi Code's in the words of its own /usage
  * panel — the month as one row, its total: the coding share of it (`monthCode`) is not a row of its own. */
 internal fun usageRows(snapshot: JsonObject): List<UsageRow> {
+    if (snapshot.str("provider") == ProviderEngines.CURSOR) return cursorUsageRows(snapshot)
     if (snapshot.str("provider") == "antigravity") return snapshot.list("buckets").map { bucket ->
         val window = bucket.text("window")
         val label = when (window) { "weekly" -> "Weekly"; "5h" -> "5-hour"; else -> window }

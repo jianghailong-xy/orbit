@@ -1,0 +1,6 @@
+# This image takes the channel's one file, never the deployment's data, secrets or the rest of the checkout.
+**
+!deploy/
+!deploy/managed-runner/
+!deploy/managed-runner/docker-channel/
+!deploy/managed-runner/docker-channel/channel.py

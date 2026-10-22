@@ -81,7 +81,7 @@ final class UserTurnRowWiringTests: XCTestCase {
     /// or never.
     func testTheTranscriptAndTheQueueDrawAUserTurnThroughTheOneRow() throws {
         let console = statements(try source(Self.consolePath))
-        XCTAssertTrue(console.contains("UserTurnRow(bubble: b, steer: steerControls(b))"),
+        XCTAssertTrue(console.contains("UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))"),
                       "the transcript no longer draws a user turn with the row")
         XCTAssertTrue(console.contains("UserTurnRow(bubble: bubble, queued: QueuedControls(bubble: bubble) {"),
                       "the queued tail no longer draws its turn with the row the transcript draws it with")
@@ -142,7 +142,7 @@ final class UserTurnRowWiringTests: XCTestCase {
                                               from: "struct SteerControls", to: "struct UserTurnRow"))
         XCTAssertTrue(controls.contains("onWithdraw = SteerDelivery.offersWithdraw(bubble) ? withdraw : nil"),
                       "the Withdraw is no longer decided by the one rule")
-        XCTAssertTrue(try rowBody.contains("UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer)"),
+        XCTAssertTrue(try rowBody.contains("UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer, onPutBack: putBack)"),
                       "the owner's bubble is no longer handed the steer's Withdraw")
 
         let console = statements(try source(Self.consolePath))

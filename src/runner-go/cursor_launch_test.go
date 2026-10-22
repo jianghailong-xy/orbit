@@ -251,7 +251,7 @@ func TestCursorLaunchSpecWhitelistsEnvironment(t *testing.T) {
 			started = call
 		}
 	}
-	if strings.Join(started.Args, " ") != "acp --disable-auto-update --disable-indexing" || started.Dir != spec.Cwd {
+	if strings.Join(started.Args, " ") != "acp --disable-auto-update --disable-indexing --disable-project-configs" || started.Dir != spec.Cwd {
 		t.Fatalf("started %v in %s", started.Args, started.Dir)
 	}
 	got := envMap(started.Env)
@@ -279,10 +279,14 @@ func TestCursorLaunchSpecWhitelistsEnvironment(t *testing.T) {
 		t.Fatalf("a command saw %q, want the runner user's real HOME %s", lines[0], home)
 	}
 	commandEnv := envMap(lines[1:])
-	for _, key := range []string{"CURSOR_API_KEY", "CURSOR_AUTH_TOKEN", "XDG_CONFIG_HOME", "CURSOR_CONFIG_DIR", "CURSOR_DATA_DIR"} {
+	for _, key := range []string{"CURSOR_API_KEY", "CURSOR_AUTH_TOKEN", "CURSOR_CONFIG_DIR", "CURSOR_DATA_DIR"} {
 		if value, ok := commandEnv[key]; ok {
 			t.Errorf("a command sees %s=%q", key, value)
 		}
+	}
+	// The runner's own XDG_CONFIG_HOME, given back in place of whatever the CLI's environment held (§8.4).
+	if commandEnv["XDG_CONFIG_HOME"] != "/runner/xdg" {
+		t.Errorf("a command sees XDG_CONFIG_HOME=%q, want the runner's own", commandEnv["XDG_CONFIG_HOME"])
 	}
 	if commandEnv["HOME"] != home || commandEnv["ORBIT_SESSION_ID"] != publicID(job.SessionID) || commandEnv["WORKSPACE_VALUE"] != "workspace" {
 		t.Errorf("a command's HOME = %q, ORBIT_SESSION_ID = %q, WORKSPACE_VALUE = %q", commandEnv["HOME"], commandEnv["ORBIT_SESSION_ID"], commandEnv["WORKSPACE_VALUE"])

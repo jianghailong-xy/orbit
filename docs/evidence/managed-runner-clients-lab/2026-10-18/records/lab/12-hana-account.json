@@ -1,0 +1,17 @@
+{
+  "created": true,
+  "owner": "hana",
+  "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+  },
+  "signIn": {
+    "at": "2026-10-18T05:58:01.157+00:00",
+    "ms": 48.7,
+    "status": 201
+  },
+  "user": {
+    "email": "t06-hana@lab.invalid",
+    "id": "34hthtWp3LhCwL323koxD"
+  }
+}

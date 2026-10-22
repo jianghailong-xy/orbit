@@ -1,0 +1,110 @@
+[
+  {
+    "file": "/mnt/data/tmp/34hxIkHX/lab/records/1-fixed-kill.jsonl",
+    "from": "2026-10-18T09:03:53.218+00:00",
+    "runs": [
+      {
+        "attempt": 0,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "Sessions here run on the runner Orbit manages for you.",
+          "kind": "available",
+          "retry": false,
+          "title": "Managed runner ready"
+        },
+        "from": "2026-10-18T09:03:53.218+00:00",
+        "generations": [
+          1
+        ],
+        "reason": null,
+        "samples": 42,
+        "seconds": 20.5,
+        "state": "READY",
+        "until": "2026-10-18T09:04:13.722+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "The runner instance stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.",
+          "kind": "waking",
+          "retry": false,
+          "title": "Waking your managed runner"
+        },
+        "from": "2026-10-18T09:04:14.222+00:00",
+        "generations": [
+          1
+        ],
+        "reason": "POD_RESTARTING",
+        "samples": 10,
+        "seconds": 4.5,
+        "state": "REQUESTED",
+        "until": "2026-10-18T09:04:18.723+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "The runner instance stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.",
+          "kind": "waking",
+          "retry": false,
+          "title": "Waking your managed runner"
+        },
+        "from": "2026-10-18T09:04:19.224+00:00",
+        "generations": [
+          2
+        ],
+        "reason": "POD_RESTARTING",
+        "samples": 1,
+        "seconds": 0.0,
+        "state": "PROVISIONING",
+        "until": "2026-10-18T09:04:19.224+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "The runner instance stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.",
+          "kind": "waking",
+          "retry": false,
+          "title": "Waking your managed runner"
+        },
+        "from": "2026-10-18T09:04:19.724+00:00",
+        "generations": [
+          2
+        ],
+        "reason": "POD_RESTARTING",
+        "samples": 41,
+        "seconds": 20.0,
+        "state": "STARTING",
+        "until": "2026-10-18T09:04:39.728+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "Sessions here run on the runner Orbit manages for you.",
+          "kind": "available",
+          "retry": false,
+          "title": "Managed runner ready"
+        },
+        "from": "2026-10-18T09:04:40.228+00:00",
+        "generations": [
+          2
+        ],
+        "reason": null,
+        "samples": 1,
+        "seconds": 0.0,
+        "state": "READY",
+        "until": "2026-10-18T09:04:40.228+00:00"
+      }
+    ],
+    "samples": 95,
+    "until": "2026-10-18T09:04:40.228+00:00"
+  }
+]

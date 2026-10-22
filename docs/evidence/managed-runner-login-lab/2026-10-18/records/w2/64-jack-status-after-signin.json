@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-17T23:42:48.459+00:00",
+  "display": {
+    "acceptsWork": false,
+    "detail": "The single-Pod admission guard is not in force in this environment, so no instance is started. An operator has to install it; then it can be retried.",
+    "ensure": false,
+    "kind": "failed",
+    "moving": false,
+    "retry": true,
+    "signIn": false,
+    "startsNewSession": false,
+    "title": "Managed runner failed"
+  },
+  "owner": "jack",
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": true,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hkUMxuOejzeYlP8LA28",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "OFFLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": null,
+    "managementState": "FAILED",
+    "reason": {
+      "code": "ADMISSION_GUARD_MISSING",
+      "message": "The single-Pod admission guard is not in force in this environment, so no instance is started. An operator has to install it; then it can be retried.",
+      "retryable": true
+    },
+    "retryAfter": null,
+    "revision": 9,
+    "runnerId": "34hkUMxuOejzeYKYK226r",
+    "runnerPublicId": "34hkUMxuOejzeYKYK226r",
+    "usable": false,
+    "workspaceId": "34hkUMxuOejzeYlP8LA28",
+    "workspacePublicId": "34hkUMxuOejzeYlP8LA28"
+  }
+}

@@ -315,10 +315,44 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
     /// run for four is a different story from one running for six and a half. Nil on a server that
     /// predates it and on a job still queued, whose whole clock IS that wait.
     public let waitMs: Int?
+    /// The job this line describes. Nil on a server that predates the field.
+    public let jobId: String?
+    /// The landing session this job belongs to (§2.9); the server fills the slot.
+    public let landingSessionId: String?
+    /// The task it lands; nil for a promotion or a merge check, which land no single task.
+    public let taskId: String?
+    /// The candidate a promotion job checks or lands; nil for a task landing.
+    public let promotionId: String?
+    /// The runner holding the claim, by name; nil while queued.
+    public let runner: String?
+    /// The claim generation the job is on: 0 before its first claim, one more per takeover.
+    public let claim: Int?
+    /// The round inside the current claim, from 1, as the v2 reports name it.
+    public let round: Int?
+    /// The check in flight under a v2 claim; nil between checks and for a legacy claim.
+    public let check: ProjectIntegrationCheck?
+    /// When the current step began; nil on a claim that never reported one.
+    public let stepStartedAt: String?
+    /// When the current step's output last moved; nil when no report measured it.
+    public let outputMovedAt: String?
+    /// `"v2"` for a claim that reports periodically, nil for a legacy claim.
+    public let progressProtocol: String?
+    /// How long this project's successful runs of the current MERGE_CHECK usually take; nil for
+    /// every other check, and while none of the project's newest finished jobs passed it.
+    public let typicalMs: Int?
+    /// `LIVE`, `QUIET`, `SILENT`, `LEASE_EXPIRED` or `LEGACY` (§7.2 V6); nil for a queued job.
+    public let liveness: String?
+    /// Why a queued job is not claimed, or why a claimed one waits on the runner's local lock.
+    public let blockingReason: LandTaskBlockingReason?
 
     public init(taskTitle: String? = nil, state: String, startedAt: String,
                 kind: String? = nil, phase: String? = nil, heartbeatAt: String? = nil,
-                waitMs: Int? = nil) {
+                waitMs: Int? = nil, jobId: String? = nil, landingSessionId: String? = nil,
+                taskId: String? = nil, promotionId: String? = nil, runner: String? = nil,
+                claim: Int? = nil, round: Int? = nil, check: ProjectIntegrationCheck? = nil,
+                stepStartedAt: String? = nil, outputMovedAt: String? = nil,
+                progressProtocol: String? = nil, typicalMs: Int? = nil, liveness: String? = nil,
+                blockingReason: LandTaskBlockingReason? = nil) {
         self.taskTitle = taskTitle
         self.kind = kind
         self.phase = phase
@@ -326,6 +360,20 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
         self.startedAt = startedAt
         self.heartbeatAt = heartbeatAt
         self.waitMs = waitMs
+        self.jobId = jobId
+        self.landingSessionId = landingSessionId
+        self.taskId = taskId
+        self.promotionId = promotionId
+        self.runner = runner
+        self.claim = claim
+        self.round = round
+        self.check = check
+        self.stepStartedAt = stepStartedAt
+        self.outputMovedAt = outputMovedAt
+        self.progressProtocol = progressProtocol
+        self.typicalMs = typicalMs
+        self.liveness = liveness
+        self.blockingReason = blockingReason
     }
 
     public init(from decoder: Decoder) throws {
@@ -337,6 +385,49 @@ public struct ProjectIntegrationInFlight: Codable, Equatable, Sendable {
         startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt) ?? ""
         heartbeatAt = try c.decodeIfPresent(String.self, forKey: .heartbeatAt)
         waitMs = try c.decodeIfPresent(Int.self, forKey: .waitMs)
+        // The landing-session fields are optional in both directions: a server that predates them
+        // leaves every one out, and a value this build cannot read is the same absence.
+        jobId = try? c.decodeIfPresent(String.self, forKey: .jobId)
+        landingSessionId = try? c.decodeIfPresent(String.self, forKey: .landingSessionId)
+        taskId = try? c.decodeIfPresent(String.self, forKey: .taskId)
+        promotionId = try? c.decodeIfPresent(String.self, forKey: .promotionId)
+        runner = try? c.decodeIfPresent(String.self, forKey: .runner)
+        claim = try? c.decodeIfPresent(Int.self, forKey: .claim)
+        round = try? c.decodeIfPresent(Int.self, forKey: .round)
+        check = try? c.decodeIfPresent(ProjectIntegrationCheck.self, forKey: .check)
+        stepStartedAt = try? c.decodeIfPresent(String.self, forKey: .stepStartedAt)
+        outputMovedAt = try? c.decodeIfPresent(String.self, forKey: .outputMovedAt)
+        progressProtocol = try? c.decodeIfPresent(String.self, forKey: .progressProtocol)
+        typicalMs = try? c.decodeIfPresent(Int.self, forKey: .typicalMs)
+        liveness = try? c.decodeIfPresent(String.self, forKey: .liveness)
+        blockingReason = try? c.decodeIfPresent(LandTaskBlockingReason.self, forKey: .blockingReason)
+    }
+}
+
+/// The check a v2 claim is running (§2.2 J-T4): its name, where it is in the run, its budget and
+/// when it started. The job row's finished results are a different shape and never decoded here.
+public struct ProjectIntegrationCheck: Codable, Equatable, Sendable {
+    public let name: String
+    public let index: Int
+    public let count: Int
+    public let budgetSeconds: Int
+    public let startedAt: String
+
+    public init(name: String, index: Int, count: Int, budgetSeconds: Int, startedAt: String) {
+        self.name = name
+        self.index = index
+        self.count = count
+        self.budgetSeconds = budgetSeconds
+        self.startedAt = startedAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        index = try c.decodeIfPresent(Int.self, forKey: .index) ?? 0
+        count = try c.decodeIfPresent(Int.self, forKey: .count) ?? 0
+        budgetSeconds = try c.decodeIfPresent(Int.self, forKey: .budgetSeconds) ?? 0
+        startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt) ?? ""
     }
 }
 
@@ -380,14 +471,50 @@ public struct LandTaskIntegrationView: Codable, Equatable, Sendable {
     /// The full ref the job froze at enqueue, e.g. `refs/heads/project/<id>`.
     public let targetRef: String
     public let blockingReason: LandTaskBlockingReason?
+    /// When the attempt FIRST started: the column a claim leaves alone across a takeover, which
+    /// is what "Taken over 17:31 · first started 17:03" reads. Absent from a server that predates
+    /// it (tolerant decode: the older `TaskIntegrationView` sent none).
+    public let startedAt: String?
+    /// The landing session this generation belongs to (§2.9), pre-generated when the subject
+    /// opened. Absent from a server that predates the field.
+    public let landingSessionId: String?
+    /// Why the attempt ended as an error (contract J12), nil unless `state` is `ERROR`.
+    public let errorCode: String?
+    /// Which landing of its subject this attempt is, counting from 1 — a decimal string on the
+    /// wire, as every 64-bit counter crosses this API. Nil on a server that predates the field.
+    public let generation: String?
+    /// Enqueue, the claimer's latest heartbeat, and the terminal write.
+    public let queuedAt: String?
+    public let heartbeatAt: String?
+    public let finishedAt: String?
+    /// Time in the queue: up to the first claim, or to the terminal write of one never claimed.
+    public let waitMs: Int?
+    /// §7.2 V6's read-time liveness, where the task read sends it; nil on the servers that do not.
+    public let liveness: String?
+    /// The runner holding the claim, by name — sent beside `liveness` by the same servers.
+    public let runnerName: String?
 
     public init(jobId: String, state: String, phase: String? = nil, targetRef: String,
-                blockingReason: LandTaskBlockingReason? = nil) {
+                blockingReason: LandTaskBlockingReason? = nil, startedAt: String? = nil,
+                landingSessionId: String? = nil, errorCode: String? = nil,
+                generation: String? = nil, queuedAt: String? = nil, heartbeatAt: String? = nil,
+                finishedAt: String? = nil, waitMs: Int? = nil, liveness: String? = nil,
+                runnerName: String? = nil) {
         self.jobId = jobId
         self.state = state
         self.phase = phase
         self.targetRef = targetRef
         self.blockingReason = blockingReason
+        self.startedAt = startedAt
+        self.landingSessionId = landingSessionId
+        self.errorCode = errorCode
+        self.generation = generation
+        self.queuedAt = queuedAt
+        self.heartbeatAt = heartbeatAt
+        self.finishedAt = finishedAt
+        self.waitMs = waitMs
+        self.liveness = liveness
+        self.runnerName = runnerName
     }
 
     public init(from decoder: Decoder) throws {
@@ -397,6 +524,21 @@ public struct LandTaskIntegrationView: Codable, Equatable, Sendable {
         phase = try c.decodeIfPresent(String.self, forKey: .phase)
         targetRef = try c.decodeIfPresent(String.self, forKey: .targetRef) ?? ""
         blockingReason = try c.decodeIfPresent(LandTaskBlockingReason.self, forKey: .blockingReason)
+        startedAt = try? c.decodeIfPresent(String.self, forKey: .startedAt)
+        landingSessionId = try? c.decodeIfPresent(String.self, forKey: .landingSessionId)
+        errorCode = try? c.decodeIfPresent(String.self, forKey: .errorCode)
+        // The generation crosses as a decimal string; a number is read as the same fact.
+        if let text = try? c.decodeIfPresent(String.self, forKey: .generation) {
+            generation = text
+        } else {
+            generation = (try? c.decodeIfPresent(Int.self, forKey: .generation)).map(String.init)
+        }
+        queuedAt = try? c.decodeIfPresent(String.self, forKey: .queuedAt)
+        heartbeatAt = try? c.decodeIfPresent(String.self, forKey: .heartbeatAt)
+        finishedAt = try? c.decodeIfPresent(String.self, forKey: .finishedAt)
+        waitMs = try? c.decodeIfPresent(Int.self, forKey: .waitMs)
+        liveness = try? c.decodeIfPresent(String.self, forKey: .liveness)
+        runnerName = try? c.decodeIfPresent(String.self, forKey: .runnerName)
     }
 }
 
@@ -458,11 +600,35 @@ public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
     public let limitSeconds: Int?
     /// Whether the owner's Retry takes this job now.
     public let retryable: Bool
+    /// The candidate a promotion job checks or lands; nil for a task landing.
+    public let promotionId: String?
+    /// The claim generation the job is on: 0 before its first claim, one more per takeover.
+    public let claim: Int?
+    /// The round inside the current claim, from 1, as the v2 reports name it.
+    public let round: Int?
+    /// The check in flight under a v2 claim; nil between checks and for a legacy claim.
+    public let check: ProjectIntegrationCheck?
+    /// When the current step began; nil on a claim that never reported one.
+    public let stepStartedAt: String?
+    /// When the current step's output last moved; nil when no report measured it.
+    public let outputMovedAt: String?
+    /// How long this project's successful runs of the current MERGE_CHECK usually take.
+    public let typicalMs: Int?
+    /// `LIVE`, `QUIET`, `SILENT`, `LEASE_EXPIRED` or `LEGACY` (§7.2 V6); nil for a queued job.
+    public let liveness: String?
+    /// Why a queued job is not claimed, or why a claimed one waits on the runner's local lock.
+    public let blockingReason: LandTaskBlockingReason?
+    /// The landing session this job belongs to (§2.9); the server fills the slot.
+    public let landingSessionId: String?
 
     public init(jobId: String, kind: String, state: String, phase: String? = nil, taskId: String? = nil,
                 taskTitle: String? = nil, generation: Int = 1, startedAt: String, queuedAt: String,
                 heartbeatAt: String? = nil, runnerName: String? = nil, retriedBy: String? = nil,
-                timedOut: Bool = false, limitSeconds: Int? = nil, retryable: Bool = false) {
+                timedOut: Bool = false, limitSeconds: Int? = nil, retryable: Bool = false,
+                promotionId: String? = nil, claim: Int? = nil, round: Int? = nil,
+                check: ProjectIntegrationCheck? = nil, stepStartedAt: String? = nil,
+                outputMovedAt: String? = nil, typicalMs: Int? = nil, liveness: String? = nil,
+                blockingReason: LandTaskBlockingReason? = nil, landingSessionId: String? = nil) {
         self.jobId = jobId
         self.kind = kind
         self.state = state
@@ -478,6 +644,16 @@ public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
         self.timedOut = timedOut
         self.limitSeconds = limitSeconds
         self.retryable = retryable
+        self.promotionId = promotionId
+        self.claim = claim
+        self.round = round
+        self.check = check
+        self.stepStartedAt = stepStartedAt
+        self.outputMovedAt = outputMovedAt
+        self.typicalMs = typicalMs
+        self.liveness = liveness
+        self.blockingReason = blockingReason
+        self.landingSessionId = landingSessionId
     }
 
     public init(from decoder: Decoder) throws {
@@ -497,6 +673,16 @@ public struct ProjectIntegrationJob: Codable, Equatable, Sendable {
         timedOut = try c.decodeIfPresent(Bool.self, forKey: .timedOut) ?? false
         limitSeconds = try c.decodeIfPresent(Int.self, forKey: .limitSeconds)
         retryable = try c.decodeIfPresent(Bool.self, forKey: .retryable) ?? false
+        promotionId = try? c.decodeIfPresent(String.self, forKey: .promotionId)
+        claim = try? c.decodeIfPresent(Int.self, forKey: .claim)
+        round = try? c.decodeIfPresent(Int.self, forKey: .round)
+        check = try? c.decodeIfPresent(ProjectIntegrationCheck.self, forKey: .check)
+        stepStartedAt = try? c.decodeIfPresent(String.self, forKey: .stepStartedAt)
+        outputMovedAt = try? c.decodeIfPresent(String.self, forKey: .outputMovedAt)
+        typicalMs = try? c.decodeIfPresent(Int.self, forKey: .typicalMs)
+        liveness = try? c.decodeIfPresent(String.self, forKey: .liveness)
+        blockingReason = try? c.decodeIfPresent(LandTaskBlockingReason.self, forKey: .blockingReason)
+        landingSessionId = try? c.decodeIfPresent(String.self, forKey: .landingSessionId)
     }
 }
 
@@ -964,11 +1150,16 @@ public struct ProjectTaskIntegration: Codable, Equatable, Sendable {
     /// `COORDINATOR` or `OWNER`, while somebody has to act.
     public let handler: String?
     public let checksRunningForMs: Double?
+    /// The task's newest `LAND_TASK` generation, when the server sends it — what the landing's own
+    /// row says beside the state. Nil on an older server and on a task with no landing.
+    public let landTask: LandTaskIntegrationView?
 
-    public init(state: String, handler: String? = nil, checksRunningForMs: Double? = nil) {
+    public init(state: String, handler: String? = nil, checksRunningForMs: Double? = nil,
+                landTask: LandTaskIntegrationView? = nil) {
         self.state = state
         self.handler = handler
         self.checksRunningForMs = checksRunningForMs
+        self.landTask = landTask
     }
 }
 

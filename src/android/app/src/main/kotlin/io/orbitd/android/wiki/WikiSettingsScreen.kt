@@ -28,7 +28,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.R
-import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.directory.DirectoryData
 import io.orbitd.android.directory.LoadingMessage
 import io.orbitd.android.navigation.OrbitRoute
@@ -53,10 +52,11 @@ internal class WikiSettingsActions(
     val turnOff: () -> Unit = {},
 )
 
-/** The settings page, drawn from the space as the server kept it. [workspaceLabel]: a workspace's name and runner, by
- * id, when this client holds the workspace. [server]: the deployment's System model while the server executes the
- * account's wiki (mock 35 ①②, P9) — there is then no provider to pick, the workspace reads as where the repository is
- * read from, and one sentence says where the wiki's material goes; nil under runner, which draws what it always did.
+/** The settings page, drawn from the space as the server kept it: the workspace is where the repository is read from,
+ * and there is no provider to pick. [workspaceLabel]: a workspace's name and runner, by id, when this client holds the
+ * workspace. [server]: the deployment's System model while the server executes the account's wiki (mock 35 ①②, P9),
+ * drawn read-only with its state, and one sentence says where the wiki's material goes; null while the read does not
+ * say so (still loading, or a control plane from before it), which draws neither.
  * Every control is off while a write is in flight ([busy]). */
 @Composable
 internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabel: (String) -> String? = { null },
@@ -78,7 +78,7 @@ internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabe
                     item(key = "review-mode") {
                         WikiCard(Modifier.testTag("wiki-settings-review-mode")) {
                             WikiModeLogic.modes.forEach { value ->
-                                SettingsModeRow(value, mode, server != null, busy) { if (value != mode) actions.setMode(value) }
+                                SettingsModeRow(value, mode, busy) { if (value != mode) actions.setMode(value) }
                                 HorizontalDivider(Modifier.padding(start = 16.dp))
                             }
                             // Automatic's own switch, in the same section, and greyed while another mode is on.
@@ -116,13 +116,8 @@ internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabe
                                     }
                                 }
                                 val place = maintenance.workspaceId?.let(workspaceLabel) ?: maintenance.workspaceId ?: "—"
-                                if (server != null) {
-                                    SettingsValueRow(WikiModeCopy.repoFrom, "wiki-settings-workspace-row", place)
-                                    SettingsValueRow(WikiModeCopy.model, "wiki-settings-model-row") { WikiModelValue(server) }
-                                } else {
-                                    SettingsValueRow(WikiModeCopy.workspace, "wiki-settings-workspace-row", place)
-                                    SettingsValueRow(WikiModeCopy.provider, "wiki-settings-provider-row", maintenance.provider)
-                                }
+                                SettingsValueRow(WikiModeCopy.repoFrom, "wiki-settings-workspace-row", place)
+                                if (server != null) SettingsValueRow(WikiModeCopy.model, "wiki-settings-model-row") { WikiModelValue(server) }
                                 SettingsValueRow(WikiModeCopy.dailyLimit, "wiki-settings-daily-row", WikiModeCopy.runsADay(maintenance.dailyRunLimit))
                                 SettingsValueRow(WikiModeCopy.lookback, "wiki-settings-lookback-row", WikiModeCopy.lookbackLabel(maintenance.lookbackDays), divider = false)
                             } else {
@@ -136,7 +131,7 @@ internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabe
                             if (!maintenance.enabled) WikiPlanFootnoteText(WikiModeCopy.maintenanceNoteServer, "wiki-settings-note-server")
                             WikiPlanFootnoteText(WikiModeCopy.privacyNote, "wiki-settings-privacy")
                         }
-                    } else if (!maintenance.enabled) item(key = "maintenance-footer") { WikiPlanFootnote(WikiModeCopy.maintenanceNote) }
+                    } else if (!maintenance.enabled) item(key = "maintenance-footer") { WikiPlanFootnote(WikiModeCopy.maintenanceNoteServer) }
                     if (maintenance.enabled) item(key = "maintenance-actions") {
                         WikiCard {
                             SettingsButtonRow(WikiModeCopy.maintenanceEdit + "…", "wiki-settings-edit", busy, onClick = actions.setUp)
@@ -153,7 +148,7 @@ internal fun WikiSettingsPage(route: OrbitRoute, space: WikiSpace, workspaceLabe
 /** One mode: its name (Tiered tagged default) and its sentence, ticked on the right when it is the space's — the system's
  * own single-choice list. */
 @Composable
-private fun SettingsModeRow(value: String, mode: String, server: Boolean, busy: Boolean, choose: () -> Unit) {
+private fun SettingsModeRow(value: String, mode: String, busy: Boolean, choose: () -> Unit) {
     Row(Modifier.fillMaxWidth().selectable(selected = value == mode, enabled = !busy, role = Role.RadioButton, onClick = choose)
         .heightIn(min = 48.dp).padding(horizontal = 16.dp, vertical = 10.dp).testTag("wiki-settings-mode:$value"),
         horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -164,7 +159,7 @@ private fun SettingsModeRow(value: String, mode: String, server: Boolean, busy: 
                 if (value == WikiModeLogic.defaultMode) Text(WikiModeCopy.modeDefault, Modifier.alignByBaseline(), style = WikiType.label,
                     color = WikiPalette.secondary)
             }
-            Text(WikiModeCopy.modeNote(value, server), style = WikiType.label, color = WikiPalette.secondary)
+            Text(WikiModeCopy.modeNote(value), style = WikiType.label, color = WikiPalette.secondary)
         }
         if (value == mode) Icon(painterResource(R.drawable.ic_check), null, Modifier.size(22.dp).align(Alignment.CenterVertically),
             tint = MaterialTheme.colorScheme.primary)
@@ -205,33 +200,30 @@ private fun SettingsFallbackBanner(text: String) {
 
 // MARK: - Set up maintenance
 
-/** One choice in a Set up picker: a workspace or a provider, and the words it is listed by. */
+/** One choice in a Set up picker: a workspace, and the words it is listed by. */
 internal data class WikiPickerOption(val id: String, val label: String)
 
-/** What Set up / Edit writes: where the runs take place, on what, how many a day, and how far back the first one reads —
- * a pick, and the days `Last … days` reads. While the server executes the account's wiki the provider is not written:
- * what the space names stays, for a return to runner (P9). */
-internal data class WikiMaintenanceChoice(val workspaceId: String?, val provider: String, val dailyRunLimit: Int,
+/** What Set up / Edit writes: where the repository is read from, how many runs a day, and how far back the first one
+ * reads — a pick, and the days `Last … days` reads. No provider: the deployment sets the System model (P11). */
+internal data class WikiMaintenanceChoice(val workspaceId: String?, val dailyRunLimit: Int,
     val lookback: WikiModeLogic.LookbackChoice, val lookbackDays: Int)
 
 private val choiceSaver = listSaver<WikiMaintenanceChoice, Any?>(
-    save = { listOf(it.workspaceId, it.provider, it.dailyRunLimit, it.lookback.name, it.lookbackDays) },
-    restore = { WikiMaintenanceChoice(it[0] as String?, it[1] as String, it[2] as Int, WikiModeLogic.LookbackChoice.valueOf(it[3] as String), it[4] as Int) })
+    save = { listOf(it.workspaceId, it.dailyRunLimit, it.lookback.name, it.lookbackDays) },
+    restore = { WikiMaintenanceChoice(it[0] as String?, it[1] as Int, WikiModeLogic.LookbackChoice.valueOf(it[2] as String), it[3] as Int) })
 
-/** Set up maintenance (mock 20 ②): the workspace, the provider it is pinned to, the daily limit and the look-back — then
- * Turn on (or Save for one already on). A sheet form: Cancel on the left, the answer on the right. [submit] is the write;
- * true when it landed and the sheet can close. While the server runs the wiki (mock 35 ②) the System model stands where
- * the provider was, read-only, and the form ends on where the wiki's material goes. */
+/** Set up maintenance (mock 20 ②, mock 35 ②): the workspace the repository is read from, the daily limit and the
+ * look-back — then Turn on (or Save for one already on). A sheet form: Cancel on the left, the answer on the right.
+ * [submit] is the write; true when it landed and the sheet can close. While the server executes the account's wiki
+ * ([server]) the System model is shown, read-only, and the form ends on where the wiki's material goes. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun WikiMaintenanceForm(workspaces: List<WikiPickerOption>, providers: List<WikiPickerOption>, initial: WikiMaintenanceChoice,
+internal fun WikiMaintenanceForm(workspaces: List<WikiPickerOption>, initial: WikiMaintenanceChoice,
     enabled: Boolean, server: WikiSystemModelStatus? = null, busy: Boolean = false, close: () -> Unit,
     submit: suspend (WikiMaintenanceChoice) -> Boolean) {
     var choice by rememberSaveable(stateSaver = choiceSaver) { mutableStateOf(initial) }
     var saving by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    // The providers offered: the one the space names stays listed even when it is not configured yet.
-    val providerOptions = if (providers.any { it.id == choice.provider }) providers else listOf(WikiPickerOption(choice.provider, choice.provider)) + providers
     WikiSheet(saving, close, Modifier.testTag("wiki-settings-form")) {
         SheetBar(WikiModeCopy.setUpTitle, WikiModeCopy.cancel, if (enabled) WikiModeCopy.save else WikiModeCopy.turnOn,
             confirmEnabled = !saving && !busy && choice.workspaceId != null, confirmTag = "wiki-settings-form-submit", cancel = close,
@@ -241,12 +233,12 @@ internal fun WikiMaintenanceForm(workspaces: List<WikiPickerOption>, providers: 
             scope.launch { val landed = submit(chosen); saving = false; if (landed) close() }
         }
         Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(bottom = 24.dp)) {
-            WikiPlanFootnoteText(if (server != null) WikiModeCopy.maintenanceNoteServer else WikiModeCopy.maintenanceNote, "wiki-settings-form-note")
-            WikiPlanSectionHead(if (server != null) WikiModeCopy.repoFrom else WikiModeCopy.workspace)
+            WikiPlanFootnoteText(WikiModeCopy.maintenanceNoteServer, "wiki-settings-form-note")
+            WikiPlanSectionHead(WikiModeCopy.repoFrom)
             WikiCard {
                 val picked = choice.workspaceId
                 val label = if (picked == null) WikiModeCopy.noWorkspace else workspaces.firstOrNull { sameWikiId(it.id, picked) }?.label ?: picked
-                SettingsPickerRow(if (server != null) WikiModeCopy.repoFrom else WikiModeCopy.workspace, label, "wiki-settings-workspace") { done ->
+                SettingsPickerRow(WikiModeCopy.repoFrom, label, "wiki-settings-workspace") { done ->
                     if (picked == null) SettingsPickerItem(WikiModeCopy.noWorkspace, true, "wiki-settings-workspace:none") { done() }
                     workspaces.forEach { option ->
                         SettingsPickerItem(option.label, picked != null && sameWikiId(option.id, picked), "wiki-settings-workspace:${option.id}") {
@@ -255,25 +247,12 @@ internal fun WikiMaintenanceForm(workspaces: List<WikiPickerOption>, providers: 
                     }
                 }
             }
-            WikiPlanFootnote(if (server != null) WikiModeCopy.repoFromNote else WikiModeCopy.workspaceNote)
+            WikiPlanFootnote(WikiModeCopy.repoFromNote)
             if (server != null) {
                 // Set by the deployment: shown, never picked, and nothing here writes the provider.
                 WikiPlanSectionHead(WikiModeCopy.model)
                 WikiCard { SettingsValueRow(WikiModeCopy.model, "wiki-settings-form-model") { WikiModelValue(server) } }
                 WikiPlanFootnote(WikiModeCopy.modelNote)
-            } else {
-                WikiPlanSectionHead(WikiModeCopy.provider)
-                WikiCard {
-                    SettingsPickerRow(WikiModeCopy.provider, providerOptions.firstOrNull { it.id == choice.provider }?.label ?: choice.provider,
-                        "wiki-settings-provider") { done ->
-                        providerOptions.forEach { option ->
-                            SettingsPickerItem(option.label, option.id == choice.provider, "wiki-settings-provider:${option.id}") {
-                                done(); choice = choice.copy(provider = option.id)
-                            }
-                        }
-                    }
-                }
-                WikiPlanFootnote(WikiModeCopy.providerNote)
             }
             WikiPlanSectionHead(WikiModeCopy.dailyLimit)
             WikiCard {
@@ -343,14 +322,13 @@ private fun SettingsStepperRow(text: String, value: Int, range: IntRange, tag: S
 internal fun wikiReviewModeUpdate(mode: String) = buildJsonObject { put("reviewMode", mode) }
 internal fun wikiSpotChecksUpdate(on: Boolean) = buildJsonObject { put("automaticSpotChecks", on) }
 internal fun wikiMaintenanceOff() = buildJsonObject { putJsonObject("maintenance") { put("enabled", false) } }
-/** Set up / Edit: maintenance on, where, on what, how often, and the look-back — all of history sent as null, which is a
- * value, never a key left out (it would leave the look-back as it was). Under server execution the provider is left out
- * as well: the deployment sets the System model, and what the space names stays for a return to runner (P9). */
-internal fun wikiMaintenanceUpdate(choice: WikiMaintenanceChoice, includeProvider: Boolean = true) = buildJsonObject {
+/** Set up / Edit: maintenance on, where, how often, and the look-back — all of history sent as null, which is a value,
+ * never a key left out (it would leave the look-back as it was). No provider: the deployment sets the System model, and
+ * the server drops one a write names (contract `space.settings.maintenance.keys.provider`, P11). */
+internal fun wikiMaintenanceUpdate(choice: WikiMaintenanceChoice) = buildJsonObject {
     putJsonObject("maintenance") {
         put("enabled", true)
         choice.workspaceId?.let { put("workspaceId", it) }
-        if (includeProvider) put("provider", choice.provider)
         put("dailyRunLimit", choice.dailyRunLimit)
         put("lookbackDays", WikiModeLogic.lookbackDays(choice.lookback, choice.lookbackDays)?.let(::JsonPrimitive) ?: JsonNull)
     }
@@ -358,15 +336,14 @@ internal fun wikiMaintenanceUpdate(choice: WikiMaintenanceChoice, includeProvide
 
 // MARK: - where the form's choices come from
 
-/** The account's workspaces, runners and providers, read when the page opens: iOS lists them from the app's agents model
- * (`model.agents`), which this client keeps only for the directory — without the runners' display names or the providers. */
-internal data class WikiMaintenanceReads(val workspaces: JsonArray? = null, val runners: JsonArray? = null, val providers: JsonArray? = null)
+/** The account's workspaces and runners, read when the page opens: iOS lists them from the app's agents model
+ * (`model.agents`), which this client keeps only for the directory — without the runners' display names. */
+internal data class WikiMaintenanceReads(val workspaces: JsonArray? = null, val runners: JsonArray? = null)
 
 internal suspend fun wikiMaintenanceReads(client: WikiClient) = coroutineScope {
     val workspaces = async { optional { client.workspaces() } }
     val runners = async { optional { client.runners() } }
-    val providers = async { optional { client.providers() } }
-    WikiMaintenanceReads(workspaces.await(), runners.await(), providers.await())
+    WikiMaintenanceReads(workspaces.await(), runners.await())
 }
 
 /** A workspace the form can run maintenance in: its name, and the option it is listed as. */
@@ -383,17 +360,6 @@ internal fun wikiWorkspaceRows(reads: WikiMaintenanceReads, data: DirectoryData)
     } ?: data.workspaces.map { Triple(it.id, it.name, it.runnerId) }
     return rows.map { (id, name, runner) -> WikiWorkspaceRow(name, WikiPickerOption(id, WikiModeLogic.workspaceLabel(name, runner?.let(names::get)))) }
 }
-
-/** The providers the server takes for maintenance, by their default model: the keys Claude Code runs, by the compatibility table
- * (each key's `engines`, docs/provider-engine-contract.md §3.5) — a maintenance run starts a clean Claude Code, and a DeepSeek key
- * runs there as well as on DeepSeek Harness. A Claude subscription token is one of them; a key no engine of Claude's protocol speaks
- * is not. */
-internal fun wikiProviderOptions(providers: JsonArray?): List<WikiPickerOption> = providers.orEmpty().filterIsInstance<JsonObject>()
-    .let { rows -> rows.filter { ProviderEngines.CLAUDE in ProviderEngines.providerEngines(it["slug"].text(), rows) } }.mapNotNull { provider ->
-        provider["slug"].text()?.let { slug ->
-            WikiPickerOption(slug, WikiModeLogic.providerLabel(slug, provider["defaultModel"].text() ?: (provider["models"] as? JsonArray)?.firstOrNull()["value"].text()))
-        }
-    }
 
 /** The screen: the space on the Wiki home, its settings page, and the Set up sheet (iOS `WikiSettingsView`). */
 @Composable
@@ -427,11 +393,11 @@ internal fun WikiSettingsScreen(store: WikiStore, route: OrbitRoute, data: Direc
         // A space names a codebase, and so does a workspace's name more often than not: the one called what the space
         // is called is the one first offered.
         val named = workspaceRows.firstOrNull { it.name == space.slug }?.option?.id
-        WikiMaintenanceForm(workspaces, wikiProviderOptions(reads.providers),
-            WikiMaintenanceChoice(current.workspaceId ?: named, current.provider, current.dailyRunLimit,
+        WikiMaintenanceForm(workspaces,
+            WikiMaintenanceChoice(current.workspaceId ?: named, current.dailyRunLimit,
                 WikiModeLogic.lookbackChoice(current.lookbackDays), WikiModeLogic.lookbackDaysOffered(current.lookbackDays)),
             current.enabled, server, state.busy, close = { settingUp = false }) { choice ->
-            val answer = store.updateSpace(space, wikiMaintenanceUpdate(choice, includeProvider = server == null))
+            val answer = store.updateSpace(space, wikiMaintenanceUpdate(choice))
             finish(answer)
             answer == null
         }

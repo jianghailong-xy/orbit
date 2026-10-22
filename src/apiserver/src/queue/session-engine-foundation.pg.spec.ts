@@ -677,21 +677,24 @@ test('T2 provider-engine foundation on PostgreSQL', { timeout: 600_000 }, async 
     const owner = await account('reload');
     const at = await machine(owner);
     const internals = api as unknown as {
-      reloadProviderEnv(tx: unknown, sessionId: string, content: string | null): Promise<Record<string, string> | undefined>;
+      reloadProviderEnv(tx: unknown, sessionId: string, content: string | null): Promise<{ env?: Record<string, string>; refusal?: string }>;
     };
     const ds = await deepSeekKey(owner);
     const reload = (id: string) => internals.reloadProviderEnv(db, id, JSON.stringify({ provider: ds.slug }));
     const harness = await session(at, ds.slug, { engine: AgentProvider.DSH, status: RunStatus.RUNNING, model: 'opaque' });
-    const harnessEnv = await reload(harness);
+    const harnessEnv = (await reload(harness)).env;
     assert.equal(harnessEnv?.ORBIT_DSH_API_KEY, ds.apiKey);
     assert.equal(harnessEnv?.ANTHROPIC_AUTH_TOKEN, undefined);
     const claude = await session(at, ds.slug, { engine: AgentProvider.CLAUDE, status: RunStatus.RUNNING, model: 'deepseek-flash' });
-    const claudeEnv = await reload(claude);
+    const claudeEnv = (await reload(claude)).env;
     assert.equal(claudeEnv?.ANTHROPIC_AUTH_TOKEN, ds.apiKey);
     assert.equal(claudeEnv?.ORBIT_DSH_API_KEY, undefined);
-    // A key whose protocol changed is not rebuilt as the engine the key now picks.
+    // A key whose protocol changed is not rebuilt as the engine the key now picks: nothing is built, and
+    // the refusal is the one the claim holds such a session with.
     await db.modelProvider.update({ where: { slug: ds.slug }, data: { runtime: 'codex' } });
-    await assert.rejects(() => reload(claude), /cannot run on Claude Code/);
+    const refused = await reload(claude);
+    assert.equal(refused.env, undefined);
+    assert.match(refused.refusal ?? '', /cannot run on Claude Code/);
   });
 
   await t.test('T2 steer and move judge the session engine', async () => {

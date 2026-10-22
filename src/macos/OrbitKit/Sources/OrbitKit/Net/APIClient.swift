@@ -170,22 +170,31 @@ public final class APIClient: @unchecked Sendable {
     /// spelling only doubled that read, on every poll. (A pre-Completed server with nothing Open
     /// answers an empty list for Completed too, and keeps it.)
     public func listSessions(view: SessionView = .open,
-                             runnerId: String? = nil, projectId: String? = nil) async throws -> [Session] {
+                             runnerId: String? = nil, projectId: String? = nil,
+                             includeLanding: Bool = false) async throws -> [Session] {
         do {
-            let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId, projectId: projectId)
+            let sessions = try await listSessions(queryValue: view.queryValue, runnerId: runnerId,
+                                                  projectId: projectId, includeLanding: includeLanding)
             if view == .open || sessions.allSatisfy({ $0.effectiveLifecycleState == view.lifecycleState }) {
                 return sessions
             }
         } catch APIError.http(let status, _) where [400, 404, 422].contains(status) {
             // Fall through to the compatibility request.
         }
-        return try await listSessions(queryValue: view.legacyQueryValue, runnerId: runnerId, projectId: projectId)
+        return try await listSessions(queryValue: view.legacyQueryValue, runnerId: runnerId,
+                                      projectId: projectId, includeLanding: includeLanding)
     }
 
-    private func listSessions(queryValue: String, runnerId: String?, projectId: String?) async throws -> [Session] {
+    private func listSessions(queryValue: String, runnerId: String?, projectId: String?,
+                              includeLanding: Bool = false) async throws -> [Session] {
         var q = [URLQueryItem(name: "view", value: queryValue)]
         if let runnerId { q.append(URLQueryItem(name: "runnerId", value: runnerId)) }
         if let projectId { q.append(URLQueryItem(name: "projectId", value: projectId)) }
+        // The project sessions page's own widening (§2.9 LS6): LANDING rows ride along, with the
+        // subject summary their Landings group is folded from. Only ever with a project.
+        if includeLanding, projectId != nil {
+            q.append(URLQueryItem(name: "includeLanding", value: "1"))
+        }
         return try await get("sessions", query: q)
     }
 
@@ -803,6 +812,45 @@ public final class APIClient: @unchecked Sendable {
         try await postEmpty("projects/\(projectID)/promotions/\(promotionID)/cancel")
     }
 
+    // MARK: a landing session's own doors (§2.9 LS6)
+
+    /// Stop a task's in-flight landing (J-T8): a queued one ends at once, a running claim is asked
+    /// and answers at its next report, and one past the push boundary is refused. The page then
+    /// re-reads the landing; the door's answer is not drawn.
+    public func stopTaskIntegration(projectID: String, taskID: String) async throws {
+        let _: JSONValue = try await postEmpty(
+            "projects/\(projectID)/tasks/\(taskID)/integration/stop")
+    }
+
+    /// Abandon a running job whose runner stopped reporting (J-T10) — the X-E5 card's lead door and
+    /// the landing page's timed-out one.
+    public func abandonIntegrationJob(projectID: String, jobID: String) async throws {
+        let _: JSONValue = try await postEmpty(
+            "projects/\(projectID)/integration/jobs/\(jobID)/abandon")
+    }
+
+    /// Re-run a timed-out merge check on the same candidate (Re-run the check, revision 16): no new
+    /// candidate. The owner route takes a reason (`RetryIntegrationDto.reason`, at least one
+    /// character), and each door names where it was pressed — the merge card sends
+    /// `LandingPageCopy.rerunCheckReason`, the landing page `rerunLandingCheckReason`, as web and
+    /// Android do.
+    public func rerunPromotionCheck(projectID: String, promotionID: String, reason: String) async throws {
+        _ = try await postRaw(
+            "projects/\(projectID)/promotions/\(promotionID)/integration/retry",
+            body: ["reason": reason])
+    }
+
+    /// One page of a landing's check output (§2.2 J-T4, §2.9 LS2). Read only when a log is opened.
+    public func landingLog(sessionID: String, _ selectors: LandingLogSelectors,
+                           cursor: String? = nil) async throws -> LandingLogPage {
+        var query = [URLQueryItem(name: "jobId", value: selectors.jobId)]
+        if let claim = selectors.claim { query.append(URLQueryItem(name: "claim", value: String(claim))) }
+        if let round = selectors.round { query.append(URLQueryItem(name: "round", value: String(round))) }
+        if let check = selectors.check { query.append(URLQueryItem(name: "check", value: String(check))) }
+        if let cursor, !cursor.isEmpty { query.append(URLQueryItem(name: "cursor", value: cursor)) }
+        return try await get("sessions/\(sessionID)/landing/log", query: query)
+    }
+
     // MARK: a project's crossings — work asked across its line, answered by its owner
 
     /// What has been asked about work crossing into or out of this project, in either direction:
@@ -1279,6 +1327,13 @@ public final class APIClient: @unchecked Sendable {
         try await get("providers/mine/\(id)/balance", query: refresh ? [URLQueryItem(name: "refresh", value: "1")] : [])
     }
 
+    /// Check Again on one of the account's own Cursor keys (POST /api/providers/mine/:id/key-check): one
+    /// of its runners asks Cursor CLI's `agent models` with the key, which never comes here, and the
+    /// answer is kept on the key when it can be.
+    public func recheckCursorKey(_ id: String) async throws -> CursorKeyRecheckAnswer {
+        try await post("providers/mine/\(id)/key-check", body: Empty())
+    }
+
     /// The caller's account pools (GET /api/providers/pools), which the catalogue above doesn't
     /// list: each with its members, their own quota and where each stands. A pool this build can't
     /// read is left out rather than failing the list.
@@ -1521,9 +1576,18 @@ public final class APIClient: @unchecked Sendable {
         try await delete("runners/\(id)/login")
     }
 
+    /// An added account comes off the machine, by the runner. Default (`account: "default"`) comes off
+    /// Orbit's list alone, answered `done` at once with nothing sent to the machine, and is refused while
+    /// the runner reports no other account of that engine.
     public func removeRunnerAccount(_ id: String, engine: LoginEngine,
                                     account: String) async throws -> RunnerAccountRemoveState {
         try await delete("runners/\(id)/accounts/\(engine.rawValue)/\(account)")
+    }
+
+    /// Bring back the Default `removeRunnerAccount` took off Orbit's list: Orbit's own record, as the
+    /// removal is, so it works with the runner offline.
+    public func restoreRunnerDefault(_ id: String, engine: LoginEngine) async throws {
+        try await postRaw("runners/\(id)/accounts/\(engine.rawValue)/default/restore", body: Optional<Empty>.none)
     }
 
     public func pauseRunnerAccount(_ id: String, engine: LoginEngine, account: String,

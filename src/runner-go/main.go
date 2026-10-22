@@ -642,6 +642,10 @@ func cmdRun() {
 		fmt.Fprintln(os.Stderr, "managed runner instance:", err)
 		os.Exit(1)
 	}
+	// A managed runner's volume has to survive its node's power loss (volume_durability.go): before
+	// anything runs Git there, it looks at what the last stop left.
+	recoverManagedRepositories()
+	logManagedVolumeSyncs()
 	runWithSelfUpdates(cfg, selfUpdate, func() (bool, func()) { return runLoop(cfg) })
 	// Its Pod ends Failed, not Succeeded: the instance did not finish, it was retired or fenced.
 	if managedInstanceRevokedSeen.Load() {

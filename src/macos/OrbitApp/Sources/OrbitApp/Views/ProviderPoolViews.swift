@@ -2060,4 +2060,84 @@ private struct WideButton: View {
     }
 }
 
+/// One of the account's own Cursor keys, from Infrastructure's API keys (board iOS 4 ③④⑤): the one engine
+/// it runs on, what Cursor answered the last time one of the owner's runners checked it — with Check
+/// Again — and the key itself. Keys are added and changed on the web.
+struct CursorKeyPageView: View {
+    let key: ConfiguredProvider
+    /// The model a session on it starts on: Cursor CLI's Auto, by its catalogue's name.
+    let model: String
+    /// Ask one of the runners to check it again; the server's sentence when nothing could be kept.
+    let checkAgain: () async -> String?
+    @State private var checking = false
+    @State private var notice: String?
+
+    var body: some View {
+        let check = CursorRuntime.keyCheck(key)
+        Form {
+            Section {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(CursorRuntime.name)
+                        Text(CursorRuntime.keyRunsLine)
+                            .font(.orbitListSubtitle)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    ProviderMark(provider: CursorRuntime.engine, size: 26, brandKey: CursorRuntime.keyPreset,
+                                 label: CursorRuntime.name)
+                }
+            } header: {
+                SettingsHeader(DeepSeekBalance.worksWith)
+            } footer: {
+                Text(CursorRuntime.keyRunsFooter)
+            }
+            Section {
+                TimelineView(.everyMinute) { context in
+                    LabeledContent("Last check") {
+                        Text(CursorRuntime.lastCheck(check, at: key.keyCheckedAt, now: context.date))
+                            .foregroundStyle(check == .rejected ? Color.orange : Color.secondary)
+                    }
+                }
+                if check != .valid {
+                    Button {
+                        guard !checking else { return }
+                        checking = true
+                        Task {
+                            notice = await checkAgain()
+                            checking = false
+                        }
+                    } label: {
+                        HStack {
+                            Text("Check Again")
+                            if checking {
+                                Spacer()
+                                ProgressView()
+                            }
+                        }
+                    }
+                    .disabled(checking)
+                }
+                if let notice {
+                    Text(notice).font(.orbitLabel).foregroundStyle(.secondary)
+                }
+            } header: {
+                SettingsHeader("Check")
+            } footer: {
+                Text(CursorRuntime.checkFooter(check))
+            }
+            Section {
+                LabeledContent(DeepSeekBalance.protocolLabel, value: SessionProviderChoices.runtimeSummary(key.runtime))
+                LabeledContent(DeepSeekBalance.defaultModel, value: model)
+                LabeledContent(DeepSeekBalance.endpoint, value: DeepSeekBalance.endpointHost(key) ?? CursorRuntime.keyEndpoint)
+            } header: {
+                SettingsHeader(DeepSeekBalance.keyHeader)
+            } footer: {
+                Text(CursorRuntime.keyPageFooter)
+            }
+        }
+        .navigationTitle(key.label)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
 #endif

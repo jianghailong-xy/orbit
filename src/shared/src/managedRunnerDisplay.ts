@@ -81,9 +81,10 @@ export interface ManagedRunnerDisplay {
    */
   acceptsWork: boolean;
   /**
-   * A first session in the managed default workspace can start. It starts on the runtime the runner
-   * was found ready with (`initialProvider`); before there is one the server refuses that session
-   * with MODEL_UNAVAILABLE, so no client offers a default engine for it.
+   * A first session in the managed default workspace can start: the server names what it starts on
+   * (`firstSessionProvider` — the runtime the runner was found ready with, or before that the owner's
+   * key the session waits for the runner on). With none the server refuses that session with
+   * MODEL_UNAVAILABLE, so no client offers a default engine for it.
    */
   startsNewSession: boolean;
   /** The state moves by itself: read the status again soon. */
@@ -114,7 +115,7 @@ export const MANAGED_RUNNER_COPY = {
     notOffered: 'This Orbit server does not give your account a managed runner. Your own runners are unaffected.',
     preparing: 'Orbit is setting up a runner for you. Sessions can start here once it is ready.',
     waking: 'It is starting again. Messages sent meanwhile wait for it and run once it is up.',
-    modelUnavailable: 'None of its runtimes is installed and signed in yet, so it cannot start a session. Sign one in from Infrastructure.',
+    modelUnavailable: 'None of its runtimes is signed in yet and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure.',
     waitingCapacity: 'The managed environment has no room for it right now. It starts by itself when room frees up.',
     available: 'Sessions here run on the runner Orbit manages for you.',
     unresponsive: 'Orbit has not heard from it recently. Messages sent meanwhile wait for it.',
@@ -198,7 +199,16 @@ export function managedRunnerDisplay(status: ManagedRunnerStatus | null | undefi
     ensure: status.managementState === 'NOT_PROVISIONED' && status.actions.canEnsure,
     signIn: reason?.code === MODEL_UNAVAILABLE && !!status.runnerId,
     acceptsWork,
-    startsNewSession: acceptsWork && !!status.initialProvider,
+    startsNewSession: acceptsWork && !!firstSessionProvider(status),
     moving: !frozen && MOVING.has(kind),
   };
+}
+
+/**
+ * What a first session in the managed default workspace starts on, as the server says: its
+ * `firstSessionProvider`, or from a server that predates that field, `initialProvider` (which the
+ * field equals whenever the runner has one).
+ */
+export function firstSessionProvider(status: ManagedRunnerStatus): string | null {
+  return status.firstSessionProvider ?? status.initialProvider ?? null;
 }

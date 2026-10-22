@@ -1,0 +1,16 @@
+Traceback (most recent call last):
+  File "/root/.orbit/worktrees/54a4a7e8-e645-56e0-95e2-01e100985351/scripts/managed-runner/lab/wake-lab.py", line 851, in <module>
+    main()
+    ~~~~^^
+  File "/root/.orbit/worktrees/54a4a7e8-e645-56e0-95e2-01e100985351/scripts/managed-runner/lab/wake-lab.py", line 843, in main
+    {'prepare': cmd_prepare, 'account': cmd_account, 'key': cmd_key, 'selfhost': cmd_selfhost, 'selfhost-dispatch': cmd_selfhost_dispatch,
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ...<2 lines>...
+     'quota': cmd_quota, 'off-check': cmd_off_check, 'record': cmd_record, 'record-loop': cmd_record_loop, 'summary': cmd_summary,
+     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     'gate-summary': cmd_gate_summary}[args.command](args)
+     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/root/.orbit/worktrees/54a4a7e8-e645-56e0-95e2-01e100985351/scripts/managed-runner/lab/wake-lab.py", line 235, in cmd_key
+    status, answer = http('POST', '/providers/mine', body, token=found['accessToken'])
+                                                                 ~~~~~^^^^^^^^^^^^^^^
+KeyError: 'accessToken'

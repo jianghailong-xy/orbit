@@ -17,16 +17,16 @@ import {
 } from './wiki-verify';
 
 /**
- * The model part of the verification, ported from `src/runner-go/wiki_verify_test.go`: the prompt one op is
- * asked about, the numbers a duplicate may name, the answer read as strictly as the runner reads it, and the
- * second asking a maintenance run makes. What the port changes is where the answer comes from — the System
- * model through the request queue, not a clean Claude Code — and that is `wiki-verify-job.pg.spec.ts`'s.
+ * The model part of the verification, ported from `src/runner-go/wiki_verify_test.go` before P11 removed it there:
+ * the prompt one op is asked about, the numbers a duplicate may name, the answer read as strictly as the runner
+ * read it, and the second asking a maintenance run makes. What the port changes is where the answer comes from —
+ * the System model through the request queue, not a clean Claude Code — and that is `wiki-verify-job.pg.spec.ts`'s.
  *
  * The cases are the Go ones, byte for byte where they can be: a phrase a refusal says back is what the second
- * asking carries into the prompt, so the two paths must refuse in the same words.
+ * asking carries into the prompt, so the server must refuse in the runner's words.
  */
 
-// The shared contract, as the Go test reads it: what the prompt must say, and the four verdicts.
+// The shared contract, as the Go test read it: what the prompt must say, and the four verdicts.
 const CONTRACT = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../contracts/wiki.contract.json'), 'utf8')) as {
   agentSurface: { verify: { prompt: string; unreadable: string; precondition: string; cli: string } };
   reviewModes: { verification: { verdicts: Record<string, string> } };
@@ -68,7 +68,7 @@ test('the four verdicts are the contract\'s, and the prompt offers exactly those
   const prompt = wikiVerifyPrompt(verifyItem('An entry'), []);
   for (const verdict of WIKI_VERIFY_VERDICTS) assert.ok(prompt.includes(`"${verdict}"`), `the prompt never offers ${verdict}`);
   assert.match(WIKI_VERIFY_SYSTEM_PROMPT, /^You verify proposed wiki entries against the records they cite\./u);
-  // The contract the runner ships next says the same about numbers, and this side keeps to it.
+  // The contract says the same about numbers, and this side keeps to it.
   assert.match(CONTRACT.agentSurface.verify.prompt, /each by a number of its own, E1 to En in the order listed, and never by its id/u);
   assert.match(CONTRACT.agentSurface.verify.unreadable, /A number is one the prompt listed, exactly: an id, whole or cut short, is none, and nothing is guessed from a prefix/u);
 });
@@ -99,9 +99,9 @@ test('parses only a verdict', () => {
     { text: '{"verdict":"duplicate","reason":"Same.","duplicateOf":"E1 (An entry)"}', refuse: 'and "E1 (An entry)" is not one' },
     { text: '{"verdict":"partial","reason":"Half.","duplicateOf":"E1"}', refuse: 'a partial verdict names a duplicate ("E1"), which only a duplicate does' },
     { text: '{"reason":"No verdict here."}', refuse: 'no JSON object' },
-    // P10's boundary probes (zz_p10_parity_test.go): the verdict object is read as Go's encoding/json
-    // reads it — the keys in any case, and a value's edge holds every space either side's reader trims
-    // (NEL per Go's TrimSpace, U+FEFF per the union the two paths agreed on 2026-10-08).
+    // P10's boundary probes (zz_p10_parity_test.go, which P11 deleted): the verdict object is read as Go's
+    // encoding/json reads it — the keys in any case, and a value's edge holds every space either side's reader
+    // trimmed (NEL per Go's TrimSpace, U+FEFF per the union the two paths agreed on 2026-10-08).
     { text: '{"verdict":"supported","Reason":"A key in another case."}', verdict: 'supported' },
     { text: '{"verdict":"supported\u0085","reason":"A NEL after the verdict."}', verdict: 'supported' },
     { text: '{"verdict":"\ufeffsupported","reason":"A BOM before the verdict."}', verdict: 'supported' },

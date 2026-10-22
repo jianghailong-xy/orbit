@@ -34,6 +34,8 @@ class TaskCopyParityTest {
 
     @Test fun taskListWordsAreTheListsOwn() = assertIn(TaskListCopy, swift("${kit}TaskListCopy.swift", "${views}TasksView.swift", "${views}TaskListParts.swift"))
     @Test fun taskDetailWordsAreTheDetailsOwn() = assertIn(TaskDetailCopy, swift("${kit}TaskDetailPage.swift", "${views}TasksView.swift"))
+    /** The Landing section's words are `TaskLanding.swift`'s; `Open landing` is the entrance's own. */
+    @Test fun taskLandingWords() = assertIn(TaskLandingCopy, swift("${kit}TaskLanding.swift", "${kit}LandingSessionPage.swift"))
     @Test fun reopenWords() = assertIn(TaskReopenCopy, swift("${kit}TaskReopen.swift"))
     @Test fun judgmentWords() = assertIn(TaskJudgmentCopy, swift("${kit}TaskJudgment.swift"))
     @Test fun ownerConfirmationWords() = assertIn(OwnerConfirmationCopy, swift("${kit}OwnerConfirmation.swift"))

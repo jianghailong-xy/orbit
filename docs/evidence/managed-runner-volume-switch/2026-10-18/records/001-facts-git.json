@@ -1,0 +1,35 @@
+{
+ "checks": [
+  {
+   "check": "the runner image sources are unchanged since the image was built",
+   "ok": true,
+   "value": "(no difference)"
+  },
+  {
+   "check": "the apiserver is built in this checkout",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-18T15:18:42.473+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "facts",
+ "result": {
+  "apiserverBuiltAt": "2026-10-18T15:18:14+00:00",
+  "branch": "orbit/task-t08b-kubernetes-runner-4c813f",
+  "head": "eccae61cd40321c0a024ba849849f9a007d884e7",
+  "imageSource": "ebf54ab8d",
+  "originMain": "cd4b7c328c2a9c5f126f461516713a8d4f2da785",
+  "projectLine": "a444c703a267db7f5b14cc6e440152acbf19c6b8",
+  "projectLineIsAncestor": true,
+  "subject": "fix(managed-runners): a replayed volume switch is answered from a read, not refused while a pass holds the lease",
+  "uncommitted": [
+   "M docs/managed-runner-design.md",
+   " M docs/managed-runner-kubernetes-operations.md",
+   " M docs/managed-runner-lab.md"
+  ]
+ },
+ "seconds": 3.2,
+ "startedAt": "2026-10-18T15:18:39.255+00:00",
+ "step": "git"
+}

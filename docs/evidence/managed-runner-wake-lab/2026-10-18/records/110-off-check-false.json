@@ -1,0 +1,134 @@
+{
+  "apiserverSocketsToTheApi": [],
+  "at": "2026-10-18T02:21:13.182+00:00",
+  "changed": [],
+  "changedMappings": [],
+  "demands": [
+    {
+      "answer": {
+        "code": null,
+        "id": null,
+        "message": null,
+        "seq": 2,
+        "status": null
+      },
+      "at": "2026-10-18T02:21:13.182+00:00",
+      "kind": "turn",
+      "owner": "ben",
+      "session": "34ho5JVXfK9HTJGSg6f6l",
+      "status": 201
+    },
+    {
+      "answer": {
+        "code": null,
+        "id": null,
+        "message": null,
+        "seq": 10,
+        "status": null
+      },
+      "at": "2026-10-18T02:21:13.223+00:00",
+      "kind": "turn",
+      "owner": "amy",
+      "session": "34hlxjW1Gs60pKc1WJR04",
+      "status": 201
+    },
+    {
+      "at": "2026-10-18T02:21:13.243+00:00",
+      "execute": {
+        "answer": {
+          "code": null,
+          "id": null,
+          "message": null,
+          "sessionId": "5hZ4x7awGPlOxH1jPQbwJ7",
+          "status": null
+        },
+        "at": "2026-10-18T02:21:13.262+00:00",
+        "status": 201
+      },
+      "kind": "task",
+      "owner": "ben",
+      "runAt": null,
+      "status": 201,
+      "task": {
+        "assigneeId": "34hnbXI6qV0xWJ7xVZrHY",
+        "code": null,
+        "id": "34hoO1j2TJm306EhLTWWv",
+        "message": null,
+        "runAt": null,
+        "status": "OPEN"
+      }
+    }
+  ],
+  "gateConnectionsDuring": 0,
+  "label": "false",
+  "managedLogLines": [
+    "\u001b[32m[Nest] 1933714  - \u001b[39m10/18/2026, 10:14:14 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/admission, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 1987682  - \u001b[39m10/18/2026, 10:21:07 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mManagedRunnerGateModule dependencies initialized\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 1987682  - \u001b[39m10/18/2026, 10:21:07 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mManagedRunnerModule dependencies initialized\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+    "\u001b[32m[Nest] 1987682  - \u001b[39m10/18/2026, 10:21:07 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mManagedRunnerController {/api/managed-runner}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 1987682  - \u001b[39m10/18/2026, 10:21:07 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner, GET} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 1987682  - \u001b[39m10/18/2026, 10:21:07 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/ensure, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 1987682  - \u001b[39m10/18/2026, 10:21:07 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/retry, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 1987682  - \u001b[39m10/18/2026, 10:21:07 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/wake, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 1987682  - \u001b[39m10/18/2026, 10:21:07 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/sleep, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 1987682  - \u001b[39m10/18/2026, 10:21:07 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/delete, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 1987682  - \u001b[39m10/18/2026, 10:21:07 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mManagedRunnerAdmissionController {/api/managed-runner/admission}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 1987682  - \u001b[39m10/18/2026, 10:21:07 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/admission, POST} route\u001b[39m\u001b[38;5;3m +1ms\u001b[39m"
+  ],
+  "mappingRows": 3,
+  "mappingsUnchanged": true,
+  "namespaceObjects": 41,
+  "namespaceUnchanged": true,
+  "ownerWrites": {
+    "amy": {
+      "delete": {
+        "code": "MANAGED_RUNNER_DISABLED",
+        "status": 404
+      },
+      "ensure": {
+        "code": "MANAGED_RUNNER_DISABLED",
+        "status": 404
+      },
+      "retry": {
+        "code": "MANAGED_RUNNER_DISABLED",
+        "status": 404
+      },
+      "sleep": {
+        "code": "MANAGED_RUNNER_DISABLED",
+        "status": 404
+      },
+      "wake": {
+        "code": "MANAGED_RUNNER_DISABLED",
+        "status": 404
+      }
+    },
+    "ben": {
+      "delete": {
+        "code": "MANAGED_RUNNER_DISABLED",
+        "status": 404
+      },
+      "ensure": {
+        "code": "MANAGED_RUNNER_DISABLED",
+        "status": 404
+      },
+      "retry": {
+        "code": "MANAGED_RUNNER_DISABLED",
+        "status": 404
+      },
+      "sleep": {
+        "code": "MANAGED_RUNNER_DISABLED",
+        "status": 404
+      },
+      "wake": {
+        "code": "MANAGED_RUNNER_DISABLED",
+        "status": 404
+      }
+    }
+  },
+  "poolUnchanged": true,
+  "switch": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=false",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t06/managed-runner-profile.json"
+  ],
+  "waitedSeconds": 330
+}

@@ -1,0 +1,382 @@
+{
+  "hostconfig-tmpfs-1.44-exec": {
+    "api": "/v1.44",
+    "create": {
+      "answer": {
+        "Id": "515fc00b56e7435f027f9c979ebbf1ea63b17291418a3b85429fe5e844087500",
+        "Warnings": []
+      },
+      "status": 201
+    },
+    "inspect": {
+      "HostConfig.Mounts": null,
+      "HostConfig.Tmpfs": {
+        "/tmp": "rw,exec,nosuid,nodev,size=67108864,mode=1777"
+      },
+      "Mounts": []
+    },
+    "output": [
+      "tmpfs /tmp tmpfs rw,nosuid,nodev,relatime,size=65536k,inode64 0 0",
+      "exec-exit=0",
+      "script-ran",
+      "script-exit=0"
+    ],
+    "request": {
+      "Tmpfs": {
+        "/tmp": "rw,exec,nosuid,nodev,size=67108864,mode=1777"
+      }
+    }
+  },
+  "mounts-api-1.44-no-options": {
+    "api": "/v1.44",
+    "create": {
+      "answer": {
+        "Id": "c1f8b5149d118c5f2d8c79dc4d9423b69ebc5dfee6548af9779ea5ad1e6465c1",
+        "Warnings": []
+      },
+      "status": 201
+    },
+    "inspect": {
+      "HostConfig.Mounts": [
+        {
+          "Target": "/tmp",
+          "TmpfsOptions": {
+            "Mode": 1023,
+            "SizeBytes": 67108864
+          },
+          "Type": "tmpfs"
+        }
+      ],
+      "HostConfig.Tmpfs": null,
+      "Mounts": [
+        {
+          "Destination": "/tmp",
+          "Mode": "",
+          "RW": true,
+          "Type": "tmpfs"
+        }
+      ]
+    },
+    "output": [
+      "tmpfs /tmp tmpfs rw,nosuid,nodev,noexec,relatime,size=65536k,inode64 0 0",
+      "sh: /tmp/true: Permission denied",
+      "exec-exit=126",
+      "sh: /tmp/s.sh: Permission denied",
+      "script-exit=126"
+    ],
+    "request": {
+      "Mounts": [
+        {
+          "Target": "/tmp",
+          "TmpfsOptions": {
+            "Mode": 1023,
+            "SizeBytes": 67108864
+          },
+          "Type": "tmpfs"
+        }
+      ]
+    }
+  },
+  "mounts-api-1.44-options-dev": {
+    "api": "/v1.44",
+    "create": {
+      "answer": {
+        "message": "invalid mount config for type \"tmpfs\": invalid option: dev"
+      },
+      "status": 400
+    },
+    "request": {
+      "Mounts": [
+        {
+          "Target": "/tmp",
+          "TmpfsOptions": {
+            "Mode": 1023,
+            "Options": [
+              [
+                "exec"
+              ],
+              [
+                "dev"
+              ]
+            ],
+            "SizeBytes": 67108864
+          },
+          "Type": "tmpfs"
+        }
+      ]
+    }
+  },
+  "mounts-api-1.44-options-exec": {
+    "api": "/v1.44",
+    "create": {
+      "answer": {
+        "Id": "d33945bf87bff1e2aa32d61b610de0e646bd1fa4d45dcdb9b4b23dea21624698",
+        "Warnings": []
+      },
+      "status": 201
+    },
+    "inspect": {
+      "HostConfig.Mounts": [
+        {
+          "Target": "/tmp",
+          "TmpfsOptions": {
+            "Mode": 1023,
+            "Options": [
+              [
+                "exec"
+              ]
+            ],
+            "SizeBytes": 67108864
+          },
+          "Type": "tmpfs"
+        }
+      ],
+      "HostConfig.Tmpfs": null,
+      "Mounts": [
+        {
+          "Destination": "/tmp",
+          "Mode": "",
+          "RW": true,
+          "Type": "tmpfs"
+        }
+      ]
+    },
+    "output": [
+      "tmpfs /tmp tmpfs rw,nosuid,nodev,relatime,size=65536k,inode64 0 0",
+      "exec-exit=0",
+      "script-ran",
+      "script-exit=0"
+    ],
+    "request": {
+      "Mounts": [
+        {
+          "Target": "/tmp",
+          "TmpfsOptions": {
+            "Mode": 1023,
+            "Options": [
+              [
+                "exec"
+              ]
+            ],
+            "SizeBytes": 67108864
+          },
+          "Type": "tmpfs"
+        }
+      ]
+    }
+  },
+  "mounts-api-1.44-options-noexec": {
+    "api": "/v1.44",
+    "create": {
+      "answer": {
+        "Id": "1a84a6a27bbc9c0da1aa17845e2d0d59d3fdeb6520b96f353f76ddf786c2fedc",
+        "Warnings": []
+      },
+      "status": 201
+    },
+    "inspect": {
+      "HostConfig.Mounts": [
+        {
+          "Target": "/tmp",
+          "TmpfsOptions": {
+            "Mode": 1023,
+            "Options": [
+              [
+                "exec"
+              ],
+              [
+                "noexec"
+              ]
+            ],
+            "SizeBytes": 67108864
+          },
+          "Type": "tmpfs"
+        }
+      ],
+      "HostConfig.Tmpfs": null,
+      "Mounts": [
+        {
+          "Destination": "/tmp",
+          "Mode": "",
+          "RW": true,
+          "Type": "tmpfs"
+        }
+      ]
+    },
+    "output": [
+      "tmpfs /tmp tmpfs rw,nosuid,nodev,noexec,relatime,size=65536k,inode64 0 0",
+      "sh: /tmp/true: Permission denied",
+      "exec-exit=126",
+      "sh: /tmp/s.sh: Permission denied",
+      "script-exit=126"
+    ],
+    "request": {
+      "Mounts": [
+        {
+          "Target": "/tmp",
+          "TmpfsOptions": {
+            "Mode": 1023,
+            "Options": [
+              [
+                "exec"
+              ],
+              [
+                "noexec"
+              ]
+            ],
+            "SizeBytes": 67108864
+          },
+          "Type": "tmpfs"
+        }
+      ]
+    }
+  },
+  "mounts-api-1.44-options-nr_inodes-1000": {
+    "api": "/v1.44",
+    "create": {
+      "answer": {
+        "message": "invalid mount config for type \"tmpfs\": invalid option: nr_inodes"
+      },
+      "status": 400
+    },
+    "request": {
+      "Mounts": [
+        {
+          "Target": "/tmp",
+          "TmpfsOptions": {
+            "Mode": 1023,
+            "Options": [
+              [
+                "exec"
+              ],
+              [
+                "nr_inodes",
+                "1000"
+              ]
+            ],
+            "SizeBytes": 67108864
+          },
+          "Type": "tmpfs"
+        }
+      ]
+    }
+  },
+  "mounts-api-1.44-options-size-1g": {
+    "api": "/v1.44",
+    "create": {
+      "answer": {
+        "message": "invalid mount config for type \"tmpfs\": invalid option: size"
+      },
+      "status": 400
+    },
+    "request": {
+      "Mounts": [
+        {
+          "Target": "/tmp",
+          "TmpfsOptions": {
+            "Mode": 1023,
+            "Options": [
+              [
+                "exec"
+              ],
+              [
+                "size",
+                "1g"
+              ]
+            ],
+            "SizeBytes": 67108864
+          },
+          "Type": "tmpfs"
+        }
+      ]
+    }
+  },
+  "mounts-api-1.44-options-suid": {
+    "api": "/v1.44",
+    "create": {
+      "answer": {
+        "message": "invalid mount config for type \"tmpfs\": invalid option: suid"
+      },
+      "status": 400
+    },
+    "request": {
+      "Mounts": [
+        {
+          "Target": "/tmp",
+          "TmpfsOptions": {
+            "Mode": 1023,
+            "Options": [
+              [
+                "exec"
+              ],
+              [
+                "suid"
+              ]
+            ],
+            "SizeBytes": 67108864
+          },
+          "Type": "tmpfs"
+        }
+      ]
+    }
+  },
+  "mounts-api-1.46-options-exec": {
+    "api": "/v1.46",
+    "create": {
+      "answer": {
+        "Id": "851e60783717d9a3fc8bfa8606705edfab55dc3a73e68d7146dc9ce5afff4ea6",
+        "Warnings": []
+      },
+      "status": 201
+    },
+    "inspect": {
+      "HostConfig.Mounts": [
+        {
+          "Target": "/tmp",
+          "TmpfsOptions": {
+            "Mode": 1023,
+            "Options": [
+              [
+                "exec"
+              ]
+            ],
+            "SizeBytes": 67108864
+          },
+          "Type": "tmpfs"
+        }
+      ],
+      "HostConfig.Tmpfs": null,
+      "Mounts": [
+        {
+          "Destination": "/tmp",
+          "Mode": "",
+          "RW": true,
+          "Type": "tmpfs"
+        }
+      ]
+    },
+    "output": [
+      "tmpfs /tmp tmpfs rw,nosuid,nodev,relatime,size=65536k,inode64 0 0",
+      "exec-exit=0",
+      "script-ran",
+      "script-exit=0"
+    ],
+    "request": {
+      "Mounts": [
+        {
+          "Target": "/tmp",
+          "TmpfsOptions": {
+            "Mode": 1023,
+            "Options": [
+              [
+                "exec"
+              ]
+            ],
+            "SizeBytes": 67108864
+          },
+          "Type": "tmpfs"
+        }
+      ]
+    }
+  }
+}

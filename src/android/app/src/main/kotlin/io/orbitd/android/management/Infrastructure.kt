@@ -1,5 +1,6 @@
 package io.orbitd.android.management
 
+import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.core.cards.DshRuntime
 import kotlinx.serialization.json.JsonArray
@@ -126,12 +127,13 @@ internal object Infrastructure {
 
     /** Whether this engine is signed out on this machine (web's signedOutOn): installed, the CLI's own answer is no, and no account of it
      * is signed in either — with one that is, sessions there still run on it. Antigravity only where its Google sign-in can be started,
-     * the one way back in there is. */
+     * the one way back in there is; Cursor CLI only where the machine can run it, which signing in would not change. */
     private fun signedOut(runner: JsonObject, engine: String): Boolean {
         val health = engineHealth(runner, engine)
         if (rowKind(health, runner.obj("install"), engine) != RowKind.SIGNED_OUT) return false
         val antigravity = runner.obj("antigravity")
         if (engine == ProviderEngines.ANTIGRAVITY && (antigravity?.bool("supported") == false || antigravity?.str("googleLogin") != "available")) return false
+        if (engine == ProviderEngines.CURSOR && CursorRuntime.state(runner) != CursorRuntime.RunnerState.READY) return false
         return health?.list("accounts").orEmpty().none { it.str("auth") == "yes" }
     }
 
@@ -151,19 +153,25 @@ internal object Infrastructure {
 
     /** Every engine, and what can pay for it now: the machines online signed in to it, by how many of their accounts ("Mac Studio ×2");
      * each enabled key under every engine the server says it runs on (`engines`), with the model a session on it starts on there; its
-     * pools that can start a session (one that is unavailable is in Needs you instead). Not an engine this app does not draw yet
+     * pools that can start a session (one that is unavailable is in Needs you instead). Cursor CLI once a machine of the account knows it
      * (ProviderEngines.androidShowsEngine). */
     fun engineCards(runners: List<JsonObject>, keys: List<JsonObject>, pools: List<Pool>): List<EngineCard> {
         val online = runners.filter { it.bool("online") == true }
         val harness = harnessModel(online)
-        return ProviderEngines.ALL_ENGINES.filter(ProviderEngines::androidShowsEngine).map { engine ->
+        val cursor = cursorModel(online)
+        return ProviderEngines.ALL_ENGINES.filter { ProviderEngines.androidShowsEngine(it, runners) }.map { engine ->
             // DeepSeek Harness has no sign-in on a machine: it runs on DeepSeek keys alone.
             val machines = if (engine == ProviderEngines.DSH) emptyList() else online.mapNotNull { runner ->
                 val count = logins(runner, engine)
                 if (count <= 0) null else RunnerPage.displayName(runner).let { if (count > 1) "$it ×$count" else it }
             }
-            val engineKeys = keys.filter { it.bool("enabled") != false && engine in KeyEngines.engines(it) }
-                .map { EngineCard.Key(it.str("label") ?: it.text("slug"), if (engine == ProviderEngines.DSH) harness else defaultModel(it)) }
+            val engineKeys = keys.filter { it.bool("enabled") != false && engine in KeyEngines.engines(it) }.map {
+                EngineCard.Key(it.str("label") ?: it.text("slug"), when (engine) {
+                    ProviderEngines.DSH -> harness
+                    ProviderEngines.CURSOR -> cursor
+                    else -> defaultModel(it)
+                })
+            }
             val enginePools = pools.filter { it.unavailable == null && (if (ProviderPools.runsCodex(it)) ProviderEngines.CODEX else ProviderEngines.CLAUDE) == engine }
             EngineCard(engine, machines, engineKeys, enginePools.map { it.label })
         }
@@ -180,6 +188,7 @@ internal object Infrastructure {
         val health = engineHealth(runner, engine) ?: return 0
         if (health.bool("installed") != true) return 0
         if (engine == ProviderEngines.ANTIGRAVITY && runner.obj("antigravity")?.bool("supported") == false) return 0
+        if (engine == ProviderEngines.CURSOR && CursorRuntime.state(runner) != CursorRuntime.RunnerState.READY) return 0
         val accounts = health.list("accounts")
         if (accounts.isEmpty()) return if (health.str("auth") == "yes") 1 else 0
         return accounts.count { it.str("auth") == "yes" || RunnerPage.runsOnEnvKey(health, it.text("id"), it.str("auth")) }
@@ -204,6 +213,19 @@ internal object Infrastructure {
             return catalog.firstOrNull { it.str("value") == model }?.str("label") ?: catalog[0].str("label")
         }
         return null
+    }
+
+    /** The model a Cursor CLI session on a Cursor key starts on (web's cursorModelOf): Auto, Cursor's own default, by the name the
+     * catalogue of the first machine online that can run it gives it — the models are Cursor CLI's on each machine, whichever key it runs
+     * on (docs/cursor-runtime-contract.md §10). Auto it is with none. */
+    private fun cursorModel(online: List<JsonObject>): String {
+        for (runner in online) {
+            if (CursorRuntime.state(runner) != CursorRuntime.RunnerState.READY) continue
+            val catalog = runner.obj("modelCatalog")?.list(ProviderEngines.CURSOR).orEmpty().takeIf { it.isNotEmpty() } ?: continue
+            val model = runner.obj("runtimeDefaultModels")?.str(ProviderEngines.CURSOR)?.takeIf { it.isNotEmpty() } ?: CursorRuntime.AUTO_MODEL
+            return catalog.firstOrNull { it.str("value") == model }?.str("label") ?: catalog[0].str("label") ?: CursorRuntime.AUTO
+        }
+        return CursorRuntime.AUTO
     }
 
     // A machine's row
@@ -231,7 +253,14 @@ internal object Infrastructure {
         if (relay?.str("status") == "failed") return if (updating) "Update failed" else "Install failed"
         if (relay?.str("status") == "pending" || relay?.str("status") == "installing") return if (updating) "Updating…" else "Installing…"
         val reported = (runner["engines"] as? JsonArray)?.filterIsInstance<JsonObject>() ?: return "Engines not reported"
-        val engines = RunnerPage.loginEngines.filter { it != ProviderEngines.ANTIGRAVITY || runner.obj("antigravity")?.str("googleLogin") == "available" }
+        // Cursor CLI wherever its row can get it signed in, installed or not, as every engine here — not on a runner too old for it or a
+        // platform it doesn't run on, whose row has nothing to sign in; nor where no runner shows it at all.
+        val cursor = CursorRuntime.state(runner)
+        val engines = RunnerPage.loginEngines.filter {
+            (it != ProviderEngines.ANTIGRAVITY || runner.obj("antigravity")?.str("googleLogin") == "available") &&
+                (it != ProviderEngines.CURSOR || (ProviderEngines.androidShowsEngine(it, listOf(runner)) &&
+                    cursor != CursorRuntime.RunnerState.UPDATE_RUNNER && cursor != CursorRuntime.RunnerState.UNSUPPORTED_PLATFORM))
+        }
         val shown = reported.filter { it.str("engine") in engines }
         val stale = shown.count { it.bool("installed") == true && RunnerPage.updateNoteOf(it.obj("update"), nowMs)?.first == "warn" }
         if (stale > 0 && runner.bool("online") == true) return if (stale == 1) "1 engine not updating" else "$stale engines not updating"

@@ -1,0 +1,119 @@
+{
+  "mappings": [
+    {
+      "runner": "01a14d42-0e5a-74cd-8e42-94a0d643bbf0",
+      "state": "FAILED",
+      "generation": 10,
+      "pvcName": "mr-data-01a14d42-0e5a-74cd-8e42-94a0d643bbf0",
+      "podUid": null
+    },
+    {
+      "runner": "01a14d42-0e68-700d-a005-676e76262619",
+      "state": "SLEEPING",
+      "generation": 2,
+      "pvcName": "mr-data-01a14d42-0e68-700d-a005-676e76262619",
+      "podUid": null
+    },
+    {
+      "runner": "01a14d47-1d2f-72d1-9a9f-d8d84f6c142d",
+      "state": "READY",
+      "generation": 1,
+      "pvcName": "mr-data-01a14d47-1d2f-72d1-9a9f-d8d84f6c142d",
+      "podUid": "637ef60c-db31-4807-8a6c-aec5afb98c14"
+    }
+  ],
+  "channel": {
+    "instanceId": "d2it-10180425c3fd",
+    "volumes": [
+      {
+        "name": "mr-data-01a14d42-0e68-700d-a005-676e76262619",
+        "kind": "data",
+        "uid": "c2192349-082a-4bc8-81ce-14f2e8daef86",
+        "ownerId": "01a14d42-0e45-737d-a8e9-c5a1ff12b5cd",
+        "runnerId": "01a14d42-0e68-700d-a005-676e76262619",
+        "limitBytes": 268435456,
+        "createdAt": "2026-10-18T12:25:37+08:00",
+        "usageBytes": 7362525
+      },
+      {
+        "name": "mr-boot-01a14d47-1d2f-72d1-9a9f-d8d84f6c142d-g1",
+        "kind": "bootstrap",
+        "uid": null,
+        "ownerId": "01a14d47-1d2a-7359-9f8f-46832b263a33",
+        "runnerId": "01a14d47-1d2f-72d1-9a9f-d8d84f6c142d",
+        "limitBytes": null,
+        "createdAt": "2026-10-18T12:31:39+08:00",
+        "usageBytes": 168
+      },
+      {
+        "name": "mr-data-01a14d42-0e5a-74cd-8e42-94a0d643bbf0",
+        "kind": "data",
+        "uid": "23ea2a72-93b7-431e-acaf-2cf79850374a",
+        "ownerId": "01a14d42-0e3f-75e4-855f-199315ba4103",
+        "runnerId": "01a14d42-0e5a-74cd-8e42-94a0d643bbf0",
+        "limitBytes": 268435456,
+        "createdAt": "2026-10-18T12:25:37+08:00",
+        "usageBytes": 339533820
+      },
+      {
+        "name": "mr-data-01a14d47-1d2f-72d1-9a9f-d8d84f6c142d",
+        "kind": "data",
+        "uid": "c033e491-f733-4a41-979a-f189b50e8310",
+        "ownerId": "01a14d47-1d2a-7359-9f8f-46832b263a33",
+        "runnerId": "01a14d47-1d2f-72d1-9a9f-d8d84f6c142d",
+        "limitBytes": 268435456,
+        "createdAt": "2026-10-18T12:31:39+08:00",
+        "usageBytes": 2982473
+      }
+    ],
+    "containers": [
+      {
+        "name": "mr-01a14d47-1d2f-72d1-9a9f-d8d84f6c142d",
+        "uid": "637ef60c-db31-4807-8a6c-aec5afb98c14",
+        "ownerId": "01a14d47-1d2a-7359-9f8f-46832b263a33",
+        "runnerId": "01a14d47-1d2f-72d1-9a9f-d8d84f6c142d",
+        "generation": 1,
+        "volumeUid": "c033e491-f733-4a41-979a-f189b50e8310",
+        "volume": "mr-data-01a14d47-1d2f-72d1-9a9f-d8d84f6c142d",
+        "node": "workstation",
+        "status": "running",
+        "running": true,
+        "neverStarted": false,
+        "exitCode": null,
+        "startedAt": "2026-10-18T04:31:39.77649524Z",
+        "finishedAt": null,
+        "oomKilled": false,
+        "stopping": false,
+        "evicted": null
+      }
+    ],
+    "credentials": [
+      {
+        "uid": "9ef46781-8e8f-4227-9bd0-258682b69e20",
+        "ownerId": "01a14d42-0e3f-75e4-855f-199315ba4103",
+        "runnerId": "01a14d42-0e5a-74cd-8e42-94a0d643bbf0",
+        "generation": 10,
+        "createdAt": "2026-10-18T04:32:27Z"
+      },
+      {
+        "uid": "70e2d625-935d-4332-a554-435f1af50c00",
+        "ownerId": "01a14d42-0e45-737d-a8e9-c5a1ff12b5cd",
+        "runnerId": "01a14d42-0e68-700d-a005-676e76262619",
+        "generation": 1,
+        "createdAt": "2026-10-18T04:25:37Z"
+      },
+      {
+        "uid": "184e8da8-b0c0-4f88-bf2a-d2e6edd690ae",
+        "ownerId": "01a14d47-1d2a-7359-9f8f-46832b263a33",
+        "runnerId": "01a14d47-1d2f-72d1-9a9f-d8d84f6c142d",
+        "generation": 1,
+        "createdAt": "2026-10-18T04:31:39Z"
+      }
+    ]
+  },
+  "maxContainersPerVolume": {
+    "01a14d42-0e5a-74cd-8e42-94a0d643bbf0": 1,
+    "01a14d42-0e68-700d-a005-676e76262619": 1,
+    "01a14d47-1d2f-72d1-9a9f-d8d84f6c142d": 1
+  }
+}

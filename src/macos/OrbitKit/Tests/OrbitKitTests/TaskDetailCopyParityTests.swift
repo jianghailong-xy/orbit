@@ -82,6 +82,9 @@ final class TaskDetailCopyParityTests: XCTestCase {
             assertSays(web, "<span className=\"tdp-field-label\">\(label)</span>", in: Self.panel)
         }
         assertSays(web, ": '\(TaskDetailCopy.runNow)'", in: Self.panel)
+        // The Run's hint on the task nothing else starts: the panel's `runNowHint`, the rule with the words.
+        assertSays(web, "if (status === 'OPEN' && !projectId && prerequisites === 0) { return '"
+                    + TaskDetailCopy.nothingStartsThisTask + "'; }", in: Self.panel)
         assertSays(web, "<div className=\"tdp-muted\">\(TaskDetailCopy.noRuns)</div>", in: Self.panel)
         assertSays(web, "<div className=\"tdp-muted\">\(TaskDetailCopy.noComments)</div>", in: Self.panel)
     }

@@ -2,7 +2,7 @@ import { type MouseEvent as ReactMouseEvent, useEffect, useMemo, useRef, useStat
 import { ExclamationCircleFilled, FullscreenExitOutlined, FullscreenOutlined } from '@ant-design/icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { RunnerRepoHealth, MergeRecoveryAction } from '@orbit/shared';
-import { MergeRecoveryPanel } from './MergeRecoveryPanel';
+import { MergeRecoveryPanel, mergeRecoveryChecking } from './MergeRecoveryPanel';
 import { refreshSessionDiff } from '../api';
 import type { SessionChangedFile, SessionDetail, SessionFilePatch } from '../api';
 import { copyText } from '../lib/clipboard';
@@ -291,6 +291,7 @@ export function SessionOutputs({
         message={detail.mergeError}
         supported={detail.mergeRecoverySupported === true}
         busy={!!merging || !!turnActive || detail.mergeStatus === 'pending'}
+        checking={mergeRecoveryChecking(detail)}
         onAction={onRecoverMerge}
         onRepair={onRepairRecovery}
         repairSession={detail.mergeRepairSession}

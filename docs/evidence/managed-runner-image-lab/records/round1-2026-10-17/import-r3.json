@@ -1,0 +1,46 @@
+{
+  "archiveSha256": "802a9ec7803aed77ea280c2a838924f23076042f1ca3f3d90514b50a28282ed0",
+  "criImages": [
+    {
+      "id": "sha256:3b13a5446e3a33f6dc33f8d4e44c527a023045aa16a5e6988988f7b667c03f59",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/import-2026-10-17@sha256:f217dcc3fe1df6b4f431cd0ada44415c2abd095eecbb84a5b609a1fca925944d"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner:r2-2126ea728"
+      ],
+      "size": "500023348",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    },
+    {
+      "id": "sha256:8a481d08ad8b79e1fb42237d80dcf16afd4f79fa3fb7a24bf5d629b3737d6095",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/import-2026-10-17@sha256:a3edc056ebe9a5e7f511e8c25104f36ebf34086ddbf7b2290b58074f619ae371"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner:r3-99aafcd61"
+      ],
+      "size": "500023353",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    }
+  ],
+  "ctr": [
+    "import 2026 10 17@sha256:a3edc056ebe9a5e\tsaved\t",
+    "application/vnd.oci.image.index.v1+json sha256:a3edc056ebe9a5e7f511e8c25104f36ebf34086ddbf7b2290b58074f619ae371",
+    "Importing\telapsed: 34.6s\ttotal:   0.0 B\t(0.0 B/s)\t",
+    "import 2026 10 17@sha256:a3edc056ebe9a5e\tsaved\t",
+    "docker.io/library/orbit managed runner:r\tsaved\t",
+    "application/vnd.oci.image.index.v1+json sha256:a3edc056ebe9a5e7f511e8c25104f36ebf34086ddbf7b2290b58074f619ae371",
+    "application/vnd.oci.image.manifest.v1+json sha256:5ac188d1b3d06efc4d4f64be46c3205e4cc5a42728d81fdf06ece15a326ba142",
+    "Importing\telapsed: 34.7s\ttotal:   0.0 B\t(0.0 B/s)"
+  ],
+  "importSeconds": 38.8
+}

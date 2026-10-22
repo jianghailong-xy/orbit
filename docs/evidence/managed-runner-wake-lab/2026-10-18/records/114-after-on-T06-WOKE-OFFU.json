@@ -1,0 +1,36 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T02:28:08.988",
+    "ingested_at": "2026-10-18T02:28:09.198649+00:00",
+    "ingested_by_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "seq": 21,
+    "session_id": "01a14cc4-e801-73fb-93ab-b2a0fa6afdae",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-WOKE-OFFU",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T02:28:08Z",
+      "kind": "text",
+      "messages": 8,
+      "n": 40,
+      "tool": null
+    }
+  ],
+  "owner": "ben",
+  "session": {
+    "assigned_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "created_at": "2026-10-18T02:08:55.297",
+    "engine": "claude",
+    "id": "01a14cc4-e801-73fb-93ab-b2a0fa6afdae",
+    "provider": "deepseek-2",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-BEN-OFFU FAKE-WAKEUP 560 OFFU a wakeup due while the swi"
+  },
+  "turns": []
+}

@@ -124,6 +124,65 @@ func TestProjectGetPropagatesTheServerError(t *testing.T) {
 	}
 }
 
+// `orbit project integration` is the agent's read of the line. Inside a session it sends that
+// session's header — the server checks it against the project's membership — and the page
+// selectors travel as the query the server reserved them under.
+func TestProjectIntegrationReadsTheLineAsTheActingSession(t *testing.T) {
+	var method, path, jobID, cursor, session string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		method, path = r.Method, r.URL.Path
+		jobID = r.URL.Query().Get("jobId")
+		cursor = r.URL.Query().Get("cursor")
+		session = r.Header.Get("X-Orbit-Session-Id")
+		_, _ = w.Write([]byte(`{"projectId":"proj-1","queue":[],"generations":[]}`))
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "coordinator")
+
+	var out bytes.Buffer
+	if err := cmdProjectCLI([]string{
+		"integration", "proj-1", "--job-id", "job-1", "--cursor", "page-2", "--json",
+	}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("project integration: %v", err)
+	}
+	if method != http.MethodGet || path != "/api/runner/projects/proj-1/integration" {
+		t.Fatalf("project integration hit %s %s", method, path)
+	}
+	if jobID != "job-1" || cursor != "page-2" {
+		t.Fatalf("the page selectors sent = jobId %q, cursor %q", jobID, cursor)
+	}
+	if session != "coordinator" {
+		t.Fatalf("the session header = %q", session)
+	}
+	if out.Len() == 0 {
+		t.Fatal("project integration printed nothing")
+	}
+}
+
+// With the machine's credential and no session there is no membership the server could check, and
+// the command says so instead of sending a request that can only be refused.
+func TestProjectIntegrationNeedsASessionOrALogin(t *testing.T) {
+	var hit bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+	}))
+	defer srv.Close()
+
+	configureCLITestRunner(t, srv.URL)
+	t.Setenv("ORBIT_SESSION_ID", "")
+
+	var out bytes.Buffer
+	err := cmdProjectCLI([]string{"integration", "proj-1"}, strings.NewReader(""), &out)
+	if err == nil || !strings.Contains(err.Error(), "orbit login") {
+		t.Fatalf("project integration outside a session = %v", err)
+	}
+	if hit {
+		t.Fatal("project integration sent a read with no session to check")
+	}
+}
+
 // An id carrying a path separator must never be able to address another route.
 func TestProjectGetIDCannotEscapeTheProjectRoute(t *testing.T) {
 	var hit bool
@@ -163,7 +222,7 @@ func TestProjectCLIHelpAndUnknownCommand(t *testing.T) {
 	// The verbs that exist, each reachable as `orbit project <verb> --help` — leaf help that the
 	// family does not route to is text nobody can read.
 	for _, action := range []string{
-		"get", "create", "update", "delete",
+		"get", "integration", "create", "update", "delete",
 		"crossings", "merge-evidence", "resolve-blocker", "request-start", "request-done", "skip-merge-check",
 	} {
 		out.Reset()
@@ -217,7 +276,10 @@ func TestProjectCLICapabilitiesAreAccurate(t *testing.T) {
 	// queues ONE landing with the check not run, after a card naming the check and the task, and
 	// writes the reason and the approval onto the generation it queues. Mutating for that reason
 	// alone — the project does not change, and one landing does.
-	if len(specs) != 12 {
+	// The thirteenth is `integration`, the read of the queue itself: the generations, why each job
+	// waits or stopped, and each candidate's newest check and merge. It is what replaces a
+	// coordinator querying the production database, and it writes nothing.
+	if len(specs) != 13 {
 		t.Fatalf("project capabilities = %#v", projectCLICapabilities)
 	}
 	spec, ok := specs["project_get"]

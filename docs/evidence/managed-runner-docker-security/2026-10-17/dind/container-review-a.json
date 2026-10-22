@@ -1,0 +1,790 @@
+{
+  "bootstrap": {
+    "contentsUnchanged": true,
+    "directory": {
+      "chmod": "EPERM",
+      "createFile": "EACCES",
+      "mkdir": "EACCES",
+      "mode": "0o755",
+      "owner": "0:0",
+      "rmdir": "EROFS",
+      "symlink": "EACCES"
+    },
+    "generation": {
+      "append": "EACCES",
+      "chmod": "EPERM",
+      "chown": "EPERM",
+      "mode": "0o444",
+      "overwrite": "EACCES",
+      "owner": "0:0",
+      "readable": "ALLOWED",
+      "rename": "EACCES",
+      "truncate": "EACCES",
+      "unlink": "EACCES",
+      "utime": "EPERM"
+    },
+    "instance.json": {
+      "append": "EACCES",
+      "chmod": "EPERM",
+      "chown": "EPERM",
+      "mode": "0o444",
+      "overwrite": "EACCES",
+      "owner": "0:0",
+      "readable": "ALLOWED",
+      "rename": "EACCES",
+      "truncate": "EACCES",
+      "unlink": "EACCES",
+      "utime": "EPERM"
+    },
+    "token": {
+      "append": "EACCES",
+      "chmod": "EPERM",
+      "chown": "EPERM",
+      "mode": "0o444",
+      "overwrite": "EACCES",
+      "owner": "0:0",
+      "readable": "ALLOWED",
+      "rename": "EACCES",
+      "truncate": "EACCES",
+      "unlink": "EACCES",
+      "utime": "EPERM"
+    }
+  },
+  "credentials": {
+    "environmentNames": [
+      "CLAUDE_CONFIG_DIR",
+      "CODEX_HOME",
+      "DISABLE_AUTOUPDATER",
+      "GOTOOLCHAIN",
+      "HOME",
+      "HOSTNAME",
+      "LC_CTYPE",
+      "NODE_VERSION",
+      "ORBIT_HOME",
+      "ORBIT_MANAGED_RUNNER_INSTANCE_FILE",
+      "ORBIT_NO_ENGINE_UPDATE",
+      "ORBIT_NO_SELFUPDATE",
+      "ORBIT_RUNNER_CREDENTIAL_FILE",
+      "ORBIT_RUNNER_EXPECTED_ID",
+      "ORBIT_RUNNER_MAX_CONCURRENT",
+      "ORBIT_RUNNER_NAME",
+      "ORBIT_RUNNER_SERVER_URL",
+      "PATH",
+      "PYTHONDONTWRITEBYTECODE"
+    ],
+    "files": {
+      "/etc/shadow": "EACCES",
+      "/root/.docker/config.json": "EACCES",
+      "/run/secrets": "ENOENT",
+      "/var/run/secrets/kubernetes.io/serviceaccount/token": "ENOENT"
+    },
+    "pid1EnvironmentNames": [
+      "CLAUDE_CONFIG_DIR",
+      "CODEX_HOME",
+      "DISABLE_AUTOUPDATER",
+      "GOTOOLCHAIN",
+      "HOME",
+      "HOSTNAME",
+      "NODE_VERSION",
+      "ORBIT_HOME",
+      "ORBIT_MANAGED_RUNNER_INSTANCE_FILE",
+      "ORBIT_NO_ENGINE_UPDATE",
+      "ORBIT_NO_SELFUPDATE",
+      "ORBIT_RUNNER_CREDENTIAL_FILE",
+      "ORBIT_RUNNER_EXPECTED_ID",
+      "ORBIT_RUNNER_MAX_CONCURRENT",
+      "ORBIT_RUNNER_NAME",
+      "ORBIT_RUNNER_SERVER_URL",
+      "PATH",
+      "PYTHONDONTWRITEBYTECODE"
+    ]
+  },
+  "dockerControl": {
+    "dockerBinary": [],
+    "knownSocketPaths": {
+      "/run/containerd/containerd.sock": false,
+      "/run/docker.sock": false,
+      "/run/orbit-docker-channel": false,
+      "/var/lib/orbit-managed-runners": false,
+      "/var/run/docker.sock": false
+    },
+    "unixSocketsOnTheFilesystem": []
+  },
+  "hostAccess": {
+    "devices": {
+      "core": "link",
+      "fd": "link",
+      "full": "char",
+      "mqueue": "dir",
+      "null": "char",
+      "ptmx": "link",
+      "pts": "dir",
+      "random": "char",
+      "shm": "dir",
+      "stderr": "link",
+      "stdin": "link",
+      "stdout": "link",
+      "tty": "char",
+      "urandom": "char",
+      "zero": "char"
+    },
+    "hostPaths": {
+      "/etc/orbit-docker-channel": false,
+      "/host": false,
+      "/hostfs": false,
+      "/mnt/data": false,
+      "/root/.orbit": false,
+      "/rootfs": false,
+      "/var/lib/docker": false
+    }
+  },
+  "identity": {
+    "euid": 10001,
+    "gid": 10001,
+    "groups": [
+      10001
+    ],
+    "home": "/var/lib/orbit/home",
+    "uid": 10001,
+    "user": "orbit"
+  },
+  "limits": {
+    "cgroup": {
+      "cpu.max": "200000 100000",
+      "cpu.weight": "100",
+      "memory.current": "345092096",
+      "memory.high": "max",
+      "memory.max": "4294967296",
+      "memory.oom.group": "0",
+      "memory.swap.max": "0",
+      "pids.current": "29",
+      "pids.max": "4096"
+    },
+    "maxProcessesRlimit": [
+      "unlimited",
+      "unlimited"
+    ]
+  },
+  "mounts": [
+    {
+      "fstype": "overlay",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "overlay",
+      "target": "/"
+    },
+    {
+      "fstype": "proc",
+      "options": "rw,nosuid,nodev,noexec,relatime",
+      "root": "/",
+      "source": "proc",
+      "target": "/proc"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "rw,nosuid",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/dev"
+    },
+    {
+      "fstype": "devpts",
+      "options": "rw,nosuid,noexec,relatime",
+      "root": "/",
+      "source": "devpts",
+      "target": "/dev/pts"
+    },
+    {
+      "fstype": "sysfs",
+      "options": "ro,nosuid,nodev,noexec,relatime",
+      "root": "/",
+      "source": "sysfs",
+      "target": "/sys"
+    },
+    {
+      "fstype": "cgroup2",
+      "options": "ro,nosuid,nodev,noexec,relatime",
+      "root": "/",
+      "source": "cgroup",
+      "target": "/sys/fs/cgroup"
+    },
+    {
+      "fstype": "mqueue",
+      "options": "rw,nosuid,nodev,noexec,relatime",
+      "root": "/",
+      "source": "mqueue",
+      "target": "/dev/mqueue"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "rw,nosuid,nodev,noexec,relatime",
+      "root": "/",
+      "source": "shm",
+      "target": "/dev/shm"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "rw,nosuid,nodev,noexec,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/tmp"
+    },
+    {
+      "fstype": "ext4",
+      "options": "ro,noatime",
+      "root": "/tmp/34hJ7S9C3isVnzIDDfSHD/dind/docker/containers/c225d05a65ab97b25b674c6e2892f58579023c275df6312eb5a93654d84ab0e5/hostname",
+      "source": "/dev/sdb",
+      "target": "/etc/hostname"
+    },
+    {
+      "fstype": "ext4",
+      "options": "ro,noatime",
+      "root": "/tmp/34hJ7S9C3isVnzIDDfSHD/dind/docker/containers/c225d05a65ab97b25b674c6e2892f58579023c275df6312eb5a93654d84ab0e5/hosts",
+      "source": "/dev/sdb",
+      "target": "/etc/hosts"
+    },
+    {
+      "fstype": "ext4",
+      "options": "ro,noatime",
+      "root": "/tmp/34hJ7S9C3isVnzIDDfSHD/dind/docker/containers/c225d05a65ab97b25b674c6e2892f58579023c275df6312eb5a93654d84ab0e5/resolv.conf",
+      "source": "/dev/sdb",
+      "target": "/etc/resolv.conf"
+    },
+    {
+      "fstype": "ext4",
+      "options": "rw,noatime",
+      "root": "/tmp/34hJ7S9C3isVnzIDDfSHD/dind/docker/volumes/mr-boot-01a14a02-f8f0-752a-9c45-2e748a13c38f-g1/_data",
+      "source": "/dev/sdb",
+      "target": "/run/orbit-bootstrap"
+    },
+    {
+      "fstype": "ext4",
+      "options": "rw,noatime",
+      "root": "/tmp/34hJ7S9C3isVnzIDDfSHD/dind/docker/volumes/mr-data-01a14a02-f8f0-752a-9c45-2e748a13c38f/_data",
+      "source": "/dev/sdb",
+      "target": "/var/lib/orbit"
+    },
+    {
+      "fstype": "proc",
+      "options": "ro,nosuid,nodev,noexec,relatime",
+      "root": "/bus",
+      "source": "proc",
+      "target": "/proc/bus"
+    },
+    {
+      "fstype": "proc",
+      "options": "ro,nosuid,nodev,noexec,relatime",
+      "root": "/fs",
+      "source": "proc",
+      "target": "/proc/fs"
+    },
+    {
+      "fstype": "proc",
+      "options": "ro,nosuid,nodev,noexec,relatime",
+      "root": "/irq",
+      "source": "proc",
+      "target": "/proc/irq"
+    },
+    {
+      "fstype": "proc",
+      "options": "ro,nosuid,nodev,noexec,relatime",
+      "root": "/sys",
+      "source": "proc",
+      "target": "/proc/sys"
+    },
+    {
+      "fstype": "proc",
+      "options": "ro,nosuid,nodev,noexec,relatime",
+      "root": "/sysrq-trigger",
+      "source": "proc",
+      "target": "/proc/sysrq-trigger"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/proc/acpi"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/proc/asound"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "rw,nosuid",
+      "root": "/null",
+      "source": "tmpfs",
+      "target": "/proc/interrupts"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "rw,nosuid",
+      "root": "/null",
+      "source": "tmpfs",
+      "target": "/proc/kcore"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "rw,nosuid",
+      "root": "/null",
+      "source": "tmpfs",
+      "target": "/proc/keys"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "rw,nosuid",
+      "root": "/null",
+      "source": "tmpfs",
+      "target": "/proc/timer_list"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/virtual/powercap"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/firmware"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu0/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu1/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu2/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu3/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu4/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu5/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu6/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu7/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu8/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu9/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu10/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu11/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu12/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu13/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu14/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu15/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu16/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu17/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu18/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu19/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu20/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu21/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu22/thermal_throttle"
+    },
+    {
+      "fstype": "tmpfs",
+      "options": "ro,relatime",
+      "root": "/",
+      "source": "tmpfs",
+      "target": "/sys/devices/system/cpu/cpu23/thermal_throttle"
+    }
+  ],
+  "network": {
+    "listeningInThisNamespace": [
+      "tcp 0B00007F:9FDF"
+    ],
+    "probes": [
+      {
+        "address": "172.19.0.3",
+        "asExpected": true,
+        "expect": "blocked",
+        "host": "172.19.0.3",
+        "ms": 4002,
+        "name": "account b runner on the same network (ICC off)",
+        "port": 18080,
+        "result": "TIMEOUT"
+      },
+      {
+        "address": "172.20.0.4",
+        "asExpected": true,
+        "expect": "blocked",
+        "host": "172.20.0.4",
+        "ms": 4004,
+        "name": "apiserver container directly (orbit_default)",
+        "port": 3000,
+        "result": "TIMEOUT"
+      },
+      {
+        "address": "172.20.0.2",
+        "asExpected": true,
+        "expect": "blocked",
+        "host": "172.20.0.2",
+        "ms": 4001,
+        "name": "postgres container directly (orbit_default)",
+        "port": 5432,
+        "result": "TIMEOUT"
+      },
+      {
+        "address": "172.20.0.5",
+        "asExpected": true,
+        "expect": "blocked",
+        "host": "172.20.0.5",
+        "ms": 4003,
+        "name": "web container directly (orbit_default)",
+        "port": 80,
+        "result": "TIMEOUT"
+      },
+      {
+        "address": "172.20.0.7",
+        "asExpected": true,
+        "expect": "blocked",
+        "host": "172.20.0.7",
+        "ms": 4003,
+        "name": "gateway container directly (orbit_default)",
+        "port": 80,
+        "result": "TIMEOUT"
+      },
+      {
+        "address": "172.19.0.1",
+        "asExpected": true,
+        "expect": "reach",
+        "host": "172.19.0.1",
+        "ms": 0,
+        "name": "the deployment gateway published port at this network gateway (runner.serverUrl)",
+        "port": 2086,
+        "result": "CONNECTED"
+      },
+      {
+        "address": "172.19.0.1",
+        "asExpected": true,
+        "expect": "reach",
+        "host": "172.19.0.1",
+        "ms": 0,
+        "name": "this test host dockerd TLS port 2376 (dind artifact, client certificate required)",
+        "port": 2376,
+        "result": "CONNECTED"
+      },
+      {
+        "address": "172.19.0.1",
+        "asExpected": true,
+        "expect": "blocked",
+        "host": "172.19.0.1",
+        "ms": 0,
+        "name": "ssh at this network gateway (nothing listens in the test host)",
+        "port": 22,
+        "result": "ECONNREFUSED"
+      },
+      {
+        "address": "169.254.169.254",
+        "asExpected": true,
+        "expect": "blocked",
+        "host": "169.254.169.254",
+        "ms": 4004,
+        "name": "cloud metadata 169.254.169.254:80",
+        "port": 80,
+        "result": "TIMEOUT"
+      },
+      {
+        "address": "3.173.21.63",
+        "asExpected": true,
+        "expect": "reach",
+        "host": "api.deepseek.com",
+        "ms": 7,
+        "name": "internet: a model endpoint, api.deepseek.com:443",
+        "port": 443,
+        "result": "CONNECTED"
+      }
+    ],
+    "resolvConf": [
+      "nameserver 127.0.0.11"
+    ],
+    "resolve": {
+      "apiserver": "NO_ADDRESS",
+      "docker-channel": "NO_ADDRESS",
+      "gateway": "NO_ADDRESS",
+      "host.docker.internal": "NO_ADDRESS",
+      "orbit-apiserver": "NO_ADDRESS",
+      "orbit-docker-channel": "NO_ADDRESS",
+      "orbit-postgres": "NO_ADDRESS",
+      "postgres": "NO_ADDRESS"
+    },
+    "routes": [
+      {
+        "destination": "0.0.0.0",
+        "gateway": "172.19.0.1",
+        "iface": "eth0",
+        "mask": "0.0.0.0"
+      },
+      {
+        "destination": "172.19.0.0",
+        "gateway": "0.0.0.0",
+        "iface": "eth0",
+        "mask": "255.255.0.0"
+      }
+    ]
+  },
+  "privilege": {
+    "kernelFiles": {
+      "open for writing /proc/sys/kernel/hostname": "EROFS",
+      "open for writing /proc/sysrq-trigger": "EROFS",
+      "open for writing /sys/fs/cgroup/cgroup.procs": "EROFS",
+      "open for writing /sys/kernel/uevent_helper": "EROFS",
+      "read /etc/shadow": "EACCES",
+      "read /proc/1/root/etc/shadow": "EACCES",
+      "read /proc/kcore": "READ 0 byte(s)",
+      "read /proc/keys": "READ 0 byte(s)",
+      "read /sys/firmware": "LISTED 0 entries"
+    },
+    "setuidBinaries": [
+      "/bin/chage",
+      "/bin/chfn",
+      "/bin/chsh",
+      "/bin/expiry",
+      "/bin/gpasswd",
+      "/bin/mount",
+      "/bin/newgrp",
+      "/bin/passwd",
+      "/bin/ssh-agent",
+      "/bin/su",
+      "/bin/umount",
+      "/sbin/unix_chkpwd",
+      "/usr/bin/chage",
+      "/usr/bin/chfn",
+      "/usr/bin/chsh",
+      "/usr/bin/expiry",
+      "/usr/bin/gpasswd",
+      "/usr/bin/mount",
+      "/usr/bin/newgrp",
+      "/usr/bin/passwd",
+      "/usr/bin/ssh-agent",
+      "/usr/bin/su",
+      "/usr/bin/umount",
+      "/usr/lib/openssh/ssh-keysign",
+      "/usr/sbin/unix_chkpwd"
+    ],
+    "syscalls": {
+      "bpf(BPF_PROG_LOAD, NULL)": "EPERM",
+      "chroot(/tmp)": "EPERM",
+      "keyctl(KEYCTL_JOIN_SESSION_KEYRING)": "EPERM",
+      "mount(tmpfs on /mnt)": "EPERM",
+      "open_by_handle_at": "EPERM",
+      "perf_event_open(NULL)": "EPERM",
+      "setuid(0)": "EPERM",
+      "unshare(CLONE_NEWNS)": "EPERM",
+      "unshare(CLONE_NEWUSER)": "EPERM"
+    }
+  },
+  "processes": [
+    {
+      "AppArmor": "unconfined",
+      "CapAmb": "0000000000000000",
+      "CapBnd": "0000000000000000",
+      "CapEff": "0000000000000000",
+      "CapInh": "0000000000000000",
+      "CapPrm": "0000000000000000",
+      "Gid": "10001\t10001\t10001\t10001",
+      "Groups": "10001",
+      "NoNewPrivs": "1",
+      "Seccomp": "2",
+      "Seccomp_filters": "1",
+      "Uid": "10001\t10001\t10001\t10001",
+      "cmdline": "/usr/bin/tini -- /usr/local/bin/orbit-container run",
+      "pid": 1
+    },
+    {
+      "AppArmor": "unconfined",
+      "CapAmb": "0000000000000000",
+      "CapBnd": "0000000000000000",
+      "CapEff": "0000000000000000",
+      "CapInh": "0000000000000000",
+      "CapPrm": "0000000000000000",
+      "Gid": "10001\t10001\t10001\t10001",
+      "Groups": "10001",
+      "NoNewPrivs": "1",
+      "Seccomp": "2",
+      "Seccomp_filters": "1",
+      "Uid": "10001\t10001\t10001\t10001",
+      "cmdline": "orbit run",
+      "pid": 7
+    },
+    {
+      "AppArmor": "unconfined",
+      "CapAmb": "0000000000000000",
+      "CapBnd": "0000000000000000",
+      "CapEff": "0000000000000000",
+      "CapInh": "0000000000000000",
+      "CapPrm": "0000000000000000",
+      "Gid": "10001\t10001\t10001\t10001",
+      "Groups": "10001",
+      "NoNewPrivs": "1",
+      "Seccomp": "2",
+      "Seccomp_filters": "1",
+      "Uid": "10001\t10001\t10001\t10001",
+      "cmdline": "python3 - [{\"name\":\"account b runner on the same network (ICC off)\",\"host\":\"172.19.0.3\",\"port\":18080,\"expect\":\"blocked\"}",
+      "pid": 807
+    }
+  ],
+  "self": {
+    "AppArmor": "unconfined",
+    "CapAmb": "0000000000000000",
+    "CapBnd": "0000000000000000",
+    "CapEff": "0000000000000000",
+    "CapInh": "0000000000000000",
+    "CapPrm": "0000000000000000",
+    "Gid": "10001\t10001\t10001\t10001",
+    "Groups": "10001",
+    "NoNewPrivs": "1",
+    "Seccomp": "2",
+    "Seccomp_filters": "1",
+    "Uid": "10001\t10001\t10001\t10001"
+  },
+  "writable": {
+    "/": "EROFS",
+    "/dev/shm": "WRITABLE",
+    "/etc": "EROFS",
+    "/opt": "EROFS",
+    "/root": "EACCES",
+    "/run": "EROFS",
+    "/run/orbit-bootstrap": "EACCES",
+    "/sys/fs/cgroup": "EROFS",
+    "/tmp": "WRITABLE",
+    "/usr/local/bin": "EROFS",
+    "/var/lib/orbit": "WRITABLE",
+    "/var/lib/orbit/home": "WRITABLE"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-18T01:51:48.894+00:00",
+  "display": {
+    "acceptsWork": true,
+    "detail": "The managed environment has no room for this runner right now (CPU, memory, temporary storage, runner slots, volume attachments, active managed users). It starts by itself when room frees up; nothing was removed or resized to make room.",
+    "ensure": false,
+    "kind": "waitingCapacity",
+    "moving": true,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": true,
+    "title": "Waiting for capacity"
+  },
+  "owner": "amy",
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hlwBX3PDHoZvmmu6hPq",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": "deepseek",
+    "lastHeartbeatAt": "2026-10-18T01:50:31.792Z",
+    "managementState": "WAITING_CAPACITY",
+    "reason": {
+      "code": "MANAGED_RUNNER_CAPACITY_UNAVAILABLE",
+      "message": "The managed environment has no room for this runner right now (CPU, memory, temporary storage, runner slots, volume attachments, active managed users). It starts by itself when room frees up; nothing was removed or resized to make room.",
+      "retryable": true
+    },
+    "retryAfter": "2026-10-18T01:52:18.754Z",
+    "revision": 215,
+    "runnerId": "34hlwBWrKOm4SMrYIA6An",
+    "runnerPublicId": "34hlwBWrKOm4SMrYIA6An",
+    "usable": false,
+    "workspaceId": "34hlwBX3PDHoZvmmu6hPq",
+    "workspacePublicId": "34hlwBX3PDHoZvmmu6hPq"
+  }
+}

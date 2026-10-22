@@ -16,9 +16,12 @@ package main
 // sent again: the session's turn ledger (cursorTurnLedger) settles one that an earlier process or runner
 // left unsettled as interrupted, since its tools may already have run.
 //
-// Not here yet: approvals through Orbit, Orbit's MCP server and instructions, and the permission modes
-// (P5c). Until then every approval Cursor asks for is declined, so a command or an MCP call that needs one
-// does not run.
+// What Cursor CLI asks the client while a turn runs — an approval, a plan to accept, a question — the
+// permission bridge answers (cursor_permissions.go), for the session's permission mode: unasked, or from
+// a person on Orbit's card, and cancelled once the turn is stopped, its process lost or it settled. Each
+// conversation is opened and continued with Orbit's MCP server (cursor_mcp.go), and its first prompt
+// carries Orbit's agent instructions ahead of the person's message: Cursor CLI reads no user-level rules
+// file Orbit could put them in (§7.2).
 
 import (
 	"bufio"
@@ -32,9 +35,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -105,12 +110,20 @@ type cursorACPClient struct {
 	exited     chan struct{} // closed once the process has been reaped
 	exit       string        // how it ended ("exit status 1", "signal: killed"); set before exited closes
 
+	// bridge answers the approvals, plans and questions Cursor CLI asks for; nil declines them all.
+	bridge *cursorPermissionBridge
+
 	// What initialize and the session's configuration reported; the session loop's alone.
 	images        bool          // promptCapabilities.image: images may go in a prompt as they are
 	configOptions []interface{} // the session's mode, model and the model's parameters
+
+	// mode is the Cursor session mode Cursor last reported (its answer to session/new or session/load, or
+	// a current_mode_update); "" once the model may have switched it itself (cursorEventMapper.onSwitchMode).
+	modeMu sync.Mutex
+	mode   string
 }
 
-func startCursorACP(ctx context.Context, spec CursorLaunchSpec, mapper *cursorEventMapper, emit emitFn) (*cursorACPClient, error) {
+func startCursorACP(ctx context.Context, spec CursorLaunchSpec, mapper *cursorEventMapper, bridge *cursorPermissionBridge, emit emitFn) (*cursorACPClient, error) {
 	if spec.Version != cursorSupportedVersion {
 		return nil, fmt.Errorf("CURSOR_VERSION_INCOMPATIBLE: Orbit runs Cursor CLI %s, not %q", cursorSupportedVersion, spec.Version)
 	}
@@ -151,7 +164,11 @@ func startCursorACP(ctx context.Context, spec CursorLaunchSpec, mapper *cursorEv
 	}
 	a := &cursorACPClient{cmd: cmd, scope: scope, cancel: cancel, stdin: stdin, mapper: mapper, secrets: cursorLaunchSecrets(spec.Env),
 		pending: map[string]cursorPending{}, writes: make(chan cursorWrite, 16), done: make(chan struct{}), readDone: make(chan struct{}),
-		stderrDone: make(chan struct{}), reapNow: make(chan struct{}), exited: make(chan struct{})}
+		stderrDone: make(chan struct{}), reapNow: make(chan struct{}), exited: make(chan struct{}), bridge: bridge}
+	if bridge != nil {
+		bridge.reply = a.respond
+	}
+	mapper.onMode = a.setMode
 	a.wg.Add(4)
 	go func() { defer a.wg.Done(); defer close(a.readDone); a.readLoop(stdout) }()
 	go func() { defer a.wg.Done(); a.writeLoop() }()
@@ -233,14 +250,22 @@ func (a *cursorACPClient) deliver(msg cursorRPCMessage) {
 func (a *cursorACPClient) answer(msg cursorRPCMessage) {
 	var result interface{}
 	switch msg.Method {
-	case "session/request_permission", "cursor/ask_question":
-		// No approval or question reaches a person from this runner yet: declined, so nothing runs.
-		logln("cursor: declined", msg.Method, "(approvals are not bridged to Orbit yet)")
-		result = map[string]interface{}{"outcome": map[string]interface{}{"outcome": "cancelled"}}
-	case "cursor/create_plan":
-		// Accepted with no planUri, the CLI saves the plan under its own HOME, the session's, and ends the
-		// step (§4.2); the plan is on its card.
-		result = map[string]interface{}{"outcome": map[string]interface{}{"outcome": "accepted"}}
+	case "session/request_permission", "cursor/ask_question", "cursor/create_plan":
+		if a.bridge == nil {
+			// Nobody can be asked: declined, so nothing runs.
+			result = cursorCancelled()
+			break
+		}
+		params := rawObject(msg.Params)
+		switch msg.Method {
+		case "session/request_permission":
+			a.bridge.permission(msg.ID, params)
+		case "cursor/ask_question":
+			a.bridge.question(msg.ID, params)
+		default:
+			a.bridge.plan(msg.ID, params)
+		}
+		return
 	case "cursor/update_todos", "cursor/task", "cursor/generate_image":
 		// Reports of what a tool already did, on its card; the CLI waits for no particular answer (§4.2).
 		result = map[string]interface{}{}
@@ -250,6 +275,11 @@ func (a *cursorACPClient) answer(msg cursorRPCMessage) {
 		return
 	}
 	a.post(map[string]interface{}{"jsonrpc": "2.0", "id": msg.ID, "result": result})
+}
+
+// respond answers a request Cursor CLI sent the client.
+func (a *cursorACPClient) respond(id interface{}, result map[string]interface{}) {
+	a.post(map[string]interface{}{"jsonrpc": "2.0", "id": id, "result": result})
 }
 
 func (a *cursorACPClient) fail(err error) {
@@ -437,10 +467,9 @@ func (a *cursorACPClient) initialize(ctx context.Context) error {
 	return nil
 }
 
-// open starts the session's conversation. mcpServers is required (§3.1); Orbit's own MCP server is not
-// among them yet (P5c).
-func (a *cursorACPClient) open(ctx context.Context, cwd string) (string, error) {
-	result, err := a.call(ctx, "session/new", map[string]interface{}{"cwd": cwd, "mcpServers": []interface{}{}})
+// open starts the session's conversation with the session's MCP servers, Orbit's among them (§3.1, §6).
+func (a *cursorACPClient) open(ctx context.Context, cwd string, servers []interface{}) (string, error) {
+	result, err := a.call(ctx, "session/new", map[string]interface{}{"cwd": cwd, "mcpServers": servers})
 	if err != nil {
 		return "", err
 	}
@@ -449,35 +478,103 @@ func (a *cursorACPClient) open(ctx context.Context, cwd string) (string, error) 
 		return "", errors.New("Cursor CLI's session/new returned no sessionId")
 	}
 	a.configOptions, _ = result["configOptions"].([]interface{})
+	a.setMode(firstString(mapValue(result["modes"]), "currentModeId"))
 	return id, nil
 }
 
 // load continues the session's conversation in this process (§3.5) in the checkout it was had in. Cursor
 // replays it as session/update before it answers, and the mapper drops all of it: Orbit's transcript
 // already holds that conversation, under ids of its own, which the replay's do not match.
-func (a *cursorACPClient) load(ctx context.Context, sessionID, cwd string) error {
+func (a *cursorACPClient) load(ctx context.Context, sessionID, cwd string, servers []interface{}) error {
 	a.mapper.load(sessionID)
-	result, err := a.call(ctx, "session/load", map[string]interface{}{"sessionId": sessionID, "cwd": cwd, "mcpServers": []interface{}{}})
+	result, err := a.call(ctx, "session/load", map[string]interface{}{"sessionId": sessionID, "cwd": cwd, "mcpServers": servers})
 	if err != nil {
 		return err
 	}
 	a.configOptions, _ = result["configOptions"].([]interface{})
+	a.setMode(firstString(mapValue(result["modes"]), "currentModeId"))
 	return nil
 }
 
-// configure puts the session on its model and effort with session/set_config_option, never --model
-// (§10, §16.3): the model is the whole process's, and an unknown one passed as a flag ends it. A
-// session that names no model stays on the one it runs on — Auto, for a new one — or goes back to Auto
-// from another. An effort the model does not take is left at the model's own, as on Kimi: a session is
-// not failed over a tuning knob.
+func (a *cursorACPClient) setMode(mode string) {
+	a.modeMu.Lock()
+	a.mode = mode
+	a.modeMu.Unlock()
+}
+
+func (a *cursorACPClient) currentMode() string {
+	a.modeMu.Lock()
+	defer a.modeMu.Unlock()
+	return a.mode
+}
+
+// enterMode puts the session in the Cursor mode its permission mode runs in (agent, or plan) unless Cursor
+// last reported it there. session/set_mode, which Cursor answers with a current_mode_update (§3.1).
+func (a *cursorACPClient) enterMode(ctx context.Context, sessionID, mode string) error {
+	if a.currentMode() == mode {
+		return nil
+	}
+	if _, err := a.call(ctx, "session/set_mode", map[string]interface{}{"sessionId": sessionID, "modeId": mode}); err != nil {
+		return err
+	}
+	a.setMode(mode)
+	return nil
+}
+
+// configure puts the session on its model, the model's settings and its effort with
+// session/set_config_option, never --model (§10, §16.3): the model is the whole process's, and an
+// unknown one passed as a flag ends it. The session's model value names the model and the context and
+// fast lane it runs with, the way Cursor writes a variant (`claude-opus-5-5[context=1m,fast=true]`,
+// decodeCursorModel): the bare model is selected first, then each of those settings the model lists —
+// at the value named, or at the model's own default where the value names none, since the process can
+// be on a setting an earlier selection left (the CLI keeps its selection in its config, §3.1). A
+// session that names no model stays on the one it runs on — Auto, for a new one — or goes back to
+// Auto from another, and Auto takes no settings. A setting or an effort the model does not take is
+// left at the model's own and logged, as on Kimi: a session is not failed over a tuning knob.
 func (a *cursorACPClient) configure(ctx context.Context, sessionID string, agent AgentExecConfig) error {
-	model := strings.TrimSpace(agent.Model)
+	model, settings := decodeCursorModel(agent.Model)
 	current := firstString(cursorSessionOption(a.configOptions, "model"), "currentValue")
 	if model == "" && current != "" && !cursorAutoModel(current) {
 		model = "default"
 	}
 	if model != "" && model != current {
 		if err := a.setOption(ctx, sessionID, "model", model); err != nil {
+			return err
+		}
+	}
+	selected := firstString(cursorSessionOption(a.configOptions, "model"), "currentValue")
+	named := map[string]string{}
+	for _, setting := range settings {
+		switch {
+		case cursorAutoModel(selected):
+			logln("cursor: Auto takes no model settings; ignoring", setting.id+"="+setting.value)
+		case !slices.Contains(cursorVariantParameters, setting.id):
+			logln("cursor: a model value sets only the context and fast lane; ignoring", setting.id+"="+setting.value)
+		default:
+			named[setting.id] = setting.value
+		}
+	}
+	for _, id := range cursorVariantParameters {
+		option := cursorSessionOption(a.configOptions, id)
+		value, asked := named[id]
+		if option == nil {
+			if asked {
+				logln("cursor: the session's model takes no", id+"; ignoring", value)
+			}
+			continue
+		}
+		fallback := cursorParameterDefault(selected, id)
+		if asked && !cursorOffers(option, value) {
+			logln("cursor: the session's model does not offer", id, value+"; leaving it at the model's own", firstNonEmpty(fallback, firstString(option, "currentValue")))
+			asked = false
+		}
+		if !asked {
+			value = fallback
+		}
+		if value == "" || value == firstString(option, "currentValue") || !cursorOffers(option, value) {
+			continue
+		}
+		if err := a.setOption(ctx, sessionID, id, value); err != nil {
 			return err
 		}
 	}
@@ -626,8 +723,8 @@ func cursorLaunchIdentity(env map[string]string) string {
 // prepareCursorPrompt builds a turn's prompt. An image goes in as an image block while the CLI takes
 // them (initialize's promptCapabilities.image); any other attachment, and an image when it does not, is
 // saved beside the session and named in the text. A person's shell commands since the last turn come
-// first, as on every other engine.
-func prepareCursorPrompt(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, images bool, shellContext []string) ([]map[string]interface{}, []map[string]interface{}) {
+// first, as on every other engine, and Orbit's agent instructions, when given, ahead of everything.
+func prepareCursorPrompt(ctx context.Context, t *Transport, job *ClaimedSession, resp *RunInboxResponse, images bool, shellContext []string, instructions string) ([]map[string]interface{}, []map[string]interface{}) {
 	var blocks, refs []map[string]interface{}
 	var paths []string
 	for _, att := range resp.Attachments {
@@ -666,10 +763,30 @@ func prepareCursorPrompt(ctx context.Context, t *Transport, job *ClaimedSession,
 			text = note
 		}
 	}
+	if instructions != "" {
+		text = "<orbit-agent-instructions>\n" + instructions + "\n</orbit-agent-instructions>\n\n" + text
+	}
 	if text != "" || len(blocks) == 0 {
 		blocks = append([]map[string]interface{}{{"type": "text", "text": text}}, blocks...)
 	}
 	return blocks, refs
+}
+
+// cursorAgentInstructions are Orbit's agent instructions for a Cursor CLI conversation: the workspace's
+// system prompt and its appended one, with Orbit's own (withOrbitCLIInstructions) — Orbit's MCP tools
+// named as Cursor shows them, a server's tools rather than mcp__orbit__* names. They go ahead of the
+// conversation's first prompt (§7.2: no user-level rules file reaches the model), and stay in the
+// conversation Cursor keeps from then on.
+func cursorAgentInstructions(job *ClaimedSession) string {
+	var parts []string
+	if strings.TrimSpace(job.Agent.SystemPrompt) != "" {
+		parts = append(parts, strings.TrimSpace(job.Agent.SystemPrompt))
+	}
+	appended := strings.TrimSpace(withOrbitCLIInstructions(job.Agent.AppendSystemPrompt, orbitCLIExecutable(), job.insideRecordedWork(), job.watchesOn()))
+	if appended != "" {
+		parts = append(parts, strings.Replace(appended, "the `mcp__orbit__*` tools", "the tools of the `orbit` MCP server", 1))
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // cursorStopGrace is how long a stopped prompt may take to answer before its process is ended instead;
@@ -945,15 +1062,25 @@ func cursorConfigureFailure(err error) string {
 
 func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	p.setTurn("")
-	// Cursor reports no usage at all (§3.2, §4.1): no turn of it claims a measured $0.
+	// Cursor reports no usage at all (§3.2, §4.1): no turn of it claims a measured $0. What a turn says of
+	// its account's quota — the usage limit met, or a turn the account ran — is kept for that account's
+	// plan usage (noteCursorTurn).
 	completeTurn := p.completeTurn
+	account := cursorSessionAccount(p.job)
 	p.completeTurn = func(req TurnCompleteRequest, providerContexts ...context.Context) error {
 		req.UsageUnknown = true
+		noteCursorTurn(account, req)
 		return completeTurn(req, providerContexts...)
 	}
 	fail := func(message string) (string, bool, bool) {
 		p.emit(evError, map[string]interface{}{"message": message})
 		return stFailed, true, false
+	}
+	// A conversation the session has talked in stays on the account or key it was opened on (D5): one its
+	// workspace has since been moved off is refused here, before anything starts or is checked.
+	identity := cursorCredentialIdentity(p.job)
+	if refusal := cursorIdentityRefusal(p.scratchDir, p.job, identity); refusal != "" {
+		return fail(refusal)
 	}
 	// A dispatched API key is checked before anything starts on it, and again when Cursor will not open a
 	// conversation on it; each answer is kept on the key.
@@ -969,8 +1096,24 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		launch = &spec
 	}
 	if !cursorLaunchSignsIn(launch.Env) {
-		return fail("Failed to authenticate: Cursor CLI is not signed in on this runner, and this session brings no Cursor API key. " +
-			"Sign in with: " + cursorLoginHint())
+		return fail(cursorSignedOutMessage())
+	}
+	// What the session's permission mode cannot be held to is refused before anything starts: a mode
+	// Cursor CLI has no equivalent of, a denylist, an MCP server it would drop, and — in every mode but
+	// Bypass, which lets everything run anyway — configuration Cursor CLI would run without asking.
+	policy, err := cursorPermissionPolicyFor(p.job.Agent.PermissionMode)
+	if err == nil {
+		err = cursorToolPolicyError(p.job.Agent)
+	}
+	var servers []interface{}
+	if err == nil {
+		servers, err = cursorMCPServers(p.job)
+	}
+	if err == nil && policy.Mode != "bypassPermissions" {
+		err = guardCursorUserConfig(*launch)
+	}
+	if err != nil {
+		return fail(err.Error())
 	}
 	dir, err := cursorSessionDir(p.job.SessionID)
 	var ledger *cursorTurnLedger
@@ -983,11 +1126,20 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 
 	var naming sync.WaitGroup
 	defer naming.Wait()
+	// Cursor names a conversation from the first prompt it is sent (§3.2). A conversation opened here has
+	// Orbit's agent instructions ahead of that prompt, so its name sums up those rather than the person's
+	// message — "Orbit Agent Instructions" in P8 — in whatever words Cursor picks. None is reported: the
+	// session keeps the title cut from the person's first message.
+	var openedWithInstructions atomic.Bool
 	mapper := newCursorEventMapper(p.emitFor)
 	mapper.onTitle = func(title string) {
 		// Only when the claim asks for it (session_naming.go): any other session's title is a person's,
 		// a task's or the server's, which a title Cursor made up must not replace.
 		if p.job.Naming == nil || p.t == nil {
+			return
+		}
+		if openedWithInstructions.Load() {
+			logln("session title: Cursor CLI named", p.job.SessionID, "from Orbit's agent instructions, not the person's message; not reported")
 			return
 		}
 		naming.Add(1)
@@ -998,11 +1150,26 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	}
 	mapper.onCommands = func(names []string) { slashReg.learnFor(providerCursor, names, nil) }
 	mapper.onTool = ledger.tool
-	app, err := startCursorACP(p.ctx, *launch, mapper, p.emit)
+	// A mode the model switched itself (§4.2), heard by the reader and handled by the loop.
+	switched := make(chan struct{}, 1)
+	mapper.onSwitchMode = func(string, string) {
+		select {
+		case switched <- struct{}{}:
+		default:
+		}
+	}
+	// The rules the session was dispatched with do not change while it runs; the mode can (reload).
+	preApproved := AgentExecConfig{AllowedTools: append([]string(nil), p.job.Agent.AllowedTools...)}
+	bridge := newCursorPermissionBridge(policy, mapper.permissionAsk, mapper.refuse, mapper.withdraw, func(ask cursorPermissionAsk) bool {
+		return cursorPreApproved(preApproved, ask)
+	}, bridgeCursorCard(p.t, p.job.SessionID), p.emitFor, launch.Cwd)
+	app, err := startCursorACP(p.ctx, *launch, mapper, bridge, p.emit)
 	if err != nil {
 		return fail("failed to start Cursor CLI: " + err.Error())
 	}
 	defer app.dispose()
+	// Every card still open is withdrawn, and answered cancelled, before the process goes.
+	defer func() { bridge.close(); bridge.wait() }()
 	initCtx, initCancel := context.WithTimeout(p.ctx, 60*time.Second)
 	defer initCancel()
 	if err := app.initialize(initCtx); err != nil {
@@ -1015,24 +1182,34 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	switch {
 	case sessionID == "":
 		method = "session/new"
-		sessionID, err = app.open(initCtx, launch.Cwd)
+		sessionID, err = app.open(initCtx, launch.Cwd, servers)
 	case cursorConversationUnspoken(launch.ConfigDir, sessionID):
 		method = "session/new"
-		if sessionID, err = app.open(initCtx, launch.Cwd); err == nil {
+		if sessionID, err = app.open(initCtx, launch.Cwd, servers); err == nil {
 			p.emit(evSystem, map[string]interface{}{"noticeKind": "cursor-conversation-reopened",
 				"notice": "Cursor CLI had not been sent a message in this session's conversation yet, so a new conversation was opened in its place."})
 		}
 	default:
-		err = app.load(initCtx, sessionID, launch.Cwd)
+		err = app.load(initCtx, sessionID, launch.Cwd, servers)
 	}
 	if err != nil {
 		return fail(cursorOpenFailure(p.ctx, *launch, p.job, method, err, report))
 	}
 	p.job.RuntimeSessionID = sessionID
-	writeSessionMeta(p.scratchDir, p.job, p.execDir)
+	writeCursorSessionMeta(p.scratchDir, p.job, p.execDir, identity)
 	if err := app.configure(initCtx, sessionID, p.job.Agent); err != nil {
 		return fail(cursorConfigureFailure(err))
 	}
+	if err := app.enterMode(initCtx, sessionID, policy.ACPMode); err != nil {
+		return fail(fmt.Sprintf("Cursor CLI did not take the session into its %s mode, so nothing was sent to it: %v", policy.ACPMode, err))
+	}
+	// A conversation opened here has had no prompt yet: its first carries Orbit's agent instructions. A
+	// loaded one has them from its first turn.
+	instructions := ""
+	if method == "session/new" {
+		instructions = cursorAgentInstructions(p.job)
+	}
+	openedWithInstructions.Store(instructions != "")
 	// The control plane keeps the runtime session id from this event (runtimeInitSessionId).
 	p.emit(evSystem, map[string]interface{}{"subtype": "init", "provider": providerCursor, "runtime": "acp",
 		"sessionId": sessionID, "cliVersion": launch.Version, "resumed": method == "session/load"})
@@ -1081,8 +1258,9 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 	defer func() { app.fail(errors.New("the Cursor CLI session loop stopped")); promptWG.Wait() }()
 	var activeID string
 	// Whether the active turn was stopped here (cursorSettlementOutcome), and when the stop gives up on
-	// Cursor's answer.
+	// Cursor's answer. refused says why, when Orbit stopped it for leaving its permission mode.
 	stopped := false
+	refused := ""
 	var stopDeadline <-chan time.Time
 	seen := map[string]bool{}
 	var queued []*RunInboxResponse
@@ -1096,6 +1274,11 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		req.WorktreeBranch = currentBranch(p.job.WT)
 	}
 	settle := func(done cursorPromptResult) string {
+		// The turn is over: nothing it asked for may be answered but cancelled from here.
+		bridge.close()
+		if refused != "" && done.err == nil {
+			done.err = errors.New(refused)
+		}
 		end := cursorTurnEnd{result: done.result, err: done.err, stopped: stopped}
 		if !end.answered() && !stopped && app.connectionClosed() {
 			end.exit = app.awaitExit(cursorExitGrace)
@@ -1116,7 +1299,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 				logln("cursor turn-complete failed for", p.job.SessionID+":", err)
 			}
 		}
-		activeID, stopped, stopDeadline = "", false, nil
+		activeID, stopped, refused, stopDeadline = "", false, "", nil
 		p.setTurn("")
 		return req.Status
 	}
@@ -1163,7 +1346,9 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			return <-promptDone
 		}
 	}
+	// cancelTurn stops the running turn: what it asked for is answered cancelled first, then Cursor is told.
 	cancelTurn := func() {
+		bridge.close()
 		app.post(map[string]interface{}{"jsonrpc": "2.0", "method": "session/cancel",
 			"params": map[string]interface{}{"sessionId": sessionID}})
 	}
@@ -1183,7 +1368,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		}
 		activeID = resp.TurnID
 		p.setTurn(activeID)
-		blocks, refs := prepareCursorPrompt(p.ctx, p.t, p.job, resp, app.images, shellContext)
+		blocks, refs := prepareCursorPrompt(p.ctx, p.t, p.job, resp, app.images, shellContext, instructions)
 		shellContext = nil
 		userEvent := map[string]interface{}{"text": resp.Content}
 		if len(refs) > 0 {
@@ -1191,12 +1376,24 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		}
 		p.emitFor(activeID, evUser, userEvent)
 		turnID := activeID
+		// The mode the permission mode runs in, again if the model may have switched it since (§4.2).
+		mode := bridge.policy().ACPMode
+		modeCtx, modeCancel := context.WithTimeout(p.ctx, 30*time.Second)
+		err := app.enterMode(modeCtx, sessionID, mode)
+		modeCancel()
+		if err != nil {
+			settle(cursorPromptResult{turnID: turnID,
+				err: fmt.Errorf("Cursor CLI did not take the session into its %s mode, so this message was not sent to it: %v", mode, err)})
+			return true
+		}
 		// Recorded before the prompt is written: from here on, a crash leaves a turn that is not sent again.
 		if err := ledger.prompted(turnID); err != nil {
 			settle(cursorPromptResult{turnID: turnID,
 				err: fmt.Errorf("Orbit could not record this turn before sending it to Cursor CLI, so it was not sent: %v", err)})
 			return true
 		}
+		instructions = ""
+		bridge.begin(turnID)
 		promptWG.Add(1)
 		go func() {
 			defer promptWG.Done()
@@ -1255,6 +1452,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 		case <-p.ctx.Done():
 			if activeID != "" {
 				stopped = true
+				bridge.close()
 				settle(<-promptDone)
 			}
 			return stCancelled, true, false
@@ -1270,6 +1468,7 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			// answer — or the error its connection ended with — is in already settles on it; one still running
 			// is the new owner's: it finds the turn prompted in the ledger and settles it without prompting it
 			// again. Nothing of it goes out from here.
+			bridge.close()
 			if activeID != "" {
 				select {
 				case done := <-promptDone:
@@ -1296,6 +1495,19 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 			// longer be talked to, so the process is ended, and the turn settles as Orbit stopped it.
 			app.fail(errors.New("Cursor CLI did not answer a stopped prompt"))
 			stopDeadline = nil
+		case <-switched:
+			// The model switched Cursor's mode itself, which Cursor approves asking nobody, and announces no
+			// mode (§4.2): measured, an edit after a switch out of plan mode is written. The next prompt puts
+			// the session back in its mode first; in Plan the turn is stopped where it is, before anything the
+			// switch lets through can run.
+			app.setMode("")
+			if activeID != "" && !stopped && bridge.policy().ACPMode == "plan" {
+				stopped = true
+				refused = "Cursor CLI switched itself out of Plan mode, so Orbit stopped the turn before anything could run outside Plan."
+				p.emitFor(activeID, evSystem, map[string]interface{}{"noticeKind": "cursor-plan-mode-left", "provider": providerCursor, "notice": refused})
+				cancelTurn()
+				stopDeadline = time.After(cursorStopGrace)
+			}
 		case done := <-promptDone:
 			if status := settle(done); app.connectionClosed() {
 				return exited(status)
@@ -1326,14 +1538,24 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 				}
 				return stSucceeded, true, false
 			case "reload":
-				before := cursorLaunchIdentity(p.job.Agent.Env)
+				before, beforeMode := cursorLaunchIdentity(p.job.Agent.Env), p.job.Agent.PermissionMode
 				applyRuntimeReload(p.job, resp.Content)
 				applyProviderEnv(p.job, resp)
-				if cursorLaunchIdentity(p.job.Agent.Env) != before {
-					// The workspace's variables, the credential among them, are the process's: a new process.
+				if next, err := cursorPermissionPolicyFor(p.job.Agent.PermissionMode); err != nil {
+					// Not taken up: the session keeps the mode it runs in.
+					p.emit(evError, map[string]interface{}{"message": err.Error()})
+					p.job.Agent.PermissionMode = beforeMode
+				} else {
+					bridge.setPolicy(next)
+				}
+				// The workspace's variables, the credential among them, and the flags a permission mode starts
+				// the CLI with (Bypass's --force) are the process's: a new process.
+				if cursorLaunchIdentity(p.job.Agent.Env) != before ||
+					strings.Join(cursorPermissionArgs(p.job.Agent.PermissionMode), " ") != strings.Join(cursorPermissionArgs(beforeMode), " ") {
 					if activeID != "" {
 						stopped = true
-						app.fail(errors.New("the session's Cursor CLI environment changed"))
+						bridge.close()
+						app.fail(errors.New("the session's Cursor CLI launch changed"))
 						settle(<-promptDone)
 					}
 					p.emit(evSystem, map[string]interface{}{"subtype": "reload", "reason": "launch_changed", "provider": providerCursor})
@@ -1341,6 +1563,9 @@ func runCursorSessionProcess(p sessionProcessArgs) (string, bool, bool) {
 				}
 				if err := app.configure(p.ctx, sessionID, p.job.Agent); err != nil {
 					p.emit(evError, map[string]interface{}{"message": "failed to reconfigure the Cursor CLI session: " + err.Error()})
+				}
+				if err := app.enterMode(p.ctx, sessionID, bridge.policy().ACPMode); err != nil {
+					p.emit(evError, map[string]interface{}{"message": "Cursor CLI did not change the session's mode; the next message tries again: " + err.Error()})
 				}
 			case "diff":
 				files, patches := liveDiff(p.job.WT)

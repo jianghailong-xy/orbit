@@ -72,6 +72,19 @@ func antigravityPermissionArgs(mode string, gated bool) []string {
 	return nil
 }
 
+// cursorPermissionArgs is what a permission mode adds to `agent acp` (docs/cursor-runtime-contract.md
+// §5.4, §16.5). Every mode switches off the checkout's own .cursor/cli.json, whose allowlist Cursor CLI
+// would otherwise apply over Orbit's (§7.2) and whose invalid copy would keep the process from starting
+// at all (§2.1); Bypass adds --force, under which nothing asks. The rest of a mode is how the runner
+// answers Cursor CLI's requests and the session mode it sets (cursorPermissionPolicyFor): a process keeps
+// its flags, so a session whose mode changes them starts a new one.
+func cursorPermissionArgs(mode string) []string {
+	if strings.TrimSpace(mode) == "bypassPermissions" {
+		return []string{"--force", "--disable-project-configs"}
+	}
+	return []string{"--disable-project-configs"}
+}
+
 // antigravityGuardedMode is every mode in which agy refuses what nobody approved: all but the two
 // that skip its permission checks altogether.
 func antigravityGuardedMode(mode string) bool {

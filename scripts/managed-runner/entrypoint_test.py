@@ -363,7 +363,7 @@ RUNNER_ID = "0b6f5f6e-6f0a-4c5e-9b9e-2a3c4d5e6f70"
 POD_UID = "7c1d2e3f-4a5b-4c6d-8e9f-0a1b2c3d4e5f"
 
 
-class ManagedBootstrapTest(EntrypointFixture):
+class ManagedBootstrapFixture(EntrypointFixture):
     """The manager's Pod: the runner exists, its credential is issued for one generation, and the
     Pod states its generation and UID through the Downward API. No enrollment, ever."""
 
@@ -394,6 +394,8 @@ class ManagedBootstrapTest(EntrypointFixture):
         self.popen.assert_not_called()
         return self.foreground.call_args.args[2]
 
+
+class ManagedBootstrapTest(ManagedBootstrapFixture):
     def test_first_start_uses_the_manager_credential_and_never_enrolls(self):
         env = self.started_env()
         config = json.loads(self.config.read_text())
@@ -480,6 +482,101 @@ class ManagedBootstrapTest(EntrypointFixture):
         self.runner.prepare()
         self.runner.durable_json(self.orbit / "registration-pending.json", {"name": "old-attempt"})
         self.assert_refused()
+
+
+class DockerInstanceFileTest(ManagedBootstrapFixture):
+    """The Docker backend's container: the same credential, with its generation and instance UID in a
+    read-only instance file the channel wrote beside it, and nothing about the instance in its
+    environment (deploy/managed-runner/docker-channel)."""
+
+    def setUp(self):
+        super().setUp()
+        for name in ("ORBIT_MANAGED_RUNNER_GENERATION", "ORBIT_MANAGED_RUNNER_POD_UID"):
+            os.environ.pop(name)
+        self.state(1, POD_UID)
+        os.environ.update({"ORBIT_MANAGED_RUNNER_INSTANCE_FILE": str(self.bootstrap / "instance.json"),
+                           "ORBIT_RUNNER_SERVER_URL": "http://172.18.0.1:3000"})
+
+    def state(self, generation, instance_uid, runner_id=RUNNER_ID, **extra):
+        path = self.bootstrap / "instance.json"
+        if path.exists():
+            path.chmod(0o600)
+        path.write_text(json.dumps({"runnerId": runner_id, "generation": generation, "instanceUid": instance_uid, **extra}))
+        path.chmod(0o444)
+
+    def test_the_instance_file_states_generation_and_instance_uid(self):
+        env = self.started_env()
+        # `orbit run` gets the instance as ever; the container itself was never given it in its environment.
+        self.assertEqual((env["ORBIT_MANAGED_RUNNER_GENERATION"], env["ORBIT_MANAGED_RUNNER_POD_UID"]), ("1", POD_UID))
+        self.assertNotIn("ORBIT_MANAGED_RUNNER_INSTANCE_FILE", env)
+        config = json.loads(self.config.read_text())
+        self.assertEqual((config["runnerToken"], config["serverUrl"]), ("generation-1-credential", "http://172.18.0.1:3000"))
+        self.assertEqual(json.loads((self.orbit / "managed-instance.json").read_text()),
+                         {"runnerId": RUNNER_ID, "generation": 1, "podUid": POD_UID})
+
+    def test_the_next_generation_s_container_replaces_only_the_credential(self):
+        self.started_env()
+        self.foreground.reset_mock()
+        self.issue(2, "generation-2-credential")
+        self.state(2, "9e8d7c6b-5a49-4382-9716-152433221100")
+        env = self.started_env()
+        self.assertEqual(env["ORBIT_MANAGED_RUNNER_GENERATION"], "2")
+        self.assertEqual(json.loads(self.config.read_text())["runnerToken"], "generation-2-credential")
+        self.foreground.reset_mock()
+        # Generation 1's container, late, on the volume generation 2 ran on: refused.
+        self.issue(1, "generation-1-credential")
+        self.state(1, POD_UID)
+        self.assert_refused()
+
+    def test_a_wrong_or_malformed_instance_file_is_refused(self):
+        for change in ({"runner_id": "1d2c3b4a-0000-4000-8000-000000000000"}, {"generation": 0}, {"generation": "1"},
+                       {"generation": True}, {"instance_uid": "mr-container"}, {"extra": "field"}):
+            with self.subTest(change=change):
+                self.state(change.get("generation", 1), change.get("instance_uid", POD_UID),
+                           change.get("runner_id", RUNNER_ID), **({"extra": "x"} if "extra" in change else {}))
+                self.assert_refused()
+        (self.bootstrap / "instance.json").chmod(0o600)
+        (self.bootstrap / "instance.json").write_text("not json")
+        self.assert_refused()
+        self.state(2, POD_UID)
+        self.assert_refused()  # the credential beside it was issued for generation 1
+        self.assertFalse(self.config.exists())
+
+    def test_the_file_and_the_downward_api_never_both_state_it(self):
+        with mock.patch.dict(os.environ, {"ORBIT_MANAGED_RUNNER_GENERATION": "1"}):
+            self.assert_refused()
+        with mock.patch.dict(os.environ, {"ORBIT_MANAGED_RUNNER_POD_UID": POD_UID}):
+            self.assert_refused()
+
+    def test_plain_http_only_to_a_private_address_of_the_host_s_container_network(self):
+        for url in ("http://172.18.0.1:3000", "http://10.0.0.5", "http://192.168.1.12:2086", "http://apiserver:3000",
+                    "http://[fd00::1]:3000", "https://orbit.example.test"):
+            with self.subTest(url=url), mock.patch.dict(os.environ, {"ORBIT_RUNNER_SERVER_URL": url}):
+                self.assertEqual(self.runner.server_url(), url)
+        for url in ("http://orbit.example.test", "http://8.8.8.8", "http://user:pw@172.18.0.1", "ftp://172.18.0.1",
+                    "http://172.18.0.1/?x=1"):
+            with self.subTest(url=url), mock.patch.dict(os.environ, {"ORBIT_RUNNER_SERVER_URL": url}):
+                with self.assertRaises(ValueError):
+                    self.runner.server_url()
+        # A Pod (no instance file) keeps the rule it always had: HTTPS, or HTTP to loopback only.
+        with mock.patch.dict(os.environ, {"ORBIT_RUNNER_SERVER_URL": "http://172.18.0.1:3000"}):
+            os.environ.pop("ORBIT_MANAGED_RUNNER_INSTANCE_FILE")
+            with self.assertRaises(ValueError):
+                self.runner.server_url()
+
+    def test_an_enrollment_start_with_the_instance_file_variable_keeps_plain_http_to_loopback(self):
+        # Without the manager's credential file the start is an enrollment, and its one-time token
+        # never goes to a private address in plain HTTP, whatever else the environment names.
+        os.environ.pop("ORBIT_RUNNER_CREDENTIAL_FILE")
+        os.environ["ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE"] = str(self.token)
+        for url in ("http://172.18.0.1:3000", "http://apiserver:3000", "http://[fd00::1]:3000"):
+            with self.subTest(url=url), mock.patch.dict(os.environ, {"ORBIT_RUNNER_SERVER_URL": url}):
+                with self.assertRaises(ValueError):
+                    self.runner.server_url()
+                self.assert_refused()
+                self.assertFalse((self.orbit / "registration-pending.json").exists())
+        with mock.patch.dict(os.environ, {"ORBIT_RUNNER_SERVER_URL": "https://orbit.example.test"}):
+            self.assertEqual(self.runner.server_url(), "https://orbit.example.test")
 
 
 if __name__ == "__main__":

@@ -98,6 +98,8 @@ func runFakeCursorAgent(dir string) int {
 		return fakeCursorModels(dir)
 	case len(args) > 0 && args[0] == "acp":
 		return fakeCursorACP(dir, args[1:])
+	case len(args) > 0 && args[0] == "login":
+		return fakeCursorLogin(dir)
 	}
 	fmt.Fprintln(os.Stderr, "fake cursor-agent: unexpected command", args)
 	return 2
@@ -179,6 +181,11 @@ func fakeCursorModels(dir string) int {
 		return 1
 	}
 	if os.Getenv("CURSOR_AUTH_TOKEN") == "" && os.Getenv("CURSOR_API_KEY") == "" {
+		fmt.Fprintln(os.Stderr, "Authentication required. Please run 'agent login' first.")
+		return 1
+	}
+	// A login Cursor no longer accepts, one token per line.
+	if refused, _ := os.ReadFile(filepath.Join(dir, "refused-tokens")); contains(strings.Fields(string(refused)), os.Getenv("CURSOR_AUTH_TOKEN")) {
 		fmt.Fprintln(os.Stderr, "Authentication required. Please run 'agent login' first.")
 		return 1
 	}
@@ -802,7 +809,7 @@ func TestCursorNeverUpdatesItself(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.Executable != exe || strings.Join(spec.Args, " ") != "acp --disable-auto-update --disable-indexing" {
+	if spec.Executable != exe || strings.Join(spec.Args, " ") != "acp --disable-auto-update --disable-indexing --disable-project-configs" {
 		t.Fatalf("launch = %s %v, want the pinned build's acp with auto-update disabled", spec.Executable, spec.Args)
 	}
 	var config map[string]interface{}

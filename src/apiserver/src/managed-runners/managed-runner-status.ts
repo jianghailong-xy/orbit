@@ -2,12 +2,14 @@ import type { ManagedRunner, RunnerStatus } from '@prisma/client';
 import {
   MANAGED_RUNNER_CONTRACT_VERSION,
   MANAGED_RUNNER_UNAVAILABLE,
+  type LoginEngine,
   type ManagedRunnerReason,
   type ManagedRunnerStatus,
 } from '@orbit/shared';
 
 import { managedRunnerAccountDisabledReason, managedRunnerNotEligibleReason } from './managed-runner-eligibility';
 import { managedRunnerDisabledReason } from './managed-runner-gate';
+import { managedFirstSessionProvider, type ManagedSupplyRunner } from './managed-runner-supply';
 
 /** How fresh a heartbeat must be to count, when no profile says otherwise: the reaper's threshold. */
 export const DEFAULT_HEARTBEAT_FRESH_MS = 90_000;
@@ -22,7 +24,11 @@ export interface ManagedRunnerStatusInput {
   /** An administrator disabled the owner's account (asked only while the switch is on). Absent: no. */
   ownerDisabled?: boolean;
   mapping: ManagedRunner | null;
-  runner: { status: RunnerStatus; lastHeartbeatAt: Date | null } | null;
+  /** The runner row: its heartbeat, and what its last heartbeat reported of its engines (absent: nothing yet). */
+  runner: ({ status: RunnerStatus; lastHeartbeatAt: Date | null } & Partial<ManagedSupplyRunner>) | null;
+  /** The owner's first own model key a managed runner can run (ownerManagedKeys), asked only before the
+   *  runner has been READY. Absent: none. */
+  firstSessionKey?: { slug: string; engine: LoginEngine } | null;
   now: Date;
   heartbeatFreshMs: number;
 }
@@ -73,6 +79,7 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
       reason: accountReason ?? switchReason ?? (eligible ? null : managedRunnerNotEligibleReason()),
       retryAfter: null,
       initialProvider: null,
+      firstSessionProvider: null,
       actions: { ...actions, canEnsure: operable && eligible },
     };
   }
@@ -94,6 +101,13 @@ export function managedRunnerStatus(input: ManagedRunnerStatusInput): ManagedRun
     reason: !enabled ? switchReason : (accountReason ?? reason ?? switchReason),
     retryAfter: mapping.nextAttemptAt && mapping.nextAttemptAt > now ? mapping.nextAttemptAt.toISOString() : null,
     initialProvider: mapping.initialProvider,
+    firstSessionProvider: managedFirstSessionProvider(
+      mapping.initialProvider,
+      input.firstSessionKey ?? null,
+      runner
+        ? { engines: runner.engines ?? null, defaultRemoved: runner.defaultRemoved ?? null, capabilities: runner.capabilities ?? null }
+        : null,
+    ),
     actions: {
       ...actions,
       canRetry: operable && mapping.managementState === 'FAILED' && reason?.retryable === true,

@@ -1,0 +1,32 @@
+{
+  "state": "FENCING",
+  "generation": 3,
+  "attempts": [
+    {
+      "case": "the fixed-name Pod of generation 3 again, by the manager identity, while FENCING",
+      "at": "2026-10-17T20:09:59.879+00:00",
+      "identity": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+      "name": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "node": "orbit-mr-lab",
+      "labels": {
+        "app.kubernetes.io/name": "orbit-managed-runner",
+        "orbit-test-environment": "orbit-mr-lab"
+      },
+      "admitted": false,
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_RESERVED: generation 3 has no Pod creation reserved (FENCING)"
+    },
+    {
+      "case": "the fixed-name Pod of generation 4, by the manager identity, while FENCING",
+      "at": "2026-10-17T20:09:59.935+00:00",
+      "identity": "system:serviceaccount:orbit-mr-test:orbit-mr-manager",
+      "name": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "node": "orbit-mr-lab",
+      "labels": {
+        "app.kubernetes.io/name": "orbit-managed-runner",
+        "orbit-test-environment": "orbit-mr-lab"
+      },
+      "admitted": false,
+      "answer": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission: NOT_THE_RESERVED_GENERATION: the reserved generation is 3"
+    }
+  ]
+}

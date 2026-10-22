@@ -1,0 +1,39 @@
+{
+  "answer": {
+    "assignedRunnerId": "34jQup6DEE3hhPfgLu01z",
+    "code": null,
+    "engine": "claude",
+    "id": "34jQvqJh34jv7n5ZFxyXr",
+    "message": null,
+    "model": null,
+    "provider": "deepseek-2",
+    "status": "PENDING",
+    "workspaceId": "34jQup6PMW94GN1z2DGw6"
+  },
+  "at": "2026-10-20T22:38:15.582+00:00",
+  "display": {
+    "acceptsWork": true,
+    "detail": "Sessions here run on the runner Orbit manages for you.",
+    "ensure": false,
+    "kind": "available",
+    "moving": false,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": true,
+    "title": "Managed runner ready"
+  },
+  "managed": {
+    "initialProvider": "deepseek-2",
+    "managementState": "READY",
+    "runnerId": "34jQup6DEE3hhPfgLu01z",
+    "usable": true,
+    "workspaceId": "34jQup6PMW94GN1z2DGw6"
+  },
+  "owner": "deepkey",
+  "request": {
+    "prompt": "This is an Orbit lab check of a managed runner's first session. Reply in one short line that starts with 'managed-ok' and names the model you are, if you know it.",
+    "title": "t05 deepkey first session",
+    "workspaceId": "34jQup6PMW94GN1z2DGw6"
+  },
+  "status": 201
+}

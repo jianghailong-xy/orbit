@@ -1,0 +1,133 @@
+{
+  "at": "2026-10-17T20:18:51.782+00:00",
+  "mapping": {
+    "attempt": 0,
+    "backend": "kubernetes",
+    "cluster_key": "orbit-mr-lab",
+    "default_workspace_id": "01a14b7d-4fb0-71e9-821e-88bc72018d6f",
+    "desired_state": "RUNNING",
+    "fencing_receipt": null,
+    "generation": 1,
+    "id": "01a14b7d-4fb1-71d8-9db3-d286f41ac4cf",
+    "initial_provider": null,
+    "last_error": {
+      "code": "PREDECESSOR_STOP_UNPROVEN",
+      "detail": "Pod 9d9277e3-a0fb-43bd-930d-ebd3c9725b87 of generation 1 is gone without a stop proof",
+      "message": "The previous runner instance is gone, and nothing proves it stopped, so no new instance is started and the data volume is kept. It waits for proof that it stopped or for an operator\u2019s fencing receipt.",
+      "retryable": false
+    },
+    "management_state": "FENCING",
+    "namespace": "orbit-mr-test",
+    "next_attempt_at": null,
+    "node_name": "orbit-mr-lab",
+    "owner_id": "01a14b7d-4f87-70fa-8c3c-a198fb176468",
+    "pod_name": "mr-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+    "pod_uid": "9d9277e3-a0fb-43bd-930d-ebd3c9725b87",
+    "pv_uid": "8bedeba6-f0c7-4281-aa76-a05308dcde14",
+    "pvc_name": "mr-data-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+    "pvc_uid": "f00e77e6-337a-464f-9a54-0c6fb3bfcc1f",
+    "reservation": {
+      "compute": {
+        "activeUsers": 1,
+        "attachments": 1,
+        "cpuMillis": 500,
+        "ephemeralBytes": 1073741824,
+        "generation": 1,
+        "memoryBytes": 805306368,
+        "pods": 1,
+        "reservedAt": "2026-10-17T20:11:06.067Z"
+      },
+      "pool": "5a227748-b16c-43d1-a557-77cce09e5b12",
+      "storage": {
+        "durableBytes": 2147483648,
+        "reservedAt": "2026-10-17T20:11:06.067Z"
+      },
+      "version": 1
+    },
+    "resource_operation_kind": "CREATE_POD",
+    "resource_operation_state": "COMPLETED",
+    "revision": 13,
+    "runner_id": "01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+    "startup_deadline_at": null,
+    "state_entered_at": "2026-10-17T20:12:48.418+00:00",
+    "updated_at": "2026-10-17T20:18:47.595+00:00",
+    "volume_handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-67891ddf-d094-47ed-a31a-2ec019223f3e"
+  },
+  "objects": {
+    "bootstrapSecret": {
+      "createdAt": "2026-10-17T20:11:11Z",
+      "generation": "1",
+      "name": "mr-boot-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+      "uid": "100d1f69-60ba-4e95-822b-c64d328d64e5"
+    },
+    "pod": null,
+    "podsUsingTheClaim": [],
+    "pv": {
+      "claimUid": "f00e77e6-337a-464f-9a54-0c6fb3bfcc1f",
+      "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+      "fsType": "ext4",
+      "image": "csi-vol-67891ddf-d094-47ed-a31a-2ec019223f3e",
+      "name": "pvc-f00e77e6-337a-464f-9a54-0c6fb3bfcc1f",
+      "pool": "orbit-mr-rbd",
+      "reclaimPolicy": "Retain",
+      "uid": "8bedeba6-f0c7-4281-aa76-a05308dcde14",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-67891ddf-d094-47ed-a31a-2ec019223f3e"
+    },
+    "pvc": {
+      "accessModes": [
+        "ReadWriteOnce"
+      ],
+      "annotations": {
+        "orbit.dev/owner-id": "01a14b7d-4f87-70fa-8c3c-a198fb176468",
+        "orbit.dev/runner-id": "01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+        "pv.kubernetes.io/bind-completed": "yes",
+        "pv.kubernetes.io/bound-by-controller": "yes",
+        "volume.beta.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com",
+        "volume.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com"
+      },
+      "name": "mr-data-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+      "phase": "Bound",
+      "storageClassName": "runner-data",
+      "uid": "f00e77e6-337a-464f-9a54-0c6fb3bfcc1f",
+      "volumeName": "pvc-f00e77e6-337a-464f-9a54-0c6fb3bfcc1f"
+    },
+    "volumeAttachments": []
+  },
+  "ownerStatus": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hfIsD8KI6ITwx2rb3qZ",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": "2026-10-17T20:12:45.377Z",
+    "managementState": "FENCING",
+    "reason": {
+      "code": "PREDECESSOR_STOP_UNPROVEN",
+      "message": "The previous runner instance is gone, and nothing proves it stopped, so no new instance is started and the data volume is kept. It waits for proof that it stopped or for an operator\u2019s fencing receipt.",
+      "retryable": false
+    },
+    "retryAfter": null,
+    "revision": 13,
+    "runnerId": "34hfIsD2FWelHSkXqxwgI",
+    "runnerPublicId": "34hfIsD2FWelHSkXqxwgI",
+    "usable": false,
+    "workspaceId": "34hfIsD8KI6ITwx2rb3qZ",
+    "workspacePublicId": "34hfIsD8KI6ITwx2rb3qZ"
+  },
+  "runner": {
+    "id": "01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+    "labels": [],
+    "last_heartbeat_at": "2026-10-17T20:12:45.377",
+    "name": "orbit-managed",
+    "status": "ONLINE",
+    "version": "managed-292b2eb4308b622b5f7b7d40f7c542d55c1091c9"
+  }
+}

@@ -1,0 +1,40 @@
+{
+ "checks": [
+  {
+   "check": "the switch is on with the lab profile",
+   "ok": true,
+   "value": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t08b/managed-runner-profile.json"
+   ]
+  }
+ ],
+ "endedAt": "2026-10-18T15:20:32.456+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "on",
+ "result": {
+  "recorder": {
+   "at": "2026-10-18T15:20:32.453+00:00",
+   "lines": 0,
+   "log": "/mnt/data/managed-runner-lab/test-server-t08b/timeline.jsonl",
+   "unit": "active"
+  },
+  "switch": [
+   "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+   "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t08b/managed-runner-profile.json"
+  ],
+  "testServer": [
+   "TLS front (orbit-mr-lab-tls): active",
+   "fake model (orbit-mr-lab-fake-model): active",
+   "PostgreSQL (orbit-mr-lab-pg): running",
+   "listening: 127.0.0.1:13710 127.0.0.1:13711 127.0.0.1:13712 127.0.0.1:15433",
+   "Pods use: https://10.0.2.2:13711 (CA /mnt/data/managed-runner-lab/test-server-t08b/tls/ca.crt); host API http://127.0.0.1:13710/api",
+   "state: /mnt/data/managed-runner-lab/test-server-t08b; managed runners: true",
+   "15:20:28Z applying migrations"
+  ]
+ },
+ "seconds": 3.8,
+ "startedAt": "2026-10-18T15:20:28.637+00:00",
+ "step": "start"
+}

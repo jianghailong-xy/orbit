@@ -33,7 +33,9 @@
 5. **检索：接口从第一天按混合检索设计，实现先用 pg_trgm。** 语义向量作为可插拔的第二路：owner 配置 embedding provider 后打开，离线评测达到阈值再上（§6）。返回给 agent 的仍是条目，并注明每条是按关键词、语义还是路径命中的。
 6. **维护作业（阶段 2）**
    - 触发：由已提交的事实驱动，不用时钟。
-   - 执行：跑在 owner 指定的 runner 上，走 BYOK。
+   - 执行：服务端 wiki-worker 里的 `maintain` 作业，模型是部署配置的 System model；不建任务、不起会话，也不花账号自己的 provider、key 或订阅
+     （服务端执行，见 `docs/wiki-server-execution-design.md`；P11 起是唯一的路径）。owner 指定的 workspace 只决定从哪台 runner 读仓库：
+     runner 只做仓库操作（快照、读文件、diff、锚点检查）。
    - 读原料：服务端按会话抽好、脱敏后的案卷（dossier）。
    - 产出：锚点复验，以及作为提议送进同一个写入口。
 7. **互联网巡检与需求建议放阶段 3。** 只盯结构化源：依赖清单 × OSV/release/changelog，以及代码里真用到的 CLI 契约面。读网页的环节零写权限。建议带判据草稿，owner 采纳后才变成任务。
@@ -231,7 +233,7 @@ agent（MCP / CLI）、owner（web / iOS / CLI）、维护作业、导入，全�
 - **actor 从凭证得出，不接受参数。**
   - owner = JWT 门；
   - agent = runner 门加上经过校验的调用会话（照抄 `runner-watches.controller.ts` 的 `callingSession`）；
-  - maintenance = 调用会话属于该 space 的维护任务清单；
+  - maintenance = 该 space 的维护运行，即服务端的 `maintain` 作业，在进程内调用，没有会话（P11 之前是「调用会话属于该 space 的维护任务清单」）；
   - headless 的 runner 调用 = `origin:'agent'`，没有会话，仍然只能提议。
 - **每个 op 的处理顺序**（全部在一个事务里，不通过的立刻带结构化原因返回，让 agent 当轮改）：
   1. `KIND_SPECS` schema 校验，报错带到字段级；
@@ -263,8 +265,8 @@ agent（MCP / CLI）、owner（web / iOS / CLI）、维护作业、导入，全�
 - **过期**：待审 14 天后变成 `expired`。被拒的条目保留，作为反例：以后 agent 的 `similar[]` 会看到「曾被拒：理由」。
 - **审阅模式（阶段 2，owner 2026-09-26 定）**：上表是 Manual 模式。space 可切到 Tiered 或 Automatic，由模式直接应用上表扣下的
   add / amend（标 Auto 或 Unreviewed），安全底线任何模式都不放开；规则、抽检与整次撤回见契约 `reviewModes`（`docs/wiki-contract.md` §7.3）。
-  **Automatic 先核实再生效**（owner 2026-09-27，判据 7 第 3 版）：Automatic 收下的 op 先等核实，由 `orbit wiki verify` 用干净的
-  Claude Code 调本地模型对照出处给出 supported / partial / unsupported / duplicate，按结论生效、标 Unreviewed、拒绝或并入已有条目；
+  **Automatic 先核实再生效**（owner 2026-09-27，判据 7 第 3 版）：Automatic 收下的 op 先等核实，由服务端的 `verify` 作业用 System model
+  对照出处给出 supported / partial / unsupported / duplicate（`orbit wiki verify` 只请求核实并等结论），按结论生效、标 Unreviewed、拒绝或并入已有条目；
   没有结论的不生效，拒绝率超阈值自动退回 Tiered；Automatic 默认不发抽检卡（见契约 `reviewModes.verification`，§7.4）。
 
 ### 4.3 出处（sources）
@@ -317,12 +319,9 @@ GET    /runner/wiki/search          只返回 active 条目，外加本会话自
 GET    /runner/wiki/entries/:id
 POST   /runner/wiki/changesets      提议（落到 §4.1）
 GET    /runner/wiki/context         推送块预览（调试用；正式投递在 dequeueTurn，§7.1）
-—— 以下仅对维护作业会话开放（会话的任务属于该 space 的维护清单）——
-GET    /runner/wiki/spaces/:id/dossiers?after=<cursor>&limit
-GET    /runner/wiki/spaces/:id/anchors?due=true
-POST   /runner/wiki/spaces/:id/anchor-checks
-POST   /runner/wiki/spaces/:id/cursor          只在运行成功结束时推进
 ```
+
+原先只对维护作业会话开放的 dossiers、anchors、anchor-checks、cursor 四条路由已在 P11（2026-10-19）删除：维护运行是服务端的 `maintain` 作业，在进程内读案卷、推进游标，git 锚点由 runner 的 `anchors` 仓库操作检查。
 
 - **service token 一律拒绝。** 理由同 `session_search`（`runner-sessions.controller.ts:251-266`）：条目衍生自其他机器上的对话正文。
 - **读条目的边界**：只有绑定在该 space 的 workspace 里的会话能读。owner 把 workspace 绑进 space，就是同意在这些 workspace 之间共享**已确认**的条目。待审内容不跨会话可见。
@@ -355,18 +354,19 @@ POST   /runner/wiki/spaces/:id/cursor          只在运行成功结束时推进
 orbit wiki search <query> [--kind] [--topic] [--json]
 orbit wiki get <id...> [--json]
 orbit wiki propose --file ops.json [--dry-run] [--json]
-orbit wiki dossier --space <id> [--after <cursor>]          # 仅维护会话
-orbit wiki anchors verify --space <id> [--repo <path>]      # 仅维护会话；在本地 checkout 里跑 git（契约 §17）
-orbit wiki cursor advance --space <id> --to <token>         # 仅维护会话
-orbit wiki check --space <id> --expect-cursor <token>       # 维护任务的 EXECUTABLE 判据
 orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.md / AGENTS.md / 记忆目录 → 待审提议
 ```
+
+原来列着的四个维护类动词——`orbit wiki dossier`、`orbit wiki anchors verify`、`orbit wiki cursor advance`（仅维护会话）和 `orbit wiki check`（维护任务的
+EXECUTABLE 判据）——随维护会话在 P11（2026-10-19）删除：维护运行是服务端的作业（§8.2）。
 
 **parity 要求**：MCP 工具与 CLI 同名同参（`cli_mcp_parity_test.go`）。CLI 可以比 MCP 多，维护类动词只做 CLI。三张 family 表都要登记：parity、help 覆盖、`agent_instructions` 的预批准。
 
 ### 5.4 错误码（写进 `contracts/wiki.contract.json`）
 
-`WIKI_DISABLED` `WIKI_SPACE_UNBOUND` `WIKI_SCHEMA` `WIKI_KIND_OWNER_ONLY` `WIKI_SOURCE_UNRESOLVED` `WIKI_QUOTE_NOT_FOUND` `WIKI_REVISION_CONFLICT` `WIKI_QUOTA` `WIKI_REVIEW_QUEUE_FULL` `WIKI_PROBE_REFUSED` `WIKI_OWNER_CHANNEL_ONLY` `WIKI_NOT_MAINTENANCE_SESSION`
+`WIKI_DISABLED` `WIKI_SPACE_UNBOUND` `WIKI_SCHEMA` `WIKI_KIND_OWNER_ONLY` `WIKI_SOURCE_UNRESOLVED` `WIKI_QUOTE_NOT_FOUND` `WIKI_REVISION_CONFLICT` `WIKI_QUOTA` `WIKI_REVIEW_QUEUE_FULL` `WIKI_PROBE_REFUSED` `WIKI_OWNER_CHANNEL_ONLY`
+
+原来列着的 `WIKI_NOT_MAINTENANCE_SESSION`（非维护会话调用维护专用路由）随维护会话在 P11（2026-10-19）删除。
 
 ---
 
@@ -485,15 +485,16 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
 
 ### 8.2 维护作业「Wiki maintenance」（阶段 2）
 
-- **开关**：在 space 设置里指定 workspace（决定跑在哪台 runner 上）、provider（钉死，`providerFallbacks=[]`）和每日预算。
-  - 必须钉死的原因：codex 路径静默忽略 `disallowedTools`，回退到 codex 隔离就没了；codex 的用量也不进 usage 表。
+- **开关**：在 space 设置里打开维护，指定 workspace（决定从哪台 runner 读仓库）和每日运行次数（`dailyRunLimit`）。
+  - 模型是部署配置的 System model：不再选 provider（P11 起 provider 不是设置），不花账号自己的 key、订阅或账号池，也不占 runner 槽位。
 - **触发（事实驱动，不用时钟）**
   - 每个已提交事实都会让 `wiki_cursor.backlog` 加一：会话结算、任务终态、审批回答、merge receipt、判据修订。
-  - 达到阈值（默认 20 个会话），或者「新事实到达时，最老的未处理事实已超过 24 小时」，就在该 space 隐藏的「Wiki maintenance」清单里建一个 Task（runAt=now）。
+  - 达到阈值（默认 20 个会话），或者「新事实到达时，最老的未处理事实已超过 24 小时」，就建一次运行：服务端的 `maintain` 作业和它的运行行，
+    不建任务、不起会话（P11 之前是在该 space 隐藏的「Wiki maintenance」清单里建一个 Task）。
   - merge receipt 或晋升到 main 会额外把 `anchors_due` 置位。
   - 平台原则「时钟不得启动 agent 工作」（`open-item-escalation.service.ts:84-91`）因此不受影响。
-- **一次运行的步骤**
-  1. `orbit wiki dossier` 拿按会话抽好的案卷。案卷由服务端确定性抽取、先脱敏，每个会话不超过 8k token，内容包括：
+- **一次运行的步骤**（wiki-worker 里的 `maintain` 作业，契约 §27）
+  1. 在进程里读按会话抽好的案卷。案卷由服务端确定性抽取、先脱敏，每个会话不超过 8k token，内容包括：
      - owner 消息和 steer；
      - AskUserQuestion 的问答、带理由的 DENIED、ExitPlanMode；
      - 已结算任务的 agent 评论（尾部）；
@@ -502,22 +503,23 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
      - 污染标记。
      - 原料有 FineWeb 类批量项目时，只收聚合统计。
      - 案卷只存 `(sourceIds, hash)`，不长期落库。
-  2. 先用 `dryRun` 自检，再按主题分批调 `wiki_propose`，origin=maintenance。
+  2. 每个案卷一次 System model 调用（经请求队列）抽出条目；先用 `dryRun` 自检，再按主题分批经同一个写入口（`submitChangeset`）提交，
+     origin=maintenance，提议者是这次运行的作业。
   3. **推进游标**（判据 3 第 4 版）：op 记下后立刻越过这些 op 所属的会话。之后的步骤失败，运行照样记失败、计入连续失败，但游标不回退，
-     下一次运行不再重读这些会话；截断或 propose 失败发生在记下之前，游标不动。
-  4. `orbit wiki anchors verify`：在本地 checkout 的 `origin/main` 上跑 git 复验，结果回报服务端。
+     下一次运行不再重读这些会话；提交失败发生在记下之前，游标不动。
+  4. 锚点复验：作业把锚点交给 space 的 workspace 所在的 runner，作为 `anchors` 仓库操作在 fetch 后的 `origin/main` 上跑 git 检查，结果由服务端记下。
   5. 按已确认的 plan 只重写受影响的节；落不进任何一节的新知识产出 plan 修改建议（判据 3 第 3 版）。
 - **成本护栏**（照 Wikova 的实测）
   - Wikova ingest 的计费输入 p50 1.1M、最高 9.5M token，由轮数驱动。
-  - 所以：maxTurns 120；**被截断就算失败，op 没记下的会话不推进游标**；禁用 Task / Agent 子 agent 和 WebFetch / WebSearch；每次运行最多 30 个 op；单次改动的 active 条目不超过 10%，超过就熔断；没有新事实就不建任务（成本为 0）。
+  - 所以：运行里没有 agent 回合，每个案卷一次模型调用，经全局并发受限的请求队列，每步有调用预算和等待上限（P11 之前维护会话的护栏是 maxTurns 120、被截断就算失败、禁用 Task / Agent 子 agent 和 WebFetch / WebSearch）；每次运行最多 30 个 op；单次改动的 active 条目不超过 10%，超过就熔断；没有新事实就不建运行（成本为 0）。
 - **追赶**（判据 3 第 4 版，owner 10-02 选的「开追赶模式」）：最老的未处理事实早于 24 小时前，space 就算落后，回到 24 小时以内即退出，只按事实判定、不用时钟。
-  - 追赶中，上一次维护运行结束本身算触发事实，没有别的新事实也建下一次。
-  - 追赶中，本地端点（provider 端点在本机或私有网络、不产生 API 费用，如 local-vllm）的运行和失败的运行不计每日上限；公网 provider 的成功运行照计。
+  - 追赶中，下一次运行由下一个事实建：服务端的运行结束不像 P11 之前 runner 路径上那样自己算触发事实（已知的缺口，照原样留着，契约 `maintenance.job.catchUp.trigger`）。
+  - 追赶中，跑在本地端点上（System model 的地址在本机或私有网络、不产生 API 费用）的运行和失败的运行不计每日上限；公网端点上的成功运行照计。
   - 连续失败 3 次暂停追赶、回到每日上限，下一次成功后恢复。
   - 落后时建出的运行跳过文档重写与 plan 修改建议；回到 24 小时以内后的第一次运行按 plan 统一重写追赶期间受影响的节，材料没变的节不重写。
   - 起因：游标停在 09-19、落后约 13 天、积压近两千条不降——每天 8 次且失败也算、每次 20 个会话、每次运行都重写文档（10-01 那次 93 分钟里文档占 54 分钟）。
-- **判据**：EXECUTABLE `orbit wiki check --expect-cursor <token>`，验证游标确实推进、每个 op 都校验通过。「跑完了」不等于「做对了」。
-  游标已推进而后续步骤失败的运行同样判不过（运行结局 failed），游标停在原地、下一次运行不重读那些会话。
+- **判据**：运行没有任务，也就没有验收命令（P11 之前是 EXECUTABLE `orbit wiki check --expect-cursor <token>`）；运行的结局记在它自己的运行行上：
+  提交时有 op 被拒就判失败。「跑完了」不等于「做对了」：游标已推进而后续步骤失败的运行同样记 failed，游标停在原地、下一次运行不重读那些会话。
 - **健康**
   - `wiki_cursor` 记录 last_ok_at、滞后量、连续失败次数，显示在 Wiki 页头（效果图 01 的状态行）。
   - 连续失败 3 次：推送一次通知，并在 Following 的 Needs attention 里出现一条。
@@ -525,9 +527,9 @@ orbit wiki import --from <dir|file> --space <id>            # 阶段 2：CLAUDE.
 
 ### 8.3 导入（阶段 2）
 
-- `orbit wiki import --from ~/.claude/projects/<p>/memory`（或 CLAUDE.md、AGENTS.md）。每个文件成为一个 `note` 出处，由导入会话提议条目，是否进 Review 由 space 的审阅模式决定（见下）。
+- `orbit wiki import --from ~/.claude/projects/<p>/memory`（或 CLAUDE.md、AGENTS.md）。命令在 runner 上读文件，每个文件登记成一个 `note` 出处；条目由服务端的 `import` 作业用 System model 从脱敏后的正文里读出、提议（变更集记在跑命令的会话名下），命令等作业结束后打印结果，会话自己的模型和 provider 都不用。是否进 Review 由 space 的审阅模式决定（见下）。
 - owner 的 1,075 条记忆笔记可以作为冷启动种子。
-- 导入的是 agent 写的二手内容：Manual 模式下全部进 Review；Tiered 模式下按审阅模式生效，Automatic 模式下先等核实、按核实结论生效（§4.2 末条），安全底线照常。
+- 导入的是 agent 写的二手内容：Manual 模式下全部进 Review；Tiered 模式下按审阅模式生效，Automatic 模式下先等核实、按核实结论生效（§4.2 末条；核实由服务端的 `verify` 作业用 System model 做），安全底线照常。
 
 ### 8.4 互联网巡检（阶段 3，见 §11）
 

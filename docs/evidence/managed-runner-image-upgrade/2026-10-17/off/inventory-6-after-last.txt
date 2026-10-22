@@ -1,0 +1,27 @@
+== inventory 6-after-last at 2026-10-17T15:07:48Z
+-- containers (docker ps -a)
+orbit-apiserver	c163190c0ff3	Up 3 minutes (healthy)
+orbit-gateway	nginx:alpine	Up 3 minutes (healthy)
+orbit-pgbackup	postgres:16-alpine	Up 3 minutes
+orbit-postgres	postgres:16-alpine	Up 3 minutes (healthy)
+orbit-web	orbit-web	Up 6 seconds (healthy)
+orbit-wiki-worker	c163190c0ff3	Up 3 minutes
+-- volumes (docker volume ls)
+4abf2c6c98d5737d5030c90bea7303b0686431dd8e49e77d94674bcf3de7b755	com.docker.volume.anonymous=
+orbit_pg-socket	com.docker.compose.config-hash=3abd8489099b05abb9d98c8049c4678b8b3499802fbf1e930bebb3bf238f9caa,com.docker.compose.project=orbit,com.docker.compose.version=5.6.0,com.docker.compose.volume=pg-socket
+-- networks (docker network ls)
+bridge	bridge
+host	host
+none	null
+orbit_default	bridge
+-- images (docker images --all --no-trunc)
+<none>:<none>	sha256:420077efacc9aa8bca77860750f369311ebfcd6d1fdbc71a69eada27f31914cc	2026-10-17 13:30:27 +0000 UTC
+<none>:<none>	sha256:841cfde6a324c386da9a9e16827d395de7a1d4352e4b06a4edd78e2758e2d032	2026-10-17 14:01:35 +0000 UTC
+<none>:<none>	sha256:8aae0190d7f9f3750d6280827eebf98f98f888e39942bd368736236cb4f877ed	2026-10-17 14:11:22 +0000 UTC
+nginx:alpine	sha256:892bb2152464f0c5d8972593a5f5afaf8054552580b699d95f8ff4af08c2d33d	2026-10-14 18:51:35 +0000 UTC
+orbit-apiserver:local	sha256:fb1f3b44e6f0bccc4b192198311dfeeaad450ef231f18d3d8f326ef9c774674b	2026-10-17 13:53:33 +0000 UTC
+orbit-web:latest	sha256:4ec4531c9fd9e7628641c682f83f0efb73f95c6074c149ae7c765521764cafa6	2026-10-17 15:07:31 +0000 UTC
+orbit-web:previous-release	sha256:274d662e38a55f5334f9d44578e3a97fdd55b861fcc7bea107c85b91577a120d	2026-10-17 14:37:46 +0000 UTC
+postgres:16-alpine	sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea	2026-09-17 21:31:24 +0000 UTC
+-- managed runner containers (label orbit.managed-runner.instance)
+-- managed runner volumes (label orbit.managed-runner.instance)

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -239,13 +240,20 @@ func lookPathIn(bin, pathList string) (string, bool) {
 func checkEngine(spec engineSpec, servicePath string) engineHealth {
 	h := engineHealth{spec: spec}
 	if spec.bin == providerDsh {
-		platformErr := dshPlatformError()
+		node, platformErr := dshPlatform()
+		// No Node 26 is the install's to fix, as no CLI is (dsh_node.go): either way Harness is not
+		// installed here yet, which is what offers the Install that fixes it.
+		nodeMissing := errors.Is(platformErr, errDshNodeMissing)
 		path, err := dshExecutableIn(dshVersionDir())
 		if err != nil {
-			if platformErr != nil {
+			if platformErr != nil && !nodeMissing {
 				err = platformErr
 			}
 			h.installError = err.Error()
+			return h
+		}
+		if nodeMissing {
+			h.installError = platformErr.Error()
 			return h
 		}
 		h.installed, h.path, h.onServicePath = true, path, true
@@ -253,7 +261,7 @@ func checkEngine(spec engineSpec, servicePath string) engineHealth {
 			h.installError = platformErr.Error()
 			return h
 		}
-		h.version, err = dshProbeVersion(path)
+		h.version, err = dshProbeVersion(node, path)
 		if err == nil && !dshVersionCompatible(h.version) {
 			err = fmt.Errorf("DSH_VERSION_INCOMPATIBLE: DeepSeek Harness version incompatible: supported version is exactly %s", dshSupportedVersion)
 		}

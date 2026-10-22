@@ -120,6 +120,17 @@ final class TaskDetailWiringTests: XCTestCase {
         XCTAssertTrue(menu.contains("Task { await tasks.setStatus(task.id, .done) }"))
     }
 
+    /// The line under the presses says why a Run cannot be taken, or — on one it can take — that it
+    /// is the task's only start (`TaskDetailLogic.runNowHint`), the web's hover in words a phone shows.
+    func testTheLineUnderTheRunSaysWhyItCannotStartOrThatNothingElseWill() throws {
+        let view = try source(Self.tasksView)
+        let presses = try section(view, from: "private func actions(_ task: TaskItem) -> some View {",
+                                  to: "private func isOpenRun")
+        XCTAssertTrue(presses.contains(
+            "let hint = canStart(task) ? TaskDetailLogic.runNowHint(task) : runDisabledHint(task) {"))
+        XCTAssertTrue(presses.contains("Text(hint).font(.orbitLabel).foregroundStyle(.secondary)"))
+    }
+
     // MARK: the blocks
 
     func testEveryHeadingIsTheBrowsersWord() throws {

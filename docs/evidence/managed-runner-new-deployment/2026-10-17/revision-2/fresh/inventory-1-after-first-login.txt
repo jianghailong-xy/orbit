@@ -1,0 +1,33 @@
+== inventory 1-after-first-login at 2026-10-17T12:30:20Z
+-- containers (docker ps -a)
+mr-01a149d2-5f7d-766f-8dd3-39d60e731030	b89d6f3f9c44	Up 5 minutes
+orbit-apiserver	orbit-apiserver:local	Up 6 minutes (healthy)
+orbit-docker-channel	orbit-docker-channel:local	Up 6 minutes (healthy)
+orbit-gateway	nginx:alpine	Up 6 minutes (healthy)
+orbit-pgbackup	postgres:16-alpine	Up 6 minutes
+orbit-postgres	postgres:16-alpine	Up 7 minutes (healthy)
+orbit-web	orbit-web	Up 6 minutes (healthy)
+orbit-wiki-worker	orbit-apiserver:local	Up 6 minutes
+-- volumes (docker volume ls)
+1df095ed6be1868ce702d023798cc3f509d56d8c906e52c8a350b926069e1be5	com.docker.volume.anonymous=
+mr-boot-01a149d2-5f7d-766f-8dd3-39d60e731030-g1	orbit.managed-runner.generation=1,orbit.managed-runner.instance=orbit-3362a4ba,orbit.managed-runner.kind=bootstrap,orbit.managed-runner.owner=01a149d2-5f6a-75ef-b9c2-844de8994076,orbit.managed-runner.runner=01a149d2-5f7d-766f-8dd3-39d60e731030
+mr-data-01a149d2-5f7d-766f-8dd3-39d60e731030	orbit.managed-runner.disk-limit-bytes=21474836480,orbit.managed-runner.instance=orbit-3362a4ba,orbit.managed-runner.kind=data,orbit.managed-runner.owner=01a149d2-5f6a-75ef-b9c2-844de8994076,orbit.managed-runner.runner=01a149d2-5f7d-766f-8dd3-39d60e731030,orbit.managed-runner.uid=738be65a-6a03-42a2-8d3d-ce04544043c3
+orbit_pg-socket	com.docker.compose.config-hash=3abd8489099b05abb9d98c8049c4678b8b3499802fbf1e930bebb3bf238f9caa,com.docker.compose.project=orbit,com.docker.compose.version=5.6.0,com.docker.compose.volume=pg-socket
+-- networks (docker network ls)
+bridge	bridge
+host	host
+none	null
+orbit-managed-runners	bridge
+orbit_default	bridge
+-- images (docker images)
+nginx:alpine	892bb2152464
+orbit-apiserver:local	62a3b58f97c5
+orbit-docker-channel:local	f58fb48f60cb
+orbit-managed-runner:local	b89d6f3f9c44
+orbit-web:latest	d8dcb8d43b09
+postgres:16-alpine	721873c34ceb
+-- managed runner containers (label orbit.managed-runner.instance)
+mr-01a149d2-5f7d-766f-8dd3-39d60e731030	Up 5 minutes	orbit-3362a4ba	owner=01a149d2-5f6a-75ef-b9c2-844de8994076	generation=1
+-- managed runner volumes (label orbit.managed-runner.instance)
+mr-boot-01a149d2-5f7d-766f-8dd3-39d60e731030-g1	bootstrap	owner=01a149d2-5f6a-75ef-b9c2-844de8994076
+mr-data-01a149d2-5f7d-766f-8dd3-39d60e731030	data	owner=01a149d2-5f6a-75ef-b9c2-844de8994076

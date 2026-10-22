@@ -39,6 +39,11 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   // is not a session, so there is nothing for a card to be bound to — and one change would then be
   // two rules, which is the door this list exists to close rather than a gap in it.
   'PATCH /projects/:id/integration',
+  // The two doors that take work off the integration line without retrying it (§2.2 J-T8, J-T10;
+  // §4.7). Each refuses an acting session: a coordinator abandons through `integration_abandon`,
+  // and a coordinator that wants work stopped reopens the task instead.
+  'POST /projects/:id/integration/jobs/:jobId/abandon',
+  'POST /projects/:id/tasks/:taskId/integration/stop',
   // The wiki's owner channel: each refuses an agent session WIKI_OWNER_CHANNEL_ONLY.
   'POST /wiki/entries/:id/reject',
   'POST /wiki/entries/:id/confirm',
@@ -52,5 +57,6 @@ export const OWNER_INTERACTIVE_ROUTES: readonly string[] = [
   'POST /wiki/spaces/:id/plan/edits',
   'POST /wiki/spaces/:id/plan/versions/:version/confirm',
   'POST /wiki/spaces/:id/plan/redraft',
+  'POST /wiki/spaces/:id/plan/versions/:version/build',
   'POST /wiki/plan-proposals/:id/decide',
 ];

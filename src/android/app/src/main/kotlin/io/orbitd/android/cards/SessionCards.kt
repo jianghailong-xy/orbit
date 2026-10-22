@@ -418,8 +418,8 @@ private fun PromotionCardReview(cards: SessionCardsModel, session: SessionState,
 
 /** The receipt a merge's line in this conversation opens (A11-9), hosted beside the review so the rail's rows cannot dismiss it. */
 @Composable
-fun CardReceiptSheet(cards: SessionCardsModel) {
-    cards.receipt?.let { PromotionReceiptSheet(it) { cards.receipt = null } }
+fun CardReceiptSheet(cards: SessionCardsModel, openLanding: ((String) -> Unit)? = null) {
+    cards.receipt?.let { PromotionReceiptSheet(it, openLanding = openLanding) { cards.receipt = null } }
 }
 
 @Composable

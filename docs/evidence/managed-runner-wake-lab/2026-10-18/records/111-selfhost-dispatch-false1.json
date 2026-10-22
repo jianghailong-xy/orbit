@@ -1,0 +1,25 @@
+{
+  "afterClaim": {
+    "assignedRunnerId": "34hlvKXUGWP9yj0k1qGS5",
+    "runStatus": "RUNNING",
+    "status": "RUNNING"
+  },
+  "at": "2026-10-18T02:26:43.622+00:00",
+  "claim": {
+    "at": "2026-10-18T02:26:43.636+00:00",
+    "claimedTheSession": true,
+    "sessionId": "01a14cd5-352a-725f-8330-5a57666b8f4d",
+    "status": 200
+  },
+  "ended": 201,
+  "heartbeat": 201,
+  "label": "false1",
+  "owner": "root",
+  "session": {
+    "assignedRunnerId": "34hlvKXUGWP9yj0k1qGS5",
+    "engine": "claude",
+    "id": "34hoWPADsieLrN7Qp7aqj",
+    "provider": "claude",
+    "status": "PENDING"
+  }
+}

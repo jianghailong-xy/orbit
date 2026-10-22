@@ -1,0 +1,117 @@
+{
+ "startedAt": "2026-10-19T17:52:56Z",
+ "dir": "/mnt/data/tmp/t02c/scratch/timing-hdd2",
+ "git": "git version 2.47.3",
+ "kernel": "6.12.107+deb13-amd64",
+ "cpus": 24,
+ "filesystem": "/dev/sdb ext4 rw,noatime,rw on /mnt/data",
+ "rounds": 20,
+ "cases": {
+  "commit 1 file, default": {
+   "n": 20,
+   "medianMs": 7.26,
+   "p90Ms": 18.55,
+   "minMs": 3.3,
+   "maxMs": 44.06
+  },
+  "commit 1 file, default, then syncfs": {
+   "n": 20,
+   "medianMs": 71.07,
+   "p90Ms": 98.98,
+   "minMs": 47.22,
+   "maxMs": 104.36
+  },
+  "commit 1 file, fsync=all": {
+   "n": 20,
+   "medianMs": 109.38,
+   "p90Ms": 147.33,
+   "minMs": 68.88,
+   "maxMs": 159.05
+  },
+  "commit 1 file, fsync=all, then syncfs": {
+   "n": 20,
+   "medianMs": 161.2,
+   "p90Ms": 300.34,
+   "minMs": 111.51,
+   "maxMs": 336.34
+  },
+  "commit 1 file, fsync=all,batch": {
+   "n": 20,
+   "medianMs": 227.81,
+   "p90Ms": 327.72,
+   "minMs": 189.74,
+   "maxMs": 469.59
+  },
+  "commit 1 file, fsync=all,batch, then syncfs": {
+   "n": 20,
+   "medianMs": 231.18,
+   "p90Ms": 430.42,
+   "minMs": 115.86,
+   "maxMs": 452.65
+  },
+  "commit 200 files, default": {
+   "n": 5,
+   "medianMs": 21.64,
+   "p90Ms": 38.23,
+   "minMs": 18.35,
+   "maxMs": 38.23
+  },
+  "commit 200 files, default, then syncfs": {
+   "n": 5,
+   "medianMs": 129.46,
+   "p90Ms": 140.19,
+   "minMs": 112.85,
+   "maxMs": 140.19
+  },
+  "commit 200 files, fsync=all": {
+   "n": 5,
+   "medianMs": 4706.42,
+   "p90Ms": 5668.67,
+   "minMs": 3973.01,
+   "maxMs": 5668.67
+  },
+  "commit 200 files, fsync=all, then syncfs": {
+   "n": 5,
+   "medianMs": 4931.14,
+   "p90Ms": 5382.98,
+   "minMs": 4773.13,
+   "maxMs": 5382.98
+  },
+  "commit 200 files, fsync=all,batch": {
+   "n": 5,
+   "medianMs": 191.59,
+   "p90Ms": 247.21,
+   "minMs": 164.43,
+   "maxMs": 247.21
+  },
+  "commit 200 files, fsync=all,batch, then syncfs": {
+   "n": 5,
+   "medianMs": 372.76,
+   "p90Ms": 463.49,
+   "minMs": 345.17,
+   "maxMs": 463.49
+  },
+  "syncfs, nothing dirty": {
+   "n": 20,
+   "medianMs": 2.62,
+   "p90Ms": 2.69,
+   "minMs": 2.56,
+   "maxMs": 11.67
+  },
+  "syncfs after 1 MiB written": {
+   "n": 10,
+   "medianMs": 58.04,
+   "p90Ms": 74.84,
+   "minMs": 45.73,
+   "maxMs": 74.84
+  },
+  "syncfs after 64 MiB written": {
+   "n": 5,
+   "medianMs": 349.94,
+   "p90Ms": 366.39,
+   "minMs": 343.65,
+   "maxMs": 366.39
+  }
+ },
+ "endedAt": "2026-10-19T17:54:28Z"
+}

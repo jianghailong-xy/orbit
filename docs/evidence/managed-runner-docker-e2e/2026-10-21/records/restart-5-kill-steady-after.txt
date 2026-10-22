@@ -1,0 +1,6 @@
+mr-01a15b9c-c69f-718f-ba2a-90bd8a35230f af38ac1f2481 running g2 Up 8 minutes
+mr-01a15b9d-4ed5-745c-b5b7-3d6e774c61c6 b6a8b1388953 running g1 Up 11 minutes
+mr-01a15b9c-5f4d-7409-9efc-efcc4e097f6b 5b6b77f2841c running g1 Up 12 minutes
+admin@d4.test|STARTING|RUNNING|1|a703f107-6f3b-4fa8-9e47-c3acab325046
+alice@d4.test|READY|RUNNING|2|62610e88-68ea-41b4-9a2a-c07224dc9e93
+bob@d4.test|STARTING|RUNNING|1|257c82a0-d369-49e9-bcf0-6303fdd839e5

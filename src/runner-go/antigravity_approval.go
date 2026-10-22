@@ -189,10 +189,10 @@ func decideAntigravityToolCall(policy *agyApprovalPolicy, in *agyHookInput) agyA
 		case "list", "status", "kill":
 			return agyApprovalVerdict{"allow", ""}
 		}
-	case "view_file":
+	case "view_file", "read_file":
 		// agy reads its workspace without asking in its own default mode (contract §5.3); the
 		// session's uploads and the conversation's artifacts are where Orbit and agy put files for it.
-		path := firstString(args, "AbsolutePath")
+		path := firstString(args, "AbsolutePath", "Path")
 		if pathWithin(path, policy.Workspace) || pathWithin(path, policy.Uploads) || pathWithin(path, artifacts) {
 			return agyApprovalVerdict{"allow", ""}
 		}
@@ -216,6 +216,8 @@ func decideAntigravityToolCall(policy *agyApprovalPolicy, in *agyHookInput) agyA
 // agyApprovalSubject is a tool call as Orbit's rules and its approval card read it: the name and
 // input claude would give the same call (canonicalAgyTool), with what agy's stream leaves out — the
 // content of a write, the text of an edit — put back, because the card is what a person decides on.
+// The file tools are read under both their names: agy 1.4.3's read_file, write_file and edit_file
+// were view_file, write_to_file and replace_file_content, with other parameter names.
 func agyApprovalSubject(raw string, args map[string]interface{}) (string, map[string]interface{}) {
 	put := func(out map[string]interface{}, key string, value interface{}) {
 		if s, ok := value.(string); ok && s == "" {
@@ -230,16 +232,25 @@ func agyApprovalSubject(raw string, args map[string]interface{}) (string, map[st
 		input := map[string]interface{}{"command": firstString(args, "CommandLine")}
 		put(input, "cwd", args["Cwd"])
 		return "Bash", input
-	case "view_file":
-		return "Read", map[string]interface{}{"file_path": firstString(args, "AbsolutePath")}
+	case "view_file", "read_file":
+		return "Read", map[string]interface{}{"file_path": firstString(args, "AbsolutePath", "Path")}
 	case "write_to_file":
 		input := map[string]interface{}{"file_path": firstString(args, "TargetFile")}
 		put(input, "content", args["CodeContent"])
+		return "Write", input
+	case "write_file":
+		input := map[string]interface{}{"file_path": firstString(args, "Path")}
+		put(input, "content", args["Content"])
 		return "Write", input
 	case "replace_file_content":
 		input := map[string]interface{}{"file_path": firstString(args, "TargetFile")}
 		put(input, "old_string", args["TargetContent"])
 		put(input, "new_string", args["ReplacementContent"])
+		return "Edit", input
+	case "edit_file":
+		input := map[string]interface{}{"file_path": firstString(args, "Path")}
+		put(input, "old_string", args["Target"])
+		put(input, "new_string", args["Replacement"])
 		return "Edit", input
 	case "multi_replace_file_content":
 		input := map[string]interface{}{"file_path": firstString(args, "TargetFile")}
@@ -270,6 +281,8 @@ func agyWriteTarget(raw string, args map[string]interface{}) (string, bool) {
 	switch raw {
 	case "write_to_file", "replace_file_content", "multi_replace_file_content":
 		return firstString(args, "TargetFile"), true
+	case "write_file", "edit_file":
+		return firstString(args, "Path"), true
 	}
 	return "", false
 }

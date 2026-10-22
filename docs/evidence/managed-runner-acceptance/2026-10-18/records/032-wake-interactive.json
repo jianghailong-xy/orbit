@@ -1,0 +1,299 @@
+{
+ "checks": [
+  {
+   "check": "ann is asleep",
+   "ok": true
+  },
+  {
+   "check": "ann: the same runner, PVC, PV, volume handle, RBD image and workspace after the wake",
+   "ok": true,
+   "value": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834"
+  },
+  {
+   "check": "ann: a new Pod of a later generation than the one that slept",
+   "ok": true,
+   "value": {
+    "slept": [
+     1,
+     "1ca70f34-4eb1-4a12-b9f5-db99499f73d2"
+    ],
+    "woken": [
+     2,
+     "d4f20ebf-b522-402a-8e11-6310288dd1a0"
+    ]
+   }
+  },
+  {
+   "check": "ann: the engine resumed the session after the wake: its request carried the earlier conversation",
+   "ok": true,
+   "value": {
+    "messages": 11,
+    "secrets": [
+     "annfirst"
+    ]
+   }
+  },
+  {
+   "check": "ann: the probe data unchanged (random bytes, SQLite rows, Git commit), integrity_check ok",
+   "ok": true,
+   "value": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   }
+  },
+  {
+   "check": "ann: uploads, worktrees, the engine's transcripts and the runner ID as before after the wake",
+   "ok": true,
+   "value": {
+    "transcripts": 1,
+    "uploads": 1,
+    "worktrees": 1
+   }
+  },
+  {
+   "check": "ann: every SQLite database on the volume passes integrity_check after the wake",
+   "ok": true,
+   "value": [
+    "t08-probe/p1/rows.sqlite"
+   ]
+  },
+  {
+   "check": "ann: the session's worktree is there after the wake",
+   "ok": true,
+   "value": [
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d"
+   ]
+  }
+ ],
+ "endedAt": "2026-10-18T12:45:11.059+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "wake",
+ "result": {
+  "answered": {
+   "event": {
+    "created_at": "2026-10-18T12:45:09.749",
+    "ingested_at": "2026-10-18T12:45:09.800624+00:00",
+    "ingested_by_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "seq": 29,
+    "session_id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+    "type": "assistant"
+   },
+   "modelRequests": [
+    {
+     "at": "2026-10-18T12:45:09Z",
+     "kind": "text",
+     "messages": 11,
+     "n": 15,
+     "secrets": [
+      "annfirst"
+     ],
+     "tool": null
+    }
+   ],
+   "session": {
+    "assigned_runner_id": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "created_at": "2026-10-18T12:37:47.476",
+    "engine": "claude",
+    "id": "01a14f04-a754-73a1-9d1b-91a624ffc84d",
+    "provider": "deepseek-2",
+    "runtime_session_id": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+    "status": "AWAITING_INPUT",
+    "task_id": null
+   }
+  },
+  "answeredAfterSeconds": 10.4,
+  "identityAfter": {
+   "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+   "generation": 2,
+   "podUid": "d4f20ebf-b522-402a-8e11-6310288dd1a0",
+   "pool": "orbit-mr-rbd",
+   "pvName": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154",
+   "pvUid": "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc",
+   "pvcName": "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "pvcUid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+   "rbdImage": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "workspaceId": "01a14f03-ec43-720c-b116-29d91c569ca6"
+  },
+  "identityAwake": {
+   "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+   "generation": 1,
+   "podUid": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2",
+   "pool": "orbit-mr-rbd",
+   "pvName": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154",
+   "pvUid": "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc",
+   "pvcName": "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "pvcUid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+   "rbdImage": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "workspaceId": "01a14f03-ec43-720c-b116-29d91c569ca6"
+  },
+  "identityBefore": {
+   "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+   "generation": 2,
+   "podUid": null,
+   "pool": "orbit-mr-rbd",
+   "pvName": "pvc-4caa2267-5150-455d-9fc8-e9efd7e63154",
+   "pvUid": "db2d8021-0ab2-45ec-a5f4-f6a5fe9452bc",
+   "pvcName": "mr-data-01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "pvcUid": "4caa2267-5150-455d-9fc8-e9efd7e63154",
+   "rbdImage": "csi-vol-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-803a7868-15d8-4471-80c9-6a33de2d9834",
+   "workspaceId": "01a14f03-ec43-720c-b116-29d91c569ca6"
+  },
+  "probe": {
+   "action": "check",
+   "allSame": true,
+   "at": "2026-10-18T12:45:10.694+00:00",
+   "data": {
+    "gitFsckExit": 0,
+    "gitHead": "d7b23ac4189d90a2d300b38e3e74e33cec739388",
+    "integrityCheck": "ok",
+    "maxRow": 150,
+    "mount": [
+     [
+      "/dev/rbd1",
+      "/var/lib/orbit",
+      "ext4"
+     ]
+    ],
+    "randomSha256": "40f97e5031520870b3132fc336fdc75ff265ac04ed495b52802dabe17d7c9e22",
+    "rows": 150,
+    "rowsSha256": "3ffa04699efae14a0d4ac7131e48e965464a41406769b3f56c0157d29c7b5654"
+   },
+   "generation": 2,
+   "owner": "ann",
+   "pod": "d4f20ebf-b522-402a-8e11-6310288dd1a0",
+   "run": "p1",
+   "same": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   },
+   "sameRunnerId": true,
+   "volume": {
+    "managedInstance": {
+     "generation": 2,
+     "podUid": "d4f20ebf-b522-402a-8e11-6310288dd1a0",
+     "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+    },
+    "repos": [
+     "default"
+    ],
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+    "worktrees": [
+     "01a14f04-a754-73a1-9d1b-91a624ffc84d"
+    ]
+   },
+   "writtenAt": "2026-10-18T12:38:30.542+00:00",
+   "writtenByGeneration": 1,
+   "writtenByPod": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2"
+  },
+  "snapshot": {
+   "managedInstance": {
+    "generation": 2,
+    "podUid": "d4f20ebf-b522-402a-8e11-6310288dd1a0",
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+   },
+   "mount": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd1"
+    }
+   ],
+   "podUid": "d4f20ebf-b522-402a-8e11-6310288dd1a0",
+   "prefix": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a754-73a1-9d1b-91a624ffc84d/9412b32d-8af2-4596-a874-0be0e646f1f4.jsonl": "ac65e06e1bc9c83458f901058a5bbc306d159a9dbf3522d2ffe7d52be4ffa9f8"
+   },
+   "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "runs": {
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d": {
+     "provider": "claude",
+     "runtimeSessionId": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+     "sessionUuid": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+     "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a14f04-a754-73a1-9d1b-91a624ffc84d"
+    }
+   },
+   "sqlite": {
+    "t08-probe/p1/rows.sqlite": "ok"
+   },
+   "takenAt": "2026-10-18T12:45:10.860+00:00",
+   "transcripts": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a754-73a1-9d1b-91a624ffc84d/9412b32d-8af2-4596-a874-0be0e646f1f4.jsonl": {
+     "lines": 42,
+     "sha256": "2fcbfc2fef04c589a74b6e6b6400cb23a6a597deca6c28da98fdfe15a3db9a2b"
+    }
+   },
+   "uid": 10001,
+   "uploads": {
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d/t08-ann-note.txt": "47b104235806bd367051f1b5bdd828df3fc5fbd77508c8a997a05e8c0d99110c"
+   },
+   "workspace": {
+    "fsckExit": 0,
+    "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+    "worktrees": [
+     "worktree /var/lib/orbit/home/orbit-repos/default",
+     "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+     "branch refs/heads/master",
+     "",
+     "worktree /var/lib/orbit/home/.orbit/worktrees/01a14f04-a754-73a1-9d1b-91a624ffc84d",
+     "HEAD b3da4b68be18c1bb2ad735b863515e5d53c86717",
+     "branch refs/heads/orbit/t08-ann-first-session-a0df10"
+    ]
+   },
+   "worktrees": {
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d": {
+     "branch": "orbit/t08-ann-first-session-a0df10",
+     "files": {
+      ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+      "t08-ann1.txt": "dd4a213dc6ebc5bc9ec1e1fc8014cc9e231298a70d955f818ca4cf29b3e9ce5d"
+     },
+     "head": "b3da4b68be18c1bb2ad735b863515e5d53c86717",
+     "status": []
+    }
+   }
+  },
+  "times": {
+   "generation": 2,
+   "initialProvider": "deepseek-2",
+   "mappingCreatedAt": "2026-10-18T12:36:59.609+00:00",
+   "node": "orbit-mr-lab",
+   "podCreatedAt": "2026-10-18T12:44:59Z",
+   "pvcCreatedAt": "2026-10-18T12:36:59Z",
+   "readyAt": "2026-10-18T12:45:09.721+00:00",
+   "runner": {
+    "capabilities_reported_at": "2026-10-18T12:45:09.017+00:00",
+    "enrolled_at": "2026-10-18T12:36:59.565",
+    "last_heartbeat_at": "2026-10-18T12:45:09.016",
+    "status": "ONLINE",
+    "version": "managed-ebf54ab8ddcb35224a4d8f0c1feae0e480186b38"
+   },
+   "runnerContainerStartedAt": "2026-10-18T12:45:08Z",
+   "secretCreatedAt": "2026-10-18T12:44:59Z"
+  },
+  "turn": {
+   "answer": {
+    "code": null,
+    "id": null,
+    "message": null,
+    "seq": 3,
+    "status": null
+   },
+   "at": "2026-10-18T12:44:59.439+00:00",
+   "kind": "turn",
+   "session": "34i3WAGGhr09tgpAvF8px",
+   "status": 201
+  },
+  "turnAt": "2026-10-18T12:44:59.439+00:00"
+ },
+ "seconds": 11.7,
+ "startedAt": "2026-10-18T12:44:59.309+00:00",
+ "step": "interactive"
+}

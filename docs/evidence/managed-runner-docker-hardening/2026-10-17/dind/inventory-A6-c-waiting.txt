@@ -1,0 +1,33 @@
+== inventory A6-c-waiting at 2026-10-17T17:32:44Z, checkout 2d16d5f1e60df0d51763af9374940a52aa978a5c
+-- managed runner containers
+mr-01a14aea-8882-7328-932e-f5fd30d56527	running	Up About a minute	generation=1	uid=26da154c-ef2f-4f94-ae80-a96e12cdce44
+mr-01a14aea-881f-71ea-ac19-0bcb23607ce2	running	Up About a minute	generation=1	uid=4ca41e47-c878-41e6-9a98-bf11f7f7297c
+-- managed runner volumes
+mr-boot-01a14aea-881f-71ea-ac19-0bcb23607ce2-g1	kind=bootstrap	uid=
+mr-boot-01a14aea-8882-7328-932e-f5fd30d56527-g1	kind=bootstrap	uid=
+mr-data-0a622aa8-e2d0-4110-8469-4e0abb465144	kind=data	uid=5c3854dc-3f9e-4f93-8a73-840bcd8e93d4
+mr-data-01a14aea-881f-71ea-ac19-0bcb23607ce2	kind=data	uid=134b861d-f281-4092-a05a-daaaf0732a6f
+mr-data-01a14aea-8882-7328-932e-f5fd30d56527	kind=data	uid=31572fe3-a0e8-425f-ac3e-024829e27366
+-- every volume
+b4d9c80c72201b8471d49ff638cb5903876548ba042901ea4e28cdead4aa3a75	local	anonymous=
+c7d5c5409a2250f8dfa5d7a79499f51c6e14d13c2e0533de445588be7f005179	local	anonymous=
+mr-boot-01a14aea-881f-71ea-ac19-0bcb23607ce2-g1	local	anonymous=
+mr-boot-01a14aea-8882-7328-932e-f5fd30d56527-g1	local	anonymous=
+mr-data-0a622aa8-e2d0-4110-8469-4e0abb465144	local	anonymous=
+mr-data-01a14aea-881f-71ea-ac19-0bcb23607ce2	local	anonymous=
+mr-data-01a14aea-8882-7328-932e-f5fd30d56527	local	anonymous=
+orbit_pg-socket	local	anonymous=
+-- stack
+orbit-apiserver	running	Up 23 seconds (healthy)
+orbit-docker-channel	running	Up 39 seconds (healthy)
+orbit-gateway	running	Up 2 minutes (healthy)
+orbit-wiki-worker	running	Up 2 minutes
+orbit-web	running	Up 2 minutes (healthy)
+orbit-pgbackup	running	Up 2 minutes
+orbit-postgres	running	Up 2 minutes (healthy)
+-- managed_runner rows
+a@d8-drill.test | STARTING | RUNNING | 1 | mr-data-01a14aea-881f-71ea-ac19-0bcb23607ce2 | mr-01a14aea-881f-71ea-ac19-0bcb23607ce2 | MODEL_UNAVAILABLE
+b@d8-drill.test | STARTING | RUNNING | 1 | mr-data-01a14aea-8882-7328-932e-f5fd30d56527 | mr-01a14aea-8882-7328-932e-f5fd30d56527 | MODEL_UNAVAILABLE
+c@d8-drill.test | WAITING_CAPACITY | RUNNING | 1 | mr-data-01a14aec-5404-7642-a53f-dd4be57ecc1b |  | MANAGED_RUNNER_CAPACITY_UNAVAILABLE
+-- capacity pool
+pods=1 | pods_reserved=2 | cpu_millis=18000 | memory_bytes=12077248512 | storage_usable_bytes=15283183085451 | storage_headroom_bytes=1587363344794 | durable_bytes_reserved=42949672960

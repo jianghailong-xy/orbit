@@ -191,17 +191,6 @@ services:
       # Set it on the host as ORBIT_WIKI_MODE, not ORBIT_WIKI, for the reason ORBIT_WATCHES_MODE gives above.
       ORBIT_WIKI: "${ORBIT_WIKI_MODE:-on}"
       ORBIT_WIKI_CANARY_OWNERS: "${ORBIT_WIKI_CANARY_OWNERS:-}"
-      # Optional: how far the wiki's pipelines run on the server rather than in a runner's maintenance
-      # session (src/apiserver/src/wiki/wiki-executor-switch.ts): runner (default — the behavior every
-      # deployment has had), canary (only the accounts ORBIT_WIKI_EXECUTOR_CANARY_OWNERS lists,
-      # comma-separated ids) or server. Both services read it from here so they always answer the same about
-      # an account: this one queues the work, and wiki-worker runs it. Takes effect on
-      # `docker compose up -d apiserver wiki-worker`; no migration and no runner release either way, and
-      # moving it back to runner stops new jobs being taken without deleting anything.
-      # Not a *_MODE name, unlike ORBIT_WIKI above: no agent session carries ORBIT_WIKI_EXECUTOR
-      # (src/apiserver/src/wiki/wiki-compose-env.spec.ts reads the runner's own list to hold that).
-      ORBIT_WIKI_EXECUTOR: "${ORBIT_WIKI_EXECUTOR:-runner}"
-      ORBIT_WIKI_EXECUTOR_CANARY_OWNERS: "${ORBIT_WIKI_EXECUTOR_CANARY_OWNERS:-}"
       PORT: "3000"
       CORS_ORIGINS: "http://localhost:2086"
       # Where runners reach this deployment — the origin the web image bakes in below. A session on a
@@ -223,6 +212,16 @@ services:
       FCM_CLIENT_EMAIL: "${FCM_CLIENT_EMAIL:-}"
       FCM_PRIVATE_KEY: "${FCM_PRIVATE_KEY:-}"
       FCM_ANDROID_PACKAGE: "${FCM_ANDROID_PACKAGE:-io.orbitd.android}"
+      # Optional: managed runners (docs/self-hosting.md, "Managed runners"): every account gets a runner of its own,
+      # a container on this host's Docker, at sign-in. Off unless the host's .env says true. A fresh install
+      # (scripts/install-server.sh) writes that line and an upgrade never does, so a deployment that predates managed
+      # runners keeps them off. The profile read here, the Docker channel's token and its socket are the files in
+      # ORBIT_MANAGED_RUNNERS_DIR, mounted below.
+      ORBIT_MANAGED_RUNNERS_ENABLED: "${ORBIT_MANAGED_RUNNERS_ENABLED:-false}"
+      ORBIT_MANAGED_RUNNERS_PROFILE: /var/lib/orbit-managed-runners/profile.json
+    volumes:
+      # Read-only. With ORBIT_MANAGED_RUNNERS_DIR unset, /dev/null stands in, so nothing is created on the host.
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"
     depends_on:
       postgres:
         condition: service_healthy
@@ -260,11 +259,6 @@ services:
       ORBIT_WIKI_MODEL: "${ORBIT_WIKI_MODEL:-}"
       # Model requests in flight at once, across every space.
       ORBIT_WIKI_MODEL_CONCURRENCY: "${ORBIT_WIKI_MODEL_CONCURRENCY:-4}"
-      # The same executor switch the apiserver reads: which accounts' jobs this worker may claim. Under
-      # runner it claims nothing at all; under canary only the listed accounts', under server every
-      # account's. Left out of an env file, both services read runner and nothing changes.
-      ORBIT_WIKI_EXECUTOR: "${ORBIT_WIKI_EXECUTOR:-runner}"
-      ORBIT_WIKI_EXECUTOR_CANARY_OWNERS: "${ORBIT_WIKI_EXECUTOR_CANARY_OWNERS:-}"
     depends_on:
       apiserver:
         condition: service_healthy
@@ -314,6 +308,79 @@ services:
       interval: 5s
       timeout: 5s
       retries: 6
+      start_period: 10s
+
+  # Managed runners on this host's Docker (docs/self-hosting.md, "Managed runners"): the restricted Docker channel
+  # (deploy/managed-runner/docker-channel), the one process given the Docker socket. It makes each account's runner
+  # container and data volume from its own template, and touches nothing without its instance's label. The apiserver
+  # reaches it only through its unix socket in ORBIT_MANAGED_RUNNERS_DIR, and it needs no network of its own.
+  # It runs only under the managed-runners-docker profile, which a fresh install switches on in .env
+  # (scripts/install-server.sh) and an upgrade never does.
+  docker-channel:
+    profiles: [managed-runners-docker]
+    build:
+      context: .
+      dockerfile: deploy/managed-runner/docker-channel/Dockerfile
+    image: orbit-docker-channel:local
+    container_name: orbit-docker-channel
+    restart: unless-stopped
+    logging: *logging
+    network_mode: none
+    # The disk the storage budget is measured on: an empty volume of the channel's own, read-only, which Docker keeps
+    # beside every runner's data volume whatever filesystem its data root is on. This container sees neither the data
+    # root nor what is in it.
+    command: ["serve", "--config", "/var/lib/orbit-managed-runners/channel.json", "--disk-probe-path", "/var/lib/orbit-docker-volumes"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners"
+      - type: volume
+        target: /var/lib/orbit-docker-volumes
+        read_only: true
+    healthcheck:
+      # Serving: its socket takes a connection. Every request on it still needs the token.
+      test: ["CMD", "python3", "-c", "import socket; socket.socket(socket.AF_UNIX).connect('/var/lib/orbit-managed-runners/channel.sock')"]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+
+  # The managed runners' host firewall (docs/self-hosting.md, "Isolation and its limits"; deploy/managed-runner/firewall):
+  # rules on this host's iptables that leave a managed runner the gateway's published port, DNS and public addresses, and
+  # nothing else of this host or of the private networks behind it. It runs in the host's network namespace with
+  # NET_ADMIN and NET_RAW, never with the Docker socket; it checks the rules every 10 s, repairs what changed, and leaves
+  # them in place when it stops. The Docker channel starts no runner container while it does not report them in force.
+  # It runs only under the managed-runner-firewall profile, which a fresh install switches on in .env beside the Docker
+  # backend's (scripts/install-server.sh; --no-managed-runner-firewall leaves it off), and an upgrade never does.
+  managed-runner-firewall:
+    profiles: [managed-runner-firewall]
+    build:
+      context: .
+      dockerfile: deploy/managed-runner/firewall/Dockerfile
+    image: orbit-managed-runner-firewall:local
+    container_name: orbit-managed-runner-firewall
+    restart: unless-stopped
+    logging: *logging
+    network_mode: host
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN, NET_RAW]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    volumes:
+      # Its configuration, and the status the Docker channel reads.
+      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}/firewall:/var/lib/orbit-managed-runner-firewall"
+      # The legacy iptables backend's lock, which Docker's own iptables calls take too; the install names it only where
+      # the host's iptables is legacy. Never made on the host: a directory there would break the host's iptables.
+      - type: bind
+        source: "${ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK:-/dev/null}"
+        target: /run/xtables.lock
+        bind:
+          create_host_path: false
+    healthcheck:
+      # Healthy while its status says the rules are in force: what the Docker channel reads before it starts a runner.
+      test: ["CMD", "python3", "-I", "/opt/orbit-managed-runner-firewall/firewall.py", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
       start_period: 10s
 
 volumes:

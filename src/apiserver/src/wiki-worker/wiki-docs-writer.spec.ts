@@ -26,11 +26,11 @@ import {
 } from './wiki-docs-writer';
 
 /**
- * The writer's deterministic half (wiki-docs-writer.ts), case for case the unit cases of
- * `src/runner-go/wiki_docs_build_test.go` and `wiki_docs_test.go` — the material's cap and filter, the merge read
- * strictly, a quote found in a file and its lines, the fingerprint, a section's heading — and, where the server
- * reads the repository differently from a checkout, a file the read cut short, a directory shown as git shows a
- * tree, and a path holding a wildcard shown as git shows a pathspec.
+ * The writer's deterministic half (wiki-docs-writer.ts), case for case the unit cases that
+ * `src/runner-go/wiki_docs_build_test.go` and `wiki_docs_test.go` had before P11 deleted them — the material's cap
+ * and filter, the merge read strictly, a quote found in a file and its lines, the fingerprint, a section's heading —
+ * and, where the server reads the repository differently from a checkout, a file the read cut short, a directory
+ * shown as git shows a tree, and a path holding a wildcard shown as git shows a pathspec.
  */
 
 const CONTRACT = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../contracts/wiki.contract.json'), 'utf8')) as {
@@ -39,7 +39,7 @@ const CONTRACT = JSON.parse(readFileSync(path.resolve(__dirname, '../../../../co
 
 const piece = (over: Partial<WikiDocPiece>): WikiDocPiece => wikiDocPiece(over);
 
-/** A piece's id with what became of it: handed, or its action (`actions` in the Go test). */
+/** A piece's id with what became of it: handed, or its action (`actions` in the Go test, before P11). */
 function actions(pieces: readonly WikiDocPiece[]): string {
   return pieces.map((p) => `${p.id}=${p.handed ? 'handed' : p.action}`).join(' ');
 }
@@ -195,7 +195,7 @@ test('in a file a read cut short only the heading named is looked for, and what 
   const repo = repoOf({ 'docs/contract.md': cut, 'src/big.ts': { text: '// big\nexport function early() {}\n', cut: true } });
   const found = wikiDocDocSection(repo, 'docs/contract.md', '19.4 orbit wiki maintain');
   assert.deepEqual([found.piece, found.past], [null, true]);
-  // A heading within what was read is taken as on the runner.
+  // A heading within what was read is taken, as the runner took it.
   assert.equal(wikiDocDocSection(repo, 'docs/contract.md', '2. Space').piece?.section, '2. Space');
   const section: WikiDocsPlanSection = {
     key: 's2', title: '流程', kind: 'flow', covers: '', length: 300,
@@ -242,7 +242,7 @@ test('a directory shows as `git show <sha>:<dir>` shows a tree — the runner\'s
   await repo.prepare(['src/x.go', './src/x.go', '`contracts/a.json`', 'nowhere']);
   assert.deepEqual(reads, [['src/x.go', 'contracts/a.json']], 'one read for the files wanted, each once; a path with no file reads nothing');
   assert.deepEqual(repo.show('src/x.go'), { text: 'src/x.go\n', cut: false });
-  // A code source naming a directory gives no piece and misses nothing, as on the runner; a contract naming one is
+  // A code source naming a directory gives no piece and misses nothing, as it did on the runner; a contract naming one is
   // the tree's listing.
   const code = wikiDocCodePieces(repo, 'contracts', [], ['json']);
   assert.deepEqual([code.pieces.length, code.missing], [0, []]);

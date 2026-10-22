@@ -1,0 +1,14 @@
+control: the key file itself: 1 line(s); /etc/hostname: 0
+control: the pattern file has no empty line
+/mnt/data/tmp/34hJ7RzpqTB13BmLR8uQv/logs: 6 files, 0 with the key
+/mnt/data/tmp/34hJ7RzpqTB13BmLR8uQv/records: 35 files, 0 with the key
+/mnt/data/tmp/34hJ7RzpqTB13BmLR8uQv/kit: 8 files, 0 with the key
+/mnt/data/tmp/34hJ7RzpqTB13BmLR8uQv/prompts: 3 files, 0 with the key
+docker logs /d4-pg: 75 lines, 0 with the key
+docker logs /d4-docker-channel: 1254 lines, 0 with the key
+docker logs /mr-01a15b9c-c69f-718f-ba2a-90bd8a35230f: 7 lines, 0 with the key
+docker logs /mr-01a15ba9-a49e-7204-a0b2-6eae30a83d9e: 24 lines, 0 with the key
+docker logs /mr-01a15b9d-4ed5-745c-b5b7-3d6e774c61c6: 15 lines, 0 with the key
+docker logs /mr-01a15b9c-5f4d-7409-9efc-efcc4e097f6b: 15 lines, 0 with the key
+journal of d4-apiserver and d4-door: 25 lines, 0 with the key
+the test database (pg_dump, provider keys are stored encrypted): 19484 lines, 0 with the key

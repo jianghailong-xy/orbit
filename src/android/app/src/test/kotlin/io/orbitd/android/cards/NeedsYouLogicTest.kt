@@ -71,6 +71,35 @@ class NeedsYouLogicTest {
         assertEquals("A session needs you", NeedsYouLogic.banner(listOf(session("s2", 1, "dev")))?.text)
     }
 
+    /** The second line names the conversation a press opens (the owner, 2026-10-21): by its title, under the workspace's
+     * sentence — and not again when the first line already used that title for want of a workspace name. */
+    @Test fun theSecondLineNamesTheConversationAPressOpens() {
+        val banner = NeedsYouLogic.banner(listOf(session("s1", 1, "dev", "orbit-develop", "Rebuild the wiki articles report")))
+        assertEquals("orbit-develop needs you", banner?.text)
+        assertEquals("Rebuild the wiki articles report", banner?.detail)
+        assertEquals("a blocked tool call's mark", NeedsYouGlyph.HAND, banner?.glyph)
+        assertNull("the title is said once", NeedsYouLogic.banner(listOf(session("s2", 1, "dev", title = "Backfill worktree fences")))?.detail)
+        assertNull("a blank title is no line", NeedsYouLogic.banner(listOf(session("s3", 1, "dev", "orbit-develop", "  ")))?.detail)
+    }
+
+    /** Several collapse to a count, and the second line is the one a press opens — the oldest — by its title alone (no "Oldest:",
+     * the owner's call). The count is the first line, so no "+N"; the age is its last state move. */
+    @Test fun severalNameTheOldestOnTheSecondLine() {
+        val newer = session("newer", 1, "a", "A", "Newer", lastTurnAt = "2026-08-14T10:00:00.000Z")
+        val older = session("older", 1, "b", "B", "Older", lastTurnAt = "2026-08-14T08:00:00.000Z")
+        val banner = NeedsYouLogic.banner(listOf(newer, older))
+        assertEquals("2 sessions need you", banner?.text)
+        assertEquals("Older", banner?.detail)
+        assertEquals(0, banner?.more)
+        assertEquals("2026-08-14T08:00:00.000Z", banner?.since)
+    }
+
+    /** A conversation with no recorded move is aged from its update, the recency key's own fallback. */
+    @Test fun aBlockedSessionsAgeFallsBackLikeItsRecency() {
+        val row = JsonObject(session("s1", 1, "dev") + ("updatedAt" to JsonPrimitive("2026-08-14T07:00:00.000Z")))
+        assertEquals("2026-08-14T07:00:00.000Z", NeedsYouLogic.banner(listOf(row))?.since)
+    }
+
     /** A project ready to start is not one of the sessions that need you (`SessionGrouping.countsOnlyAStart`). */
     @Test fun aRowCountingOnlyAStartDoesNotNeedYou() {
         val start = JsonObject(session("c1", 1, "orbit", "orbit") + ("waitingKind" to JsonPrimitive("START_REQUEST")))
@@ -123,6 +152,13 @@ class NeedsYouLogicTest {
         assertEquals("the destination is still the first thing waiting, whatever it is", "item:x1", mixed?.rowId)
     }
 
+    /** The bar's mark is the card a press goes to: a question's while that card is a question, an exception's while it is one. */
+    @Test fun theMarkIsTheCardAPressGoesTo() {
+        assertEquals(NeedsYouGlyph.QUESTION, NeedsYouLogic.below(listOf(question("q")), ReaderSide.BELOW)?.glyph)
+        assertEquals(NeedsYouGlyph.WARNING, NeedsYouLogic.below(listOf(exception("e"), question("q")), ReaderSide.BELOW)?.glyph)
+        assertEquals(NeedsYouGlyph.QUESTION, NeedsYouLogic.below(listOf(question("q"), exception("e")), ReaderSide.ABOVE)?.glyph)
+    }
+
     @Test fun nothingBelowIsNoBar() = assertNull(NeedsYouLogic.below(emptyList(), null))
 
     // the four owner items (contract §7.6 V13)
@@ -139,14 +175,18 @@ class NeedsYouLogicTest {
     }
 
     @Test fun ownerItemsCountTowardNeedsYou() {
-        listOf("PROMOTION_APPROVAL" to "Approve merge to main · Integration line",
-            "COORDINATOR_QUESTION" to "Question from coordinator · Integration line",
-            "ESCALATED" to "Escalated to you · Integration line",
-            "FUSE_PAUSED" to "Paused · Integration line").forEach { (kind, text) ->
+        listOf(Triple("PROMOTION_APPROVAL", "Approve merge to main", NeedsYouGlyph.MERGE),
+            Triple("COORDINATOR_QUESTION", "Question from coordinator", NeedsYouGlyph.QUESTION),
+            Triple("ESCALATED", "Escalated to you", NeedsYouGlyph.WARNING),
+            Triple("FUSE_PAUSED", "Paused", NeedsYouGlyph.PAUSE)).forEach { (kind, text, glyph) ->
             val session = coordinator("c1", "Integration line", listOf(ownerItem(kind, "2026-09-13T10:00:00Z")))
             assertTrue(kind, NeedsYouLogic.needsYou(session))
             val banner = NeedsYouLogic.banner(listOf(session))
             assertEquals(kind, text, banner?.text)
+            assertEquals("$kind's second line is its project", "Integration line", banner?.detail)
+            assertEquals(kind, glyph, banner?.glyph)
+            assertEquals("aged from the item, not the conversation", "2026-09-13T10:00:00Z", banner?.since)
+            assertEquals(0, banner?.more)
             assertEquals("and a tap lands in the coordinator conversation", "c1", banner?.target?.text("id"))
             assertEquals("on the card the item is", "item-1", banner?.ownerItem?.itemId)
         }
@@ -165,8 +205,9 @@ class NeedsYouLogicTest {
         assertEquals("a blank need leaves the word alone", "Escalated to you", row(item("ESCALATED", "  ")))
         assertEquals("an older server's item has none", "Escalated to you", row(item("ESCALATED", null)))
         assertEquals("Paused", row(item("FUSE_PAUSED", "not the pause's")))
-        assertEquals("Escalated to you · Integration line",
-            NeedsYouLogic.banner(listOf(coordinator("c1", "Integration line", listOf(item("ESCALATED", "the check failed")))))?.text)
+        val banner = NeedsYouLogic.banner(listOf(coordinator("c1", "Integration line", listOf(item("ESCALATED", "the check failed")))))
+        assertEquals("the bar's first line is the word alone", "Escalated to you", banner?.text)
+        assertEquals("and its second line the project, not the need (the owner, 2026-10-21)", "Integration line", banner?.detail)
     }
 
     @Test fun coordinatorItemsDoNotCount() {
@@ -182,22 +223,28 @@ class NeedsYouLogicTest {
         val banner = NeedsYouLogic.banner(listOf(newer, older))
         assertEquals("old", banner?.ownerItem?.itemId)
         assertEquals("c2", banner?.target?.text("id"))
-        assertEquals("Approve merge to main · Older project", banner?.text)
+        assertEquals("Approve merge to main", banner?.text)
+        assertEquals("Older project", banner?.detail)
         assertEquals(2, banner?.count)
+        assertEquals("the one it names, and +1", 1, banner?.more)
     }
 
     @Test fun anOwnerItemOutranksABlockedToolCall() {
         val blocked = session("s1", 1, "dev", "wikova-develop")
         val waiting = coordinator("c1", "Integration line", listOf(ownerItem("FUSE_PAUSED", "2026-09-13T10:00:00Z")))
         val banner = NeedsYouLogic.banner(listOf(blocked, waiting))
-        assertEquals("Paused · Integration line", banner?.text)
+        assertEquals("Paused", banner?.text)
+        assertEquals("Integration line", banner?.detail)
         assertEquals("c1", banner?.target?.text("id"))
+        assertEquals("the blocked tool call is the one behind it", 1, banner?.more)
     }
 
     @Test fun anUnknownKindDoesNotNameTheBar() {
         val unknown = coordinator("c1", "Integration line", listOf(ownerItem("WHAT_IS_THIS", "2026-09-13T10:00:00Z")))
         val banner = NeedsYouLogic.banner(listOf(unknown))
         assertEquals("orbit needs you", banner?.text)
+        assertEquals("Project coordinator", banner?.detail)
+        assertEquals(NeedsYouGlyph.HAND, banner?.glyph)
         assertNull(banner?.ownerItem)
     }
 
@@ -210,7 +257,8 @@ class NeedsYouLogicTest {
         """).jsonObject
         assertEquals(2, NeedsYouLogic.ownerItems(row).size)
         assertEquals("Merge 3 tasks into main?", NeedsYouLogic.ownerItems(row).first().title)
-        assertEquals("Approve merge to main · Integration line", NeedsYouLogic.banner(listOf(row))?.text)
+        assertEquals("Approve merge to main", NeedsYouLogic.banner(listOf(row))?.text)
+        assertEquals("Integration line", NeedsYouLogic.banner(listOf(row))?.detail)
     }
 
     // which of this conversation's cards the bar counts (the shared card corpus)

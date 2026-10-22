@@ -1,0 +1,113 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T02:28:34.532",
+    "ingested_at": "2026-10-18T02:28:34.698854+00:00",
+    "ingested_by_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "seq": 38,
+    "session_id": "01a14cc4-e830-7738-8326-34c35f6ee50b",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-BEN-RT",
+  "modelRequests": [
+    {
+      "apiErrors": {
+        "BENRT": 1
+      },
+      "at": "2026-10-18T02:09:01Z",
+      "kind": "api_error",
+      "messages": 2,
+      "n": 33,
+      "tool": null
+    },
+    {
+      "apiErrors": {
+        "BENRT": 2
+      },
+      "at": "2026-10-18T02:09:44Z",
+      "kind": "api_error",
+      "messages": 5,
+      "n": 34,
+      "tool": null
+    },
+    {
+      "apiErrors": {
+        "BENRT": 3
+      },
+      "at": "2026-10-18T02:12:47Z",
+      "kind": "api_error",
+      "messages": 8,
+      "n": 35,
+      "tool": null
+    },
+    {
+      "apiErrors": {
+        "BENRT": 3
+      },
+      "at": "2026-10-18T02:28:34Z",
+      "kind": "text",
+      "messages": 11,
+      "n": 45,
+      "tool": null
+    }
+  ],
+  "owner": "ben",
+  "session": {
+    "assigned_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "created_at": "2026-10-18T02:08:55.344",
+    "engine": "claude",
+    "id": "01a14cc4-e830-7738-8326-34c35f6ee50b",
+    "provider": "deepseek-2",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-BEN-RT FAKE-APIERR 3 BENRT a message whose provider is o"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T02:09:01.646",
+      "client_turn_id": "initial-01a14cc4-e830-7738-8326-34c35f6ee50b",
+      "content": "T06-BEN-RT FAKE-APIERR 3 BENRT a message whose provider is overloaded three times",
+      "created_at": "2026-10-18T02:08:58.81",
+      "delivered_at": "2026-10-18T02:09:01.048",
+      "id": "01a14cc4-f5ba-722a-a0e8-e1fae85df196",
+      "kind": "message",
+      "seq": 1,
+      "status": "ANSWERED"
+    },
+    {
+      "answered_at": "2026-10-18T02:09:44.505",
+      "client_turn_id": "auto-retry:02f1fd95-168f-4424-90f9-cd335ba8a9df",
+      "content": "T06-BEN-RT FAKE-APIERR 3 BENRT a message whose provider is overloaded three times",
+      "created_at": "2026-10-18T02:09:43.718",
+      "delivered_at": "2026-10-18T02:09:44.096",
+      "id": "01a14cc5-a526-711b-b184-a863545c4d5f",
+      "kind": "message",
+      "seq": 2,
+      "status": "ANSWERED"
+    },
+    {
+      "answered_at": "2026-10-18T02:12:48.039",
+      "client_turn_id": "auto-retry:92ca66d9-c935-467c-9562-c298908b08c9",
+      "content": "T06-BEN-RT FAKE-APIERR 3 BENRT a message whose provider is overloaded three times",
+      "created_at": "2026-10-18T02:12:43.724",
+      "delivered_at": "2026-10-18T02:12:46.623",
+      "id": "01a14cc8-644c-75aa-a7b6-f70c8bb4fb0a",
+      "kind": "message",
+      "seq": 3,
+      "status": "ANSWERED"
+    },
+    {
+      "answered_at": "2026-10-18T02:28:34.752",
+      "client_turn_id": "auto-retry:426f6a66-97ed-4cf0-9fec-f6ba0fc73bb9",
+      "content": "T06-BEN-RT FAKE-APIERR 3 BENRT a message whose provider is overloaded three times",
+      "created_at": "2026-10-18T02:28:30.818",
+      "delivered_at": "2026-10-18T02:28:34.32",
+      "id": "01a14cd6-d7e2-760a-87a5-7ca8d298f0df",
+      "kind": "message",
+      "seq": 4,
+      "status": "ANSWERED"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "valueKind": "example",
+  "backend": "docker",
+  "environmentId": "REPLACE_ME",
+  "clusterKey": "REPLACE_ME",
+  "resourceProfileId": "REPLACE_ME",
+  "docker": {
+    "instanceId": "REPLACE_ME",
+    "channel": { "socketPath": "/run/orbit-docker-channel/channel.sock" },
+    "tokenFile": "/REPLACE_ME/docker-channel-token"
+  },
+  "storage": {
+    "capacity": "REPLACE_ME"
+  },
+  "runner": {
+    "image": "sha256:REPLACE_ME",
+    "serverUrl": "https://REPLACE_ME",
+    "maxConcurrent": null,
+    "tmpSizeLimit": "REPLACE_ME",
+    "resources": { "cpu": "REPLACE_ME", "memory": "REPLACE_ME", "pids": null }
+  },
+  "capacity": {
+    "reserve": { "cpu": 0.25, "memory": 0.25, "disk": 0.1 }
+  },
+  "lifecycle": {
+    "maxAttempts": null,
+    "backoffBaseSeconds": null,
+    "backoffMaxSeconds": null,
+    "startupDeadlineSeconds": null,
+    "requestTimeoutSeconds": null,
+    "leaseSeconds": null,
+    "pollIntervalSeconds": null,
+    "heartbeatFreshSeconds": null,
+    "idleSeconds": null,
+    "capacityRetrySeconds": null,
+    "drainSeconds": null
+  }
+}

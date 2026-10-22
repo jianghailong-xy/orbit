@@ -21,6 +21,12 @@ import type { ManagedRunnerProfile } from './managed-runner-profile';
  * Downward API: its generation annotation and its own UID, as ORBIT_MANAGED_RUNNER_GENERATION and
  * ORBIT_MANAGED_RUNNER_POD_UID, which the image entrypoint checks against the Secret and the runner
  * sends with every request (managed-runner-instance.ts).
+ *
+ * The Pod carries one finalizer, MANAGED_STOP_REPORT_FINALIZER: deleted by anyone — an operator's
+ * `kubectl delete`, an eviction, a drain — it stays, terminal, with its kubelet's report of the stop,
+ * until the manager has recorded that report and takes the finalizer off. Without it the kubelet's
+ * final delete removes the report within about a second, and the manager, which looks every
+ * `pollIntervalSeconds`, finds the Pod gone with no proof of its stop and fences.
  */
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -35,6 +41,11 @@ export const MANAGED_RUNNER_NAME = 'orbit-managed';
 /** Where the default workspace works: the image's fixed checkout (deploy/managed-runner/README.md). */
 export const MANAGED_WORKSPACE_DIR = '/var/lib/orbit/home/orbit-repos/default';
 export const MANAGED_WORKSPACE_NAME = 'Default';
+/**
+ * The manager's finalizer on every Pod it creates: taken off by the manager alone, once it has
+ * recorded the Pod's stop (kubernetes-backend.ts, `removeInstance`).
+ */
+export const MANAGED_STOP_REPORT_FINALIZER = 'orbit.dev/managed-runner-stop-report';
 /** The Pod example's grace: beyond the 170-second supervisor/lease/event envelope. */
 export const MANAGED_POD_TERMINATION_GRACE_SECONDS = 240;
 export const BOOTSTRAP_MOUNT = '/run/orbit-bootstrap';
@@ -146,6 +157,7 @@ export function buildManagedPod(identity: ManagedRunnerIdentity, pvcUid: string,
     metadata: {
       name: managedPodName(identity.runnerId),
       namespace: identity.namespace,
+      finalizers: [MANAGED_STOP_REPORT_FINALIZER],
       labels: {
         'app.kubernetes.io/name': 'orbit-managed-runner',
         'orbit-test-environment': profile.environmentId,
@@ -302,6 +314,11 @@ export function podIdentityProblem(pod: Pod, identity: ManagedRunnerIdentity, pv
 /** Whether a Pod has finished: its containers ran and stopped, and it will not start again. */
 export function podTerminated(pod: Pod): boolean {
   return pod.status?.phase === 'Succeeded' || pod.status?.phase === 'Failed';
+}
+
+/** Whether the manager's stop-report finalizer is on the Pod: then the object goes only once the manager takes it off. */
+export function podHeldForStopReport(pod: Pod): boolean {
+  return (pod.metadata.finalizers ?? []).includes(MANAGED_STOP_REPORT_FINALIZER);
 }
 
 /**

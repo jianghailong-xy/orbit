@@ -207,7 +207,7 @@ test('Antigravity keeps its display order when dsh is reported, and accounts lik
     auth: 'unknown',
   });
   // It signs in Google accounts through the relay, one Gemini directory each, the way Claude and
-  // Codex keep theirs — and has an install action, which every sign-in engine but Cursor CLI has.
+  // Codex keep theirs — and has an install action, which every sign-in engine has.
   assert.equal(isLoginEngine('antigravity'), true);
   assert.equal(engineKeepsAccounts('antigravity'), true);
   assert.equal(isInstallEngine('antigravity'), true);

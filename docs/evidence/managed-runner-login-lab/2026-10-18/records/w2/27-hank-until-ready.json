@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-17T23:39:08.162+00:00",
+  "changes": [
+    [
+      "2026-10-17T23:39:06.067+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": null,
+        "last_heartbeat_at": "2026-10-17T23:38:49.021",
+        "management_state": "STARTING",
+        "pod": "6b00386a",
+        "reason": "MODEL_UNAVAILABLE",
+        "revision": 12,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-17T23:39:08.162+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "RUNNING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": "deepseek-3",
+        "last_heartbeat_at": "2026-10-17T23:38:49.021",
+        "management_state": "READY",
+        "pod": "6b00386a",
+        "reason": null,
+        "revision": 13,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ]
+  ],
+  "owner": "hank",
+  "reached": {
+    "reason": null,
+    "state": "READY"
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "permissions": {
+    "allow": ["Shell(ls)", "Shell(touch)", "Shell(echo)", "Shell(curl)", "Shell(sh)", "Mcp(repo:record)", "WebFetch(*)"],
+    "deny": []
+  }
+}

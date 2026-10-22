@@ -16,8 +16,33 @@ data class OwnerItem(val itemId: String, val kind: String, val title: String, va
     val need: String? = null)
 
 /** What the cross-session bar says, and where its press goes (OrbitKit `NeedsYouBanner`): the session that has
- * waited longest, or — when one of the four owner items is waiting — the card that item is. */
-data class NeedsYouBanner(val count: Int, val target: JsonObject, val text: String, val ownerItem: OwnerItem? = null)
+ * waited longest, or — when one of the four owner items is waiting — the card that item is. Two lines (the owner,
+ * 2026-10-21, `docs/mocks/needs-you-capsule`): [text] is what is waiting, [detail] where — the project an owner item
+ * stops, or the conversation a press opens — and [since] since when, the ISO instant the bar's age is read from. */
+data class NeedsYouBanner(val count: Int, val target: JsonObject, val text: String, val detail: String? = null,
+    val since: String? = null, val ownerItem: OwnerItem? = null) {
+    /** The mark the bar draws: the owner item's kind, or the raised hand of a blocked tool call. */
+    val glyph: NeedsYouGlyph get() = ownerItem?.let { NeedsYouGlyph.of(it.kind) } ?: NeedsYouGlyph.HAND
+    /** How many other conversations wait behind the one the bar names — its "+2"; none when the first line is itself the
+     * count ("2 sessions need you"). */
+    val more: Int get() = if (ownerItem == null) 0 else maxOf(0, count - 1)
+}
+
+/** Which mark the needs-you bar draws in its circle (OrbitKit `NeedsYouGlyph`): one per owner item kind, the raised hand for a
+ * blocked tool call; in the conversation on screen, a question's or an exception's, by the card a press goes to. */
+enum class NeedsYouGlyph {
+    MERGE, QUESTION, WARNING, PAUSE, HAND;
+
+    companion object {
+        fun of(kind: String) = when (kind) {
+            "PROMOTION_APPROVAL" -> MERGE
+            "COORDINATOR_QUESTION" -> QUESTION
+            "ESCALATED" -> WARNING
+            "FUSE_PAUSED" -> PAUSE
+            else -> HAND
+        }
+    }
+}
 
 /** Which way the reader has to look for what the bar counts (OrbitKit `ReaderSide`). */
 enum class ReaderSide { ABOVE, BELOW }
@@ -26,8 +51,10 @@ enum class ReaderSide { ABOVE, BELOW }
  * pressing a door (an exception that became theirs, a pause only they can lift). */
 data class BelowRow(val rowId: String, val isQuestion: Boolean)
 
-/** What is waiting in THIS conversation: how many, the row a press goes to, and the bar's line (OrbitKit `WaitingBelow`). */
-data class WaitingBelow(val count: Int, val rowId: String, val text: String, val side: ReaderSide? = null)
+/** What is waiting in THIS conversation: how many, the row a press goes to, the bar's line, and the mark of the card a press
+ * goes to (OrbitKit `WaitingBelow`). */
+data class WaitingBelow(val count: Int, val rowId: String, val text: String, val side: ReaderSide? = null,
+    val glyph: NeedsYouGlyph = NeedsYouGlyph.QUESTION)
 
 /** The needs-you bar's rules (OrbitKit `NeedsYouLogic`, `SessionGrouping`), read off the Open snapshot the directory
  * already holds and the cards this conversation draws — so the bar costs no request. */
@@ -39,7 +66,8 @@ object NeedsYouLogic {
     /** The bar for what is waiting in this conversation, or null when nothing is. The press goes to the first row. */
     fun below(rows: List<BelowRow>, side: ReaderSide?): WaitingBelow? {
         val first = rows.firstOrNull() ?: return null
-        return WaitingBelow(rows.size, first.rowId, belowText(rows.size, rows.all { it.isQuestion }, side), side)
+        return WaitingBelow(rows.size, first.rowId, belowText(rows.size, rows.all { it.isQuestion }, side), side,
+            if (first.isQuestion) NeedsYouGlyph.QUESTION else NeedsYouGlyph.WARNING)
     }
 
     /** "1 open question below" while every card counted is a question; "2 waiting below" otherwise. The direction word
@@ -109,10 +137,13 @@ object NeedsYouLogic {
     fun banner(open: List<JsonObject>, focused: String? = null): NeedsYouBanner? {
         val elsewhere = open.filter { needsYou(it) && !(focused != null && ObjectId.same(it.text("id"), focused)) }
         oldestOwnerItem(elsewhere)?.let { (session, item) ->
-            return NeedsYouBanner(elsewhere.size, session, ownerItemText(item, session.text("projectTitle")), item)
+            return NeedsYouBanner(elsewhere.size, session, ownerItemWord(item), detail = named(session.text("projectTitle")),
+                since = item.since.takeIf { it.isNotEmpty() }, ownerItem = item)
         }
         val target = elsewhere.minByOrNull(::recency) ?: return null
-        return NeedsYouBanner(elsewhere.size, target, text(elsewhere.size, target))
+        // Aged from the conversation's last state move — when it stopped to ask — on the recency key's own fallbacks.
+        return NeedsYouBanner(elsewhere.size, target, text(elsewhere.size, target), detail = detail(elsewhere.size, target),
+            since = target.text("lastTurnAt") ?: target.text("updatedAt") ?: target.text("createdAt"))
     }
 
     /** The words the bar and a session row share for one of the four; null for a kind this build does not know. A merge approval
@@ -140,11 +171,9 @@ object NeedsYouLogic {
         return base + needSeparator + need
     }
 
-    /** "Approve merge to main · Integration line": which of the four, and which project. */
-    fun ownerItemText(item: OwnerItem, project: String?): String {
-        val what = word(item) ?: "Needs you"
-        return if (project.isNullOrEmpty()) what else "$what · $project"
-    }
+    /** The bar's first line for one owner item: which of the four, its merge named by the item's main branch (OrbitKit
+     * `ownerItemWord`). The project is the second line. */
+    fun ownerItemWord(item: OwnerItem): String = word(item) ?: "Needs you"
 
     /** An item's word, its merge named by the main branch the item carries. */
     private fun word(item: OwnerItem) = kindWord(item.kind, RunSettings.mainBranchName(item.mainBranch))
@@ -175,4 +204,14 @@ object NeedsYouLogic {
         if (count != 1) return "$count sessions need you"
         return "${target.obj("agent")?.text("name") ?: target.text("title") ?: "A session"} needs you"
     }
+
+    /** The conversation a press opens, by its title — unless the first line already named it by that title, for a session
+     * with no workspace name. */
+    private fun detail(count: Int, target: JsonObject): String? {
+        if (count == 1 && target.obj("agent")?.text("name") == null) return null
+        return named(target.text("title"))
+    }
+
+    /** A name worth a line: null for none, and for one that is only whitespace. */
+    private fun named(name: String?): String? = name?.takeIf { it.isNotBlank() }
 }

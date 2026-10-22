@@ -1,0 +1,116 @@
+{
+  "at": "2026-10-17T19:56:50.971+00:00",
+  "kept": [
+    {
+      "generation": 1,
+      "podUid": "38693fcf-9066-4dfa-9c27-c39b2124f3c9",
+      "tokenSha256Prefix": "511c51785bc1"
+    }
+  ],
+  "mapping": {
+    "generation": 1,
+    "podUid": "38693fcf-9066-4dfa-9c27-c39b2124f3c9",
+    "state": "STARTING"
+  },
+  "results": [
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": null,
+      "offer": "its own generation and Pod",
+      "route": "GET /api/runner/me",
+      "runnerId": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "status": 200
+    },
+    {
+      "code": null,
+      "credential": "generation 1",
+      "message": null,
+      "offer": "the current generation and Pod",
+      "route": "GET /api/runner/me",
+      "runnerId": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "status": 200
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_REQUIRED",
+      "credential": "generation 1",
+      "message": "This credential belongs to a managed runner. A request with it must declare managed-runner-instance-v1 and name its generation and Pod UID; a runner that cannot is refused.",
+      "offer": "no instance declaration",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_REQUIRED",
+      "credential": "generation 1",
+      "message": "This credential belongs to a managed runner. A request with it must declare managed-runner-instance-v1 and name its generation and Pod UID; a runner that cannot is refused.",
+      "offer": "no instance declaration",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_REQUIRED",
+      "credential": "generation 1",
+      "message": "This credential belongs to a managed runner. A request with it must declare managed-runner-instance-v1 and name its generation and Pod UID; a runner that cannot is refused.",
+      "offer": "no instance declaration",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "credential": "generation 1",
+      "message": "Pod bb51e728-037e-4c89-ac77-38bf62eefd53 is not the instance authorized for generation 1.",
+      "offer": "the current generation, another Pod UID",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "credential": "generation 1",
+      "message": "Pod bb51e728-037e-4c89-ac77-38bf62eefd53 is not the instance authorized for generation 1.",
+      "offer": "the current generation, another Pod UID",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "credential": "generation 1",
+      "message": "Pod bb51e728-037e-4c89-ac77-38bf62eefd53 is not the instance authorized for generation 1.",
+      "offer": "the current generation, another Pod UID",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "credential": "generation 1",
+      "message": "Generation 2 of this managed runner was never authorized.",
+      "offer": "the next generation",
+      "route": "GET /api/runner/me",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "credential": "generation 1",
+      "message": "Generation 2 of this managed runner was never authorized.",
+      "offer": "the next generation",
+      "route": "POST /api/runner/heartbeat",
+      "runnerId": null,
+      "status": 403
+    },
+    {
+      "code": "MANAGED_RUNNER_INSTANCE_NOT_AUTHORIZED",
+      "credential": "generation 1",
+      "message": "Generation 2 of this managed runner was never authorized.",
+      "offer": "the next generation",
+      "route": "GET /api/runner/sessions/claim",
+      "runnerId": null,
+      "status": 403
+    }
+  ]
+}

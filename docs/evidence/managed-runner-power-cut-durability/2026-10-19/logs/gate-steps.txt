@@ -1,0 +1,20 @@
+head 09d69958bb7bea59781a9ebb5eaab901546f04f2 status '?? docs/evidence/managed-runner-power-cut-durability/2026-10-19/kit/gate.sh' 2026-10-19T18:00:27Z
+start 00-overlay 2026-10-19T18:00:27Z
+end 00-overlay exit=0 1 s 2026-10-19T18:00:28Z
+start 01-compose-topology 2026-10-19T18:00:28Z
+end 01-compose-topology exit=0 0 s 2026-10-19T18:00:28Z
+start 02-prisma-generate 2026-10-19T18:00:28Z
+end 02-prisma-generate exit=0 1 s 2026-10-19T18:00:29Z
+start 03-build 2026-10-19T18:00:29Z
+end 03-build exit=0 5 s 2026-10-19T18:00:34Z
+start 04-shared 2026-10-19T18:00:34Z
+end 04-shared exit=0 1 s 2026-10-19T18:00:35Z
+start 05-apiserver 2026-10-19T18:00:35Z
+end 05-apiserver exit=0 27 s 2026-10-19T18:01:02Z
+start 06-web 2026-10-19T18:01:02Z
+end 06-web exit=0 190 s 2026-10-19T18:04:12Z
+start 07-managed-runner-python 2026-10-19T18:04:12Z
+end 07-managed-runner-python exit=0 11 s 2026-10-19T18:04:23Z
+start 08-runner-go 2026-10-19T18:04:23Z
+end 08-runner-go exit=0 309 s 2026-10-19T18:09:32Z
+done 2026-10-19T18:09:32Z

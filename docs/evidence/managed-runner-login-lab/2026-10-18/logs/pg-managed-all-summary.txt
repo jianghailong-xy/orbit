@@ -1,0 +1,12 @@
+==== docker-backend.pg.spec.ts tests=14 pass=14 fail=0 skipped=0 
+==== managed-runner-account-disabled.pg.spec.ts tests=5 pass=5 fail=0 skipped=0 
+==== managed-runner-backend.pg.spec.ts tests=7 pass=7 fail=0 skipped=0 
+==== managed-runner-boot.pg.spec.ts tests=5 pass=5 fail=0 skipped=0 
+==== managed-runner-capacity.pg.spec.ts tests=7 pass=7 fail=0 skipped=0 
+==== managed-runner-existing.pg.spec.ts tests=3 pass=3 fail=0 skipped=0 
+==== managed-runner-fencing.pg.spec.ts tests=16 pass=16 fail=0 skipped=0 
+==== managed-runner-manager.pg.spec.ts tests=14 pass=14 fail=0 skipped=0 
+==== managed-runner-recovery.pg.spec.ts tests=17 pass=17 fail=0 skipped=0 
+==== managed-runner-sign-in.pg.spec.ts tests=13 pass=13 fail=0 skipped=0 
+==== managed-runner-sleep.pg.spec.ts tests=10 pass=10 fail=0 skipped=0 
+==== managed-runner-wake.pg.spec.ts tests=10 pass=10 fail=0 skipped=0 

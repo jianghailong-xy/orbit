@@ -12,9 +12,9 @@ import (
 
 // acquireWikiFetchLock takes the wiki fetch lock at path (fetchWikiOriginMain), waiting at most wait
 // for whoever holds it. flock is tied to the open descriptor, not to the process: two goroutines of the
-// runner exclude each other exactly as the runner and a CLI process in a session do, and a holder that
-// dies lets go with its descriptors. held is false when the wait ran out or no lock could be taken at
-// all, and the caller fetches without it.
+// runner exclude each other exactly as two processes do, and a holder that dies lets go with its
+// descriptors. held is false when the wait ran out or no lock could be taken at all, and the caller
+// fetches without it.
 func acquireWikiFetchLock(path string, wait time.Duration) (release func(), held bool) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDONLY, 0o644)
 	if err != nil {

@@ -31,13 +31,7 @@ func cursorDefaultAccountDir() string { return filepath.Join(cursorRoot(), "defa
 
 // cursorLoginHint is how to sign the Default account in by hand: the pinned build's own `login`, saving
 // into Orbit's directory for that account, with a HOME of its own so ~/.cursor stays untouched.
-func cursorLoginHint() string {
-	account := cursorDefaultAccountDir()
-	return "NO_OPEN_BROWSER=1 HOME=" + shellQuote(filepath.Join(account, "home")) +
-		" XDG_CONFIG_HOME=" + shellQuote(filepath.Join(account, "xdg-config")) +
-		" CURSOR_CONFIG_DIR=" + shellQuote(filepath.Join(account, "config")) +
-		" " + shellQuote(filepath.Join(cursorVersionDir(), cursorEntryPoint)) + " login"
-}
+func cursorLoginHint() string { return cursorLoginHintFor(cursorDefaultAccountDir()) }
 
 func cursorStoredLoginPath(accountDir string) string {
 	return filepath.Join(accountDir, "xdg-config", "cursor", "auth.json")
@@ -84,17 +78,11 @@ func cursorTokenExpired(token string, now time.Time) bool {
 }
 
 // cursorLoginState is the Default account's sign-in, by the login saved for it and the CLI's own
-// `agent models` asked with that login's token. A network the CLI could not reach, and an answer it
-// did not explain, are unknown: neither is evidence of a sign-out.
+// `agent models` asked with that login's token (cursorSlotLoginStatus, every account's question). A
+// network the CLI could not reach, and an answer it did not explain, are unknown: neither is evidence of
+// a sign-out.
 func cursorLoginState(exe string) authState {
-	token, err := cursorStoredLogin(cursorDefaultAccountDir())
-	if err != nil {
-		return authUnknown
-	}
-	if token == "" || cursorTokenExpired(token, time.Now()) {
-		return authNo
-	}
-	return cursorModelsAnswer(exe, "CURSOR_AUTH_TOKEN="+token)
+	return cursorSlotLoginStatus(context.Background(), exe, cursorDefaultAccountDir())
 }
 
 // cursorModels runs `agent models` with credential (KEY=value) in a throwaway home, the injected
@@ -117,8 +105,8 @@ func cursorModels(ctx context.Context, exe, credential string) (string, error) {
 }
 
 // cursorModelsAnswer reads `agent models`' answer to credential (§9): exit 0 is a credential that works.
-func cursorModelsAnswer(exe, credential string) authState {
-	out, err := cursorModels(context.Background(), exe, credential)
+func cursorModelsAnswer(ctx context.Context, exe, credential string) authState {
+	out, err := cursorModels(ctx, exe, credential)
 	if err == nil {
 		return authYes
 	}

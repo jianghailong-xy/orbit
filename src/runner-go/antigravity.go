@@ -581,18 +581,19 @@ func agyUnansweredToolText(status string) string {
 
 // canonicalAgyTool names agy's tools the way Orbit's cards know them (§2.3). agy streams only a
 // display subset of each call's parameters — no file contents, no diff — so a card shows what
-// there is, and a file change shows up in the session's diff.
+// there is, and a file change shows up in the session's diff. agy 1.4.3 renamed the file tools
+// (read_file, write_file and edit_file, each with a Path); both generations are read.
 func canonicalAgyTool(name string, params interface{}) (string, interface{}) {
 	p := mapValue(params)
 	switch name {
 	case "run_command":
 		return "Bash", map[string]interface{}{"command": firstString(p, "CommandLine")}
-	case "view_file":
-		return "Read", map[string]interface{}{"file_path": firstString(p, "AbsolutePath")}
-	case "write_to_file":
-		return "Write", map[string]interface{}{"file_path": firstString(p, "TargetFile")}
-	case "replace_file_content", "multi_replace_file_content":
-		return "Edit", map[string]interface{}{"file_path": firstString(p, "TargetFile")}
+	case "view_file", "read_file":
+		return "Read", map[string]interface{}{"file_path": firstString(p, "AbsolutePath", "Path")}
+	case "write_to_file", "write_file":
+		return "Write", map[string]interface{}{"file_path": firstString(p, "TargetFile", "Path")}
+	case "replace_file_content", "multi_replace_file_content", "edit_file":
+		return "Edit", map[string]interface{}{"file_path": firstString(p, "TargetFile", "Path")}
 	case "read_url_content":
 		return "WebFetch", map[string]interface{}{"url": firstString(p, "Url", "URL", "url")}
 	case "search_web":
@@ -618,9 +619,9 @@ func agyPermission(rawName string) string {
 	switch rawName {
 	case "run_command":
 		return "command"
-	case "write_to_file", "replace_file_content", "multi_replace_file_content":
+	case "write_to_file", "replace_file_content", "multi_replace_file_content", "write_file", "edit_file":
 		return "write_file"
-	case "view_file":
+	case "view_file", "read_file":
 		return "read_file"
 	case "read_url_content", "search_web":
 		return "read_url"

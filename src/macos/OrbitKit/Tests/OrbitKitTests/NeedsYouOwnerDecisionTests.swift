@@ -95,8 +95,7 @@ final class NeedsYouOwnerDecisionTests: XCTestCase {
             "the row says the item's own word, not the approval one")
         // The same words the bar says about the same item, so a person who pressed either arrives
         // at a card saying what they read.
-        XCTAssertEqual(NeedsYouLogic.ownerItemText(escalated, project: "FineWeb"),
-                       "Escalated to you · FineWeb")
+        XCTAssertEqual(NeedsYouLogic.ownerItemWord(escalated), "Escalated to you")
         XCTAssertEqual(NeedsYouLogic.kindWord(.fusePaused), "Paused")
         XCTAssertNil(NeedsYouLogic.kindWord(.unknown),
                      "a kind this build cannot name is not named")

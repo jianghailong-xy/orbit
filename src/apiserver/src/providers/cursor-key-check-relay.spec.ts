@@ -47,7 +47,7 @@ async function heldFor(relay: CursorKeyCheckRelay, runnerId: string): Promise<vo
   const held = (relay as unknown as { held: Map<string, { runnerId: string; apiKey: string | null }> }).held;
   for (let i = 0; i < 400; i++) {
     if ([...held.values()].some((check) => check.runnerId === runnerId && check.apiKey !== null)) return;
-    await new Promise((resolve) => setTimeout(resolve, 5));
+    await new Promise((resolve) => setImmediate(resolve));
   }
   assert.fail(`nothing was held for ${runnerId}`);
 }
@@ -113,11 +113,14 @@ test('P2 follow-up an answer settles its check once, only from that runner and o
   assert.equal(relay.answer('runner-a', { checkId, state: 'VALID', keyFingerprint: fingerprint(KEY) }), false, 'a check was settled twice');
 });
 
-test('P2 follow-up a check nobody answers in time settles as no answer, and its key is gone', async () => {
+test('P2 follow-up a check nobody answers in time settles as no answer, and its key is gone', async (t) => {
+  // The relay's timer is unref'd, so nothing keeps this process alive while a real one runs out: the
+  // test runs it out itself.
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const relay = new CursorKeyCheckRelay();
-  relay.waitMs = 30;
   const answer = relay.ask('runner-a', KEY);
   const checkId = [...(relay as unknown as { held: Map<string, object> }).held.keys()][0];
+  t.mock.timers.tick(relay.waitMs);
   assert.equal(await answer, null);
   assert.deepEqual(relay.take('runner-a'), [], 'a heartbeat after the wait was handed the key');
   assert.equal(relay.answer('runner-a', { checkId, state: 'VALID', keyFingerprint: fingerprint(KEY) }), false);
@@ -172,7 +175,8 @@ test('P2 follow-up the heartbeat hands a key only to a process that declares cur
   }
 });
 
-test('P2 follow-up connecting a Cursor key answers VALID, INVALID, UNREACHABLE or NO_RUNNER, in words that never carry the key', async () => {
+test('P2 follow-up connecting a Cursor key answers VALID, INVALID, UNREACHABLE or NO_RUNNER, in words that never carry the key', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
   const OWNER = '44444444-4444-4444-8444-444444444444';
   const RUNNER = '55555555-5555-4555-8555-555555555555';
   let runners: CursorKeyCheckerRow[] = [];
@@ -222,23 +226,21 @@ test('P2 follow-up connecting a Cursor key answers VALID, INVALID, UNREACHABLE o
   answers.push(valid, invalid, unreachable);
 
   // The one asked does not answer in time.
-  const wait = cursorKeyCheckRelay.waitMs;
-  cursorKeyCheckRelay.waitMs = 30;
-  try {
-    const silent = await connect();
-    assert.deepEqual({ ok: silent.ok, keyCheck: silent.keyCheck }, { ok: false, keyCheck: 'NO_RUNNER' });
-    assert.equal(silent.message, 'The runner asked to check this key didn’t answer in time. Save the key anyway, or try again.');
-    answers.push(silent);
-    // Every runner able to check is checking other keys already.
-    const busy = Array.from({ length: CURSOR_KEY_CHECKS_PER_RUNNER }, () => cursorKeyCheckRelay.ask(RUNNER, `${KEY}-other`));
-    const full = await connect();
-    assert.deepEqual({ keyCheck: full.keyCheck, message: full.message },
-      { keyCheck: 'NO_RUNNER', message: 'Your runners are already checking other Cursor keys. Try again in a moment.' });
-    answers.push(full);
-    await Promise.all(busy);
-  } finally {
-    cursorKeyCheckRelay.waitMs = wait;
-  }
+  const pending = connect();
+  await heldFor(cursorKeyCheckRelay, RUNNER);
+  t.mock.timers.tick(cursorKeyCheckRelay.waitMs);
+  const silent = await pending;
+  assert.deepEqual({ ok: silent.ok, keyCheck: silent.keyCheck }, { ok: false, keyCheck: 'NO_RUNNER' });
+  assert.equal(silent.message, 'The runner asked to check this key didn’t answer in time. Save the key anyway, or try again.');
+  answers.push(silent);
+  // Every runner able to check is checking other keys already.
+  const busy = Array.from({ length: CURSOR_KEY_CHECKS_PER_RUNNER }, () => cursorKeyCheckRelay.ask(RUNNER, `${KEY}-other`));
+  const full = await connect();
+  assert.deepEqual({ keyCheck: full.keyCheck, message: full.message },
+    { keyCheck: 'NO_RUNNER', message: 'Your runners are already checking other Cursor keys. Try again in a moment.' });
+  answers.push(full);
+  t.mock.timers.tick(cursorKeyCheckRelay.waitMs);
+  await Promise.all(busy);
   // A blank key is refused before any runner is asked, and the refusal names no key.
   await assert.rejects(connect('   '), (error: { getStatus(): number; message: string }) => error.getStatus() === 400);
   for (const answer of answers) assert.ok(!JSON.stringify(answer).includes(KEY), `an answer carries the key: ${answer.message}`);

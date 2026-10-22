@@ -219,6 +219,29 @@ test('answers without a definite outcome are ambiguous or retryable; refusals ar
   assert.ok((await kube.pods.get('mr-x').catch((e: unknown) => e)) instanceof KubeAmbiguousError);
 });
 
+test('a Pod patch is a JSON Patch of that one Pod, and a test that does not hold is the API server\'s refusal', async () => {
+  const pod = { apiVersion: 'v1', kind: 'Pod', metadata: { name: 'mr-x', uid: 'pod-uid-1', finalizers: [] }, spec: {} };
+  const { sent, kube } = client(
+    json(200, pod),
+    json(422, { kind: 'Status', reason: 'Invalid', message: 'the server rejected our request due to an error in our request' }),
+  );
+  const operations = [
+    { op: 'test' as const, path: '/metadata/uid', value: 'pod-uid-1' },
+    { op: 'test' as const, path: '/metadata/finalizers/0', value: 'orbit.dev/managed-runner-stop-report' },
+    { op: 'remove' as const, path: '/metadata/finalizers/0' },
+  ];
+  assert.deepEqual(await kube.pods.patch('mr-x', operations), pod);
+  await assert.rejects(kube.pods.patch('mr-x', operations), (e: unknown) => e instanceof KubeApiError && e.status === 422 && !isRetryableKubeError(e));
+  assert.deepEqual(sent.map((r) => `${r.method} ${r.url.pathname}${r.url.search}`), [
+    'PATCH /api/v1/namespaces/orbit-managed-test/pods/mr-x',
+    'PATCH /api/v1/namespaces/orbit-managed-test/pods/mr-x',
+  ]);
+  assert.equal(sent[0].headers['content-type'], 'application/json-patch+json');
+  assert.deepEqual(JSON.parse(sent[0].body!), operations);
+  await assert.rejects(kube.pods.patch('../secrets/x', operations), /not a Kubernetes object name/);
+  assert.equal(sent.length, 2, 'refused before anything was sent');
+});
+
 test('names and namespaces are fixed: no path injection, no create outside the namespace', async () => {
   const { sent, kube } = client();
   await assert.rejects(kube.pods.get('../../secrets/x'), /not a Kubernetes object name/);

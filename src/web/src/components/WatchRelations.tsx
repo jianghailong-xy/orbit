@@ -22,6 +22,7 @@ import {
   targetHref,
   targetName,
   targetNoun,
+  waitedOn,
   waitsBeyondTasks,
   watchBucket,
   watchHref,
@@ -209,7 +210,8 @@ export function SessionWatchStrip({ sessionId }: { sessionId: string }) {
   const watchesQ = useQuery(watchesQuery());
   const now = useNow();
   const [open, setOpen] = useState(false);
-  // Only what waits beyond tasks: a task the session waits on is an eye in its Tasks card.
+  // Only what waits beyond tasks: a task the session waits on, or its run session, is an eye in its
+  // Tasks card.
   const waitingOn = watchesFollowing(rowsOf(watchesQ.data), sessionId)
     .filter(isLiveWatch)
     .filter(waitsBeyondTasks);
@@ -303,15 +305,21 @@ function WatchTargetPill({ target }: { target: WatchTargetView }) {
 
 /**
  * One watch in the opened strip: its targets and the line it adds when nobody is checking it; when
- * the line above names no one target, each target opens its own page. What
+ * the line above names no one target, each target opens its own page. A task's run session is listed
+ * as that task (`waitedOn`), once, as the line above counts it. What
  * the condition has already met goes first, a stable sort, so the watch's own order holds within each
  * group.
  */
 function StripWatch({ watch, now, listsTargets }: { watch: WatchView; now: number; listsTargets: boolean }) {
   const stale = stripStaleLine(watch, now);
-  const targets = watch.targets
-    .filter((t) => t.state !== 'GONE')
-    .sort((a, b) => Number(a.state !== 'SATISFIED') - Number(b.state !== 'SATISFIED'));
+  const targets = [
+    ...new Map(
+      watch.targets
+        .filter((t) => t.state !== 'GONE')
+        .map(waitedOn)
+        .map((t) => [`${t.targetKind}:${t.targetResourceId}`, t] as const),
+    ).values(),
+  ].sort((a, b) => Number(a.state !== 'SATISFIED') - Number(b.state !== 'SATISFIED'));
   return (
     <div className="watch-strip-watch" data-watch-id={watch.id}>
       {stale && (

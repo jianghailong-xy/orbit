@@ -44,6 +44,10 @@ test('provider-slug', async (t) => {
       pickFreeSlug(KIMI_ORPHAN_PROVIDER_TOMBSTONE, []),
       `${KIMI_ORPHAN_PROVIDER_TOMBSTONE}-2`,
     );
+    // `orbit` is the LANDING session's provider (0436): a key or pool a person labels "Orbit" lands
+    // beside the platform value, never on it.
+    assert.equal(pickFreeSlug(slugBase('Orbit'), []), 'orbit-2');
+    assert.equal(pickFreeSlug('orbit', []), 'orbit-2');
   });
 
   await t.test('pickFreeSlug: reuses the first Moonshot gap used by the Kimi migration', () => {

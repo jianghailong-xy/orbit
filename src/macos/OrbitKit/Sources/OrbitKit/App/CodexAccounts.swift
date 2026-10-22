@@ -28,6 +28,9 @@ public enum CodexAccounts {
     /// …or a model of its own, which only both of these together are (shared `OWN_CREDENTIAL_NEEDS_ALL`,
     /// runner `kimiUsesEnvModel`): either one alone still runs on the account's login.
     private static let kimiOwnModelEnvKeys = ["KIMI_MODEL_NAME", "KIMI_MODEL_API_KEY"]
+    /// Cursor CLI's: the runner's variable naming one of its accounts (shared `ACCOUNT_DIR_VAR`), or a key
+    /// or token of its own, which signs the CLI in by itself (shared `OWN_CREDENTIAL_KEYS`).
+    private static let cursorDecidingEnvKeys = ["ORBIT_CURSOR_ACCOUNT_DIR", "CURSOR_API_KEY", "CURSOR_AUTH_TOKEN"]
 
     /// The snapshot `engine`'s accounts' quota is read from: the runner's own report for Codex and
     /// Claude Code (`Runner.planUsage`). Antigravity's never rides there — it travels with the engine's
@@ -40,12 +43,14 @@ public enum CodexAccounts {
     }
 
     /// The account a workspace picked for its sessions on `engine` (`Agent.codexAccount`,
-    /// `.claudeAccount`, `.antigravityAccount`, `.kimiAccount`); nil leaves it to Automatic.
+    /// `.claudeAccount`, `.antigravityAccount`, `.kimiAccount`, `.cursorAccount`); nil leaves it to
+    /// Automatic.
     public static func workspaceAccount(_ engine: String, of agent: Agent?) -> String? {
         switch engine {
         case "claude": return agent?.claudeAccount
         case "antigravity": return agent?.antigravityAccount
         case "kimi": return agent?.kimiAccount
+        case "cursor": return agent?.cursorAccount
         default: return agent?.codexAccount
         }
     }
@@ -63,11 +68,14 @@ public enum CodexAccounts {
     /// Antigravity conversation lives in the session's own directory whichever account it runs on, so
     /// there is nothing to carry: a runner that keeps Antigravity accounts at all — one that signs them
     /// in (`antigravityAccountLoginCapability`) — moves a session between them.
+    /// Cursor CLI's (`cursor-account-move/v1`) is declared only once a conversation has been shown to
+    /// carry between two real identities (D5): until then a Cursor session that has talked stays put.
     public static func moveCapability(_ engine: String) -> String {
         switch engine {
         case "claude": return "claude-account-move/v1"
         case "antigravity": return antigravityAccountLoginCapability
         case "kimi": return "kimi-account-move/v1"
+        case "cursor": return CursorRuntime.accountMoveCapability
         default: return "codex-account-move/v1"
         }
     }
@@ -106,6 +114,7 @@ public enum CodexAccounts {
             || s.limitId != nil || s.limitName != nil || s.planType != nil
             || s.rateLimitReachedType != nil || s.credits != nil || s.rateLimits != nil
             || s.rateLimitReset != nil || s.fetchedAt != nil || s.buckets != nil
+            || s.planName != nil || s.includedUsage != nil
     }
 
     /// What an account is called where one is named: what the user called it — Default too, once
@@ -117,11 +126,19 @@ public enum CodexAccounts {
 
     /// `wanted` when the runner reports it, else Default — the account dispatch runs a session on
     /// (the server's `accountOnRunner`).
-    public static func onRunner(_ wanted: String?, accounts: [RunnerEngineAccount]?) -> String {
-        guard let wanted, !wanted.isEmpty, accounts?.contains(where: { $0.id == wanted }) == true else {
-            return defaultID
-        }
-        return wanted
+    ///
+    /// While Default is removed from Orbit (`defaultRemoved`: `RunnerEngineHealth.removedDefault`, whose
+    /// `accounts` leave it out) there is no Default to fall back on: no pick, a pick of Default and a slot
+    /// the runner no longer reports land on Automatic's pick among the accounts that remain (`toStartOn`)
+    /// — unless the workspace's `env` selects a config directory or a key of its own, which stays the
+    /// user's.
+    public static func onRunner(_ wanted: String?, accounts: [RunnerEngineAccount]?, engine: String = "codex",
+                                env: [String: String]? = nil, usage: PlanUsageSnapshot? = nil,
+                                defaultRemoved: Bool = false, now: Date = Date()) -> String {
+        if let wanted, !wanted.isEmpty, accounts?.contains(where: { $0.id == wanted }) == true { return wanted }
+        guard defaultRemoved, !envDecides(engine: engine, env: env),
+              let pick = toStartOn(accounts, usage: usage, now: now, defaultRemoved: true) else { return defaultID }
+        return pick
     }
 
     /// Whether a new session of `engine` (`codex`, `claude`, `antigravity` or `kimi`) on `agent` starts
@@ -130,27 +147,40 @@ public enum CodexAccounts {
     /// server's `automaticAccount`). The same answer says whether a session there is on Automatic unless
     /// an account was picked for it by hand.
     public static func automaticOffered(engine: String = "codex", agent: Agent?,
-                                        accounts: [RunnerEngineAccount]?) -> Bool {
+                                        accounts: [RunnerEngineAccount]?, defaultRemoved: Bool = false) -> Bool {
         automaticOffered(engine: engine, pick: workspaceAccount(engine, of: agent),
-                         env: agent?.env, accounts: accounts)
+                         env: agent?.env, accounts: accounts, defaultRemoved: defaultRemoved)
     }
 
     /// The same question asked of the workspace's `pick` for that engine and its `env` — what a
     /// session's detail carries of its workspace (`SessionAgentRef`).
+    ///
+    /// While Default is removed from Orbit (`defaultRemoved`) a workspace set to it runs on Automatic too
+    /// — there is no other account that choice could mean (the server's `workspaceLeavesAccountToOrbit`)
+    /// — and Automatic picks among the accounts that remain, the only one included.
     public static func automaticOffered(engine: String, pick: String?, env: [String: String]?,
-                                        accounts: [RunnerEngineAccount]?) -> Bool {
-        guard (accounts?.count ?? 0) >= 2, pick?.isEmpty ?? true else { return false }
+                                        accounts: [RunnerEngineAccount]?, defaultRemoved: Bool = false) -> Bool {
+        let pick = defaultRemoved && pick == defaultID ? nil : pick
+        guard (accounts?.count ?? 0) >= (defaultRemoved ? 1 : 2), pick?.isEmpty ?? true else { return false }
+        return !envDecides(engine: engine, env: env)
+    }
+
+    /// Whether a workspace's `env` decides where a session of `engine` runs: it selects a config
+    /// directory of its own, or brings a key of its own — Kimi Code a model of its own too, which only
+    /// both of its variables together are.
+    private static func envDecides(engine: String, env: [String: String]?) -> Bool {
         let env = env ?? [:]
         let set = { (key: String) in !(env[key]?.trimmingCharacters(in: .whitespaces).isEmpty ?? true) }
-        if engine == "kimi" && kimiOwnModelEnvKeys.allSatisfy(set) { return false }
+        if engine == "kimi" && kimiOwnModelEnvKeys.allSatisfy(set) { return true }
         let deciding: [String]
         switch engine {
         case "claude": deciding = claudeDecidingEnvKeys
         case "antigravity": deciding = antigravityDecidingEnvKeys
         case "kimi": deciding = kimiDecidingEnvKeys
+        case "cursor": deciding = cursorDecidingEnvKeys
         default: deciding = decidingEnvKeys
         }
-        return !deciding.contains(where: set)
+        return deciding.contains(where: set)
     }
 
     /// Which account a new session with none picked starts on: the one whose quota would otherwise go
@@ -170,15 +200,23 @@ public enum CodexAccounts {
     /// - Ties go to Default, then to the lower id.
     ///
     /// Nil with fewer than two accounts, or none signed in: nothing to choose between.
+    ///
+    /// With `defaultRemoved` — the owner removed this engine's Default from Orbit, and the runner reports
+    /// another account (`RunnerEngineHealth.removedDefault`) — there is no such place: Default is no
+    /// candidate, and the choice is among the accounts that remain, the only one of them included. With
+    /// every one of them signed out it is the first of them, whose sign-in the session then waits on. Nil
+    /// only when none remains (shared `accountToStartOn`'s `defaultRemoved`).
     public static func toStartOn(_ accounts: [RunnerEngineAccount]?, usage: PlanUsageSnapshot?,
-                                 now: Date = Date()) -> String? {
-        guard let accounts, accounts.count >= 2 else { return nil }
+                                 now: Date = Date(), defaultRemoved: Bool = false) -> String? {
+        let pool = defaultRemoved ? accounts?.filter { $0.id != defaultID } : accounts
+        guard let pool, pool.count >= (defaultRemoved ? 1 : 2) else { return nil }
         struct Candidate {
             let id: String; let nearLimit: Bool; let expiresAt: Double; let tightest: Double; let spentUntil: Double?
         }
-        let candidates: [Candidate] = accounts.filter { $0.auth != "no" }.map { account in
+        let candidates: [Candidate] = pool.filter { $0.auth != "no" }.map { account in
             let own = snapshot(usage, account: account.id)
-            let ws = own.map(windows) ?? []
+            // A Cursor CLI reading orders accounts and never says one is spent (shared `windowsOf`).
+            let ws = own.map(limits) ?? []
             // Not past its reset — or with no reset to go by, which nothing says has come.
             let open = ws.filter { !(resetTime($0).map { $0 <= now.timeIntervalSince1970 } ?? false) }
             let spent = open.filter { $0.utilization >= 100 }
@@ -191,7 +229,7 @@ public enum CodexAccounts {
             return Candidate(id: account.id,
                              nearLimit: own.map { nearlySpent($0, now: now) } ?? false,
                              expiresAt: own.map { expiresAt($0, now: now) } ?? .infinity,
-                             tightest: ws.map(\.utilization).max() ?? .infinity,
+                             tightest: own.flatMap { withLength($0).map(\.window.utilization).max() } ?? .infinity,
                              spentUntil: spentUntil)
         }
         func byID(_ a: Candidate, _ b: Candidate) -> Bool {
@@ -206,10 +244,12 @@ public enum CodexAccounts {
                 return a.tightest != b.tightest ? a.tightest < b.tightest : byID(a, b)
             }.first?.id
         }
-        return candidates.sorted { a, b in
+        let first = candidates.sorted { a, b in
             let x = a.spentUntil ?? 0, y = b.spentUntil ?? 0
             return x != y ? x < y : byID(a, b)
-        }.first?.id
+        }.first
+        if let first { return first.id }
+        return defaultRemoved ? pool.map(\.id).min() : nil
     }
 
     /// At or over this share consumed, a window is nearly spent (shared `NEAR_LIMIT_UTILIZATION`).
@@ -249,15 +289,17 @@ public enum CodexAccounts {
 
     /// Every window of one snapshot with its length in minutes (shared `windowsWithLength`): Claude's
     /// and Kimi Code's named ones by their names, Codex's as it reports them — nil when one does not
-    /// say — and Antigravity's buckets as the windows they are (`bucketWindow`).
+    /// say — Antigravity's buckets as the windows they are (`bucketWindow`), and a Cursor CLI account's
+    /// usage limit met and its reading, as long as its period (`CursorRuntime.windows`).
     static func withLength(_ s: PlanUsageSnapshot) -> [(window: PlanUsageWindow, mins: Int?)] {
         let week = 7 * 24 * 60
         let named: [(PlanUsageWindow?, Int)] = [(s.fiveHour, 5 * 60), (s.sevenDay, week), (s.sevenDayOpus, week),
                                                 (s.sevenDaySonnet, week), (s.month, monthMins),
                                                 (s.monthCode, monthMins)]
         let buckets: [PlanUsageWindow?] = (s.buckets ?? []).map(bucketWindow)
+        let cursor = CursorRuntime.windows(s)
         let reported = [s.primary, s.secondary] + (s.rateLimits ?? []).flatMap { [$0.primary, $0.secondary] }
-            + buckets
+            + buckets + [cursor.limit, cursor.reading]
         let all: [(window: PlanUsageWindow, mins: Int?)] =
             named.compactMap { window, mins in window.map { ($0, $0.windowDurationMins ?? mins) } }
             + reported.compactMap { window in window.map { ($0, $0.windowDurationMins) } }
@@ -265,13 +307,20 @@ public enum CodexAccounts {
     }
 
     /// Every window one snapshot reports: Claude's named ones, Kimi Code's monthly pair, Codex's
-    /// primary/secondary pair, the per-bucket windows Codex reports under `rateLimits`, and
-    /// Antigravity's buckets (`bucketWindow`).
+    /// primary/secondary pair, the per-bucket windows Codex reports under `rateLimits`, Antigravity's
+    /// buckets (`bucketWindow`), and a Cursor CLI account's usage limit met and its reading.
     static func windows(_ s: PlanUsageSnapshot) -> [PlanUsageWindow] {
+        limits(s) + [CursorRuntime.windows(s).reading].compactMap { $0 }
+    }
+
+    /// The windows that can say an account is spent (shared `windowsOf`): every one but a Cursor CLI
+    /// reading, which only orders accounts — past its included usage a paid plan can go on, on demand.
+    static func limits(_ s: PlanUsageSnapshot) -> [PlanUsageWindow] {
         [s.fiveHour, s.sevenDay, s.sevenDayOpus, s.sevenDaySonnet, s.month, s.monthCode, s.primary,
          s.secondary].compactMap { $0 }
             + (s.rateLimits ?? []).flatMap { [$0.primary, $0.secondary].compactMap { $0 } }
             + (s.buckets ?? []).map(bucketWindow)
+            + [CursorRuntime.windows(s).limit].compactMap { $0 }
     }
 
     /// How long an Antigravity bucket's window is, from agy's own name for it (shared

@@ -639,7 +639,7 @@ func TestKimiAccountUsageReportsEveryAccountUnderPlanUsageKimi(t *testing.T) {
 	readKimiProbe(t, usage.def)
 	readKimiProbe(t, usage.slot(work.ID).probe)
 
-	wire, err := json.Marshal(HeartbeatRequest{PlanUsage: combinePlanUsage(nil, nil, usage.snapshot())})
+	wire, err := json.Marshal(HeartbeatRequest{PlanUsage: combinePlanUsage(nil, nil, usage.snapshot(), nil)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -672,7 +672,7 @@ func TestKimiAccountUsageReportsEveryAccountUnderPlanUsageKimi(t *testing.T) {
 		t.Fatalf("tokens = %q / %q, want each account's own", svc.usages(), svcWork.usages())
 	}
 
-	if err := removeAccount(kimiAccountKind, nil, nil, usage, work.ID, nil); err != nil {
+	if err := removeAccount(kimiAccountKind, nil, nil, usage, nil, work.ID, nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := usage.snapshot(); got == nil || got.Accounts != nil {
@@ -686,14 +686,14 @@ func TestKimiAccountUsageReportsEveryAccountUnderPlanUsageKimi(t *testing.T) {
 func TestCombinePlanUsageNestsKimiAlways(t *testing.T) {
 	claude := &PlanUsage{Provider: providerClaude, FetchedAt: "2026-10-08T10:00:00Z"}
 	kimi := &PlanUsage{Provider: providerKimi, FetchedAt: "2026-10-08T11:00:00Z"}
-	if got := combinePlanUsage(claude, nil, nil); got != claude {
+	if got := combinePlanUsage(claude, nil, nil, nil); got != claude {
 		t.Fatalf("a lone Claude snapshot = %#v, want the payload itself, as before", got)
 	}
-	got := combinePlanUsage(claude, nil, kimi)
+	got := combinePlanUsage(claude, nil, kimi, nil)
 	if got.Provider != "" || got.Claude != claude || got.Kimi != kimi || got.Codex != nil || got.FetchedAt != kimi.FetchedAt {
-		t.Fatalf("combinePlanUsage(claude, nil, kimi) = %#v", got)
+		t.Fatalf("combinePlanUsage(claude, nil, kimi, nil) = %#v", got)
 	}
-	if got := combinePlanUsage(nil, nil, kimi); got.Kimi != kimi || got.Provider != "" {
+	if got := combinePlanUsage(nil, nil, kimi, nil); got.Kimi != kimi || got.Provider != "" {
 		t.Fatalf("a lone Kimi snapshot = %#v, want it under kimi", got)
 	}
 }
@@ -701,7 +701,7 @@ func TestCombinePlanUsageNestsKimiAlways(t *testing.T) {
 // A Kimi window that resets is read again shortly after, monthly ones included.
 func TestPlanUsageRefreshDueAfterAKimiWindowResets(t *testing.T) {
 	now := time.Date(2026, 10, 31, 23, 0, 0, 0, time.UTC)
-	usage := combinePlanUsage(nil, nil, &PlanUsage{Provider: providerKimi, MonthCode: &PlanUsageWindow{Utilization: 100, ResetsAt: "2026-11-01T00:00:00Z"}})
+	usage := combinePlanUsage(nil, nil, &PlanUsage{Provider: providerKimi, MonthCode: &PlanUsageWindow{Utilization: 100, ResetsAt: "2026-11-01T00:00:00Z"}}, nil)
 	if reset, ok := nextPlanUsageResetAfter(usage, now); !ok || !reset.Equal(time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("next reset = %v, %v", reset, ok)
 	}
@@ -749,7 +749,7 @@ func TestKimiPlanUsageFixture(t *testing.T) {
 					usage.slot(id).probe.store(read)
 				}
 			}
-			wire, err := json.Marshal(combinePlanUsage(nil, nil, usage.snapshot()))
+			wire, err := json.Marshal(combinePlanUsage(nil, nil, usage.snapshot(), nil))
 			if err != nil {
 				t.Fatal(err)
 			}

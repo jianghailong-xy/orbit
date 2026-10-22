@@ -1,0 +1,227 @@
+{
+ "checks": [
+  {
+   "check": "two nodes: the first VM and the second",
+   "ok": true,
+   "value": [
+    "orbit-mr-lab",
+    "orbit-mr-lab-2"
+   ]
+  },
+  {
+   "check": "orbit-mr-lab is Ready",
+   "ok": true,
+   "value": "True"
+  },
+  {
+   "check": "orbit-mr-lab-2 is Ready",
+   "ok": true,
+   "value": "True"
+  }
+ ],
+ "endedAt": "2026-10-19T14:22:36.829+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "facts",
+ "result": {
+  "csiDaemonSets": [
+   {
+    "name": "rbd.csi.ceph.com-nodeplugin",
+    "tolerations": null
+   }
+  ],
+  "csiDriver": {
+   "attachRequired": true,
+   "fsGroupPolicy": "File",
+   "podInfoOnMount": true,
+   "requiresRepublish": false,
+   "seLinuxMount": true,
+   "storageCapacity": false,
+   "volumeLifecycleModes": [
+    "Persistent"
+   ]
+  },
+  "csiPods": [
+   {
+    "images": [
+     "quay.io/cephcsi/ceph-csi-operator:v1.1.0@sha256:c42c95c36fa257266571ff7542c3e350bb93b152f8865538c8929eb2e2dbe7c6"
+    ],
+    "name": "ceph-csi-operator-controller-manager-6f845d96cb-th47r",
+    "node": "orbit-mr-lab"
+   },
+   {
+    "images": [
+     "quay.io/cephcsi/cephcsi:v3.18.0@sha256:0a92e5c8c153cd17b2f6d110de336651df0e8c1040fcb6a175ef66b131018937",
+     "registry.k8s.io/sig-storage/csi-attacher:v4.13.0@sha256:d1a26170efed45491074ca4545c81844eee2b9043fb885ac01fb4aed6f8b72d2",
+     "registry.k8s.io/sig-storage/csi-provisioner:v6.3.0@sha256:a4b0b1a37605b7b04a293e136edf7006ec1786a8eb3f4e5a945f81d667dcc371",
+     "registry.k8s.io/sig-storage/csi-resizer:v2.2.1@sha256:ea1d25e23479000c7e8eeb92d827df66258df4e482ca054c5e7ce3fc0f5c41a5"
+    ],
+    "name": "rbd.csi.ceph.com-ctrlplugin-8cf5bfdc5-qfkcf",
+    "node": "orbit-mr-lab"
+   },
+   {
+    "images": [
+     "quay.io/cephcsi/cephcsi:v3.18.0@sha256:0a92e5c8c153cd17b2f6d110de336651df0e8c1040fcb6a175ef66b131018937",
+     "registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.18.0@sha256:b7fefd08651f00ac4df1a196ed4c621c2451fbb899297fe9fad9e36c667af0c0"
+    ],
+    "name": "rbd.csi.ceph.com-nodeplugin-9smf6",
+    "node": "orbit-mr-lab-2"
+   },
+   {
+    "images": [
+     "quay.io/cephcsi/cephcsi:v3.18.0@sha256:0a92e5c8c153cd17b2f6d110de336651df0e8c1040fcb6a175ef66b131018937",
+     "registry.k8s.io/sig-storage/csi-node-driver-registrar:v2.18.0@sha256:b7fefd08651f00ac4df1a196ed4c621c2451fbb899297fe9fad9e36c667af0c0"
+    ],
+    "name": "rbd.csi.ceph.com-nodeplugin-bpq68",
+    "node": "orbit-mr-lab"
+   }
+  ],
+  "kubernetes": {
+   "client": "v1.36.5",
+   "server": "v1.36.5+k3s1"
+  },
+  "namespace": {
+   "labels": {
+    "kubernetes.io/metadata.name": "orbit-mr-test"
+   },
+   "name": "orbit-mr-test",
+   "uid": "73ff6574-5cb3-4530-bf84-79d6af41d57e"
+  },
+  "nodes": [
+   {
+    "addresses": [
+     {
+      "address": "10.77.0.1",
+      "type": "InternalIP"
+     },
+     {
+      "address": "orbit-mr-lab",
+      "type": "Hostname"
+     }
+    ],
+    "allocatable": {
+     "cpu": "3",
+     "ephemeral-storage": "36382345975",
+     "hugepages-1Gi": "0",
+     "hugepages-2Mi": "0",
+     "memory": "2654212Ki",
+     "pods": "110"
+    },
+    "capacity": {
+     "cpu": "4",
+     "ephemeral-storage": "39477372Ki",
+     "hugepages-1Gi": "0",
+     "hugepages-2Mi": "0",
+     "memory": "6062084Ki",
+     "pods": "110"
+    },
+    "labels": {
+     "kubernetes.io/arch": "amd64",
+     "kubernetes.io/hostname": "orbit-mr-lab",
+     "kubernetes.io/os": "linux",
+     "node-role.kubernetes.io/control-plane": "true"
+    },
+    "name": "orbit-mr-lab",
+    "nodeInfo": {
+     "architecture": "amd64",
+     "containerRuntimeVersion": "containerd://2.3.4-k3s1.36",
+     "kernelVersion": "7.0.0-34-generic",
+     "kubeletVersion": "v1.36.5+k3s1",
+     "osImage": "Ubuntu 26.04.1 LTS"
+    },
+    "taints": [],
+    "uid": "2aacc9d7-fc60-4ef9-97a4-5a776d40c386",
+    "unschedulable": false
+   },
+   {
+    "addresses": [
+     {
+      "address": "10.77.0.2",
+      "type": "InternalIP"
+     },
+     {
+      "address": "orbit-mr-lab-2",
+      "type": "Hostname"
+     }
+    ],
+    "allocatable": {
+     "cpu": "1750m",
+     "ephemeral-storage": "27009220564",
+     "hugepages-1Gi": "0",
+     "hugepages-2Mi": "0",
+     "memory": "2185952Ki",
+     "pods": "110"
+    },
+    "capacity": {
+     "cpu": "2",
+     "ephemeral-storage": "28620Mi",
+     "hugepages-1Gi": "0",
+     "hugepages-2Mi": "0",
+     "memory": "2972384Ki",
+     "pods": "110"
+    },
+    "labels": {
+     "kubernetes.io/arch": "amd64",
+     "kubernetes.io/hostname": "orbit-mr-lab-2",
+     "kubernetes.io/os": "linux"
+    },
+    "name": "orbit-mr-lab-2",
+    "nodeInfo": {
+     "architecture": "amd64",
+     "containerRuntimeVersion": "containerd://2.3.4-k3s1.36",
+     "kernelVersion": "7.0.0-34-generic",
+     "kubeletVersion": "v1.36.5+k3s1",
+     "osImage": "Ubuntu 26.04.1 LTS"
+    },
+    "taints": [],
+    "uid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+    "unschedulable": false
+   }
+  ],
+  "podsInTheNamespaceAtStart": [
+   {
+    "deleting": false,
+    "finalizers": null,
+    "name": "lab-20261017061552-b",
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "bbc3ff55-2aee-47da-9c43-57f708e36bef"
+   },
+   {
+    "deleting": false,
+    "finalizers": [
+     "orbit.dev/managed-runner-stop-report"
+    ],
+    "name": "mr-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+    "node": "orbit-mr-lab",
+    "phase": "Failed",
+    "uid": "52ed1c8a-1ba8-43b5-a563-347bb26f9038"
+   }
+  ],
+  "storageClass": {
+   "allowVolumeExpansion": false,
+   "parameters": {
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "csi.storage.k8s.io/controller-expand-secret-name": "orbit-mr-csi-rbd",
+    "csi.storage.k8s.io/controller-expand-secret-namespace": "ceph-csi-operator-system",
+    "csi.storage.k8s.io/controller-publish-secret-name": "orbit-mr-csi-rbd",
+    "csi.storage.k8s.io/controller-publish-secret-namespace": "ceph-csi-operator-system",
+    "csi.storage.k8s.io/fstype": "ext4",
+    "csi.storage.k8s.io/node-stage-secret-name": "orbit-mr-csi-rbd",
+    "csi.storage.k8s.io/node-stage-secret-namespace": "ceph-csi-operator-system",
+    "csi.storage.k8s.io/provisioner-secret-name": "orbit-mr-csi-rbd",
+    "csi.storage.k8s.io/provisioner-secret-namespace": "ceph-csi-operator-system",
+    "imageFeatures": "layering",
+    "mounter": "rbd",
+    "pool": "orbit-mr-rbd",
+    "tryOtherMounters": "false"
+   },
+   "provisioner": "rbd.csi.ceph.com",
+   "reclaimPolicy": "Retain",
+   "volumeBindingMode": "Immediate"
+  }
+ },
+ "seconds": 0.4,
+ "startedAt": "2026-10-19T14:22:36.394+00:00",
+ "step": "cluster"
+}

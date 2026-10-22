@@ -16,9 +16,11 @@ const EXHAUSTED_UTILIZATION = 100;
 export const CODEX_DEFAULT_ACCOUNT = 'default';
 
 /**
- * Every rate-limit window in one snapshot: the named Claude windows, Kimi Code's monthly pair, the
- * Codex primary/secondary pair, the per-bucket windows Codex reports under `rateLimits`, and
- * Antigravity's buckets read as the windows they are (bucketWindow).
+ * Every rate-limit window in one snapshot that can say its account is spent: the named Claude
+ * windows, Kimi Code's monthly pair, the Codex primary/secondary pair, the per-bucket windows Codex
+ * reports under `rateLimits`, Antigravity's buckets read as the windows they are (bucketWindow), and
+ * a Cursor CLI account's usage limit met (cursorWindows) — but not Cursor's reading, which only
+ * orders accounts (windowsWithLength).
  */
 function windowsOf(snapshot: PlanUsageSnapshot): PlanUsageWindow[] {
   const windows = [
@@ -32,8 +34,39 @@ function windowsOf(snapshot: PlanUsageSnapshot): PlanUsageWindow[] {
     snapshot.secondary,
     ...(snapshot.rateLimits ?? []).flatMap((bucket) => [bucket.primary, bucket.secondary]),
     ...(snapshot.buckets ?? []).map(bucketWindow),
+    cursorWindows(snapshot).limit,
   ];
   return windows.filter((w): w is PlanUsageWindow => !!w);
+}
+
+/**
+ * A Cursor CLI account's included usage (PlanUsageIncludedUsage) as the windows the rest of this file
+ * weighs, each as long as its period when Cursor names one:
+ *
+ * - `limit`: a turn on the account met Cursor's usage limit this period, so it is spent until the
+ *   included usage resets — or spent with no reset to go by, when the snapshot names none after that
+ *   turn (docs/cursor-runtime-contract.md §11: the limit is judged by the turns that meet it). A limit
+ *   met before the period began is over, and none.
+ * - `reading`: the share used, which Cursor reports only above 0 to mean anything. It orders accounts —
+ *   which goes to waste first, which is nearly spent, which has more room — and never says one is
+ *   spent: past its included usage a paid plan can go on, on demand.
+ */
+function cursorWindows(snapshot: PlanUsageSnapshot): { limit?: PlanUsageWindow; reading?: PlanUsageWindow } {
+  const included = snapshot.includedUsage;
+  if (!included || typeof included !== 'object') return {};
+  const mins = CURSOR_PERIOD_MINS[included.period ?? ''];
+  const length = mins ? { windowDurationMins: mins } : {};
+  const resets = Date.parse(included.resetsAt ?? '');
+  const reached = Date.parse(included.limitReachedAt ?? '');
+  const used = included.percentUsed;
+  return {
+    ...(Number.isNaN(reached) || reached < Date.parse(included.startsAt ?? '')
+      ? {}
+      : { limit: { utilization: EXHAUSTED_UTILIZATION, ...(resets > reached ? { resetsAt: included.resetsAt } : {}), ...length } }),
+    ...(typeof used === 'number' && Number.isFinite(used) && used > 0
+      ? { reading: { utilization: used, ...(Number.isNaN(resets) ? {} : { resetsAt: included.resetsAt }), ...length } }
+      : {}),
+  };
 }
 
 /** How long an Antigravity bucket's window is, from agy's own name for it: null for one it names
@@ -71,8 +104,12 @@ const SHORT_WINDOW_MINS = 5 * 60;
  *  all its length decides here (quotaExpiresAt takes the longest window, quotaNearLimit a short one). */
 const MONTH_MINS = 30 * 24 * 60;
 
+/** How long a Cursor CLI period is, from Cursor's own name for it (PlanUsageIncludedUsage.period). */
+const CURSOR_PERIOD_MINS: Record<string, number> = { weekly: 7 * 24 * 60, monthly: MONTH_MINS };
+
 /** Every window of one snapshot with its length in minutes: Claude's and Kimi Code's named windows by
- *  their names, Codex's as they report it (null when one does not). */
+ *  their names, Codex's as they report it (null when one does not), and a Cursor CLI account's usage
+ *  limit met and its reading, as long as its period (cursorWindows). */
 function windowsWithLength(snapshot: PlanUsageSnapshot): Array<{ window: PlanUsageWindow; mins: number | null }> {
   const named: Array<[PlanUsageWindow | undefined, number]> = [
     [snapshot.fiveHour, 5 * 60],
@@ -82,11 +119,14 @@ function windowsWithLength(snapshot: PlanUsageSnapshot): Array<{ window: PlanUsa
     [snapshot.month, MONTH_MINS],
     [snapshot.monthCode, MONTH_MINS],
   ];
+  const cursor = cursorWindows(snapshot);
   const reported = [
     snapshot.primary,
     snapshot.secondary,
     ...(snapshot.rateLimits ?? []).flatMap((bucket) => [bucket.primary, bucket.secondary]),
     ...(snapshot.buckets ?? []).map(bucketWindow),
+    cursor.limit,
+    cursor.reading,
   ];
   return [
     ...named.flatMap(([window, mins]) => (window ? [{ window, mins: window.windowDurationMins ?? mins }] : [])),
@@ -159,10 +199,10 @@ export function codexAccountSnapshot(
 
 /**
  * The snapshot of `provider`'s quota a run spends. For an engine whose CLI keeps a login per
- * directory — Codex, Claude — that is one account's: `account` names it (accountOfEnv) and defaults to
- * Default, the only account there was before accounts; null is a run that spends no account's
- * subscription, which no snapshot describes. Both engines' runners report their other accounts the
- * same way, under the snapshot's `accounts` (codexAccountSnapshot).
+ * directory — Codex, Claude, Antigravity, Kimi Code, Cursor CLI — that is one account's: `account`
+ * names it (accountOfEnv) and defaults to Default, the only account there was before accounts; null is
+ * a run that spends no account's subscription, which no snapshot describes. Their runners all report
+ * their other accounts the same way, under the snapshot's `accounts` (codexAccountSnapshot).
  */
 function spentSnapshot(
   usage: PlanUsage,
@@ -215,7 +255,8 @@ const OWN_CREDENTIAL_KEYS: Partial<Record<string, readonly string[]>> = {
   antigravity: ['GEMINI_API_KEY'],
   kimi: ['KIMI_MODEL_NAME', 'KIMI_MODEL_API_KEY'],
   // A key or token in the environment signs Cursor CLI in by itself (docs/cursor-runtime-contract.md
-  // §2.3): no account's login is spent.
+  // §2.3): no account's login is spent — unless the run names an added account, whose login the runner
+  // hands the CLI in their place (accountOfEnv).
   cursor: ['CURSOR_API_KEY', 'CURSOR_AUTH_TOKEN'],
 };
 
@@ -268,6 +309,12 @@ export function isAccountEngine(engine: string | null | undefined): engine is Ac
  * null means the session spends no account's subscription this runner reports: a credential of its
  * own (OWN_CREDENTIAL_KEYS — what the runner's hasInjectedCredentials reads), or a directory none
  * of its accounts lives in.
+ *
+ * Cursor CLI is the one engine where an account the session names outranks a credential in its
+ * environment: the runner hands the CLI that account's login in place of a CURSOR_API_KEY or
+ * CURSOR_AUTH_TOKEN the workspace set (docs/cursor-runtime-contract.md §16.3; src/runner-go
+ * cursorLaunchCredential), so the run spends that account. Default named counts as none named: the
+ * runner reads Default's login only for a run whose environment brings no credential.
  */
 export function accountOfEnv(
   provider: string | null | undefined,
@@ -281,17 +328,24 @@ export function accountOfEnv(
   };
   const own = OWN_CREDENTIAL_KEYS[provider ?? ''];
   const defaultDir = ENGINE_DEFAULT_DIR[provider ?? ''];
-  if (!own || !defaultDir) return null;
-  const ownCredential = OWN_CREDENTIAL_NEEDS_ALL.has(provider ?? '')
+  if (!own || !defaultDir || !isAccountEngine(provider)) return null;
+  const accountAt = (dir: string) => {
+    const where = cleanAbsolutePath(dir);
+    if (where === null) return null;
+    return (accounts ?? []).find((account) => cleanAbsolutePath(accountDir(account)) === where)?.id ?? null;
+  };
+  const named = set(ACCOUNT_DIR_VAR[provider]);
+  if (provider === AgentProvider.CURSOR && named !== undefined) {
+    const account = accountAt(named);
+    if (account !== CODEX_DEFAULT_ACCOUNT) return account;
+  }
+  const ownCredential = OWN_CREDENTIAL_NEEDS_ALL.has(provider)
     ? own.every((key) => set(key))
     : Object.keys(vars).some((key) => own.includes(key) && set(key));
   if (ownCredential) return null;
-  if (!isAccountEngine(provider)) return null;
-  const dir = set(ACCOUNT_DIR_VAR[provider]) ?? defaultDir(set('HOME'));
+  const dir = named ?? defaultDir(set('HOME'));
   if (dir === undefined) return CODEX_DEFAULT_ACCOUNT;
-  const where = cleanAbsolutePath(dir);
-  if (where === null) return null;
-  return (accounts ?? []).find((account) => cleanAbsolutePath(accountDir(account)) === where)?.id ?? null;
+  return accountAt(dir);
 }
 
 /**
@@ -319,6 +373,11 @@ export function codexAccountOfEnv(
  * For Codex and Claude the question is about one account, `account`: the one the run spends
  * (accountOfEnv), Default when omitted, and null for a run spending no account's subscription —
  * about which this runner reports nothing.
+ *
+ * A Cursor CLI account is reported only once its snapshot says when its included usage resets
+ * (PlanUsageIncludedUsage.resetsAt). Cursor's dashboard never says an account cannot run — only a
+ * turn that meets its limit does — so that reset is what there is to judge by: without it, a limit
+ * met holds nothing back and names no moment to try again.
  */
 export function planUsageReported(
   usage: PlanUsage | null | undefined,
@@ -326,7 +385,29 @@ export function planUsageReported(
   account?: string | null,
 ): boolean {
   if (!usage) return false;
-  return spentSnapshot(usage, provider, account) !== undefined;
+  const snapshot = spentSnapshot(usage, provider, account);
+  if (provider === AgentProvider.CURSOR) return !Number.isNaN(Date.parse(snapshot?.includedUsage?.resetsAt ?? ''));
+  return snapshot !== undefined;
+}
+
+/**
+ * When a run on `account` that has just met `provider`'s usage limit can run again, by this runner's
+ * snapshot: {@link planUsageBlockedUntil}'s answer — and for Cursor CLI, whose snapshot says an
+ * account is spent only once the runner has seen a turn on it meet the limit (the turn that just
+ * ended is reported on its own, ahead of the snapshot that counts it), the reset of the account's
+ * included usage (PlanUsageIncludedUsage.resetsAt): when Cursor gives the account its usage back.
+ * Null when neither names a moment after `now`.
+ */
+export function usageLimitResetsAt(
+  usage: PlanUsage | null | undefined,
+  provider: string,
+  now: Date,
+  account?: string | null,
+): Date | null {
+  const blocked = planUsageBlockedUntil(usage, provider, now, account);
+  if (blocked || provider !== AgentProvider.CURSOR || !usage) return blocked;
+  const resets = Date.parse(spentSnapshot(usage, provider, account)?.includedUsage?.resetsAt ?? '');
+  return resets > now.getTime() ? new Date(resets) : null;
 }
 
 /**
@@ -414,19 +495,28 @@ export function withEnginePlanUsage(
  *
  * Null when there is nothing to choose between — fewer than two accounts reported, or none signed in —
  * and the session runs where it always did.
+ *
+ * With `defaultRemoved` — the owner removed this engine's Default from Orbit, and the runner reports
+ * another account — there is no such place: Default is no candidate, and the choice is among the
+ * accounts that remain, the only one of them included. With every one of them signed out it is the
+ * first of them, whose sign-in the session then waits on. Null only when none remains.
  */
 export function accountToStartOn(
   engine: AccountEngine,
   accounts: readonly RunnerEngineAccount[] | null | undefined,
   usage: PlanUsage | null | undefined,
   now: Date,
+  options: { defaultRemoved?: boolean } = {},
 ): string | null {
-  if (!accounts || accounts.length < 2) return null;
-  const candidates = rankAccounts(engine, accounts, usage, now);
+  const removed = options.defaultRemoved === true;
+  const pool = removed ? accounts?.filter((account) => account.id !== CODEX_DEFAULT_ACCOUNT) : accounts;
+  if (!pool || pool.length < (removed ? 1 : 2)) return null;
+  const candidates = rankAccounts(engine, pool, usage, now);
   const usable = candidates.filter((c) => c.spentUntil === null);
   if (usable.length > 0) return usable[0].id;
   const first = [...candidates].sort((a, b) => (a.spentUntil ?? 0) - (b.spentUntil ?? 0) || byAccountId(a, b))[0];
-  return first?.id ?? null;
+  if (first) return first.id;
+  return removed ? [...pool].sort(byAccountId)[0].id : null;
 }
 
 /** {@link accountToStartOn} for Codex. */
@@ -518,11 +608,13 @@ function rankAccounts(
       const resets = spent.map((w) => Date.parse(w.resetsAt ?? ''));
       const pause = Date.parse(account.pausedUntil ?? '');
       const spentUntil = spent.length === 0 ? null : resets.some(Number.isNaN) ? Number.POSITIVE_INFINITY : Math.max(...resets);
+      // Room is weighed on every window, a Cursor CLI reading among them (windowsWithLength).
+      const weighed = snapshot ? windowsWithLength(snapshot).map(({ window }) => window.utilization) : [];
       return {
         id: account.id,
         nearLimit: quotaNearLimit(snapshot, now),
         expiresAt: quotaExpiresAt(snapshot, now),
-        tightest: windows.length > 0 ? Math.max(...windows.map((w) => w.utilization)) : Number.POSITIVE_INFINITY,
+        tightest: weighed.length > 0 ? Math.max(...weighed) : Number.POSITIVE_INFINITY,
         spentUntil: pause > now.getTime() ? Math.max(pause, spentUntil ?? 0) : spentUntil,
       };
     })

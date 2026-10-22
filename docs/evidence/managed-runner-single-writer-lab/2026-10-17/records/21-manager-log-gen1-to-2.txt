@@ -1,0 +1,3 @@
+[Nest] 78692  - 10/18/2026, 3:50:53 AM    WARN [ManagedRunnerManager] managed runner 01a14b6a-bbb7-74fc-84d5-24498c3e64a6: ADMISSION_GUARD_MISSING: a Pod the single-Pod admission guard must refuse was admitted by a dry run
+[Nest] 78692  - 10/18/2026, 3:57:12 AM    WARN [ManagedRunnerManager] managed runner 01a14b6a-bbb7-74fc-84d5-24498c3e64a6: POD_TERMINATED: Pod 38693fcf-9066-4dfa-9c27-c39b2124f3c9 of generation 1 stopped in STARTING with exit code 0, not out of memory; starting generation 2 on the same volume in 4 s (attempt 1 of 20)
+[Nest] 78692  - 10/18/2026, 3:57:17 AM    WARN [ManagedRunnerManager] managed runner 01a14b6a-bbb7-74fc-84d5-24498c3e64a6: generation 1 retired (OBSERVED_STOP); generation 2 reserved

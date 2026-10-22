@@ -37,7 +37,10 @@
  *       (6) a runner with nothing installed and signed in is not READY: MODEL_UNAVAILABLE, and a
  *           first session on any engine is refused with it, the Claude floor included; a runtime
  *           signed in afterwards makes it READY on its own;
- *       (7) the server's eligibility decision governs both sign-in and explicit ensure.
+ *       (7) the server's eligibility decision governs both sign-in and explicit ensure;
+ *       (8) a model key of the owner's own is supply: with no runtime signed in, it makes the runner
+ *           READY, and the first session with nothing named starts on it and is claimed; another
+ *           account's key, a disabled key and a shared key do not.
  *
  * (C) The manager, on the test's clock: MODEL_UNAVAILABLE until the startup deadline, then FAILED
  *     and retryable; a retry once a runtime is signed in is READY with that runtime.
@@ -289,6 +292,7 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
       CLAUDE_CONFIG_DIR: path.join(home, '.claude'),
       DATABASE_URL: url,
       JWT_SECRET,
+      PROVIDER_SECRET_KEY: randomBytes(32).toString('hex'),
       ORBIT_MANAGED_RUNNERS_ENABLED: 'true',
       ORBIT_MANAGED_RUNNERS_PROFILE: profilePath,
     };
@@ -672,6 +676,67 @@ test('managed runners at sign-in: off changes nothing; on, sign-in records inten
     // As shipped, every account: the next sign-in records it.
     assertSignedIn(await login(outsider.email), 'the same account under the shipped decision');
     assert.deepEqual(await countsOf(outsider.id), { mappings: 1, runners: 1, workspaces: 1 });
+  });
+
+  await t.test("(B8) the owner's own model key is supply: READY on it, the first session starts on it; another's, a disabled or a shared key is not", async () => {
+    const user = await account('keyonly');
+    const token = (await login(user.email)).json.accessToken as string;
+    const other = await account('keyother');
+    const keyBody = (label: string, extra: Record<string, unknown> = {}) =>
+      ({ label, presetSlug: 'deepseek', baseUrl: 'https://api.deepseek.com/anthropic', apiKey: `sk-pg-${label.replace(/ /g, '-')}-not-a-key`, ...extra });
+    // Keys that are not this owner's to run on, or not enabled.
+    const others = await call(server, 'POST', '/api/providers/mine', await bearer(other.id), keyBody('another account'));
+    assert.equal(others.status, 201, others.text);
+    const disabled = await call(server, 'POST', '/api/providers/mine', token, keyBody('disabled', { enabled: false }));
+    assert.equal(disabled.status, 201, disabled.text);
+    const shared = await db.modelProvider.create({
+      data: { slug: `shared-${RUN}`, label: 'shared', runtime: 'claude', baseUrl: 'https://api.deepseek.com/anthropic', apiKeyEnc: 'unused', presetSlug: 'deepseek', ownerId: null },
+    });
+    // Claude Code and Codex installed on the runner, neither signed in.
+    const signedOut = [engine('claude', { auth: 'no' }), engine('codex', { auth: 'no' })];
+    const waiting = await bringUp(user.id, signedOut, 'STARTING');
+    assert.equal((waiting.lastError as { code: string }).code, 'MODEL_UNAVAILABLE');
+    await sleep(2_500); // manager passes over the keys above
+    const still = (await mappingOf(user.id))!;
+    assert.equal(still.managementState, 'STARTING', "another account's key, a disabled one and a shared one are no supply");
+    assert.equal(still.initialProvider, null);
+    const unavailable = await statusOf(token);
+    assert.equal(unavailable.reason.code, 'MODEL_UNAVAILABLE');
+    assert.match(unavailable.reason.message, /add a model key/);
+
+    // The owner's own enabled key: READY at the next pass, on it.
+    const own = await call(server, 'POST', '/api/providers/mine', token, keyBody('own'));
+    assert.equal(own.status, 201, own.text);
+    assert.equal(new Set([others.json.slug, disabled.json.slug, shared.slug, own.json.slug]).size, 4);
+    await heartbeat(waiting.runnerId, signedOut);
+    const ready = await until('READY on the key', async () => {
+      const m = await mappingOf(user.id);
+      return m?.managementState === 'READY' ? m : null;
+    });
+    assert.equal(ready.initialProvider, own.json.slug);
+    assert.equal(ready.lastError, null);
+    const status = await statusOf(token);
+    assert.equal(status.usable, true);
+    assert.equal(status.initialProvider, own.json.slug);
+
+    // The default workspace starts on that key, on the engine the key runs on.
+    const [workspace] = (await call(server, 'GET', '/api/workspaces', token)).json;
+    assert.equal(toUuid(workspace.id), ready.defaultWorkspaceId);
+    assert.equal(workspace.lastProvider, own.json.slug);
+    assert.equal(workspace.lastEngine, 'claude');
+    assert.equal(workspace.providerBuiltin, false);
+    // A first session with nothing named starts on the key, and the managed runner claims it.
+    const session = await call(server, 'POST', '/api/sessions', token, { workspaceId: workspace.id, prompt: 'hello', title: 'first session on a key' });
+    assert.equal(session.status, 201, session.text);
+    assert.equal(session.json.provider, own.json.slug);
+    assert.equal(session.json.engine, 'claude');
+    const claim = await call(server, 'GET', '/api/runner/sessions/claim', runnerCredential(ready.runnerId), undefined, instanceHeaders(ready.runnerId));
+    assert.equal(claim.status, 200, claim.text);
+    assert.equal(toUuid(claim.json.sessionId), toUuid(session.json.id), 'the managed runner claimed the first session');
+    // The claim names the runtime that drives it, and hands it the key's endpoint and the key itself.
+    assert.equal(claim.json.provider, 'claude');
+    assert.equal(claim.json.agent.env.ANTHROPIC_BASE_URL, 'https://api.deepseek.com/anthropic');
+    assert.equal(claim.json.agent.env.ANTHROPIC_AUTH_TOKEN, 'sk-pg-own-not-a-key');
   });
 
   await t.test('(B) shutdown: the real Kubernetes client was never built', async () => {

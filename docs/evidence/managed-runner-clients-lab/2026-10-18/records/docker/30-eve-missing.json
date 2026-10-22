@@ -1,0 +1,15 @@
+{
+  "changes": [
+    [
+      "2026-10-18T06:39:09Z",
+      {
+        "desiredState": "RUNNING",
+        "managementState": "FAILED",
+        "reason": "PVC_MISSING",
+        "revision": 68
+      }
+    ]
+  ],
+  "owner": "eve",
+  "reached": "FAILED"
+}

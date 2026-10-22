@@ -1,0 +1,95 @@
+{"n": 1, "how": "kill", "sentAt": "2026-10-18T06:05:35.151+00:00", "generation": 3, "state": "STARTING", "pod": "762bae1f", "terminated": {"exitCode": 137, "reason": "Error"}, "after": {"management_state": "STARTING", "generation": 3, "attempt": 0}}
+{"n": 2, "how": "kill", "sentAt": "2026-10-18T06:05:59.460+00:00", "generation": 4, "state": "STARTING", "pod": "537f0f95", "terminated": {"exitCode": 137, "reason": "Error"}, "after": {"management_state": "STARTING", "generation": 4, "attempt": 1}}
+{"n": 3, "how": "kill", "sentAt": "2026-10-18T06:06:19.507+00:00", "generation": 5, "state": "STARTING", "pod": "dd04807e", "terminated": {"exitCode": 137, "reason": "Error"}, "after": {"management_state": "STARTING", "generation": 5, "attempt": 2}}
+{"n": 4, "how": "kill", "sentAt": "2026-10-18T06:06:50.324+00:00", "generation": 6, "state": "STARTING", "pod": "d28770f1", "terminated": {"exitCode": 137, "reason": "Error"}, "after": {"management_state": "STARTING", "generation": 6, "attempt": 3}}
+{"n": 5, "how": "kill", "sentAt": "2026-10-18T06:07:40.912+00:00", "generation": 7, "state": "STARTING", "pod": "c7894069", "terminated": {"exitCode": 137, "reason": "Error"}, "after": {"management_state": "STARTING", "generation": 7, "attempt": 4}}
+{
+  "owner": "wen",
+  "stops": [
+    {
+      "after": {
+        "attempt": 0,
+        "generation": 3,
+        "management_state": "STARTING"
+      },
+      "generation": 3,
+      "how": "kill",
+      "n": 1,
+      "pod": "762bae1f",
+      "sentAt": "2026-10-18T06:05:35.151+00:00",
+      "state": "STARTING",
+      "terminated": {
+        "exitCode": 137,
+        "reason": "Error"
+      }
+    },
+    {
+      "after": {
+        "attempt": 1,
+        "generation": 4,
+        "management_state": "STARTING"
+      },
+      "generation": 4,
+      "how": "kill",
+      "n": 2,
+      "pod": "537f0f95",
+      "sentAt": "2026-10-18T06:05:59.460+00:00",
+      "state": "STARTING",
+      "terminated": {
+        "exitCode": 137,
+        "reason": "Error"
+      }
+    },
+    {
+      "after": {
+        "attempt": 2,
+        "generation": 5,
+        "management_state": "STARTING"
+      },
+      "generation": 5,
+      "how": "kill",
+      "n": 3,
+      "pod": "dd04807e",
+      "sentAt": "2026-10-18T06:06:19.507+00:00",
+      "state": "STARTING",
+      "terminated": {
+        "exitCode": 137,
+        "reason": "Error"
+      }
+    },
+    {
+      "after": {
+        "attempt": 3,
+        "generation": 6,
+        "management_state": "STARTING"
+      },
+      "generation": 6,
+      "how": "kill",
+      "n": 4,
+      "pod": "d28770f1",
+      "sentAt": "2026-10-18T06:06:50.324+00:00",
+      "state": "STARTING",
+      "terminated": {
+        "exitCode": 137,
+        "reason": "Error"
+      }
+    },
+    {
+      "after": {
+        "attempt": 4,
+        "generation": 7,
+        "management_state": "STARTING"
+      },
+      "generation": 7,
+      "how": "kill",
+      "n": 5,
+      "pod": "c7894069",
+      "sentAt": "2026-10-18T06:07:40.912+00:00",
+      "state": "STARTING",
+      "terminated": {
+        "exitCode": 137,
+        "reason": "Error"
+      }
+    }
+  ]
+}

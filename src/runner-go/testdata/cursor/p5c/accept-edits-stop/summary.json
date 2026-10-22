@@ -1,0 +1,117 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": [
+    {
+      "input": {
+        "command": "touch stopped.txt"
+      },
+      "toolName": "Bash",
+      "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+      "withdrawn": true
+    }
+  ],
+  "checks": [
+    {
+      "name": "request-answered-cancelled-once",
+      "pass": true,
+      "detail": "requests [[\"`touch stopped.txt`\" \"cancelled\"]]"
+    },
+    {
+      "name": "card-withdrawn",
+      "pass": true,
+      "detail": "cards [{ID:approval-1 ToolName:Bash ToolUseID:call-<UUID_2>-0\nfc_<UUID_3>_0 Input:map[command:touch stopped.txt] Withdrawn:true}]"
+    },
+    {
+      "name": "command-did-not-run",
+      "pass": true,
+      "detail": "stopped.txt absent"
+    },
+    {
+      "name": "turn-interrupted",
+      "pass": true,
+      "detail": "completions [{LeaseOwner: TurnID:turn-1 Status:INTERRUPTED Result:I'll create `stopped.txt` and stop there. Error: ShellExitCode:\u003cnil\u003e ShellOutput:\u003cnil\u003e Subtype:interrupted NumTurns:1 CostUsd:0 Usage:\u003cnil\u003e ModelUsage:map[] UsageUnknown:true RuntimeSessionID:<UUID_1> IsolationStatus: ChangedFiles:[] BaseSha: BranchSha: ChangedDiff:[] WorktreeDirty:false BranchMerged:false WorktreeBranch:}]"
+    },
+    {
+      "name": "session-cancel-sent",
+      "pass": true,
+      "detail": "1 session/cancel"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.config/cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.config/cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.local/share/cursor-agent",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.local/share/cursor-agent: no such file or directory)"
+    }
+  ],
+  "completions": [
+    {
+      "error": "",
+      "result": "I'll create `stopped.txt` and stop there.",
+      "status": "INTERRUPTED",
+      "subtype": "interrupted",
+      "turn": "turn-1"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+        "input": {
+          "command": "touch stopped.txt"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Interrupted: the turn was stopped before this tool finished; it may have run in part.",
+        "isError": true,
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    }
+  ],
+  "facts": {},
+  "mode": "acceptEdits",
+  "process": "session",
+  "processes": [
+    "<CLI>/cursor-agent --use-system-ca <CLI>/index.js acp --disable-auto-update --disable-indexing --disable-project-configs",
+    "<ORBIT> mcp",
+    "<CLI>/node <CLI>/index.js worker-server"
+  ],
+  "prompts": [
+    4
+  ],
+  "scenario": "accept-edits-stop",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}

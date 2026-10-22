@@ -1,0 +1,9 @@
+Test Case '-[T07MacProbeUITests.ReplayTests test19DockerVolumeInUse]' started.
+Test Case '-[T07MacProbeUITests.ReplayTests test19DockerVolumeInUse]' passed (114.949 seconds).
+Test Case '-[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' started.
+    t =    43.36s Added attachment named '20b-failed-volume-gone-no-retry'
+Test Case '-[T07MacProbeUITests.ReplayTests test20DockerVolumeRestoredRetry]' passed (118.211 seconds).
+	 Executed 2 tests, with 0 failures (0 unexpected) in 233.160 (233.163) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 233.160 (233.164) seconds
+	 Executed 2 tests, with 0 failures (0 unexpected) in 233.160 (233.165) seconds
+** TEST SUCCEEDED **

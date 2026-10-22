@@ -1,0 +1,87 @@
+{
+ "checks": [
+  {
+   "check": "the switch is unset while the administrator signs up",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "root is the bootstrapped administrator",
+   "ok": true,
+   "value": true
+  },
+  {
+   "check": "no managed runner row: the administrator has no mapping",
+   "ok": true,
+   "value": 0
+  }
+ ],
+ "endedAt": "2026-10-19T14:25:42.145+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "setup",
+ "result": {
+  "root": {
+   "admin": true,
+   "at": "2026-10-19T14:25:42.028+00:00",
+   "bootstrap": {
+    "ms": 62.4,
+    "status": 201
+   },
+   "owner": "root",
+   "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+   },
+   "user": {
+    "email": "t08x-root@lab.invalid",
+    "id": "34ifVNGHAzpjknx1eC9O5"
+   }
+  },
+  "server": {
+   "apiEnvironmentNames": [
+    "CORS_ORIGINS",
+    "DATABASE_URL",
+    "HOME",
+    "INVOCATION_ID",
+    "JWT_SECRET",
+    "LANG",
+    "MEMORY_PRESSURE_WATCH",
+    "MEMORY_PRESSURE_WRITE",
+    "MODEL_CATALOG_URL",
+    "NODE_ENV",
+    "ORBIT_RECAP_ENABLED",
+    "PATH",
+    "PORT",
+    "PROVIDER_SECRET_KEY",
+    "PUBLIC_ORIGIN",
+    "SYSTEMD_EXEC_PID",
+    "USER"
+   ],
+   "clusterSettingsInTheEnvironment": [],
+   "kubeconfigInTheServerHome": false,
+   "mode": "unset",
+   "replica": {
+    "managedSwitch": [],
+    "port": 13720,
+    "unit": "inactive"
+   },
+   "seconds": 106.5,
+   "switch": [
+    "(unset)"
+   ],
+   "testServer": [
+    "TLS front (orbit-mr-lab-tls): active",
+    "fake model (orbit-mr-lab-fake-model): active",
+    "PostgreSQL (orbit-mr-lab-pg): running",
+    "listening: 127.0.0.1:13710 127.0.0.1:13711 127.0.0.1:13712 127.0.0.1:15433",
+    "Pods use: https://10.0.2.2:13711 (CA /mnt/data/managed-runner-lab/test-server-t08x/tls/ca.crt); host API http://127.0.0.1:13710/api",
+    "state: /mnt/data/managed-runner-lab/test-server-t08x; managed runners: unset",
+    "14:24:02Z applying migrations"
+   ]
+  }
+ },
+ "seconds": 106.6,
+ "startedAt": "2026-10-19T14:23:55.542+00:00",
+ "step": "admin"
+}

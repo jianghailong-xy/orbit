@@ -1,0 +1,64 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T01:17:30.26",
+    "ingested_at": "2026-10-18T01:17:30.335337+00:00",
+    "ingested_by_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "seq": 12,
+    "session_id": "01a14c95-8c41-761f-8c86-a7f859235b72",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-AMY-WK",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T01:17:30Z",
+      "kind": "tool_use",
+      "messages": 1,
+      "n": 5,
+      "tool": "mcp__orbit__schedule_wakeup"
+    },
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T01:17:30Z",
+      "kind": "tool_use",
+      "messages": 2,
+      "n": 6,
+      "tool": "mcp__orbit__schedule_wakeup"
+    },
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T01:17:30Z",
+      "kind": "text",
+      "messages": 5,
+      "n": 7,
+      "tool": null
+    }
+  ],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "created_at": "2026-10-18T01:17:11.617",
+    "engine": "claude",
+    "id": "01a14c95-8c41-761f-8c86-a7f859235b72",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-AMY-WK FAKE-WAKEUP 240 AMYWK1 schedule a wakeup"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T01:17:30.351",
+      "client_turn_id": "initial-01a14c95-8c41-761f-8c86-a7f859235b72",
+      "content": "T06-AMY-WK FAKE-WAKEUP 240 AMYWK1 schedule a wakeup",
+      "created_at": "2026-10-18T01:17:28.54",
+      "delivered_at": "2026-10-18T01:17:29.883",
+      "id": "01a14c95-ce5c-765f-9ba7-ef96b22de809",
+      "kind": "message",
+      "seq": 1,
+      "status": "ANSWERED"
+    }
+  ]
+}

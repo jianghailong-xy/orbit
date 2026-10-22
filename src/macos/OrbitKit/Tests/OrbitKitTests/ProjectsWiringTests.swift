@@ -482,11 +482,16 @@ final class ProjectsWiringTests: XCTestCase {
     /// rather than one its clock would redraw, and a server that lists none draws the card as a
     /// read. A task opens over the page once the sheet is down, as the page's rows open theirs, and
     /// a Retry goes through the page's store, which reads it again.
+    ///
+    /// Since 2026-10-19 (owner decision) it draws every job in flight — a merge job included, as
+    /// web and Android do — because this page has no merge card to hand that job to.
     func testTheLandingRowOpensTheJobsInFlightOverTheProjectPage() throws {
         let view = code(try appSource("Views/ProjectsView.swift"))
         let row = try slice(view, from: "private func landingRow(_ store: ProjectDetailModel) -> some View {",
                             to: "\n    }\n")
-        XCTAssertTrue(row.contains("if let card = ProjectMergeCard.taskLandingCard(integration, now: context.date,"))
+        XCTAssertTrue(row.contains("if let card = ProjectPage.landingCard(integration, now: context.date,"))
+        XCTAssertFalse(row.contains("ProjectMergeCard.taskLandingCard"),
+                       "a merge job in flight is drawn here too, not hidden behind the merge card")
         XCTAssertTrue(row.contains("onOpenJobs: integration.inFlightJobs == nil ? nil : { pageSheet = .landingJobs },"))
         XCTAssertTrue(row.contains("onOpenProject: nil,"),
                       "on the project's own page a card with no list to open is a read")

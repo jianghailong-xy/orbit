@@ -1,0 +1,11 @@
+// Evidence kit (task 34jQkOSz5CENWMRYAWVHC): compile LandingPageFixesShotsTest.kt into the app's unit tests without adding it to the
+// tree. Pass it as an extra init script, from the repository root:
+//   bash src/android/gradlew -p src/android -I docs/evidence/landing-page-fixes/android-kit/kit.gradle \
+//     :app:testDebugUnitTest --rerun --tests 'io.orbitd.android.LandingPageFixes*'
+// The frames land in src/android/build/evidence/landing-page-fixes/{light,dark}/.
+allprojects {
+    plugins.withId('com.android.application') {
+        // rootDir is src/android; this directory is docs/evidence/landing-page-fixes/android-kit.
+        android.sourceSets.test.java.srcDir(new File(rootDir, '../../docs/evidence/landing-page-fixes/android-kit'))
+    }
+}

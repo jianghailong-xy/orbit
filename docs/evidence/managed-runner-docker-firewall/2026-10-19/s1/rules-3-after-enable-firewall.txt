@@ -1,0 +1,63 @@
+== rules at 2026-10-19T07:14:02Z: 3-after-enable-firewall
+-- iptables backend: iptables v1.8.13 (nf_tables); Docker's firewall backend: {"Driver":"iptables","Info":[["EnableUserlandProxy","true"],["UserlandProxyPath","/usr/local/bin/docker-proxy"]]}
+-- managed runners' network
+id=75117e1ea77f3f4876bd8e6b632156c42c1a92eecd7494a5f2b88fb68cd1bf5b ipv6=false options={"com.docker.network.bridge.enable_icc":"false"} ipam=[{"Gateway":"172.19.0.1","Subnet":"172.19.0.0/16"}]
+-- iptables: jumps into ORBIT-MR-* (INPUT, DOCKER-USER, FORWARD) and the chains
+-P INPUT ACCEPT
+-A INPUT -i br-75117e1ea77f -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT
+-P FORWARD ACCEPT
+-A FORWARD -j DOCKER-USER
+-A FORWARD -j DOCKER-FORWARD
+-N DOCKER-USER
+-A DOCKER-USER -i br-75117e1ea77f -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+-N ORBIT-MR-INPUT
+-A ORBIT-MR-INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+-A ORBIT-MR-INPUT -d 172.19.0.1/32 -p tcp -m tcp --dport 2086 -j RETURN
+-A ORBIT-MR-INPUT -j REJECT --reject-with icmp-admin-prohibited
+-N ORBIT-MR-FORWARD
+-A ORBIT-MR-FORWARD -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+-A ORBIT-MR-FORWARD -p tcp -m conntrack --ctstate DNAT --ctorigdst 172.19.0.1 --ctorigdstport 2086 -j RETURN
+-A ORBIT-MR-FORWARD -d 10.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 172.16.0.0/12 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 192.168.0.0/16 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 100.64.0.0/10 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 169.254.0.0/16 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 127.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 0.0.0.0/8 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 192.0.0.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 192.0.2.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 198.18.0.0/15 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 198.51.100.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 203.0.113.0/24 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 224.0.0.0/4 -j REJECT --reject-with icmp-admin-prohibited
+-A ORBIT-MR-FORWARD -d 240.0.0.0/4 -j REJECT --reject-with icmp-admin-prohibited
+-- ip6tables: jumps into ORBIT-MR-* (INPUT, DOCKER-USER, FORWARD) and the chains
+-P INPUT ACCEPT
+-A INPUT -i br-75117e1ea77f -m comment --comment orbit-managed-runners -j ORBIT-MR-INPUT
+-P FORWARD ACCEPT
+-A FORWARD -j DOCKER-USER
+-A FORWARD -j DOCKER-FORWARD
+-N DOCKER-USER
+-A DOCKER-USER -i br-75117e1ea77f -m comment --comment orbit-managed-runners -j ORBIT-MR-FORWARD
+-N ORBIT-MR-INPUT
+-A ORBIT-MR-INPUT -j REJECT --reject-with icmp6-adm-prohibited
+-N ORBIT-MR-FORWARD
+-A ORBIT-MR-FORWARD -j REJECT --reject-with icmp6-adm-prohibited
+-- nat DOCKER chain (the published port's DNAT)
+-N DOCKER
+-A DOCKER ! -i br-e18d5741014b -p tcp -m tcp --dport 2086 -j DNAT --to-destination 172.20.0.7:80
+-- the firewall's service
+orbit-managed-runner-firewall Up 24 seconds (healthy) image=orbit-managed-runner-firewall:local
+-- the firewall's status file
+{"apiPort": 2086, "backend": "nft", "bootId": "369b4f51-8eef-4b7b-8357-90245df8ed63", "bridge": "br-75117e1ea77f", "checkedAt": 1792394038, "gateway": "172.19.0.1", "network": "orbit-managed-runners", "schemaVersion": 1, "state": "enforced", "validUntil": 1792394068}
+-- the firewall's configuration
+{
+  "schemaVersion": 1,
+  "network": "orbit-managed-runners",
+  "bridge": "br-75117e1ea77f",
+  "gateway": "172.19.0.1",
+  "apiPort": 2086,
+  "dnsServers": [],
+  "allow": [],
+  "intervalSeconds": 10
+}

@@ -21,6 +21,7 @@ function mapping(change: Partial<ManagedRunner> = {}): ManagedRunner {
     managementState: 'READY',
     generation: 1,
     revision: 7,
+    backend: 'kubernetes',
     clusterKey: 'c',
     namespace: 'n',
     pvcName: 'mr-data-r',
@@ -153,8 +154,8 @@ test('READY reports the runtime it was found ready with; waiting on model supply
   assert.deepEqual(waiting.reason, managedRunnerReason('MODEL_UNAVAILABLE'));
   assert.equal(
     waiting.reason?.message,
-    'The runner is up, but none of its runtimes is installed and signed in, so it cannot start a session. ' +
-      'Sign one in from Infrastructure; a runner that has stopped waiting for it can then be retried.',
+    'The runner is up, but none of its runtimes is signed in and none of your model keys runs on it, so it cannot start a session. ' +
+      'Sign one in, or add a model key, from Infrastructure; a runner that has stopped waiting for it can then be retried.',
   );
   assert.equal(waiting.reason?.retryable, true);
   assert.equal(waiting.actions.canRetry, false, 'nothing to retry while it is still waiting');
@@ -190,4 +191,34 @@ test('a disabled owner: ACCOUNT_DISABLED before any stored cause, nothing offere
   const again = managedRunnerStatus({ enabled: true, available: true, ownerDisabled: false, mapping: mapping({ managementState: 'SLEEPING', desiredState: 'SLEEPING' }), runner: null, now: NOW, heartbeatFreshMs: FRESH });
   assert.equal(again.reason, null);
   assert.equal(again.actions.canWake, true);
+});
+
+test('firstSessionProvider: READY names what it was found ready with; before that the owner\'s key while the runner can run it', () => {
+  const deepseek = { slug: 'deepseek', engine: 'claude' as const };
+  const status = (change: Partial<ManagedRunner>, runner: Parameters<typeof managedRunnerStatus>[0]['runner'], firstSessionKey?: typeof deepseek | null) =>
+    managedRunnerStatus({ enabled: true, available: true, mapping: mapping(change), runner, firstSessionKey, now: NOW, heartbeatFreshMs: FRESH });
+  const unreported = { status: 'OFFLINE' as const, lastHeartbeatAt: null, engines: null };
+  // No mapping, no default workspace: nothing to start a session in.
+  assert.equal(managedRunnerStatus({ enabled: true, available: true, mapping: null, runner: null, firstSessionKey: deepseek, now: NOW, heartbeatFreshMs: FRESH }).firstSessionProvider, null);
+  // Found ready on a runtime or a key: that, as `initialProvider` says, asleep or awake.
+  assert.equal(status({ initialProvider: 'codex' }, beat(1000)).firstSessionProvider, 'codex');
+  assert.equal(status({ managementState: 'SLEEPING', initialProvider: 'deepseek' }, null, null).firstSessionProvider, 'deepseek');
+  // Waiting for capacity before its first start, the owner's key known: a first session waits on it.
+  const waiting = status({ managementState: 'WAITING_CAPACITY', initialProvider: null }, unreported, deepseek);
+  assert.equal(waiting.initialProvider, null);
+  assert.equal(waiting.firstSessionProvider, 'deepseek');
+  // Started and reporting the key's engine: still the key, until READY records it.
+  assert.equal(
+    status({ managementState: 'STARTING' }, { ...beat(1000), engines: [{ engine: 'claude', installed: true, auth: 'no' }] }, deepseek).firstSessionProvider,
+    'deepseek',
+  );
+  // Reporting no engine the key runs on, or with no key of the owner's own: none.
+  const missing = status(
+    { managementState: 'STARTING', lastError: managedRunnerReason('MODEL_UNAVAILABLE') as never },
+    { ...beat(1000), engines: [{ engine: 'codex', installed: true, auth: 'no' }] },
+    deepseek,
+  );
+  assert.equal(missing.firstSessionProvider, null);
+  assert.equal(status({ managementState: 'PROVISIONING' }, unreported, null).firstSessionProvider, null);
+  assert.equal(status({ managementState: 'PROVISIONING' }, unreported).firstSessionProvider, null);
 });

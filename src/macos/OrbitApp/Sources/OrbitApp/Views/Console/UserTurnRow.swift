@@ -50,6 +50,9 @@ struct UserTurnRow: View {
     var queued: QueuedControls? = nil
     /// What a steer has, queued or delivered; nil where there is no console to act through.
     var steer: SteerControls? = nil
+    /// The words of a message that never reached the engine, back in the composer: nil unless
+    /// `SteerDelivery.offersPutBack` says so and there is a console to act through.
+    var putBack: (() -> Void)? = nil
 
     var body: some View {
         let b = bubble
@@ -180,7 +183,7 @@ struct UserTurnRow: View {
                 }
             }
         } else {
-            UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer)
+            UserBubbleView(bubble: b, onCancelQueued: cancel, steer: steer, onPutBack: putBack)
         }
     }
 

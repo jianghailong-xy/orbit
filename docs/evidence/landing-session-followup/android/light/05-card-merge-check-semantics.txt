@@ -1,0 +1,23 @@
+Printing with useUnmergedTree = 'false'
+Node #5189 at (l=0.0, t=0.0, r=411.0, b=156.0)px
+ |-Node #5242 at (l=0.0, t=0.0, r=411.0, b=156.0)px
+   IsContainer = 'true'
+    |-Node #5244 at (l=28.0, t=28.0, r=383.0, b=128.0)px, Tag: 'landing-card'
+       |-Node #5245 at (l=28.0, t=28.0, r=383.0, b=72.0)px, Tag: 'landing-card:body'
+       | Focused = 'false'
+       | Role = 'Button'
+       | Text = '[Merge check, 1m 50s of 60m, checking · output 6s ago · claim 1 · round 1]'
+       | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+       | MergeDescendants = 'true'
+       |-Node #5255 at (l=28.0, t=84.0, r=160.0, b=124.0)px, Tag: 'landing-card:open-landing'
+       | Focused = 'false'
+       | Role = 'Button'
+       | Text = '[Open landing ›]'
+       | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+       | MergeDescendants = 'true'
+       |-Node #5259 at (l=294.0, t=84.0, r=383.0, b=124.0)px, Tag: 'landing-card:all-jobs'
+         Focused = 'false'
+         Role = 'Button'
+         Text = '[All jobs ›]'
+         Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+         MergeDescendants = 'true'
