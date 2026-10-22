@@ -1,0 +1,23 @@
+xcodebuild-ios.log: 	 Executed 11 tests, with 0 failures (0 unexpected) in 431.271 (431.284) seconds
+xcodebuild-ios.log: 	 Executed 11 tests, with 0 failures (0 unexpected) in 431.271 (431.286) seconds
+xcodebuild-ios.log: 	 Executed 11 tests, with 0 failures (0 unexpected) in 431.271 (431.287) seconds
+xcodebuild-ios.log: Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneBareEarlierFoldOpensOntoUncountedRows]' passed (66.444 seconds).
+xcodebuild-ios.log: Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneCheckTimeoutCard]' passed (17.769 seconds).
+xcodebuild-ios.log: Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneEarlierRowLeavesOutAZeroCount]' passed (66.161 seconds).
+xcodebuild-ios.log: Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingCardOneTaskJob]' passed (12.497 seconds).
+xcodebuild-ios.log: Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneLandingPageLiveCheck]' passed (16.264 seconds).
+xcodebuild-ios.log: Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneMergeCheckRow]' passed (13.792 seconds).
+xcodebuild-ios.log: Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneNoFoldWithoutOlderLandings]' passed (101.084 seconds).
+xcodebuild-ios.log: Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneSourceConversationsLabel]' passed (79.243 seconds).
+xcodebuild-ios.log: Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneTaskSegmentTimedOut]' passed (15.948 seconds).
+xcodebuild-ios.log: Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneTimelineMarksReadTheLinesData]' passed (11.970 seconds).
+xcodebuild-ios.log: Test Case '-[LandingSessionProbeUITests.LandingSessionShotTests testIPhoneXE5StepRowByJobKind]' passed (30.099 seconds).
+xcodebuild-mac.log: 	 Executed 6 tests, with 0 failures (0 unexpected) in 157.291 (157.297) seconds
+xcodebuild-mac.log: 	 Executed 6 tests, with 0 failures (0 unexpected) in 157.291 (157.298) seconds
+xcodebuild-mac.log: 	 Executed 6 tests, with 0 failures (0 unexpected) in 157.291 (157.299) seconds
+xcodebuild-mac.log: Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacLandingPageCheckTimedOut]' passed (31.326 seconds).
+xcodebuild-mac.log: Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacLandingPageTaskTimedOut]' passed (22.810 seconds).
+xcodebuild-mac.log: Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacTimelineMarksReadTheLinesData]' passed (22.870 seconds).
+xcodebuild-mac.log: Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacWorkOverviewLoneMergeCheck]' passed (30.141 seconds).
+xcodebuild-mac.log: Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacWorkOverviewLoneMergeToMain]' passed (29.484 seconds).
+xcodebuild-mac.log: Test Case '-[LandingSessionMacProbeUITests.LandingSessionShotTests testMacWorkOverviewTaskLandingKeepsItsSentence]' passed (20.661 seconds).

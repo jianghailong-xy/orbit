@@ -1,0 +1,134 @@
+{
+ "checks": [
+  {
+   "check": "the gate runs",
+   "ok": true,
+   "value": "active"
+  },
+  {
+   "check": "the final image's runner and image sources are this checkout's",
+   "ok": true,
+   "value": "(no difference)"
+  },
+  {
+   "check": "the switch is on with the lab profile",
+   "ok": true,
+   "value": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t02c/managed-runner-profile.json"
+   ]
+  },
+  {
+   "check": "the profile pins the final image",
+   "ok": true
+  },
+  {
+   "check": "the admission webhook is installed",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T17:49:37.940+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "damaged",
+ "result": {
+  "admission": {
+   "dryRunUnmanagedPod": "pod/t02a-admission-check",
+   "dryRunUnownedManagedClaim": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission"
+  },
+  "gate": {
+   "at": "2026-10-19T17:47:36.180+00:00",
+   "connections": 1896,
+   "control": {
+    "mode": "pass"
+   },
+   "listen": "127.0.0.1:16444",
+   "log": null,
+   "lost": [],
+   "refused": [],
+   "unit": "active"
+  },
+  "image": {
+   "archive": "/mnt/data/tmp/t02c/image-final/lab.oci.tar",
+   "archiveSha256": "4de0570dadc21c20e5a5c56b339e97c4fb6afc6441736627f798067f7527aa21",
+   "labManifest": "sha256:99b7804bb45300c2d4e57cdf1b1c307c1e6e78566d4f274fb8f42762e0ce527e",
+   "nodes": {
+    "orbit-mr-lab": {
+     "alreadyThere": false,
+     "id": "sha256:4015bd196e16069470a984befb412ee820696e2ded7c243d5d28632fba4a5548",
+     "importSeconds": 39.6,
+     "size": "499729702"
+    },
+    "orbit-mr-lab-2": {
+     "alreadyThere": false,
+     "id": "sha256:4015bd196e16069470a984befb412ee820696e2ded7c243d5d28632fba4a5548",
+     "importSeconds": 35.5,
+     "size": "499729702"
+    }
+   },
+   "pushed": false,
+   "reference": "docker.io/library/orbit-managed-runner-lab@sha256:7b6b64fb6ca7cc66b78967f647e8f6feb810407976fc9e09555173342d063fbf",
+   "source": "5928c0e0ac014e5764c3146fa31554c50ebecc64"
+  },
+  "recorder": {
+   "at": "2026-10-19T17:49:37.824+00:00",
+   "lines": 245,
+   "log": "/mnt/data/managed-runner-lab/test-server-t02c/timeline.jsonl",
+   "unit": "active"
+  },
+  "restarted": {
+   "apiEnvironmentNames": [
+    "CORS_ORIGINS",
+    "DATABASE_URL",
+    "HOME",
+    "INVOCATION_ID",
+    "JWT_SECRET",
+    "LANG",
+    "MEMORY_PRESSURE_WATCH",
+    "MEMORY_PRESSURE_WRITE",
+    "MODEL_CATALOG_URL",
+    "NODE_ENV",
+    "ORBIT_MANAGED_RUNNERS_ENABLED",
+    "ORBIT_MANAGED_RUNNERS_PROFILE",
+    "ORBIT_RECAP_ENABLED",
+    "PATH",
+    "PORT",
+    "PROVIDER_SECRET_KEY",
+    "PUBLIC_ORIGIN",
+    "SYSTEMD_EXEC_PID",
+    "USER"
+   ],
+   "clusterSettingsInTheEnvironment": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED",
+    "ORBIT_MANAGED_RUNNERS_PROFILE"
+   ],
+   "kubeconfigInTheServerHome": false,
+   "mode": "on",
+   "replica": {
+    "managedSwitch": [
+     "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+     "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t02c/managed-runner-profile.json"
+    ],
+    "port": 13720,
+    "unit": "active"
+   },
+   "seconds": 7.0,
+   "switch": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t02c/managed-runner-profile.json"
+   ],
+   "testServer": [
+    "TLS front (orbit-mr-lab-tls): active",
+    "fake model (orbit-mr-lab-fake-model): active",
+    "PostgreSQL (orbit-mr-lab-pg): running",
+    "listening: 127.0.0.1:13710 127.0.0.1:13711 127.0.0.1:13712 127.0.0.1:15433",
+    "Pods use: https://10.0.2.2:13711 (CA /mnt/data/managed-runner-lab/test-server-t02c/tls/ca.crt); host API http://127.0.0.1:13710/api",
+    "state: /mnt/data/managed-runner-lab/test-server-t02c; managed runners: true",
+    "17:49:19Z applying migrations"
+   ]
+  }
+ },
+ "seconds": 121.8,
+ "startedAt": "2026-10-19T17:47:36.168+00:00",
+ "step": "start"
+}

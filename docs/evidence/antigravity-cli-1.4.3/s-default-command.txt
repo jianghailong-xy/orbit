@@ -1,0 +1,3 @@
+case default command
+mock:tool run_command {"CommandLine":"echo denied > @WS@/cmd.txt","WaitMsBeforeAsync":5000,"toolSummary":"Run it"}
+mock:text after

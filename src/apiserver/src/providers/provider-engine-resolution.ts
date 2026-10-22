@@ -36,7 +36,11 @@ export const RESOLUTION_SELECT = {
   runtimeSessionId: true,
   usesRuntimeDefaultModel: true,
   workspace: { select: { env: true, model: true } },
-  assignedRunner: { select: { runtimeDefaultModels: true, modelCatalog: true, engines: true } },
+  assignedRunner: {
+    select: {
+      runtimeDefaultModels: true, modelCatalog: true, engines: true, defaultRemoved: true, accountPauses: true, planUsage: true,
+    },
+  },
 } satisfies Prisma.SessionSelect;
 
 export type ResolutionSession = Prisma.SessionGetPayload<{ select: typeof RESOLUTION_SELECT }>;
@@ -178,7 +182,7 @@ export async function resolutionOf(db: Prisma.TransactionClient, session: Resolu
       workspaceModel: session.workspace?.model,
       modelCatalog: session.assignedRunner?.modelCatalog,
       workspaceEnv,
-      runnerEngines: session.assignedRunner?.engines,
+      runner: session.assignedRunner,
     });
     const { key, endpoint } = handedOver(exec.provider, exec.env, exec.runnerModel ?? exec.model);
     return {

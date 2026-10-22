@@ -1,0 +1,79 @@
+{
+ "appArmorProfile": "docker-default",
+ "binds": [],
+ "capAdd": [],
+ "capDrop": [
+  "ALL"
+ ],
+ "cgroupnsMode": "private",
+ "deviceRequests": [],
+ "devices": [],
+ "envKeys": [
+  "CLAUDE_CONFIG_DIR",
+  "CODEX_HOME",
+  "DISABLE_AUTOUPDATER",
+  "GOTOOLCHAIN",
+  "HOME",
+  "NODE_VERSION",
+  "ORBIT_HOME",
+  "ORBIT_MANAGED_RUNNER_INSTANCE_FILE",
+  "ORBIT_NO_ENGINE_UPDATE",
+  "ORBIT_NO_SELFUPDATE",
+  "ORBIT_RUNNER_CREDENTIAL_FILE",
+  "ORBIT_RUNNER_EXPECTED_ID",
+  "ORBIT_RUNNER_MAX_CONCURRENT",
+  "ORBIT_RUNNER_NAME",
+  "ORBIT_RUNNER_SERVER_URL",
+  "PATH",
+  "PYTHONDONTWRITEBYTECODE"
+ ],
+ "image": "sha256:e70dc4770beb31947330a29364cf3f722da2243cb71fd7c91b0cfb2c7336e906",
+ "ipcMode": "private",
+ "labels": {
+  "orbit.managed-runner.generation": "2",
+  "orbit.managed-runner.instance": "d5-host",
+  "orbit.managed-runner.kind": "runner",
+  "orbit.managed-runner.owner": "1bc92f45-ca59-47dc-a9c0-c508394f3465",
+  "orbit.managed-runner.runner": "8c342985-2d5d-4961-af81-5168b179ed23",
+  "orbit.managed-runner.uid": "d5d85ad3-3671-43e2-988f-84b7407b4a9e",
+  "orbit.managed-runner.volume-uid": "7cfcf94f-6f6d-46cd-9706-286a89a04949",
+  "orbit.test": "d5-34hJ7S9C3isVnzIDDfSHD",
+  "org.opencontainers.image.revision": "c16d115b38900ba4c20237d060ecb0c004ac7051",
+  "org.opencontainers.image.title": "Orbit optional managed runner"
+ },
+ "memory": 536870912,
+ "memorySwap": 536870912,
+ "mounts": [
+  "tmpfs  -> /tmp rw=True",
+  "volume mr-boot-8c342985-2d5d-4961-af81-5168b179ed23-g2 -> /run/orbit-bootstrap rw=True",
+  "volume mr-data-8c342985-2d5d-4961-af81-5168b179ed23 -> /var/lib/orbit rw=True"
+ ],
+ "name": "/mr-8c342985-2d5d-4961-af81-5168b179ed23",
+ "nanoCpus": 1000000000,
+ "networkMode": "orbit-mr-d5",
+ "pidMode": "",
+ "pidsLimit": 256,
+ "portBindings": {},
+ "privileged": false,
+ "readonlyRootfs": true,
+ "restartPolicy": {
+  "MaximumRetryCount": 0,
+  "Name": "no"
+ },
+ "securityOpt": [
+  "no-new-privileges:true"
+ ],
+ "tmpfs": [
+  {
+   "Target": "/tmp",
+   "TmpfsOptions": {
+    "Mode": 1023,
+    "SizeBytes": 67108864
+   },
+   "Type": "tmpfs"
+  }
+ ],
+ "user": "10001:10001",
+ "usernsMode": "",
+ "utsMode": ""
+}

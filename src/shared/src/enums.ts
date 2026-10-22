@@ -283,13 +283,15 @@ export const DSH_PERMISSION_MODES: readonly PermissionMode[] = [
  * The permission modes Cursor CLI can be held to over ACP, measured on 2026.10.14-941492e
  * (docs/cursor-runtime-contract.md §5.4, §16.5). In every mode a write inside the workspace runs
  * without asking. Accept Edits is its default allowlist, with commands, MCP tools and web fetches
- * asking through Orbit's card; Plan adds Cursor's own plan mode and Orbit refuses every request; Don't
- * Ask refuses every request too; Bypass is `--force`. Default (ask before an edit) cannot be kept and
- * Auto has no review Orbit can rely on over ACP, so both are refused.
+ * asking through Orbit's card; Plan adds Cursor's own plan mode and Orbit refuses every request; Auto
+ * is Orbit's own review of each request (the runner allows a routine command, the rest go to the
+ * card); Don't Ask refuses every request too; Bypass is `--force`. Default (ask before an edit) cannot
+ * be kept, so it is refused (D6).
  */
 export const CURSOR_PERMISSION_MODES: readonly PermissionMode[] = [
   PermissionMode.ACCEPT_EDITS,
   PermissionMode.PLAN,
+  PermissionMode.AUTO,
   PermissionMode.DONT_ASK,
   PermissionMode.BYPASS,
 ];

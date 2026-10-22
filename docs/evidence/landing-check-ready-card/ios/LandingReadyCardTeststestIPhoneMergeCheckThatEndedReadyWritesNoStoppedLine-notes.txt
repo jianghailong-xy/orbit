@@ -1,0 +1,5 @@
+ios-1-ready-card: head
+  Merge check: (68.99999999999997, 281.0, 102.66666666666666, 20.33333333333337)
+  Ready: (329.33333333333337, 282.1666666666667, 44.666666666666686, 18.0)
+  Passed the check · waiting for the owner: (68.99999999999997, 303.33333333333337, 277.0, 18.0)
+ios-1-ready-card: texts containing `Stopped · not landed`: 0

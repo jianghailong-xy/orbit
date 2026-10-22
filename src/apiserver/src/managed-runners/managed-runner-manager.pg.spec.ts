@@ -21,9 +21,10 @@
  *       volume is a conflict for an operator: nothing is replaced, deleted or created in its place;
  *   (7) a manager whose lease expired mid-pass is superseded by the next, and creates nothing twice;
  *   (8) another account can neither read nor act on the mapping, its runner or its volume;
- *   (9) releasing compute (a Pod its kubelet reported stopped, on explicit retry) never deletes the
- *       runner row, its workspace or its volume; the replacement is the next generation, with a new
- *       credential, once the stopped Pod is deleted and its volume detached;
+ *   (9) releasing compute (a Pod its kubelet reported stopped, on explicit retry once no automatic
+ *       restart is left) never deletes the runner row, its workspace or its volume; the replacement
+ *       is the next generation, with a new credential, once the stopped Pod is deleted and its volume
+ *       detached;
  *  (10) enrollment by runner name never takes over a managed runner, and the runner removal doors
  *       refuse it; a Pod that replaced the recorded one is not adopted: the mapping fences;
  *  (11) a missing environment profile leaves the feature unavailable, with nothing written;
@@ -286,7 +287,7 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
     assert.equal(w.cluster.all('persistentvolumeclaims').length, 1);
     assert.equal(w.cluster.all('secrets').length, 1);
     assert.equal(w.cluster.all('pods').length, 1);
-    assert.equal(mapping.attempt, 0, 'READY resets the attempt budget');
+    assert.equal(mapping.attempt, 2, 'READY keeps the attempts it took until it has stayed up (managed-runner-recovery.pg.spec.ts)');
   });
 
   await t.test('(4) a restarted manager takes over a dead replica, adopts what it created, and finds stored intents', async () => {
@@ -432,9 +433,10 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
       assert.equal(w.cluster.all('persistentvolumeclaims').length, 0, 'no empty disk took its place');
     }
     // The recorded claim gone before an explicit retry walks back through PROVISIONING: the retry
-    // reports it, and still creates nothing in its place.
+    // reports it, and still creates nothing in its place. No restart is left (maxAttempts 1), so the
+    // stop is FAILED and the owner's retry is what walks back.
     {
-      const w = world();
+      const w = world({ maxAttempts: 1 });
       const { ownerId, mapping } = await ready(w, 'pvc-missing-retry');
       // Stopped by its kubelet's report: a stop the retry may release (a terminal phase the kubelet
       // did not report is not proof, and fences instead — managed-runner-fencing.pg.spec.ts).
@@ -543,7 +545,8 @@ test('managed runner manager: unique mapping and idempotent reconciliation again
   });
 
   await t.test('(9) releasing compute never deletes the runner row, its workspace or its volume; the replacement is the next generation', async () => {
-    const w = world();
+    // No restart left (maxAttempts 1): the stop is FAILED, and the owner's retry is what replaces it.
+    const w = world({ maxAttempts: 1 });
     const { ownerId, mapping } = await ready(w, 'recycle');
     const runnerBefore = await db.runner.findUniqueOrThrow({ where: { id: mapping.runnerId } });
     const credentialBefore = bootstrapCredentialOf(w.cluster.object<Secret>('secrets', managedSecretName(mapping.runnerId))!)!;

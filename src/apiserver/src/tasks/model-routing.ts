@@ -52,10 +52,19 @@ export interface ModelRoutingSelection {
 export type ModelRoutingOutcome =
   'FAILED' | 'ACCEPTANCE_FAILED' | 'VERIFICATION_FAILED' | 'SENT_BACK' | 'OK';
 
+/**
+ * What a run's error says when the provider found the model at capacity ("Selected model is at
+ * capacity"), matched case-insensitively as a substring. Keep it identical to isCodexCapacityError in
+ * src/runner-go/codex.go.
+ */
+export const MODEL_AT_CAPACITY_ERROR_MARKER = 'at capacity';
+
 export interface ModelRoutingRun {
   ordinal: number;
   status: string;
   quotaFailure: boolean;
+  /** Failed on "Selected model is at capacity"; skipped for escalation like quotaFailure. */
+  capacityFailure?: boolean;
   /** The prior decision's tier, including a shadow decision; null falls back to the actual model. */
   level?: ModelRoutingLevel | null;
   model?: string | null;
@@ -225,6 +234,8 @@ export function routeTaskRun(input: ModelRoutingInput): ModelRoutingDecision {
   for (const run of history) {
     if (run.quotaFailure) {
       skipped.push(`Run ${run.ordinal} hit a usage limit — not counted`);
+    } else if (run.capacityFailure) {
+      skipped.push(`Run ${run.ordinal} found the model at capacity — not counted`);
     } else {
       last = run;
       break;

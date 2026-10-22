@@ -1,0 +1,51 @@
+== effective configuration 2-after-d6 at 2026-10-17T14:17:16Z, checkout e93f6ba3e9accc5463fd372f3ab50696d6892707 (d6-off-d6)
+-- .env (mode 644, sha256 53deab4b5450dc6eb439720048591dbed5af09ed40e5959074a64f29293f20e0; secrets redacted)
+DATABASE_URL="postgresql://orbit:orbit@localhost:5432/orbit?schema=public"
+JWT_SECRET=<redacted>
+PROVIDER_SECRET_KEY=<redacted>
+PORT=3000
+PUBLIC_ORIGIN="http://localhost:2086"
+-- data/ (two levels)
+data
+data/pg-archive
+data/pg-archive/base
+data/pg-archive/wal
+data/postgres
+data/postgres/PG_VERSION
+data/postgres/base
+data/postgres/global
+data/postgres/pg_commit_ts
+data/postgres/pg_dynshmem
+data/postgres/pg_hba.conf
+data/postgres/pg_ident.conf
+data/postgres/pg_logical
+data/postgres/pg_multixact
+data/postgres/pg_notify
+data/postgres/pg_replslot
+data/postgres/pg_serial
+data/postgres/pg_snapshots
+data/postgres/pg_stat
+data/postgres/pg_stat_tmp
+data/postgres/pg_subtrans
+data/postgres/pg_tblspc
+data/postgres/pg_twophase
+data/postgres/pg_wal
+data/postgres/pg_xact
+data/postgres/postgresql.auto.conf
+data/postgres/postgresql.conf
+data/postgres/postmaster.opts
+data/postgres/postmaster.pid
+-- data/managed-runners: (absent)
+-- apiserver: managed runner environment
+ORBIT_MANAGED_RUNNERS_PROFILE=/var/lib/orbit-managed-runners/profile.json
+ORBIT_MANAGED_RUNNERS_ENABLED=false
+-- apiserver: container 27954dbef89932646b74423089e96a4b5b1e703265c112f316fceac4c4fb3e7b image sha256:c163190c0ff3143553d7dd060532ae7273cd75c5b6451fcf58b2b4524bd694f0 started 2026-10-17T13:55:09.776446605Z
+-- apiserver: what it said about managed runners
+-- docker-channel: (no container)
+-- docker compose ps
+orbit-apiserver	sha256:c163190c0ff3143553d7dd060532ae7273cd75c5b6451fcf58b2b4524bd694f0	Up 22 minutes (healthy)
+orbit-gateway	nginx:alpine	Up 18 minutes (healthy)
+orbit-pgbackup	postgres:16-alpine	Up 22 minutes
+orbit-postgres	postgres:16-alpine	Up 22 minutes (healthy)
+orbit-web	orbit-web	Up 8 seconds (healthy)
+orbit-wiki-worker	sha256:c163190c0ff3143553d7dd060532ae7273cd75c5b6451fcf58b2b4524bd694f0	Up 18 minutes

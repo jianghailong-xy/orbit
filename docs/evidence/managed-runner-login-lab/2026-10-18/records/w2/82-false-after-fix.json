@@ -1,0 +1,217 @@
+{
+  "apiserverSocketsToTheApi": [],
+  "at": "2026-10-17T23:45:11.096+00:00",
+  "changed": [],
+  "gateConnectionsDuring": 0,
+  "label": "false-after-fix",
+  "managedLogLines": [
+    "[39m10/18/2026, 7:44:47 AM \u001b[33m   WARN\u001b[39m \u001b[38;5;3m[ManagedRunnerManager] \u001b[39m\u001b[33mmanaged runner 01a14c3e-c23f-7742-9b80-346078104f26: asleep; generation 1 stopped (OBSERVED_STOP), compute released, volume kept\u001b[39m",
+    "\u001b[32m[Nest] 941555  - \u001b[39m10/18/2026, 7:45:08 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mManagedRunnerGateModule dependencies initialized\u001b[39m\u001b[38;5;3m +1ms\u001b[39m",
+    "\u001b[32m[Nest] 941555  - \u001b[39m10/18/2026, 7:45:08 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[InstanceLoader] \u001b[39m\u001b[32mManagedRunnerModule dependencies initialized\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 941555  - \u001b[39m10/18/2026, 7:45:08 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mManagedRunnerController {/api/managed-runner}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 941555  - \u001b[39m10/18/2026, 7:45:08 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner, GET} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 941555  - \u001b[39m10/18/2026, 7:45:08 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/ensure, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 941555  - \u001b[39m10/18/2026, 7:45:08 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/retry, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 941555  - \u001b[39m10/18/2026, 7:45:08 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/wake, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 941555  - \u001b[39m10/18/2026, 7:45:08 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/sleep, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 941555  - \u001b[39m10/18/2026, 7:45:08 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/delete, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 941555  - \u001b[39m10/18/2026, 7:45:08 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mManagedRunnerAdmissionController {/api/managed-runner/admission}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+    "\u001b[32m[Nest] 941555  - \u001b[39m10/18/2026, 7:45:08 AM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/admission, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m"
+  ],
+  "mappingRows": 6,
+  "mappingsUnchanged": true,
+  "namespaceObjects": 33,
+  "namespaceUnchanged": true,
+  "runnerRowsUnchanged": true,
+  "signIns": [
+    {
+      "account": "new",
+      "capabilities": {
+        "managedRunners": {
+          "contractVersion": 1,
+          "enabled": false
+        }
+      },
+      "owner": "olga",
+      "signIn": {
+        "at": "2026-10-17T23:45:11.204+00:00",
+        "ms": 37.4,
+        "port": 13710,
+        "status": 201
+      },
+      "status": {
+        "display": null,
+        "enabled": false,
+        "http": 200,
+        "managementState": "NOT_PROVISIONED"
+      },
+      "usersMe": {
+        "id": "34hkYc8K7s6UnWLbXUyo3",
+        "status": 200
+      },
+      "writes": {
+        "delete": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        },
+        "ensure": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        },
+        "retry": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        },
+        "sleep": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        },
+        "wake": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        }
+      }
+    },
+    {
+      "account": "existing",
+      "capabilities": {
+        "managedRunners": {
+          "contractVersion": 1,
+          "enabled": false
+        }
+      },
+      "owner": "erin",
+      "signIn": {
+        "at": "2026-10-17T23:45:11.371+00:00",
+        "ms": 40.9,
+        "port": 13710,
+        "status": 201
+      },
+      "status": {
+        "display": null,
+        "enabled": false,
+        "http": 200,
+        "managementState": "SLEEPING"
+      },
+      "usersMe": {
+        "id": "34hkLQ8LZayiRZwU7JNrb",
+        "status": 200
+      },
+      "writes": {
+        "delete": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        },
+        "ensure": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        },
+        "retry": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        },
+        "sleep": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        },
+        "wake": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        }
+      }
+    },
+    {
+      "account": "existing",
+      "capabilities": {
+        "managedRunners": {
+          "contractVersion": 1,
+          "enabled": false
+        }
+      },
+      "owner": "vera",
+      "signIn": {
+        "at": "2026-10-17T23:45:11.504+00:00",
+        "ms": 47.3,
+        "port": 13710,
+        "status": 201
+      },
+      "status": {
+        "display": null,
+        "enabled": false,
+        "http": 200,
+        "managementState": "SLEEPING"
+      },
+      "usersMe": {
+        "id": "34hjevQ3Zt1PpcMaStfzg",
+        "status": 200
+      },
+      "writes": {
+        "delete": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        },
+        "ensure": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        },
+        "retry": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        },
+        "sleep": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        },
+        "wake": {
+          "code": "MANAGED_RUNNER_DISABLED",
+          "status": 404
+        }
+      }
+    }
+  ],
+  "signedInOwners": {
+    "t05-erin@lab.invalid": {
+      "after": {
+        "mappings": 1,
+        "runners": 1,
+        "workspaces": 1
+      },
+      "before": {
+        "mappings": 1,
+        "runners": 1,
+        "workspaces": 1
+      }
+    },
+    "t05-olga@lab.invalid": {
+      "after": {
+        "mappings": 0,
+        "runners": 0,
+        "workspaces": 0
+      },
+      "before": {
+        "mappings": 0,
+        "runners": 0,
+        "workspaces": 0
+      }
+    },
+    "t05-vera@lab.invalid": {
+      "after": {
+        "mappings": 1,
+        "runners": 2,
+        "workspaces": 3
+      },
+      "before": {
+        "mappings": 1,
+        "runners": 2,
+        "workspaces": 3
+      }
+    }
+  },
+  "signedInOwnersUnchanged": true,
+  "switch": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=false",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t05/managed-runner-profile.json"
+  ],
+  "waitedSeconds": 90,
+  "workspaceRowsUnchanged": true
+}

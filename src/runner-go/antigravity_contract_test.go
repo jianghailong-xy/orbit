@@ -490,6 +490,9 @@ func waitGone(t *testing.T, what string, gone func() bool) {
 	}
 }
 
+// agyToolCall is a mock:tool line for a call with every parameter some agy release requires — 1.4.2's
+// tools require toolAction, and its run_command a Cwd, both of which 1.4.3 refuses — which the mock
+// trims to what the running agy declares. name may list a renamed tool's names: view_file|read_file.
 func agyToolCall(name string, args map[string]interface{}) string {
 	args["toolSummary"] = name
 	args["toolAction"] = "Using " + name
@@ -777,6 +780,10 @@ func TestAntigravityContractInterruptedToolGetsResult(t *testing.T) {
 		t.Fatalf("the command is not running: %v", err)
 	}
 	agyPID, _ := c.onlyAgy()
+	// agy starts the command a moment before it streams the step that announces it, so the pid files
+	// can be there while the runner has no call to answer yet. Stop comes once the call is on its
+	// card, the way a person presses it.
+	waitFor(t, "the run_command call relayed as a tool_use", func() bool { return len(c.eventsOf("t1", evToolUse)) == 1 })
 	if results := c.eventsOf("t1", evToolResult); len(results) != 0 {
 		t.Fatalf("the command has a result while it runs: %v", results)
 	}

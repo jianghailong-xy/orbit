@@ -289,7 +289,12 @@ struct ConsoleView: View {
             // The reader's messages nothing has read yet, on the composer they were sent from —
             // not folded while typing: they are about the message flow being typed into.
             PendingTrayView(console: console, rows: console.pendingTrayRows(
-                turnRunning: (appModel.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running))
+                turnRunning: (appModel.session(id: console.sessionID)?.effectiveRunStatus ?? console.state.status) == .running),
+                            // Why none of them goes into the turn running now: Cursor CLI's would stop it.
+                            note: console.engine == CursorRuntime.engine ? CursorRuntime.queueNote : nil)
+            // The landing this conversation's work fed, at the session's own bottom (owner
+            // 2026-10-19, board v4 06 e): absent from a session that produced no landing work.
+            SourceLandingChip(console: console)
             ComposerView(console: console)
             // What the provider pick standing in the composer will do, and WHEN — the
             // part that matters, because a run keeps its provider for its whole life.
@@ -304,7 +309,12 @@ struct ConsoleView: View {
 
     private func consoleBody(navTitleWidth: CGFloat) -> some View {
         Group {
-            if let console = registry.peek(sessionID) {
+            // A LANDING session is platform work, not a conversation (§2.9 LS6): the same frame
+            // (`.console`, so every push and `/sessions/<id>` link still lands here) draws the
+            // landing page instead of a transcript, and nothing ever creates a console model for it.
+            if appModel.session(id: sessionID)?.isLanding == true {
+                LandingSessionPageView(sessionID: sessionID)
+            } else if let console = registry.peek(sessionID) {
                 transcriptAndBand(console, navTitleWidth: navTitleWidth)
                 // Image cache for user-turn attachments, read by `UserBubbleView` down the tree.
                 .environment(registry.attachments)
@@ -354,6 +364,9 @@ struct ConsoleView: View {
         // view's lifecycle) — so backing out to the list reliably drops the connection even if SwiftUI
         // keeps this off-screen view cached, and at most one session ever streams.
         .task(id: sessionID) {
+            // Platform work has no transcript to hydrate, and a console model for one would write
+            // an empty store beside a page that never shows it.
+            guard appModel.session(id: sessionID)?.isLanding != true else { return }
             _ = registry.model(for: sessionID, agentID: agentID)
         }
         .onChange(of: sessionID) { _, _ in
@@ -373,7 +386,9 @@ struct ConsoleView: View {
         // bar pointing down into this transcript instead of away from it. See `NeedsYouBannerView`.
         // While you type the bar folds away with the nav bar (`foldsChrome`), and a backdrop takes the
         // nav bar's place behind the status bar so the transcript doesn't scroll under the clock.
-        .safeAreaInset(edge: .top, spacing: 0) {
+        // On iOS 26 it floats over the transcript as the composer band does at the bottom
+        // (`needsYouTop`).
+        .needsYouTop {
             if hSize == .compact {
                 let console = registry.peek(sessionID)
                 if foldsChrome(console) {
@@ -403,12 +418,17 @@ struct ConsoleView: View {
         // says.
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                if let session = appModel.session(id: sessionID) {
-                    sessionMenu(session)
-                } else {
-                    Button {} label: { Image(systemName: "ellipsis") }
-                        .disabled(true)
-                        .accessibilityLabel("Session actions")
+                // A landing session is platform work (LS6): its page carries the ⋯ menu the design
+                // gives it, and none of the conversation's own actions — no rename, share, pin,
+                // move or complete. The frame still shows Back, which is how a reader leaves.
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    if let session = appModel.session(id: sessionID) {
+                        sessionMenu(session)
+                    } else {
+                        Button {} label: { Image(systemName: "ellipsis") }
+                            .disabled(true)
+                            .accessibilityLabel("Session actions")
+                    }
                 }
             }
         }
@@ -439,10 +459,14 @@ struct ConsoleView: View {
         // `.primaryAction` there, as the project and task pages' menus do.
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { showShare = true } label: {
-                    Label("Share session", systemImage: "square.and.arrow.up")
+                // No Share on a landing session (LS6): it is platform work, not a conversation,
+                // and its page's own ⋯ menu is the whole of what it offers.
+                if appModel.session(id: sessionID)?.isLanding != true {
+                    Button { showShare = true } label: {
+                        Label("Share session", systemImage: "square.and.arrow.up")
+                    }
+                    .help("Share a read-only link to this session")
                 }
-                .help("Share a read-only link to this session")
             }
         }
         #endif
@@ -1056,6 +1080,13 @@ struct TranscriptView: View {
         }
     }
 
+    /// The words of a message at the tail that never reached the engine, back in the composer
+    /// (`ConsoleModel.putBack`): the row goes, and a receipt is discarded with it.
+    private func putBack(_ bubble: UserBubble) -> (() -> Void)? {
+        guard SteerDelivery.offersPutBack(bubble) else { return nil }
+        return { Task { await console.putBack(bubble) } }
+    }
+
     @ViewBuilder
     private func transcriptRow(_ row: TranscriptRow) -> some View {
         switch row {
@@ -1100,7 +1131,7 @@ struct TranscriptView: View {
                 Task { await console.cancelQueued(bubble) }
             }, steer: SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
                 Task { await console.withdrawSteer(bubble) }
-            })
+            }, putBack: putBack(bubble))
         case .bottom:
             // Both shapes end in the room the list's fade lies over (`fadesIntoComposerBand`), so a list
             // at its tail has nothing in the fade. In the row's content, not its insets: every follow and
@@ -1343,6 +1374,20 @@ private extension View {
 
 #if os(iOS)
 private extension View {
+    /// Where the needs-you bar stands: on iOS 26 a safe-area BAR, so the transcript runs on under
+    /// its capsule and the scroll-edge effect softens what passes there, as under the nav bar above
+    /// it and the composer band below (the owner, 2026-10-16: the bottom as clear as the top; and
+    /// 2026-10-21: the bar a capsule, not a band). Before it, the inset it always was, the bar
+    /// standing on the page's colour.
+    @ViewBuilder func needsYouTop<Bar: View>(@ViewBuilder _ bar: () -> Bar) -> some View {
+        if #available(iOS 26.0, *) {
+            let content = bar()
+            safeAreaBar(edge: .top, spacing: 0) { content.environment(\.floatsOverTranscript, true) }
+        } else {
+            safeAreaInset(edge: .top, spacing: 0, content: bar)
+        }
+    }
+
     /// The sticky question's capsule: iOS 26's Liquid Glass at the height of the back and ⋯ buttons
     /// beside it. Earlier systems draw those as bare glyphs in a 44-point bar, so there it is a
     /// smaller capsule of system fill, as a search field is.
@@ -1809,12 +1854,14 @@ struct TranscriptItemView: View {
         case .user(let b):
             // Which card a user turn is — or the owner's bubble — is decided in one place, for the
             // transcript and the queued tail alike (`UserTurnRow`).
-            UserTurnRow(bubble: b, steer: steerControls(b))
+            UserTurnRow(bubble: b, steer: steerControls(b), putBack: putBack(b))
         case .assistant(let b): AssistantBubbleView(bubble: b)
         case .thinking(let b):  ThinkingView(block: b)
         case .toolCall(let c):  ToolCardView(card: c, fullPayload: fullPayload)
-        case .interrupt:
-            Label("Interrupted", systemImage: "stop.circle").font(.orbitLabel).foregroundStyle(.secondary)
+        case .interrupt(_, _, let runnerRestart):
+            // Nobody pressed Stop on a turn the runner's restart cut off: the row says what did (web parity).
+            Label(runnerRestart ? "Interrupted — the runner restarted" : "Interrupted", systemImage: "stop.circle")
+                .font(.orbitLabel).foregroundStyle(.secondary)
         case .error(_, let message):
             if let console, console.executesDsh, let repair = DshRuntime.repair(message) {
                 DshRepairCardView(console: console, repair: repair)
@@ -1859,5 +1906,12 @@ struct TranscriptItemView: View {
         return SteerControls(bubble: bubble, withdrawing: console.withdrawingSteers) {
             Task { await console.withdrawSteer(bubble) }
         }
+    }
+
+    /// The words of a message in the conversation that never reached the engine, back in the
+    /// composer (`ConsoleModel.putBack`); the bubble itself stays.
+    private func putBack(_ bubble: UserBubble) -> (() -> Void)? {
+        guard let console, SteerDelivery.offersPutBack(bubble) else { return nil }
+        return { Task { await console.putBack(bubble) } }
     }
 }

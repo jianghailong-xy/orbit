@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-17T21:32:26.907+00:00",
+  "content": {
+    "claudeAiOauth": {
+      "accessToken": "",
+      "expiresAt": 4102444800000,
+      "refreshToken": "orbit-lab-stand-in-not-a-credential",
+      "scopes": [],
+      "subscriptionType": null
+    }
+  },
+  "contentSha256": "0d48a14b07f7d8fca2d6e3e9732d669d6ac3eab25601e3631a639885e2204df2",
+  "generation": 1,
+  "owner": "bob",
+  "pod": "9b3a5363-d639-4066-b9ca-1dd03770fc0a",
+  "written": [
+    "-rw------- 1 10001 10001 161 Oct 17 21:32 /var/lib/orbit/home/.claude/.credentials.json",
+    "0d48a14b07f7d8fca2d6e3e9732d669d6ac3eab25601e3631a639885e2204df2  /var/lib/orbit/home/.claude/.credentials.json",
+    ""
+  ]
+}

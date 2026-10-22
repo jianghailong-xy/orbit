@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "repo": { "command": "__WORK__/.cursor/hooks/mark.sh", "args": ["repo-mcp-server"] }
+  }
+}

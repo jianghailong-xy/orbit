@@ -123,9 +123,10 @@ internal object WatchProjection {
 
     fun targetCount(n: Int) = if (n == 1) "1 target" else "$n targets"
 
-    /** The noun a set of targets counts in: the one kind every target shares, "targets" for a mix. */
+    /** The noun a set of targets counts in: the one kind every target shares, "targets" for a mix. A task's run session is that
+     * task here ([waitedOn]). */
     fun targetNoun(watches: List<Watch>, count: Int): String {
-        val kinds = watches.flatMap { w -> w.targets.map { it.targetKind } }.toSet()
+        val kinds = watches.flatMap { w -> w.targets.map { it.waitedOn.targetKind } }.toSet()
         val noun = if (kinds.size != 1) "target" else if (WatchTargetKind.TASK in kinds) "task" else "session"
         return if (count == 1) noun else "${noun}s"
     }
@@ -398,9 +399,10 @@ internal object WatchProjection {
         return WatchSessionGlyph.of(standing.status)
     }
 
-    /** The targets an opened strip lists for one watch: the live ones, what the condition has already met first. */
+    /** The targets an opened strip lists for one watch: the live ones, each once and a task's run session as that task
+     * ([waitedOn]), what the condition has already met first. */
     fun stripTargets(watch: Watch): List<WatchTarget> {
-        val live = watch.targets.filter { it.state != WatchTargetState.GONE }
+        val live = watch.targets.filter { it.state != WatchTargetState.GONE }.map { it.waitedOn }.distinctBy { it.waitedKey }
         return live.filter { it.state == WatchTargetState.SATISFIED } + live.filter { it.state != WatchTargetState.SATISFIED }
     }
 
@@ -463,6 +465,18 @@ internal object WatchProjection {
     }
 }
 
+/** The target as the cards above the composer and the session's watching words count it (OrbitKit `WatchTarget.waitedOn`, the
+ * browser's `waitedOn`): a session that runs a task ([WatchTarget.targetTask]) is a target on that task — its id, its title, where it
+ * stands — so a task and its run session are one target, drawn on the task's row. Any other target is itself, and so is every target
+ * from a server older than the field. The watch's own page and its condition say the watch as it was made, and read targets as they
+ * are. */
+internal val WatchTarget.waitedOn: WatchTarget get() = targetTask?.let { task ->
+    copy(targetKind = WatchTargetKind.TASK, targetResourceId = task.id, targetTitle = task.title, targetStatus = task.status, targetTask = null)
+} ?: this
+
+/** One key per target as it is waited on ([waitedOn]), whichever way its id is spelled. */
+internal val WatchTarget.waitedKey: String get() = waitedOn.let { "${it.targetKind.name}:${watchKey(it.targetResourceId)}" }
+
 /** A session as an observer: the live watches that resume it when they match (OrbitKit `WatchSessionSummary`). */
 internal data class WatchSessionSummary(
     /** Live RESUME_SESSION watches whose observer is the session. Never empty. */
@@ -470,27 +484,27 @@ internal data class WatchSessionSummary(
 ) {
     private val active get() = watches.filter { it.state == WatchState.ACTIVE }
 
-    /** "Watching 7 targets" — the targets still in the set, each counted once across the ACTIVE watches — or
-     * "Watch paused" when every one of them is paused. */
+    /** "Watching 7 targets" — the targets still in the set, each counted once across the ACTIVE watches and a task's run session
+     * as that task ([waitedOn]), as the server's own tally counts them — or "Watch paused" when every one of them is paused. */
     val word: String get() {
         if (active.isEmpty()) return if (watches.size == 1) "Watch paused" else "${watches.size} watches paused"
-        val seen = active.flatMap { it.targets }.filter { it.state != WatchTargetState.GONE }
-            .map { "${it.targetKind.name}:${watchKey(it.targetResourceId)}" }.toSet()
+        val seen = active.flatMap { it.targets }.filter { it.state != WatchTargetState.GONE }.map { it.waitedKey }.toSet()
         return WatchProjection.watchingLabel(seen.size)
     }
 
     /** One watch's progress, or how many watches there are when there are several. */
     val progress: String get() = if (watches.size == 1) WatchProjection.progress(watches[0]) else "${watches.size} watches"
 
-    /** The distinct targets still in the set, each counted once across every watch. */
+    /** The distinct targets still in the set, each counted once across every watch — a task and its run session once
+     * ([waitedOn]) — the way its watch names it, which is what a condition's own count reads. */
     private val lineTargets: List<WatchTarget> get() {
         val seen = mutableSetOf<String>()
-        return watches.flatMap { it.targets }.filter { it.state != WatchTargetState.GONE }
-            .filter { seen.add("${it.targetKind.name}:${watchKey(it.targetResourceId)}") }
+        return watches.flatMap { it.targets }.filter { it.state != WatchTargetState.GONE }.filter { seen.add(it.waitedKey) }
     }
 
-    /** The one target a lone watch over one target that still exists names; null when the line counts instead. */
-    val lineTarget: WatchTarget? get() = lineTargets.takeIf { watches.size == 1 && it.size == 1 }?.single()
+    /** The one target left that still exists, named however many watches wait on it — a task its run session stands for
+     * ([waitedOn]); null when the line counts instead. */
+    val lineTarget: WatchTarget? get() = lineTargets.singleOrNull()?.waitedOn
 
     val lineTargetCount: Int get() = lineTargets.size
 
@@ -501,9 +515,10 @@ internal data class WatchSessionSummary(
         return WatchProjection.thresholdLabel(watches[0].predicate, lineTargets, watches)
     }
 
-    /** Tasks created here's sentence over the distinct live targets (`2 running · 1 failed · 4/8 done`). */
+    /** Tasks created here's sentence over the distinct live targets (`2 running · 1 failed · 4/8 done`), a run session where its
+     * task stands. */
     val lineParts: List<WatchCountCopy.Part> get() {
-        val counts = WatchProjection.stripCounts(lineTargets)
+        val counts = WatchProjection.stripCounts(lineTargets.map { it.waitedOn })
         return WatchCountCopy.parts(counts.running, counts.failed, counts.done, counts.total)
     }
 
@@ -515,17 +530,19 @@ internal data class WatchSessionSummary(
         return if (active.isEmpty()) word + WatchCountCopy.SEPARATOR + what else "${WatchProjection.STRIP_LABEL} $what"
     }
 
-    /** The watches the Watching card draws (A08-6; OrbitKit `beyondTasks`): those waiting on something that is not a task. A task the
-     * session waits on is an eye in its Tasks card instead. Null when every watch waits on tasks. */
+    /** The watches the Watching card draws (A08-6; OrbitKit `beyondTasks`): those waiting on something that is neither a task nor a
+     * task's run session ([waitedOn]). A task the session waits on is an eye in its Tasks card instead. Null when every watch waits on
+     * tasks. */
     val beyondTasks: WatchSessionSummary? get() =
-        watches.filter { watch -> watch.targets.any { it.state != WatchTargetState.GONE && it.targetKind != WatchTargetKind.TASK } }
+        watches.filter { watch -> watch.targets.any { it.state != WatchTargetState.GONE && it.waitedOn.targetKind != WatchTargetKind.TASK } }
             .takeIf { it.isNotEmpty() }?.let(::WatchSessionSummary)
 
-    /** The tasks the live watches wait on, for the Tasks card; [name] names a target the watch carries no title for. */
+    /** The tasks the live watches wait on, a task's run session as that task ([waitedOn]), for the Tasks card; [name] names a target
+     * the watch carries no title for. */
     fun watchedTasks(now: Instant, name: (WatchTarget) -> String? = { null }): List<io.orbitd.android.cards.SessionWatchedTask> =
         watches.flatMap { watch ->
             val stale = WatchProjection.stripStaleLine(watch, now) != null
-            watch.targets.filter { it.state != WatchTargetState.GONE && it.targetKind == WatchTargetKind.TASK }.map { target ->
+            watch.targets.filter { it.state != WatchTargetState.GONE }.map { it.waitedOn }.filter { it.targetKind == WatchTargetKind.TASK }.map { target ->
                 io.orbitd.android.cards.SessionWatchedTask(target.targetResourceId,
                     WatchProjection.targetTitle(WatchTargetKind.TASK, target.targetResourceId, target.targetTitle ?: name(target)),
                     target.targetStatus, stale)
@@ -534,7 +551,7 @@ internal data class WatchSessionSummary(
 
     /** What the Tasks card says above its rows: the unchecked reminder of each watch the Watching card doesn't draw, each once. */
     fun taskStaleLines(now: Instant): List<String> = watches
-        .filter { watch -> watch.targets.none { it.state != WatchTargetState.GONE && it.targetKind != WatchTargetKind.TASK } }
+        .filter { watch -> watch.targets.none { it.state != WatchTargetState.GONE && it.waitedOn.targetKind != WatchTargetKind.TASK } }
         .mapNotNull { WatchProjection.stripStaleLine(it, now) }.distinct()
 
     /** The oldest last look among the ACTIVE watches; null while they're all paused. */

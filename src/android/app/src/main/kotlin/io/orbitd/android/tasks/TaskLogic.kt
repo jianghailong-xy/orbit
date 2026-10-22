@@ -322,6 +322,7 @@ object TaskDetailCopy {
     const val runsHeading = "Runs"
     const val commentsHeading = "Comments"
     const val runNow = "Run now"
+    const val nothingStartsThisTask = "Nothing starts this task by itself: auto-run needs a prerequisite or a project, and it has neither."
     const val assigneeLabel = "Assignee"
     const val providerLabel = "Provider"
     const val modelLabel = "Model"
@@ -681,6 +682,14 @@ object TaskDetailLogic {
         task.obj("assignee") == null -> TaskDetailCopy.runDisabledUnassigned
         !assigneeHasRunner -> TaskDetailCopy.runDisabledNoRunner
         else -> null
+    }
+
+    /** OrbitKit's `runNowHint`: on a Run that can be taken, that it is the task's only start. Auto-run never picks up an
+     * OPEN task in no project that has no prerequisites, and a scheduled start does start it, so only that task gets it —
+     * and not from a row that does not carry its prerequisites. */
+    fun runNowHint(task: JsonObject): String? = TaskDetailCopy.nothingStartsThisTask.takeIf {
+        task.text("status") == "OPEN" && task.text("projectId") == null && (task["dependsOn"] as? JsonArray)?.isEmpty() == true &&
+            task.text("runAt").isNullOrEmpty()
     }
 
     fun createdFootnote(creatorName: String?, createdAt: String?, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String? {

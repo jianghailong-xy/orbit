@@ -1,0 +1,21 @@
+{
+  "attachmentBeforeRelease": {
+    "attached": false,
+    "deletionTimestamp": "2026-10-18T09:18:52Z",
+    "finalizers": [
+      "orbit.dev/t07b-detach-held"
+    ],
+    "name": "csi-a2f5d12f5e74b9ea0f272b4214dffc55a5ebc9b3281fa1c4cc415e269b5066ad",
+    "node": "orbit-mr-lab"
+  },
+  "attachmentGoneAt": "2026-10-18T09:19:11.976+00:00",
+  "heldUntil": "2026-10-18T09:19:11.919+00:00",
+  "owner": "amy",
+  "pv": "pvc-3d7239dd-281f-4a10-8720-e270c96cf7ec",
+  "waitSeen": [
+    {
+      "at": "2026-10-18T09:19:01.616+00:00",
+      "storedReason": "VOLUME_STILL_ATTACHED"
+    }
+  ]
+}

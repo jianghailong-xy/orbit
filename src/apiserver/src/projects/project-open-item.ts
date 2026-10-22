@@ -56,7 +56,9 @@ export interface ProjectOpenItemDelivery {
  *  (`DONE_REQUEST`, `project-done-request.ts`; migration 0345). `DELIVERY_REVIEW` (0375) is a
  *  finished delivery whose landing somebody has to decide — files outside its declaration, a
  *  branch git refused, or a written reason for keeping a completion criterion Orbit questioned —
- *  put to the coordinator first. */
+ *  put to the coordinator first. `LANDING_LEASE_EXPIRED` (0439) is the owner's: the escalation
+ *  clock opens it when a RUNNING job's current claim has been LEASE_EXPIRED for fifteen minutes
+ *  (§4.6 X-E5), so that the owner can abandon an attempt whose runner stopped reporting. */
 export const OPEN_ITEM_KINDS = [
   'INTEGRATION_CONFLICT',
   'INTEGRATION_CHECK_FAILED',
@@ -68,6 +70,7 @@ export const OPEN_ITEM_KINDS = [
   'START_REQUEST',
   'DONE_REQUEST',
   'DELIVERY_REVIEW',
+  'LANDING_LEASE_EXPIRED',
 ] as const;
 export type OpenItemKind = (typeof OPEN_ITEM_KINDS)[number];
 
@@ -147,6 +150,9 @@ export const OPEN_ITEM_RESOLUTIONS = [
   'ANSWERED',
   'WITHDRAWN',
   'RESUMED',
+  /** The claim a `LANDING_LEASE_EXPIRED` item was about moved on: it reported, was released, was
+   *  taken over, or its job reached any terminal state (§4.6 X-E5). */
+  'JOB_MOVED_ON',
 ] as const;
 export type OpenItemResolution = (typeof OPEN_ITEM_RESOLUTIONS)[number];
 
@@ -311,6 +317,7 @@ export function ownerItemNeed(kind: OpenItemKind | string): string {
     case 'START_REQUEST': return 'Ready to start';
     case 'DONE_REQUEST': return 'Ready to close';
     case 'DELIVERY_REVIEW': return 'Delivery review';
+    case 'LANDING_LEASE_EXPIRED': return 'Runner stopped reporting';
     default: return 'Exception';
   }
 }
@@ -414,6 +421,10 @@ export function openItemRequiredAction(row: OpenItemDecisionRow): string {
   }
   if (row.kind === 'DELIVERY_REVIEW') {
     return `This delivery needs a landing decision — ${actor === 'You' ? 'review it and' : 'review it, then'} retry, repair, or close it.`;
+  }
+  // §4.6 X-E5's card: the one sentence the contract spells for this kind, byte for byte.
+  if (row.kind === 'LANDING_LEASE_EXPIRED') {
+    return 'The runner stopped reporting; abandon this landing, or wait for the runner to come back.';
   }
   if (sourceJob === 'MAIN_SYNC' && failureClass === 'CONFLICT') {
     return 'The project branch cannot move until this sync conflict is repaired — record the fix and reopen the task.';
@@ -788,6 +799,9 @@ export const INTEGRATION_ITEM_KINDS: readonly OpenItemKind[] = [
  * By what the item names:
  *  - a merge card (`PROMOTION_APPROVAL`) is owed while its candidate is READY, the one state the
  *    owner's Merge acts on (`promotionConfirmRefusal`);
+ *  - a `LANDING_LEASE_EXPIRED` item, while its job is still RUNNING under the claim generation its
+ *    dedupe key names: the fact is that ONE claim's lease, so the first accepted report, a release,
+ *    a takeover (which moves the generation) or any terminal state answers it;
  *  - an INTEGRATION_* item about a candidate, while the candidate is live (`LIVE_PROMOTION_STATES`,
  *    BLOCKED among them: a blocked candidate is what such an item waits on somebody to fix);
  *  - an INTEGRATION_* item about a task's landing, while the task is neither cancelled nor replaced —
@@ -815,6 +829,11 @@ export function openItemOwed(alias: string): Prisma.Sql {
   const live = Prisma.raw(LIVE_PROMOTION_STATES.map((state) => `'${state}'`).join(', '));
   const liveSessions = Prisma.raw(PROJECT_LIVE_SESSION_STATUS_SQL);
   return Prisma.sql`(CASE
+      WHEN ${item}."kind" = 'LANDING_LEASE_EXPIRED' THEN EXISTS (
+        SELECT 1 FROM "project_integration_job" owed_job
+         WHERE owed_job."id" = ${item}."integration_job_id"
+           AND owed_job."state" = 'RUNNING'
+           AND ${item}."dedupe_key" = 'LE:' || owed_job."id"::text || ':' || owed_job."claim_generation"::text)
       WHEN ${item}."promotion_id" IS NOT NULL AND ${item}."kind" = 'PROMOTION_APPROVAL' THEN EXISTS (
         SELECT 1 FROM "project_promotion" owed_promotion
          WHERE owed_promotion."id" = ${item}."promotion_id"
@@ -1134,6 +1153,51 @@ export async function rearmItemFixedBy(
 
 /** What a finished delivery whose landing somebody has to decide is filed under (0375). */
 export const DELIVERY_REVIEW_KIND = 'DELIVERY_REVIEW' satisfies OpenItemKind;
+
+/** The owner's item about a claim whose runner stopped reporting (§4.6 X-E5, 0439). */
+export const LANDING_LEASE_EXPIRED_KIND = 'LANDING_LEASE_EXPIRED' satisfies OpenItemKind;
+
+/**
+ * One item per claim of one job (§4.2's dedupe key for `LANDING_LEASE_EXPIRED`): the lease that
+ * expired is that generation's, so a takeover opens a second item rather than refreshing this one,
+ * and every edge that ends one generation can name the row it ends.
+ */
+export function leaseExpiredDedupeKey(
+  jobId: string,
+  claimGeneration: bigint | number | string,
+): string {
+  return `LE:${jobId}:${claimGeneration.toString()}`;
+}
+
+/**
+ * The edge §4.6 X-E5 writes: the claim an item was opened about moved on — it reported again, it
+ * was released, a takeover took it, or the job reached any terminal state — so nobody owes the
+ * owner a decision about it any more. Called in the transaction that wrote that fact, for every
+ * open lease item of the job; a row already ended is left alone by the terminal guard.
+ *
+ * `by` is the party that moved it: the platform for a report, a release or a result, and for the
+ * abandon doors the person (`USER` with their id) or the coordinator (with its conversation), so
+ * the ending records who acted exactly as every other hand-ended row does.
+ */
+export async function resolveLeaseExpiredItems(
+  tx: Pick<Prisma.TransactionClient, 'projectOpenItem'>,
+  jobId: string,
+  by: { resolvedBy: OpenItemResolvedBy; resolvedByUserId?: string | null; resolvedBySessionId?: string | null }
+    = { resolvedBy: 'PLATFORM' },
+): Promise<number> {
+  const closed = await tx.projectOpenItem.updateMany({
+    where: { integrationJobId: jobId, kind: LANDING_LEASE_EXPIRED_KIND, state: 'OPEN' },
+    data: {
+      state: 'RESOLVED',
+      resolution: 'JOB_MOVED_ON',
+      resolvedBy: by.resolvedBy,
+      resolvedByUserId: by.resolvedByUserId ?? null,
+      resolvedBySessionId: by.resolvedBySessionId ?? null,
+      resolvedAt: new Date(),
+    },
+  });
+  return closed.count;
+}
 
 /** The three readings answered by the bounded task-landing decision. */
 export type DeliveryReviewReason =
@@ -1564,6 +1628,13 @@ interface IntegrationItemPayload {
   } | null;
   errorCode?: string;
   errorDetail?: unknown;
+  /**
+   * J-T13: the commits that moved the upstream under a LAND_PROMOTION (contract §4.2's payload
+   * note), at the top level and never inside `errorDetail`. Deliberately not read by
+   * `integrationItemFacts` or `failureClassLines`: the delivery text is replayed byte for byte
+   * (G6), and a field added for a person reading the payload must not move it.
+   */
+  upstreamMovedCommits?: unknown;
   /** What the failure was of (`landingFailureClass`), and which generation of the landing it was. */
   failureClass?: string | null;
   generation?: number;
@@ -1575,6 +1646,89 @@ interface IntegrationItemPayload {
     requestedBySessionId?: string | null;
     requestedByUserId?: string | null;
   } | null;
+  /**
+   * The landing session this attempt belongs to (§2.9 LS1), at the top level like
+   * `upstreamMovedCommits` and for the same reason (G6): the delivery text is replayed byte for
+   * byte, and this field is read by the item's card, never by its message.
+   */
+  landingSessionId?: string | null;
+  /** The round inside the claim that failed, from 1, as the v2 reports named it (§2.2 J-T4). Its own
+   *  top-level field, not read by the delivery text. */
+  round?: number | null;
+}
+
+/**
+ * The landing session an item's payload records (§2.9 LS1), or null when it records none — a
+ * payload an older build wrote, a promotion's item that predates the field, a kind that lands
+ * nothing.
+ */
+export function landingSessionIdOf(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const value = (payload as { landingSessionId?: unknown }).landingSessionId;
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/**
+ * The claim an X-E5 item's payload names (§4.6 X-E5, revision 23), as its card reads it.
+ *
+ * The heading's "<N>m" counts from the last report; J12's two facts (the claim's protocol and
+ * whether it ever recorded a push) decide the Abandon sentence; and the card's three rows are drawn
+ * from the rest — the landing's generation, the runner with its last report and the lease's expiry,
+ * and the step with the claim and round. Null for a payload that names none of them, which is what
+ * an older build wrote; the card then says the cautious half of J12 ("it may have been pushed") and
+ * leaves the heading's number out, rather than claiming a push that never happened. Every field
+ * beyond the three the first build wrote is optional: an item opened before it draws what it has.
+ */
+export function leaseFactsOf(
+  payload: unknown,
+): {
+  lastReportAt: string | null;
+  leaseExpiredAt: string | null;
+  jobKind: string | null;
+  generation: number | null;
+  phase: string | null;
+  step: string | null;
+  claimGeneration: number | null;
+  round: number | null;
+  checkCount: number | null;
+  runner: string | null;
+  progressProtocol: string | null;
+  pushReported: boolean;
+} | null {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
+  const row = payload as {
+    lastReportAt?: unknown; leaseExpiredAt?: unknown; jobKind?: unknown; generation?: unknown;
+    phase?: unknown; step?: unknown; claimGeneration?: unknown; round?: unknown; checkCount?: unknown;
+    runner?: unknown; progressProtocol?: unknown; pushReported?: unknown;
+  };
+  const text = (value: unknown): string | null =>
+    typeof value === 'string' && value !== '' ? value : null;
+  const count = (value: unknown): number | null => {
+    const n = typeof value === 'string' ? Number(value) : value;
+    return typeof n === 'number' && Number.isInteger(n) ? n : null;
+  };
+  const lastReportAt = text(row.lastReportAt);
+  const jobKind = text(row.jobKind);
+  const progressProtocol = text(row.progressProtocol);
+  if (lastReportAt === null && jobKind === null && progressProtocol === null && row.pushReported === undefined) {
+    return null;
+  }
+  return {
+    lastReportAt,
+    leaseExpiredAt: text(row.leaseExpiredAt),
+    jobKind,
+    // Which generation of the work this claim was on, and the claim's own numbers: the card's
+    // "generation N", "claim N · round N of M".
+    generation: count(row.generation),
+    phase: text(row.phase),
+    step: text(row.step),
+    claimGeneration: count(row.claimGeneration),
+    round: count(row.round),
+    checkCount: count(row.checkCount),
+    runner: text(row.runner),
+    progressProtocol,
+    pushReported: row.pushReported === true,
+  };
 }
 
 /** Longest tail of a check's output a turn carries. The payload holds 16 KiB; a turn is not a log. */
@@ -1840,7 +1994,7 @@ export function openItemFacts(
   task: { id: string; title: string } | null,
 ): OpenItemFacts | null {
   if (!(INTEGRATION_ITEM_KINDS as readonly string[]).includes(kind) && kind !== 'TASK_FAILED'
-      && kind !== DELIVERY_REVIEW_KIND) {
+      && kind !== DELIVERY_REVIEW_KIND && kind !== 'LANDING_LEASE_EXPIRED') {
     return null;
   }
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
@@ -2334,6 +2488,9 @@ export async function readOpenItemDeliveryCard(
       upstream: branches.upstream[0]!,
       integration: branches.integration[0]!,
     },
+    // The landing the failure came from, when its payload recorded one: the transcript card's
+    // "Open the landing ↗" and the row's `OPEN_LANDING` both reach it.
+    landingSessionId: landingSessionIdOf(item.payload),
   };
 }
 

@@ -1,0 +1,40 @@
+{
+  "at": "2026-10-17T23:12:24.407+00:00",
+  "display": {
+    "acceptsWork": true,
+    "detail": "Orbit is setting up a runner for you. Sessions can start here once it is ready.",
+    "ensure": false,
+    "kind": "preparing",
+    "moving": true,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": false,
+    "title": "Preparing your managed runner"
+  },
+  "owner": "dora",
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hjkjinEmKqKFiWEM4Ej",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "OFFLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": null,
+    "managementState": "PROVISIONING",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 4,
+    "runnerId": "34hjkjiVESUBoVp9PV5Va",
+    "runnerPublicId": "34hjkjiVESUBoVp9PV5Va",
+    "usable": false,
+    "workspaceId": "34hjkjinEmKqKFiWEM4Ej",
+    "workspacePublicId": "34hjkjinEmKqKFiWEM4Ej"
+  }
+}

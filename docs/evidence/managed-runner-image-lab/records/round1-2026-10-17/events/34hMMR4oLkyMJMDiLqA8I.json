@@ -1,0 +1,522 @@
+[
+ {
+  "seq": 1,
+  "type": "user",
+  "payload": {
+   "text": "T03-SECRET bluefinch. This is the lab's FAKE model, not a real model: reply with anything.",
+   "delivery": "enqueued",
+   "attachments": [
+    {
+     "id": "34hMMR3XnCXW55CQtVzJd",
+     "mime": "text/plain",
+     "name": "t03-attachment-3.txt",
+     "publicId": "34hMMR3XnCXW55CQtVzJd"
+    }
+   ]
+  },
+  "turnId": "34hMMR8JurPECSLcCwxj0",
+  "ts": "2026-10-17T07:19:13.937Z",
+  "turnPublicId": "34hMMR8JurPECSLcCwxj0"
+ },
+ {
+  "seq": 2,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMMR8JurPECSLcCwxj0",
+   "delivery": "written",
+   "turnPublicId": "34hMMR8JurPECSLcCwxj0"
+  },
+  "turnId": "34hMMR8JurPECSLcCwxj0",
+  "ts": "2026-10-17T07:19:13.937Z",
+  "turnPublicId": "34hMMR8JurPECSLcCwxj0"
+ },
+ {
+  "seq": 3,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-v4-flash",
+   "subtype": "init",
+   "sessionId": "6KiHQrEHpQffRgI41jtWyq",
+   "sessionPublicId": "6KiHQrEHpQffRgI41jtWyq"
+  },
+  "turnId": "34hMMR8JurPECSLcCwxj0",
+  "ts": "2026-10-17T07:19:14.157Z",
+  "turnPublicId": "34hMMR8JurPECSLcCwxj0"
+ },
+ {
+  "seq": 5,
+  "type": "system",
+  "payload": {
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"deepseek-v4-flash\",\"query_source\":\"sdk\"}\n"
+  },
+  "turnId": "34hMMR8JurPECSLcCwxj0",
+  "ts": "2026-10-17T07:19:14.168Z",
+  "turnPublicId": "34hMMR8JurPECSLcCwxj0"
+ },
+ {
+  "seq": 6,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMMR8JurPECSLcCwxj0",
+   "delivery": "acknowledged",
+   "turnPublicId": "34hMMR8JurPECSLcCwxj0"
+  },
+  "turnId": "34hMMR8JurPECSLcCwxj0",
+  "ts": "2026-10-17T07:19:14.204Z",
+  "turnPublicId": "34hMMR8JurPECSLcCwxj0"
+ },
+ {
+  "seq": 8,
+  "type": "assistant",
+  "payload": {
+   "text": "FAKE MODEL reply #1: this conversation has 2 message(s); secrets seen: bluefinch."
+  },
+  "turnId": "34hMMR8JurPECSLcCwxj0",
+  "ts": "2026-10-17T07:19:14.205Z",
+  "turnPublicId": "34hMMR8JurPECSLcCwxj0"
+ },
+ {
+  "seq": 9,
+  "type": "system",
+  "payload": {
+   "subtype": "context",
+   "contextTokens": 30
+  },
+  "turnId": "34hMMR8JurPECSLcCwxj0",
+  "ts": "2026-10-17T07:19:14.205Z",
+  "turnPublicId": "34hMMR8JurPECSLcCwxj0"
+ },
+ {
+  "seq": 10,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0.00044,
+   "subtype": "success",
+   "numTurns": 1,
+   "contextTokens": 30
+  },
+  "turnId": "34hMMR8JurPECSLcCwxj0",
+  "ts": "2026-10-17T07:19:14.270Z",
+  "turnPublicId": "34hMMR8JurPECSLcCwxj0"
+ },
+ {
+  "seq": 11,
+  "type": "tool_use",
+  "payload": {
+   "id": "shell-01a148ba-d5a6-712f-828b-19663a29b2b3",
+   "name": "Bash",
+   "input": {
+    "command": "printf \"T03 fake-session work, committed before the Pod is recreated\\n\" > before-recreate.txt && printf \"uncommitted draft kept across recreation\\n\" > draft-uncommitted.txt && git add before-recreate.txt && git commit -q -m \"T03: work committed before Pod recreation\" && git log --oneline -3 && git status --short"
+   }
+  },
+  "turnId": "34hMMl7UEx6ZO0WDfYi8p",
+  "ts": "2026-10-17T07:19:26.433Z",
+  "turnPublicId": "34hMMl7UEx6ZO0WDfYi8p"
+ },
+ {
+  "seq": 13,
+  "type": "tool_result",
+  "payload": {
+   "content": "75466e7 T03: work committed before Pod recreation\nf75c2d0 orbit: baseline\n?? draft-uncommitted.txt\n",
+   "isError": false,
+   "toolUseId": "shell-01a148ba-d5a6-712f-828b-19663a29b2b3"
+  },
+  "turnId": "34hMMl7UEx6ZO0WDfYi8p",
+  "ts": "2026-10-17T07:19:26.589Z",
+  "turnPublicId": "34hMMl7UEx6ZO0WDfYi8p"
+ },
+ {
+  "seq": 14,
+  "type": "user",
+  "payload": {
+   "text": "Second message before the Pod is recreated: T03-SECRET goldcrest.",
+   "delivery": "enqueued"
+  },
+  "turnId": "34hMMq2zXCXVu9U5secvw",
+  "ts": "2026-10-17T07:19:29.587Z",
+  "turnPublicId": "34hMMq2zXCXVu9U5secvw"
+ },
+ {
+  "seq": 15,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMMq2zXCXVu9U5secvw",
+   "delivery": "written",
+   "turnPublicId": "34hMMq2zXCXVu9U5secvw"
+  },
+  "turnId": "34hMMq2zXCXVu9U5secvw",
+  "ts": "2026-10-17T07:19:29.587Z",
+  "turnPublicId": "34hMMq2zXCXVu9U5secvw"
+ },
+ {
+  "seq": 16,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-v4-flash",
+   "subtype": "init",
+   "sessionId": "6KiHQrEHpQffRgI41jtWyq",
+   "sessionPublicId": "6KiHQrEHpQffRgI41jtWyq"
+  },
+  "turnId": "34hMMq2zXCXVu9U5secvw",
+  "ts": "2026-10-17T07:19:29.600Z",
+  "turnPublicId": "34hMMq2zXCXVu9U5secvw"
+ },
+ {
+  "seq": 19,
+  "type": "assistant",
+  "payload": {
+   "text": "FAKE MODEL reply #2: this conversation has 5 message(s); secrets seen: bluefinch, goldcrest."
+  },
+  "turnId": "34hMMq2zXCXVu9U5secvw",
+  "ts": "2026-10-17T07:19:29.624Z",
+  "turnPublicId": "34hMMq2zXCXVu9U5secvw"
+ },
+ {
+  "seq": 20,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMMq2zXCXVu9U5secvw",
+   "delivery": "acknowledged",
+   "turnPublicId": "34hMMq2zXCXVu9U5secvw"
+  },
+  "turnId": "34hMMq2zXCXVu9U5secvw",
+  "ts": "2026-10-17T07:19:29.663Z",
+  "turnPublicId": "34hMMq2zXCXVu9U5secvw"
+ },
+ {
+  "seq": 21,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0.00088,
+   "subtype": "success",
+   "numTurns": 1,
+   "contextTokens": 30
+  },
+  "turnId": "34hMMq2zXCXVu9U5secvw",
+  "ts": "2026-10-17T07:19:29.663Z",
+  "turnPublicId": "34hMMq2zXCXVu9U5secvw"
+ },
+ {
+  "seq": 22,
+  "type": "user",
+  "payload": {
+   "text": "Third message, after the Pod was recreated: which T03-SECRET words have you seen?",
+   "delivery": "enqueued"
+  },
+  "turnId": "34hMREILuXC8v9UgfrRUa",
+  "ts": "2026-10-17T07:22:22.883Z",
+  "turnPublicId": "34hMREILuXC8v9UgfrRUa"
+ },
+ {
+  "seq": 23,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMREILuXC8v9UgfrRUa",
+   "delivery": "written",
+   "turnPublicId": "34hMREILuXC8v9UgfrRUa"
+  },
+  "turnId": "34hMREILuXC8v9UgfrRUa",
+  "ts": "2026-10-17T07:22:22.883Z",
+  "turnPublicId": "34hMREILuXC8v9UgfrRUa"
+ },
+ {
+  "seq": 24,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-v4-flash",
+   "subtype": "init",
+   "sessionId": "6KiHQrEHpQffRgI41jtWyq",
+   "sessionPublicId": "6KiHQrEHpQffRgI41jtWyq"
+  },
+  "turnId": "34hMREILuXC8v9UgfrRUa",
+  "ts": "2026-10-17T07:22:23.141Z",
+  "turnPublicId": "34hMREILuXC8v9UgfrRUa"
+ },
+ {
+  "seq": 26,
+  "type": "system",
+  "payload": {
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"deepseek-v4-flash\",\"query_source\":\"sdk\"}\n"
+  },
+  "turnId": "34hMREILuXC8v9UgfrRUa",
+  "ts": "2026-10-17T07:22:23.150Z",
+  "turnPublicId": "34hMREILuXC8v9UgfrRUa"
+ },
+ {
+  "seq": 27,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMREILuXC8v9UgfrRUa",
+   "delivery": "acknowledged",
+   "turnPublicId": "34hMREILuXC8v9UgfrRUa"
+  },
+  "turnId": "34hMREILuXC8v9UgfrRUa",
+  "ts": "2026-10-17T07:22:23.238Z",
+  "turnPublicId": "34hMREILuXC8v9UgfrRUa"
+ },
+ {
+  "seq": 29,
+  "type": "assistant",
+  "payload": {
+   "text": "FAKE MODEL reply #3: this conversation has 8 message(s); secrets seen: bluefinch, goldcrest, words."
+  },
+  "turnId": "34hMREILuXC8v9UgfrRUa",
+  "ts": "2026-10-17T07:22:23.240Z",
+  "turnPublicId": "34hMREILuXC8v9UgfrRUa"
+ },
+ {
+  "seq": 30,
+  "type": "system",
+  "payload": {
+   "subtype": "context",
+   "contextTokens": 30
+  },
+  "turnId": "34hMREILuXC8v9UgfrRUa",
+  "ts": "2026-10-17T07:22:23.240Z",
+  "turnPublicId": "34hMREILuXC8v9UgfrRUa"
+ },
+ {
+  "seq": 31,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0.00044,
+   "subtype": "success",
+   "numTurns": 1,
+   "contextTokens": 30
+  },
+  "turnId": "34hMREILuXC8v9UgfrRUa",
+  "ts": "2026-10-17T07:22:23.277Z",
+  "turnPublicId": "34hMREILuXC8v9UgfrRUa"
+ },
+ {
+  "seq": 32,
+  "type": "user",
+  "payload": {
+   "text": "Drain test drain60: FAKE-SLOW 60. Hold this turn open while the runner is asked to stop.",
+   "delivery": "enqueued"
+  },
+  "turnId": "34hMRtTkMDVqKiwntPnzm",
+  "ts": "2026-10-17T07:22:48.934Z",
+  "turnPublicId": "34hMRtTkMDVqKiwntPnzm"
+ },
+ {
+  "seq": 33,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMRtTkMDVqKiwntPnzm",
+   "delivery": "written",
+   "turnPublicId": "34hMRtTkMDVqKiwntPnzm"
+  },
+  "turnId": "34hMRtTkMDVqKiwntPnzm",
+  "ts": "2026-10-17T07:22:48.935Z",
+  "turnPublicId": "34hMRtTkMDVqKiwntPnzm"
+ },
+ {
+  "seq": 34,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-v4-flash",
+   "subtype": "init",
+   "sessionId": "6KiHQrEHpQffRgI41jtWyq",
+   "sessionPublicId": "6KiHQrEHpQffRgI41jtWyq"
+  },
+  "turnId": "34hMRtTkMDVqKiwntPnzm",
+  "ts": "2026-10-17T07:22:48.948Z",
+  "turnPublicId": "34hMRtTkMDVqKiwntPnzm"
+ },
+ {
+  "seq": 36,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMRtTkMDVqKiwntPnzm",
+   "delivery": "acknowledged",
+   "turnPublicId": "34hMRtTkMDVqKiwntPnzm"
+  },
+  "turnId": "34hMRtTkMDVqKiwntPnzm",
+  "ts": "2026-10-17T07:22:48.970Z",
+  "turnPublicId": "34hMRtTkMDVqKiwntPnzm"
+ },
+ {
+  "seq": 38,
+  "type": "assistant",
+  "payload": {
+   "text": "FAKE MODEL reply #4: this conversation has 11 message(s); secrets seen: bluefinch, goldcrest, words."
+  },
+  "turnId": "34hMRtTkMDVqKiwntPnzm",
+  "ts": "2026-10-17T07:23:48.974Z",
+  "turnPublicId": "34hMRtTkMDVqKiwntPnzm"
+ },
+ {
+  "seq": 39,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0.00088,
+   "subtype": "success",
+   "numTurns": 1,
+   "contextTokens": 30
+  },
+  "turnId": "34hMRtTkMDVqKiwntPnzm",
+  "ts": "2026-10-17T07:23:49.025Z",
+  "turnPublicId": "34hMRtTkMDVqKiwntPnzm"
+ },
+ {
+  "seq": 40,
+  "type": "user",
+  "payload": {
+   "text": "Drain test drain150: FAKE-SLOW 150. Hold this turn open while the runner is asked to stop.",
+   "delivery": "enqueued"
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:26:16.070Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 41,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMX6zjzdtmLMqtDX5GY",
+   "delivery": "written",
+   "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:26:16.070Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 42,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-v4-flash",
+   "subtype": "init",
+   "sessionId": "6KiHQrEHpQffRgI41jtWyq",
+   "sessionPublicId": "6KiHQrEHpQffRgI41jtWyq"
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:26:16.704Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 44,
+  "type": "system",
+  "payload": {
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"deepseek-v4-flash\",\"query_source\":\"sdk\"}\n"
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:26:16.723Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 45,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMX6zjzdtmLMqtDX5GY",
+   "delivery": "acknowledged",
+   "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:26:16.794Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 46,
+  "type": "interrupt",
+  "payload": {
+   "reason": "runner_restart"
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:28:09.664Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 47,
+  "type": "user",
+  "payload": {
+   "text": "Drain test drain150: FAKE-SLOW 150. Hold this turn open while the runner is asked to stop.",
+   "delivery": "enqueued"
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:28:35.708Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 48,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMX6zjzdtmLMqtDX5GY",
+   "delivery": "written",
+   "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:28:35.708Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 49,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-v4-flash",
+   "subtype": "init",
+   "sessionId": "6KiHQrEHpQffRgI41jtWyq",
+   "sessionPublicId": "6KiHQrEHpQffRgI41jtWyq"
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:28:38.766Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 51,
+  "type": "system",
+  "payload": {
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"deepseek-v4-flash\",\"query_source\":\"sdk\"}\n"
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:28:38.781Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 52,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMX6zjzdtmLMqtDX5GY",
+   "delivery": "acknowledged",
+   "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:28:38.851Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 54,
+  "type": "assistant",
+  "payload": {
+   "text": "FAKE MODEL reply #6: this conversation has 17 message(s); secrets seen: bluefinch, goldcrest, words."
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:31:08.869Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 55,
+  "type": "system",
+  "payload": {
+   "subtype": "context",
+   "contextTokens": 30
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:31:08.869Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ },
+ {
+  "seq": 56,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0.00044,
+   "subtype": "success",
+   "numTurns": 1,
+   "contextTokens": 30
+  },
+  "turnId": "34hMX6zjzdtmLMqtDX5GY",
+  "ts": "2026-10-17T07:31:08.928Z",
+  "turnPublicId": "34hMX6zjzdtmLMqtDX5GY"
+ }
+]

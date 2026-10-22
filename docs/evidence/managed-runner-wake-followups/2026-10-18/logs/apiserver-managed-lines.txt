@@ -1,0 +1,31 @@
+[Nest] 2210470  - 10/18/2026, 11:55:18 AM     LOG [ManagedRunners] managed runners are enabled in orbit-mr-lab (namespace orbit-mr-test)
+[Nest] 2210470  - 10/18/2026, 11:57:10 AM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: idle; draining generation 1 to sleep
+[Nest] 2210470  - 10/18/2026, 11:57:35 AM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: asleep; generation 1 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 2210470  - 10/18/2026, 11:57:44 AM     LOG [ManagedRunnerDemand] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: demand (session) while SLEEPING
+[Nest] 2210470  - 10/18/2026, 11:57:44 AM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: waking for demand (generation 2)
+[Nest] 2210470  - 10/18/2026, 11:58:59 AM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: idle; draining generation 2 to sleep
+[Nest] 2210470  - 10/18/2026, 11:59:40 AM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: asleep; generation 2 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 2210470  - 10/18/2026, 12:05:15 PM     LOG [ManagedRunnerDemand] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: demand (turn) while SLEEPING
+[Nest] 2210470  - 10/18/2026, 12:05:15 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: waking for demand (generation 3)
+[Nest] 2210470  - 10/18/2026, 12:06:36 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: idle; draining generation 3 to sleep
+[Nest] 2210470  - 10/18/2026, 12:06:47 PM     LOG [ManagedRunnerDemand] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: demand (turn) while DRAINING
+[Nest] 2210470  - 10/18/2026, 12:06:47 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: drain to sleep called off (DEMAND); READY again
+[Nest] 2210470  - 10/18/2026, 12:07:08 PM    WARN [ManagedRunnerManager] managed runner 01a14d31-2559-765f-9c10-ea02e047e1d1: WAITING_CAPACITY: short of cpu, memory, ephemeralStorage, pods, attachments, activeUsers
+[Nest] 2210470  - 10/18/2026, 12:07:18 PM     LOG [ManagedRunnerDemand] managed runner 01a14d31-2559-765f-9c10-ea02e047e1d1: demand (session) while WAITING_CAPACITY
+[Nest] 2210470  - 10/18/2026, 12:07:18 PM     LOG [ManagedRunnerDemand] managed runner 01a14d31-2559-765f-9c10-ea02e047e1d1: demand (session) while WAITING_CAPACITY
+[Nest] 2210470  - 10/18/2026, 12:10:30 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: idle; draining generation 3 to sleep
+[Nest] 2210470  - 10/18/2026, 12:11:10 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: asleep; generation 3 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 2210470  - 10/18/2026, 12:12:07 PM     LOG [ManagedRunnerDemand] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: demand (session) while SLEEPING
+[Nest] 2210470  - 10/18/2026, 12:12:07 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: waking for demand (generation 4)
+[Nest] 2210470  - 10/18/2026, 12:12:07 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: WAITING_CAPACITY: short of cpu, memory, ephemeralStorage, pods, attachments, activeUsers
+[Nest] 2210470  - 10/18/2026, 12:12:38 PM    WARN [ManagedRunnerManager] managed runner 01a14d31-2559-765f-9c10-ea02e047e1d1: idle; draining generation 1 to sleep
+[Nest] 2210470  - 10/18/2026, 12:13:13 PM    WARN [ManagedRunnerManager] managed runner 01a14d31-2559-765f-9c10-ea02e047e1d1: asleep; generation 1 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 2210470  - 10/18/2026, 12:14:29 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: idle; draining generation 4 to sleep
+[Nest] 2210470  - 10/18/2026, 12:15:09 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: asleep; generation 4 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 2210470  - 10/18/2026, 12:15:20 PM     LOG [ManagedRunnerDemand] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: demand (turn) while SLEEPING
+[Nest] 2210470  - 10/18/2026, 12:15:20 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: waking for demand (generation 5)
+[Nest] 2210470  - 10/18/2026, 12:15:20 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: KUBERNETES_QUOTA_EXCEEDED: exceeded quota: t06-no-pods, requested: pods=1, used: pods=1, limited: pods=0; it is started once there is room
+[Nest] 2210470  - 10/18/2026, 12:18:42 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: idle; draining generation 5 to sleep
+[Nest] 2210470  - 10/18/2026, 12:19:12 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: asleep; generation 5 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 2210470  - 10/18/2026, 12:21:08 PM     LOG [ManagedRunnerDemand] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: demand (turn) while SLEEPING
+[Nest] 2210470  - 10/18/2026, 12:21:08 PM    WARN [ManagedRunnerManager] managed runner 01a14d26-b015-74ae-adbf-b0eb3ffeabe6: waking for demand (generation 6)

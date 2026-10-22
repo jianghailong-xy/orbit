@@ -86,20 +86,24 @@ object SessionProjectGrouping {
         coordinators: List<DirectorySession> = emptyList(), contentSessions: List<DirectorySession>? = null,
         watching: Map<String, WatchSessionSummary> = emptyMap(), recaps: Boolean = true,
         line: ((DirectorySession) -> SessionLine)? = null): SessionProjectListing {
-        if (!listShowsProjects(view, byTag, searching)) return SessionProjectListing(sessions, emptyList(), sessions, sessions.map { SessionProjectEntry.Session(it) })
+        // A LANDING row is platform work with no engine (LS6): it is never a project row's member, and it never counts among the
+        // row's needs-you, running or background jobs, should a flat read ever carry one.
+        val conversations = sessions.filterNot { it.isLanding }
+        if (!listShowsProjects(view, byTag, searching))
+            return SessionProjectListing(conversations, emptyList(), conversations, conversations.map { SessionProjectEntry.Session(it) })
         fun watch(session: DirectorySession) = watching[watchKey(session.id)]
         val sessionLine = line ?: { session -> SessionLine.make(session, live = true, watching = watch(session), recaps = recaps, now = now) }
         val coordinatorByProject = mutableMapOf<String, DirectorySession>()
-        for (session in coordinators + sessions) session.projectMembership?.takeIf { it.isCoordinator }?.let { coordinatorByProject[key(it.projectId)] = session }
+        for (session in coordinators + conversations) session.projectMembership?.takeIf { it.isCoordinator }?.let { coordinatorByProject[key(it.projectId)] = session }
         val groups = linkedMapOf<String, MutableList<DirectorySession>>()
-        for (session in sessions) session.projectMembership?.let { groups.getOrPut(key(it.projectId)) { mutableListOf() } += session }
+        for (session in conversations) session.projectMembership?.let { groups.getOrPut(key(it.projectId)) { mutableListOf() } += session }
         // Folder rows count every local member under its coordinator's folder, whatever folder the member itself is in.
-        val assigned = sessions.map { session -> session.projectMembership?.let { session.copy(folderId = coordinatorByProject[key(it.projectId)]?.folderId) } ?: session }
+        val assigned = conversations.map { session -> session.projectMembership?.let { session.copy(folderId = coordinatorByProject[key(it.projectId)]?.folderId) } ?: session }
         fun inScope(id: String?): Boolean = if (folderId != null) ObjectId.same(id, folderId) else id == null || folders.none { ObjectId.same(it.id, id) }
-        val loose = sessions.filter { it.projectMembership == null && inScope(it.folderId) }
+        val loose = conversations.filter { it.projectMembership == null && inScope(it.folderId) }
         if (groups.isEmpty()) return SessionProjectListing(assigned, emptyList(), loose, loose.map { SessionProjectEntry.Session(it) })
         // Each project's share of the content list, split once.
-        val contentByProject = contentSessions?.filter { it.projectMembership != null }?.groupBy { key(it.projectMembership!!.projectId) }
+        val contentByProject = contentSessions?.filter { it.projectMembership != null && !it.isLanding }?.groupBy { key(it.projectMembership!!.projectId) }
         val rows = mutableListOf<SessionProjectRow>()
         for ((project, members) in groups) {
             val coordinator = coordinatorByProject[project]
@@ -205,6 +209,11 @@ object SessionProjectCopy {
 
     /** A runner that stopped reporting, in the row's own scale: "no report for 11m", or "no report yet". */
     fun landingSilentWord(minutes: Int?) = minutes?.let { "no report for ${it}m" } ?: "no report yet"
+    /** §7.2 V6 in the row's own scale: the server judged the claim timed out — amber words and no needs-you dot, because a stopped
+     * landing is a fact rather than a question. */
+    const val landingTimedOut = "timed out"
+    /** The server's SILENT claim in the row's scale: "no word from runner · 4m" — inside the lease, so not a timeout. */
+    const val landingNoWordFromRunner = "no word from runner"
 
     /** The project page's landing line, shortened for a row: "Merge to main · queued · 13m", "Landing · checking · 4m · <task>";
      * null when nothing is in flight, and "Landing · N jobs" from a server that sends only the count. A silent runner is said in
@@ -215,11 +224,29 @@ object SessionProjectCopy {
             ?: return if (count > 0) SessionLine("Landing · $count ${if (count == 1) "job" else "jobs"}", SessionLine.Tone.QUEUED) else null
         val running = job.text("state") == "RUNNING"
         val heartbeat = ProjectTime.parse(job.text("heartbeatAt"))
-        val silent = running && (heartbeat?.let { ProjectTime.between(it, now) > 600 } ?: true)
         val word = ProjectPage.jobWords(main)[job.text("kind").orEmpty()] ?: "Integration"
+        val head = if (count > 1) "$word $count jobs" else word
+        val since = heartbeat ?: ProjectTime.parse(job.text("startedAt"))
+        val minutes = since?.let { max(0, ProjectTime.between(it, now).toInt() / 60) } ?: 0
+        // §7.2 V6: a server that derives the claim's liveness hands this row the fact, so it no longer reads the heartbeat against
+        // the claim lease by itself. A timeout is the server's verdict and is said in amber words — not the needs-you ink, not its dot.
+        job.text("liveness")?.takeIf { running }?.let { liveness ->
+            if (liveness == "LEASE_EXPIRED") return SessionLine(listOf(head, landingTimedOut, landingSilentWord(minutes)).joinToString(" · "),
+                SessionLine.Tone.WARNING)
+            if (liveness == "SILENT") return SessionLine(listOf(head, "$landingNoWordFromRunner · ${minutes}m").joinToString(" · "),
+                SessionLine.Tone.QUEUED)
+            // LIVE, QUIET and LEGACY: the runner is reporting (or reports only between steps, so its quiet is not silence). A healthy
+            // long check stays "checking".
+            val state = ProjectPage.phaseWords(main)[job.text("phase").orEmpty()] ?: "running"
+            val text = listOfNotNull(head, state, ProjectAttention.elapsedLabel(job.text("startedAt"), now),
+                if (count > 1) null else job.text("taskTitle")).filter { it.isNotEmpty() }.joinToString(" · ")
+            return SessionLine(text, SessionLine.Tone.RUNNING)
+        }
+        // An older server: the runner has gone quiet — the same claim lease the project page's landing row reads the same fact with.
+        val silent = running && (heartbeat?.let { ProjectTime.between(it, now) > 600 } ?: true)
         val state = if (!running) "queued" else if (silent) landingSilentWord(heartbeat?.let { (max(0.0, ProjectTime.between(it, now)) / 60).toInt() })
             else ProjectPage.phaseWords(main)[job.text("phase").orEmpty()] ?: "running"
-        val text = listOfNotNull(if (count > 1) "$word $count jobs" else word, state, ProjectAttention.elapsedLabel(job.text("startedAt"), now),
+        val text = listOfNotNull(head, state, ProjectAttention.elapsedLabel(job.text("startedAt"), now),
             if (count > 1) null else job.text("taskTitle")).filter { it.isNotEmpty() }.joinToString(" · ")
         return SessionLine(text, if (running && !silent) SessionLine.Tone.RUNNING else SessionLine.Tone.QUEUED)
     }
@@ -250,15 +277,26 @@ object SessionProjectMembers {
     /** How long a poll leaves the Completed members as last read while nothing says they moved (the web's `PROJECT_SESSION_REFRESH_MS`). */
     const val completedRefreshMs = 60_000L
 
-    /** [projectId]'s members out of [sessions], in either spelling of the id, never Trash. The first copy of a session wins, so the
-     * freshest list goes first; newest activity first. */
+    /** [projectId]'s members out of [sessions], in either spelling of the id, never Trash and never a LANDING row — those are the
+     * page's Landings group, not its timeline (§2.9 LS6). The first copy of a session wins, so the freshest list goes first; newest
+     * activity first. */
     fun members(projectId: String, sessions: List<DirectorySession>): List<DirectorySession> {
         val key = SessionProjectGrouping.key(projectId)
         val seen = mutableSetOf<String>()
         return sessions.filter { session ->
             val membership = session.projectMembership ?: return@filter false
-            session.effectiveLifecycleState != "TRASH" && SessionProjectGrouping.key(membership.projectId) == key && seen.add(session.id)
+            !session.isLanding && session.effectiveLifecycleState != "TRASH" && SessionProjectGrouping.key(membership.projectId) == key && seen.add(session.id)
         }.sortedByDescending { it.lastTurnAt ?: it.createdAt ?: "" }
+    }
+
+    /** [projectId]'s landing sessions out of [sessions] — never Trash, which cannot take one (LS6). */
+    fun landings(projectId: String, sessions: List<DirectorySession>): List<DirectorySession> {
+        val key = SessionProjectGrouping.key(projectId)
+        val seen = mutableSetOf<String>()
+        return sessions.filter { session ->
+            val membership = session.projectMembership ?: return@filter false
+            session.isLanding && session.effectiveLifecycleState != "TRASH" && SessionProjectGrouping.key(membership.projectId) == key && seen.add(session.id)
+        }
     }
 
     /** One poll of the page without asking for either list again: the Open members are the app's Open list's, the Completed ones

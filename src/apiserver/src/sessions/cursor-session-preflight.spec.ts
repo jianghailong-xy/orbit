@@ -93,7 +93,7 @@ async function rejectsUpgrade(operation: () => Promise<unknown>) {
 async function rejectsMode(operation: () => Promise<unknown>, mode: string) {
   await assert.rejects(operation, (error: unknown) => {
     assert.ok(error instanceof BadRequestException);
-    assert.equal(error.message, `Cursor CLI cannot enforce permission mode "${mode}"; use Accept Edits, Plan, Don't Ask or Bypass`);
+    assert.equal(error.message, `Cursor CLI cannot enforce permission mode "${mode}"; use Accept Edits, Plan, Auto, Don't Ask or Bypass`);
     return true;
   });
 }
@@ -125,7 +125,7 @@ test('P1 cursor preflight: a new session nobody named a mode for starts in one C
   for (const [accountMode, expected] of [
     [undefined, PermissionMode.ACCEPT_EDITS],
     [PermissionMode.DEFAULT, PermissionMode.ACCEPT_EDITS],
-    [PermissionMode.AUTO, PermissionMode.ACCEPT_EDITS],
+    [PermissionMode.AUTO, PermissionMode.AUTO],
     [PermissionMode.PLAN, PermissionMode.PLAN],
     [PermissionMode.DONT_ASK, PermissionMode.DONT_ASK],
     [PermissionMode.ACCEPT_EDITS, PermissionMode.ACCEPT_EDITS],
@@ -139,12 +139,12 @@ test('P1 cursor preflight: a new session nobody named a mode for starts in one C
 });
 
 test('P1 cursor preflight: a mode the caller names has to be one Cursor CLI keeps', async () => {
-  for (const mode of [PermissionMode.DEFAULT, PermissionMode.AUTO]) {
+  for (const mode of [PermissionMode.DEFAULT]) {
     const f = fixture();
     await rejectsMode(() => f.service.create(ownerId, { ...opening, engine: 'cursor', permissionMode: mode }), mode);
     assert.deepEqual(f.creates, []);
   }
-  for (const mode of [PermissionMode.ACCEPT_EDITS, PermissionMode.PLAN, PermissionMode.DONT_ASK, PermissionMode.BYPASS]) {
+  for (const mode of [PermissionMode.ACCEPT_EDITS, PermissionMode.PLAN, PermissionMode.AUTO, PermissionMode.DONT_ASK, PermissionMode.BYPASS]) {
     const f = fixture({ runsAsRoot: true });
     await f.service.create(ownerId, { ...opening, engine: 'cursor', permissionMode: mode });
     assert.equal(f.creates[0].permissionMode, mode);
@@ -165,7 +165,7 @@ test('P1 cursor preflight: resume and reconfiguration refuse a runner that withd
       assert.deepEqual(f.updates, []);
       assert.deepEqual(f.turns, []);
     }
-    for (const mode of [PermissionMode.DEFAULT, PermissionMode.AUTO]) {
+    for (const mode of [PermissionMode.DEFAULT]) {
       const f = fixture({ status });
       await rejectsMode(() => operation === 'resume'
         ? f.service.resume(ownerId, id, { ...continuation, permissionMode: mode })

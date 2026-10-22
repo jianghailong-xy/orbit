@@ -37,16 +37,19 @@ class ExceptionCardViewTest {
 
     private fun row(kind: String, actions: List<String>, promotionId: String? = null, taskId: String? = "t1", sessionId: String? = "s9",
         requiredAction: String? = null, handledBy: List<String> = emptyList(), facts: JsonElement = JsonNull, fuseEpisodeId: String? = null,
-        reason: String = "ESCALATED") = buildJsonObject {
-        put("itemId", "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4"); put("kind", kind); put("title", "Checks failed on the combined tree")
+        reason: String = "ESCALATED", primaryAction: String? = null, landingSessionId: String? = null, integrationJobId: String? = null,
+        lease: JsonElement = JsonNull, title: String = "Checks failed on the combined tree") = buildJsonObject {
+        put("itemId", "01a0bb0b-b3fb-744c-b9a6-2fd68b4420b4"); put("kind", kind); put("title", title)
         put("detailLine", "the merge check exited 1"); put("assignee", "OWNER"); put("assigneeReason", reason)
         put("waitingSince", "2026-09-19T19:01:41.497Z"); put("escalatedAt", if (reason == "ESCALATED") "2026-09-19T21:02:23.903Z" else null)
         put("taskId", taskId); put("sessionId", sessionId); put("promotionId", promotionId); put("fuseEpisodeId", fuseEpisodeId)
+        put("landingSessionId", landingSessionId); put("integrationJobId", integrationJobId)
         putJsonObject("delivery") { put("state", "NOT_REQUIRED"); put("sessionId", JsonNull); put("at", JsonNull) }
         putJsonArray("actions") { actions.forEach { add(it) } }
         requiredAction?.let { put("requiredAction", it) }
+        primaryAction?.let { put("primaryAction", it) }
         if (handledBy.isNotEmpty()) putJsonArray("handledBy") { handledBy.forEach { addJsonObject { put("taskId", "f"); put("title", it); put("state", "OPEN") } } }
-        put("question", JsonNull); put("facts", facts)
+        put("question", JsonNull); put("facts", facts); put("lease", lease)
     }
     private fun card(row: JsonObject) = CardCatalog.project("s1", "p1", mapOf("project" to buildJsonObject { put("id", "p1") },
         "openItems" to buildJsonObject { putJsonArray("needsYou") { add(row) }; putJsonArray("withCoordinator") {} })).single()
@@ -103,6 +106,46 @@ class ExceptionCardViewTest {
         compose.onNodeWithTag("$key:RETURN_COORDINATOR").assertExists()
         compose.onNodeWithTag("$key:REVIEW").assertDoesNotExist()
         compose.onNodeWithTag("$key:REVIEW:consequence", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    /** X-E5 (§4.6, board v4 06): the heading is how long the runner has been silent, Abandon is the lead in its solid weight, Open
+     * landing follows it, and both lines say what they do — J12's push verdict under Abandon. */
+    @Test fun theXe5CardLeadsWithAbandonAndOpensItsLanding() {
+        val lease = buildJsonObject { put("jobKind", "LAND_TASK"); put("progressProtocol", "v2"); put("pushReported", false)
+            put("generation", 2); put("runner", "workstation-gpu"); put("phase", "REBASE"); put("claimGeneration", 1); put("round", 1)
+            put("checkCount", 3); put("lastReportAt", "2026-09-19T18:35:00Z") }
+        show(card(row("LANDING_LEASE_EXPIRED", listOf("ABANDON", "OPEN_LANDING"), taskId = "t1", sessionId = null, primaryAction = "ABANDON",
+            landingSessionId = "L1", integrationJobId = "j-1", lease = lease, title = "A landing stopped reporting",
+            requiredAction = "The runner stopped reporting; abandon this landing, or wait for the runner to come back.")))
+        compose.onNodeWithTag("$key:heading", useUnmergedTree = true).assertTextEquals("Now yours — no report from the runner for 147m")
+        compose.onNodeWithTag("$key:ABANDON").assertTextEquals("Abandon")
+        compose.onNodeWithTag("$key:ABANDON:consequence", useUnmergedTree = true)
+            .assertTextEquals("Ends this attempt. Nothing was pushed, and nothing is queued again.")
+        compose.onNodeWithTag("$key:OPEN_LANDING").assertTextEquals("Open landing")
+        compose.onNodeWithTag("$key:OPEN_LANDING:consequence", useUnmergedTree = true).assertTextEquals("Open the landing: every attempt, step by step.")
+        assertTrue("Abandon leads", top("$key:ABANDON") < top("$key:OPEN_LANDING"))
+        compose.onNodeWithTag("$key:OPEN_LANDING").performClick()
+        assertEquals(listOf("orbit-session:L1"), opened)
+        compose.onNodeWithTag("$key:ABANDON").performClick()
+        assertEquals(listOf(CardVerb.ABANDON), pressed.map { it.first })
+        // The lease block draws the claim, not the item's sentence; the footer says the wait alone.
+        compose.onNodeWithTag("$key:fact:Landing", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("$key:owner", useUnmergedTree = true).assertExists()
+        assertTrue("Mark as handled closes X-E5 too", compose.onAllNodesWithTag("$key:MARK_HANDLED", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    /** An INTEGRATION_* card that names a landing draws Open landing at the END of its doors — a way to look, not the step it asks
+     * for — and sends nothing when pressed. */
+    @Test fun anIntegrationCardsOpenLandingComesLastAndOnlyLooks() {
+        show(card(row("INTEGRATION_CHECK_FAILED", listOf("ASK_COORDINATOR_AGAIN", "OPEN_TASK_SESSION", "OPEN_LANDING"),
+            promotionId = "pr1", landingSessionId = "L1", requiredAction = "Nothing reaches main until this check passes.")))
+        compose.onNodeWithTag("$key:OPEN_LANDING").assertTextEquals("Open landing")
+        assertTrue(top("$key:RETURN_COORDINATOR") < top("$key:OPEN_LANDING"))
+        assertTrue(top("$key:OPEN_TASK_SESSION") < top("$key:OPEN_LANDING"))
+        assertTrue("the doors come before the footer", top("$key:OPEN_LANDING") < top("$key:owner"))
+        compose.onNodeWithTag("$key:OPEN_LANDING").performClick()
+        assertEquals(listOf("orbit-session:L1"), opened)
+        assertTrue("it sends nothing", pressed.isEmpty())
     }
 
     @Test fun aFailedTaskRunsAgainWithItsOwnPressAndCancelAsksFirst() {

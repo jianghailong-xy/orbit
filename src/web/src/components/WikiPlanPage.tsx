@@ -12,6 +12,7 @@ import {
   EditOutlined,
   ExclamationCircleFilled,
   EllipsisOutlined,
+  FileSyncOutlined,
   HolderOutlined,
   LockOutlined,
   PlusOutlined,
@@ -67,6 +68,8 @@ import {
   WIKI_PLAN_EDIT,
   WIKI_PLAN_EDIT_KIND,
   WIKI_PLAN_EDIT_TITLE_FIELD,
+  WIKI_PLAN_EMPTY_NOTE_SERVER,
+  WIKI_PLAN_EMPTY_TEXT,
   WIKI_PLAN_EMPTY_TITLE,
   WIKI_PLAN_FACTS_SHOWN,
   WIKI_PLAN_FOUND,
@@ -112,6 +115,9 @@ import {
   WIKI_PLAN_STATUS_LABELS,
   WIKI_PLAN_TITLE,
   WIKI_PLAN_OP_LABELS,
+  WIKI_PLAN_UPDATE_ALREADY,
+  WIKI_PLAN_UPDATE_DOCS,
+  WIKI_PLAN_UPDATE_FAILED,
   WIKI_PLAN_WHY,
   WIKI_PLAN_WRITTEN_FOR,
   wikiPlanAcceptConfirms,
@@ -138,8 +144,6 @@ import {
   wikiPlanEditHead,
   wikiPlanEditSection,
   wikiPlanEditTitle,
-  wikiPlanEmptyNote,
-  wikiPlanEmptyText,
   wikiPlanErrorCount,
   wikiPlanFailedHint,
   wikiPlanFailedJob,
@@ -171,6 +175,8 @@ import {
   wikiPlanSourceLines,
   wikiPlanSourcesSummary,
   wikiPlanTime,
+  wikiPlanUpdateAsked,
+  wikiPlanUpdateDocs,
   wikiPlanVersionLabel,
   wikiPlanVersionRows,
   WIKI_PLAN_WRITING_NOW,
@@ -185,6 +191,7 @@ import {
 import { wikiSettingsPath } from '../lib/wikiReviewMode';
 import {
   acceptWikiPlanProposal,
+  buildWikiPlan,
   confirmWikiPlan,
   decideWikiPlanProposal,
   editWikiPlan,
@@ -222,8 +229,8 @@ function usePlanPage(spaceId: string) {
   const directory = useQuery(wikiDocsQuery(spaceId));
   const space = useQuery(wikiSpaceQuery(spaceId));
   const maintenance = useWikiMaintenanceWhere(space.data);
-  // Whether the server drafts the plan instead of a session on the maintenance provider (`health.executor`,
-  // P9): the empty page's line under Draft plan names the System model while it does (owner's call 2026-10-08).
+  // Whether the server executes the account's wiki (`health.executor`, P9): Update documents is drawn only while it
+  // says so (`plan.jobs.rebuild.when`).
   const health = useQuery(wikiHealthQuery(spaceId));
   const plan = state.data;
   const failed = plan ? wikiPlanFailedJob(plan) : null;
@@ -304,13 +311,15 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
   const card = wikiPlanJobCard(plan.job, {
     now,
     runnerOnline: page.maintenance.runnerOnline,
-    serverExecutes: page.serverExecutes,
     failed: shown?.status === 'failed' ? page.failed : null,
     inForce,
     directory: page.directory.data,
   });
   const confirm = useWikiWrite(({ version }: { version: number }) => confirmWikiPlan(spaceId, version));
   const draft = useWikiWrite(() => redraftWikiPlan(spaceId, null));
+  // The version in force's documents asked for again (contract `plan.jobs.rebuild`): while the server executes the wiki.
+  const update = useWikiWrite(({ version }: { version: number }) => buildWikiPlan(spaceId, version));
+  const updateDocs = wikiPlanUpdateDocs(plan, { inForce, serverExecutes: page.serverExecutes });
   const diff = comparing && shown && page.base ? wikiPlanDiff(shown, page.base) : null;
   const canEdit = !!shown && (shown.status === 'draft' || inForce) && wikiPlanNewest(plan)?.version === shown.version;
   const showsChanges = !!shown && shown.status !== 'superseded' && plan.proposals.length > 0;
@@ -331,6 +340,15 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
       message.success(answer.created ? WIKI_PLAN_REDRAFT_ASKED : WIKI_PLAN_REDRAFT_ALREADY);
     } catch (error) {
       message.error("Couldn't draft the plan", error instanceof Error ? error.message : undefined);
+    }
+  };
+  const onUpdate = async () => {
+    if (!shown) return;
+    try {
+      const answer = await update.mutateAsync({ version: shown.version });
+      message.success(answer.created ? wikiPlanUpdateAsked(shown.version) : WIKI_PLAN_UPDATE_ALREADY);
+    } catch (error) {
+      message.error(WIKI_PLAN_UPDATE_FAILED, error instanceof Error ? error.message : undefined);
     }
   };
 
@@ -391,6 +409,11 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
                 {WIKI_PLAN_REDRAFT}
               </Button>
             )}
+            {updateDocs && (
+              <Button icon={<FileSyncOutlined />} onClick={onUpdate} disabled={updateDocs === 'busy' || update.isPending} loading={update.isPending}>
+                {WIKI_PLAN_UPDATE_DOCS}
+              </Button>
+            )}
             {moreItems.length > 0 && (
               <Menu items={moreItems} trigger={<Button icon={<EllipsisOutlined />} aria-label="More" />} />
             )}
@@ -401,7 +424,7 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
 
       {card && <PlanJobCard card={card} spaceSlug={spaceSlug} solo={!!shown && card.look === 'failed'} />}
       {!shown && !open && (
-        <PlanEmpty where={page.maintenance.where} provider={page.maintenance.provider} serverExecutes={page.serverExecutes} busy={draft.isPending} onDraft={onDraft} />
+        <PlanEmpty busy={draft.isPending} onDraft={onDraft} />
       )}
 
       {shown && (shown.status === 'draft' || shown.status === 'failed') && (
@@ -430,8 +453,6 @@ function WikiPlanPage({ page, spaceId, spaceSlug }: { page: PlanPage; spaceId: s
         open={redrafting}
         onClose={() => setRedrafting(false)}
         spaceId={spaceId}
-        provider={page.maintenance.provider}
-        serverExecutes={page.serverExecutes}
         plan={plan}
         protectedDocs={(page.plan && wikiPlanNewest(page.plan) ? wikiPlanFromVersion(wikiPlanNewest(page.plan)!) : null)?.docs.filter((doc) => doc.protected).map((doc) => doc.number) ?? []}
       />
@@ -525,28 +546,16 @@ function PlanJobCard({ card, spaceSlug, solo }: { card: WikiPlanJobCard; spaceSl
 }
 
 /** No plan yet (mock 21 ⑨ A, 22 ①): what a plan is, Draft plan, and where and how long it runs. */
-function PlanEmpty({
-  where,
-  provider,
-  serverExecutes,
-  busy,
-  onDraft,
-}: {
-  where: string | null;
-  provider: string | null;
-  serverExecutes: boolean;
-  busy: boolean;
-  onDraft: () => void;
-}) {
+function PlanEmpty({ busy, onDraft }: { busy: boolean; onDraft: () => void }) {
   return (
     <div className="wk-pl-empty">
       <ProfileOutlined className="ic" />
       <b>{WIKI_PLAN_EMPTY_TITLE}</b>
-      <p>{wikiPlanEmptyText(provider, serverExecutes)}</p>
+      <p>{WIKI_PLAN_EMPTY_TEXT}</p>
       <Button variant="primary" loading={busy} onClick={onDraft}>
         {WIKI_PLAN_DRAFT}
       </Button>
-      <div className="note">{wikiPlanEmptyNote(where, provider, serverExecutes)}</div>
+      <div className="note">{WIKI_PLAN_EMPTY_NOTE_SERVER}</div>
     </div>
   );
 }
@@ -1332,16 +1341,12 @@ function PlanRedraftModal({
   open,
   onClose,
   spaceId,
-  provider,
-  serverExecutes,
   plan,
   protectedDocs,
 }: {
   open: boolean;
   onClose: () => void;
   spaceId: string;
-  provider: string | null;
-  serverExecutes: boolean;
   plan: WikiPlanState;
   protectedDocs: string[];
 }) {
@@ -1380,7 +1385,7 @@ function PlanRedraftModal({
         </>
       }
     >
-      <p className="wk-pl-modal-p">{wikiPlanRedraftNote(provider, newest ? { version: newest.version, inForce: newest.status === 'confirmed' } : null, serverExecutes)}</p>
+      <p className="wk-pl-modal-p">{wikiPlanRedraftNote(newest ? { version: newest.version, inForce: newest.status === 'confirmed' } : null)}</p>
       <Textarea ref={field} value={words} onChange={(event) => setWords(event.target.value)} rows={4} placeholder={WIKI_PLAN_REDRAFT_PLACEHOLDER} />
       {protectedDocs.length > 0 && <div className="wk-pl-modal-note">{wikiPlanProtectedKept(protectedDocs)}</div>}
     </Dialog>

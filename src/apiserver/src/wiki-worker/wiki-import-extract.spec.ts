@@ -19,12 +19,13 @@ import {
 import { wikiImportIdempotencyKey, wikiImportRationale, wikiImportRepoName, wikiImportSnapshotOpId } from './wiki-import-job';
 
 /**
- * What the server's import makes of a note (wiki-import-extract.ts), case for case the unit cases of
- * `src/runner-go/wiki_import_test.go`: the answer read however it comes, the quote cited in the note's own
- * words, each entry held to its kind's fields, a verify command only as the note writes it, a note's language
- * read from its prose — and, where the server differs from the runner, the anchors held to the space's snapshot
- * instead of a checkout. The end-to-end cases (the job against PostgreSQL and a fake System model) are
- * wiki-import-job.pg.spec.ts; what both implementations must answer byte for byte is wiki-import-golden.spec.ts.
+ * What the server's import makes of a note (wiki-import-extract.ts), case for case the unit cases
+ * `src/runner-go/wiki_import_test.go` had before P11 removed them: the answer read however it comes, the quote
+ * cited in the note's own words, each entry held to its kind's fields, a verify command only as the note writes
+ * it, a note's language read from its prose — and, where the server differs from what the runner did, the
+ * anchors held to the space's snapshot instead of a checkout. The end-to-end cases (the job against PostgreSQL
+ * and a fake System model) are wiki-import-job.pg.spec.ts; what the server must answer byte for byte, as the
+ * runner's Go code did, is wiki-import-golden.spec.ts.
  */
 
 const note = (over: Partial<WikiImportNote> = {}): WikiImportNote => ({
@@ -60,8 +61,9 @@ test('the answer is read the way it comes: bare, in a fence, after reasoning, wr
 });
 
 test("the answer is read as Go's encoding/json reads it: a lone surrogate is U+FFFD, a number past float64 is no parse", () => {
-  // P10's boundary probes (zz_p10_parity_test.go), where JSON.parse alone answers differently from the
-  // runner's decoder: it keeps a lone surrogate and turns 1e999 into Infinity, Go writes U+FFFD and fails.
+  // P10's boundary probes (zz_p10_parity_test.go, which P11 deleted), where JSON.parse alone answers differently
+  // from the Go decoder the runner used: it keeps a lone surrogate and turns 1e999 into Infinity, Go writes U+FFFD
+  // and fails.
   const lone = parseWikiImportAnswer('[{"kind":"concept","title":"half \\ud83d of a pair","summary":"B","definition":"C","boundaries":"D","quote":"E"}]');
   assert.ok(lone && lone.length === 1, `the lone-surrogate answer parses: ${JSON.stringify(lone)}`);
   assert.equal(lone?.[0]?.title, 'half \ufffd of a pair', 'a lone surrogate is U+FFFD, as Go decodes it');

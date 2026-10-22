@@ -1,0 +1,15 @@
+{
+ "at": "2026-10-18T01:49:39.829+00:00",
+ "kind": "session",
+ "status": 409,
+ "managedState": "WAITING_CAPACITY",
+ "answer": {
+  "id": null,
+  "status": null,
+  "provider": null,
+  "engine": null,
+  "assignedRunnerId": null,
+  "code": "MODEL_UNAVAILABLE",
+  "message": "No runtime is installed and signed in on your managed runner yet, so this first session cannot start. Sign one in, or add a model key, from Infrastructure, then start the session again."
+ }
+}

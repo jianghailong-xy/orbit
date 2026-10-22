@@ -281,7 +281,7 @@ func startCursorScopeACP(t *testing.T, sessionID, marker string) *cursorScopeACP
 		t.Fatal(err)
 	}
 	mapper := newCursorEventMapper(func(string, string, map[string]interface{}) {})
-	app, err := startCursorACP(context.Background(), spec, mapper, func(string, map[string]interface{}) {})
+	app, err := startCursorACP(context.Background(), spec, mapper, nil, func(string, map[string]interface{}) {})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +289,7 @@ func startCursorScopeACP(t *testing.T, sessionID, marker string) *cursorScopeACP
 	defer cancel()
 	conversation := ""
 	if err = app.initialize(ctx); err == nil {
-		conversation, err = app.open(ctx, spec.Cwd)
+		conversation, err = app.open(ctx, spec.Cwd, []interface{}{})
 	}
 	if err == nil {
 		err = mapper.begin("turn-1")

@@ -1,0 +1,163 @@
+{
+  "at": "2026-10-17T20:08:26.202+00:00",
+  "mapping": {
+    "attempt": 6,
+    "backend": "kubernetes",
+    "cluster_key": "orbit-mr-lab",
+    "default_workspace_id": "01a14b6a-bbb5-75eb-be89-178b7aee0397",
+    "desired_state": "RUNNING",
+    "fencing_receipt": {
+      "kind": "OBSERVED_STOP",
+      "observation": {
+        "containers": [
+          {
+            "exitCode": 0,
+            "finishedAt": "2026-10-17T19:57:25Z",
+            "name": "private-volume-directories",
+            "state": "terminated"
+          },
+          {
+            "exitCode": 0,
+            "finishedAt": "2026-10-17T20:00:27Z",
+            "name": "runner",
+            "state": "terminated"
+          }
+        ],
+        "phase": "Succeeded"
+      },
+      "predecessor": {
+        "generation": 2,
+        "nodeName": "orbit-mr-lab",
+        "podName": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+        "podUid": "c99d2b99-30b5-4b90-af52-00d2bd3a23fa",
+        "pvcUid": "d5299c21-8be0-4e61-91dd-33636ccda9ab",
+        "runnerId": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+        "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-73e7db32-b44a-49cb-a146-f42de6fe5c27"
+      },
+      "recordedAt": "2026-10-17T20:02:20.773Z",
+      "retiredAt": "2026-10-17T20:03:21.171Z"
+    },
+    "generation": 3,
+    "id": "01a14b6a-bbb7-74fc-84d5-24498c3e64a6",
+    "initial_provider": null,
+    "last_error": {
+      "code": "PREDECESSOR_STOP_UNPROVEN",
+      "detail": "Pod e8bc0c13-e7ae-4064-8ecc-105e45b48d6e of generation 3 is gone without a stop proof",
+      "message": "The previous runner instance is gone, and nothing proves it stopped, so no new instance is started and the data volume is kept. It waits for proof that it stopped or for an operator\u2019s fencing receipt.",
+      "retryable": false
+    },
+    "management_state": "FENCING",
+    "namespace": "orbit-mr-test",
+    "next_attempt_at": null,
+    "node_name": "orbit-mr-lab",
+    "owner_id": "01a14b6a-bba2-7260-801a-354b0a0e6f8b",
+    "pod_name": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+    "pod_uid": "e8bc0c13-e7ae-4064-8ecc-105e45b48d6e",
+    "pv_uid": "26476233-644b-47a5-b62d-b8a0848ef9f3",
+    "pvc_name": "mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+    "pvc_uid": "d5299c21-8be0-4e61-91dd-33636ccda9ab",
+    "reservation": {
+      "compute": {
+        "activeUsers": 1,
+        "attachments": 1,
+        "cpuMillis": 500,
+        "ephemeralBytes": 1073741824,
+        "generation": 1,
+        "memoryBytes": 805306368,
+        "pods": 1,
+        "reservedAt": "2026-10-17T19:51:59.653Z"
+      },
+      "pool": "5a227748-b16c-43d1-a557-77cce09e5b12",
+      "storage": {
+        "durableBytes": 2147483648,
+        "reservedAt": "2026-10-17T19:50:48.521Z"
+      },
+      "version": 1
+    },
+    "resource_operation_kind": "CREATE_POD",
+    "resource_operation_state": "COMPLETED",
+    "revision": 50,
+    "runner_id": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+    "startup_deadline_at": null,
+    "state_entered_at": "2026-10-17T20:05:27.884+00:00",
+    "updated_at": "2026-10-17T20:08:24.257+00:00",
+    "volume_handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-73e7db32-b44a-49cb-a146-f42de6fe5c27"
+  },
+  "objects": {
+    "bootstrapSecret": {
+      "createdAt": "2026-10-17T20:03:21Z",
+      "generation": "3",
+      "name": "mr-boot-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "uid": "ce22d189-59cc-4845-830b-65e5cf65aabb"
+    },
+    "pod": null,
+    "podsUsingTheClaim": [],
+    "pv": {
+      "claimUid": "d5299c21-8be0-4e61-91dd-33636ccda9ab",
+      "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+      "fsType": "ext4",
+      "image": "csi-vol-73e7db32-b44a-49cb-a146-f42de6fe5c27",
+      "name": "pvc-d5299c21-8be0-4e61-91dd-33636ccda9ab",
+      "pool": "orbit-mr-rbd",
+      "reclaimPolicy": "Retain",
+      "uid": "26476233-644b-47a5-b62d-b8a0848ef9f3",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-73e7db32-b44a-49cb-a146-f42de6fe5c27"
+    },
+    "pvc": {
+      "accessModes": [
+        "ReadWriteOnce"
+      ],
+      "annotations": {
+        "orbit.dev/owner-id": "01a14b6a-bba2-7260-801a-354b0a0e6f8b",
+        "orbit.dev/runner-id": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+        "pv.kubernetes.io/bind-completed": "yes",
+        "pv.kubernetes.io/bound-by-controller": "yes",
+        "volume.beta.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com",
+        "volume.kubernetes.io/storage-provisioner": "rbd.csi.ceph.com"
+      },
+      "name": "mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "phase": "Bound",
+      "storageClassName": "runner-data",
+      "uid": "d5299c21-8be0-4e61-91dd-33636ccda9ab",
+      "volumeName": "pvc-d5299c21-8be0-4e61-91dd-33636ccda9ab"
+    },
+    "volumeAttachments": []
+  },
+  "ownerStatus": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34henzw58bMujstITsz03",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": "2026-10-17T20:05:26.368Z",
+    "managementState": "FENCING",
+    "reason": {
+      "code": "PREDECESSOR_STOP_UNPROVEN",
+      "message": "The previous runner instance is gone, and nothing proves it stopped, so no new instance is started and the data volume is kept. It waits for proof that it stopped or for an operator\u2019s fencing receipt.",
+      "retryable": false
+    },
+    "retryAfter": null,
+    "revision": 50,
+    "runnerId": "34henzvsur3N7nKIMcXRR",
+    "runnerPublicId": "34henzvsur3N7nKIMcXRR",
+    "usable": false,
+    "workspaceId": "34henzw58bMujstITsz03",
+    "workspacePublicId": "34henzw58bMujstITsz03"
+  },
+  "runner": {
+    "id": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+    "labels": [],
+    "last_heartbeat_at": "2026-10-17T20:05:26.368",
+    "name": "orbit-managed",
+    "status": "ONLINE",
+    "version": "managed-292b2eb4308b622b5f7b7d40f7c542d55c1091c9"
+  }
+}

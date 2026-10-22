@@ -199,11 +199,12 @@ async function reclaim(s: Scenario): Promise<AgentExecConfig> {
  *  switch is already on the session row by then (updateConfig persists it before queueing this). */
 async function reload(s: Scenario, provider: string): Promise<Record<string, string> | undefined> {
   const prisma = prismaFor({ ...s, provider });
-  return (
+  const built = await (
     controllerFor(prisma) as unknown as {
-      reloadProviderEnv(tx: unknown, sessionId: string, content: string): Promise<Record<string, string> | undefined>;
+      reloadProviderEnv(tx: unknown, sessionId: string, content: string): Promise<{ env?: Record<string, string> }>;
     }
   ).reloadProviderEnv(prisma.tx, SESSION_ID, JSON.stringify({ provider }));
+  return built.env;
 }
 
 test('a workspace on another Codex account dispatches its session in that account\'s CODEX_HOME, through every door', async () => {

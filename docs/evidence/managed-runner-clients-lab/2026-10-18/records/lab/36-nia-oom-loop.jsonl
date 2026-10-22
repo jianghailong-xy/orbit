@@ -1,0 +1,95 @@
+{"n": 1, "how": "oom", "sentAt": "2026-10-18T06:14:52.495+00:00", "generation": 2, "state": "READY", "pod": "0b5fda80", "terminated": {"exitCode": 137, "reason": "OOMKilled"}, "after": {"management_state": "READY", "generation": 2, "attempt": 0}}
+{"n": 2, "how": "oom", "sentAt": "2026-10-18T06:15:20.018+00:00", "generation": 3, "state": "STARTING", "pod": "44cbec6b", "terminated": {"exitCode": 137, "reason": "OOMKilled"}, "after": {"management_state": "STARTING", "generation": 3, "attempt": 1}}
+{"n": 3, "how": "oom", "sentAt": "2026-10-18T06:15:50.990+00:00", "generation": 4, "state": "STARTING", "pod": "0fe6f2b6", "terminated": {"exitCode": 137, "reason": "OOMKilled"}, "after": {"management_state": "STARTING", "generation": 4, "attempt": 2}}
+{"n": 4, "how": "oom", "sentAt": "2026-10-18T06:16:32.371+00:00", "generation": 5, "state": "STARTING", "pod": "fdf275b4", "terminated": {"exitCode": 137, "reason": "OOMKilled"}, "after": {"management_state": "STARTING", "generation": 5, "attempt": 3}}
+{"n": 5, "how": "oom", "sentAt": "2026-10-18T06:17:23.479+00:00", "generation": 6, "state": "STARTING", "pod": "52455258", "terminated": {"exitCode": 137, "reason": "OOMKilled"}, "after": {"management_state": "STARTING", "generation": 6, "attempt": 4}}
+{
+  "owner": "nia",
+  "stops": [
+    {
+      "after": {
+        "attempt": 0,
+        "generation": 2,
+        "management_state": "READY"
+      },
+      "generation": 2,
+      "how": "oom",
+      "n": 1,
+      "pod": "0b5fda80",
+      "sentAt": "2026-10-18T06:14:52.495+00:00",
+      "state": "READY",
+      "terminated": {
+        "exitCode": 137,
+        "reason": "OOMKilled"
+      }
+    },
+    {
+      "after": {
+        "attempt": 1,
+        "generation": 3,
+        "management_state": "STARTING"
+      },
+      "generation": 3,
+      "how": "oom",
+      "n": 2,
+      "pod": "44cbec6b",
+      "sentAt": "2026-10-18T06:15:20.018+00:00",
+      "state": "STARTING",
+      "terminated": {
+        "exitCode": 137,
+        "reason": "OOMKilled"
+      }
+    },
+    {
+      "after": {
+        "attempt": 2,
+        "generation": 4,
+        "management_state": "STARTING"
+      },
+      "generation": 4,
+      "how": "oom",
+      "n": 3,
+      "pod": "0fe6f2b6",
+      "sentAt": "2026-10-18T06:15:50.990+00:00",
+      "state": "STARTING",
+      "terminated": {
+        "exitCode": 137,
+        "reason": "OOMKilled"
+      }
+    },
+    {
+      "after": {
+        "attempt": 3,
+        "generation": 5,
+        "management_state": "STARTING"
+      },
+      "generation": 5,
+      "how": "oom",
+      "n": 4,
+      "pod": "fdf275b4",
+      "sentAt": "2026-10-18T06:16:32.371+00:00",
+      "state": "STARTING",
+      "terminated": {
+        "exitCode": 137,
+        "reason": "OOMKilled"
+      }
+    },
+    {
+      "after": {
+        "attempt": 4,
+        "generation": 6,
+        "management_state": "STARTING"
+      },
+      "generation": 6,
+      "how": "oom",
+      "n": 5,
+      "pod": "52455258",
+      "sentAt": "2026-10-18T06:17:23.479+00:00",
+      "state": "STARTING",
+      "terminated": {
+        "exitCode": 137,
+        "reason": "OOMKilled"
+      }
+    }
+  ]
+}

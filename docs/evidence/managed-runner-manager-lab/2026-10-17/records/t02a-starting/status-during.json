@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-17T21:59:57.918+00:00",
+  "display": {
+    "acceptsWork": true,
+    "detail": "A transient infrastructure error interrupted provisioning; it is retried automatically.",
+    "ensure": false,
+    "kind": "preparing",
+    "moving": true,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": false,
+    "title": "Preparing your managed runner"
+  },
+  "owner": "carol",
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hhrlQmmkpxJaHZB6QbB",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": "2026-10-17T21:59:35.356Z",
+    "managementState": "STARTING",
+    "reason": {
+      "code": "TRANSIENT",
+      "message": "A transient infrastructure error interrupted provisioning; it is retried automatically.",
+      "retryable": true
+    },
+    "retryAfter": null,
+    "revision": 45,
+    "runnerId": "34hhrlQOb3MVDzFDVV6sP",
+    "runnerPublicId": "34hhrlQOb3MVDzFDVV6sP",
+    "usable": false,
+    "workspaceId": "34hhrlQmmkpxJaHZB6QbB",
+    "workspacePublicId": "34hhrlQmmkpxJaHZB6QbB"
+  }
+}

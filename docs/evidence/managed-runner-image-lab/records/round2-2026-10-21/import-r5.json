@@ -1,0 +1,181 @@
+{
+  "archiveSha256": "9ccfc7dc3f9b885d578692b18a0d35591deff4b346720bf68a336ab81b3d727e",
+  "criImages": [
+    {
+      "id": "sha256:6d72caf4b147150eb390abfa75a942caf3f1e950af12a101227c3c447544b38f",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/orbit-managed-runner-lab@sha256:6483cb7504e34fe140333f519eb68db6aba3699d22b1ac5db61d212885d3f3d9"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner-lab:t02-8055bb568"
+      ],
+      "size": "499715070",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    },
+    {
+      "id": "sha256:37b5f6dec1036142c04d5a26cd07674f830b1e0fc7674de8a1d91cc924648076",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner-lab:t02a-292b2eb4308b"
+      ],
+      "size": "500243961",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    },
+    {
+      "id": "sha256:46ce2c44946ebc8d212d2df3dc18a866996cc4f1bf6fda1bcb0453c934d7669e",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/orbit-managed-runner-lab@sha256:76635be14a5d535d874944f046f0277053e56a4eba01faeafd9cd8b625365e40"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner-lab:t02c-0e894464e"
+      ],
+      "size": "499728894",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    },
+    {
+      "id": "sha256:0f899822c45fd88b3244eb061b87d2861c72f562c60dc7f11e340a55760f6019",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/orbit-managed-runner-lab@sha256:61c8f43391761835816685427e07099534298861053a3a81602aaf46d8548b4c"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner-lab:t02c-4aa01a1be"
+      ],
+      "size": "499731845",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    },
+    {
+      "id": "sha256:4015bd196e16069470a984befb412ee820696e2ded7c243d5d28632fba4a5548",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/orbit-managed-runner-lab@sha256:7b6b64fb6ca7cc66b78967f647e8f6feb810407976fc9e09555173342d063fbf"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner-lab:t02c-5928c0e0a"
+      ],
+      "size": "499729198",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    },
+    {
+      "id": "sha256:a48423df05a60055bf74776046f4c2e862d095acf2aa95e741765bfb7c650a1c",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/orbit-managed-runner-lab@sha256:51888af127b4c076f79f914ce119ac6b22fd9859282151a564996ce9cffc3ad0"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner-lab:t02c-af37b5285"
+      ],
+      "size": "499728080",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    },
+    {
+      "id": "sha256:1a46bd5c8af6a4d997b2b124a78968f4aa2ad3b4f96b9db6aa9875b3d4611a90",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner-lab:t06b-ebf54ab8d"
+      ],
+      "size": "500246552",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    },
+    {
+      "id": "sha256:3b13a5446e3a33f6dc33f8d4e44c527a023045aa16a5e6988988f7b667c03f59",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/import-2026-10-17@sha256:f217dcc3fe1df6b4f431cd0ada44415c2abd095eecbb84a5b609a1fca925944d"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner:r2-2126ea728"
+      ],
+      "size": "500022852",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    },
+    {
+      "id": "sha256:8a481d08ad8b79e1fb42237d80dcf16afd4f79fa3fb7a24bf5d629b3737d6095",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/import-2026-10-17@sha256:a3edc056ebe9a5e7f511e8c25104f36ebf34086ddbf7b2290b58074f619ae371"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner:r3-99aafcd61"
+      ],
+      "size": "500022857",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    },
+    {
+      "id": "sha256:feda0de727a4cd065adfef8d0badb6c49d29bab65324448586db8e5a715e7b76",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/import-2026-10-17@sha256:a8ce9b8bbb572e520e0db4acfb936d7f1fa7fbe6c290bfb1d740cf35777c86b1"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner:r4-6bfe0a871"
+      ],
+      "size": "500024908",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    },
+    {
+      "id": "sha256:953d107327a3dc27732bf43ce0590a1c5f3d5715c859fe7f7e96725c252b02b6",
+      "pinned": false,
+      "repoDigests": [
+        "docker.io/library/import-2026-10-20@sha256:4d44fb987813990da3a438c080064dda30a098c442123e2184266ce12fd2c3b9"
+      ],
+      "repoTags": [
+        "docker.io/library/orbit-managed-runner:r5-6d597ec38"
+      ],
+      "size": "499655007",
+      "uid": {
+        "value": "10001"
+      },
+      "username": ""
+    }
+  ],
+  "ctr": [
+    "import 2026 10 20@sha256:4d44fb987813990\tsaved\t",
+    "application/vnd.oci.image.index.v1+json sha256:4d44fb987813990da3a438c080064dda30a098c442123e2184266ce12fd2c3b9",
+    "Importing\telapsed: 37.0s\ttotal:   0.0 B\t(0.0 B/s)\t",
+    "import 2026 10 20@sha256:4d44fb987813990\tsaved\t",
+    "docker.io/library/orbit managed runner:r\tsaved\t",
+    "application/vnd.oci.image.index.v1+json sha256:4d44fb987813990da3a438c080064dda30a098c442123e2184266ce12fd2c3b9",
+    "application/vnd.oci.image.manifest.v1+json sha256:ad05f60aae7a031551dd0f859f5fd4c867d6f17ff93714242b43ebc528a8e9d4",
+    "Importing\telapsed: 37.0s\ttotal:   0.0 B\t(0.0 B/s)"
+  ],
+  "importSeconds": 38.4
+}

@@ -374,14 +374,16 @@ final class AcceptedTurnPlaceholderTests: XCTestCase {
     // MARK: - the rest of the listing is drawn as it was
 
     /// A receipt for a message written into the running turn that never made it is a steer that is
-    /// over: the queue never listed one, and the tail still draws none — a steer of the queue's that
-    /// becomes one goes, as it did when the listing dropped it.
-    func testADeliveryReceiptIsNotDrawnInTheTail() throws {
+    /// over, and all there is of it (docs/mocks/put-back-ios, decided 2026-10-17): a steer of the queue's that
+    /// becomes one stays the row it was, at the tail, saying it was not delivered and why — no longer
+    /// dropped as though it had never been sent.
+    func testADeliveryReceiptStaysInTheTailAsTheRowItWas() throws {
         var reducer = TranscriptReducer()
         reducer.reconcileQueuedTurns(try listing(row("t-s", placement: "steer", kind: "steer", content: "use staging",
                                                      extra: ", \"targetTurnId\": \"t-a\"")),
                                      knownBefore: [])
         XCTAssertEqual(reducer.state.queued.map(\.steer), [true])
+        let id = reducer.state.queued[0].id
 
         reducer.reconcileQueuedTurns(try listing(row("t-s", placement: "steer", kind: "steer", content: "use staging",
                                                      extra: """
@@ -390,7 +392,12 @@ final class AcceptedTurnPlaceholderTests: XCTestCase {
                                                          "deliveryReason": "The turn it was written into had already ended."
                                                          """)),
                                      knownBefore: reducer.state.listedTurnIDs)
-        XCTAssertTrue(reducer.state.queued.isEmpty)
+        XCTAssertEqual(reducer.state.queued.map(\.id), [id])
+        let receipt = try XCTUnwrap(reducer.state.queued.first)
+        XCTAssertTrue(receipt.receipt)
+        XCTAssertTrue(receipt.undelivered)
+        XCTAssertFalse(receipt.pending)
+        XCTAssertEqual(receipt.deliveryCode, "CURRENT_WORK_TARGET_COMPLETED")
         XCTAssertTrue(reducer.state.accepted.isEmpty)
     }
 

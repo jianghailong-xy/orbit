@@ -9,7 +9,6 @@ const claim = (over: Partial<Parameters<typeof claimPromptSuggestions>[0]> = {})
     provider: AgentProvider.CLAUDE,
     runSource: 'MANUAL',
     spawnDepth: 0,
-    maintenance: null,
     env: undefined,
     ...over,
   });
@@ -52,7 +51,6 @@ test('a non-Claude session gets the server-written guess only while the server h
     // The shared conditions still apply: the guess is written for a person who will read it.
     assert.equal(claim({ provider: AgentProvider.CODEX, runSource: 'TASK_LIST_AUTO' }), false, 'nobody reads an automatic run');
     assert.equal(claim({ provider: AgentProvider.CODEX, spawnDepth: 1 }), false, 'another session drives a session it spawned');
-    assert.equal(claim({ provider: AgentProvider.CODEX, maintenance: { runId: 'w' } }), false, 'a Wiki maintenance run');
     assert.equal(
       claim({ provider: AgentProvider.CODEX, owner: { preferences: { promptSuggestions: false } } }),
       false,
@@ -72,7 +70,6 @@ test('everything else is left without them', () => {
   assert.equal(claim({ owner: { preferences: { promptSuggestions: false } } }), false, 'owner turned it off');
   assert.equal(claim({ runSource: 'TASK_LIST_AUTO' }), false, 'nobody reads an automatic run');
   assert.equal(claim({ spawnDepth: 1 }), false, 'another session drives a session it spawned');
-  assert.equal(claim({ maintenance: { runId: 'w' } }), false, 'a Wiki maintenance run');
   assert.equal(
     claim({ env: { ANTHROPIC_BASE_URL: 'http://127.0.0.1:8000' } }),
     false,

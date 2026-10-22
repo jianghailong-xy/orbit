@@ -1,0 +1,23 @@
+Printing with useUnmergedTree = 'false'
+Node #4769 at (l=0.0, t=0.0, r=411.0, b=230.0)px
+ |-Node #4822 at (l=0.0, t=0.0, r=411.0, b=230.0)px
+   IsContainer = 'true'
+    |-Node #4824 at (l=28.0, t=28.0, r=383.0, b=202.0)px, Tag: 'landing-card'
+       |-Node #4825 at (l=28.0, t=28.0, r=383.0, b=146.0)px, Tag: 'landing-card:body'
+       | Focused = 'false'
+       | Role = 'Button'
+       | Text = '[Landing, 1m 50s of 60m, checking · output 6s ago · claim 1 · round 1 of 3, Wire the page, onto project/launch, Nothing to do — it lands on its own.]'
+       | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+       | MergeDescendants = 'true'
+       |-Node #4838 at (l=28.0, t=158.0, r=160.0, b=198.0)px, Tag: 'landing-card:open-landing'
+       | Focused = 'false'
+       | Role = 'Button'
+       | Text = '[Open landing ›]'
+       | Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+       | MergeDescendants = 'true'
+       |-Node #4842 at (l=294.0, t=158.0, r=383.0, b=198.0)px, Tag: 'landing-card:all-jobs'
+         Focused = 'false'
+         Role = 'Button'
+         Text = '[All jobs ›]'
+         Actions = [ClearTextSubstitution, GetTextLayoutResult, OnClick, RequestFocus, SetTextSubstitution, ShowTextSubstitution]
+         MergeDescendants = 'true'

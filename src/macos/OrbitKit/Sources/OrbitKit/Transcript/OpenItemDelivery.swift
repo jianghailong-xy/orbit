@@ -117,12 +117,16 @@ public struct OpenItemDelivery: Sendable, Equatable, Codable {
     /// kept and simply has no label to draw (`OpenItemDeliveryCard.actionLabels`).
     public let actions: [String]
     public let landing: OpenItemDeliveryLandingFacts?
+    /// The landing session this failure came from (§2.9 LS1), if the network recorded one: the
+    /// card's "Open the landing ↗". Nil for a payload an older server recorded.
+    public let landingSessionId: String?
 
     public init(itemId: String, kind: ProjectOpenItemKind, title: String,
                 task: OpenItemDeliveryTask? = nil, files: [String] = [], targetRef: String? = nil,
                 check: OpenItemDeliveryCheck? = nil, errorCode: String? = nil,
                 failure: OpenItemDeliveryFailure? = nil, actions: [String] = [],
-                landing: OpenItemDeliveryLandingFacts? = nil) {
+                landing: OpenItemDeliveryLandingFacts? = nil,
+                landingSessionId: String? = nil) {
         self.itemId = itemId
         self.kind = kind
         self.title = title
@@ -134,6 +138,7 @@ public struct OpenItemDelivery: Sendable, Equatable, Codable {
         self.failure = failure
         self.actions = actions
         self.landing = landing
+        self.landingSessionId = landingSessionId
     }
 
     /// The card a `user` event's payload carries, or nil for the ordinary case: a turn that is
@@ -170,7 +175,8 @@ public struct OpenItemDelivery: Sendable, Equatable, Codable {
             errorCode: nonEmptyString(card["errorCode"]),
             failure: failure(card["failure"]),
             actions: strings(card["actions"]),
-            landing: landing(card["landing"]))
+            landing: landing(card["landing"]),
+            landingSessionId: nonEmptyString(card["landingSessionId"]))
     }
 
     private static func nonEmptyString(_ value: JSONValue?) -> String? {
@@ -243,6 +249,10 @@ public enum OpenItemDeliveryCard {
         case .promotionApproval:      return "Merge approval"
         case .coordinatorQuestion:    return "Question"
         case .fusePaused:             return "Project paused"
+        // The browser's `KIND_LABEL` has no word for these two either; the header names them, and a
+        // second name invented here would be a wording the web does not share.
+        case .deliveryReview:         return header
+        case .landingLeaseExpired:    return header
         case .unknown:                return header
         }
     }
@@ -330,6 +340,10 @@ public enum OpenItemDeliveryCard {
             case "REVIEW":                return "Review the merge"
             case "ANSWER":                return "Answer the question"
             case "RESUME":                return "Resume the project"
+            // The landing doors (§2.9 LS6, board v4 06 b): Open landing is a way in, and Abandon is
+            // the X-E5 card's lead — the delivery card only names both, as it names every door.
+            case "OPEN_LANDING":          return "Open landing"
+            case "ABANDON":               return "Abandon"
             default:                      return nil
             }
         }
@@ -340,6 +354,15 @@ public enum OpenItemDeliveryCard {
     public static let doorsLead = "The coordinator can:"
     public static let openTask = "Open the task ↗"
     public static let openSession = "Open the failed session ↗"
+    /// The third link, after the two main's card already had (board v4 06 b): the landing this
+    /// attempt belongs to. A delivery whose item recorded no landing draws nothing.
+    public static let openLanding = "Open the landing ↗"
+
+    /// Where `Open the landing ↗` goes, or nil for a payload an older server recorded.
+    public static func landingLink(_ card: OpenItemDelivery) -> URL? {
+        guard let id = card.landingSessionId, !id.isEmpty else { return nil }
+        return URL(string: "orbit-session:\(PublicID.toPublic(id))")
+    }
     /// The foot line: what this is, and that it asks nothing of the reader yet.
     public static let notification = "a notification, not an interruption"
     public static let undelivered = "The session has not confirmed it received this."

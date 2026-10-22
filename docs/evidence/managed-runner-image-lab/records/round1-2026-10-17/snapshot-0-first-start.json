@@ -1,0 +1,48 @@
+{
+  "claude": {},
+  "config": {
+    "autoInstallEngines": null,
+    "maxConcurrent": 2,
+    "name": "t03",
+    "runnerId": "01a148b4-0c67-7688-b666-fdea8b9a55ed",
+    "serverUrl": "https://10.0.2.2:13711",
+    "workDir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "configSha256": "0f8ab256b7b5b271fc93d668f871f0a74380da5a00f3b77e5d70f0f9b86eb9c5",
+  "containerIdentity": {
+    "layoutVersion": 1,
+    "runnerId": "01a148b4-0c67-7688-b666-fdea8b9a55ed",
+    "serverUrl": "https://10.0.2.2:13711",
+    "workDir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "modes": {
+    "/var/lib/orbit/home": "0o700",
+    "/var/lib/orbit/home/.orbit": "0o700",
+    "/var/lib/orbit/home/.orbit/config.json": "0o600"
+  },
+  "mount": [
+    {
+      "fstype": "ext4",
+      "source": "/dev/rbd1"
+    }
+  ],
+  "process": {
+    "capEff": "0000000000000000",
+    "gid": 10001,
+    "uid": 10001
+  },
+  "runs": {},
+  "sqlite": {},
+  "takenAt": "2026-10-17T07:12:58.454+00:00",
+  "uploads": {},
+  "workspace": {
+    "branch": "ERROR: fatal: not a git repository (or any parent up to mount point /var/lib)\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).",
+    "files": {},
+    "head": "ERROR: fatal: not a git repository (or any parent up to mount point /var/lib)\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).",
+    "worktreeList": [
+      "ERROR: fatal: not a git repository (or any parent up to mount point /var/lib)",
+      "Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set)."
+    ]
+  },
+  "worktrees": {}
+}

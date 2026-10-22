@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { wikiWorkerRunning, type WikiSystemModelRead, type WikiSystemModelState, type WikiSystemModelStatus } from '@orbit/shared';
+import { WIKI_EXECUTOR_READ, wikiWorkerRunning, type WikiSystemModelRead, type WikiSystemModelState, type WikiSystemModelStatus } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { currentWikiExecutorSwitch, wikiExecutorView } from './wiki-executor-switch';
 
 /**
  * The System model as the wiki settings page and the health line read it (contract `systemModel.read`): the model's
@@ -33,10 +32,10 @@ export class WikiSystemModelReads {
   }
 
   /**
-   * The user door's answer (contract `systemModel.read`): the state `read` answers, and what the executor switch
-   * says for `ownerId` — the mode and whether the server executes that account's wiki, never the canary list.
+   * The user door's answer (contract `systemModel.read`): the state `read` answers, and who executes the caller's
+   * wiki — the server, for every account (contract `jobs.executor.read`).
    */
-  async readFor(ownerId: string, now: Date = new Date()): Promise<WikiSystemModelRead> {
-    return { ...(await this.read(now)), executor: wikiExecutorView(currentWikiExecutorSwitch(), ownerId) };
+  async readForUser(now: Date = new Date()): Promise<WikiSystemModelRead> {
+    return { ...(await this.read(now)), executor: WIKI_EXECUTOR_READ };
   }
 }

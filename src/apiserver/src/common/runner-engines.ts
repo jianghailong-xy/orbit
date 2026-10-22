@@ -47,8 +47,7 @@ export function isKimiRegion(value: unknown): value is KimiRegion {
 }
 
 export function isInstallEngine(value: unknown): value is InstallEngine {
-  // Cursor CLI is signed in through the relay, but its install is not relayed yet.
-  return (isLoginEngine(value) && value !== 'cursor') || value === 'dsh' || value === 'opencode';
+  return isLoginEngine(value) || value === 'dsh' || value === 'opencode';
 }
 
 /**
@@ -380,6 +379,117 @@ export function namedRunnerEngines(runner: { engines: unknown; accountNames: unk
       }),
     };
   });
+}
+
+/**
+ * Read `runner.default_removed` (which RunnersService.removeAccount writes for Default) the way the
+ * names are read: only an engine that keeps accounts. Anything else is no removal.
+ */
+function sanitizeDefaultRemoved(value: unknown): LoginEngine[] {
+  return Array.isArray(value) ? value.filter(engineKeepsAccounts) : [];
+}
+
+/**
+ * A runner's engines as Orbit uses them: as everything that names an account reads them
+ * (namedRunnerEngines), less each Default the owner removed from Orbit (`runner.default_removed`).
+ * The one place a removed Default is taken out. Every runner read Orbit serves goes through it, and
+ * whatever picks an account or runs on one is meant to as well, so that Default is gone from all of
+ * them at once.
+ *
+ * A removal takes effect only while the report lists another account of that engine. The engine then
+ * lists the accounts that remain, and is marked with what a client names Default by and brings it
+ * back with (`removedDefault`). Whatever sums up its sign-in reads as if the machine had only those
+ * accounts (withoutDefault), so a reader that predates the marker never calls the engine signed out
+ * over a Default nobody uses. An engine whose report lists no other account is the report as it
+ * stands, Default included and in use; the record stays, so a later account leaves it removed again.
+ *
+ * `defaultRemoved` is required for the reason `accountNames` is on namedRunnerEngines: a select that
+ * forgets it would otherwise compile, and list a Default the owner removed.
+ */
+export function usedRunnerEngines(runner: {
+  engines: unknown;
+  accountNames: unknown;
+  accountPauses?: unknown;
+  defaultRemoved: unknown;
+}): RunnerEngineHealth[] | null {
+  const engines = namedRunnerEngines(runner);
+  const removed = sanitizeDefaultRemoved(runner.defaultRemoved);
+  if (!engines || !removed.length) return engines;
+  return engines.map((entry) => (removed.includes(entry.engine as LoginEngine) ? withoutDefault(entry) : entry));
+}
+
+/**
+ * One engine with its Default left out, or as reported while it lists no other account (or no Default
+ * to leave out).
+ *
+ * Its sign-in is read from one remaining account, as it was from Default: the first signed in, else
+ * the first that may be, else the first. So `auth` is `yes` while any of them is signed in and `no`
+ * only once every one says so, and Kimi's site is that account's. Antigravity's credential is a Google
+ * sign-in, as every account it adds is; the Gemini key in the machine's environment was Default's alone
+ * (docs/antigravity-runtime-contract.md §16.11). Its quota loses Default's part (withoutDefaultUsage).
+ */
+function withoutDefault(entry: RunnerEngineHealth): RunnerEngineHealth {
+  const own = entry.accounts?.find((account) => account.id === 'default');
+  const remaining = entry.accounts?.filter((account) => account.id !== 'default') ?? [];
+  if (!own || !remaining.length) return entry;
+  const speaks =
+    remaining.find((account) => account.auth === 'yes') ??
+    remaining.find((account) => account.auth === 'unknown') ??
+    remaining[0];
+  const { authSource: _authSource, kimiRegion: _kimiRegion, planUsage, ...rest } = entry;
+  return {
+    ...rest,
+    auth: speaks.auth,
+    accounts: remaining,
+    ...(entry.engine === 'antigravity' ? { authSource: 'google' as const } : {}),
+    ...(speaks.kimiRegion ? { kimiRegion: speaks.kimiRegion } : {}),
+    ...(planUsage ? { planUsage: withoutDefaultUsage(planUsage, remaining) } : {}),
+    removedDefault: {
+      home: own.home,
+      ...(own.name ? { name: own.name } : {}),
+      ...(own.fingerprintPrefix ? { fingerprintPrefix: own.fingerprintPrefix } : {}),
+    },
+  };
+}
+
+/**
+ * One engine's quota without Default's part, which is the snapshot's own windows beside `accounts`
+ * (codexAccountSnapshot). With one account left, its entry becomes the snapshot's own, as Default's was
+ * on a machine with no other: that is what a reader older than accounts shows for the engine. With
+ * more, the snapshot has none of its own and each account keeps its entry.
+ */
+function withoutDefaultUsage(snapshot: PlanUsageSnapshot, remaining: readonly RunnerEngineAccount[]): PlanUsageSnapshot {
+  // The heartbeat's planUsage is stored as sent, so neither the list nor an entry is taken on trust.
+  const accounts = isPlainObject(snapshot.accounts) ? snapshot.accounts : undefined;
+  const theirs = remaining.length === 1 ? accounts?.[remaining[0].id] : undefined;
+  return {
+    ...(snapshot.provider ? { provider: snapshot.provider } : {}),
+    ...(isPlainObject(theirs) ? theirs : {}),
+    ...(accounts ? { accounts } : {}),
+  };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * The runner's heartbeat planUsage beside its engines as Orbit uses them (usedRunnerEngines): the
+ * snapshot of every engine whose Default they leave out loses Default's part the same way
+ * (withoutDefaultUsage). That is Codex's, Claude Code's, Kimi Code's and Cursor CLI's, nested under
+ * the engine or, for a lone Claude or Codex snapshot, the payload itself. Antigravity's travels with
+ * its engine and is done there. Everything else is passed through as stored.
+ */
+export function usedPlanUsage<T>(planUsage: T, engines: readonly RunnerEngineHealth[] | null): T {
+  if (!isPlainObject(planUsage)) return planUsage;
+  let usage: Record<string, unknown> = planUsage;
+  for (const entry of engines ?? []) {
+    if (!entry.removedDefault || !entry.accounts || entry.engine === 'antigravity') continue;
+    const nested = usage[entry.engine];
+    if (isPlainObject(nested)) usage = { ...usage, [entry.engine]: withoutDefaultUsage(nested, entry.accounts) };
+    else if (usage.provider === entry.engine) usage = { ...withoutDefaultUsage(usage, entry.accounts) };
+  }
+  return usage as T;
 }
 
 /** How long a message from the runner may be. Long enough for an installer's last words plus the

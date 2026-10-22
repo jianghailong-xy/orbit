@@ -4400,7 +4400,7 @@ private struct OwnerItemCardView: View {
                                             row: ProjectOpenItemRow) -> some View {
         if let make = makePress(cardPress, row: row) {
             doorRow(cardPress.consequence) {
-                weighted(cardPress.tier) {
+                weighted(cardPress.tier, tint: cardPress.action == .abandon ? .red : nil) {
                     Button(action: make) {
                         Text(cardPress.label).approvalActionLabel()
                     }
@@ -4439,8 +4439,29 @@ private struct OwnerItemCardView: View {
             guard let promotionID = row.promotionId,
                   console.mergeCardPromotionID == promotionID else { return nil }
             return { PlatformHaptics.tap(); console.revealPromotionCard(promotionID) }
+        case .openLanding:
+            // A reading door: the landing this item is about, opened through the app's own
+            // `orbit-session:` route — the same door the delivery card's third link uses.
+            guard let url = ExceptionCards.landingLink(row) else { return nil }
+            return { PlatformHaptics.tap(); openURL(url) }
+        case .abandon:
+            // §4.6 X-E5's lead: end the attempt whose runner stopped reporting (J-T10).
+            guard ExceptionCards.addressed(row, .abandon) else { return nil }
+            return { abandon(row) }
         default:
             return nil
+        }
+    }
+
+    /// The Abandon press: no second press while it is on its way, and the console re-reads what
+    /// the card was drawn from.
+    private func abandon(_ row: ProjectOpenItemRow) {
+        guard !sending else { return }
+        PlatformHaptics.tap()
+        sending = true
+        Task {
+            await console.abandonIntegration(row)
+            sending = false
         }
     }
 
@@ -4448,9 +4469,12 @@ private struct OwnerItemCardView: View {
     /// style is the only thing the tier decides here: WHICH presses exist, and in what order, is
     /// `ExceptionCards.presses` — the browser's own rule, so the two cards cannot disagree.
     @ViewBuilder private func weighted<V: View>(_ tier: ExceptionCards.PressTier,
+                                                tint: Color? = nil,
                                                 @ViewBuilder _ button: () -> V) -> some View {
         if tier == .primary {
-            button().buttonStyle(.borderedProminent)
+            // Abandon leads X-E5 in the board's solid red; every other leading door wears the
+            // accent. The tint is the style's, not a second button.
+            button().buttonStyle(.borderedProminent).tint(tint ?? .accentColor)
         } else if tier == .link {
             button().buttonStyle(.plain).font(.orbitLabel).foregroundStyle(.secondary)
         } else {
@@ -4987,6 +5011,11 @@ struct PromotionReceiptSheet: View {
                         if let undo = PromotionCards.revertLine(promotion) {
                             CardRow(label: "Undo", value: undo)
                         }
+                    }
+                    // The receipt's foot still opens the round's landing (方案 A): the merge
+                    // happened, and every attempt is still read there.
+                    if let landingID = ProjectMergeCard.receiptLandingSessionId(promotion) {
+                        LandingEntryLink(entry: .link(landingID), compact: false)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

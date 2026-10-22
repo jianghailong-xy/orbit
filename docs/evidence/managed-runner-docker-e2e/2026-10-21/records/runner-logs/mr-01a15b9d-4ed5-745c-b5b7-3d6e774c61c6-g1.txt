@@ -1,0 +1,15 @@
+[orbit-runner 2026-10-20T23:19:58.850Z] managed runner instance identity read; it is sent with every request
+[orbit-runner 2026-10-20T23:19:58.850Z] volume check: 0 checkouts in 0 repositories after start; 0 stale lock files removed, 0 branches restored, 0 checkouts damaged
+[orbit-runner 2026-10-20T23:19:58.850Z] volume syncs: before reports only; the volume is a directory of /dev/nvme0n1p3 (ext4), which it shares, so a sync behind every tool would write back the whole filesystem
+[orbit-runner 2026-10-20T23:19:58.850Z] runner "orbit-managed" online -> http://172.18.0.1:2714 (max 2 concurrent)
+[orbit-runner 2026-10-20T23:20:13.855Z] claude plan-usage unavailable: open /var/lib/orbit/home/.claude/.credentials.json: no such file or directory
+[orbit-runner 2026-10-20T23:23:46.136Z] claim failed: Get "http://172.18.0.1:2714/api/runner/sessions/claim": EOF
+[orbit-runner 2026-10-20T23:23:58.856Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": read tcp 172.18.0.4:60330->172.18.0.1:2714: read: connection reset by peer
+[orbit-runner 2026-10-20T23:24:53.518Z] claim failed: Get "http://172.18.0.1:2714/api/runner/sessions/claim": EOF
+[orbit-runner 2026-10-20T23:24:58.854Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": readfrom tcp 172.18.0.4:54492->172.18.0.1:2714: write tcp 172.18.0.4:54492->172.18.0.1:2714: write: broken pipe
+[orbit-runner 2026-10-20T23:25:28.853Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:32:00.819Z] claim failed: Get "http://172.18.0.1:2714/api/runner/sessions/claim": EOF
+[orbit-runner 2026-10-20T23:32:28.853Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:27.077Z] claim failed: Get "http://172.18.0.1:2714/api/runner/sessions/claim": read tcp 172.18.0.4:52248->172.18.0.1:2714: read: connection reset by peer
+[orbit-runner 2026-10-20T23:33:28.852Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF
+[orbit-runner 2026-10-20T23:33:58.851Z] heartbeat failed: Post "http://172.18.0.1:2714/api/runner/heartbeat": EOF

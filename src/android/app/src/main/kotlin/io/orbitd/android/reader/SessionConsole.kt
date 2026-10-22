@@ -4,14 +4,19 @@ import androidx.compose.runtime.*
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.composer.ComposerCatalog
 import io.orbitd.android.composer.ComposerModel
+import io.orbitd.android.composer.CursorRuntime
+import io.orbitd.android.composer.DraftTarget
 import io.orbitd.android.composer.ProviderEngines
 import io.orbitd.android.composer.ProviderOption
 import io.orbitd.android.composer.threeTries
 import io.orbitd.android.core.auth.SessionHandle
 import io.orbitd.android.core.cards.DshRuntime
 import io.orbitd.android.directory.directoryError
+import io.orbitd.android.management.EngineAccounts
 import io.orbitd.android.management.ManagementApi
 import io.orbitd.android.management.RunnerPage
+import io.orbitd.android.management.accountSnapshotReported
+import io.orbitd.android.management.cursorUsageLimit
 import io.orbitd.android.navigation.ObjectId
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
@@ -27,7 +32,7 @@ import kotlinx.serialization.json.*
 @Stable
 internal class SessionConsole(val app: OrbitApplication, val handle: SessionHandle, val sessionId: String, val composer: ComposerModel,
     private val scope: CoroutineScope, private val reloadDetail: suspend () -> Unit, val openRunner: (runner: String, engine: String) -> Unit,
-    val openSession: (String) -> Unit) {
+    val openSession: (String) -> Unit, val openDraft: (workspaceId: String) -> Unit = {}) {
     val management = ManagementApi(app.session, handle, scope)
     /** The session as last read: the worktree bar's poll, or the store's snapshot. */
     var detail by mutableStateOf<JsonObject?>(null)
@@ -149,6 +154,48 @@ internal class SessionConsole(val app: OrbitApplication, val handle: SessionHand
         val origin = handle.account.server.trimEnd('/')
         val mine = runCatching { (management.get("providers/mine") as? JsonArray)?.filterIsInstance<JsonObject>() }.getOrNull().orEmpty()
         return mine.firstOrNull { it.string("slug") == provider }?.string("id")?.let { "$origin/providers/$it" } ?: "$origin/infrastructure#keys"
+    }
+
+    // MARK: Cursor CLI (the board's iOS 5 ⑧)
+
+    /** The account a session on Cursor CLI's own sign-in spends: its own pick, else its workspace's, else Default — as dispatch resolves
+     * an id this runner does not report. */
+    private val cursorAccount: String get() {
+        val accounts = (CursorRuntime.health(runner)?.get("accounts") as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty()
+        val wanted = detail?.string("cursorAccount") ?: (detail?.get("workspace") as? JsonObject)?.string("cursorAccount")
+        return wanted?.takeIf { id -> accounts.any { it.string("id") == id } } ?: EngineAccounts.DEFAULT
+    }
+
+    /** What a Cursor CLI session's quota card says of whose usage ran out (AutoRetryLogic.CursorQuota): a key by its name; an account of
+     * the runner's by its name, its plan, when its included usage comes back, and another account with room. Null on any other engine. */
+    val cursorQuota: AutoRetryLogic.CursorQuota? get() {
+        if (engine != CursorRuntime.ENGINE) return null
+        if (provider != CursorRuntime.ENGINE) return AutoRetryLogic.CursorQuota(providers.firstOrNull { it.string("slug") == provider }?.string("label") ?: provider)
+        val runner = runner ?: return AutoRetryLogic.CursorQuota(RunnerPage.accountLabel(cursorAccount, emptyList()))
+        val accounts = (CursorRuntime.health(runner)?.get("accounts") as? JsonArray)?.filterIsInstance<JsonObject>().orEmpty()
+        val usage = EngineAccounts.usage(CursorRuntime.ENGINE, runner)
+        val account = cursorAccount
+        val snapshot = accountSnapshotReported(usage, account)
+        val now = System.currentTimeMillis()
+        val elsewhere = accounts.firstOrNull { other ->
+            val id = other.string("id") ?: return@firstOrNull false
+            id != account && other.string("auth") == "yes" && !RunnerPage.isPaused(other.string("pausedUntil"), now) &&
+                cursorUsageLimit(accountSnapshotReported(usage, id), now) == null
+        }
+        return AutoRetryLogic.CursorQuota(RunnerPage.accountLabel(account, accounts), snapshot?.string("planName"),
+            (snapshot?.get("includedUsage") as? JsonObject)?.string("resetsAt"),
+            elsewhere?.let { it.string("id")!! to RunnerPage.accountLabel(it.string("id")!!, accounts) })
+    }
+
+    /** A new session on Cursor CLI's [account], in this session's workspace: the draft is opened on it, as the quota card's press asks
+     * — the conversation itself can't move there yet (D5). */
+    fun startCursorSession(account: String) {
+        val workspace = (detail?.get("workspace") as? JsonObject)?.string("id") ?: detail?.string("agentId") ?: return
+        val target = DraftTarget(workspace)
+        app.composer(handle, target.key, target).hold(buildJsonObject {
+            put("engine", CursorRuntime.ENGINE); put("provider", CursorRuntime.ENGINE); put("account", account)
+        })
+        openDraft(workspace)
     }
 
     // MARK: auto-retry (iOS `AutoRetryCardView`'s reads and presses on `ConsoleModel`)

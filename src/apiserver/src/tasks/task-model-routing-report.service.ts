@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { USAGE_LIMIT_ERROR_MARKERS } from '@orbit/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { MODEL_AT_CAPACITY_ERROR_MARKER } from './model-routing';
 
 export interface ModelRoutingReportGroup {
   policyVersion: number;
@@ -77,8 +78,9 @@ export class TaskModelRoutingReportService {
       ),
       assessed_runs AS (
         SELECT w.*,
-               NOT (w.status = 'FAILED' AND (${Prisma.join(USAGE_LIMIT_ERROR_MARKERS.map((marker) =>
-                 Prisma.sql`lower(coalesce(w.error, '')) LIKE ${`%${marker}%`}`), ' OR ')}))
+               NOT (w.status = 'FAILED' AND (${Prisma.join(
+                 [...USAGE_LIMIT_ERROR_MARKERS, MODEL_AT_CAPACITY_ERROR_MARKER].map((marker) =>
+                   Prisma.sql`lower(coalesce(w.error, '')) LIKE ${`%${marker}%`}`), ' OR ')}))
                AND (w.status = 'FAILED' OR EXISTS (
                  SELECT 1 FROM task v
                   WHERE v.owner_id = ${ownerId}::uuid AND v.verifies_task_id = w.task_id

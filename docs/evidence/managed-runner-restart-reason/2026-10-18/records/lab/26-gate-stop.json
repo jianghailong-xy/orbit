@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-18T09:23:27.384+00:00",
+  "connections": 1030,
+  "control": {
+    "mode": "pass"
+  },
+  "listen": "127.0.0.1:16444",
+  "log": null,
+  "lost": [],
+  "refused": [],
+  "unit": "inactive"
+}

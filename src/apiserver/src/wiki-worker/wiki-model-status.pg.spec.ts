@@ -227,10 +227,10 @@ test('the read answers the model\'s name and its state, and nothing that names i
   // No worker has ever written: no row, and the read says the worker is not running.
   const before = await read(h);
   assert.equal(before.status, 200);
-  // Beside the model's state, the executor switch as it stands for the caller (P9): unset here, so runner.
+  // Beside the model's state, who executes the caller's wiki (P9): the server, for every account since P11.
   assert.deepEqual(before.body, {
     state: 'worker_not_running', model: null, since: null, checkedAt: null, workerSeenAt: null,
-    executor: { mode: 'runner', serverExecutes: false },
+    executor: { mode: 'server', serverExecutes: true },
   });
 
   await worker(h).check();

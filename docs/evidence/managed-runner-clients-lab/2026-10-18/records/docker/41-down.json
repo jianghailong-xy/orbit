@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-18T06:43:24Z",
+  "left": {
+    "containers": [],
+    "volumes": []
+  },
+  "removed": {
+    "containers": [
+      "t07-docker-pg\tUp 13 minutes"
+    ],
+    "volumes": [
+      "mr-data-01a14db4-2860-74e4-ba71-9f655918b8b5",
+      "mr-data-01a14db4-4337-71fe-91f7-313820ecb3dd"
+    ]
+  }
+}

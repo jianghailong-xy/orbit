@@ -27,6 +27,10 @@ import (
 //     until stdin closes or the script says eof
 const fakeClaudeDirEnv = "ORBIT_FAKE_CLAUDE_DIR"
 
+// testOrbitMCPEnv makes this test binary serve as `orbit mcp` (TestMain), so a real engine that starts the
+// orbit server a test's MCP config names gets the real one, with the real tool list.
+const testOrbitMCPEnv = "ORBIT_TEST_AS_ORBIT_MCP"
+
 // How long the fake waits on an `await` step, and how long the parent side waits for a
 // frame or a recording, before giving up. Only ever hit when something is wedged: a
 // bounded failure beats a ten-minute test timeout with no output.
@@ -69,10 +73,6 @@ func TestMain(m *testing.M) {
 	if dir := os.Getenv(fakeCursorACPDirEnv); dir != "" {
 		os.Exit(runFakeCursorACP(dir))
 	}
-	// The one-shot `claude -p` that `orbit wiki verify` runs (wiki_verify_test.go).
-	if dir := os.Getenv(fakeVerifyClaudeDirEnv); dir != "" {
-		os.Exit(runFakeVerifyClaude(dir))
-	}
 	// A Kimi Code process refreshing its token under Kimi's lock, beside the runner's own refresh
 	// (kimi_refresh_lock_test.go).
 	if os.Getenv(fakeKimiCLIEnv) != "" {
@@ -85,17 +85,15 @@ func TestMain(m *testing.M) {
 		cmdHook(os.Args[2:])
 		os.Exit(0)
 	}
-	// This binary as the real `orbit mcp`, when a real Claude Code starts it from a maintenance run's
-	// MCP config (wiki_maintenance_session_test.go) — rather than the whole suite again.
+	// This binary as the real `orbit mcp`, when a real engine starts it from the MCP config a test hands it
+	// (testOrbitMCPEnv) — rather than the whole suite again.
 	if os.Getenv(testOrbitMCPEnv) != "" {
 		cmdMcp()
 		os.Exit(0)
 	}
-	// This binary as the `orbit` CLI itself, when a real Claude Code's Bash runs `orbit wiki …` from a
-	// maintenance run — bare, off a link named orbit on its PATH, or by this binary's own path, as the run's
-	// rules name the CLI (wiki_maintenance_session_test.go) — or a shell turn runs `orbit task …` or `orbit
-	// whoami` (runner_child_identity_test.go). `go test` never starts it with a subcommand.
-	if len(os.Args) > 1 && (os.Args[1] == "wiki" || os.Args[1] == "task" || os.Args[1] == "whoami") {
+	// This binary as the `orbit` CLI itself, when a shell turn runs `orbit task …`, `orbit token …` or
+	// `orbit whoami` (runner_child_identity_test.go). `go test` never starts it with a subcommand.
+	if len(os.Args) > 1 && (os.Args[1] == "task" || os.Args[1] == "token" || os.Args[1] == "whoami") {
 		main()
 		os.Exit(0)
 	}

@@ -11,13 +11,21 @@
 
 ## 固定版本安装
 
-首版准入为 Linux x64、服务 PATH 中的 Node 26。P0 的真实实验使用 Node 26.10.0；其他平台、架构、Node 主版本及真实模型仍未验证。runner 拒绝未准入平台，返回 `DSH_PLATFORM_UNSUPPORTED` 或 `DSH_NODE_UNSUPPORTED`。
+首版准入为 Linux x64 上的 Node 26。P0 的真实实验使用官方 Node v26.10.0 构建（自带 npm 11.19.1）；其他平台、架构、Node 主版本及真实模型仍未验证。runner 拒绝其他平台，返回 `DSH_PLATFORM_UNSUPPORTED`。
+
+Node 从哪来（`src/runner-go/dsh_node.go`）：
+
+- 服务 PATH 上的 `node --version` 是 v26.x，就用它，和以前一样。
+- 否则由安装提供：下载官方 `node-v26.10.0-linux-x64.tar.gz`（nodejs.org），核对钉住的大小和 SHA-256（取自 SHASUMS256.txt，它的签名已用 Node.js 发布密钥核对过），解包到 `${ORBIT_HOME}/engines/node/v26.10.0`。确认 `bin/node` 在本机能启动后才发布，发布后不再改写。官方构建在本机起不来（例如 glibc 太旧、缺 libatomic）时安装失败，返回 `DSH_NODE_UNSUPPORTED`。
+- 这份 Node 不进任何会话看得到的 PATH。dsh 以 `<这份 node> <入口绝对路径>` 启动，dsh 自己的 Node 子进程都用 `process.execPath`；agent 跑的命令仍用机器自己的 node，或者没有 node。只有 `npm ci` 的 PATH 把它放在最前面，npm 和安装脚本都跑在它上面。
+- 服务 PATH 没有 Node 26、Orbit 也还没装自己那份时，runner 报 `DSH_NOT_INSTALLED`，客户端因此显示 Install，Install 把 Node 一起装上。以前这里报 `DSH_NODE_UNSUPPORTED`，客户端读作「不支持」，不给 Install。CLI 已经装好、后来服务 PATH 上的 Node 26 没了的，同样报 `DSH_NOT_INSTALLED`；Install 只补 Node，不重装已发布的版本目录。
+- 2026-10-21 实测：服务 PATH 只有 Node v22.22.2 的 Linux x64 主机上，Install 约 1 分钟完成（下载 Node 加 `npm ci`），之后真 dsh 在这份 Node 上读出模型目录，并在 bwrap 沙箱里跑通一轮 bash 工具回合，agent 看到的 node 是 `/usr/bin/node` v22.22.2。
 
 安装使用嵌入的 P0 `package.json` 和完整 `package-lock.json`，在私有暂存目录执行 `npm ci`，核对 CLI `--version` 精确等于 `0.2.0-rc.2` 后，发布到 `${ORBIT_HOME}/engines/dsh/0.2.0-rc.2`。未指定 ORBIT_HOME 时沿用 runner 的 machineHome。启动使用该目录内部的绝对入口；用户 PATH 上的 dsh 和 npm latest 都不参与选择。ACP 的插件版本不用于判断发行版本。
 
 `src/runner-go/dsh-install/` 的两个文件与 `scripts/deepseek-harness-p0/` 当前版本逐字节相同（测试断言），包括 `@deepseek-ai/libreoffice-kit` 的 `fflate` 0.8.3 安全覆盖；`@deepseek-ai/dsh` 0.2.0-rc.2 的 integrity 不变。P0 锁文件更新时同步复制这两个文件。已发布的 `0.2.0-rc.2` 目录不可变，不会因锁文件更新而重装。
 
-首次自动安装沿用 `AutoInstallEngines` 授权，默认拒绝；用户发起的浏览器 Install 使用既有单次授权。安装、更新共用原有锁。更新只在已有 Orbit 管理的 dsh 安装上工作，活动会话沿用原有延后策略；以后提升支持版本时安装相邻的新目录，保留旧目录。损坏、不兼容或链接到外部目录的已发布安装会报错，不原地覆写。
+首次自动安装沿用 `AutoInstallEngines` 授权，默认拒绝；用户发起的浏览器 Install 使用既有单次授权。下载 Node 是安装的一部分，授权相同。安装、更新共用原有锁。更新只在已有 Orbit 管理的 dsh 安装上工作，活动会话沿用原有延后策略；以后提升支持版本时安装相邻的新目录，保留旧目录。损坏、不兼容或链接到外部目录的已发布安装会报错，不原地覆写。
 
 ## 启动与恢复接口
 

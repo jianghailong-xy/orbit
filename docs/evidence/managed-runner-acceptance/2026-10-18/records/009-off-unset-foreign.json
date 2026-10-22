@@ -1,0 +1,18 @@
+{
+ "checks": [],
+ "endedAt": "2026-10-18T12:31:50.752+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "off-unset",
+ "result": {
+  "foreignObjects": 46,
+  "kinds": [
+   "PersistentVolumeClaim",
+   "Pod",
+   "Secret"
+  ]
+ },
+ "seconds": 0.1,
+ "startedAt": "2026-10-18T12:31:50.627+00:00",
+ "step": "foreign"
+}

@@ -711,6 +711,8 @@ export class PushService {
         where: {
           ownerId,
           status: RunStatus.RUNNING,
+          // A LANDING row is never RUNNING; named anyway, so no status scan can ever count one.
+          sessionKind: 'CONVERSATION',
           completedAt: null,
           archivedAt: null,
           deletedAt: null,

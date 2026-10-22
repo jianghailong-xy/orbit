@@ -34,9 +34,20 @@ interface CardCase {
   } | null;
 }
 
+/** A `watch-strip.fixture.json` fold case: what a session's watches give the Tasks card. */
+interface FoldCase {
+  case: string;
+  watchedTasks: { id: string; title: string; status: string | null; running: boolean; queued: boolean; stale: boolean }[];
+  card?: string;
+}
+
 const fixture = JSON.parse(
   readFileSync(path.join(__dirname, 'session-created-tasks.fixture.json'), 'utf8'),
 ) as { copy: Record<string, string>; singleNamesTheTask: boolean; countLine: CountLineCase[]; card: CardCase[] };
+
+const fold = (
+  JSON.parse(readFileSync(path.join(__dirname, 'watch-strip.fixture.json'), 'utf8')) as { fold: FoldCase[] }
+).fold;
 
 describe('session-created-tasks.fixture.json', () => {
   it('every countLine case is exactly what createdTasksCountLine writes', () => {
@@ -125,6 +136,20 @@ describe('session-created-tasks.fixture.json', () => {
         },
         c.name,
       ).toEqual(c.card);
+    }
+  });
+
+  // Each client proves the watches → watched tasks half on the fold case and the watched tasks → card
+  // half on the card case, so the two halves must hand over the same tasks.
+  it('feeds each card a run session makes the watched tasks its watches fold to', () => {
+    const linked = fold.filter((c) => c.card !== undefined);
+    expect(linked.length).toBeGreaterThan(0);
+    for (const c of linked) {
+      const card = fixture.card.find((each) => each.name === c.card);
+      expect(card, c.case).toBeDefined();
+      expect(card!.watched, c.case).toEqual(
+        c.watchedTasks.map(({ id, status, running, queued, stale }) => ({ id, status, running, queued, stale })),
+      );
     }
   });
 });

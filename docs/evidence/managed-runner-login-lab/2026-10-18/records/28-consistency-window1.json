@@ -1,0 +1,133 @@
+{
+  "at": "2026-10-17T23:15:04.301+00:00",
+  "foreign": [
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "resourceVersion": "8484",
+      "uid": "d5299c21-8be0-4e61-91dd-33636ccda9ab"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+      "resourceVersion": "9855",
+      "uid": "f00e77e6-337a-464f-9a54-0c6fb3bfcc1f"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4",
+      "resourceVersion": "10967",
+      "uid": "d2dd3096-1e5f-44f0-9fc2-0a44e9fb1250"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-01a14bc6-f4de-7328-9a3f-0d025ff3a21b",
+      "resourceVersion": "10963",
+      "uid": "e8aa1f8c-ce3f-4bba-8674-89fbdb37615f"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-01a14bdc-ead8-73ba-9322-286ff7b293dd",
+      "resourceVersion": "12676",
+      "uid": "8278f180-68bf-4eea-ae49-c79d896e3c15"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-13282595-dbc7-4ac3-b7ef-0999794197d4",
+      "resourceVersion": "809",
+      "uid": "8780660e-7455-4612-8b16-3f1fddaf9ded"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-640deaf2-edcb-4c42-aedd-716f4bcbccf3",
+      "resourceVersion": "650",
+      "uid": "e2daf0db-ed65-4a62-9841-ced57d71ed3b"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-83283361-0bc1-4cdf-a05d-647fc0b120cf",
+      "resourceVersion": "2549",
+      "uid": "dd745a38-f385-4596-b359-8bc9f27828c6"
+    },
+    {
+      "kind": "PersistentVolumeClaim",
+      "name": "mr-data-b3c54306-e474-4fce-a316-228ce37a5266",
+      "resourceVersion": "2424",
+      "uid": "c869968e-0f44-4365-800c-0448f74f8892"
+    },
+    {
+      "kind": "Secret",
+      "name": "mr-boot-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "resourceVersion": "9344",
+      "uid": "ce22d189-59cc-4845-830b-65e5cf65aabb"
+    },
+    {
+      "kind": "Secret",
+      "name": "mr-boot-01a14b7d-4faf-7082-acb6-7cee4cd693ee",
+      "resourceVersion": "9865",
+      "uid": "100d1f69-60ba-4e95-822b-c64d328d64e5"
+    },
+    {
+      "kind": "Secret",
+      "name": "mr-boot-01a14bc6-f4dc-7456-913d-bc14f2f3bcd4",
+      "resourceVersion": "14091",
+      "uid": "fbbfb039-9dc1-4ea9-b5e6-f45c927ffc73"
+    },
+    {
+      "kind": "Secret",
+      "name": "mr-boot-01a14bc6-f4de-7328-9a3f-0d025ff3a21b",
+      "resourceVersion": "13468",
+      "uid": "9255a698-de90-48eb-99f4-e5f355ac93e5"
+    },
+    {
+      "kind": "Secret",
+      "name": "mr-boot-01a14bdc-ead8-73ba-9322-286ff7b293dd",
+      "resourceVersion": "13449",
+      "uid": "18cd9ede-0e57-42f7-89f4-2494da6b79eb"
+    }
+  ],
+  "mappings": [
+    {
+      "attachments": [
+        "csi-8b385597cf4876f0cd9af87dd31c67d6aadeafb6b269620f5f0d47542757aaab"
+      ],
+      "attempt": 0,
+      "desired": "RUNNING",
+      "generation": 1,
+      "notes": [],
+      "owner": "dora",
+      "pod": {
+        "deleting": false,
+        "finalizers": [
+          "orbit.dev/managed-runner-stop-report"
+        ],
+        "generation": "1",
+        "phase": "Running",
+        "recorded": "b7338697-f02d-4a61-a83a-cc8736147c79",
+        "uid": "b7338697-f02d-4a61-a83a-cc8736147c79"
+      },
+      "podsUsingTheVolume": [
+        "mr-01a14c23-4d07-7679-812d-f74876266c72"
+      ],
+      "pv": {
+        "handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-fcf2a14e-ee95-4adf-bba0-ac1d2d119794",
+        "recorded": [
+          "724fc753-e395-495b-bcb3-e2ef9d881aab",
+          "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-fcf2a14e-ee95-4adf-bba0-ac1d2d119794"
+        ],
+        "uid": "724fc753-e395-495b-bcb3-e2ef9d881aab"
+      },
+      "pvc": {
+        "phase": "Bound",
+        "recorded": "4ede0589-3cb3-44a8-bc3e-f7b414b71681",
+        "uid": "4ede0589-3cb3-44a8-bc3e-f7b414b71681"
+      },
+      "reason": "MODEL_UNAVAILABLE",
+      "runnerId": "01a14c23-4d07-7679-812d-f74876266c72",
+      "secretGeneration": "1",
+      "state": "STARTING"
+    }
+  ],
+  "problems": [],
+  "via": "host"
+}

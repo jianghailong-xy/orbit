@@ -1185,6 +1185,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const sessions = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId,
+        // A LANDING row has no branch and no runner, and must never be handed one (§2.9 LS6).
+        sessionKind: 'CONVERSATION',
         mergeStatus: 'pending',
         ...(!supportsRecovery ? { mergeRecoveryAction: null } : {}),
         mergeOperationId: { not: null },
@@ -1304,6 +1306,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const sessions = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId,
+        // A LANDING row has no worktree to commit (§2.9 LS6).
+        sessionKind: 'CONVERSATION',
         commitStatus: 'pending',
         commitOperationId: { not: null },
         branch: { not: null },

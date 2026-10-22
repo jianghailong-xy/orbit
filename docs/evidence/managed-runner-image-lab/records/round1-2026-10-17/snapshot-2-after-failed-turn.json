@@ -1,0 +1,81 @@
+{
+  "claude": {
+    "projects/-var-lib-orbit-home--orbit-worktrees-01a148b5-1ca5-73eb-8ffa-77f5bef212e1/0451bf1d-25d5-47ea-9e7a-75445cb8be40.jsonl": {
+      "lines": 42,
+      "sha256": "7e0f4a16647d178f91b507219df70440398b9f83b46a69034419736579f7538b"
+    }
+  },
+  "config": {
+    "autoInstallEngines": null,
+    "maxConcurrent": 2,
+    "name": "t03",
+    "runnerId": "01a148b4-0c67-7688-b666-fdea8b9a55ed",
+    "serverUrl": "https://10.0.2.2:13711",
+    "workDir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "configSha256": "0f8ab256b7b5b271fc93d668f871f0a74380da5a00f3b77e5d70f0f9b86eb9c5",
+  "containerIdentity": {
+    "layoutVersion": 1,
+    "runnerId": "01a148b4-0c67-7688-b666-fdea8b9a55ed",
+    "serverUrl": "https://10.0.2.2:13711",
+    "workDir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "modes": {
+    "/var/lib/orbit/home": "0o700",
+    "/var/lib/orbit/home/.orbit": "0o700",
+    "/var/lib/orbit/home/.orbit/config.json": "0o600"
+  },
+  "mount": [
+    {
+      "fstype": "ext4",
+      "source": "/dev/rbd1"
+    }
+  ],
+  "process": {
+    "capEff": "0000000000000000",
+    "gid": 10001,
+    "uid": 10001
+  },
+  "runs": {
+    "01a148b5-1ca5-73eb-8ffa-77f5bef212e1": {
+      "claudeConfigDir": null,
+      "provider": "claude",
+      "runtimeSessionId": "0451bf1d-25d5-47ea-9e7a-75445cb8be40",
+      "sessionUuid": "0451bf1d-25d5-47ea-9e7a-75445cb8be40",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a148b5-1ca5-73eb-8ffa-77f5bef212e1"
+    }
+  },
+  "sqlite": {},
+  "takenAt": "2026-10-17T07:16:53.460+00:00",
+  "uploads": {
+    "01a148b5-1ca5-73eb-8ffa-77f5bef212e1/t03-attachment-2.txt": "90aba5b63eefdf69da605b292ed1ba9f2edfd64e8cc296833ea33c7144dc8d3d"
+  },
+  "workspace": {
+    "branch": "master",
+    "files": {
+      ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697"
+    },
+    "head": "f75c2d0414d4cc18273c7e950ecbe99c18e8079c",
+    "worktreeList": [
+      "worktree /var/lib/orbit/home/orbit-repos/default",
+      "HEAD f75c2d0414d4cc18273c7e950ecbe99c18e8079c",
+      "branch refs/heads/master",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a148b5-1ca5-73eb-8ffa-77f5bef212e1",
+      "HEAD 688cc7b3be32665d8da87d492cb7d97e8eb78336",
+      "branch refs/heads/orbit/t03-model-free-worktree-session-248543"
+    ]
+  },
+  "worktrees": {
+    "01a148b5-1ca5-73eb-8ffa-77f5bef212e1": {
+      "branch": "orbit/t03-model-free-worktree-session-248543",
+      "commonDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+      "files": {
+        ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+        "t03-shell.txt": "cb652a7869aa8113f9f541ee41e4031db5db810b25c2b2d4672317c0e92f594f"
+      },
+      "head": "688cc7b3be32665d8da87d492cb7d97e8eb78336",
+      "status": []
+    }
+  }
+}

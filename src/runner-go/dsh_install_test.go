@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +38,12 @@ func fakeDshInstall(t *testing.T, mode string) dshInstallFixture {
 	priorPath := dshServicePath
 	dshServicePath = func() string { return f.bins + ":/usr/bin:/bin" }
 	t.Cleanup(func() { dshServicePath = priorPath })
+	// No test reaches nodejs.org: a Node build is fetched only from a server the test serves.
+	noNode := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(noNode.Close)
+	priorBase := dshNodeDownloadBase
+	dshNodeDownloadBase = noNode.URL
+	t.Cleanup(func() { dshNodeDownloadBase = priorBase })
 	configureEngineInstall(false, nil)
 	t.Cleanup(func() { configureEngineInstall(false, nil); clearDeferredEngineUpdate(providerDsh) })
 	writeDshInstallExecutable(t, filepath.Join(f.bins, "node"), "#!/bin/sh\nprintf 'v26.10.0\\n'\n")
@@ -207,10 +215,15 @@ func TestDshVersionAndPlatformAdmission(t *testing.T) {
 	if err := dshPlatformAdmission("linux", "amd64", "v26.10.0"); err != nil {
 		t.Fatal(err)
 	}
+	// Another Node on the service PATH is not one dsh runs on: the install fetches Node 26 instead
+	// (dsh_node_test.go), and here, with no build to fetch, it stops before npm runs at all.
 	f := fakeDshInstall(t, "ok")
 	writeDshInstallExecutable(t, filepath.Join(f.bins, "node"), "#!/bin/sh\nprintf 'v24.0.0\\n'\n")
+	if node, err := dshPlatform(); node != "" || !errors.Is(err, errDshNodeMissing) {
+		t.Fatalf("an incompatible service node was admitted: %q, %v", node, err)
+	}
 	configureEngineInstall(true, nil)
-	if msg := ensureEngine(context.Background(), providerDsh, nil); !strings.Contains(msg, "Node 26") {
+	if msg := ensureEngine(context.Background(), providerDsh, nil); !strings.Contains(msg, "Node "+dshNodeVersion) {
 		t.Fatalf("incompatible runtime lacks repair diagnostic: %q", msg)
 	}
 	if _, err := os.Stat(f.npmRuns); !os.IsNotExist(err) {
@@ -219,7 +232,7 @@ func TestDshVersionAndPlatformAdmission(t *testing.T) {
 	writeDshInstallExecutable(t, filepath.Join(f.bins, "node"), "#!/bin/sh\nprintf 'v26.10.0\\n'\n")
 	path := publishedFakeDsh(t, dshSupportedVersion)
 	writeDshInstallExecutable(t, path, "#!/bin/sh\nprintf 'opaque-upstream-secret\\n'\n")
-	version, err := dshProbeVersion(path)
+	version, err := dshProbeVersion("", path)
 	if version != "" || err == nil || strings.Contains(err.Error(), "opaque-upstream-secret") {
 		t.Fatal("malformed version output entered diagnostics")
 	}

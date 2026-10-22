@@ -1,0 +1,116 @@
+{
+ "checks": [
+  {
+   "check": "a session on the self-managed workspace is accepted",
+   "ok": true,
+   "value": 201
+  },
+  {
+   "check": "a task run now and a task with a run time are accepted",
+   "ok": true,
+   "value": [
+    201,
+    201,
+    201
+   ]
+  },
+  {
+   "check": "T08-SELF-UNSET-S answered on the self-managed runner",
+   "ok": true,
+   "value": "01a14eff-377f-713d-8c24-67a0aab40daf"
+  },
+  {
+   "check": "T08-SELF-UNSET-NOW answered on the self-managed runner",
+   "ok": true,
+   "value": "01a14eff-377f-713d-8c24-67a0aab40daf"
+  },
+  {
+   "check": "T08-SELF-UNSET-AT answered on the self-managed runner",
+   "ok": true,
+   "value": "01a14eff-377f-713d-8c24-67a0aab40daf"
+  }
+ ],
+ "endedAt": "2026-10-18T12:32:48.602+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "off-unset",
+ "result": {
+  "AT": {
+   "event": {
+    "created_at": "2026-10-18T12:32:48.502",
+    "ingested_at": "2026-10-18T12:32:48.518756+00:00",
+    "ingested_by_runner_id": "01a14eff-377f-713d-8c24-67a0aab40daf",
+    "seq": 8,
+    "session_id": "3ca7af23-f6c3-5132-86ee-72678670ed34",
+    "type": "assistant"
+   },
+   "modelRequests": [],
+   "session": {
+    "assigned_runner_id": "01a14eff-377f-713d-8c24-67a0aab40daf",
+    "created_at": "2026-10-18T12:32:48.169",
+    "engine": "claude",
+    "id": "3ca7af23-f6c3-5132-86ee-72678670ed34",
+    "provider": "deepseek",
+    "runtime_session_id": "13d59c1e-d512-45fb-a0fc-a22a67ff216b",
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14eff-b06c-7563-acc7-da57e837107d"
+   }
+  },
+  "NOW": {
+   "event": {
+    "created_at": "2026-10-18T12:32:22.445",
+    "ingested_at": "2026-10-18T12:32:22.481671+00:00",
+    "ingested_by_runner_id": "01a14eff-377f-713d-8c24-67a0aab40daf",
+    "seq": 8,
+    "session_id": "52825052-f40f-5dc5-ab48-1408076f1d1d",
+    "type": "assistant"
+   },
+   "modelRequests": [],
+   "session": {
+    "assigned_runner_id": "01a14eff-377f-713d-8c24-67a0aab40daf",
+    "created_at": "2026-10-18T12:32:22.078",
+    "engine": "claude",
+    "id": "52825052-f40f-5dc5-ab48-1408076f1d1d",
+    "provider": "deepseek",
+    "runtime_session_id": "1b2d8e94-511a-4a3b-865f-3e0cb36c2262",
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14eff-b002-703c-8c0b-d8d456ef14a1"
+   }
+  },
+  "S": {
+   "event": {
+    "created_at": "2026-10-18T12:32:22.348",
+    "ingested_at": "2026-10-18T12:32:22.386469+00:00",
+    "ingested_by_runner_id": "01a14eff-377f-713d-8c24-67a0aab40daf",
+    "seq": 8,
+    "session_id": "01a14eff-aff0-72c7-9047-d80edc1b7117",
+    "type": "assistant"
+   },
+   "modelRequests": [
+    {
+     "at": "2026-10-18T12:32:22Z",
+     "kind": "text",
+     "messages": 2,
+     "n": 1,
+     "secrets": [],
+     "tool": null
+    }
+   ],
+   "session": {
+    "assigned_runner_id": "01a14eff-377f-713d-8c24-67a0aab40daf",
+    "created_at": "2026-10-18T12:32:22",
+    "engine": "claude",
+    "id": "01a14eff-aff0-72c7-9047-d80edc1b7117",
+    "provider": "deepseek",
+    "runtime_session_id": "882bf6f5-7cbf-4635-84db-4e17bfe85760",
+    "status": "AWAITING_INPUT",
+    "task_id": null
+   }
+  },
+  "sessionCreatedAt": "2026-10-18T12:32:21.989+00:00",
+  "taskRunAt": "2026-10-18T12:32:42Z"
+ },
+ "seconds": 26.6,
+ "startedAt": "2026-10-18T12:32:21.989+00:00",
+ "step": "selfhost-work"
+}

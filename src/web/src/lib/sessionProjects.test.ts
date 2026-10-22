@@ -4,10 +4,13 @@ import type { SessionFolder } from '../api';
 import { COORDINATOR_LEAD_COPY, type SidebarProject } from './projectAttention';
 import { sessionTimeSections } from './sessionGrouping';
 import {
+  landingEarlierLine,
+  landingGroup,
   listShowsProjects,
   SESSION_PROJECT_COPY,
   SESSION_PROJECT_COORDINATOR_COPY,
   sessionProjectListing,
+  sourceLandingLabel,
   type SessionProjectLine,
   type SessionProjectSession,
 } from './sessionProjects';
@@ -289,5 +292,198 @@ describe('session project copy', () => {
     expect(SESSION_PROJECT_COPY.pageSubtitle(9)).toBe('Project · 9 sessions');
     expect(SESSION_PROJECT_COPY.pageProgress(3, 8, 2)).toBe('3/8 done · 2 running');
     expect([SESSION_PROJECT_COPY.openSession, SESSION_PROJECT_COPY.openCoordinator, SESSION_PROJECT_COPY.sessions, SESSION_PROJECT_COPY.openProject, SESSION_PROJECT_COPY.pin, SESSION_PROJECT_COPY.unpin, SESSION_PROJECT_COPY.move]).toEqual(['Open Session', 'Open Coordinator', 'Sessions', 'Open Project', 'Pin', 'Unpin', 'Move…']);
+  });
+});
+
+/**
+ * The Landings group of a project's sessions page (owner 2026-10-19, board v4 04 c1; contract §2.9
+ * LS6): what waits on a decision, what settled in the last day, one folded line for everything
+ * older — and never a landing still in flight, nor a round of merging that already merged.
+ */
+describe('the Landings group', () => {
+  const landing = (
+    id: string,
+    summary: {
+      subject?: 'TASK' | 'PROMOTION';
+      state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED';
+      settledAs?: string | null;
+      settledAt?: string | null;
+    },
+    over: Record<string, unknown> = {},
+  ) => ({
+    id,
+    title: id,
+    createdAt: ago(15),
+    landing: {
+      subject: summary.subject ?? 'TASK', state: summary.state,
+      settledAs: summary.settledAs ?? null, settledAt: summary.settledAt ?? null,
+    },
+    ...over,
+  });
+
+  it('lists what waits and what settled within the day, waiting first, and never what moves', () => {
+    const group = landingGroup([
+      landing('in-flight', { state: 'IN_FLIGHT' }),
+      landing('waiting', { state: 'AWAITING_DECISION' }),
+      landing('landed-now', { state: 'SETTLED', settledAs: 'LANDED', settledAt: ago(60) }),
+      landing('nothing-now', { state: 'SETTLED', settledAs: 'NOTHING_TO_LAND', settledAt: ago(120) }),
+    ], { now: NOW })!;
+    expect(group.waiting.map((row) => row.id)).toEqual(['waiting']);
+    expect(group.settled.map((row) => row.id)).toEqual(['landed-now', 'nothing-now']);
+    expect(group.earlier).toBeNull();
+    // The waiting row says the outcome and who holds it; the settled ones say how they ended.
+    expect(group.waiting[0]!.detail).toBe('Waiting for a decision');
+    expect(group.waiting[0]!.time).toBe('15m');
+    expect(group.waiting[0]!.tone).toBe('quiet');
+    expect(group.settled.map((row) => row.detail)).toEqual(['Landed', 'Nothing to land']);
+    expect(group.settled[0]!.tone).toBe('ok');
+    expect(group.settled[1]!.tone).toBe('quiet');
+  });
+
+  it('says which side holds a waiting landing, in the open items’ own words', () => {
+    const holders = new Map([
+      ['waiting', { reason: 'Checks failed', assignee: 'COORDINATOR' as const }],
+      ['mine', { reason: 'Merge conflict', assignee: 'OWNER' as const }],
+    ]);
+    const group = landingGroup([
+      landing('waiting', { state: 'AWAITING_DECISION' }),
+      landing('mine', { state: 'AWAITING_DECISION' }, { createdAt: ago(40) }),
+      landing('bare', { state: 'AWAITING_DECISION' }, { createdAt: ago(5) }),
+    ], { now: NOW, holders })!;
+    // Longest wait first: this group answers "what is stuck".
+    expect(group.waiting.map((row) => [row.id, row.detail, row.tone])).toEqual([
+      ['mine', 'Merge conflict · with you', 'fail'],
+      ['waiting', 'Checks failed · with the coordinator', 'fail'],
+      ['bare', 'Waiting for a decision', 'quiet'],
+    ]);
+  });
+
+  it('folds everything older than the day into one line, and keeps it to open', () => {
+    const group = landingGroup([
+      landing('recent', { state: 'SETTLED', settledAs: 'LANDED', settledAt: ago(60) }),
+      landing('old-landed', { state: 'SETTLED', settledAs: 'ALREADY_LANDED', settledAt: ago(26 * 60) }),
+      landing('old-nothing', { state: 'SETTLED', settledAs: 'NOTHING_TO_LAND', settledAt: ago(30 * 60) }),
+      landing('older-still', { state: 'SETTLED', settledAs: 'LANDED', settledAt: ago(50 * 60) }),
+    ], { now: NOW })!;
+    expect(group.settled.map((row) => row.id)).toEqual(['recent']);
+    expect(group.earlier).toEqual({ landed: 2, nothing: 1 });
+    expect(landingEarlierLine(group.earlier!)).toBe('Earlier · 2 landed · 1 nothing to land');
+    expect(group.older.map((row) => row.id)).toEqual(['old-landed', 'old-nothing', 'older-still']);
+  });
+
+  it('leaves a segment whose count is 0 out of the fold’s line', () => {
+    expect(landingEarlierLine({ landed: 2, nothing: 0 })).toBe('Earlier · 2 landed');
+    expect(landingEarlierLine({ landed: 0, nothing: 1 })).toBe('Earlier · 1 nothing to land');
+    // Only landed: the fold says so, and still opens to every older row, the cancelled one too.
+    const landedOnly = landingGroup([
+      landing('old-landed', { state: 'SETTLED', settledAs: 'LANDED', settledAt: ago(26 * 60) }),
+      landing('old-again', { state: 'SETTLED', settledAs: 'ALREADY_LANDED', settledAt: ago(28 * 60) }),
+      landing('old-cancelled', { state: 'SETTLED', settledAs: 'CANCELLED', settledAt: ago(30 * 60) }),
+    ], { now: NOW })!;
+    expect(landedOnly.earlier).toEqual({ landed: 2, nothing: 0 });
+    expect(landingEarlierLine(landedOnly.earlier!)).toBe('Earlier · 2 landed');
+    expect(landedOnly.older.map((row) => row.id)).toEqual(['old-landed', 'old-again', 'old-cancelled']);
+    const nothingOnly = landingGroup([
+      landing('old-nothing', { state: 'SETTLED', settledAs: 'NOTHING_TO_LAND', settledAt: ago(26 * 60) }),
+    ], { now: NOW })!;
+    expect(landingEarlierLine(nothingOnly.earlier!)).toBe('Earlier · 1 nothing to land');
+  });
+
+  it('folds older landings neither count names under a bare Earlier, and opens to them', () => {
+    expect(landingEarlierLine({ landed: 0, nothing: 0 })).toBe('Earlier');
+    const old = [
+      landing('old-cancelled', { state: 'SETTLED', settledAs: 'CANCELLED', settledAt: ago(26 * 60) }),
+      landing('old-handled', { state: 'SETTLED', settledAs: 'HANDLED', settledAt: ago(30 * 60) }),
+      landing('old-declined', { state: 'SETTLED', settledAs: 'DECLINED', settledAt: ago(32 * 60) }),
+      landing('no-instant', { state: 'SETTLED', settledAs: 'CANCELLED', settledAt: null }),
+    ];
+    const group = landingGroup([landing('waiting', { state: 'AWAITING_DECISION' }), ...old], { now: NOW })!;
+    expect(group.waiting.map((row) => row.id)).toEqual(['waiting']);
+    expect(group.earlier).toEqual({ landed: 0, nothing: 0 });
+    expect(landingEarlierLine(group.earlier!)).toBe('Earlier');
+    expect(group.older.map((row) => [row.id, row.detail])).toEqual([
+      ['old-cancelled', 'Cancelled'], ['old-handled', 'Handled'], ['old-declined', 'Declined'], ['no-instant', 'Cancelled'],
+    ]);
+    // …and with nothing else to list, the group is still there: the fold is its one row.
+    const alone = landingGroup(old, { now: NOW })!;
+    expect(alone.waiting).toEqual([]);
+    expect(alone.settled).toEqual([]);
+    expect(landingEarlierLine(alone.earlier!)).toBe('Earlier');
+    expect(alone.older.map((row) => row.id)).toEqual(['old-cancelled', 'old-handled', 'old-declined', 'no-instant']);
+  });
+
+  it('has no fold with nothing older, and is no group with nothing else to list', () => {
+    const group = landingGroup([
+      landing('waiting', { state: 'AWAITING_DECISION' }),
+      landing('cancelled-now', { state: 'SETTLED', settledAs: 'CANCELLED', settledAt: ago(60) }),
+      // A round of merging that merged is never an older row, however old.
+      landing('old-round', { subject: 'PROMOTION', state: 'SETTLED', settledAs: 'MERGED', settledAt: ago(30 * 60) }),
+    ], { now: NOW })!;
+    expect(group.waiting.map((row) => row.id)).toEqual(['waiting']);
+    expect(group.settled.map((row) => row.id)).toEqual(['cancelled-now']);
+    expect(group.earlier).toBeNull();
+    expect(group.older).toEqual([]);
+    expect(landingGroup([
+      landing('moving', { state: 'IN_FLIGHT' }),
+      landing('old-round', { subject: 'PROMOTION', state: 'SETTLED', settledAs: 'MERGED', settledAt: ago(30 * 60) }),
+    ], { now: NOW })).toBeNull();
+  });
+
+  it('never lists a round of merging that merged — the timeline has that row', () => {
+    const group = landingGroup([
+      landing('round', { subject: 'PROMOTION', state: 'SETTLED', settledAs: 'MERGED', settledAt: ago(30) }),
+      landing('waiting', { state: 'AWAITING_DECISION' }),
+    ], { now: NOW })!;
+    expect(group.settled).toEqual([]);
+    expect(group.earlier).toBeNull();
+    // …and a project with nothing but that round has no group at all.
+    expect(landingGroup([
+      landing('round-only', { subject: 'PROMOTION', state: 'SETTLED', settledAs: 'MERGED', settledAt: ago(30) }),
+      landing('moving', { state: 'IN_FLIGHT' }),
+    ], { now: NOW })).toBeNull();
+  });
+
+  it('is no group at all when there is nothing to list', () => {
+    expect(landingGroup([], { now: NOW })).toBeNull();
+    expect(landingGroup([landing('moving', { state: 'IN_FLIGHT' })], { now: NOW })).toBeNull();
+    // A conversation row carries no landing summary and is skipped, not drawn as a blank landing.
+    expect(landingGroup([{ id: 'chat', createdAt: ago(5) }], { now: NOW })).toBeNull();
+  });
+});
+
+/** The derived label on a source work session (board v4 06 e): three facts, three inks. */
+describe('the source session’s landing label', () => {
+  const source = (over: Record<string, unknown> = {}) => ({
+    landingSessionId: 'S1', subject: 'TASK' as const, state: 'RUNNING', phase: 'CHECK',
+    settledAs: null, targetRef: 'refs/heads/project/p1', ...over,
+  });
+
+  it('says checking while it moves, the branch once it landed, and what stopped it', () => {
+    expect(sourceLandingLabel(source())).toEqual({ text: 'Landing · checking', tone: 'run' });
+    expect(sourceLandingLabel(source({ phase: 'REBASE' }))).toEqual({ text: 'Landing · rebasing', tone: 'run' });
+    expect(sourceLandingLabel(source({ state: 'QUEUED', phase: null })))
+      .toEqual({ text: 'Landing · queued', tone: 'run' });
+    expect(sourceLandingLabel(source({ settledAs: 'LANDED' })))
+      .toEqual({ text: 'On project/p1 ✓', tone: 'landed' });
+    expect(sourceLandingLabel(source({ state: 'CHECK_FAILED', settledAs: null })))
+      .toEqual({ text: 'Landing · checks failed', tone: 'failed' });
+    expect(sourceLandingLabel(source({ state: 'CHECK_FAILED' })))
+      .toEqual({ text: 'Landing · checks failed', tone: 'failed' });
+    expect(sourceLandingLabel(source({ state: 'CONFLICT' }))?.tone).toBe('failed');
+    expect(sourceLandingLabel(source({ state: 'ERROR' }))?.text).toBe('Landing · error');
+  });
+
+  it('says where a merge round put the work, by the project’s main branch', () => {
+    expect(sourceLandingLabel(source({ subject: 'PROMOTION', settledAs: 'MERGED' })))
+      .toEqual({ text: 'On main ✓', tone: 'landed' });
+    expect(sourceLandingLabel(source({ subject: 'PROMOTION', settledAs: 'MERGED' }), 'master'))
+      .toEqual({ text: 'On master ✓', tone: 'landed' });
+    expect(sourceLandingLabel(source({ settledAs: 'NOTHING_TO_LAND' })))
+      .toEqual({ text: 'Nothing to land', tone: 'quiet' });
+  });
+
+  it('is nothing at all for a conversation that fed no landing', () => {
+    expect(sourceLandingLabel(null)).toBeNull();
+    expect(sourceLandingLabel(undefined)).toBeNull();
   });
 });

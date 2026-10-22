@@ -420,9 +420,11 @@ export const WATCHING_WORDS = {
  * The set is the strip's (`watchesFollowing`, live): the watches whose wake comes back to this
  * session. While one is ACTIVE the session is not waiting for a reply and it has not left a process
  * running — contract §9.2 keeps a watch out of the Background processes words — so it reads as what
- * it is doing, with every target counted once across those watches. Paused, nothing is being looked
- * at, and the word says that instead of counting targets nobody is reading. macOS: the same word
- * from `WatchSessionSummary.word`, which `SessionHeader.statusWord` puts in the same place.
+ * it is doing, with every target counted once across those watches and a task's run session as that
+ * task (`waitedOn`), as the server's own tally counts them (`LinkPreviewSession.watching`). Paused,
+ * nothing is being looked at, and the word says that instead of counting targets nobody is reading.
+ * macOS: the same word from `WatchSessionSummary.word`, which `SessionHeader.statusWord` puts in the
+ * same place.
  */
 export function watchingWord(watches: readonly WatchView[], sessionId: string): string | null {
   const observing = watchesFollowing(watches, sessionId).filter(isLiveWatch);
@@ -437,11 +439,7 @@ function wordOf(observing: readonly WatchView[]): string {
       ? WATCHING_WORDS.paused
       : `${observing.length} ${WATCHING_WORDS.pausedMany}`;
   }
-  const targets = new Set(
-    active.flatMap((w) =>
-      w.targets.filter((t) => t.state !== 'GONE').map((t) => `${t.targetKind}:${normId(t.targetResourceId)}`),
-    ),
-  );
+  const targets = new Set(active.flatMap((w) => w.targets.filter((t) => t.state !== 'GONE').map(waitedKey)));
   const noun = targets.size === 1 ? WATCHING_WORDS.target : WATCHING_WORDS.targets;
   return `${STRIP_LABEL} ${targets.size} ${noun}`;
 }
@@ -473,20 +471,65 @@ export function watchingCountWord(
 export const targetName = (t: WatchTargetView): string => t.targetTitle ?? linkId(t.targetResourceId).slice(0, 8);
 
 /**
- * Whether a live watch belongs on the Watching strip: it waits on something that is not a task. A
- * task the session waits on is drawn in its Tasks card instead, with an eye (`watchedTasks`).
+ * A target as the cards above the composer and the session's watching words count it: a session that
+ * runs a task (`targetTask`) is a target on that task — its id, its title, where it stands — so a task
+ * and its run session are one target, drawn on the task's row. Any other target is itself, and so is
+ * every target from a server older than the field. The Following page, a watch's detail and the
+ * Followed by relations say the watch as it was made, and read targets as they are.
+ */
+export const waitedOn = (t: WatchTargetView): WatchTargetView =>
+  t.targetTask
+    ? {
+        ...t,
+        targetKind: 'TASK',
+        targetResourceId: t.targetTask.id,
+        targetTitle: t.targetTask.title,
+        targetStatus: t.targetTask.status,
+      }
+    : t;
+
+/** One key per target as it is waited on (`waitedOn`), whichever way its id is spelled. */
+const waitedKey = (t: WatchTargetView): string => {
+  const waited = waitedOn(t);
+  return `${waited.targetKind}:${normId(waited.targetResourceId)}`;
+};
+
+/**
+ * Whether a live watch belongs on the Watching strip: it waits on something that is neither a task
+ * nor a task's run session (`waitedOn`). A task the session waits on is drawn in its Tasks card
+ * instead, with an eye (`watchedTasks`).
  */
 export const waitsBeyondTasks = (w: WatchView): boolean =>
-  w.targets.some((t) => t.state !== 'GONE' && t.targetKind !== 'TASK');
+  w.targets.some((t) => t.state !== 'GONE' && waitedOn(t).targetKind !== 'TASK');
 
-/** The tasks the session's live watches wait on, as its Tasks card marks them (`sessionTaskCard`). */
+/**
+ * The tasks the session's live watches wait on, a task's run session as that task (`waitedOn`), as its
+ * Tasks card marks them (`sessionTaskCard`).
+ */
 export function watchedTasks(waitingOn: readonly WatchView[], now: number): SessionWatchedTask[] {
   return waitingOn.flatMap((w) => {
     const stale = stripStaleLine(w, now) !== null;
     return w.targets
-      .filter((t) => t.state !== 'GONE' && t.targetKind === 'TASK')
+      .filter((t) => t.state !== 'GONE')
+      .map(waitedOn)
+      .filter((t) => t.targetKind === 'TASK')
       .map((t) => ({ id: t.targetResourceId, title: targetName(t), standing: t.targetStatus ?? null, stale }));
   });
+}
+
+/**
+ * What the opened Tasks card says above its rows: the unchecked line of each watch the Watching strip
+ * doesn't draw (`waitsBeyondTasks`), each line once.
+ */
+export function taskStaleLines(waitingOn: readonly WatchView[], now: number): string[] {
+  return [
+    ...new Set(
+      waitingOn
+        .filter((w) => !waitsBeyondTasks(w))
+        .map((w) => stripStaleLine(w, now))
+        .filter((line): line is string => line !== null),
+    ),
+  ];
 }
 
 /** The noun a set of targets counts in: the one kind every target shares, and "targets" across kinds. */
@@ -512,31 +555,34 @@ function thresholdLine(t: WatchThreshold, watches: readonly WatchView[]): string
 
 /**
  * The Watching strip's folded line, as data: the live targets of the watches a session waits on, each
- * once however many watches name it; the target it names, when a lone watch waits on a lone target;
- * and otherwise what the wait needs. `SessionWatchStrip` draws it, and a session list row says it in
- * one string (`watchingSessions`), so the two cannot come apart.
+ * once however many watches name it, and a task's run session as that task (`waitedOn`); the target
+ * it names, when one target is left; and otherwise what the wait needs. `SessionWatchStrip` draws it,
+ * and a session list row says it in one string (`watchingSessions`), so the two cannot come apart.
  */
 export function stripLine(waitingOn: readonly WatchView[]): {
   live: WatchTargetView[];
   single: WatchTargetView | null;
   targetLine: string;
 } {
-  // Each live target once, however many watches name it, so two watches over the same task never
-  // read "2 targets".
-  const live = [
+  // Each live target once, however many watches name it and whether a watch names the task or its
+  // run, so two watches over the same task never read "2 targets". `named` keeps each the way its
+  // watch names it, which is what the condition's own count reads.
+  const named = [
     ...new Map(
-      waitingOn
-        .flatMap((w) => w.targets.filter((t) => t.state !== 'GONE'))
-        .map((t) => [`${t.targetKind}:${t.targetResourceId}`, t] as const),
+      waitingOn.flatMap((w) => w.targets.filter((t) => t.state !== 'GONE')).map((t) => [waitedKey(t), t] as const),
     ).values(),
   ];
-  const single = waitingOn.length === 1 && live.length === 1 ? live[0] : null;
+  const live = named.map(waitedOn);
+  // One target left is named, however many watches wait on it.
+  const single = live.length === 1 ? live[0] : null;
   // What the wait is for when it names no one target: one watch states the threshold its own
-  // condition sets, several — no one condition between them — count the targets they cover.
+  // condition sets, several — no one condition between them — count the targets they cover, in the
+  // noun of what they wait on.
+  const waited = waitingOn.map((w) => ({ ...w, targets: w.targets.map(waitedOn) }));
   const targetLine =
     waitingOn.length === 1
-      ? thresholdLine(thresholdOf(waitingOn[0].predicate, live), waitingOn)
-      : `${live.length} ${targetNoun(waitingOn, live.length)}`;
+      ? thresholdLine(thresholdOf(waitingOn[0].predicate, named), waited)
+      : `${live.length} ${targetNoun(waited, live.length)}`;
   return { live, single, targetLine };
 }
 

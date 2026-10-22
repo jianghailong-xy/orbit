@@ -1,0 +1,250 @@
+[
+  {
+    "file": "04-project-sessions-page.html",
+    "text": "Earlier · 31 landed",
+    "name": "04-c1-earlier-ios",
+    "box": {
+      "x": 44,
+      "y": 2970.09375,
+      "width": 393,
+      "height": 796.21875
+    }
+  },
+  {
+    "file": "04-project-sessions-page.html",
+    "text": "Earlier · 31 landed",
+    "name": "04-c1-earlier-web",
+    "box": {
+      "x": 1312,
+      "y": 5214.109375,
+      "width": 1240,
+      "height": 920
+    }
+  },
+  {
+    "file": "04-project-sessions-page.html",
+    "text": "Earlier · 31 landed",
+    "found": 2
+  },
+  {
+    "file": "04-project-sessions-page.html",
+    "text": "Merges on its own when it passes.",
+    "name": "04-merge-check-row-a",
+    "box": {
+      "x": 886,
+      "y": 397.6875,
+      "width": 393,
+      "height": 686.578125
+    }
+  },
+  {
+    "file": "04-project-sessions-page.html",
+    "text": "Merges on its own when it passes.",
+    "name": "04-merge-check-row-b",
+    "box": {
+      "x": 1307,
+      "y": 1632.609375,
+      "width": 393,
+      "height": 717.828125
+    }
+  },
+  {
+    "file": "04-project-sessions-page.html",
+    "text": "Merges on its own when it passes.",
+    "found": 2
+  },
+  {
+    "file": "04-project-sessions-page.html",
+    "text": "Nothing to do — it lands on its own.",
+    "name": "04-task-card-a",
+    "box": {
+      "x": 44,
+      "y": 397.6875,
+      "width": 393,
+      "height": 690.875
+    }
+  },
+  {
+    "file": "04-project-sessions-page.html",
+    "text": "Nothing to do — it lands on its own.",
+    "name": "04-task-card-b",
+    "box": {
+      "x": 465,
+      "y": 397.6875,
+      "width": 393,
+      "height": 690.875
+    }
+  },
+  {
+    "file": "04-project-sessions-page.html",
+    "text": "Nothing to do — it lands on its own.",
+    "found": 9
+  },
+  {
+    "file": "05-landing-session-page.html",
+    "selector": ".cap4.red",
+    "name": "05-abandon-light-a",
+    "box": {
+      "x": 1728,
+      "y": 277.6875,
+      "width": 393,
+      "height": 852
+    }
+  },
+  {
+    "file": "05-landing-session-page.html",
+    "selector": ".cap4.red",
+    "name": "05-abandon-light-b",
+    "box": {
+      "x": 2149,
+      "y": 277.6875,
+      "width": 393,
+      "height": 852
+    }
+  },
+  {
+    "file": "05-landing-session-page.html",
+    "selector": ".cap4.red",
+    "name": "05-abandon-light-c",
+    "box": {
+      "x": 886,
+      "y": 1465.890625,
+      "width": 393,
+      "height": 852
+    }
+  },
+  {
+    "file": "05-landing-session-page.html",
+    "selector": ".cap4.red",
+    "found": 3
+  },
+  {
+    "file": "05-landing-session-page.html",
+    "selector": ".wsec4.red",
+    "name": "05-abandon-web",
+    "box": {
+      "x": 564,
+      "y": 2654.09375,
+      "width": 720,
+      "height": 800
+    }
+  },
+  {
+    "file": "05-landing-session-page.html",
+    "selector": ".wsec4.red",
+    "found": 1
+  },
+  {
+    "file": "05-landing-session-page.html",
+    "text": "round 1 of 3",
+    "name": "05-round-a",
+    "box": {
+      "x": 886,
+      "y": 1465.890625,
+      "width": 393,
+      "height": 852
+    }
+  },
+  {
+    "file": "05-landing-session-page.html",
+    "text": "round 1 of 3",
+    "name": "05-round-b",
+    "box": {
+      "x": 564,
+      "y": 2654.09375,
+      "width": 720,
+      "height": 800
+    }
+  },
+  {
+    "file": "05-landing-session-page.html",
+    "text": "round 1 of 3",
+    "found": 3
+  },
+  {
+    "file": "06-list-chat-task.html",
+    "text": "round 1 of 3",
+    "name": "06-c-xe5-ios",
+    "box": {
+      "x": 1319,
+      "y": 406.234375,
+      "width": 369,
+      "height": 578.953125
+    }
+  },
+  {
+    "file": "06-list-chat-task.html",
+    "text": "round 1 of 3",
+    "name": "06-c-xe5-web",
+    "box": {
+      "x": 1832,
+      "y": 1419.390625,
+      "width": 720,
+      "height": 900
+    }
+  },
+  {
+    "file": "06-list-chat-task.html",
+    "text": "round 1 of 3",
+    "found": 2
+  },
+  {
+    "file": "06-list-chat-task.html",
+    "selector": ".chip4.run",
+    "name": "06-e-source-label",
+    "box": {
+      "x": 2149,
+      "y": 347.1875,
+      "width": 393,
+      "height": 644
+    }
+  },
+  {
+    "file": "06-list-chat-task.html",
+    "selector": ".chip4.run",
+    "found": 1
+  },
+  {
+    "file": "07-android.html",
+    "text": "Earlier · 31 landed",
+    "name": "07-earlier",
+    "box": {
+      "x": 44,
+      "y": 1512.0625,
+      "width": 412,
+      "height": 794
+    }
+  },
+  {
+    "file": "07-android.html",
+    "text": "Earlier · 31 landed",
+    "found": 1
+  },
+  {
+    "file": "07-android.html",
+    "text": "round 1 of 3",
+    "name": "07-round-a",
+    "box": {
+      "x": 1364,
+      "y": 1414.0625,
+      "width": 412,
+      "height": 892
+    }
+  },
+  {
+    "file": "07-android.html",
+    "text": "round 1 of 3",
+    "name": "07-round-b",
+    "box": {
+      "x": 500,
+      "y": 2795.15625,
+      "width": 380,
+      "height": 596
+    }
+  },
+  {
+    "file": "07-android.html",
+    "text": "round 1 of 3",
+    "found": 2
+  }
+]

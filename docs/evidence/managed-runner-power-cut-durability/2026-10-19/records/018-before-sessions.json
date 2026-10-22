@@ -1,0 +1,287 @@
+{
+ "checks": [
+  {
+   "check": "amy s1: the engine committed a file in the session's worktree",
+   "ok": true,
+   "value": {
+    "commit": "db45ce2f391830dcc62928337be43ce5f4522898",
+    "file": "t08-amys1.txt",
+    "fileSha256Prefix": "ade8e182f3d9b7df",
+    "ingestedAt": "2026-10-19T17:13:47.002559+00:00"
+   }
+  },
+  {
+   "check": "amy s2: the engine committed a file in the session's worktree",
+   "ok": true,
+   "value": {
+    "commit": "b7ea9b9cc674816d83c68be2ba51a6835b5da2e7",
+    "file": "t08-amys2.txt",
+    "fileSha256Prefix": "ffa6c7e4fb0cc89c",
+    "ingestedAt": "2026-10-19T17:13:48.774677+00:00"
+   }
+  },
+  {
+   "check": "amy: the saved credential is this generation's",
+   "ok": true,
+   "value": {
+    "generation": 1,
+    "podUid": "0b940e7c-a6aa-4728-9ae0-ed54e002dfe9"
+   }
+  },
+  {
+   "check": "amy 01a15527-aade-766a-b161-b52aff12bcba: the repository reads and git fsck is clean before the last seconds",
+   "ok": true,
+   "value": {
+    "fsck": {
+     "err": "",
+     "exit": 0,
+     "out": ""
+    },
+    "revParseHead": {
+     "err": "",
+     "exit": 0,
+     "out": "3f44b6899781ca5a80e2c2e48c4d4c8fc1d380a9"
+    }
+   }
+  },
+  {
+   "check": "amy 01a15527-b3fa-74d6-b522-8cd7dcf92922: the repository reads and git fsck is clean before the last seconds",
+   "ok": true,
+   "value": {
+    "fsck": {
+     "err": "",
+     "exit": 0,
+     "out": ""
+    },
+    "revParseHead": {
+     "err": "",
+     "exit": 0,
+     "out": "c602b378413e1c8cbee7960a9de2d2c4b4f2b4a2"
+    }
+   }
+  },
+  {
+   "check": "amy workspace: the repository reads and git fsck is clean before the last seconds",
+   "ok": true,
+   "value": {
+    "fsck": {
+     "err": "",
+     "exit": 0,
+     "out": ""
+    },
+    "revParseHead": {
+     "err": "",
+     "exit": 0,
+     "out": "a965ff0f24070efbb07853cbd2e2c5e22a9b6ffa"
+    }
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T17:13:49.608+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "before",
+ "result": {
+  "credential": {
+   "generation": 1,
+   "podUid": "0b940e7c-a6aa-4728-9ae0-ed54e002dfe9",
+   "tokenSha256Prefix": "3774a568e5ed"
+  },
+  "sessions": {
+   "s1": {
+    "createdAt": "2026-10-19T17:13:45.432+00:00",
+    "id": "34ijd4vUOpVCPPXsUr1pa",
+    "runtimeSessionId": "c1682585-7d95-425e-9a6d-8fe34c5c5b25",
+    "uuid": "01a15527-aade-766a-b161-b52aff12bcba",
+    "wrote": {
+     "commit": "db45ce2f391830dcc62928337be43ce5f4522898",
+     "file": "t08-amys1.txt",
+     "fileSha256Prefix": "ade8e182f3d9b7df",
+     "ingestedAt": "2026-10-19T17:13:47.002559+00:00"
+    }
+   },
+   "s2": {
+    "createdAt": "2026-10-19T17:13:47.765+00:00",
+    "id": "34ijd8aoQTrlvGz8pP3cw",
+    "runtimeSessionId": "14c264b6-ac91-45af-8c2f-bbb9b458f4c4",
+    "uncommitted": "/var/lib/orbit/home/.orbit/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922/t02c-runner-amy.txt",
+    "uuid": "01a15527-b3fa-74d6-b522-8cd7dcf92922",
+    "wrote": {
+     "commit": "b7ea9b9cc674816d83c68be2ba51a6835b5da2e7",
+     "file": "t08-amys2.txt",
+     "fileSha256Prefix": "ffa6c7e4fb0cc89c",
+     "ingestedAt": "2026-10-19T17:13:48.774677+00:00"
+    }
+   }
+  },
+  "volume": {
+   "commits": {},
+   "ext4Options": [
+    "rw",
+    "bsddf",
+    "nogrpid",
+    "block_validity",
+    "dioread_nolock",
+    "nodiscard",
+    "delalloc",
+    "nowarn_on_error",
+    "journal_checksum",
+    "barrier",
+    "auto_da_alloc",
+    "user_xattr",
+    "acl",
+    "noquota",
+    "resuid=0",
+    "resgid=0",
+    "errors=continue",
+    "commit=5",
+    "min_batch_time=0",
+    "max_batch_time=15000",
+    "i_version",
+    "stripe=1024",
+    "data=ordered",
+    "inode_readahead_blks=32",
+    "init_itable=10",
+    "max_dir_size_kb=0",
+    "prefetch_block_bitmaps"
+   ],
+   "git": "git version 2.47.3",
+   "kernel": "7.0.0-34-generic",
+   "mount": {
+    "fstype": "ext4",
+    "options": "rw,relatime",
+    "source": "/dev/rbd0",
+    "superOptions": "rw,stripe=1024"
+   },
+   "repos": {
+    "01a15527-aade-766a-b161-b52aff12bcba": {
+     "branch": {
+      "loose": "db45ce2f391830dcc62928337be43ce5f4522898",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-amy-s1-a-session-t03-secret-amys1-f-08a072"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a15527-aade-766a-b161-b52aff12bcba",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-aade-766a-b161-b52aff12bcba",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-amy-s1-a-session-t03-secret-amys1-f-08a072"
+     },
+     "indexBytes": 225,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "db45ce2f391830dcc62928337be43ce5f4522898 T08 amys1\nd2b2e66211d1f17102d85d671b66eeb1034a2d94 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "3f44b6899781ca5a80e2c2e48c4d4c8fc1d380a9"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    },
+    "01a15527-b3fa-74d6-b522-8cd7dcf92922": {
+     "branch": {
+      "loose": "b7ea9b9cc674816d83c68be2ba51a6835b5da2e7",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-amy-s2-a-session-t03-secret-amys2-f-3dfc91"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-amy-s2-a-session-t03-secret-amys2-f-3dfc91"
+     },
+     "indexBytes": 225,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "b7ea9b9cc674816d83c68be2ba51a6835b5da2e7 T08 amys2\nd2b2e66211d1f17102d85d671b66eeb1034a2d94 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "c602b378413e1c8cbee7960a9de2d2c4b4f2b4a2"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": "?? t02c-runner-amy.txt"
+     }
+    },
+    "workspace": {
+     "branch": {
+      "loose": "d2b2e66211d1f17102d85d671b66eeb1034a2d94",
+      "looseBytes": 41,
+      "ref": "refs/heads/master"
+     },
+     "checkout": "/var/lib/orbit/home/orbit-repos/default",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [],
+     "fsck": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+     "headFile": {
+      "bytes": 23,
+      "content": "ref: refs/heads/master"
+     },
+     "indexBytes": 145,
+     "locks": [],
+     "log": {
+      "err": "",
+      "exit": 0,
+      "out": "d2b2e66211d1f17102d85d671b66eeb1034a2d94 orbit: baseline"
+     },
+     "revParseHead": {
+      "err": "",
+      "exit": 0,
+      "out": "a965ff0f24070efbb07853cbd2e2c5e22a9b6ffa"
+     },
+     "status": {
+      "err": "",
+      "exit": 0,
+      "out": ""
+     }
+    }
+   },
+   "transcripts": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15527-aade-766a-b161-b52aff12bcba/c1682585-7d95-425e-9a6d-8fe34c5c5b25.jsonl": {
+     "bytes": 731895,
+     "lines": 29,
+     "markers": {}
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15527-b3fa-74d6-b522-8cd7dcf92922/14c264b6-ac91-45af-8c2f-bbb9b458f4c4.jsonl": {
+     "bytes": 731895,
+     "lines": 29,
+     "markers": {}
+    }
+   },
+   "uid": 10001
+  }
+ },
+ "seconds": 4.2,
+ "startedAt": "2026-10-19T17:13:45.393+00:00",
+ "step": "sessions"
+}

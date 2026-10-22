@@ -84,6 +84,16 @@ internal fun TranscriptCardView(card: InteractionCard, open: (String) -> Unit, e
             listOf("fromSessionId" to "Open sender session", "runSessionId" to "Open task session", "reviewerSessionId" to "Open reviewer session").forEach { (field, label) ->
                 card.source.text(field)?.let { LinkButton(label, "orbit-session:$it", open) }
             }
+            // An open-item delivery's two ways into the record (iOS `OpenItemDeliveryCardView`, board v4 06 b): the session whose
+            // failure opened the item, and the landing it belongs to (§2.9 LS6). Either is drawn only where the payload names it.
+            if (card.key.endsWith(":openItemDelivery")) {
+                card.source.obj("task")?.text("sessionId")?.takeIf { it.isNotEmpty() }?.let {
+                    LinkButton(OpenItemDeliveryCopy.openSession, "orbit-session:$it", open)
+                }
+                card.source.text("landingSessionId")?.takeIf { it.isNotEmpty() }?.let {
+                    LinkButton(OpenItemDeliveryCopy.openLanding, "orbit-session:$it", open)
+                }
+            }
             if (card.source.text("taskId") != null || card.source.text("projectId") != null) {
                 Text("Task and project details are not connected yet.", style = MaterialTheme.typography.bodySmall)
             }

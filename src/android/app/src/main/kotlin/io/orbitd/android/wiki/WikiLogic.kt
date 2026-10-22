@@ -201,7 +201,7 @@ internal object WikiLogic {
     enum class ActivityBand(val title: String?) {
         STATUS(null), REVIEW_BANNER(null), PLAN_BANNERS(null), OTHER_PLAN_BANNERS(null),
         // The server's runs (mock 35 ④, P9): after Review and Plan, drawn only while the server executes the account's
-        // wiki or once it ran something for the space (iOS's `.runs`, the web's `WikiRunsCard`).
+        // wiki (iOS's `.runs`, the web's `WikiRunsCard`).
         RUNS(WikiRunsCopy.runs),
         RECENT_DECISIONS(WikiCopy.recentDecisions), RECENTLY_CHANGED(WikiCopy.recentlyChanged), AGENTS_USED(WikiCopy.agentsUsed)
     }
@@ -505,7 +505,6 @@ internal object WikiModeLogic {
         val named = name?.takeIf { it.isNotEmpty() } ?: "—"
         return if (runner.isNullOrEmpty()) named else "$named · $runner"
     }
-    fun providerLabel(provider: String, model: String?) = if (model.isNullOrEmpty()) provider else "$provider · $model"
     enum class LookbackChoice { NOW, DAYS, ALL }
     fun lookbackChoice(days: Int?) = when { days == null -> LookbackChoice.ALL; days == 0 -> LookbackChoice.NOW; else -> LookbackChoice.DAYS }
     fun lookbackDays(choice: LookbackChoice, days: Int): Int? = when (choice) { LookbackChoice.NOW -> 0; LookbackChoice.DAYS -> days; LookbackChoice.ALL -> null }

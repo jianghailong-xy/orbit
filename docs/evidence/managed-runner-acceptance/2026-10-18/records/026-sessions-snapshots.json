@@ -1,0 +1,189 @@
+{
+ "checks": [
+  {
+   "check": "ann: /var/lib/orbit is an RBD device, ext4",
+   "ok": true,
+   "value": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd1"
+    }
+   ]
+  },
+  {
+   "check": "ann: the attachment is on the volume with its checksum",
+   "ok": true,
+   "value": 1
+  },
+  {
+   "check": "ann: the engine's commit is the session worktree's HEAD and its file is there",
+   "ok": true,
+   "value": {
+    "files": [
+     ".gitignore",
+     "t08-ann1.txt"
+    ],
+    "head": "b3da4b68be18c1bb2ad735b863515e5d53c86717"
+   }
+  },
+  {
+   "check": "bob: /var/lib/orbit is an RBD device, ext4",
+   "ok": true,
+   "value": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd2"
+    }
+   ]
+  },
+  {
+   "check": "bob: the attachment is on the volume with its checksum",
+   "ok": true,
+   "value": 1
+  },
+  {
+   "check": "bob: the engine's commit is the session worktree's HEAD and its file is there",
+   "ok": true,
+   "value": {
+    "files": [
+     ".gitignore",
+     "t08-bob1.txt"
+    ],
+    "head": "32d48c95c39372dfd3e51504a9c970dacdfde7a4"
+   }
+  }
+ ],
+ "endedAt": "2026-10-18T12:39:13.736+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "sessions",
+ "result": {
+  "ann": {
+   "managedInstance": {
+    "generation": 1,
+    "podUid": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2",
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+   },
+   "mount": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd1"
+    }
+   ],
+   "podUid": "1ca70f34-4eb1-4a12-b9f5-db99499f73d2",
+   "prefix": {},
+   "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "runs": {
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d": {
+     "provider": "claude",
+     "runtimeSessionId": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+     "sessionUuid": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+     "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a14f04-a754-73a1-9d1b-91a624ffc84d"
+    }
+   },
+   "sqlite": {
+    "t08-probe/p1/rows.sqlite": "ok"
+   },
+   "takenAt": "2026-10-18T12:39:13.508+00:00",
+   "transcripts": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a754-73a1-9d1b-91a624ffc84d/9412b32d-8af2-4596-a874-0be0e646f1f4.jsonl": {
+     "lines": 35,
+     "sha256": "ac65e06e1bc9c83458f901058a5bbc306d159a9dbf3522d2ffe7d52be4ffa9f8"
+    }
+   },
+   "uid": 10001,
+   "uploads": {
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d/t08-ann-note.txt": "47b104235806bd367051f1b5bdd828df3fc5fbd77508c8a997a05e8c0d99110c"
+   },
+   "workspace": {
+    "fsckExit": 0,
+    "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+    "worktrees": [
+     "worktree /var/lib/orbit/home/orbit-repos/default",
+     "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+     "branch refs/heads/master",
+     "",
+     "worktree /var/lib/orbit/home/.orbit/worktrees/01a14f04-a754-73a1-9d1b-91a624ffc84d",
+     "HEAD b3da4b68be18c1bb2ad735b863515e5d53c86717",
+     "branch refs/heads/orbit/t08-ann-first-session-a0df10"
+    ]
+   },
+   "worktrees": {
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d": {
+     "branch": "orbit/t08-ann-first-session-a0df10",
+     "files": {
+      ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+      "t08-ann1.txt": "dd4a213dc6ebc5bc9ec1e1fc8014cc9e231298a70d955f818ca4cf29b3e9ce5d"
+     },
+     "head": "b3da4b68be18c1bb2ad735b863515e5d53c86717",
+     "status": []
+    }
+   }
+  },
+  "bob": {
+   "managedInstance": {
+    "generation": 1,
+    "podUid": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620",
+    "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb"
+   },
+   "mount": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd2"
+    }
+   ],
+   "podUid": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620",
+   "prefix": {},
+   "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+   "runs": {
+    "01a14f04-a753-774e-ae62-e1572e6de075": {
+     "provider": "claude",
+     "runtimeSessionId": "c8974823-c3e4-4082-a8d3-c855eaef7411",
+     "sessionUuid": "c8974823-c3e4-4082-a8d3-c855eaef7411",
+     "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a14f04-a753-774e-ae62-e1572e6de075"
+    }
+   },
+   "sqlite": {
+    "t08-probe/p1/rows.sqlite": "ok"
+   },
+   "takenAt": "2026-10-18T12:39:13.736+00:00",
+   "transcripts": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a753-774e-ae62-e1572e6de075/c8974823-c3e4-4082-a8d3-c855eaef7411.jsonl": {
+     "lines": 41,
+     "sha256": "59663fbfe3e2235dc022b6e73751a16b5b9866a0b217e3cb0987e94d5144237e"
+    }
+   },
+   "uid": 10001,
+   "uploads": {
+    "01a14f04-a753-774e-ae62-e1572e6de075/t08-bob-note.txt": "a4d8206da6b9d5bfd2f59d07f1b3ebc632cf7d5becbde43db75b54b84f735216"
+   },
+   "workspace": {
+    "fsckExit": 0,
+    "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+    "worktrees": [
+     "worktree /var/lib/orbit/home/orbit-repos/default",
+     "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+     "branch refs/heads/master",
+     "",
+     "worktree /var/lib/orbit/home/.orbit/worktrees/01a14f04-a753-774e-ae62-e1572e6de075",
+     "HEAD 32d48c95c39372dfd3e51504a9c970dacdfde7a4",
+     "branch refs/heads/orbit/t08-bob-first-session-d2213c"
+    ]
+   },
+   "worktrees": {
+    "01a14f04-a753-774e-ae62-e1572e6de075": {
+     "branch": "orbit/t08-bob-first-session-d2213c",
+     "files": {
+      ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+      "t08-bob1.txt": "60477fcb9906a12d70ea8b641cb966255bc822703a5308963a1e2e3060742019"
+     },
+     "head": "32d48c95c39372dfd3e51504a9c970dacdfde7a4",
+     "status": []
+    }
+   }
+  }
+ },
+ "seconds": 0.7,
+ "startedAt": "2026-10-18T12:39:13.076+00:00",
+ "step": "snapshots"
+}

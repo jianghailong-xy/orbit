@@ -46,8 +46,9 @@ public struct ManagedRunnerDisplay: Equatable, Sendable {
     /// demand hook queues work for, and asleep only when the server offers a wake), so a console
     /// does not refuse it as offline.
     public let acceptsWork: Bool
-    /// A first session in the managed default workspace can start: the runner was found ready with
-    /// `initialProvider`. Before that the server refuses it with MODEL_UNAVAILABLE.
+    /// A first session in the managed default workspace can start: the server names what it starts
+    /// on (`firstSessionProvider` — what the runner was found ready with, or before that the owner's
+    /// key the session waits for the runner on). With none the server refuses it with MODEL_UNAVAILABLE.
     public let startsNewSession: Bool
     /// The state moves by itself: read the status again soon.
     public let moving: Bool
@@ -86,7 +87,7 @@ public enum ManagedRunnerCopy {
         case .waking:
             return "It is starting again. Messages sent meanwhile wait for it and run once it is up."
         case .modelUnavailable:
-            return "None of its runtimes is installed and signed in yet, so it cannot start a session. Sign one in from Infrastructure."
+            return "None of its runtimes is signed in yet and none of your model keys runs on it, so it cannot start a session. Sign one in, or add a model key, from Infrastructure."
         case .waitingCapacity:
             return "The managed environment has no room for it right now. It starts by itself when room frees up."
         case .available:
@@ -211,8 +212,15 @@ public enum ManagedRunnerLogic {
             ensure: status.managementState == "NOT_PROVISIONED" && status.actions.canEnsure,
             signIn: reason?.code == modelUnavailable && status.runnerId != nil,
             acceptsWork: acceptsWork,
-            startsNewSession: acceptsWork && status.initialProvider != nil,
+            startsNewSession: acceptsWork && firstSessionProvider(status) != nil,
             moving: !frozen && movingKinds.contains(kind))
+    }
+
+    /// What a first session in the managed default workspace starts on, as the server says: its
+    /// `firstSessionProvider`, or from a server that predates that field, `initialProvider` (which
+    /// the field equals whenever the runner has one).
+    public static func firstSessionProvider(_ status: ManagedRunnerStatus) -> String? {
+        status.firstSessionProvider ?? status.initialProvider
     }
 
     /// When to read the status again after this display.

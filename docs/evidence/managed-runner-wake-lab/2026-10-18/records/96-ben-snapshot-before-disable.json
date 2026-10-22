@@ -1,0 +1,214 @@
+{
+  "at": "2026-10-18T02:00:04.828+00:00",
+  "attachments": [
+    {
+      "attached": true,
+      "deleting": false,
+      "name": "csi-130659592fb8973cfc683b300bb8c8eced794b4c64f3d7456f2a77309126c7f7"
+    }
+  ],
+  "defaultWorkspace": {
+    "auto_init_git": true,
+    "enable_worktree": true,
+    "id": "01a14cb2-fd33-70db-bdcb-d0751ef570cc",
+    "name": "Default",
+    "runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "target_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "work_dir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "display": {
+    "acceptsWork": true,
+    "detail": "It is starting again. Messages sent meanwhile wait for it and run once it is up.",
+    "ensure": false,
+    "kind": "waking",
+    "moving": true,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": true,
+    "title": "Waking your managed runner"
+  },
+  "mapping": {
+    "attempt": 0,
+    "demand_revision": 7,
+    "desired_state": "RUNNING",
+    "generation": 3,
+    "id": "01a14cb2-fd34-7230-bb47-a0736a4a5c85",
+    "initial_provider": "deepseek-2",
+    "last_demand_at": "2026-10-18T02:00:01.173+00:00",
+    "last_error": null,
+    "management_state": "STARTING",
+    "node_name": "orbit-mr-lab",
+    "pod_name": "mr-01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "pod_uid": "210ec2f2-498d-4ec4-aa05-9289a1419528",
+    "pv_uid": "19f0bd89-cc03-48a2-8189-53d453395ed5",
+    "pvc_name": "mr-data-01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "pvc_uid": "9e102973-fe8d-4114-a3be-4178cab95865",
+    "reservation": {
+      "compute": {
+        "activeUsers": 1,
+        "attachments": 1,
+        "cpuMillis": 500,
+        "ephemeralBytes": 1073741824,
+        "generation": 3,
+        "memoryBytes": 805306368,
+        "pods": 1,
+        "reservedAt": "2026-10-18T01:59:41.960Z"
+      },
+      "pool": "bb0a87ab-68f7-4a2c-90b9-626e139eadbc",
+      "storage": {
+        "durableBytes": 2147483648,
+        "reservedAt": "2026-10-18T01:50:41.656Z"
+      },
+      "version": 1
+    },
+    "revision": 49,
+    "state_entered_at": "2026-10-18T01:59:42.023+00:00",
+    "volume_handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-111f38fc-dfce-4abe-b4cd-4133070ba5a7"
+  },
+  "owner": "ben",
+  "pod": {
+    "containers": [
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+        "name": "private-volume-directories",
+        "restartCount": 0,
+        "state": {
+          "terminated": {
+            "containerID": "containerd://054ce0cc2cf08925b8a91acdd9b5f8f955ca13f8c65481d6006a25ea87c0fbc4",
+            "exitCode": 0,
+            "finishedAt": "2026-10-18T01:59:52Z",
+            "reason": "Completed",
+            "startedAt": "2026-10-18T01:59:51Z"
+          }
+        }
+      },
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+        "name": "runner",
+        "restartCount": 0,
+        "state": {
+          "running": {
+            "startedAt": "2026-10-18T01:59:53Z"
+          }
+        }
+      }
+    ],
+    "deletionTimestamp": null,
+    "generation": "3",
+    "images": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+    ],
+    "name": "mr-01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "210ec2f2-498d-4ec4-aa05-9289a1419528"
+  },
+  "podsUsingTheClaim": [
+    "mr-01a14cb2-fd31-761c-ae11-591d4b8f6360"
+  ],
+  "pv": {
+    "handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-111f38fc-dfce-4abe-b4cd-4133070ba5a7",
+    "image": "csi-vol-111f38fc-dfce-4abe-b4cd-4133070ba5a7",
+    "reclaim": "Retain",
+    "uid": "19f0bd89-cc03-48a2-8189-53d453395ed5"
+  },
+  "pvc": {
+    "createdAt": "2026-10-18T01:50:41Z",
+    "phase": "Bound",
+    "uid": "9e102973-fe8d-4114-a3be-4178cab95865",
+    "volumeName": "pvc-9e102973-fe8d-4114-a3be-4178cab95865"
+  },
+  "runner": {
+    "capabilities": [
+      "antigravity-account-login/v1",
+      "antigravity-account-remove/v1",
+      "antigravity-google-login/v1",
+      "claude-account-login/v1",
+      "claude-account-move/v1",
+      "claude-account-remove/v1",
+      "codex-account-login/v1",
+      "codex-account-move/v1",
+      "codex-account-remove/v1",
+      "codex-rate-limit-reset-v1",
+      "cursor-account-login/v1",
+      "cursor-account-remove/v1",
+      "cursor-key-check/v1",
+      "integration-job/v1",
+      "kimi-account-login/v1",
+      "kimi-account-move/v1",
+      "kimi-account-remove/v1",
+      "kimi-login-region/v1",
+      "managed-runner-instance-v1",
+      "managed-runner-sleep-v1",
+      "promotion-automatic-land/v1",
+      "session-claude-coordinator-context-v1",
+      "session-claude-steer-withdraw-v1",
+      "session-codex-coordinator-context-v1",
+      "session-codex-steer-v1",
+      "session-current-work-routing-v1",
+      "session-merge-recovery-v1",
+      "session-move/v1",
+      "session-orchestration-credential-v1",
+      "session-terminal-handoff-v1",
+      "session-worktree-ops-v1",
+      "source-pin/v1",
+      "wiki-maintenance-run/v1",
+      "wiki-repo-op-read/v1",
+      "wiki-repo-op/v1",
+      "provider:claude",
+      "provider:codex",
+      "provider:opencode",
+      "provider:antigravity",
+      "provider:dsh",
+      "os:linux"
+    ],
+    "enrolled_at": "2026-10-18T01:49:21.074",
+    "id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "last_heartbeat_at": "2026-10-18T01:57:38.509",
+    "name": "orbit-managed",
+    "status": "ONLINE",
+    "token_hash_prefix": "d6fd8d70f236"
+  },
+  "sessions": [
+    {
+      "id": "01a14cb5-38bd-769d-8c0b-9059299860e7",
+      "retry_at": null,
+      "retry_attempts": 0,
+      "status": "AWAITING_INPUT",
+      "task_id": null,
+      "title": "T06-BEN-S1 ben's first session"
+    },
+    {
+      "id": "01a14cb8-c804-75e6-8404-49636f4f77ee",
+      "retry_at": null,
+      "retry_attempts": 0,
+      "status": "AWAITING_INPUT",
+      "task_id": null,
+      "title": "T06-BEN-WK FAKE-WAKEUP 240 BENOFF a wakeup that co"
+    },
+    {
+      "id": "ddee9d83-0966-5179-8af5-733f36e4f4b1",
+      "retry_at": null,
+      "retry_attempts": 0,
+      "status": "AWAITING_INPUT",
+      "task_id": "01a14cb8-c855-7115-bea1-685718242592",
+      "title": "Task: T06-BEN-RUNAT a task whose run time comes wh"
+    }
+  ],
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "desiredState": "RUNNING",
+    "heartbeatStatus": "ONLINE",
+    "managementState": "STARTING",
+    "reason": null,
+    "retryAfter": null,
+    "revision": 49,
+    "usable": false
+  }
+}

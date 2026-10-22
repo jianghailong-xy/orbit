@@ -710,6 +710,12 @@ func refuseSourceWorktree(job *ClaimedSession, code, reason string) string {
 // sets job.WT and returns the checkout's exec dir. A session whose SOURCE is resolved takes
 // setupSourceWorktree instead, and none of those fallbacks.
 func setupWorktree(job *ClaimedSession, baseDir string) string {
+	// A managed runner does not work in a repository its volume brought back broken from an unclean
+	// stop. The fallbacks below would run the session in the workDir without a checkout, or start a
+	// new repository over the broken one, and say nothing (managed_repo_recovery.go).
+	if reason := managedCheckoutDamage(baseDir, job.SessionID); reason != "" {
+		return refuseSourceWorktree(job, repositoryDamagedRefusal, reason+repositoryDamagedAdvice)
+	}
 	if needsSourcePin(job) {
 		return setupSourceWorktree(job, baseDir)
 	}
@@ -1409,6 +1415,12 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 			}
 			if !targetContainsSource(repoRoot, sourceSha, remote) {
 				r.RemoteSha = remote
+				// Origin may still carry every one of these commits as a copy, and then the
+				// local target's extra commits are no part of this session's merge.
+				anchor := replayAnchor(repoRoot, req.SessionID, sourceSha, req.BaseSha)
+				if landing := landedCommits(repoRoot, anchor, sourceSha, remote); landing.All {
+					return alreadyLandedOutcome(repoRoot, r, landing.Landed)
+				}
 				code := "TARGET_DIVERGED"
 				if targetContainsSource(repoRoot, remote, tip) {
 					code = "TARGET_AHEAD"
@@ -1454,12 +1466,38 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 	// Bring the local target up to date with origin before rebasing onto it (see the function
 	// comment): a target that lagged origin/<target> would replay the branch onto a stale base and
 	// conflict on lines already reconciled upstream.
-	if out := reconcileTargetWithOrigin(repoRoot, target); out != nil {
-		out.SourceSha, out.TargetBranch = sourceSha, target
-		if out.Recovery != nil {
-			out.Recovery.SourceSha = sourceSha
+	//
+	// Between the fetch and that reconcile: did this session's commits already reach origin under
+	// other names? The 2026-10-11 incident: a merged session's branch was rewritten, its commits
+	// were on origin/main as the rebase copies Orbit had pushed, and main had built on them — so
+	// replaying them conflicted with themselves. Asked before the reconcile because a target
+	// that already has everything has nothing to synchronize for: no branch moves, and a local
+	// target's unpushed commits — diverged or ahead — are not this session's to push. Only a fetch
+	// that answered is trusted for it, and a source origin contains as itself is left to the
+	// already-merged answer below. Partly landed, the replay leaves the landed commits out.
+	anchor := replayAnchor(repoRoot, req.SessionID, sourceSha, req.BaseSha)
+	var landed map[string]bool
+	hasOrigin, fetched := fetchOriginTarget(repoRoot, target)
+	if fetched && originTracks(repoRoot, target) {
+		remote, _ := git(repoRoot, "rev-parse", "refs/remotes/origin/"+target)
+		if !targetContainsSource(repoRoot, sourceSha, remote) {
+			landing := landedCommits(repoRoot, anchor, sourceSha, remote)
+			if landing.All {
+				local, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
+				return alreadyLandedOutcome(repoRoot, &MergeRecovery{TargetBranch: target, RepoRoot: repoRoot,
+					SourceSha: sourceSha, LocalSha: local, RemoteSha: remote}, landing.Landed)
+			}
+			landed = landing.Skip
 		}
-		return *out
+	}
+	if hasOrigin {
+		if out := reconcileFetchedTarget(repoRoot, target); out != nil {
+			out.SourceSha, out.TargetBranch = sourceSha, target
+			if out.Recovery != nil {
+				out.Recovery.SourceSha = sourceSha
+			}
+			return *out
+		}
 	}
 	if originTracks(repoRoot, target) {
 		local, _ := git(repoRoot, "rev-parse", "refs/heads/"+target)
@@ -1482,8 +1520,7 @@ func mergeToMain(req MergeCommand) mergeOutcome {
 		return alreadyMergedOutcome(req.SessionID, target, sourceSha, targetBefore)
 	}
 
-	out := rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot,
-		replayAnchor(repoRoot, req.SessionID, sourceSha, req.BaseSha))
+	out := rebaseFastForward(repoRoot, req.Branch, sourceSha, target, req.SessionID, ffAtRoot, anchor, landed)
 	out.TargetBranch = target
 	out.TargetShaBefore = targetBefore
 	// The base the source was replayed ONTO. For this merge that is the target tip: the rebase puts
@@ -1659,13 +1696,14 @@ func restageRebaseScratch(repoRoot, sourceSha string) (string, error) {
 // own commits move, rather than everything the branch carries ahead of the target. Empty replays
 // `<target>..<source>`, the original behavior. The two are equivalent whenever the fork point is
 // already in the target — the usual fork-from-main, merge-to-main case — and differ only where the
-// branch sits on commits the target doesn't have.
+// branch sits on commits the target doesn't have. `landed` are commits origin/<target> already
+// carries as copies (see landedCommits); the replay leaves them out (see replaySource).
 //
 // When origin tracks target, it pushes the rebased result to origin/<target> BEFORE advancing the
 // local branch, so the local target only ever moves to what origin already accepted — local merges
 // can't pile up unpushed and silently diverge from origin. A concurrent push that beats ours is
 // rejected (non-fast-forward); we re-sync to the new origin tip and replay, up to mergePushAttempts.
-func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool, onto string) mergeOutcome {
+func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ffAtRoot bool, onto string, landed map[string]bool) mergeOutcome {
 	// Staged once per repository and kept: the scratch is NOT removed afterwards, because the next
 	// merge restages it and paying a full checkout of the repository again is what pressing Merge
 	// mostly used to cost.
@@ -1692,15 +1730,9 @@ func rebaseFastForward(repoRoot, source, sourceSha, target, sessionID string, ff
 				return mergeOutcome{Status: "error", Message: clip(fmt.Sprintf("could not restage %s for retry: %s", source, gitStderr(err)), 1000)}
 			}
 		}
-		rebase := []string{"rebase"}
-		if onto != "" {
-			rebase = append(rebase, "--onto", target, onto)
-		} else {
-			rebase = append(rebase, target)
-		}
 		// A conflict stops the rebase; abort so nothing of this attempt is left in the scratch for
 		// the next merge to stage over (git writes "CONFLICT ..." to stdout, returned as `out`).
-		if out, err := git(tmp, rebase...); err != nil {
+		if out, err := replaySource(tmp, target, onto, sourceSha, landed); err != nil {
 			msg := strings.TrimSpace(out + "\n" + gitStderr(err))
 			// The paths git stopped on, read BEFORE the abort clears the index. They go on the
 			// receipt: "it conflicted" and "it conflicted in these three files" are answers to
@@ -1846,10 +1878,25 @@ func isNonFastForward(pushOutput string) bool {
 // failed fetch just proceeds against whatever origin ref the repo already has.
 func reconcileTargetWithOrigin(repoRoot, target string) *mergeOutcome {
 	// No 'origin' remote (e.g. an auto-init'd local repo) → nothing to reconcile; behave as before.
-	if _, err := git(repoRoot, "remote", "get-url", "origin"); err != nil {
+	if hasOrigin, _ := fetchOriginTarget(repoRoot, target); !hasOrigin {
 		return nil
 	}
-	_, _ = git(repoRoot, "fetch", "origin", target) // read-only; transient failures fall through
+	return reconcileFetchedTarget(repoRoot, target)
+}
+
+// fetchOriginTarget refreshes origin/<target> for reconcileFetchedTarget: whether there is an
+// 'origin' at all, and whether this fetch answered. Read-only, and a failed fetch is no reason to
+// stop a merge — it falls through to the ref the repository already has.
+func fetchOriginTarget(repoRoot, target string) (hasOrigin, fetched bool) {
+	if _, err := git(repoRoot, "remote", "get-url", "origin"); err != nil {
+		return false, false
+	}
+	_, err := git(repoRoot, "fetch", "origin", target)
+	return true, err == nil
+}
+
+// reconcileFetchedTarget is reconcileTargetWithOrigin once origin/<target> has been fetched.
+func reconcileFetchedTarget(repoRoot, target string) *mergeOutcome {
 	remoteRef := "origin/" + target
 	if _, err := git(repoRoot, "rev-parse", "--verify", "--quiet", remoteRef); err != nil {
 		return nil // target isn't tracked on origin (a local-only branch) → nothing to reconcile
@@ -2661,12 +2708,17 @@ const maxRetainedEligibleCheckouts = 32
 // Branches are always preserved — only the checkout directory and the base ref go — so anything
 // reclaimed here can be checked out again from its branch. On any query failure the candidates are
 // left untouched: GC never destroys a checkout it couldn't confirm removable.
+//
+// Merge recovery's repair checkouts (recovery-*) are no session's, so the control plane is not asked
+// about them and none of the above applies: one that is clean and has not changed for two weeks goes,
+// its branch kept, whatever the disk looks like, and any other stays (gcRecoveryCheckouts).
 func gcWorktrees(t *Transport, live map[string]bool, pressure worktreeGCPressure) {
 	root := worktreesDir()
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return
 	}
+	gcRecoveryCheckouts(root, entries)
 	// touched is the checkout directory's mtime: the last time anything wrote in it, which is a
 	// better answer to "whose contents is a successor least likely to still want" than the
 	// session's age, and it is what orders every removal below. A directory that will not stat is
@@ -2679,7 +2731,7 @@ func gcWorktrees(t *Transport, live map[string]bool, pressure worktreeGCPressure
 	var names []string
 	for _, e := range entries {
 		if !e.IsDir() || live[e.Name()] || strings.HasPrefix(e.Name(), rebaseScratchPrefix) || strings.HasPrefix(e.Name(), mergeRecoveryWorktreePrefix) ||
-			strings.HasPrefix(e.Name(), retiredCheckoutPrefix) {
+			strings.HasPrefix(e.Name(), retiredCheckoutPrefix) || strings.HasPrefix(e.Name(), integrateScratchPrefix) {
 			continue
 		}
 		var touched time.Time

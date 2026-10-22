@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 import {
   INTEGRATION_CLAIM_STALE_MS,
+  LAND_TASK_ROUNDS_PER_CLAIM,
+  type IntegrationJobKind,
   type IntegrationJobPhase,
   type ProjectIntegrationJob,
   type ProjectIntegrationView,
@@ -278,6 +280,36 @@ export interface LandingLine {
    *  waited, the read does not say, or it has not been claimed at all (a queued job's whole clock
    *  is that wait, said by `clockLabel`). */
   wait: string | null;
+  /** §7.2 V6's facts, once the server sends them. Absent from a server that predates the fields,
+   *  and the whole line is then worded exactly as it was before they existed. */
+  liveness?: LandingLiveness | null;
+}
+
+/** §7.2 V6's read-time liveness of an integration claim, as the server derives it. */
+export type LandingLivenessWord = 'LIVE' | 'QUIET' | 'SILENT' | 'LEASE_EXPIRED' | 'LEGACY';
+
+/** The check a v2 claim is running (§2.2 J-T4), as `inFlight.check` carries it. */
+export interface LandingCheck {
+  name: string;
+  index: number;
+  count: number;
+  budgetSeconds: number;
+  startedAt: string;
+}
+
+/**
+ * What a head draws from §7.2 V6 when the server sends it: the current step's own clock against
+ * its budget (the head's main number, "2m 40s of 60m"), the clauses that follow the state in the
+ * head's one line, and whether the local clock may advance between reads — only LIVE and QUIET,
+ * and only while the read itself is fresh.
+ */
+export interface LandingLiveness {
+  /** The right slot's number: the step's clock, with its budget while a check is in flight. */
+  clock: string;
+  /** The facts after the state word, in the order the board draws them. */
+  clauses: string[];
+  /** Whether the local clock runs: LIVE / QUIET on a read no older than 90 s. */
+  ticking: boolean;
 }
 
 export const JOB_WORDS = {
@@ -285,6 +317,10 @@ export const JOB_WORDS = {
   CHECK_PROMOTION: 'Merge check',
   LAND_PROMOTION: 'Merge to main',
 };
+
+/** The two kinds that are about main: a check of a round, and the round's own push. Their rows are
+ *  the merge card's, and the landing into which they are read is the ROUND's (contract §2.9). */
+const MERGE_JOB_KINDS: ReadonlySet<string> = new Set<string>(['CHECK_PROMOTION', 'LAND_PROMOTION']);
 
 /** The words above for a project whose main branch is `main` by name: a merge names the branch it
  *  goes into. */
@@ -330,6 +366,45 @@ export const LANDING_WORDS = {
   RETRIED_BY_OWNER: 'retried by you',
   RETRIED_BY_COORDINATOR: 'retried by the coordinator',
 };
+
+/**
+ * §7.2 V6's words, held to the Swift `ProjectPage` constants by
+ * `ProjectPageSectionsCopyParityTests` and to the Kotlin `ProjectPage` object by
+ * `ProjectCopyParityTest`. The board (docs/mocks/landing-session/v4, 05) writes them capitalized
+ * where they open a line and folded into the sentence elsewhere; `lowerFirst` does the folding, as
+ * the freshness clause has always done.
+ */
+export const LANDING_LIVENESS_WORDS = {
+  OUTPUT: 'Output',
+  NO_OUTPUT_FOR: 'No output for',
+  WITHIN_ITS: 'within its',
+  BUDGET: 'budget',
+  NO_WORD_FROM_RUNNER: 'No word from runner',
+  NO_WORD_FROM_THE_RUNNER: 'No word from the runner',
+  REPORTS_ONLY_BETWEEN_STEPS: 'Reports only between steps',
+  CLAIM: 'claim',
+  ROUND: 'round',
+  OF: 'of',
+  TAKEN_OVER: 'Taken over',
+  FIRST_STARTED: 'first started',
+  USUALLY: 'usually',
+};
+
+/**
+ * "round 2 of 3" for a task's landing, "round 1" for a merge check or a merge into main (§7.2 V6):
+ * the M is the most rounds one claim of that kind can run (`LAND_TASK_ROUNDS_PER_CLAIM`), never the
+ * check's count, and a kind with one round — or one this client does not know — names no M.
+ */
+export function landingRoundClause(round: number, kind: string | null | undefined): string {
+  return kind === 'LAND_TASK'
+    ? `${LANDING_LIVENESS_WORDS.ROUND} ${round} ${LANDING_LIVENESS_WORDS.OF} ${LAND_TASK_ROUNDS_PER_CLAIM}`
+    : `${LANDING_LIVENESS_WORDS.ROUND} ${round}`;
+}
+
+/** The words above mid-sentence: "output 6s ago", "no word from runner …". */
+function lowerFirst(text: string): string {
+  return text ? text[0].toLowerCase() + text.slice(1) : text;
+}
 
 /** "2 jobs · 1 timed out" — the row's name slot while several jobs are in flight; "2 jobs" when none timed out. */
 export function landingJobsCount(jobs: number, timedOut: number): string {
@@ -404,7 +479,9 @@ export function landingLine(
   // verdict of its own (a server that does not list its jobs) — one that lists them judges the
   // timeouts, and this row takes that word instead. Even here it is a fact about the REPORTS and
   // never a verdict: "No report", not "timed out", which is the job's own to say.
-  const silent = !listed && running
+  // Only where the server hands over no liveness of its own: one that sends it has already judged
+  // the claim, and LEGACY's quiet is the protocol, not a stall.
+  const silent = inFlight.liveness == null && !listed && running
     && (!Number.isFinite(heartbeatAt) || now - heartbeatAt > INTEGRATION_CLAIM_STALE_MS);
   const unavailable = unreadable(now, observation);
   const main = mainBranchName(view.upstreamRef);
@@ -416,7 +493,27 @@ export function landingLine(
   // and only a CLAIMED job has one to show: a queued job's whole clock already is that wait.
   const waitMs = running ? inFlight.waitMs : null;
   if (!unavailable && lead?.timedOut) return { ...named, ...timedOutLine(lead, now, waitMs) };
-  return { ...named, ...liveLine(inFlight, now, observation, unavailable, silent, main, waitMs) };
+  return {
+    ...named,
+    ...liveLine(inFlight, now, observation, unavailable, silent, main, waitMs,
+      firstStartedAt(view, inFlight.jobId), inFlight.runner ?? null),
+  };
+}
+
+/**
+ * When the attempt behind a job FIRST started: the `landTask` row's own `startedAt` is the column
+ * the claim leaves alone across a takeover (`started_at = COALESCE(started_at, now())`), while the
+ * integration line's `startedAt` is the claim now holding it. That is the fact "Taken over 17:31 ·
+ * first started 17:03" needs, and it exists only for a job that lands a task — a promotion and a
+ * merge check have no landTask row, and a server that predates the field sends none.
+ */
+function firstStartedAt(view: ProjectIntegrationView, jobId: string | null | undefined): string | null {
+  if (!jobId) return null;
+  for (const task of view.landTasks ?? []) {
+    const land = task.integration?.landTask;
+    if (land?.jobId === jobId) return land.startedAt ?? null;
+  }
+  return null;
 }
 
 /** Whether this app has lost the server: its last read failed, or is more than 90 s old. */
@@ -429,14 +526,108 @@ function unreadable(now: number, observation: { updatedAt?: number; failed?: boo
  *  frozen at the last word anyone had when `unavailable`, and at the last report when `silent`
  *  (the same freeze, reached from the runner's silence rather than this app's read). `main` is the
  *  project's main branch by name, which a sync names. */
+/** The job facts §7.2 V6 reads, as both `inFlight` and every `inFlightJobs` entry carry them. */
+interface LandingJobFacts {
+  state: 'RUNNING' | 'QUEUED';
+  phase?: IntegrationJobPhase | null;
+  startedAt: string;
+  heartbeatAt?: string | null;
+  kind?: IntegrationJobKind | null;
+  claim?: number;
+  round?: number | null;
+  check?: LandingCheck | null;
+  stepStartedAt?: string | null;
+  outputMovedAt?: string | null;
+  typicalMs?: number | null;
+  liveness?: string | null;
+}
+
+/**
+ * §7.2 V6's head facts, or null for a server that does not send them (or a claim the server gave
+ * no liveness: a queued job, and LEASE_EXPIRED, which the timed-out line words).
+ *
+ * The main number is the CURRENT STEP's own clock — from `stepStartedAt`, not the claim — against
+ * the check's budget: "2m 40s of 60m". The local clock runs only for LIVE and QUIET on a read no
+ * older than 90 s; SILENT freezes it at the runner's last word, and LEGACY at the read it came
+ * with. Nothing here infers a timeout: LEASE_EXPIRED is the server's word and the timed-out line
+ * draws it.
+ */
+function landingLiveness(
+  job: LandingJobFacts,
+  runner: string | null,
+  now: number,
+  observation: { updatedAt?: number },
+  firstStartedAt: string | null,
+): LandingLiveness | null {
+  const word = job.liveness;
+  if (!word || word === 'LEASE_EXPIRED' || job.state !== 'RUNNING') return null;
+  const stepStart = Date.parse(job.stepStartedAt ?? job.startedAt);
+  const heartbeat = Date.parse(job.heartbeatAt ?? '');
+  const outputMoved = Date.parse(job.outputMovedAt ?? '');
+  const readAt = observation.updatedAt;
+  const fresh = readAt === undefined || now - readAt <= 90_000;
+  const ticking = (word === 'LIVE' || word === 'QUIET') && fresh;
+  // The clock a reader watches: the local second only for LIVE and QUIET on a fresh read; the
+  // runner's last word while it is silent; the read itself for a legacy claim, whose runner
+  // reports only between steps and whose silence is not to be inferred.
+  const elapsedAt = ticking ? now
+    : word === 'SILENT' ? (Number.isFinite(heartbeat) ? heartbeat : stepStart)
+      : (readAt ?? now);
+  const stepClock = landingClock(Number.isFinite(stepStart) ? Math.max(0, elapsedAt - stepStart) : 0);
+  const budget = job.check ? Math.round(job.check.budgetSeconds / 60) : null;
+  const minutes = (at: number): number => Math.max(0, Math.floor((now - at) / 60_000));
+  // The liveness sentence leads the line, right after the step word: the narrow cards (the
+  // sessions page's Landing card, the 360 dp Android card) elide everything past it, and the board
+  // says the liveness there — "checking · output 1s ago" (v4 04 and 07). The claim, round and the
+  // usual duration follow it and are read in full on the wider rows.
+  const clauses: string[] = [];
+  if (word === 'LIVE') {
+    if (Number.isFinite(outputMoved)) {
+      clauses.push(`${lowerFirst(LANDING_LIVENESS_WORDS.OUTPUT)} ${Math.max(0, Math.round((now - outputMoved) / 1000))}s ago`);
+    }
+  } else if (word === 'QUIET') {
+    if (Number.isFinite(outputMoved)) {
+      clauses.push(`${lowerFirst(LANDING_LIVENESS_WORDS.NO_OUTPUT_FOR)} ${minutes(outputMoved)}m`);
+    }
+    if (budget !== null) {
+      clauses.push(`${LANDING_LIVENESS_WORDS.WITHIN_ITS} ${budget}m ${LANDING_LIVENESS_WORDS.BUDGET}`);
+    }
+  } else if (word === 'SILENT') {
+    const since = Number.isFinite(heartbeat) ? heartbeat : stepStart;
+    const who = runner
+      ? `${lowerFirst(LANDING_LIVENESS_WORDS.NO_WORD_FROM_RUNNER)} ${runner}`
+      : lowerFirst(LANDING_LIVENESS_WORDS.NO_WORD_FROM_THE_RUNNER);
+    clauses.push(`${who} for ${minutes(since)}m`);
+  } else if (word === 'LEGACY') {
+    clauses.push(lowerFirst(LANDING_LIVENESS_WORDS.REPORTS_ONLY_BETWEEN_STEPS));
+  }
+  if (job.check?.name === 'MERGE_CHECK' && job.typicalMs != null) {
+    clauses.push(`${LANDING_LIVENESS_WORDS.USUALLY} ~${Math.round(job.typicalMs / 60_000)}m`);
+  }
+  if (typeof job.claim === 'number' && job.claim >= 1) {
+    clauses.push(`${LANDING_LIVENESS_WORDS.CLAIM} ${job.claim}`);
+    if (job.round != null) clauses.push(landingRoundClause(job.round, job.kind));
+  }
+  if (typeof job.claim === 'number' && job.claim > 1 && Number.isFinite(Date.parse(job.startedAt))) {
+    const first = Date.parse(firstStartedAt ?? '');
+    clauses.push(Number.isFinite(first)
+      ? `${LANDING_LIVENESS_WORDS.TAKEN_OVER} ${landingClockTime(job.startedAt)} · `
+        + `${LANDING_LIVENESS_WORDS.FIRST_STARTED} ${landingClockTime(firstStartedAt!)}`
+      : `${LANDING_LIVENESS_WORDS.TAKEN_OVER} ${landingClockTime(job.startedAt)}`);
+  }
+  return { clock: budget === null ? stepClock : `${stepClock} ${LANDING_LIVENESS_WORDS.OF} ${budget}m`, clauses, ticking };
+}
+
 function liveLine(
-  job: { state: 'RUNNING' | 'QUEUED'; phase?: IntegrationJobPhase | null; startedAt: string; heartbeatAt?: string | null },
+  job: LandingJobFacts,
   now: number,
   observation: { updatedAt?: number },
   unavailable: boolean,
   silent: boolean,
   main: string,
   waitMs?: number | null,
+  firstStartedAt: string | null = null,
+  runner: string | null = null,
 ): Omit<LandingLine, 'word' | 'what'> {
   const running = job.state === 'RUNNING';
   const startedAt = Date.parse(job.startedAt);
@@ -448,21 +639,25 @@ function liveLine(
   const updatedAt = unavailable ? observation.updatedAt : running && reported ? heartbeatAt : observation.updatedAt;
   const elapsedAt = unavailable || silent ? Math.min(now, updatedAt ?? now) : now;
   const age = updatedAt === undefined ? null : Math.max(0, Math.floor((now - updatedAt) / 60_000));
+  const liveness = unavailable ? null : landingLiveness(job, runner, now, observation, firstStartedAt);
   return {
-    running: running && !unavailable && !silent,
+    // A legacy claim's runner reports only between steps, so its quiet is not a stall: the ring
+    // keeps turning and the line says why. SILENT is the state that stops it.
+    running: running && !unavailable && !silent && job.liveness !== 'SILENT',
     timedOut: false,
     state: unavailable ? 'Update unavailable'
       : silent ? LANDING_NO_REPORT
         : running ? (job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running') : 'queued',
     // An instant this clock cannot read is no elapsed time rather than `NaN` on the page: the row
     // stays up and counts from zero, which is the one thing it can still say truthfully.
-    clock: landingClock(Number.isFinite(startedAt) ? elapsedAt - startedAt : 0),
+    clock: liveness?.clock ?? landingClock(Number.isFinite(startedAt) ? elapsedAt - startedAt : 0),
     clockLabel: running ? 'Elapsed' : 'Queued for',
     // A read that failed or went stale says how old the read is; a read that WORKED says where the
     // reports stand — and a silent job says that rather than putting a false "Updated" on itself.
     updated: silent ? (reported && age !== null ? landingNoReportFor(age) : LANDING_NO_REPORT_YET)
       : age === null ? null : age === 0 ? 'Updated just now' : `Updated ${age}m ago`,
     wait: running && waitMs ? landingClock(waitMs) : null,
+    ...(liveness ? { liveness } : {}),
   };
 }
 
@@ -495,6 +690,12 @@ export interface LandingJobLine {
   detail: string | null;
   /** Whether the owner's Retry takes this job now — the server's answer, not `line.timedOut`. */
   retryable: boolean;
+  /** The landing session this job belongs to (§2.9), or null where the server named none — an
+   *  older build, or a job whose subject opened no session. "Open landing ›" is drawn from it. */
+  landingSessionId: string | null;
+  /** Whether this job is a round of merging into main rather than a task's landing: the card's own
+   *  row for one carries its word and no way into the landing, which the merge card holds. */
+  mergeJob: boolean;
 }
 
 /**
@@ -519,14 +720,25 @@ export function landingJobLines(
     const named = { word: jobWords(main)[job.kind] ?? 'Integration', what: job.taskTitle };
     const stoppedAt = job.phase ? jobPhases(main)[job.phase] ?? 'running' : 'running';
     const pushed = job.phase === 'PUSH' || job.phase === 'VERIFY';
+    // A merge check never pushes: J12's "may have been pushed" is about a landing's push, and a
+    // check that stopped has nothing to say about one.
+    const push = job.kind === 'CHECK_PROMOTION' ? null
+      : pushed ? LANDING_WORDS.MAY_HAVE_BEEN_PUSHED : LANDING_WORDS.NO_PUSH_RECORDED;
     return {
       jobId: job.jobId,
       taskId: job.taskId,
+      landingSessionId: job.landingSessionId ?? null,
+      mergeJob: MERGE_JOB_KINDS.has(job.kind),
       line: !unavailable && job.timedOut
         ? { ...named, ...timedOutLine(job, now) }
-        : { ...named, ...liveLine(job, now, observation, unavailable, false, main, null) },
+        : {
+            ...named,
+            ...liveLine(job, now, observation, unavailable, false, main, null,
+              firstStartedAt(view, job.jobId), job.runnerName),
+          },
       detail: job.timedOut
-        ? `${job.runnerName ? `Runner ${job.runnerName}` : 'The runner'} took it at ${landingClockTime(job.startedAt)} · stopped at ${stoppedAt} · ${pushed ? LANDING_WORDS.MAY_HAVE_BEEN_PUSHED : LANDING_WORDS.NO_PUSH_RECORDED}`
+        ? `${job.runnerName ? `Runner ${job.runnerName}` : 'The runner'} took it at ${landingClockTime(job.startedAt)} · stopped at ${stoppedAt}`
+          + (push ? ` · ${push}` : '')
         : job.retriedBy
           ? `Generation ${job.generation} · ${job.retriedBy === 'OWNER' ? LANDING_WORDS.RETRIED_BY_OWNER : LANDING_WORDS.RETRIED_BY_COORDINATOR} at ${landingClockTime(job.queuedAt)}`
           : null,
@@ -543,6 +755,14 @@ export interface LandingCardJob {
   jobId: string;
   /** The task the job lands, which its row opens; null for a promotion or a merge check. */
   taskId: string | null;
+  /** The job's own word — "Landing", "Merge check", "Merge to main" — which its row shows in the
+   *  name slot when it lands no single task. */
+  word: string;
+  /** The landing session this job belongs to (§2.9), or null where the server named none. */
+  landingSessionId: string | null;
+  /** A round of merging into main: its row carries the word and no "Open landing ›" — the merge
+   *  card is that round's way in. */
+  mergeJob: boolean;
   title: string | null;
   state: string;
   running: boolean;
@@ -587,10 +807,17 @@ export interface LandingCard {
   clockLabel: string;
   wait: string | null;
   updated: string | null;
+  /** §7.2 V6's facts for the head; absent from a server that does not send them. */
+  liveness?: LandingLiveness | null;
   /** What the timed-out lead job's runner did before it stopped, or null. */
   detail: string | null;
   /** The job Retry takes, when the server says a retry takes one. */
   retryJobId: string | null;
+  /** The card holds one job — by the same counts its head is named by — and it is a round of
+   *  merging into main (a merge check, or the merge itself). It lands no task, so the card says no
+   *  "Nothing to do" (board v4 04 draws no body under that head). Read off `inFlight`, so a server
+   *  that does not list its jobs says it too. */
+  mergeJob: boolean;
 }
 
 /** The card's own three: the branch the work lands on, the sentence that takes the reader off the
@@ -598,6 +825,11 @@ export interface LandingCard {
 export const landingOnto = (ref: string): string => `onto ${ref}`;
 export const LANDING_NOTHING_TO_DO = 'Nothing to do — it lands on its own.';
 export const LANDING_ALL_JOBS = 'All jobs';
+/** The way into a job's landing session (contract §2.9 LS6, board v4 04): beside Retry on a job's
+ *  row, and under a card holding one job. */
+export const LANDING_OPEN = 'Open landing';
+/** The same slot on a server that names no landing session: a fact, not a broken link. */
+export const LANDING_NO_PAGE = 'No landing page on this server yet';
 
 /**
  * The card, or null when nothing is landing — which is what removes it from the page.
@@ -616,7 +848,12 @@ export function landingCard(
   const jobs = landingJobLines(view, now, observation).map((job) => ({
     jobId: job.jobId,
     taskId: job.taskId,
-    title: job.line.what,
+    word: job.line.word,
+    landingSessionId: job.landingSessionId,
+    mergeJob: job.mergeJob,
+    // A merge job lands no single task, so its row is named by its word — "Merge to main",
+    // "Merge check" — rather than left blank beside its state.
+    title: job.line.what ?? job.line.word,
     state: job.line.state,
     running: job.line.running,
     timedOut: job.line.timedOut,
@@ -642,8 +879,10 @@ export function landingCard(
     clockLabel: line.clockLabel,
     wait: line.wait,
     updated: line.updated,
+    ...(line.liveness ? { liveness: line.liveness } : {}),
     detail: line.timedOut ? lead?.detail ?? null : null,
     retryJobId: lead?.retryable ? lead.jobId : null,
+    mergeJob: !several && MERGE_JOB_KINDS.has(view.inFlight?.kind ?? ''),
   };
 }
 
@@ -673,11 +912,21 @@ export interface LandingHeadShape {
 }
 
 export function landingHead(
-  line: Pick<LandingLine, 'state' | 'timedOut' | 'clockLabel' | 'clock' | 'wait' | 'updated'>,
+  line: Pick<LandingLine, 'state' | 'timedOut' | 'clockLabel' | 'clock' | 'wait' | 'updated' | 'liveness'>,
 ): LandingHeadShape {
   if (line.timedOut) {
     const silence = `${line.clockLabel} ${line.clock}`;
     return { right: line.state, isClock: false, detail: [silence, line.updated].filter(Boolean).join(' · ') };
+  }
+  // The V6 head: the step's clock against its budget at the right, and the state plus the facts
+  // the server derived — the check's usual duration, the claim and round, and the liveness
+  // sentence — in one line. A server that sends none takes the shape below, word for word.
+  if (line.liveness) {
+    return {
+      right: line.liveness.clock,
+      isClock: true,
+      detail: [line.state, ...line.liveness.clauses].join(' · '),
+    };
   }
   if (line.state === LANDING_NO_REPORT) {
     return { right: line.clock, isClock: true, detail: line.updated ?? line.state };
@@ -698,17 +947,20 @@ export function landingHead(
  * The chevron the heads used to carry is gone: the whole row is the press (the merged line opens its
  * receipt the same way), and the words beside the clock say what they have to say.
  */
-export function LandingHead({ title, head, running, timedOut }: {
+export function LandingHead({ title, head, running, timedOut, done = false }: {
   title: string;
   head: LandingHeadShape;
   running: boolean;
   timedOut: boolean;
+  /** The head of an outcome rather than of work in hand: the mark turns green and still. */
+  done?: boolean;
 }) {
-  const shape = timedOut ? ' is-timed-out' : running ? ' is-running' : '';
+  const shape = timedOut ? ' is-timed-out' : done ? ' is-done' : running ? ' is-running' : '';
   return (
     <span className={`landing-head${shape}`}>
       <span className="landing-head-mark">
-        <Glyph shape={timedOut ? 'exclamation' : 'spinner'} color="currentColor" size={15} />
+        <Glyph shape={timedOut ? 'exclamation' : done ? 'check' : 'spinner'}
+          color="currentColor" size={15} />
       </span>
       <span className="landing-head-body">
         <span className="landing-head-line">

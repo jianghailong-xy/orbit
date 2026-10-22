@@ -299,7 +299,8 @@ test('managed runner single-writer gate: no new generation without a stop proof 
   });
 
   await t.test('(4) the kubelet’s report, the Pod deleted and the volume detached authorize generation 2 — not one step before the volume detaches', async () => {
-    const w = world();
+    // No restart left (maxAttempts 1): the stop is FAILED, and the owner's retry is what replaces it.
+    const w = world({ maxAttempts: 1 });
     const { ownerId, mapping } = await ready(w, 'replace');
     const credential = credentialOf(w, mapping.runnerId);
     const pvName = w.cluster.object<PersistentVolumeClaim>('persistentvolumeclaims', mapping.pvcName)!.spec.volumeName!;
@@ -422,7 +423,7 @@ test('managed runner single-writer gate: no new generation without a stop proof 
   });
 
   await t.test('(6) two managers racing the advance make one generation, one Secret and one Pod', async () => {
-    const w = world();
+    const w = world({ maxAttempts: 1 });
     const { ownerId, mapping } = await ready(w, 'race');
     w.cluster.stopPod(managedPodName(mapping.runnerId), 0);
     assert.equal(await w.primary.reconcile(mapping.id), 'FAILED');
@@ -545,7 +546,8 @@ test('managed runner instance binding over HTTP: the authorized instance only, a
   const JWT_SECRET = randomBytes(32).toString('hex');
   const PASSWORD = 'correct horse battery staple';
   // Passes run when this test says, never on a timer: the worker is stopped right after boot.
-  const profile = testManagedRunnerProfile({ lifecycle: { pollIntervalSeconds: 3600 } });
+  // No restart left (maxAttempts 1): (H2)'s stop is FAILED, and the owner's retry starts generation 2.
+  const profile = testManagedRunnerProfile({ lifecycle: { pollIntervalSeconds: 3600, maxAttempts: 1 } });
   const cluster = installManagedRunnerAdmission(new FakeKubeCluster(profile.kubernetes.namespace), prisma, profile);
   const realClient: string[] = [];
   const savedEnv = process.env;

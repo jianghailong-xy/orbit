@@ -1,0 +1,18 @@
+scene 13-nia-volume-deleted: 131.794 s, actions (
+        {
+        body =         {
+            content = "T07-NIA-D1 wake after the volume claim was deleted";
+            kind = message;
+        };
+        m = POST;
+        path = "/api/sessions/34hu0yWhtIlaZz1eVBWTZ/turns";
+        t = "91.60899999999999";
+    }
+)
+13-nia-volume-deleted-00: "Managed runner asleep" shows
+13-nia-volume-deleted-01: typed into 52 label="" value="T07-NIA-D1 wake after the volume claim was deleted" frame=(32.00000000000003, 431.0, 338.0, 44.0) hittable=true
+13-nia-volume-deleted-01: send 9 label="Arrow Up Circle" value="" frame=(346.0, 489.0, 32.0, 32.0) hittable=true
+13-nia-volume-deleted-02: "Managed runner failed" shows
+13-nia-volume-deleted-03: "recorded data volume is gone" shows
+13-nia-volume-deleted: 84 requests, 0 violations, actions left [], notes (
+)

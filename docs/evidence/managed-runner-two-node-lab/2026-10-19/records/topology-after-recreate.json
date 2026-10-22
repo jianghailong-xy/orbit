@@ -1,0 +1,227 @@
+{
+  "at": "2026-10-19T11:04:56.758Z",
+  "nodes": [
+    {
+      "name": "orbit-mr-lab",
+      "uid": "2aacc9d7-fc60-4ef9-97a4-5a776d40c386",
+      "labels": {
+        "beta.kubernetes.io/arch": "amd64",
+        "beta.kubernetes.io/instance-type": "k3s",
+        "beta.kubernetes.io/os": "linux",
+        "kubernetes.io/arch": "amd64",
+        "kubernetes.io/hostname": "orbit-mr-lab",
+        "kubernetes.io/os": "linux",
+        "node-role.kubernetes.io/control-plane": "true",
+        "node.kubernetes.io/instance-type": "k3s"
+      },
+      "addresses": [
+        {
+          "address": "10.77.0.1",
+          "type": "InternalIP"
+        },
+        {
+          "address": "orbit-mr-lab",
+          "type": "Hostname"
+        }
+      ],
+      "podCIDR": "10.42.0.0/24",
+      "flannelPublicIP": "10.77.0.1",
+      "taints": [],
+      "unschedulable": false,
+      "kubelet": "v1.36.5+k3s1",
+      "kernel": "7.0.0-34-generic",
+      "osImage": "Ubuntu 26.04.1 LTS",
+      "capacity": {
+        "cpu": "4",
+        "ephemeral-storage": "39477372Ki",
+        "hugepages-1Gi": "0",
+        "hugepages-2Mi": "0",
+        "memory": "6062092Ki",
+        "pods": "110"
+      },
+      "allocatable": {
+        "cpu": "3",
+        "ephemeral-storage": "36382345975",
+        "hugepages-1Gi": "0",
+        "hugepages-2Mi": "0",
+        "memory": "2654220Ki",
+        "pods": "110"
+      },
+      "ready": "True"
+    },
+    {
+      "name": "orbit-mr-lab-2",
+      "uid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+      "labels": {
+        "beta.kubernetes.io/arch": "amd64",
+        "beta.kubernetes.io/instance-type": "k3s",
+        "beta.kubernetes.io/os": "linux",
+        "kubernetes.io/arch": "amd64",
+        "kubernetes.io/hostname": "orbit-mr-lab-2",
+        "kubernetes.io/os": "linux",
+        "node.kubernetes.io/instance-type": "k3s"
+      },
+      "addresses": [
+        {
+          "address": "10.77.0.2",
+          "type": "InternalIP"
+        },
+        {
+          "address": "orbit-mr-lab-2",
+          "type": "Hostname"
+        }
+      ],
+      "podCIDR": "10.42.1.0/24",
+      "flannelPublicIP": "10.77.0.2",
+      "taints": [],
+      "unschedulable": false,
+      "kubelet": "v1.36.5+k3s1",
+      "kernel": "7.0.0-34-generic",
+      "osImage": "Ubuntu 26.04.1 LTS",
+      "capacity": {
+        "cpu": "2",
+        "ephemeral-storage": "28620Mi",
+        "hugepages-1Gi": "0",
+        "hugepages-2Mi": "0",
+        "memory": "2972384Ki",
+        "pods": "110"
+      },
+      "allocatable": {
+        "cpu": "1750m",
+        "ephemeral-storage": "27009220564",
+        "hugepages-1Gi": "0",
+        "hugepages-2Mi": "0",
+        "memory": "2185952Ki",
+        "pods": "110"
+      },
+      "ready": "True"
+    }
+  ],
+  "podsByNode": {
+    "orbit-mr-lab": [
+      {
+        "namespace": "ceph-csi-operator-system",
+        "name": "ceph-csi-operator-controller-manager-6f845d96cb-th47r",
+        "ip": "10.42.0.2",
+        "phase": "Running"
+      },
+      {
+        "namespace": "ceph-csi-operator-system",
+        "name": "rbd.csi.ceph.com-ctrlplugin-8cf5bfdc5-qfkcf",
+        "ip": "10.42.0.4",
+        "phase": "Running"
+      },
+      {
+        "namespace": "ceph-csi-operator-system",
+        "name": "rbd.csi.ceph.com-nodeplugin-bpq68",
+        "ip": "10.77.0.1",
+        "phase": "Running"
+      },
+      {
+        "namespace": "kube-system",
+        "name": "coredns-7cfb7bc9c7-2hcxg",
+        "ip": "10.42.0.3",
+        "phase": "Running"
+      },
+      {
+        "namespace": "orbit-mr-test",
+        "name": "lab-20261017061552-b",
+        "ip": "10.42.0.5",
+        "phase": "Running"
+      },
+      {
+        "namespace": "orbit-mr-test",
+        "name": "mr-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+        "ip": null,
+        "phase": "Failed"
+      }
+    ],
+    "orbit-mr-lab-2": [
+      {
+        "namespace": "ceph-csi-operator-system",
+        "name": "rbd.csi.ceph.com-nodeplugin-52l79",
+        "ip": "10.77.0.2",
+        "phase": "Running"
+      }
+    ]
+  },
+  "ceph": {
+    "mons": [
+      {
+        "name": "orbit-mr-lab",
+        "public_addrs": {
+          "addrvec": [
+            {
+              "type": "v2",
+              "addr": "10.77.0.1:3300",
+              "nonce": 0
+            },
+            {
+              "type": "v1",
+              "addr": "10.77.0.1:6789",
+              "nonce": 0
+            }
+          ]
+        }
+      }
+    ],
+    "osdAddrs": [
+      {
+        "osd": 0,
+        "public": [
+          "10.77.0.1:6808",
+          "10.77.0.1:6809"
+        ],
+        "cluster": [
+          "10.77.0.1:6810",
+          "10.77.0.1:6811"
+        ]
+      },
+      {
+        "osd": 1,
+        "public": [
+          "10.77.0.1:6800",
+          "10.77.0.1:6801"
+        ],
+        "cluster": [
+          "10.77.0.1:6802",
+          "10.77.0.1:6803"
+        ]
+      },
+      {
+        "osd": 2,
+        "public": [
+          "10.77.0.1:6816",
+          "10.77.0.1:6817"
+        ],
+        "cluster": [
+          "10.77.0.1:6818",
+          "10.77.0.1:6819"
+        ]
+      }
+    ],
+    "publicNetwork": "10.77.0.0/24"
+  },
+  "link": {
+    "subnet": "10.77.0.0/24",
+    "hostSocket": "127.0.0.1:16230",
+    "first": {
+      "ifname": "lablink0",
+      "mac": "52:54:00:4c:00:01",
+      "operstate": "UP",
+      "mtu": 1500,
+      "addresses": [
+        "10.77.0.1/24"
+      ]
+    },
+    "second": {
+      "ifname": "lablink0",
+      "mac": "52:54:00:4c:00:02",
+      "operstate": "UP",
+      "mtu": 1500,
+      "addresses": [
+        "10.77.0.2/24"
+      ]
+    }
+  }
+}

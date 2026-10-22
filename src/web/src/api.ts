@@ -8,6 +8,7 @@ import type {
   OwnerAnswerCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionLandingView,
   SessionMessageCard,
   SessionReplyCard,
   SessionMoveTargets,
@@ -457,6 +458,8 @@ export const createInteractiveSession = (body: {
   antigravityAccount?: string;
   /** The same again for the built-in Kimi engine: one of the runner's Kimi Code accounts. */
   kimiAccount?: string;
+  /** The same again for Cursor CLI on its own sign-in: one of the runner's Cursor CLI accounts. */
+  cursorAccount?: string;
   /** Ids of images uploaded unscoped on the compose page; the server scopes them to the
    *  new session and links them to its seeded first turn. */
   attachmentIds?: string[];
@@ -684,10 +687,10 @@ export const setAvatar = async (photo: Blob): Promise<Me> => {
   return (await res.json()) as Me;
 };
 
-/** The account's profile photo as a data URL. The endpoint is bearer-guarded, so an `<img src>`
- *  pointing at it would 401; a data URL, unlike an object URL, needs no revoking when it changes. */
-export const fetchAvatarDataUrl = async (): Promise<string> => {
-  const res = await authedFetch('/api/users/me/avatar');
+/** A profile photo as a data URL. The endpoints are bearer-guarded, so an `<img src>` pointing at
+ *  one would 401; a data URL, unlike an object URL, needs no revoking when it changes. */
+const fetchPhotoDataUrl = async (path: string): Promise<string> => {
+  const res = await authedFetch(path);
   if (!res.ok) throw new Error(`profile photo: ${res.status}`);
   const blob = await res.blob();
   return await new Promise<string>((resolve, reject) => {
@@ -697,6 +700,13 @@ export const fetchAvatarDataUrl = async (): Promise<string> => {
     reader.readAsDataURL(blob);
   });
 };
+
+/** The account's profile photo as a data URL. */
+export const fetchAvatarDataUrl = (): Promise<string> => fetchPhotoDataUrl('/api/users/me/avatar');
+
+/** Another account's profile photo as a data URL, for Admin → Users (`GET /admin/users/:id/avatar`). */
+export const fetchUserAvatarDataUrl = (userId: string): Promise<string> =>
+  fetchPhotoDataUrl(`/api/admin/users/${encodeURIComponent(userId)}/avatar`);
 
 /** Withdraw a still-queued message (only works before the runner picks it up). */
 export const cancelQueuedTurn = (sessionId: string, turnId: string) =>
@@ -1672,6 +1682,11 @@ export interface MergeRepairSession {
   sessionState?: string | null;
   error?: string | null;
   completedAt?: string | null;
+  /** When its turn last ended (it moves with activity during a turn) and when it finished. Absent from older servers. */
+  lastTurnAt?: string | null;
+  finishedAt?: string | null;
+  /** What it last said — for a repair waiting on the owner, what it asked — clipped to 200 characters. */
+  lastAssistantText?: string | null;
 }
 
 /** The tiers a task can be suggested at (`task.modelHint`, docs/model-routing-design.md §3.1). */
@@ -1710,6 +1725,12 @@ export interface TaskRunRoute {
  *  per-session git worktree result (null until the runner reports completion). */
 export interface SessionDetail {
   id: string;
+  /** What drives the session (contract §2.9 LS6): `LANDING` is platform work with no engine.
+   *  Optional, because a server that predates the column does not send it. */
+  sessionKind?: 'CONVERSATION' | 'LANDING';
+  /** A LANDING session's subject view (§2.9 LS1/LS6): its attempt, phase, checks, liveness,
+   *  timeline and todos. Present on a landing and on the pre-generated id before its row exists. */
+  landing?: SessionLandingView | null;
   /** Latest run outcome and sidebar lifecycle location are independent product dimensions. */
   runState?: string;
   lifecycleState?: string;
@@ -1823,6 +1844,8 @@ export interface SessionDetail {
   mergeRecovery?: MergeRecovery | null;
   mergeRepairSession?: MergeRepairSession | null;
   mergeRecoveryAction?: MergeRecoveryAction | null;
+  /** Non-null while a check a repair turn left owed waits for this session's own turn to end; the server then runs it. */
+  mergeRepairTurnEndedAt?: string | null;
   mergeRecoverySupported?: boolean;
   mergedAt?: string | null;
   // The server-resolved merge target: an explicit choice, a project integration line, or the

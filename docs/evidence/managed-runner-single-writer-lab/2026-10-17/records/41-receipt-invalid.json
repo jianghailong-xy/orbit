@@ -1,0 +1,48 @@
+{
+  "at": "2026-10-17T20:08:48.736+00:00",
+  "configMap": "mr-fence-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+  "receipt": {
+    "action": {
+      "description": "no fence was performed: a test of the gate",
+      "performedAt": "2026-10-17T20:08:48.647+00:00",
+      "performedBy": "T02a lab operator",
+      "reference": "T02a lab"
+    },
+    "kind": "orbit.managed-runner.fencing-receipt",
+    "method": "STORAGE_FENCE",
+    "predecessor": {
+      "generation": 3,
+      "nodeName": "orbit-mr-lab",
+      "nodeUid": "2aacc9d7-fc60-4ef9-97a4-5a776d40c386",
+      "podName": "mr-01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "podUid": "fe7d821f-d764-447f-ba8e-f41ac8d1a2b1",
+      "pvcUid": "d5299c21-8be0-4e61-91dd-33636ccda9ab",
+      "rbdImage": {
+        "image": "csi-vol-73e7db32-b44a-49cb-a146-f42de6fe5c27",
+        "pool": "orbit-mr-rbd"
+      },
+      "runnerId": "01a14b6a-bbb3-703c-9da2-52e164ebf799",
+      "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-73e7db32-b44a-49cb-a146-f42de6fe5c27"
+    },
+    "schemaVersion": 1,
+    "storageFence": {
+      "blocklistedClients": [
+        {
+          "address": "10.0.2.15:0",
+          "nonce": "0"
+        }
+      ],
+      "expiresAt": "2026-10-17T21:08:48.647921+00:00",
+      "osdMapEpoch": 1,
+      "persistent": false,
+      "procedureReference": "none",
+      "propagationVerifiedAt": "2026-10-17T20:08:48.647+00:00"
+    },
+    "verification": {
+      "evidenceReference": "none",
+      "observedAt": "2026-10-17T20:08:48.647+00:00",
+      "observedBy": "T02a lab operator",
+      "result": "CLIENTS_BLOCKLISTED"
+    }
+  }
+}

@@ -1,0 +1,44 @@
+######## d6-store-classic-dind
+== store: overlay2 [["Backing Filesystem","extfs"],["Supports d_type","true"],["Using metacopy","false"],["Native Overlay Diff","true"],["userxattr","false"]]
+previous image sha256:3b5d8aac0260d7a57fc4c9e9da54e99975d5e9d0e43eb816fed5a03100a2c39e
+new image sha256:d894bd06fb9adc609a13e4b91892692a9e33089a2dbafcc66dd434dafe926fb9 (the tag moved)
+-- images
+t:local sha256:d894bd06fb9adc609a13e4b91892692a9e33089a2dbafcc66dd434dafe926fb9
+<none>:<none> sha256:3b5d8aac0260d7a57fc4c9e9da54e99975d5e9d0e43eb816fed5a03100a2c39e
+-- the container: sha256:3b5d8aac0260d7a57fc4c9e9da54e99975d5e9d0e43eb816fed5a03100a2c39e running
+-- docker ps -a --filter ancestor=<previous>
+runner 3b5d8aac0260
+-- docker image rm <previous>
+Error response from daemon: conflict: unable to delete 3b5d8aac0260 (cannot be forced) - image is being used by running container 508cf9c798c7
+-- docker image prune -f, the container still there
+Total reclaimed space: 0B
+t:local sha256:d894bd06fb9adc609a13e4b91892692a9e33089a2dbafcc66dd434dafe926fb9
+<none>:<none> sha256:3b5d8aac0260d7a57fc4c9e9da54e99975d5e9d0e43eb816fed5a03100a2c39e
+-- the container stopped and removed
+-- docker image prune -f
+Deleted Images:
+deleted: sha256:3b5d8aac0260d7a57fc4c9e9da54e99975d5e9d0e43eb816fed5a03100a2c39e
+
+Total reclaimed space: 0B
+t:local sha256:d894bd06fb9adc609a13e4b91892692a9e33089a2dbafcc66dd434dafe926fb9
+-- can a container still be made from the previous image?
+Error response from daemon: No such image: sha256:3b5d8aac0260d7a57fc4c9e9da54e99975d5e9d0e43eb816fed5a03100a2c39e
+######## d6-store-containerd-dind
+== store: overlayfs [["driver-type","io.containerd.snapshotter.v1"]]
+previous image sha256:58e44295d293182c9cfc97caf08bd109816650a41e154b81e80105a4b0ed1b3e
+new image sha256:0b436f9d3b2f3e214974a5df51aa54ae1247296b406ccc8c89bb6ab3938bf365 (the tag moved)
+-- images
+t:local sha256:0b436f9d3b2f3e214974a5df51aa54ae1247296b406ccc8c89bb6ab3938bf365
+-- the container: sha256:58e44295d293182c9cfc97caf08bd109816650a41e154b81e80105a4b0ed1b3e running
+-- docker ps -a --filter ancestor=<previous>
+-- docker image rm <previous>
+Error response from daemon: No such image: sha256:58e44295d293182c9cfc97caf08bd109816650a41e154b81e80105a4b0ed1b3e
+-- docker image prune -f, the container still there
+Total reclaimed space: 0B
+t:local sha256:0b436f9d3b2f3e214974a5df51aa54ae1247296b406ccc8c89bb6ab3938bf365
+-- the container stopped and removed
+-- docker image prune -f
+Total reclaimed space: 0B
+t:local sha256:0b436f9d3b2f3e214974a5df51aa54ae1247296b406ccc8c89bb6ab3938bf365
+-- can a container still be made from the previous image?
+Error response from daemon: No such image: sha256:58e44295d293182c9cfc97caf08bd109816650a41e154b81e80105a4b0ed1b3e

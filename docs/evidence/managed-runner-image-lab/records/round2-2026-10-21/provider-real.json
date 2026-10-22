@@ -1,0 +1,21 @@
+{
+  "baseUrl": "https://api.deepseek.com/anthropic",
+  "defaultModel": "deepseek-v4-pro",
+  "id": "34jQVPr5QmWGnBslkK8Lu",
+  "label": "DeepSeek (owner key, lab)",
+  "models": [
+    {
+      "contextWindow": 1000000,
+      "label": "DeepSeek V4 Pro",
+      "value": "deepseek-v4-pro"
+    },
+    {
+      "contextWindow": 1000000,
+      "label": "DeepSeek V4 Flash",
+      "value": "deepseek-v4-flash"
+    }
+  ],
+  "presetSlug": "deepseek",
+  "runtime": "claude",
+  "slug": "deepseek-3"
+}

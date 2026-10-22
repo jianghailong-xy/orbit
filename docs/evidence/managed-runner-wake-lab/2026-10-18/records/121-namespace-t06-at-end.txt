@@ -1,0 +1,5 @@
+NAME                       READY   STATUS    RESTARTS       AGE   IP          NODE           NOMINATED NODE   READINESS GATES
+pod/lab-20261017061552-b   1/1     Running   9 (115m ago)   20h   10.42.0.5   orbit-mr-lab   <none>           <none>
+NAME                                                                 STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE     VOLUMEMODE
+persistentvolumeclaim/mr-data-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585   Bound    pvc-3831f550-8fc3-4718-8fbd-940a7979157b   2Gi        RWO            runner-data    <unset>                 111m    Filesystem
+persistentvolumeclaim/mr-data-01a14cb2-fd31-761c-ae11-591d4b8f6360   Bound    pvc-9e102973-fe8d-4114-a3be-4178cab95865   2Gi        RWO            runner-data    <unset>                 42m     Filesystem

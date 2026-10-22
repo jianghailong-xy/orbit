@@ -2,6 +2,7 @@
 """Optional runner container bootstrap; the existing Orbit protocol owns recovery."""
 
 import fcntl
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,9 @@ GENERATION = re.compile(r"[1-9][0-9]{0,9}")
 # The instance identity the Pod states through the Downward API; `orbit run` sends it with every
 # request (src/runner-go/managed_instance.go).
 INSTANCE_ENV = ("ORBIT_MANAGED_RUNNER_GENERATION", "ORBIT_MANAGED_RUNNER_POD_UID")
+# The Docker backend's container states it in a read-only bootstrap file instead
+# (deploy/managed-runner/docker-channel): {"runnerId", "generation", "instanceUid"}.
+INSTANCE_FILE_ENV = "ORBIT_MANAGED_RUNNER_INSTANCE_FILE"
 
 
 def paths():
@@ -88,12 +92,29 @@ def clean_env():
     return env
 
 
+def private_host(hostname):
+    """A private, loopback or link-local IP literal, or a single-label name (a Compose service). Neither
+    proves the address is on the host's container network (private ranges include LANs; a single label
+    can resolve through search domains): the operator who sets the URL guarantees that."""
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        return bool(re.fullmatch(r"[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?", hostname))
+    return address.is_private or address.is_loopback or address.is_link_local
+
+
 def server_url():
     value = os.environ.get("ORBIT_RUNNER_SERVER_URL", "").rstrip("/")
     parsed = urlsplit(value)
+    # A Docker backend container (its identity comes from the bootstrap file, beside the manager's
+    # credential) reaches the server on its host, over the host's container network: plain HTTP is
+    # accepted there, to a private address only. A start without the credential file is an enrollment,
+    # whose one-time token never travels in plain HTTP beyond loopback.
+    docker_private = (bool(os.environ.get(INSTANCE_FILE_ENV)) and bool(os.environ.get("ORBIT_RUNNER_CREDENTIAL_FILE"))
+                      and private_host(parsed.hostname or ""))
     if (not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment
             or (parsed.scheme != "https" and not
-                (parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "localhost", "::1")))):
+                (parsed.scheme == "http" and (parsed.hostname in ("127.0.0.1", "localhost", "::1") or docker_private)))):
         raise ValueError("ORBIT_RUNNER_SERVER_URL must explicitly name the approved HTTPS test server")
     return value
 
@@ -148,7 +169,10 @@ def load_identity():
         raise ValueError("retained config does not match the fixed runner contract")
     expected = os.environ.get("ORBIT_RUNNER_EXPECTED_ID")
     if expected and config["runnerId"] != expected:
-        raise ValueError("retained runner ID does not match the expected user's volume")
+        # config.json keeps the UUID `orbit register` prints; the owner API's public id spells
+        # the same runner differently and does not match here.
+        raise ValueError("retained runner ID does not match the expected user's volume "
+                         "(ORBIT_RUNNER_EXPECTED_ID is the runner UUID that `orbit-container check` prints)")
     identity = {"layoutVersion": 1, "runnerId": config["runnerId"],
                 "serverUrl": config["serverUrl"], "workDir": str(workspace)}
     marker = orbit / "container-identity.json"
@@ -204,21 +228,47 @@ def register():
         raise ValueError("enrollment failed; reconcile the persisted attempt before retrying")
 
 
+def instance_file_identity(expected):
+    """The Docker backend's statement of this instance: the bootstrap file the channel wrote, root-owned
+    and read-only, beside the credential (deploy/managed-runner/docker-channel). Generation and instance
+    UID come from it, never from the environment."""
+    path = Path(os.environ[INSTANCE_FILE_ENV])
+    try:
+        value = json.loads(path.read_text())
+    except (OSError, ValueError, UnicodeError) as error:
+        raise ValueError(f"the instance file {path} could not be read") from error
+    if not isinstance(value, dict) or set(value) != {"runnerId", "generation", "instanceUid"}:
+        raise ValueError("the instance file must state exactly runnerId, generation and instanceUid")
+    if value["runnerId"] != expected:
+        raise ValueError("the instance file names another runner than ORBIT_RUNNER_EXPECTED_ID")
+    generation, instance_uid = value["generation"], value["instanceUid"]
+    if (not isinstance(generation, int) or isinstance(generation, bool) or not GENERATION.fullmatch(str(generation))
+            or not isinstance(instance_uid, str) or not UUID.fullmatch(instance_uid)):
+        raise ValueError("the instance file needs a positive generation and a canonical instance UID")
+    return str(generation), instance_uid
+
+
 def managed_instance():
-    """The manager's Pod (ORBIT_RUNNER_CREDENTIAL_FILE): which runner, generation and Pod this is.
+    """The manager's Pod or container (ORBIT_RUNNER_CREDENTIAL_FILE): which runner, generation and instance this is.
 
     The runner row already exists and the manager issued its credential for one generation, in the
     bootstrap Secret beside the generation it was issued for. The Pod states its own generation and
-    UID through the Downward API. A Secret of another generation is a Pod started against a credential
-    that is not its own: refused, as is anything missing or malformed. Never an enrollment.
+    UID through the Downward API; a Docker backend container states them in its read-only instance
+    file instead, and never both. A credential of another generation is an instance started against a
+    credential that is not its own: refused, as is anything missing or malformed. Never an enrollment.
     """
     if os.environ.get("ORBIT_RUNNER_ENROLLMENT_TOKEN_FILE"):
         raise ValueError("a managed runner Pod is given a runner credential, never an enrollment token")
     expected = os.environ.get("ORBIT_RUNNER_EXPECTED_ID", "").strip()
-    generation = os.environ.get(INSTANCE_ENV[0], "").strip()
-    pod_uid = os.environ.get(INSTANCE_ENV[1], "").strip().lower()
     if not UUID.fullmatch(expected):
         raise ValueError("a managed runner Pod needs ORBIT_RUNNER_EXPECTED_ID, its runner's UUID")
+    if os.environ.get(INSTANCE_FILE_ENV):
+        if any(name in os.environ for name in INSTANCE_ENV):
+            raise ValueError("an instance is stated by its instance file or by the Downward API, never both")
+        generation, pod_uid = instance_file_identity(expected)
+    else:
+        generation = os.environ.get(INSTANCE_ENV[0], "").strip()
+        pod_uid = os.environ.get(INSTANCE_ENV[1], "").strip().lower()
     if not GENERATION.fullmatch(generation) or not UUID.fullmatch(pod_uid):
         raise ValueError("a managed runner Pod needs its generation and Pod UID from the Downward API")
     credential_file = Path(os.environ["ORBIT_RUNNER_CREDENTIAL_FILE"])

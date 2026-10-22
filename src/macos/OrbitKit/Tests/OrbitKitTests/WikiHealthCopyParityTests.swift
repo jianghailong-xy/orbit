@@ -118,7 +118,8 @@ final class WikiHealthCopyParityTests: XCTestCase {
             // The whole maintenance part: the look's parts, and — while the server runs the wiki — its reason (P9).
             let parts = WikiHealthLogic.parts(one.health, now: now)
             if !one.health.serverExecutes {
-                XCTAssertEqual(parts, WikiHealthLogic.parts(one.health.maintenance, now: now), "\(one.name): runner says the look alone")
+                XCTAssertEqual(parts, WikiHealthLogic.parts(one.health.maintenance, now: now),
+                               "\(one.name): a read that does not say the server executes the wiki says the look alone")
             }
             XCTAssertEqual(parts.map(\.text), one.parts.map(\.text), one.name)
             XCTAssertEqual(parts.map(\.tone.rawValue), one.parts.map(\.tone), "\(one.name): tones")
@@ -132,6 +133,24 @@ final class WikiHealthCopyParityTests: XCTestCase {
             XCTAssertEqual(home.statusLine(now: now), one.line, "\(one.name): the line under the title")
             XCTAssertEqual(one.health.entries, shared.entries)
         }
+    }
+
+    /// The server's reasons hang on `serverExecutes` alone: the server's case with its runner offline, read with its
+    /// executor left out — a control plane from before the field — says no reason, whatever the runner is doing.
+    func testAReadThatDoesNotSayTheServerExecutesSaysNoReason() throws {
+        let shared = try fixture()
+        let now = try now(shared)
+        let raw = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: find(Self.fixturePath))) as? [String: Any])
+        let cases = try XCTUnwrap(raw["cases"] as? [[String: Any]])
+        let offline = try XCTUnwrap(cases.first { (($0["health"] as? [String: Any])?["repo"] as? [String: Any])?["look"] as? String == "runner_offline" })
+        var read = try XCTUnwrap(offline["health"] as? [String: Any])
+        XCTAssertNotNil(WikiHealthLogic.serverReason(try JSONDecoder().decode(WikiSpaceHealth.self, from: JSONSerialization.data(withJSONObject: read))),
+                        "the case says its reason while the read says the server executes the wiki")
+        read["executor"] = nil
+        let older = try JSONDecoder().decode(WikiSpaceHealth.self, from: JSONSerialization.data(withJSONObject: read))
+        XCTAssertFalse(older.serverExecutes)
+        XCTAssertNil(WikiHealthLogic.serverReason(older))
+        XCTAssertEqual(WikiHealthLogic.parts(older, now: now), WikiHealthLogic.parts(older.maintenance, now: now))
     }
 
     /// Every look the contract names is in the fixture, and none is left without words.

@@ -1,0 +1,25 @@
+#cloud-config
+# Unattended first boot of a lab VM. create.sh replaces @@LAB_NAME@@, @@LINK_IP@@ and
+# @@SSH_PUBLIC_KEY@@; everything else is installed afterwards over SSH by guest/provision.sh.
+hostname: @@LAB_NAME@@
+preserve_hostname: false
+manage_etc_hosts: false
+# cephadm manages this host as root over SSH with its own key, which it adds itself.
+disable_root: false
+ssh_pwauth: false
+users:
+  - name: ubuntu
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    lock_passwd: true
+    ssh_authorized_keys:
+      - @@SSH_PUBLIC_KEY@@
+growpart:
+  mode: auto
+  devices: ["/"]
+write_files:
+  - path: /etc/hosts
+    append: true
+    content: |
+      @@LINK_IP@@ @@LAB_NAME@@

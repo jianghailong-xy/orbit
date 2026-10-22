@@ -36,11 +36,16 @@ the full SHA before building. If any prerequisite is missing, install it before 
 
 ## 2. Generate secrets and choose the network boundary
 
-- [ ] Run `cp .env.example .env` and edit `.env` locally. Generate two independent values with
-  `openssl rand -base64 32`: one for `JWT_SECRET`, the other for `PROVIDER_SECRET_KEY`. Protect the file
-  with `chmod 600 .env`, and back it up securely. Do not print its contents into a shared transcript.
-- [ ] Set `PUBLIC_ORIGIN` before the web build. For a local smoke test use `http://localhost:2086`.
-  For access from another machine use the exact HTTPS origin served by your reverse proxy.
+- [ ] Write `.env` with `scripts/install-server.sh --no-start`. It generates `JWT_SECRET` and
+  `PROVIDER_SECRET_KEY` independently, writes the file with mode 0600 and switches
+  [managed runners](self-hosting.md#managed-runners) on: every account gets a runner of its own, a container on
+  this host's Docker, at sign-in. Read who gets one and how far a container isolates it; `--no-managed-runners`
+  leaves them off. By hand instead: `cp .env.example .env`, then generate two independent values with
+  `openssl rand -base64 32`, one for `JWT_SECRET` and the other for `PROVIDER_SECRET_KEY`, and protect the file
+  with `chmod 600 .env`. Back it up securely, and do not print its contents into a shared transcript.
+- [ ] Set `PUBLIC_ORIGIN` before the web build (`--public-origin` for the install script). For a local smoke test
+  use `http://localhost:2086`. For access from another machine use the exact HTTPS origin served by your reverse
+  proxy.
 - [ ] The included gateway serves **HTTP only**, and Compose publishes port 2086 on the host.
   Keep inbound access blocked during bootstrap. Before network exposure, add TLS termination,
   HTTP-to-HTTPS redirects, and proxy settings for long-lived SSE as described in
@@ -68,12 +73,17 @@ docker compose logs --since=10m --tail=100 apiserver pgbackup
 - [ ] Open the configured origin in a browser. The first visit redirects to `/setup`; create the
   first administrator with a strong password, then sign in. Setup status should now report
   `needsSetup: false`. Additional accounts are created by an administrator.
+- [ ] With managed runners on, `docker compose ps` also lists `orbit-docker-channel`, and once the administrator
+  has signed in, `docker ps --filter label=orbit.managed-runner.instance` shows their runner's container.
 
 If boot fails, read the API/Postgres logs for migration or disk errors. Do not delete the data
 directory to retry an existing deployment. If setup is already complete on an expected fresh host,
 verify the checkout and data mount before writing anything else.
 
 ## 4. Enroll a runner and authenticate one runtime
+
+With managed runners on, the administrator already has a runner: sign a runtime in on it and continue at step 5,
+or enroll a machine of your own as below.
 
 - [ ] In the web UI open **Add a runner** and copy its generated command to the runner machine.
   Confirm that the command points at your deployment. Run it as the selected runner OS account,
@@ -135,6 +145,7 @@ redact tokens, cookies, keys, private origins/paths, repository content, and use
 | Release tag and full source SHA | Fill in |
 | Start/end of build; container health result | Fill in |
 | Setup before/after; first administrator created (no identity/credential) | Fill in |
+| Managed runners on or off; the first administrator's runner state | Fill in |
 | Runner/runtime versions; heartbeat age; authentication result | Fill in |
 | First task result and completion evidence | Fill in |
 | Backup/restore check and off-host copy | Fill in |

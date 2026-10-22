@@ -9,11 +9,14 @@ import OrbitKit
 // and folded back once the account is signed in; Add Account starts signing a new one in at once,
 // under a name it picks and the user can change, and folds back once that account is signed in. On a
 // phone an account's row says only where it stands — Paused, a login about to lapse, what being signed
-// out costs — and its presses are on its left swipe (Pause or Resume, and Remove for an added one,
-// after asking) and its long-press menu (all of those, Rename… and Sign In Again too); a Mac keeps
-// them on the row. None of it can reach a machine that is offline, so there the presses are greyed
-// and the page says why — all but Rename… (Default's too: a name is a label Orbit keeps, and the
-// machine has no say) and the pause, which Orbit keeps as well.
+// out costs — and its presses are on its left swipe (Pause or Resume, and Remove, after asking) and its
+// long-press menu (all of those, Rename… and Sign In Again too); a Mac keeps them on the row. An added
+// account's Remove deletes its sign-in from the machine; Default's, offered while another account of the
+// engine is there, takes it off Orbit's list alone — the machine and the CLI in a terminal keep it — and
+// the accounts then end with a line naming it and Use again, which brings it back. None of it can reach
+// a machine that is offline, so there the presses are greyed and the page says why — all but Rename…
+// (Default's too: a name is a label Orbit keeps, and the machine has no say), the pause, and Default's
+// Remove and Use again, which Orbit keeps as well.
 
 /// The engine page for `engine` on the runner `runnerID` — the frame `NavNode.runnerEngine` names.
 struct RunnerEnginePage: View {
@@ -55,6 +58,9 @@ private struct RunnerEngineContent: View {
     @FocusState private var newAccountFocused: Bool
     @State private var newAccountRenaming = false
     @State private var pendingRemoval: RunnerPageFormat.AccountLine?
+    /// Use again is on its way: the button stays busy until the list read after it carries Default back
+    /// and its line goes.
+    @State private var restoring = false
     /// The account whose Pause Account sheet is up: raised by its swipe or its long-press menu.
     @State private var pausing: RunnerPageFormat.AccountLine?
     /// The account whose card said its sign-in landed, a moment after it said so: the card folds
@@ -87,6 +93,8 @@ private struct RunnerEngineContent: View {
             head(health, now: now)
             if engine == "dsh" {
                 dshSection(offline: offline)
+            } else if engine == CursorRuntime.engine, CursorRuntime.state(of: runner).blocks {
+                cursorStateSection(health, offline: offline)
             } else if let health, health.installed == true, let login = RunnerPageFormat.loginEngine(engine) {
                 accountsSection(health, login: login, offline: offline, now: now)
             } else if let login = RunnerPageFormat.loginEngine(engine) {
@@ -97,7 +105,11 @@ private struct RunnerEngineContent: View {
                 installSection(Infrastructure.rowKind(health, install: runner.install, slug: engine),
                                installable: Infrastructure.installsOpenCode(runner), offline: offline)
             }
-            updateSection(offline: offline)
+            // Cursor CLI stays on the build Orbit pins, which a runner release moves: Update Engines Now
+            // has nothing to do for it (board iOS 2).
+            if engine != CursorRuntime.engine {
+                updateSection(offline: offline)
+            }
         }
         .formStyle(.grouped)
         .orbitRevealSurface()   // macOS: reveal the unified `orbitSurface` behind the grouped form
@@ -177,8 +189,41 @@ private struct RunnerEngineContent: View {
                         .font(.orbitLabel)
                         .foregroundStyle(Color.secondary)
                 }
+            } footer: {
+                // Cursor CLI's page has no Update Engines Now to carry its footer.
+                if engine == CursorRuntime.engine { Text(cursorFooter(offline: offline)) }
             }
         }
+    }
+
+    /// Cursor CLI on a runner that can't run it at all (board iOS 2, its four states): a runner that
+    /// predates it, a platform its pinned build doesn't run on, or a build other than the pinned one —
+    /// what the state means and what fixes it, and the one fix that happens here: putting the pinned build
+    /// back (Reinstall). Nothing about accounts, which no sign-in here would make usable.
+    @ViewBuilder private func cursorStateSection(_ health: RunnerEngineHealth?, offline: Bool) -> some View {
+        let state = CursorRuntime.state(of: runner)
+        Section {
+            if let label = state.label {
+                Text(label).foregroundStyle(RunnerInk.amber)
+            }
+            if let hint = CursorRuntime.stateHint(state, installationError: health?.installationError) {
+                Text(hint).font(.orbitLabel).foregroundStyle(Color.secondary)
+            }
+            if let reinstall = CursorRuntime.installLabel(state) {
+                Button(reinstall) { install() }
+                    .disabled(offline || runner.install?.inFlight == true)
+            }
+            if runner.install?.engine == engine, let message = runner.install?.message, !message.isEmpty {
+                Text(message).font(.orbitLabel).foregroundStyle(Color.secondary)
+            }
+        } footer: {
+            Text(cursorFooter(offline: offline))
+        }
+    }
+
+    /// Cursor CLI's page footer: its version is the one Orbit pins; an offline machine says what it can't do.
+    private func cursorFooter(offline: Bool) -> String {
+        offline ? RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER : CursorRuntime.enginePageFooter
     }
 
     /// The engine, its version and whether it is kept current.
@@ -210,19 +255,22 @@ private struct RunnerEngineContent: View {
     /// Google sign-ins, drawn the same way: the runner's own is Default, and Add Account signs another
     /// one in where the runner can keep it apart (`RunnerPageFormat.canAddAccount`) — a macOS runner, or
     /// one too old to sign in with Google at all, says so instead. Every Google sign-in on the page
-    /// starts above the section's footer, so Google's terms are said there, once.
+    /// starts above the section's footer, so Google's terms are said there, once. While Default is
+    /// removed from Orbit, the accounts that remain are listed — the only one too — and end with
+    /// Default's line and Use again.
     @ViewBuilder private func accountsSection(_ health: RunnerEngineHealth, login: LoginEngine, offline: Bool,
                                               now: Date) -> some View {
         Section {
-            ForEach(RunnerPageFormat.accountLines(health)) { line in
+            ForEach(RunnerPageFormat.accountLines(health, usage: CodexAccounts.usage(engine, planUsage: runner.planUsage,
+                                                                                    engines: runner.engines))) { line in
                 let canPause = RunnerPageFormat.keepsAccounts(engine)
                     && (health.accounts ?? []).contains { $0.id == line.id }
                 // A row whose sign-in card is open has no swipe: its code field takes the drags.
                 withActions(accountRow(line, login: login, offline: offline, now: now, canPause: canPause),
                             id: "\(engine)/\(line.id)",
                             trailing: signingIn == line.id ? []
-                                : trailingActions(line, canPause: canPause, offline: offline, now: now),
-                            menu: accountMenu(line, canPause: canPause, offline: offline, now: now))
+                                : trailingActions(line, health: health, canPause: canPause, offline: offline, now: now),
+                            menu: accountMenu(line, health: health, canPause: canPause, offline: offline, now: now))
                     // On the account's own row, whose swipe or menu raises it, so the panel opens
                     // against the row rather than at the top of the page.
                     .orbitConfirmation({ _ in removalTitle },
@@ -232,6 +280,10 @@ private struct RunnerEngineContent: View {
                     } message: { line in
                         Text(removalNote(line))
                     }
+            }
+            if let removed = RunnerPageFormat.removedDefaultLine(health),
+               let name = RunnerPageFormat.removedDefaultName(health) {
+                removedDefaultRow(removed, name: name, login: login)
             }
             if RunnerPageFormat.canAddAccount(runner, engine: engine) {
                 addAccountRow(health, login: login, offline: offline)
@@ -250,6 +302,8 @@ private struct RunnerEngineContent: View {
                         Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER)
                     }
                 }
+            } else if engine == CursorRuntime.engine {
+                Text(cursorFooter(offline: offline))
             } else if offline {
                 Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER)
             }
@@ -288,7 +342,12 @@ private struct RunnerEngineContent: View {
                                          now: Date, canPause: Bool) -> some View {
         let windows = RunnerPageFormat.accountWindows(runner, engine: engine, account: line.id)
         let alone = (runner.engines?.first(where: { $0.engine == engine })?.accounts?.count ?? 0) < 2
-        let status = RunnerPageFormat.authStatus(line.auth)
+        // A Cursor CLI account a turn met Cursor's limit on is spent until its usage resets, which no
+        // reading says (web's "Spent · resets …").
+        let spent = line.auth == "yes"
+            ? RunnerPageFormat.accountUsageLimit(runner, engine: engine, account: line.id, now: now) : nil
+        let status = spent.map { RunnerPageFormat.Status(text: CursorRuntime.spentStatus($0, now: now), tone: .warn) }
+            ?? RunnerPageFormat.authStatus(line.auth)
         let removal = RunnerPageFormat.removal(runner.accountRemove, engine: engine, account: line.id)
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
@@ -329,6 +388,10 @@ private struct RunnerEngineContent: View {
                 Text("env key · runs on your Gemini key")
                     .font(.orbitLabel)
                     .foregroundStyle(Color.secondary)
+            } else if line.auth == "yes", engine == CursorRuntime.engine {
+                // Cursor reports no share of this account's usage, or only 0%, which is no reading
+                // (contract §11): under the plan's name, no number at all rather than one Orbit made up.
+                cursorUsageUnavailable(plan: line.plan)
             } else if line.auth == "yes", RunnerPageFormat.reportsQuota(engine) {
                 // Kimi only: a read that held no window at all is a plan with no quota limit, said so —
                 // not the failed-or-never-ran read's "No quota reported" (web QuotaCell).
@@ -430,15 +493,17 @@ private struct RunnerEngineContent: View {
         }
     }
 
-    /// An account's left swipe, from the screen edge inward: Remove outermost — an added account's,
-    /// after asking, never by a full swipe — then Pause, or Resume while it is paused. Pause opens the
-    /// Pause Account sheet; Resume is done at once. Both work offline: a pause is Orbit's to keep.
-    private func trailingActions(_ line: RunnerPageFormat.AccountLine, canPause: Bool, offline: Bool,
-                                 now: Date) -> [RowSwipeAction] {
+    /// An account's left swipe, from the screen edge inward: Remove outermost — an added account's, and
+    /// Default's while another account is there (`RunnerPageFormat.offersRemove`), after asking, never by
+    /// a full swipe — then Pause, or Resume while it is paused. Pause opens the Pause Account sheet;
+    /// Resume is done at once. Both work offline: a pause is Orbit's to keep, as Default's removal is.
+    private func trailingActions(_ line: RunnerPageFormat.AccountLine, health: RunnerEngineHealth, canPause: Bool,
+                                 offline: Bool, now: Date) -> [RowSwipeAction] {
         var actions: [RowSwipeAction] = []
-        if !line.isDefault {
+        if RunnerPageFormat.offersRemove(line, health: health, runner: runner) {
             actions.append(RowSwipeAction(title: "Remove", systemImage: "trash", tint: .red, role: .destructive,
-                                          isEnabled: !offline, perform: { pendingRemoval = line }))
+                                          isEnabled: RunnerPageFormat.canRemove(line, offline: offline),
+                                          perform: { pendingRemoval = line }))
         }
         if canPause {
             if AccountPause.isPaused(line.pausedUntil, now: now) {
@@ -456,8 +521,8 @@ private struct RunnerEngineContent: View {
     /// VoiceOver and of anyone who doesn't swipe. Rename stays out of the swipe: it opens an editor
     /// rather than performing the action, which is not what a swipe promises (SessionRowActions.swift);
     /// Sign In Again opens the account's sign-in on its row, so it is the menu's alone too.
-    @ViewBuilder private func accountMenu(_ line: RunnerPageFormat.AccountLine, canPause: Bool, offline: Bool,
-                                          now: Date) -> some View {
+    @ViewBuilder private func accountMenu(_ line: RunnerPageFormat.AccountLine, health: RunnerEngineHealth,
+                                          canPause: Bool, offline: Bool, now: Date) -> some View {
         let removal = RunnerPageFormat.removal(runner.accountRemove, engine: engine, account: line.id)
         Button {
             renameDraft = line.name
@@ -479,12 +544,12 @@ private struct RunnerEngineContent: View {
                 Button { pausing = line } label: { Label("Pause…", systemImage: "pause.fill") }
             }
         }
-        if !line.isDefault {
+        if RunnerPageFormat.offersRemove(line, health: health, runner: runner) {
             Divider()
             Button(role: .destructive) { pendingRemoval = line } label: {
                 Label("Remove…", systemImage: "trash")
             }
-            .disabled(offline)
+            .disabled(!RunnerPageFormat.canRemove(line, offline: offline))
         }
     }
 
@@ -529,17 +594,56 @@ private struct RunnerEngineContent: View {
         }
     }
 
+    /// Where an engine's accounts end while its Default is removed from Orbit (web `RemovedDefault`):
+    /// which one it is and where it lives on the machine, which keeps it and its sign-in, and Use again,
+    /// which brings it back — Orbit's own record, as the removal is, so it works with the runner offline.
+    private func removedDefaultRow(_ line: String, name: String, login: LoginEngine) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(line)
+                .font(.orbitLabel)
+                .foregroundStyle(Color.secondary)
+            Spacer(minLength: 8)
+            Button(RunnerAccountCopy.RUNNER_DEFAULT_USE_AGAIN) { restoreDefault(login, name: name) }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+                .disabled(restoring)
+        }
+        .padding(.vertical, 4)
+    }
+
     // MARK: words
+
+    /// `**Free plan** · Usage unavailable — Cursor doesn’t report how many of the Free plan’s requests
+    /// are left.` (board iOS 2 ③).
+    private func cursorUsageUnavailable(plan: String?) -> some View {
+        var line = AttributedString()
+        if let plan {
+            var name = AttributedString("\(plan) plan")
+            name.inlinePresentationIntent = .stronglyEmphasized
+            line = name + AttributedString(" · ")
+        }
+        line += AttributedString(CursorRuntime.usageUnavailable(plan: plan))
+        return Text(line)
+            .font(.orbitLabel)
+            .foregroundStyle(Color.secondary)
+    }
 
     /// `2.1.284 · checked 6m ago` — the updater's own footnote, amber when this machine has drifted.
     private func versionLine(_ health: RunnerEngineHealth?, now: Date) -> AttributedString {
         typealias Colour = AttributeScopes.SwiftUIAttributes.ForegroundColorAttribute
         guard let health, health.installed == true else {
+            // A runner too old for Cursor CLI, or on a platform it doesn't run on, has nothing to install.
+            if engine == CursorRuntime.engine, let label = CursorRuntime.state(of: runner).blocksLabel {
+                return AttributedString(label)
+            }
             return AttributedString(RunnerPageCopy.RUNNER_ENGINE_NOT_INSTALLED)
         }
         let version = RunnerPageFormat.engineVersion(health.version)
         var line = AttributedString(version ?? "")
-        if let note = RunnerAttention.updateNoteOf(health.update, nowMs: RunnerPageFormat.nowMs(now)) {
+        // Cursor CLI's build is the one Orbit pins, which its note says.
+        if let note = RunnerAttention.updateNoteOf(health.update, nowMs: RunnerPageFormat.nowMs(now),
+                                                   pinned: engine == CursorRuntime.engine) {
             if version != nil { line += AttributedString(RunnerPageCopy.RUNNER_LINE_SEPARATOR) }
             var words = AttributedString(note.text)
             if note.tone == .warn { words[Colour.self] = RunnerInk.amber }
@@ -558,12 +662,18 @@ private struct RunnerEngineContent: View {
 
     private var removalTitle: String {
         guard let line = pendingRemoval else { return "Remove" }
-        return "Remove “\(line.name)” from \(RunnerPageFormat.displayName(runner))?"
+        return removalQuestion(line).title
     }
 
     private func removalNote(_ line: RunnerPageFormat.AccountLine) -> String {
-        let place = line.home ?? "Its sign-in"
-        return "\(place) goes from this machine, and sessions stop running on it. Default is untouched."
+        removalQuestion(line).message
+    }
+
+    /// Default's removal in the web's words; an added account's in the page's own, or — while Default is
+    /// removed from Orbit — the web's, which never send its workspaces to Default (`removalQuestion`).
+    private func removalQuestion(_ line: RunnerPageFormat.AccountLine) -> RunnerPageFormat.RemovalQuestion {
+        let health = RunnerPageFormat.engines(runner).first { $0.engine == engine } ?? RunnerEngineHealth(engine: engine)
+        return RunnerPageFormat.removalQuestion(line, health: health, runner: runner)
     }
 
     // MARK: presses
@@ -665,6 +775,19 @@ private struct RunnerEngineContent: View {
         let id = runner.id
         Task {
             if let failure = await runners.removeAccount(id, engine: login, account: line.id) { show(failure) }
+        }
+    }
+
+    /// Use again: Default back in Orbit's use. The model reads the runner again after the write, so the
+    /// line goes once the list carries Default back; one that fails says so above the server's reason.
+    private func restoreDefault(_ login: LoginEngine, name: String) {
+        let id = runner.id
+        restoring = true
+        Task {
+            if let failure = await runners.restoreDefault(id, engine: login) {
+                show(RunnerAccountCopy.runnerDefaultUseAgainFailed(name: name) + "\n" + failure)
+            }
+            restoring = false
         }
     }
 

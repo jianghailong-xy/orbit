@@ -1,0 +1,48 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T04:05:35.9",
+    "ingested_at": "2026-10-18T04:05:36.013485+00:00",
+    "ingested_by_runner_id": "01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "seq": 18,
+    "session_id": "01a14d28-86e3-779e-a191-0fe345bd2b7c",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-B-AMY-M1",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T04:05:35Z",
+      "kind": "text",
+      "messages": 5,
+      "n": 3,
+      "tool": null
+    }
+  ],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14d26-b010-71ec-bb22-0cf65c7614e5",
+    "created_at": "2026-10-18T03:57:44.036",
+    "engine": "claude",
+    "id": "01a14d28-86e3-779e-a191-0fe345bd2b7c",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06B-AMY-S1 the first session, sent while the runner sleeps"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T04:05:36.031",
+      "client_turn_id": "f013ff96-8546-4846-9bdd-f21415f1d9b2",
+      "content": "T06-B-AMY-M1 a message to the parked session while the runner sleeps",
+      "created_at": "2026-10-18T04:05:15.709",
+      "delivered_at": "2026-10-18T04:05:35.62",
+      "id": "01a14d2f-6b3d-70cb-9ee1-cef90da0bd7e",
+      "kind": "message",
+      "seq": 2,
+      "status": "ANSWERED"
+    }
+  ]
+}

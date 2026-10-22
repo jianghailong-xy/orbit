@@ -128,6 +128,7 @@ final class ConsoleModel {
     private(set) var draftClaudeAccount: String?
     private(set) var draftAntigravityAccount: String?
     private(set) var draftKimiAccount: String?
+    private(set) var draftCursorAccount: String?
     /// Which Codex account this session runs on, from its detail: its own (`Session.codexAccount`),
     /// and its workspace's for a session that stored none. Only a detail read sets them.
     private(set) var sessionCodexAccount: String?
@@ -146,6 +147,17 @@ final class ConsoleModel {
     private(set) var sessionKimiAccount: String?
     private(set) var workspaceKimiAccount: String?
     private(set) var sessionKimiAccountPinned = false
+    /// The same three for Cursor CLI.
+    private(set) var sessionCursorAccount: String?
+    private(set) var workspaceCursorAccount: String?
+    private(set) var sessionCursorAccountPinned = false
+    /// Whether this session has a conversation another account or key would have to continue: a turn
+    /// of it settled, its engine reported its conversation's id, or a turn is running — and once it
+    /// has, it has for good (`CursorRuntime.conversationStarted`, the server's own test).
+    private(set) var conversationStarted = false
+    /// Whether some runner of the account knows Cursor CLI, as the last runner list read said — what
+    /// opens it in the new-session hero (`ProviderEngines.appleShowsEngine`, web `fleet`).
+    private(set) var fleetKnowsCursor = false
     private(set) var workspaceEnv: [String: String]?
     private var workspaceAntigravityKeys: [String: Bool]?
     private(set) var runnerAntigravity: RunnerAntigravityState?
@@ -185,6 +197,13 @@ final class ConsoleModel {
     var dshRunnerState: DshRuntime.RunnerState? {
         guard runnerEngines != nil || runnerCapabilities != nil else { return nil }
         return DshRuntime.state(capabilities: runnerCapabilities, engines: runnerEngines)
+    }
+
+    /// Whether this console's runner can start Cursor CLI — nil before any runner snapshot is read,
+    /// which claims nothing (`CursorRuntime.state`).
+    var cursorRunnerState: CursorRuntime.RunnerState? {
+        guard runnerEngines != nil || runnerCapabilities != nil else { return nil }
+        return CursorRuntime.state(capabilities: runnerCapabilities, engines: runnerEngines)
     }
 
     var queuedDshRepair: DshRuntime.Repair? {
@@ -679,6 +698,13 @@ final class ConsoleModel {
     func engineAccounts(_ engine: String) -> [RunnerEngineAccount] {
         runnerEngines?.first { $0.engine == engine }?.accounts ?? []
     }
+    /// Whether the runner's owner removed `engine`'s Default from Orbit, which its accounts then leave
+    /// out (`RunnerEngineHealth.removedDefault`): Automatic picks among the ones that remain, a workspace
+    /// set to Default is on Automatic, and nothing falls back on Default (`CodexAccounts`'s
+    /// `defaultRemoved`).
+    private func defaultRemoved(_ engine: String) -> Bool {
+        runnerEngines?.first { $0.engine == engine }?.removedDefault != nil
+    }
     /// The snapshot the runner's accounts of `engine` read their quota from (`CodexAccounts.usage`):
     /// Antigravity's travels with its engine health rather than in the runner's plan usage.
     private func engineUsage(_ engine: String) -> PlanUsageSnapshot? {
@@ -691,10 +717,12 @@ final class ConsoleModel {
     /// runner has more than one to choose between — a draft's workspace, or a session's.
     func automaticOffered(_ engine: String) -> Bool {
         if isDraft {
-            return CodexAccounts.automaticOffered(engine: engine, agent: draftAgent, accounts: engineAccounts(engine))
+            return CodexAccounts.automaticOffered(engine: engine, agent: draftAgent, accounts: engineAccounts(engine),
+                                                  defaultRemoved: defaultRemoved(engine))
         }
         return CodexAccounts.automaticOffered(engine: engine, pick: workspaceAccount(engine),
-                                              env: workspaceEnv, accounts: engineAccounts(engine))
+                                              env: workspaceEnv, accounts: engineAccounts(engine),
+                                              defaultRemoved: defaultRemoved(engine))
     }
     /// The account picked for this draft under `engine`, if any.
     func draftAccount(_ engine: String) -> String? {
@@ -702,6 +730,7 @@ final class ConsoleModel {
         case "claude": return draftClaudeAccount
         case "antigravity": return draftAntigravityAccount
         case "kimi": return draftKimiAccount
+        case CursorRuntime.engine: return draftCursorAccount
         default: return draftCodexAccount
         }
     }
@@ -711,6 +740,7 @@ final class ConsoleModel {
         case "claude": return sessionClaudeAccount
         case "antigravity": return sessionAntigravityAccount
         case "kimi": return sessionKimiAccount
+        case CursorRuntime.engine: return sessionCursorAccount
         default: return sessionCodexAccount
         }
     }
@@ -720,6 +750,7 @@ final class ConsoleModel {
         case "claude": return sessionClaudeAccountPinned
         case "antigravity": return sessionAntigravityAccountPinned
         case "kimi": return sessionKimiAccountPinned
+        case CursorRuntime.engine: return sessionCursorAccountPinned
         default: return sessionCodexAccountPinned
         }
     }
@@ -729,6 +760,7 @@ final class ConsoleModel {
         case "claude": return workspaceClaudeAccount
         case "antigravity": return workspaceAntigravityAccount
         case "kimi": return workspaceKimiAccount
+        case CursorRuntime.engine: return workspaceCursorAccount
         default: return workspaceCodexAccount
         }
     }
@@ -756,19 +788,22 @@ final class ConsoleModel {
         let pinned = sessionAccountPinned(engine)
         if pinned && pendingResumeAccount == nil { return own }
         if automaticOffered(engine) {
-            return CodexAccounts.toStartOn(engineAccounts(engine), usage: engineUsage(engine))
+            return CodexAccounts.toStartOn(engineAccounts(engine), usage: engineUsage(engine),
+                                           defaultRemoved: defaultRemoved(engine))
         }
         return own ?? workspaceAccount(engine)
     }
     /// The `engine` account this draft or session runs on, as far as its runner reports it: a draft's
     /// pick, else its workspace's, else the one Automatic would choose now; a session's own, else its
-    /// workspace's. Default when the runner lists no such account, as dispatch resolves it.
+    /// workspace's. Default when the runner lists no such account, as dispatch resolves it — or, while
+    /// Default is removed from Orbit, Automatic's pick among the accounts that remain.
     func account(for engine: String) -> String {
         let wanted: String?
         if isDraft {
             wanted = draftAccount(engine) ?? CodexAccounts.workspaceAccount(engine, of: draftAgent)
                 ?? (draftAutomatic(engine)
-                    ? CodexAccounts.toStartOn(engineAccounts(engine), usage: engineUsage(engine))
+                    ? CodexAccounts.toStartOn(engineAccounts(engine), usage: engineUsage(engine),
+                                              defaultRemoved: defaultRemoved(engine))
                     : nil)
         } else if pendingResumeProvider == engine && !isLive {
             // Only while it is held: once the revive lands the session is live and says itself.
@@ -776,7 +811,9 @@ final class ConsoleModel {
         } else {
             wanted = sessionAccount(engine) ?? workspaceAccount(engine)
         }
-        return CodexAccounts.onRunner(wanted, accounts: engineAccounts(engine))
+        return CodexAccounts.onRunner(wanted, accounts: engineAccounts(engine), engine: engine,
+                                      env: isDraft ? draftAgent?.env : workspaceEnv, usage: engineUsage(engine),
+                                      defaultRemoved: defaultRemoved(engine))
     }
     /// The Codex account this draft or session runs on (`account(for:)`).
     var codexAccount: String { account(for: "codex") }
@@ -814,8 +851,21 @@ final class ConsoleModel {
     /// to carry, so it starts on any.
     var accountRowsOffered: Bool {
         guard let engine = accountEngine, engineAccounts(engine).count >= 2 else { return false }
-        if isDraft { return true }
-        return runnerCapabilities?.contains(CodexAccounts.moveCapability(engine)) ?? false
+        return accountsMove(engine)
+    }
+    /// Whether a session here can move between `engine`'s accounts — a draft has no conversation to
+    /// carry, so it starts on any. Cursor CLI's are listed on every runner: one that has not talked moves
+    /// anywhere, and one that has is listed greyed with why (`cursorMoveBlocked`, P6b, D5).
+    private func accountsMove(_ engine: String) -> Bool {
+        isDraft || engine == CursorRuntime.engine
+            || (runnerCapabilities?.contains(CodexAccounts.moveCapability(engine)) ?? false)
+    }
+    /// A Cursor CLI session that has talked, on a runner that can't carry its conversation to another
+    /// account or key (`cursor-account-move/v1`): the Provider menu lists its other accounts and keys
+    /// but greys them, and says why (`CursorRuntime.moveBlockedNote`) — the move the server refuses.
+    var cursorMoveBlocked: Bool {
+        engine == CursorRuntime.engine && !isDraft && (conversationStarted || sessionStatus == .running)
+            && !(runnerCapabilities?.contains(CursorRuntime.accountMoveCapability) ?? false)
     }
     /// Those rows, each with its own quota (`SessionProviderChoices.accountChoices`).
     var accountChoices: [AccountChoice] {
@@ -823,12 +873,39 @@ final class ConsoleModel {
         return SessionProviderChoices.accountChoices(runnerEngines?.first(where: { $0.engine == engine }),
                                                      usage: engineUsage(engine)) ?? []
     }
+    /// The Cursor CLI account (or key) this session ran on, its plan and when its usage comes back, and
+    /// another signed-in account with room for a new session: the usage-limit card's words for it
+    /// (board iOS 5 ⑧, web `CursorQuotaHelp`). Nil off Cursor CLI.
+    var cursorQuota: AutoRetryLogic.CursorQuota? {
+        guard engine == CursorRuntime.engine, !isDraft else { return nil }
+        let outage = outageProvider
+        guard outage == CursorRuntime.engine else {
+            return AutoRetryLogic.CursorQuota(account: configuredProviders.first { $0.slug == outage }?.label ?? outage)
+        }
+        let accounts = engineAccounts(CursorRuntime.engine)
+        let own = account(for: CursorRuntime.engine)
+        let usage = engineUsage(CursorRuntime.engine)
+        let snapshot = CodexAccounts.reportedSnapshot(usage, account: own)
+        let elsewhere = accounts.first { entry in
+            entry.id != own && entry.auth == "yes" && !AccountPause.isPaused(entry.pausedUntil, now: Date())
+                && CursorRuntime.usageLimit(CodexAccounts.reportedSnapshot(usage, account: entry.id)) == nil
+        }
+        return AutoRetryLogic.CursorQuota(account: CodexAccounts.label(own, accounts: accounts),
+                                          plan: snapshot?.planName, resetsAt: snapshot?.includedUsage?.resetsAt,
+                                          elsewhere: elsewhere.map { CodexAccounts.label($0.id, accounts: accounts) })
+    }
+    /// The id of the account `cursorQuota.elsewhere` names, for the press that starts a session on it.
+    var cursorElsewhereAccount: String? {
+        guard let name = cursorQuota?.elsewhere else { return nil }
+        let accounts = engineAccounts(CursorRuntime.engine)
+        return accounts.first { CodexAccounts.label($0.id, accounts: accounts) == name }?.id
+    }
     /// Another built-in engine's accounts, listed under it in the Provider submenu as the engine's own
     /// are (web parity): a switch onto that engine can land on any of them. Two or more to choose from
     /// — for a session, on a runner that carries a conversation between them.
     func accountChoices(for engine: String) -> [AccountChoice] {
         guard RunnerPageFormat.keepsAccounts(engine), engineAccounts(engine).count >= 2 else { return [] }
-        guard isDraft || (runnerCapabilities?.contains(CodexAccounts.moveCapability(engine)) ?? false) else { return [] }
+        guard accountsMove(engine) else { return [] }
         return SessionProviderChoices.accountChoices(runnerEngines?.first(where: { $0.engine == engine }),
                                                      usage: engineUsage(engine)) ?? []
     }
@@ -1817,7 +1894,9 @@ final class ConsoleModel {
     /// Work for a managed runner that is not up asks it to wake: read its state now rather than at
     /// the next poll, so the console says it is waking.
     private func managedWorkSent() {
-        guard managed != nil, runnerOnline != true, let managedRunner else { return }
+        // Up is the managed status's own READY: a runner that has just gone to sleep still reads
+        // online until its last heartbeat goes stale, while its status already says it sleeps.
+        guard let managed, managed.display.kind != .available, let managedRunner else { return }
         Task { await managedRunner.load() }
     }
 
@@ -1949,6 +2028,7 @@ final class ConsoleModel {
             clearCodexResetAdmission()
             return
         }
+        fleetKnowsCursor = rows.contains(where: CursorRuntime.runnerKnows)
         let runner = rows.first(where: { $0.id == runnerID })
         if let runner { adoptRunnerSnapshot(runner) } else { clearRunnerSnapshot() }
         applySlashItems(from: runner)
@@ -1996,6 +2076,9 @@ final class ConsoleModel {
         sessionKimiAccount = s.kimiAccount
         workspaceKimiAccount = s.agent?.kimiAccount
         sessionKimiAccountPinned = s.kimiAccountPinned ?? false
+        sessionCursorAccount = s.cursorAccount
+        workspaceCursorAccount = s.agent?.cursorAccount
+        sessionCursorAccountPinned = s.cursorAccountPinned ?? false
         workspaceEnv = s.agent?.env
         workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
 
@@ -2010,6 +2093,7 @@ final class ConsoleModel {
         runnerID = s.assignedRunnerId
         if let rid = s.assignedRunnerId {
             if let rows = await fetchRunners() {
+                fleetKnowsCursor = rows.contains(where: CursorRuntime.runnerKnows)
                 if let r = rows.first(where: { $0.id == rid }) {
                     sessionRunner = r
                     runnerSnapshotLoaded = true
@@ -2109,6 +2193,7 @@ final class ConsoleModel {
         guard let session, session.id == sessionID else { return }
         serverStatus = session.effectiveRunStatus
         sessionError = session.error
+        if CursorRuntime.conversationStarted(session) { conversationStarted = true }
         // Why a version waiting for this conversation is waiting: its own run state, error and armed
         // retry, which only this row carries.
         coordinatorPause = EvidenceDecisions.coordinatorPause(session)
@@ -2185,6 +2270,9 @@ final class ConsoleModel {
         sessionKimiAccount = s.kimiAccount
         workspaceKimiAccount = s.agent?.kimiAccount
         sessionKimiAccountPinned = s.kimiAccountPinned ?? false
+        sessionCursorAccount = s.cursorAccount
+        workspaceCursorAccount = s.agent?.cursorAccount
+        sessionCursorAccountPinned = s.cursorAccountPinned ?? false
         workspaceEnv = s.agent?.env
         workspaceAntigravityKeys = s.agent?.antigravityKeyAvailableByRunner
         return true
@@ -2214,7 +2302,8 @@ final class ConsoleModel {
         ChoiceSources(configured: configuredProviders, catalog: modelCatalog, runtimeDefaults: runtimeDefaultModels,
                       engines: runnerEngines, pools: allPools, planUsage: runnerPlanUsage,
                       antigravity: runnerAntigravity, antigravityKeyAvailable: antigravityKeyAvailable,
-                      dshState: dshRunnerState)
+                      dshState: dshRunnerState, cursorState: cursorRunnerState,
+                      showsCursor: fleetKnowsCursor || engine == CursorRuntime.engine)
     }
 
     /// The credentials this session's engine runs on here (`SessionProviderChoices.providers`): its own
@@ -2378,6 +2467,7 @@ final class ConsoleModel {
         draftClaudeAccount = slug == "claude" ? account : nil
         draftAntigravityAccount = slug == "antigravity" ? account : nil
         draftKimiAccount = slug == "kimi" ? account : nil
+        draftCursorAccount = slug == CursorRuntime.engine ? account : nil
     }
 
     /// Move this session to another of its runner's accounts — which pins it there — or back onto
@@ -3202,6 +3292,7 @@ final class ConsoleModel {
                 claudeAccount: provider == "claude" ? draftClaudeAccount : nil,
                 antigravityAccount: provider == "antigravity" ? draftAntigravityAccount : nil,
                 kimiAccount: provider == "kimi" ? draftKimiAccount : nil,
+                cursorAccount: provider == CursorRuntime.engine ? draftCursorAccount : nil,
                 // The folder page this draft was opened from, if any: the session is filed in it as
                 // it is created (§3.3). Omitted for a draft from a list.
                 folderId: draftFolderID))
@@ -3214,6 +3305,7 @@ final class ConsoleModel {
             draftClaudeAccount = nil
             draftAntigravityAccount = nil
             draftKimiAccount = nil
+            draftCursorAccount = nil
             // The Mode pick is different: without a write-back it lived on this one session, while
             // the runs nobody starts from a composer — task-launched, MCP-created — keep resolving
             // the ACCOUNT default server-side. Web parity, and best-effort: a failed write costs a
@@ -3236,6 +3328,7 @@ final class ConsoleModel {
         var agentRunner: Runner?
         if let rid = draftAgent?.runnerId {
             if let rows = await fetchRunners() {
+                fleetKnowsCursor = rows.contains(where: CursorRuntime.runnerKnows)
                 if let r = rows.first(where: { $0.id == rid }) {
                     agentRunner = r
                     runnerID = r.id
@@ -3578,6 +3671,30 @@ final class ConsoleModel {
                 onToast(ToastRequest(message: "Couldn't withdraw the message",
                                      detail: APIClient.failureReason(error), tone: .error))
             }
+        }
+    }
+
+    /// "Put back in the composer" (web parity: `restoreUndelivered`, and `takeBackUndelivered` for a
+    /// receipt): the words of a message that never reached the engine, back in the box under any
+    /// draft as a withdrawal hands them back — an explicit press, so a draft keeps its place above
+    /// them. Nothing is sent. The conversation's own bubble stays, the record of what happened; a
+    /// row at the tail goes, and one the server still lists — a delivery's receipt — is discarded
+    /// there too, or the next listing would bring it back. Attachments aren't rehydrated (the
+    /// composer needs their bytes), as with Cancel. Offered where `SteerDelivery.offersPutBack` says.
+    func putBack(_ bubble: UserBubble) async {
+        guard let words = ComposerLogic.restorableText(of: bubble) else { return }
+        let body = bubble.shell ? "!" + words : words
+        composerText = composerText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? body : composerText + "\n\n" + body
+        guard reducer.state.queued.contains(where: { $0.id == bubble.id }) else { return }
+        reducer.removeQueued(id: bubble.id)
+        publishStateNow()
+        guard bubble.delivery != nil, let turnId = bubble.turnId else { return }
+        do {
+            try await api.withdrawTurn(sessionID: sessionID, turnId: turnId)
+        } catch {
+            onToast(ToastRequest(message: "Couldn't discard the message",
+                                 detail: APIClient.failureReason(error), tone: .error))
         }
     }
 
@@ -5235,6 +5352,19 @@ final class ConsoleModel {
         } catch {
             statusMessage = "\(headline) — \(APIClient.failureReason(error))."
             return nil
+        }
+    }
+
+    /// End the timed-out attempt an X-E5 item is about (J-T10): the card's own lead door. The item
+    /// and the project's landings are read again afterwards, as the Retry does.
+    func abandonIntegration(_ row: ProjectOpenItemRow) async {
+        guard let projectID, let jobID = row.integrationJobId, !jobID.isEmpty,
+              ExceptionCards.addressed(row, .abandon) else { return }
+        do {
+            try await api.abandonIntegrationJob(projectID: projectID, jobID: jobID)
+            await refreshRulerQuestions(force: true)
+        } catch {
+            statusMessage = "\(ExceptionCards.abandonFailed) — \(APIClient.failureReason(error))."
         }
     }
 

@@ -416,6 +416,32 @@ describe('codexAccountToStartOn — where a session with no account picked start
     expect(codexAccountToStartOn([], usage(100, 18, null), NOW)).toBeNull();
     expect(codexAccountToStartOn(undefined, null, NOW)).toBeNull();
   });
+
+  it('with Default removed from Orbit, chooses among the accounts that remain — the only one too', () => {
+    const removed = { defaultRemoved: true };
+    // Default has room and Pro has none: Pro all the same, as the only account left.
+    expect(accountToStartOn('codex', [account(PRO)], usage(5, 18, 100), NOW, removed)).toBe(PRO);
+    expect(accountToStartOn('codex', both, usage(5, 18, 100), NOW, removed)).toBe(PRO);
+    // Pro signed out: still Pro, whose sign-in the session waits on.
+    expect(accountToStartOn('codex', [account('default'), account(PRO, 'no')], usage(5, 18, 0), NOW, removed)).toBe(PRO);
+    // Two remaining, both spent: the one that frees up first.
+    const TEAM = '7b02d9e1';
+    const spent: PlanUsage = {
+      codex: {
+        provider: 'codex',
+        primary: win(5, 300, EARLIER),
+        accounts: {
+          [PRO]: { provider: 'codex', primary: win(100, 10080, LATER) },
+          [TEAM]: { provider: 'codex', primary: win(100, 10080, '2026-08-03T14:00:00Z') },
+        },
+      },
+    };
+    expect(accountToStartOn('codex', [...both, account(TEAM)], spent, NOW, removed)).toBe(TEAM);
+    // Nothing remains: nothing to choose.
+    expect(accountToStartOn('codex', [account('default')], usage(5, 18, null), NOW, removed)).toBeNull();
+    // Not removed, the answers are the ones above.
+    expect(accountToStartOn('codex', both, usage(5, 18, 100), NOW, { defaultRemoved: false })).toBe('default');
+  });
 });
 
 describe('codexAccountToMoveTo — where a session whose account hit its limit goes, between turns', () => {

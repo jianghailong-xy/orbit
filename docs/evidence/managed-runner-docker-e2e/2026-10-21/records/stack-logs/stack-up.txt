@@ -1,0 +1,7 @@
+23:15:26 network d4-managed-runners gateway 172.18.0.1
+23:15:27 postgres ready on 127.0.0.1:5714
+23:15:27 configuration written: instance orbit-d4-e1a08e4f, runner image sha256:716c65e78baf1cbdc895811ce7aac715f4e8600f25f3d34d56bd39d990e6d8e3, serverUrl http://172.18.0.1:2714
+23:15:38 migrated: 437 lines; All migrations have been successfully applied.
+23:15:39 channel up: running 1b9a61cc82b94d7c
+23:15:41 apiserver: 1913267 /system.slice/d4-apiserver.service active 
+23:15:42 door: /system.slice/d4-door.service active 

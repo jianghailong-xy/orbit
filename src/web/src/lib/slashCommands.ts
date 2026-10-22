@@ -82,13 +82,15 @@ export function supportsRunnerSlashAssets(engine?: string | null): boolean {
 }
 
 /** Match one runner-owned slash asset to the session's engine. Untagged assets come from older
- *  runners and therefore belong to Claude Code. */
+ *  runners and therefore belong to Claude Code. Kimi Code and Cursor CLI list their own, which the
+ *  runner reports as the CLI announces them over ACP (Cursor's `available_commands_update`), tagged
+ *  with the engine: a session on either sees only its own engine's. */
 export function slashAssetMatchesEngine(
   assetEngine: string | null | undefined,
   engine: string | null | undefined,
 ): boolean {
   if (!supportsRunnerSlashAssets(engine)) return false;
-  if (engine === 'kimi') return assetEngine === 'kimi';
+  if (engine === 'kimi' || engine === 'cursor') return assetEngine === engine;
   return !assetEngine || assetEngine === 'claude';
 }
 

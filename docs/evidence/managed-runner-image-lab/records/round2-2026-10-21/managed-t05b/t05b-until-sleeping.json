@@ -1,0 +1,95 @@
+{
+  "at": "2026-10-20T22:39:24.953+00:00",
+  "changes": [
+    [
+      "2026-10-20T22:38:49.347+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "SLEEPING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": "deepseek-2",
+        "last_heartbeat_at": "2026-10-20T22:38:46.284",
+        "management_state": "DRAINING",
+        "pod": "fd9e9481",
+        "reason": null,
+        "revision": 15,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-20T22:39:16.567+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "SLEEPING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": "deepseek-2",
+        "last_heartbeat_at": "2026-10-20T22:39:16.354",
+        "management_state": "DRAINING",
+        "pod": "fd9e9481",
+        "reason": null,
+        "revision": 15,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-20T22:39:17.617+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "SLEEPING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": "deepseek-2",
+        "last_heartbeat_at": "2026-10-20T22:39:16.674",
+        "management_state": "DRAINING",
+        "pod": "fd9e9481",
+        "reason": null,
+        "revision": 15,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-20T22:39:19.711+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "SLEEPING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 1,
+        "initial_provider": "deepseek-2",
+        "last_heartbeat_at": "2026-10-20T22:39:16.674",
+        "management_state": "DRAINING",
+        "pod": "fd9e9481",
+        "reason": null,
+        "revision": 18,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ],
+    [
+      "2026-10-20T22:39:24.953+00:00",
+      {
+        "attempt": 0,
+        "desired_state": "SLEEPING",
+        "engines": "claude:no,codex:no,kimi:unknown(absent),opencode:unknown(absent),antigravity:unknown(absent),dsh:unknown(absent),cursor:unknown(absent)",
+        "generation": 2,
+        "initial_provider": "deepseek-2",
+        "last_heartbeat_at": "2026-10-20T22:39:16.674",
+        "management_state": "SLEEPING",
+        "pod": null,
+        "reason": null,
+        "revision": 19,
+        "runner_status": "ONLINE",
+        "workspace_bound": true
+      }
+    ]
+  ],
+  "owner": "deepkey",
+  "reached": {
+    "reason": null,
+    "state": "SLEEPING"
+  }
+}

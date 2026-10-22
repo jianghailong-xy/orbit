@@ -1,0 +1,174 @@
+{
+  "runId": "l1h-20261019100612",
+  "startedAt": "2026-10-19T10:06:12.399Z",
+  "volume": {
+    "pvc": "mr-data-7780fd99-b953-41f0-a005-6ac813c776b4",
+    "pv": "pvc-11457841-9550-4ed6-bbf2-f61f595fca88",
+    "accessModes": [
+      "ReadWriteOnce"
+    ],
+    "volumeMode": "Filesystem",
+    "reclaimPolicy": "Retain",
+    "driver": "rbd.csi.ceph.com",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-5b832fc0-4366-4f11-83f3-66c4016630b2",
+    "fsType": "ext4",
+    "image": "orbit-mr-rbd/csi-vol-5b832fc0-4366-4f11-83f3-66c4016630b2",
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "mounter": "rbd"
+  },
+  "placements": {
+    "before-the-stop": {
+      "at": "2026-10-19T10:07:50.685Z",
+      "volumeAttachments": [
+        {
+          "name": "csi-162683acddfde152735072586cce255f870e71ede53f3fb908224201ed7bafbc",
+          "node": "orbit-mr-lab-2",
+          "attached": true,
+          "deleting": false,
+          "attachError": null,
+          "detachError": null
+        }
+      ],
+      "mappedOn": {
+        "orbit-mr-lab": [],
+        "orbit-mr-lab-2": [
+          "rbd0 orbit-mr-rbd/csi-vol-5b832fc0-4366-4f11-83f3-66c4016630b2"
+        ]
+      },
+      "watchers": [
+        {
+          "address": "10.77.0.2:0/2657588639",
+          "client": 234495,
+          "cookie": 18446462598732840961
+        }
+      ]
+    },
+    "after-cleanup": {
+      "at": "2026-10-19T10:21:30.027Z",
+      "volumeAttachments": [],
+      "mappedOn": {
+        "orbit-mr-lab": [],
+        "orbit-mr-lab-2": []
+      },
+      "watchers": []
+    }
+  },
+  "writerBeforeStop": {
+    "pod": "l1h-20261019100612-w",
+    "node": "orbit-mr-lab-2",
+    "acknowledgedRows": {
+      "committedRows": 109
+    }
+  },
+  "nodeBeforeStop": {
+    "ready": "True",
+    "reason": "KubeletReady",
+    "since": "2026-10-19T09:59:43Z",
+    "taints": [],
+    "unschedulable": false
+  },
+  "killedAt": "2026-10-19T10:08:13.189Z",
+  "whileDown": {
+    "node": {
+      "ready": "Unknown",
+      "reason": "NodeStatusUnknown",
+      "since": "2026-10-19T10:09:00Z",
+      "taints": [
+        "node.kubernetes.io/unreachable:NoSchedule",
+        "node.kubernetes.io/unreachable:NoExecute"
+      ],
+      "unschedulable": false
+    },
+    "pod": {
+      "phase": "Running",
+      "node": "orbit-mr-lab-2",
+      "ready": "False",
+      "deletionTimestamp": "2026-10-19T10:14:30Z",
+      "reason": null,
+      "containerState": [
+        "running"
+      ],
+      "restarts": 0
+    },
+    "volumeAttachments": [
+      {
+        "name": "csi-162683acddfde152735072586cce255f870e71ede53f3fb908224201ed7bafbc",
+        "node": "orbit-mr-lab-2",
+        "attached": true,
+        "deleting": false,
+        "attachError": null,
+        "detachError": null
+      }
+    ],
+    "watchers": [],
+    "mappedOnFirst": [
+      "rbd0 orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd"
+    ],
+    "observedSeconds": 420
+  },
+  "recoveryStartedAt": "2026-10-19T10:15:14.358Z",
+  "recoveredAt": "2026-10-19T10:21:11.908Z",
+  "afterRecovery": {
+    "pod": null,
+    "volumeAttachments": [],
+    "node": {
+      "ready": "True",
+      "reason": "KubeletReady",
+      "since": "2026-10-19T10:15:47Z",
+      "taints": [],
+      "unschedulable": false
+    },
+    "sample": {
+      "at": "2026-10-19T10:21:11.800Z",
+      "phase": "recovering",
+      "second": 357.4,
+      "vm2": "running",
+      "node": {
+        "ready": "True",
+        "reason": "KubeletReady",
+        "since": "2026-10-19T10:15:47Z",
+        "taints": [],
+        "unschedulable": false
+      },
+      "pod": null,
+      "volumeAttachments": [],
+      "watchers": []
+    }
+  },
+  "comparisons": [
+    {
+      "what": "after the power cut: SQLite integrity_check",
+      "same": true
+    },
+    {
+      "what": "after cleanup: no VolumeAttachment",
+      "same": true
+    },
+    {
+      "what": "after cleanup: no RBD watcher",
+      "same": true
+    }
+  ],
+  "dataAfterPowerCut": {
+    "ordinarySHA256": "3fbe229cc22d9165165355ece7bb92d60d89e621930d98bd940835c931f27857",
+    "gitCommit": "d1eaa2cf860fe393d68fa8dacf25fcdba482c8fc",
+    "gitFsck": "",
+    "sqliteIntegrity": [
+      "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "committedRows": 121,
+    "rowSHA256": "1ce02f25fd4301512306e312fac3db945610390e678edb0648abc81dbe8cbd31",
+    "prefixRows": 109,
+    "prefixSHA256": "94c31d150275b448ba30e043947d77ca2232e857baa3a52ef562157cd0f23a42",
+    "acknowledgedRows": 120,
+    "mountInfo": [
+      "1689 1674 251:16 / /var/lib/orbit rw,relatime - ext4 /dev/rbd1 rw,stripe=1024"
+    ],
+    "pod": "l1h-20261019100612-check",
+    "node": "orbit-mr-lab"
+  },
+  "finishedAt": "2026-10-19T10:21:31.468Z",
+  "failures": 0,
+  "timeline": "/mnt/data/managed-runner-lab/state/two-node-l1h-20261019100612-timeline.jsonl"
+}

@@ -244,6 +244,17 @@ public struct WatchTarget: Codable, Equatable, Sendable {
     public var targetTitle: String? = nil
     /// Where the target itself stands, read with the watch on the same terms as `targetTitle`.
     public var targetStatus: WatchTargetStatus? = nil
+    /// The task a session target's session runs (`sessions.task_id`), named and standing as a task
+    /// target on it reads. Nil on a session that runs no task, on a task or session this account
+    /// can't read, on every task target, and from a server older than the field.
+    public var targetTask: WatchTargetTask? = nil
+}
+
+/// The task a session target runs (`WatchTarget.targetTask`): its id, title and standing.
+public struct WatchTargetTask: Codable, Equatable, Sendable {
+    public let id: String
+    public let title: String
+    public let status: WatchTargetStatus
 }
 
 /// One target's own standing, in its own list's words: a task as the task list reads it — its status

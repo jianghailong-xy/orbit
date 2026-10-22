@@ -1,0 +1,49 @@
+{
+  "action": "check",
+  "allSame": true,
+  "at": "2026-10-18T00:45:12.681+00:00",
+  "data": {
+    "gitFsckExit": 0,
+    "gitHead": "5938769007e914a2c01509ffb302172910e9d131",
+    "integrityCheck": "ok",
+    "maxRow": 500,
+    "mount": [
+      [
+        "/dev/rbd1",
+        "/var/lib/orbit",
+        "ext4"
+      ]
+    ],
+    "randomSha256": "5086429678ebd0538eb9a0f183a63464e5cd58770a8b4b4b36ee276214755f67",
+    "rows": 500,
+    "rowsSha256": "7b358716d3013eaa7156908b96bf53f4c3d494676a1f88e256c26a661f3b91b2"
+  },
+  "generation": 2,
+  "owner": "amy",
+  "pod": "643d6df8-bbd4-475c-b857-69e0998b1dcc",
+  "run": "p1",
+  "same": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+  },
+  "sameRunnerId": true,
+  "volume": {
+    "managedInstance": {
+      "generation": 2,
+      "podUid": "643d6df8-bbd4-475c-b857-69e0998b1dcc",
+      "runnerId": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585"
+    },
+    "repos": [
+      "default"
+    ],
+    "runnerId": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "worktrees": [
+      "01a14c75-bbb6-724b-83b5-8d8649235e38"
+    ]
+  },
+  "writtenAt": "2026-10-18T00:43:23.053+00:00",
+  "writtenByGeneration": 1,
+  "writtenByPod": "f4b2dfe7-3724-4f43-8a05-794cdd1b893b"
+}

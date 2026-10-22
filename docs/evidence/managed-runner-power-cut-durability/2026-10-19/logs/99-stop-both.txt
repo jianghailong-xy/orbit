@@ -1,0 +1,14 @@
+17:51:55Z node orbit-mr-lab-2: cordoned
+unit orbit-mr-lab-2: memory.current 1139 MiB, memory.peak 2435 MiB, swap 677 MiB, memory.max 3758096384
+17:51:55Z orbit-mr-lab-2: ACPI shutdown requested; waiting up to 600 s
+17:52:01Z orbit-mr-lab-2 stopped after 6 s
+unit orbit-mr-lab: memory.current 1437 MiB, memory.peak 4372 MiB, swap 2854 MiB, memory.max 6979321856
+17:52:01Z orbit-mr-lab: ACPI shutdown requested; waiting up to 600 s
+17:52:16Z orbit-mr-lab stopped after 15 s
+host: MemAvailable 9806 MiB
+stop exit 0
+host kernel modules rbd/nbd/ceph/libceph loaded: none
+VM 1: stopped (orbit-mr-lab.service inactive)
+VM 2: stopped (orbit-mr-lab-2.service inactive)
+host: MemAvailable 9802 MiB, SwapFree 33264 MiB
+status exit 0

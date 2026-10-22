@@ -245,6 +245,10 @@ func TestKimiSubRelayNestedAgent(t *testing.T) {
 		kimiSubPromptRecord("agent-1", "inner"),
 		kimiSubToolCall("tool_G", "Edit", map[string]interface{}{"path": "x"}),
 	}, false)
+	// A poll reads the sub-agent wires in map order. When agent-1's comes first, the Agent call its
+	// prompt binds to has not been read yet: the wire is held at the prompt and the next poll binds
+	// it. Two polls relay both calls, in this order, whichever wire a poll reads first.
+	r.poll()
 	r.poll()
 
 	got := cap.types()

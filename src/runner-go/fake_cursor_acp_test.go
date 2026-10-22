@@ -23,8 +23,9 @@ package main
 // sub-agents. What the runner wrote is kept in received.jsonl, each line with how much of the
 // recording had gone out by then, and how the CLI was started in start.json. Like the real CLI it does
 // not exit when stdin ends, only on SIGTERM (143) or SIGINT (130) (§3.4) — or, when the script says so,
-// once its recording has gone out: killed, as a crash, or with its stdout closed while it runs on. The
-// same binary answers `agent models` the ways P0a recorded it (§9), each call noted in models.jsonl.
+// once its recording has gone out or where the replay holds: killed, as a crash, or with its stdout closed
+// while it runs on. The same binary answers `agent models` the ways P0a recorded it (§9), each call noted
+// in models.jsonl.
 //
 // A script can also have the CLI start, as its first prompt arrives, what a session's commands leave
 // running (Spawn, scope.json): the processes a session's scope has to reclaim (session_scope.go).
@@ -52,8 +53,9 @@ type fakeCursorACPScript struct {
 	Recording string `json:"recording"`
 	// Session, when set, is the one session of a recording that holds two.
 	Session string `json:"session,omitempty"`
-	// Exit ends the CLI once its recording has gone out and nothing waits on the runner: "SIGKILL" kills
-	// it, as a crash does (§3.4, §12), and "close-stdout" closes its connection while it runs on.
+	// Exit ends the CLI once its recording has gone out, or HoldAfter holds it, and nothing waits on the
+	// runner: "SIGKILL" kills it, as a crash does (§3.4, §12), and "close-stdout" closes its connection while
+	// it runs on.
 	Exit string `json:"exit,omitempty"`
 	// Models is how `agent models` answers: "invalid-key" or "offline" as P0a recorded them
 	// (failure-shapes-without-prompt), a catalogue otherwise.
@@ -67,6 +69,24 @@ type fakeCursorACPScript struct {
 	// session/cancel then ends the command's process group, as Cursor ends a cancelled command's (§3.3),
 	// unless IgnoreCancel.
 	Spawn bool `json:"spawn,omitempty"`
+	// CancelEndsPrompt answers a session/cancel the way the real CLI does whatever the recording holds:
+	// the session's running prompt is answered `cancelled` at once, the rest of its recorded stream is
+	// dropped, and a request it was waiting on the runner for is no longer waited on (§3.3, §5.2).
+	CancelEndsPrompt bool `json:"cancelEndsPrompt,omitempty"`
+	// Modes answers a session/set_mode the recording does not hold as the CLI answers one (§3.1): a
+	// current_mode_update for the mode asked, then {}.
+	Modes bool `json:"modes,omitempty"`
+	// HoldAfter stops the replay once the runner has answered the request the CLI sent under this recorded
+	// id, until the runner sends anything else: a stop, or the CLI ending, finds the turn still running — with
+	// Exit, the CLI ends there.
+	HoldAfter string `json:"holdAfter,omitempty"`
+	// Config answers a session/set_config_option the recording does not hold with the same params the way
+	// the recording shows the CLI answering one (§10), from the recording's own data: selecting a model
+	// lists the mode, the model and that model's own options as the recording's cursor/list_available_models
+	// lists them, at their defaults; setting an option moves its currentValue; and a model, option or value
+	// the CLI does not list is refused -32602, as the recording refuses one. A set_config_option the
+	// recording holds with the same params is replayed as recorded.
+	Config bool `json:"config,omitempty"`
 }
 
 // fakeCursorScopeProcessEnv starts this test binary as one of the processes a Spawn script starts
@@ -336,6 +356,14 @@ func runFakeCursorACP(dir string) int {
 		}
 		os.Exit(143)
 	}()
+	// SIGUSR1 closes the connection while the CLI runs on, whatever it is waiting on — a request of its own the
+	// runner has not answered among them, where Exit never ends it (cursorSignalReplay).
+	hangUp := make(chan os.Signal, 1)
+	signal.Notify(hangUp, syscall.SIGUSR1)
+	go func() {
+		<-hangUp
+		_ = os.Stdout.Close()
+	}()
 	var requests []fakeCursorRequest
 	var lines []fakeCursorLine
 	if err == nil {
@@ -351,8 +379,22 @@ func runFakeCursorACP(dir string) int {
 		return 2
 	}
 	defer received.Close()
+	// What a Config script answers from: every model the recording's catalogue lists, with its own options,
+	// and the options the CLI last listed for the session.
+	catalogue := map[string][]interface{}{}
+	for _, line := range lines {
+		models, _ := mapValue(line.msg["result"])["models"].([]interface{})
+		for _, raw := range models {
+			model := mapValue(raw)
+			catalogue[firstString(model, "value")], _ = model["configOptions"].([]interface{})
+		}
+	}
+	var options []interface{}
 	out := bufio.NewWriter(os.Stdout)
 	write := func(msg map[string]interface{}) {
+		if listed, ok := mapValue(msg["result"])["configOptions"].([]interface{}); ok {
+			options = listed
+		}
 		if line, err := json.Marshal(msg); err == nil {
 			_, _ = out.Write(append(line, '\n'))
 			_ = out.Flush()
@@ -367,6 +409,7 @@ func runFakeCursorACP(dir string) int {
 	cancelled := map[string]bool{}   // recorded prompts the runner cancelled
 	unanswered := ""                 // the first recorded request the CLI never answered
 	command := 0                     // the command a Spawn script started, which leads its process group
+	held := false                    // HoldAfter's request was answered: nothing more goes out for now
 	for _, request := range requests {
 		if request.unanswered {
 			unanswered = request.id
@@ -381,7 +424,7 @@ func runFakeCursorACP(dir string) int {
 		}
 	}
 	pump := func() {
-		for cursor < len(lines) && waiting == "" {
+		for cursor < len(lines) && waiting == "" && !held {
 			line := lines[cursor]
 			if line.answer != "" && skipped[line.answer] {
 				cursor++
@@ -417,7 +460,7 @@ func runFakeCursorACP(dir string) int {
 			cursor++
 			waiting = line.ask
 		}
-		if cursor == len(lines) && waiting == "" {
+		if (cursor == len(lines) || held) && waiting == "" {
 			switch script.Exit {
 			case "SIGKILL":
 				_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
@@ -439,19 +482,40 @@ func runFakeCursorACP(dir string) int {
 		}
 		method, id := asString(msg["method"]), msg["id"]
 		params := mapValue(msg["params"])
+		if method != "" {
+			held = false
+		}
 		switch {
 		case method != "" && id != nil:
 			match := -1
-			for i := next; i < len(requests) && script.MatchParams; i++ {
+			configures := script.Config && method == "session/set_config_option"
+			for i := next; i < len(requests) && (script.MatchParams || configures); i++ {
 				if requests[i].method == method && fakeCursorSameParams(requests[i].params, params) {
 					match = i
 					break
 				}
 			}
+			if match < 0 && configures {
+				listed, refusal := fakeCursorConfigAnswer(options, catalogue, firstString(params, "configId"), firstString(params, "value"))
+				if refusal != "" {
+					write(map[string]interface{}{"jsonrpc": "2.0", "id": id, "error": map[string]interface{}{
+						"code": -32602, "message": "Invalid params", "data": map[string]interface{}{"message": refusal}}})
+				} else {
+					write(map[string]interface{}{"jsonrpc": "2.0", "id": id, "result": map[string]interface{}{"configOptions": listed}})
+				}
+				continue
+			}
 			for i := next; i < len(requests) && match < 0; i++ {
 				if requests[i].method == method {
 					match = i
 				}
+			}
+			if match < 0 && method == "session/set_mode" && script.Modes {
+				write(map[string]interface{}{"jsonrpc": "2.0", "method": "session/update", "params": map[string]interface{}{
+					"sessionId": firstString(params, "sessionId"),
+					"update":    map[string]interface{}{"sessionUpdate": "current_mode_update", "currentModeId": firstString(params, "modeId")}}})
+				write(map[string]interface{}{"jsonrpc": "2.0", "id": id, "result": map[string]interface{}{}})
+				continue
 			}
 			if match < 0 {
 				write(map[string]interface{}{"jsonrpc": "2.0", "id": id,
@@ -476,19 +540,73 @@ func runFakeCursorACP(dir string) int {
 				}
 			}
 		case method == "session/cancel" && !script.IgnoreCancel:
-			cancel(firstString(params, "sessionId"))
+			session := firstString(params, "sessionId")
+			cancel(session)
 			if command != 0 {
 				_ = syscall.Kill(-command, syscall.SIGTERM)
+			}
+			for recorded, s := range running {
+				if !script.CancelEndsPrompt || s != session {
+					continue
+				}
+				// The prompt ends here: its answer goes out now, and what the recording streamed for it
+				// after this point never does.
+				for i := cursor; i < len(lines); i++ {
+					if lines[i].answer == recorded {
+						cursor = i + 1
+						break
+					}
+				}
+				write(map[string]interface{}{"jsonrpc": "2.0", "id": live[recorded], "result": map[string]interface{}{"stopReason": "cancelled"}})
+				delete(running, recorded)
+				waiting = ""
 			}
 		case id != nil:
 			if rpcIDKey(id) == waiting {
 				waiting = ""
+			}
+			if script.HoldAfter != "" && rpcIDKey(id) == script.HoldAfter {
+				held = true
 			}
 		}
 		pump()
 	}
 	time.Sleep(60 * time.Second)
 	return 0
+}
+
+// fakeCursorConfigAnswer is the options a Config script's CLI lists once a session/set_config_option the
+// recording does not hold has set id to value, or the refusal the CLI answers it with (§10). Selecting a
+// model keeps the mode and the model, at its new value, and lists that model's own options from the
+// catalogue in place of the last model's.
+func fakeCursorConfigAnswer(options []interface{}, catalogue map[string][]interface{}, id, value string) ([]interface{}, string) {
+	var listed []interface{}
+	set := false
+	for _, raw := range options {
+		var option map[string]interface{}
+		if wire, err := json.Marshal(raw); err != nil || json.Unmarshal(wire, &option) != nil {
+			continue
+		}
+		switch other := firstString(option, "id"); {
+		case other == id && !cursorOffers(option, value) && id == "model":
+			return nil, "Invalid model value: " + value
+		case other == id && !cursorOffers(option, value):
+			return nil, "Invalid value for " + id + ": " + value
+		case other == id:
+			option["currentValue"] = value
+			set = true
+		case id == "model" && other != "mode":
+			continue // the last model's own option
+		}
+		listed = append(listed, option)
+	}
+	if !set {
+		return nil, "Invalid value for " + id + ": " + value
+	}
+	if id == "model" {
+		listed = append(listed, catalogue[value]...)
+	}
+	return listed, ""
 }
 
 // fakeCursorSameParams is whether a request's params are a recorded one's, the session id and the working
@@ -542,15 +660,18 @@ func newCursorReplay(t *testing.T, recording, session string) *cursorReplay {
 	return newCursorReplayScript(t, fakeCursorACPScript{Recording: recording, Session: session})
 }
 
-// newCursorReplayScript replays the recording script names (scenario/process, under testdata/cursor) the
-// way the rest of the script says.
+// newCursorReplayScript replays the recording script names (scenario/process, under testdata/cursor, or a
+// test's own directory by its absolute path) the way the rest of the script says.
 func newCursorReplayScript(t *testing.T, script fakeCursorACPScript) *cursorReplay {
 	t.Helper()
 	recording := script.Recording
 	dir := t.TempDir()
-	abs, err := filepath.Abs(filepath.Join("testdata", "cursor", recording))
-	if err != nil {
-		t.Fatal(err)
+	abs := recording
+	if !filepath.IsAbs(abs) {
+		var err error
+		if abs, err = filepath.Abs(filepath.Join("testdata", "cursor", recording)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(abs, "stdout.jsonl")); err != nil {
 		t.Fatalf("no recording %s: %v", recording, err)

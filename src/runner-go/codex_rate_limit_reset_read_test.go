@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -144,7 +145,7 @@ func TestCodexResetReadKeepsTopLevelCreditsLossless(t *testing.T) {
 				t.Fatalf("account/rateLimits/read params %v, want null", params)
 			}
 
-			wire, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, read.usage, nil)})
+			wire, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, read.usage, nil, nil)})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -329,7 +330,7 @@ func TestCodexResetOverrideAccountsNeverOpenReset(t *testing.T) {
 			if strings.Contains(err.Error(), secret) || strings.Contains(logs, secret) {
 				t.Fatalf("the %s value leaked: %v / %q", variable, err, logs)
 			}
-			wire, _ := json.Marshal(HeartbeatRequest{LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, probe.snapshot(), nil)})
+			wire, _ := json.Marshal(HeartbeatRequest{LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, probe.snapshot(), nil, nil)})
 			if bytes.Contains(wire, []byte("rateLimitReset")) || bytes.Contains(wire, []byte(secret)) {
 				t.Fatalf("the heartbeat offers reset under %s: %s", variable, wire)
 			}
@@ -430,7 +431,7 @@ func TestCodexUsageProbeReadsResetThroughAFakeAppServer(t *testing.T) {
 				t.Fatal(err)
 			}
 			probe.store(usage)
-			wire, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, probe.snapshot(), nil)})
+			wire, err := json.Marshal(HeartbeatRequest{Status: "ONLINE", LeaseOwner: codexResetTestLeaseOwner, PlanUsage: combinePlanUsage(nil, probe.snapshot(), nil, nil)})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -579,11 +580,35 @@ func (f *fakeCodexBinary) answerSessionsWith(t *testing.T, frames ...map[string]
 	}
 }
 
+// answerTurnsWith lets the fake run turns: turn/start is answered with one Codex turn id, and the
+// frames of attempts[n] follow the answer to the (n+1)th turn/start — one turn's notifications.
+func (f *fakeCodexBinary) answerTurnsWith(t *testing.T, attempts ...[]map[string]interface{}) {
+	t.Helper()
+	files := map[string][]byte{}
+	files["turnStart.json"], _ = json.Marshal(map[string]interface{}{"turn": map[string]interface{}{"id": "turn-fake-session"}})
+	for i, frames := range attempts {
+		var after []byte
+		for _, frame := range frames {
+			data, err := json.Marshal(frame)
+			if err != nil {
+				t.Fatal(err)
+			}
+			after = append(append(after, data...), '\n')
+		}
+		files[fmt.Sprintf("afterTurnStart-%d.jsonl", i+1)] = after
+	}
+	for name, data := range files {
+		if err := os.WriteFile(filepath.Join(f.dir, name), data, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // runFakeCodexAppServer is `codex app-server --stdio` for the shim. It records the spawn — with the
 // CODEX_HOME it ran in — and every frame it receives, answers initialize, account/read and
 // account/rateLimits/read from the answer files — thread/start too once a test serves sessions, saying
-// that test's frames after the answer, and thread/resume as the real server resumes a thread: by id,
-// from a rollout under the CODEX_HOME it runs in — and refuses anything else as the real server refuses
+// that test's frames after the answer, turn/start once a test runs turns (answerTurnsWith), and
+// thread/resume as the real server resumes a thread: by id, from a rollout under the CODEX_HOME it runs in — and refuses anything else as the real server refuses
 // an unknown method — account/rateLimitResetCredit/consume included, which the recording lets a test
 // rule out. An answer file in the CODEX_HOME it runs in (fakeCodexHomeAnswer) wins over the one in dir,
 // so each account can answer for itself.
@@ -608,6 +633,10 @@ func runFakeCodexAppServer(dir string) int {
 			answers[method] = data
 		}
 	}
+	if data, err := os.ReadFile(filepath.Join(dir, "turnStart.json")); err == nil {
+		answers["turn/start"] = data
+	}
+	turnStarts := 0
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
@@ -640,6 +669,13 @@ func runFakeCodexAppServer(dir string) int {
 		}
 		if answered && (method == "thread/start" || method == "thread/resume") {
 			after, _ := os.ReadFile(filepath.Join(dir, "afterThreadStart.jsonl"))
+			if _, err := os.Stdout.Write(after); err != nil {
+				return 1
+			}
+		}
+		if answered && method == "turn/start" {
+			turnStarts++
+			after, _ := os.ReadFile(filepath.Join(dir, fmt.Sprintf("afterTurnStart-%d.jsonl", turnStarts)))
 			if _, err := os.Stdout.Write(after); err != nil {
 				return 1
 			}

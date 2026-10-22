@@ -1,0 +1,39 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T01:37:36.5",
+    "ingested_at": "2026-10-18T01:37:36.52558+00:00",
+    "ingested_by_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "seq": 8,
+    "session_id": "3e912bb3-49f2-583e-84b5-aade5a7aeae3",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-AMY-BURST-T1",
+  "modelRequests": [],
+  "owner": "amy",
+  "session": {
+    "assigned_runner_id": "01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+    "created_at": "2026-10-18T01:37:15.779",
+    "engine": "claude",
+    "id": "3e912bb3-49f2-583e-84b5-aade5a7aeae3",
+    "provider": "deepseek",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14ca7-ebc6-77ae-b948-2101ad69a141",
+    "title": "Task: T06-AMY-BURST-T1 a task run"
+  },
+  "turns": [
+    {
+      "answered_at": "2026-10-18T01:37:36.763",
+      "client_turn_id": "initial-3e912bb3-49f2-583e-84b5-aade5a7aeae3",
+      "content": "Start the task \u201cT06-AMY-BURST-T1 a task run\u201d.\n\nTask description:\nT06-AMY-BURST-T1 a task run\n\nAcceptance criteria (what decides whether this task is done):\nT06 ",
+      "created_at": "2026-10-18T01:37:33.408",
+      "delivered_at": "2026-10-18T01:37:35.476",
+      "id": "01a14ca8-30e0-7106-9670-bb1e780da445",
+      "kind": "message",
+      "seq": 1,
+      "status": "ANSWERED"
+    }
+  ]
+}

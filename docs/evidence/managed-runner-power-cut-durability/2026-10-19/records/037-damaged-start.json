@@ -1,0 +1,107 @@
+{
+ "checks": [
+  {
+   "check": "the gate runs",
+   "ok": true,
+   "value": "active"
+  },
+  {
+   "check": "the switch is on with the lab profile",
+   "ok": true,
+   "value": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t02c/managed-runner-profile.json"
+   ]
+  },
+  {
+   "check": "the profile pins the after image",
+   "ok": true
+  },
+  {
+   "check": "the admission webhook is installed",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T17:35:38.331+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "damaged",
+ "result": {
+  "admission": {
+   "dryRunUnmanagedPod": "pod/t02a-admission-check",
+   "dryRunUnownedManagedClaim": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission"
+  },
+  "gate": {
+   "at": "2026-10-19T17:35:19.534+00:00",
+   "connections": 1004,
+   "control": {
+    "mode": "pass"
+   },
+   "listen": "127.0.0.1:16444",
+   "log": null,
+   "lost": [],
+   "refused": [],
+   "unit": "active"
+  },
+  "recorder": {
+   "at": "2026-10-19T17:35:38.198+00:00",
+   "lines": 216,
+   "log": "/mnt/data/managed-runner-lab/test-server-t02c/timeline.jsonl",
+   "unit": "active"
+  },
+  "restarted": {
+   "apiEnvironmentNames": [
+    "CORS_ORIGINS",
+    "DATABASE_URL",
+    "HOME",
+    "INVOCATION_ID",
+    "JWT_SECRET",
+    "LANG",
+    "MEMORY_PRESSURE_WATCH",
+    "MEMORY_PRESSURE_WRITE",
+    "MODEL_CATALOG_URL",
+    "NODE_ENV",
+    "ORBIT_MANAGED_RUNNERS_ENABLED",
+    "ORBIT_MANAGED_RUNNERS_PROFILE",
+    "ORBIT_RECAP_ENABLED",
+    "PATH",
+    "PORT",
+    "PROVIDER_SECRET_KEY",
+    "PUBLIC_ORIGIN",
+    "SYSTEMD_EXEC_PID",
+    "USER"
+   ],
+   "clusterSettingsInTheEnvironment": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED",
+    "ORBIT_MANAGED_RUNNERS_PROFILE"
+   ],
+   "kubeconfigInTheServerHome": false,
+   "mode": "on",
+   "replica": {
+    "managedSwitch": [
+     "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+     "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t02c/managed-runner-profile.json"
+    ],
+    "port": 13720,
+    "unit": "active"
+   },
+   "seconds": 7.0,
+   "switch": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t02c/managed-runner-profile.json"
+   ],
+   "testServer": [
+    "TLS front (orbit-mr-lab-tls): active",
+    "fake model (orbit-mr-lab-fake-model): active",
+    "PostgreSQL (orbit-mr-lab-pg): running",
+    "listening: 127.0.0.1:13710 127.0.0.1:13711 127.0.0.1:13712 127.0.0.1:15433",
+    "Pods use: https://10.0.2.2:13711 (CA /mnt/data/managed-runner-lab/test-server-t02c/tls/ca.crt); host API http://127.0.0.1:13710/api",
+    "state: /mnt/data/managed-runner-lab/test-server-t02c; managed runners: true",
+    "17:35:19Z applying migrations"
+   ]
+  }
+ },
+ "seconds": 19.8,
+ "startedAt": "2026-10-19T17:35:18.520+00:00",
+ "step": "start"
+}

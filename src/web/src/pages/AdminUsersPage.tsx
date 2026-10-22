@@ -1,7 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { MoreOutlined, SearchOutlined } from '@ant-design/icons';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api, listUserAccessTokens, revokeUserAccessToken, startImpersonation, type AccessToken } from '../api';
+import type { WikiPlanSupportBuildResult, WikiSupportSpace, WikiSupportSpaces } from '@orbit/shared';
+import { api, fetchUserAvatarDataUrl, listUserAccessTokens, revokeUserAccessToken, startImpersonation, type AccessToken } from '../api';
 import { AccessTokenTable } from '../components/AccessTokenTable';
 import { AdminNav } from '../components/AdminNav';
 import { Avatar } from '../components/ui/Avatar';
@@ -12,6 +13,7 @@ import { useConfirm } from '../components/ui/ConfirmDialog';
 import { Dialog } from '../components/ui/Dialog';
 import { Input } from '../components/ui/Input';
 import { Menu, type MenuItem } from '../components/ui/Menu';
+import { Radio, RadioGroup } from '../components/ui/Radio';
 import { Spinner } from '../components/ui/Spinner';
 import { TableEmptyRow, TableFrame } from '../components/ui/Table';
 import { Textarea } from '../components/ui/Textarea';
@@ -37,6 +39,9 @@ interface AdminUser {
   disabledAt?: string | null;
   /** When the account last used Orbit, and through what; null when it never has, absent from a server that predates it. */
   lastActive?: { at: string; via: ActiveVia } | null;
+  /** When the account's profile photo was set — the version it is fetched by; null without one, absent from a
+   *  server that predates the list naming it. */
+  avatarUpdatedAt?: string | null;
 }
 interface CreateResult {
   email: string;
@@ -54,6 +59,12 @@ export const VIEW_AS = 'View as';
 export const START_VIEWING = 'Start viewing';
 /** A row's menu of every other action, named for the account it acts on. */
 export const MORE_ACTIONS = 'More actions';
+/**
+ * An account's wiki documents asked for again, for support (contracts/wiki.contract.json `plan.jobs.rebuild.support`):
+ * the menu's entry, and the dialog's button.
+ */
+export const UPDATE_WIKI_DOCS = 'Update wiki documents…';
+export const UPDATE_DOCUMENTS = 'Update documents';
 /**
  * What the Add-user dialog says under **Google sign-in only** (design §5.2): only a Gmail or Google
  * Workspace address is one Google vouches for, so only that address can be linked by it. Any other
@@ -78,11 +89,19 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 /** The account as the list names it: its name, or the part of its email before the @ while it has none. */
 const nameOf = (u: AdminUser) => u.name.trim() || u.email.split('@')[0];
 
-/** The account: its photo's place, its name, a mark for you and for an administrator, and its email. */
+/** The account: its photo (its initial while it has none), its name, a mark for you and for an administrator, and its email. */
 function UserCell({ user, you }: { user: AdminUser; you: boolean }) {
+  // By the version the row names, so a new photo is a new key; nothing is fetched while there is none. Under a
+  // key of its own rather than the list's, so refreshing the list does not fetch every photo again.
+  const photo = useQuery({
+    queryKey: ['admin', 'avatar', user.id, user.avatarUpdatedAt ?? null],
+    queryFn: () => fetchUserAvatarDataUrl(user.id),
+    enabled: !!user.avatarUpdatedAt,
+    staleTime: Infinity,
+  });
   return (
     <div className="admin-users-who">
-      <Avatar size={32}>{nameOf(user).charAt(0).toUpperCase()}</Avatar>
+      <Avatar size={32} src={photo.data}>{nameOf(user).charAt(0).toUpperCase()}</Avatar>
       <div className="admin-users-who-text">
         <div className="admin-users-name">
           <span className="admin-users-name-text">{nameOf(user)}</span>
@@ -168,6 +187,7 @@ export function AdminUsersPage() {
   const [name, setName] = useState('');
   const [googleOnly, setGoogleOnly] = useState(false);
   const [tokensOf, setTokensOf] = useState<AdminUser | null>(null);
+  const [wikiOf, setWikiOf] = useState<AdminUser | null>(null);
   const [viewAs, setViewAs] = useState<AdminUser | null>(null);
   const [reason, setReason] = useState('');
   const [confirm, confirmation] = useConfirm();
@@ -333,6 +353,7 @@ export function AdminUsersPage() {
       ...(phone && own ? [{ key: 'own', label: own.label, onSelect: own.run }, { type: 'separator', key: 'own-end' }] as MenuItem[] : []),
       { key: 'reset', label: RESET_PASSWORD, onSelect: () => void askReset(u) },
       { key: 'tokens', label: 'Access tokens', onSelect: () => setTokensOf(u) },
+      { key: 'wiki', label: UPDATE_WIKI_DOCS, onSelect: () => setWikiOf(u) },
       ...(u.signInMethods?.google ? [{ key: 'unlink', label: UNLINK_GOOGLE, onSelect: () => askUnlink(u) }] : []),
       {
         key: 'role',
@@ -535,7 +556,99 @@ export function AdminUsersPage() {
       >
         {tokensOf && <UserAccessTokens user={tokensOf} />}
       </Dialog>
+      {wikiOf && <UserWikiDocs key={wikiOf.id} user={wikiOf} onClose={() => setWikiOf(null)} />}
     </div>
+  );
+}
+
+/** What a space's choice says under its title: its version in force and how far its documents are written. */
+function wikiSpaceState(space: WikiSupportSpace): string {
+  if (space.confirmedVersion === null || !space.docs) return 'No plan in force: nothing to write yet';
+  const written = `v${space.confirmedVersion} in force · ${space.docs.written} of ${plural(space.docs.total, 'document', 'documents')} written`;
+  return space.building ? `${written} · being written now` : written;
+}
+
+/**
+ * An account's wiki documents asked for again, for support (contracts/wiki.contract.json `plan.jobs.rebuild.support`):
+ * its spaces, each with its version in force and how far its documents are written, one of them picked, and why —
+ * recorded with the request as this administrator's. The server writes the version in force just as the owner's
+ * Update documents on the plan page does; a space with no plan in force, or a build already on its way, cannot be
+ * picked, and nothing can while the read does not say the server executes the account's wiki.
+ */
+function UserWikiDocs({ user, onClose }: { user: AdminUser; onClose: () => void }) {
+  const message = useToast();
+  const qc = useQueryClient();
+  const [spaceId, setSpaceId] = useState('');
+  const [why, setWhy] = useState('');
+  const key = ['admin', 'users', user.id, 'wiki-spaces'] as const;
+  const spacesQ = useQuery({ queryKey: key, queryFn: () => api<WikiSupportSpaces>(`/admin/wiki/users/${user.id}/spaces`) });
+  const build = useMutation({
+    mutationFn: ({ space, reason }: { space: WikiSupportSpace; reason: string }) =>
+      api<WikiPlanSupportBuildResult>(`/admin/wiki/spaces/${space.id}/plan/build`, { method: 'POST', body: { reason } }),
+    onSuccess: (answer, { space }) => {
+      void qc.invalidateQueries({ queryKey: key });
+      message.success(answer.created ? `Updating the documents of ${space.title}` : `The documents of ${space.title} are already being written`);
+      onClose();
+    },
+    onError: (e: Error) => message.error("Couldn't update the documents", e.message),
+  });
+  const read = spacesQ.data;
+  const ready = (space: WikiSupportSpace) => space.confirmedVersion !== null && !space.building;
+  const picked = read?.serverExecutes ? read.spaces.find((space) => space.id === spaceId && ready(space)) : undefined;
+  return (
+    <Dialog
+      className="admin-user-dialog"
+      title={`Update wiki documents — ${user.email}`}
+      open
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            disabled={!picked || !why.trim()}
+            loading={build.isPending}
+            onClick={() => picked && build.mutate({ space: picked, reason: why.trim() })}
+          >
+            {UPDATE_DOCUMENTS}
+          </Button>
+        </>
+      }
+    >
+      <div className="admin-user-form">
+        <div>
+          Writes what the space’s plan in force has not written yet, and what went out of date, as its owner’s Update
+          documents does. Asking is recorded with your reason.
+        </div>
+        {spacesQ.isPending ? (
+          <Spinner />
+        ) : spacesQ.isError ? (
+          <div>Couldn’t load the spaces: {spacesQ.error.message}</div>
+        ) : !read || read.spaces.length === 0 ? (
+          <div>This account has no wiki spaces.</div>
+        ) : (
+          <>
+            {/* The sign-in policy's choices, one under another with their hint (Administration's own look). */}
+            <RadioGroup<string> aria-label="Space" className="admin-signin-policy" value={spaceId} onValueChange={setSpaceId}>
+              {read.spaces.map((space) => (
+                <Radio key={space.id} value={space.id} disabled={!read.serverExecutes || !ready(space)}>
+                  <span className="admin-signin-choice">{space.title}</span>
+                  <span className="admin-signin-hint">{wikiSpaceState(space)}</span>
+                </Radio>
+              ))}
+            </RadioGroup>
+          </>
+        )}
+        <Textarea
+          aria-label="Reason"
+          placeholder="Reason, e.g. the support request you are answering"
+          value={why}
+          maxLength={500}
+          autoSize={{ minRows: 2, maxRows: 6 }}
+          onChange={(e) => setWhy(e.target.value)}
+        />
+      </div>
+    </Dialog>
   );
 }
 

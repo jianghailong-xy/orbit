@@ -1,0 +1,3 @@
+case mcp
+mock:tool call_mcp_tool {"ServerName":"fake","ToolName":"whoami","Arguments":{"note":"n1"}}
+mock:text done

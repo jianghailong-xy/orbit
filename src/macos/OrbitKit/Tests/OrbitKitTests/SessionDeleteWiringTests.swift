@@ -132,7 +132,8 @@ final class SessionDeleteWiringTests: XCTestCase {
         let project = try slice(app, from: "func loadProjectSessions(_ address: SessionProjectAddress) async {",
                                 to: "\n    }\n")
         XCTAssertTrue(project.contains("let kept = SessionFilter.removing(trashingSessions, from: rows)"))
-        XCTAssertTrue(project.contains("projectSessions = SessionProjectMembers.members(of: address.projectID, in: kept)"))
+        XCTAssertTrue(project.contains("let members = SessionProjectMembers.members(of: address.projectID, in: kept)")
+                      && project.contains("projectSessions = members + landedRows(of: address.projectID, in: kept)"))
         let poll = try slice(app, from: "func pollProjectSessions(_ address: SessionProjectAddress) async {",
                              to: "\n    }\n")
         XCTAssertTrue(poll.contains("let kept = SessionFilter.removing(trashingSessions, from: rows)"))

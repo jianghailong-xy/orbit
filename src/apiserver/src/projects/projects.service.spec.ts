@@ -276,6 +276,8 @@ test('the index buckets every project in one aggregate, not one query per projec
           count: 1, oldestWaitingSince: new Date('2026-07-31T12:00:00.000Z'), nextEscalationAt: null,
         }];
       }
+      // The page's in-flight jobs, read by the same function the project page uses.
+      if (rawQueries === 4) return [];
       // Two of the three projects grouped; `c3` has no tasks and so has no row here at all.
       return [
         { projectId: 'a1', taskCount: 15, running: 1, ready: 2, blocked: 3,
@@ -291,8 +293,10 @@ test('the index buckets every project in one aggregate, not one query per projec
   const rows: any[] = await service.list(OWNER_ID);
 
   // Page-wide overlays, none of which grows with the number of projects: the task rollup, open
-  // blockers, the exception items behind them (§7.1 V1) and the integration bindings.
-  assert.equal(rawQueries, 3);
+  // blockers, the exception items behind them (§7.1 V1), the integration bindings and the jobs in
+  // flight on them — the last read through the project page's own reader, so the two rows state
+  // one job the same way.
+  assert.equal(rawQueries, 4);
   assert.equal(bindingReads, 1);
   // The line each project lands on, read through the one definition of "which line is this" and
   // stated as a branch name: null for the two bindings nobody decided a line for.
@@ -366,7 +370,8 @@ test('the sidebar reads queued and running integration work once for the whole p
   });
   const rows = await service.listSidebar(OWNER_ID);
   assert.equal(bindingReads, 1);
-  assert.equal(rawQueries, 3, 'the sidebar retains its three page-wide task/attention readers');
+  assert.equal(rawQueries, 4,
+    'the sidebar keeps its page-wide task/attention readers and adds the one in-flight read');
   assert.deepEqual(rows[0].integration,
     { line: 'PROJECT_BRANCH', ref: 'project/bg', activeJobCount: 1 });
   assert.deepEqual(rows[0].buckets, { running: 0 }, 'integration work is not a task session');

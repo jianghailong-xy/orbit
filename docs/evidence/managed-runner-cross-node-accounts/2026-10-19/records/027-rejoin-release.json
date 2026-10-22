@@ -1,0 +1,553 @@
+{
+ "checks": [
+  {
+   "check": "the taint is removed",
+   "ok": true,
+   "value": "node/orbit-mr-lab-2 untainted"
+  },
+  {
+   "check": "orbit-mr-lab-2 is Ready, schedulable and untainted",
+   "ok": true,
+   "value": {
+    "name": "orbit-mr-lab-2",
+    "ready": "True",
+    "readySince": "2026-10-19T14:45:28Z",
+    "reason": "KubeletReady",
+    "taints": [],
+    "uid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+    "unschedulable": false
+   }
+  },
+  {
+   "check": "ann: the runner did not move: the same Pod on orbit-mr-lab",
+   "ok": true,
+   "value": "de97e3f3-e934-4609-881f-f38c82423e99"
+  },
+  {
+   "check": "ann, with the old node rejoined: the runner's Pod runs on orbit-mr-lab",
+   "ok": true,
+   "value": {
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "de97e3f3-e934-4609-881f-f38c82423e99"
+   }
+  },
+  {
+   "check": "ann, with the old node rejoined: one Pod on the claim",
+   "ok": true,
+   "value": [
+    {
+     "deleting": false,
+     "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+     "node": "orbit-mr-lab",
+     "phase": "Running",
+     "uid": "de97e3f3-e934-4609-881f-f38c82423e99"
+    }
+   ]
+  },
+  {
+   "check": "ann, with the old node rejoined: one VolumeAttachment, to orbit-mr-lab",
+   "ok": true,
+   "value": [
+    {
+     "attached": true,
+     "deleting": false,
+     "detachError": null,
+     "name": "csi-affdc008f0ae7fe2acbeb01d6fc62d482ff5ec4b75171c6a9da5256ea11ac222",
+     "node": "orbit-mr-lab"
+    }
+   ]
+  },
+  {
+   "check": "ann, with the old node rejoined: the image is mapped by orbit-mr-lab's kernel",
+   "ok": true,
+   "value": [
+    {
+     "address": "10.77.0.1:0/3639404582",
+     "client": "clientclient294137",
+     "device": "rbd1",
+     "image": "orbit-mr-rbd/csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+    }
+   ]
+  },
+  {
+   "check": "ann, with the old node rejoined: and not by orbit-mr-lab-2's",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "ann, with the old node rejoined: one RBD watcher, orbit-mr-lab's kernel client (10.77.0.1)",
+   "ok": true,
+   "value": [
+    "10.77.0.1:0/3639404582"
+   ]
+  },
+  {
+   "check": "ann: the writer quiesced, integrity_check ok",
+   "ok": true,
+   "value": [
+    "ok"
+   ]
+  },
+  {
+   "check": "bob: the runner did not move: the same Pod on orbit-mr-lab",
+   "ok": true,
+   "value": "f18bf6bd-9d69-46d5-912f-bb65032f0903"
+  },
+  {
+   "check": "bob, with the old node rejoined: the runner's Pod runs on orbit-mr-lab",
+   "ok": true,
+   "value": {
+    "node": "orbit-mr-lab",
+    "phase": "Running",
+    "uid": "f18bf6bd-9d69-46d5-912f-bb65032f0903"
+   }
+  },
+  {
+   "check": "bob, with the old node rejoined: one Pod on the claim",
+   "ok": true,
+   "value": [
+    {
+     "deleting": false,
+     "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+     "node": "orbit-mr-lab",
+     "phase": "Running",
+     "uid": "f18bf6bd-9d69-46d5-912f-bb65032f0903"
+    }
+   ]
+  },
+  {
+   "check": "bob, with the old node rejoined: one VolumeAttachment, to orbit-mr-lab",
+   "ok": true,
+   "value": [
+    {
+     "attached": true,
+     "deleting": false,
+     "detachError": null,
+     "name": "csi-7767fb794d9638199285d7bcbf716bedf52faf4454f608f42adeef5e1fc9be15",
+     "node": "orbit-mr-lab"
+    }
+   ]
+  },
+  {
+   "check": "bob, with the old node rejoined: the image is mapped by orbit-mr-lab's kernel",
+   "ok": true,
+   "value": [
+    {
+     "address": "10.77.0.1:0/3639404582",
+     "client": "clientclient294137",
+     "device": "rbd2",
+     "image": "orbit-mr-rbd/csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+    }
+   ]
+  },
+  {
+   "check": "bob, with the old node rejoined: and not by orbit-mr-lab-2's",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "bob, with the old node rejoined: one RBD watcher, orbit-mr-lab's kernel client (10.77.0.1)",
+   "ok": true,
+   "value": [
+    "10.77.0.1:0/3639404582"
+   ]
+  },
+  {
+   "check": "bob: the writer quiesced, integrity_check ok",
+   "ok": true,
+   "value": [
+    "ok"
+   ]
+  }
+ ],
+ "endedAt": "2026-10-19T14:48:32.898+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "rejoin",
+ "result": {
+  "ann": {
+   "placement": {
+    "at": "2026-10-19T14:48:04.228+00:00",
+    "generation": 3,
+    "guests": {
+     "orbit-mr-lab": {
+      "bootId": "393dbae1-9c15-449f-bc00-9816ed2072c5",
+      "devices": [
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd0",
+        "image": "orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd"
+       },
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd1",
+        "image": "orbit-mr-rbd/csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+       },
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd2",
+        "image": "orbit-mr-rbd/csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+       }
+      ],
+      "mounts": [
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/pods/bbc3ff55-2aee-47da-9c43-57f708e36bef/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd2",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/e8dcc238b46fc2c525e59c00a1183d2e93d754a7d3ab864b75709fd2970c9548/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd2",
+        "target": "/var/lib/kubelet/pods/f18bf6bd-9d69-46d5-912f-bb65032f0903/volumes/kubernetes.io~csi/pvc-89d67b8d-c292-4f99-a619-0d964d1df9e5/mount"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd1",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/f2e771687bdf0ba0e2a24a831d4338738031ce21971f9d3cd49f65615db35767/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd1",
+        "target": "/var/lib/kubelet/pods/de97e3f3-e934-4609-881f-f38c82423e99/volumes/kubernetes.io~csi/pvc-22b25daa-3fa0-4432-a081-8ec8ed247208/mount"
+       }
+      ],
+      "uptimeSeconds": 1646.84
+     },
+     "orbit-mr-lab-2": {
+      "bootId": "53b68dde-f1e6-4ffc-9e2a-a042d0f93d7a",
+      "devices": [],
+      "mounts": [],
+      "uptimeSeconds": 186.36
+     }
+    },
+    "image": "orbit-mr-rbd/csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568",
+    "nodeName": "orbit-mr-lab",
+    "pod": {
+     "containers": [
+      {
+       "exitCode": 0,
+       "name": "private-volume-directories",
+       "reason": "Completed",
+       "state": "terminated"
+      },
+      {
+       "exitCode": null,
+       "name": "runner",
+       "reason": null,
+       "state": "running"
+      }
+     ],
+     "deletionTimestamp": null,
+     "disruptionTarget": null,
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "generation": "3",
+     "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+     "node": "orbit-mr-lab",
+     "phase": "Running",
+     "ready": "True",
+     "uid": "de97e3f3-e934-4609-881f-f38c82423e99"
+    },
+    "podUid": "de97e3f3-e934-4609-881f-f38c82423e99",
+    "podsOnTheClaim": [
+     {
+      "deleting": false,
+      "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+      "node": "orbit-mr-lab",
+      "phase": "Running",
+      "uid": "de97e3f3-e934-4609-881f-f38c82423e99"
+     }
+    ],
+    "state": "READY",
+    "volumeAttachments": [
+     {
+      "attached": true,
+      "deleting": false,
+      "detachError": null,
+      "name": "csi-affdc008f0ae7fe2acbeb01d6fc62d482ff5ec4b75171c6a9da5256ea11ac222",
+      "node": "orbit-mr-lab"
+     }
+    ],
+    "watchers": [
+     {
+      "address": "10.77.0.1:0/3639404582",
+      "client": 294137,
+      "cookie": 18446462598732840965
+     }
+    ]
+   },
+   "writerQuiesced": {
+    "acknowledgedRows": 434,
+    "acknowledgedSHA256": "cd87309c954fe3f1b0b2d7c1779fb57be435d35464ffe99c104a08c86a64170e",
+    "committedRows": 434,
+    "gitCommit": "e620e660124e32eb98e330d72ff4ecd759e6376e",
+    "gitFsck": "",
+    "gitStatus": "",
+    "kernel": "7.0.0-34-generic",
+    "mountInfo": [
+     "1775 1760 251:16 / /var/lib/orbit rw,relatime - ext4 /dev/rbd1 rw,stripe=1024"
+    ],
+    "ordinarySHA256": "ce2f2be20803dbf87c2962de029a3df704c25762cc612e535376dfe30ada6252",
+    "prefixRows": 0,
+    "prefixSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "quiesced": true,
+    "rowSHA256": "cd87309c954fe3f1b0b2d7c1779fb57be435d35464ffe99c104a08c86a64170e",
+    "runID": "t08x-writer",
+    "sqliteIntegrity": [
+     "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "walBytes": 0,
+    "walExists": true
+   }
+  },
+  "bob": {
+   "placement": {
+    "at": "2026-10-19T14:48:18.180+00:00",
+    "generation": 3,
+    "guests": {
+     "orbit-mr-lab": {
+      "bootId": "393dbae1-9c15-449f-bc00-9816ed2072c5",
+      "devices": [
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd0",
+        "image": "orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd"
+       },
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd1",
+        "image": "orbit-mr-rbd/csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+       },
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd2",
+        "image": "orbit-mr-rbd/csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+       }
+      ],
+      "mounts": [
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/pods/bbc3ff55-2aee-47da-9c43-57f708e36bef/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd2",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/e8dcc238b46fc2c525e59c00a1183d2e93d754a7d3ab864b75709fd2970c9548/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd2",
+        "target": "/var/lib/kubelet/pods/f18bf6bd-9d69-46d5-912f-bb65032f0903/volumes/kubernetes.io~csi/pvc-89d67b8d-c292-4f99-a619-0d964d1df9e5/mount"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd1",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/f2e771687bdf0ba0e2a24a831d4338738031ce21971f9d3cd49f65615db35767/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd1",
+        "target": "/var/lib/kubelet/pods/de97e3f3-e934-4609-881f-f38c82423e99/volumes/kubernetes.io~csi/pvc-22b25daa-3fa0-4432-a081-8ec8ed247208/mount"
+       }
+      ],
+      "uptimeSeconds": 1660.67
+     },
+     "orbit-mr-lab-2": {
+      "bootId": "53b68dde-f1e6-4ffc-9e2a-a042d0f93d7a",
+      "devices": [],
+      "mounts": [],
+      "uptimeSeconds": 199.93
+     }
+    },
+    "image": "orbit-mr-rbd/csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14",
+    "nodeName": "orbit-mr-lab",
+    "pod": {
+     "containers": [
+      {
+       "exitCode": 0,
+       "name": "private-volume-directories",
+       "reason": "Completed",
+       "state": "terminated"
+      },
+      {
+       "exitCode": null,
+       "name": "runner",
+       "reason": null,
+       "state": "running"
+      }
+     ],
+     "deletionTimestamp": null,
+     "disruptionTarget": null,
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "generation": "3",
+     "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+     "node": "orbit-mr-lab",
+     "phase": "Running",
+     "ready": "True",
+     "uid": "f18bf6bd-9d69-46d5-912f-bb65032f0903"
+    },
+    "podUid": "f18bf6bd-9d69-46d5-912f-bb65032f0903",
+    "podsOnTheClaim": [
+     {
+      "deleting": false,
+      "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+      "node": "orbit-mr-lab",
+      "phase": "Running",
+      "uid": "f18bf6bd-9d69-46d5-912f-bb65032f0903"
+     }
+    ],
+    "state": "READY",
+    "volumeAttachments": [
+     {
+      "attached": true,
+      "deleting": false,
+      "detachError": null,
+      "name": "csi-7767fb794d9638199285d7bcbf716bedf52faf4454f608f42adeef5e1fc9be15",
+      "node": "orbit-mr-lab"
+     }
+    ],
+    "watchers": [
+     {
+      "address": "10.77.0.1:0/3639404582",
+      "client": 294137,
+      "cookie": 18446462598732840964
+     }
+    ]
+   },
+   "writerQuiesced": {
+    "acknowledgedRows": 441,
+    "acknowledgedSHA256": "6ddd713b59faf5871b89177ebd63eca8d13da2f1fbdd4d771a7975130aef9bd3",
+    "committedRows": 441,
+    "gitCommit": "e620e660124e32eb98e330d72ff4ecd759e6376e",
+    "gitFsck": "",
+    "gitStatus": "",
+    "kernel": "7.0.0-34-generic",
+    "mountInfo": [
+     "1720 1705 251:32 / /var/lib/orbit rw,relatime - ext4 /dev/rbd2 rw,stripe=1024"
+    ],
+    "ordinarySHA256": "ce2f2be20803dbf87c2962de029a3df704c25762cc612e535376dfe30ada6252",
+    "prefixRows": 0,
+    "prefixSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "quiesced": true,
+    "rowSHA256": "6ddd713b59faf5871b89177ebd63eca8d13da2f1fbdd4d771a7975130aef9bd3",
+    "runID": "t08x-writer",
+    "sqliteIntegrity": [
+     "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "walBytes": 0,
+    "walExists": true
+   }
+  },
+  "memory": {
+   "at": "2026-10-19T14:48:26.818Z",
+   "host": {
+    "MemAvailable": 4718,
+    "MemTotal": 15357,
+    "SwapFree": 31044,
+    "SwapTotal": 44285
+   },
+   "label": "t08x second node rejoined",
+   "vms": {
+    "orbit-mr-lab": {
+     "guest": {
+      "stat-available-memory": 3309,
+      "stat-disk-caches": 1160,
+      "stat-free-memory": 2347,
+      "stat-total-memory": 5920
+     },
+     "unit": {
+      "currentMiB": 2369,
+      "peakMiB": 3409,
+      "swapMiB": 1803
+     }
+    },
+    "orbit-mr-lab-2": {
+     "guest": {
+      "stat-available-memory": 2375,
+      "stat-disk-caches": 647,
+      "stat-free-memory": 1915,
+      "stat-total-memory": 2903
+     },
+     "unit": {
+      "currentMiB": 896,
+      "peakMiB": 1111,
+      "swapMiB": 378
+     }
+    }
+   }
+  },
+  "node": {
+   "name": "orbit-mr-lab-2",
+   "ready": "True",
+   "readySince": "2026-10-19T14:45:28Z",
+   "reason": "KubeletReady",
+   "taints": [],
+   "uid": "8e19d40a-87fc-4db6-96cf-fe7837c1014a",
+   "unschedulable": false
+  },
+  "nodePluginReadyAt": "2026-10-19T14:47:28.526+00:00",
+  "nodePluginReadyBefore": false,
+  "releasedAt": "2026-10-19T14:47:19.194+00:00",
+  "status": {
+   "exit": 0,
+   "lines": [
+    "unit orbit-mr-lab-2: memory.current 890 MiB, memory.peak 1111 MiB, swap 306 MiB, memory.max 3758096384",
+    "host: MemAvailable 3819 MiB, SwapFree 31096 MiB",
+    "guest 1 (virtio-balloon): {\"guestMiB\": {\"stat-available-memory\": 3357, \"stat-free-memory\": 2505, \"stat-total-memory\": 5920, \"stat-disk-caches\": 1051}, \"lastUpdate\": 1792421251}",
+    "guest 2 (virtio-balloon): {\"guestMiB\": {\"stat-available-memory\": 2374, \"stat-free-memory\": 1918, \"stat-total-memory\": 2903, \"stat-disk-caches\": 644}, \"lastUpdate\": 1792421254}",
+    "guest 1: {\"cephHealth\":\"HEALTH_OK\",\"osdsUp\":3,\"osdsIn\":3,\"pgStates\":[{\"state_name\":\"active+clean\",\"count\":33}],\"cephListens\":\"10.77.0.1\",\"problems\":[]}",
+    "guest 2: {\"linkRttMs\":\"0.320\",\"rbdMapped\":0,\"problems\":[]}",
+    "k3s v1.36.5+k3s1",
+    "node orbit-mr-lab Ready: True, internal IP 10.77.0.1",
+    "node orbit-mr-lab-2 Ready: True, internal IP 10.77.0.2",
+    "deployment/ceph-csi-operator-controller-manager: 1/1 available",
+    "deployment/rbd.csi.ceph.com-ctrlplugin: 1/1 available",
+    "daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab: ready",
+    "daemonset/rbd.csi.ceph.com-nodeplugin on orbit-mr-lab-2: ready",
+    "healthy, two nodes: orbit-mr-lab and orbit-mr-lab-2 Ready over the link 10.77.0.0/24; Ceph (3 OSDs, HEALTH_OK) at 10.77.0.1; Ceph-CSI on both nodes; StorageClass runner-data, namespace orbit-mr-test"
+   ]
+  },
+  "untaint": {
+   "at": "2026-10-19T14:47:19.106+00:00",
+   "exit": 0,
+   "label": "the out-of-service taint off orbit-mr-lab-2",
+   "script": "$K taint node \"$NODE\" node.kubernetes.io/out-of-service-",
+   "stderr": "",
+   "stdout": "node/orbit-mr-lab-2 untainted",
+   "variables": {
+    "NODE": "orbit-mr-lab-2"
+   }
+  }
+ },
+ "seconds": 73.9,
+ "startedAt": "2026-10-19T14:47:19.030+00:00",
+ "step": "release"
+}

@@ -1,0 +1,1 @@
+06:41:39.712 VIOLATION {"at": 57.9, "what": "key fields differ", "request": "POST /api/sessions", "fields": {"model": {"app": "claude-opus-5", "recorded": "deepseek-v4-pro"}}}

@@ -169,7 +169,7 @@ public struct WikiSpaceRepoHealth: Codable, Equatable, Sendable {
 /// `GET /wiki/spaces/:id/health`: every active entry of the space, and where its maintenance run stands — and,
 /// from P2 and P9 on, what the server's runs depend on: the repository's look, whether the server executes this
 /// account's wiki (`executor`), and the System model's state while it does. Each is absent from an older control
-/// plane, which reads as runner and draws the line as it always was.
+/// plane, whose line says the look alone.
 public struct WikiSpaceHealth: Codable, Equatable, Sendable {
     public let spaceId: String
     /// The space's active entries, every one of them — the status line's `N entries`.

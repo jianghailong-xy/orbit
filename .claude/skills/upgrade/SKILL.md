@@ -61,9 +61,16 @@ It will, in order:
    `postgres` is left running untouched — it is not in the recreate set.
 4. Print `docker compose ps`.
 
+On a deployment whose `.env` turns on the `managed-runners-docker` profile, steps
+2 and 3 also cover managed runners: `docker-channel` is built with the rest, the
+managed runner image is rebuilt and named in both of its files, and the apiserver
+and then `docker-channel` are recreated after the other services (see Notes).
+
 With `--pull-base` it instead first runs `docker compose pull postgres gateway`
 and then a full `docker compose up -d --wait`, so a genuinely new base image is
-applied — this is the only path that may recreate (restart) `postgres`.
+applied — this is the only path that may recreate (restart) `postgres`. With the
+managed runners' profile on, that full recreate leaves out `docker-channel`,
+which follows the apiserver as above.
 
 ### Flags
 
@@ -74,10 +81,13 @@ applied — this is the only path that may recreate (restart) `postgres`.
 - `--pull-base` — also refresh the pinned base images (`postgres`, `gateway`)
   and run a full recreate. This is the only path that may restart `postgres`;
   omit it (the default) to leave an unchanged `postgres` running.
-- `--no-cache` — rebuild the apiserver/web images without the Docker layer
-  cache (use when a dependency change isn't being picked up).
+- `--no-cache` — rebuild the apiserver/web images (and, with managed runners on,
+  the channel's and the managed runner image) without the Docker layer cache (use
+  when a dependency change isn't being picked up).
 - `--prune` — `docker image prune -f` after a successful upgrade to reclaim
-  space from the now-dangling old image layers.
+  space from the now-dangling old image layers. In the classic image store that
+  includes a previous managed runner image once no container, running or
+  stopped, was made from it; Docker never prunes one a container uses.
 - `--allow-dirty` — build even though the checkout has uncommitted changes. Use
   when you deliberately want to test an uncommitted change in the deployment, and
   remember the change exists in no commit: the next clean rebuild reverts it.
@@ -97,6 +107,30 @@ applied — this is the only path that may recreate (restart) `postgres`.
 
 ## Notes
 
+- Managed runners stay as the deployment's `.env` has them: the script never writes `.env`. A
+  deployment installed before them, or with `--no-managed-runners`, keeps them off; only a fresh
+  install (`scripts/install-server.sh`) or an administrator switches them on (docs/self-hosting.md,
+  "Managed runners"). Where `.env` does not turn on the `managed-runners-docker` Compose profile,
+  Compose does not list `docker-channel`, and the script builds, recreates and writes exactly what it
+  did before managed runners existed: nothing under `data/`, no managed runner image.
+- Where `.env` turns that profile on, the script also:
+  1. finds the managed runners' directory where Compose binds it into `docker-channel`, and stops
+     before building anything if its `channel.json` and `profile.json` are not there;
+  2. builds `docker-channel` with the other images, then the managed runner image from
+     `deploy/managed-runner/image` as `orbit-managed-runner:local` (local, never pushed; `--no-cache`
+     applies to it too);
+  3. when its image ID is new, writes that ID into both files, each replaced whole by a rename;
+  4. recreates the other services as above, then the apiserver again if that did not recreate it
+     (it reads the profile only as it starts), then `docker-channel`, last. The apiserver goes
+     first: until the channel serves the image its profile names, it makes no container and only
+     waits, while a channel already on the new image would refuse the old apiserver's creates.
+  A managed runner's container keeps the image it was made from and is never stopped by the
+  upgrade: each runner moves to the new image with its next container, when it wakes after it next
+  sleeps. Nothing deletes the previous image while a container uses it: in Docker's containerd image
+  store it loses its name when the new image takes the tag, and its storage goes with the last
+  container made from it; in the classic store `--prune` removes it once no container uses it.
+  `data/managed-runners/.image-switch` marks a switch written and not yet started on, so a run that
+  failed between the two is finished by the next one.
 - The default `up -d --wait apiserver wiki-worker web gateway` only recreates services whose
   image or config changed, so an upgrade with no source changes is a no-op (and
   stays healthy). `postgres` is never recreated unless you pass `--pull-base` and

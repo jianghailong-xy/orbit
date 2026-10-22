@@ -52,8 +52,12 @@ func TestBgJobSocketRunsAndReadsAJob(t *testing.T) {
 		t.Fatalf("token file = %q, %v", data, err)
 	}
 
+	// The job waits for this file, written once its pid has been looked at: a job that is only
+	// `echo` can be over, and reaped, before the reply to `run` reaches the caller.
+	release := filepath.Join(t.TempDir(), "release")
 	raw, err := bgSocketCall(socket, "test-token", "run", map[string]interface{}{
-		"command": "echo over-the-socket", "kind": bgKindJob,
+		"command": "echo over-the-socket; while [ ! -e " + shellQuote(release) + " ]; do sleep 0.01; done",
+		"kind":    bgKindJob,
 	})
 	if err != nil {
 		t.Fatalf("run failed: %v", err)
@@ -74,6 +78,9 @@ func TestBgJobSocketRunsAndReadsAJob(t *testing.T) {
 	}
 	if !started.HoldsWorktree {
 		t.Fatal("bg_run did not tell the caller its job fences the checkout")
+	}
+	if err := os.WriteFile(release, nil, 0o600); err != nil {
+		t.Fatal(err)
 	}
 
 	// Read it back until it has ended, exactly as the agent would.

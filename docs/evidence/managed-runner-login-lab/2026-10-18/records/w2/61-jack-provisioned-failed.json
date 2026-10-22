@@ -1,0 +1,110 @@
+{
+  "at": "2026-10-17T23:42:27.494+00:00",
+  "bootstrapSecret": {
+    "createdAt": "2026-10-17T23:42:26Z",
+    "generation": "1"
+  },
+  "boundToTheManagedRunner": true,
+  "defaultWorkspace": {
+    "auto_init_git": true,
+    "created_at": "2026-10-17T23:42:23.806",
+    "enable_worktree": true,
+    "id": "01a14c3e-c23e-7476-91bc-0c732d445324",
+    "name": "Default",
+    "position": null,
+    "runner_id": "01a14c3e-c23e-7476-91bc-0b1010f420a1",
+    "target_runner_id": "01a14c3e-c23e-7476-91bc-0b1010f420a1",
+    "work_dir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "display": {
+    "acceptsWork": false,
+    "detail": "The single-Pod admission guard is not in force in this environment, so no instance is started. An operator has to install it; then it can be retried.",
+    "ensure": false,
+    "kind": "failed",
+    "moving": false,
+    "retry": true,
+    "signIn": false,
+    "startsNewSession": false,
+    "title": "Managed runner failed"
+  },
+  "mapping": {
+    "attempt": 0,
+    "createdAt": "2026-10-17T23:42:23.807+00:00",
+    "desired_state": "RUNNING",
+    "generation": 1,
+    "id": "01a14c3e-c23f-7742-9b80-346078104f26",
+    "initial_provider": null,
+    "last_error": {
+      "code": "ADMISSION_GUARD_MISSING",
+      "detail": "a Pod the single-Pod admission guard must refuse was admitted by a dry run",
+      "message": "The single-Pod admission guard is not in force in this environment, so no instance is started. An operator has to install it; then it can be retried.",
+      "retryable": true
+    },
+    "management_state": "FAILED",
+    "node_name": null,
+    "pod_uid": null,
+    "pv_uid": "ef14cf1a-58f8-4857-8bb9-8b99cdd4ddcc",
+    "pvc_name": "mr-data-01a14c3e-c23e-7476-91bc-0b1010f420a1",
+    "pvc_uid": "d1075e02-0f32-4913-9884-5c3da5d1e57d",
+    "state_entered_at": "2026-10-17T23:42:26.88+00:00",
+    "volume_handle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-26bee6a0-0386-40cd-822b-71c0cb191d46"
+  },
+  "owner": "jack",
+  "pod": null,
+  "pv": {
+    "createdAt": "2026-10-17T23:42:23Z",
+    "driver": "rbd.csi.ceph.com",
+    "fsType": "ext4",
+    "image": "csi-vol-26bee6a0-0386-40cd-822b-71c0cb191d46",
+    "uid": "ef14cf1a-58f8-4857-8bb9-8b99cdd4ddcc"
+  },
+  "pvc": {
+    "accessModes": [
+      "ReadWriteOnce"
+    ],
+    "createdAt": "2026-10-17T23:42:23Z",
+    "phase": "Bound",
+    "storageClass": "runner-data",
+    "uid": "d1075e02-0f32-4913-9884-5c3da5d1e57d"
+  },
+  "runner": {
+    "capabilities": [],
+    "enrolled_at": "2026-10-17T23:42:23.806",
+    "id": "01a14c3e-c23e-7476-91bc-0b1010f420a1",
+    "last_heartbeat_at": null,
+    "name": "orbit-managed",
+    "status": "OFFLINE",
+    "version": null
+  },
+  "runnerEngines": [],
+  "signIns": [
+    {
+      "at": "2026-10-17T23:42:23.780+00:00",
+      "ms": 31.9,
+      "port": 13710,
+      "status": 201
+    }
+  ],
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": true,
+      "canSleep": false,
+      "canWake": false
+    },
+    "desiredState": "RUNNING",
+    "heartbeatStatus": "OFFLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": null,
+    "managementState": "FAILED",
+    "reason": {
+      "code": "ADMISSION_GUARD_MISSING",
+      "message": "The single-Pod admission guard is not in force in this environment, so no instance is started. An operator has to install it; then it can be retried.",
+      "retryable": true
+    },
+    "runnerId": "34hkUMxuOejzeYKYK226r",
+    "usable": false,
+    "workspaceId": "34hkUMxuOejzeYlP8LA28"
+  }
+}

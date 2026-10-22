@@ -1,0 +1,61 @@
+{
+ "checks": [
+  {
+   "check": "no managed row changed",
+   "ok": true
+  },
+  {
+   "check": "the capacity pool did not change",
+   "ok": true
+  },
+  {
+   "check": "no connection reached the gate (the manager's only way to k3s)",
+   "ok": true,
+   "value": 0
+  },
+  {
+   "check": "no apiserver socket to the k3s API",
+   "ok": true
+  },
+  {
+   "check": "no object in the namespace changed",
+   "ok": true,
+   "value": []
+  }
+ ],
+ "endedAt": "2026-10-18T12:36:51.501+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "off-false",
+ "result": {
+  "apiserverSocketsToTheApi": [],
+  "changed": [],
+  "demands": [],
+  "from": "2026-10-18T12:35:21.303+00:00",
+  "gateConnectionsDuring": 0,
+  "label": "false",
+  "managedLogLinesSinceStart": [
+   "\u001b[32m[Nest] 488524  - \u001b[39m10/18/2026, 8:34:20 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner, GET} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 488524  - \u001b[39m10/18/2026, 8:34:20 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/ensure, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 488524  - \u001b[39m10/18/2026, 8:34:20 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/retry, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 488524  - \u001b[39m10/18/2026, 8:34:20 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/wake, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 488524  - \u001b[39m10/18/2026, 8:34:20 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/sleep, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 488524  - \u001b[39m10/18/2026, 8:34:20 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/delete, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 488524  - \u001b[39m10/18/2026, 8:34:20 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RoutesResolver] \u001b[39m\u001b[32mManagedRunnerAdmissionController {/api/managed-runner/admission}:\u001b[39m\u001b[38;5;3m +0ms\u001b[39m",
+   "\u001b[32m[Nest] 488524  - \u001b[39m10/18/2026, 8:34:20 PM \u001b[32m    LOG\u001b[39m \u001b[38;5;3m[RouterExplorer] \u001b[39m\u001b[32mMapped {/api/managed-runner/admission, POST} route\u001b[39m\u001b[38;5;3m +0ms\u001b[39m"
+  ],
+  "mappingRows": 0,
+  "mappingsUnchanged": true,
+  "namespaceObjects": 53,
+  "namespaceUnchanged": true,
+  "poolUnchanged": true,
+  "switch": [
+   "ORBIT_MANAGED_RUNNERS_ENABLED=false"
+  ],
+  "to": "2026-10-18T12:36:51.435+00:00",
+  "waitedSeconds": 90
+ },
+ "seconds": 90.4,
+ "startedAt": "2026-10-18T12:35:21.146+00:00",
+ "step": "quiet"
+}

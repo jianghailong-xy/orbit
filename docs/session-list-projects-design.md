@@ -1,6 +1,6 @@
 # 会话列表里的项目条目：一个项目合成一个条目
 
-状态：已定稿（2026-10-04），按项目「会话列表：一个项目合成一个条目」分任务落地。效果图在 `docs/mocks/session-list-projects/`：`01-web` 是真实 Web 控制台截图，新加的部分用控制台自己的样式画进页面；`02-ios` 是 iPhone 版式，照 `AgentSessionRow.compactRow` 画。
+状态：已定稿（2026-10-04），按项目「会话列表：一个项目合成一个条目」分任务落地。修订：10-05 点条目改为进项目会话页；10-17 条目在别的 Workspace 里，方向键跨过、默认打开不挑它（§4.3、§4.4）。效果图在 `docs/mocks/session-list-projects/`：`01-web` 是真实 Web 控制台截图，新加的部分用控制台自己的样式画进页面；`02-ios` 是 iPhone 版式，照 `AgentSessionRow.compactRow` 画。
 本文是执行会话的契约：写代码前读它；实现与本文冲突时，先说清楚再改，别悄悄偏离。
 
 ## 1. 为什么
@@ -52,6 +52,8 @@
 
 集成线契约修订 12（§2.9 LS6，对实现的要求）：平铺的 `GET /sessions`（不带 `projectId` 的各 view）、`GET /sessions/compact`、`GET /sessions/search`、`GET /sessions/counts`，以及 agent 工具 `session_list`、`session_search`，默认排除落地会话；`GET /sessions?projectId=` 只在带 `includeLanding=1` 时把该项目的落地会话以 `LANDING` 角色返回，项目会话页带上它。直接链接的 `GET /sessions/:id`、`session_get` 不受列表排除规则影响。
 
+`includeLanding=1` 读回的 `LANDING` 行另带可选的 `landing` 摘要：`{ subject: 'TASK' | 'PROMOTION', state: 'IN_FLIGHT' | 'AWAITING_DECISION' | 'SETTLED', settledAs, settledAt }`（`settledAs` 只在 `SETTLED` 时有值）。`AWAITING_DECISION` 指段里有 OPEN 的集成类待办，或候选为 `BLOCKED`；`SETTLED` 的行在 `view=completed` 里。分组与 24 小时窗口在客户端：Landings 组只列等决定的与 24 小时内结案的，从不列在途的与已合入的合入轮，已结的折叠成「Earlier · n landed」。
+
 ### 3.3 `/projects/sidebar` 补进度数字
 
 每个项目加 `taskCounts: { done, failed, total }`，取自触发器维护的 `project_task_status_count`：`done` 是 DONE，`failed` 是 FAILED，`total` 是除 CANCELLED 外的全部。`buckets.running`、`attention`、`coordinatorActivity` 已经有了。
@@ -92,11 +94,12 @@
 
 ### 4.3 点击
 
-- **点条目**：进第 2 行所说的那个会话。第 1、3、4、6 种是 coordinator；第 2 种是那个等你的执行会话；第 5 种今天有 coordinator 时进 coordinator、没有时进项目会话页（集成线契约修订 12 对实现的要求：`inFlight` 带 `landingSessionId` 时进那个落地会话）；第 7 种进项目会话页。
-- **点进度小标签**：进项目会话页（§5）。它是单独的点击区：Web 悬停时描边变蓝，提示 `<n> sessions · <m> running`（n 含 coordinator）；iOS 把它的点击区加高到整行。
-- **Web 悬停 ⋯ / 右键 / iOS 长按**：`Open Session`、`Sessions`、`Open Project`，分隔线，`Pin` / `Unpin`、`Move…`（owner 10-04 的决定）。`Open Session` 和点条目一样，打开第 2 行所说的会话；没有可打开的会话时置灰。后两项作用在 coordinator 上，条目跟着走。
+- **点条目**：进项目会话页（§5），会话栏留在本 Workspace（10-05 起；之前是进第 2 行所说的那个会话）。
+- **进度小标签**：不再是单独的点击区，点它就是点条目；Web 悬停时提示 `<n> sessions · <m> running`（n 含 coordinator）。
+- **Web 悬停 ⋯ / 右键 / iOS 长按**：`Open Session`、`Sessions`、`Open Project`，分隔线，`Pin` / `Unpin`、`Move…`（owner 10-04 的决定）。`Open Session` 打开第 2 行所说的那个会话：第 1、3、4、6 种是 coordinator；第 2 种是那个等你的执行会话；第 5 种有 coordinator 时进 coordinator（集成线契约修订 12 对实现的要求：`inFlight` 带 `landingSessionId` 时进那个落地会话）；第 2 行说的不是一个会话时（第 5 种没有 coordinator、第 7 种）置灰。后两项作用在 coordinator 上，条目跟着走。
   - **不放** `Complete`、`Share`、`Delete`：完成 coordinator 会影响整个项目，要在对话里做。
   - **不放任何回答按钮**：回答只在对话里的卡片上（`OwnerConfirmationCard.test` 钉着“会话列表上不能有回答入口”）。
+- **方向键与默认打开**（Web，owner 10-17 的决定，效果图 `docs/mocks/project-row-other-workspace/`）：↑ / ↓ 逐行切换打开的会话；从侧栏进 Workspace 时，默认打开列表里的一条。在 coordinator 所在的 Workspace 里，条目算作 coordinator 那一行，↑ / ↓ 走到它就打开 coordinator。在别的 Workspace 里，条目只收本 Workspace 的成员会话，和文件夹行一样：↑ / ↓ 跨过它，默认打开也不挑它，免得打开 coordinator 把会话栏换成它的 Workspace。没有 coordinator 的条目同样跨过。
 - **滑动**（iOS、Web 手机）：右滑 `Pin` / `Unpin`，左滑 `Move`。
 - **选中态**（Web）：打开的会话是这个项目的成员时，条目高亮。
 
@@ -106,13 +109,13 @@
 - **Open / Completed**：视图里有这个项目的任何一个会话就显示条目，状态点、时间只算这个视图里的会话（同文件夹）。执行会话在任务 DONE 后会自动进 Completed（`docs/session-lifecycle-design.md` §3），所以 Completed 里的条目收着已完成的执行会话。
 - **Trash、Filter by Tag、Group by Tag、搜索**：平铺，不合并，免得两套分组叠在一起（同文件夹）。
 - **文件夹**：coordinator 在哪个文件夹，条目就在哪个文件夹（文件夹行的数字和标记把条目里的会话算进去）。成员会话一律收在条目后面，忽略它们自己的 `folderId`；非 coordinator 成员的 `Move…` 隐藏。
-- **跨 Workspace**：每个有成员会话的 Workspace 列表里都出现这个条目，内容是整个项目的，状态点只算本 Workspace 的会话；点了照样打开第 2 行所说的会话，会话栏跟着换到它的 Workspace（Web 本来就这样）。
+- **跨 Workspace**：每个有成员会话的 Workspace 列表里都出现这个条目，内容是整个项目的，状态点只算本 Workspace 的会话。点了进项目会话页，会话栏留在本 Workspace。在 coordinator 所在的 Workspace 之外，条目只代表本 Workspace 的成员会话，像文件夹行：方向键跨过它，默认打开不挑它（§4.3，owner 10-17）。从项目会话页或菜单的 `Open Session` 打开别的 Workspace 的会话时，会话栏跟着换到那个 Workspace（Web 本来就这样）。
 - **老服务器**：没有 `projectMembership` 时平铺，和现在一样。项目不在 `/projects/sidebar` 里（比如已 DONE）时，进度小标签只显示 `projectStatus`，不画进度条。
 - **Needs-you 提示条、推送**：不变，照旧直接跳到等你的那个会话。
 
 ## 5. 项目会话页
 
-- **入口**：进度小标签、菜单里的 `Sessions`、没有 coordinator 时点条目。
+- **入口**：点条目（10-05 起）、菜单里的 `Sessions`。
 - **Web**：会话栏原地换页，地址带 `?project=<id>`，浏览器后退、刷新都对；在这一页里打开会话时参数跟着走。做法照文件夹页（`?folder=`）。
 - **iOS**：iPhone 推进导航栈（`NavNode` 加一种页面）；iPad 中间栏原地换页。和文件夹页走同一套。
 - **页头**：‹ 回到 Workspace 的列表；标题是项目名，下面一行小字 `Project · <n> sessions`；右上角一个按钮（iOS 用 `square.grid.2x2`）直接进项目页，不再是 ⋯ 菜单（owner 10-06 的决定）。这里没有 New session：项目的会话由 coordinator 派发。

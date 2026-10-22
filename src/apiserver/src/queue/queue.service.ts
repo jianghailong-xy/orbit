@@ -53,7 +53,8 @@ import {
   sessionAccountPausedUntil,
   type WorkspaceAccountChoices,
 } from '../providers/plan-usage-accounts';
-import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
+import { ACCOUNT_CHOICE, ACCOUNT_PINNED, type AccountRunner } from '../providers/account';
+import { runnerAccountPausedUntil } from '../common/account-pause';
 import {
   choosePoolMember,
   poolFallbackNotice,
@@ -99,11 +100,6 @@ import { sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
 import { branchName } from '../projects/project-criterion-landing';
-import {
-  wikiMaintenanceRunOf,
-  wikiMaintenanceSessionSql,
-  withWikiMaintenanceRun,
-} from '../wiki/wiki-maintenance-session';
 import { managedRunnerInstanceClaimable, type ManagedRunnerInstance } from '../managed-runners/managed-runner-instance';
 import { MANAGED_RUNNER_GATE, type ManagedRunnerGate } from '../managed-runners/managed-runner-gate';
 
@@ -174,13 +170,12 @@ export class QueueService {
     waitMs = 0,
     supportsTerminalHandoff = false,
     supportsSourcePin = false,
-    supportsWikiMaintenance = false,
     hungUp?: AbortSignal,
   ): Promise<ClaimedSession | null> {
     const deadline = Date.now() + waitMs;
     for (;;) {
       if (hungUp?.aborted) return null;
-      const job = await this.trySessionClaim(runner, supportsTerminalHandoff, supportsSourcePin, supportsWikiMaintenance, hungUp);
+      const job = await this.trySessionClaim(runner, supportsTerminalHandoff, supportsSourcePin, hungUp);
       if (job) return job;
       const remaining = deadline - Date.now();
       if (remaining <= 0) return null;
@@ -198,13 +193,13 @@ export class QueueService {
    * DeepSeek key under a DeepSeek Harness session, a Claude subscription token under OpenCode — holds
    * it here with PROVIDER_ENGINE_INCOMPATIBLE's message rather than letting the claim hand the runner
    * another CLI's job (docs/provider-engine-contract.md §4.1). The claim clears it like every hold. */
-  private async pausedPendingSessions(
-    runnerId: string, supportsWikiMaintenance: boolean, dshUnavailable?: string | null,
-  ): Promise<string[]> {
+  private async pausedPendingSessions(runnerId: string, dshUnavailable?: string | null): Promise<string[]> {
     const now = new Date();
     const pending = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId, status: 'PENDING', cancelRequestedAt: null,
+        // The claim SQL's own filter: a LANDING row is never claimed, so it is never held either.
+        sessionKind: 'CONVERSATION',
         OR: [
           { providerBuiltin: false },
           { assignedRunner: { accountPauses: { not: Prisma.DbNull } } },
@@ -223,7 +218,9 @@ export class QueueService {
         workspace: {
           select: { env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true },
         },
-        assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
+        assignedRunner: {
+          select: { engines: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true },
+        },
       },
     });
     const blocked: string[] = [];
@@ -245,8 +242,10 @@ export class QueueService {
         const move = canMove && accountBeforeDispatch(slug, {
           account: session[ACCOUNT_CHOICE[slug]],
           pinned: session[ACCOUNT_PINNED[slug]],
-        }, session.workspace, runner.engines, runner.planUsage, now, runner.accountPauses);
-        if (move) until = null;
+        }, session.workspace, runner, now);
+        // Off a Default its owner removed from Orbit the move is to Automatic's pick even when that is
+        // paused too — every account left is — and the session waits for it.
+        if (move && !runnerAccountPausedUntil(runner.accountPauses, slug, move.to, now)) until = null;
       }
       if (!isBuiltinProvider(slug, session.providerBuiltin) && slug) {
         // The key it names, or the one a retired name of it resolves to (migration 0415).
@@ -260,17 +259,6 @@ export class QueueService {
         if (!unavailable && engine) {
           const engines = provider ? credentialEngines(keyCredential(provider)) : [poolEngine!];
           if (!engines.includes(engine)) incompatible = engineIncompatibleMessage(slug, engine, engines);
-        }
-        // A Wiki maintenance session is not held for it by a runner that declares wiki-maintenance-run/v1: the
-        // claim hands it over with its refusal (wiki/wiki-maintenance-session.ts), which that runner ends FAILED
-        // without starting any engine. Held here, it would wait PENDING for good, and its space's maintenance with it.
-        if ((unavailable || incompatible) && supportsWikiMaintenance) {
-          const maintained = await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
-            SELECT s.id FROM "session" s WHERE s.id = ${session.id}::uuid AND ${wikiMaintenanceSessionSql('s')}`);
-          if (maintained.length > 0) {
-            unavailable = false;
-            incompatible = null;
-          }
         }
         const key = `${session.ownerId}:${slug}`;
         if (!poolPauses.has(key)) poolPauses.set(key, await this.accountPoolPausedUntil(session.ownerId, slug, now));
@@ -331,7 +319,6 @@ export class QueueService {
     runner: ClaimingRunner,
     supportsTerminalHandoff: boolean,
     supportsSourcePin: boolean,
-    supportsWikiMaintenance: boolean,
     hungUp?: AbortSignal,
   ): Promise<ClaimedSession | null> {
     const supportsOpenCode = runner.supportedProviders?.includes(AgentProvider.OPENCODE) ?? false;
@@ -342,7 +329,7 @@ export class QueueService {
     // Cursor CLI: the route keeps it in the request's declaration only when the runner's persisted
     // heartbeat declares it too (RunnerApiController.claim); the statement below asks the heartbeat again.
     const supportsCursor = runner.supportedProviders?.includes(AgentProvider.CURSOR) ?? false;
-    const paused = await this.pausedPendingSessions(runner.id, supportsWikiMaintenance, runner.dshUnavailable);
+    const paused = await this.pausedPendingSessions(runner.id, runner.dshUnavailable);
     // Atomically claim one PENDING session assigned to this runner. The runner id
     // must be cast to ::uuid: Prisma binds template params as text, and Postgres
     // has no `uuid = text` operator (claim silently fails otherwise — 42883).
@@ -432,12 +419,11 @@ export class QueueService {
         WHERE id = (
           SELECT s.id FROM "session" s
           WHERE s.status = 'PENDING'
+            AND s."kind" = 'CONVERSATION'
             AND NOT (s.id = ANY(${paused}::uuid[]))
             AND s."cancel_requested_at" IS NULL
             AND s."assigned_runner_id" = ${runnerId}
-            -- An unresolved/disabled configured identity must never become a Claude job. A Wiki maintenance
-            -- session does not become one: a runner that declares wiki-maintenance-run/v1 is handed it with its
-            -- refusal and no provider (buildSession), and ends it FAILED without starting any engine. A shared
+            -- An unresolved/disabled configured identity must never become a Claude job. A shared
             -- provider resolves for an admin's session only (usableProviderScope): a member's is never claimed.
             --
             -- A session with a recorded engine is claimed on a credential that engine can spend
@@ -500,7 +486,6 @@ export class QueueService {
                   )
                 ))
               ))
-              OR (${supportsWikiMaintenance}::boolean AND ${wikiMaintenanceSessionSql('s')})
             )
             -- Both the request and the heartbeat must declare Harness, for a session recorded on it
             -- whatever key it spends, and for one without an engine by the old rule. The database
@@ -583,13 +568,6 @@ export class QueueService {
             AND (
               ${supportsSourcePin}::boolean
               OR s."source_state" = 'UNBOUND'
-            )
-            -- The same refusal for a Wiki maintenance session (wiki/wiki-maintenance-session.ts): it is
-            -- started clean, pinned and bounded, and a runner that does not declare wiki-maintenance-run/v1
-            -- would start it as an ordinary session instead. It waits for a runner that can.
-            AND (
-              ${supportsWikiMaintenance}::boolean
-              OR NOT ${wikiMaintenanceSessionSql('s')}
             )
             -- A slot is an active turn, not a warm process. Idle AWAITING_INPUT and
             -- legacy INTERRUPTED sessions remain resumable without consuming capacity.
@@ -708,6 +686,10 @@ export class QueueService {
    * The move is a compare-and-set on the account the claim read, so a pick made in between wins; it owes
    * the transcript its line (the one a failure's move says), which the engine this claim starts carries
    * on its first event.
+   *
+   * A session on a Default its owner removed from Orbit is moved too, to the account Automatic picks among
+   * those that remain, on any runner and pinned or not, and is unpinned there: nothing runs on that Default
+   * any more. A runner that cannot carry the conversation rebuilds it there as it can, or says why not.
    */
   private async accountsForClaim(session: {
     id: string;
@@ -724,7 +706,7 @@ export class QueueService {
     cursorAccount: string | null;
     cursorAccountPinned: boolean;
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
-    assignedRunner: { engines: unknown; accountNames: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
+    assignedRunner: (AccountRunner & { accountNames: unknown; capabilities: string[] }) | null;
   }): Promise<WorkspaceAccountChoices> {
     const workspace = session.workspace;
     const accounts: WorkspaceAccountChoices = {
@@ -737,22 +719,22 @@ export class QueueService {
     const engine = isAccountEngine(session.provider) ? session.provider : null;
     const runner = session.assignedRunner;
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin) || !runner) return accounts;
-    if (!(runner.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[engine])) return accounts;
     const column = ACCOUNT_CHOICE[engine];
     const own = session[column];
     const move = accountBeforeDispatch(
       engine,
       { account: own, pinned: session[ACCOUNT_PINNED[engine]] },
       workspace,
-      runner.engines,
-      runner.planUsage,
+      runner,
       new Date(),
-      runner.accountPauses,
     );
-    if (!move) return accounts;
+    if (!move || (!move.defaultRemoved && !(runner.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[engine]))) {
+      return accounts;
+    }
+    const pinned = ACCOUNT_PINNED[engine];
     const { count } = await this.prisma.session.updateMany({
-      where: { id: session.id, [column]: own, [ACCOUNT_PINNED[engine]]: false },
-      data: { [column]: move.to },
+      where: { id: session.id, [column]: own, ...(move.defaultRemoved ? {} : { [pinned]: false }) },
+      data: { [column]: move.to, ...(move.defaultRemoved ? { [pinned]: false } : {}) },
     });
     if (count === 0) return accounts;
     // Owed only when no other line is: one already owed (a pool's) is said first, as PoolNotices.owe keeps it.
@@ -761,8 +743,8 @@ export class QueueService {
       data: { poolSwitchNotice: accountSwitchNotice(engine, move, runner) },
     });
     // A resident engine still holds the previous account's environment. Reload before
-    // the next message so a pause cannot be bypassed by reusing that warm process.
-    if (move.paused) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
+    // the next message so a pause cannot be bypassed by reusing that warm process, nor a removed Default.
+    if (move.paused || move.defaultRemoved) await new PoolNotices(this.prisma, this.realtime).carrier(session.id, engine);
     return { ...accounts, [column]: move.to };
   }
 
@@ -798,6 +780,9 @@ export class QueueService {
             // What naming the account it moves to reads (accountSwitchNotice).
             accountNames: true,
             accountPauses: true,
+            // A Default its owner removed from Orbit, which the claim moves a session off (accountsForClaim)
+            // and dispatch never runs one on (resolveProviderExec).
+            defaultRemoved: true,
             // What moving it off a spent account before this start reads (accountsForClaim).
             planUsage: true,
             capabilities: true,
@@ -902,21 +887,12 @@ export class QueueService {
     // The account this start builds the engine on — moved first off one the runner's own snapshot
     // already reports spent, on Automatic, rather than after the engine's first turn fails there.
     const accounts = await this.accountsForClaim(session);
-    // A Wiki maintenance session's run (wiki/wiki-maintenance-session.ts), null for every other session.
-    const maintenance = await wikiMaintenanceRunOf(this.prisma, session);
-    // One that may not start is built on no provider at all: the runner ends it FAILED with its refusal and
-    // starts no engine, so it is handed no provider's endpoint or key — not its pin's, not a pool member's —
-    // and its row is not given a model it never ran.
-    const refused = maintenance?.refusal !== undefined;
-    const declared = refused ? AgentProvider.CLAUDE : session.provider ?? null;
-    const declaredProviderBuiltin = refused || session.providerBuiltin;
+    const declared = session.provider ?? null;
     // The engine it runs on is its own (the claim recorded one for a row that had none), never one
     // read off its credential: the credential is resolved below only for where that engine sends its
     // requests. A session nobody can place — its key gone before it ever recorded an engine — is
     // refused as a slug nothing holds always was.
-    const engine = refused
-      ? AgentProvider.CLAUDE
-      : recordedEngine(session.engine) ?? (await legacySessionEngine(this.prisma, session));
+    const engine = recordedEngine(session.engine) ?? (await legacySessionEngine(this.prisma, session));
     if (!engine) throw new BadRequestException(`provider not available: "${declared}"`);
     // A configured (custom) provider borrows a built-in runtime: resolve the runner-facing
     // built-in provider, model, and process env (baseUrl + decrypted key injected)
@@ -927,24 +903,21 @@ export class QueueService {
     // of the owner's account pools, which dispatches as the member chosen for this claim — or, for a Codex
     // pool of their own, through the pool gateway on the ChatGPT login it holds — or a shared pool the
     // owner is in, which dispatches through the pool gateway; each on a token minted for this claim.
-    const declaredIsBuiltin = isBuiltinProvider(declared, declaredProviderBuiltin);
+    const declaredIsBuiltin = isBuiltinProvider(declared, session.providerBuiltin);
     // The key the slug names, or a retired name of one; and for a legacy built-in dsh session whose
     // workspace holds no key of its own, the owner's default DeepSeek key (docs/provider-engine-contract.md
-    // §4.1) — a built-in credential is otherwise no key. A maintenance run is never dispatched through a
-    // pool: it has no member to fall back on (its refusal says so).
+    // §4.1) — a built-in credential is otherwise no key.
     const configuredRow = await dispatchKeyRow(
       this.prisma,
-      { ownerId: session.ownerId, provider: declared, providerBuiltin: declaredProviderBuiltin },
+      { ownerId: session.ownerId, provider: declared, providerBuiltin: session.providerBuiltin },
       workspace?.env,
     );
     const customRow = declaredIsBuiltin
       ? configuredRow
       : (configuredRow ??
-        (maintenance
-          ? null
-          : ((await this.resolveLoginPool(this.prisma, session, declared!, true)) ??
-            (await this.resolvePoolMember(this.prisma, session, declared!, true)) ??
-            (await this.resolveSharedPool(this.prisma, session, declared!, true)))));
+        (await this.resolveLoginPool(this.prisma, session, declared!, true)) ??
+        (await this.resolvePoolMember(this.prisma, session, declared!, true)) ??
+        (await this.resolveSharedPool(this.prisma, session, declared!, true)));
     // A Claude pool of the owner's own that none of its members can run still dispatches, on the Claude
     // default: the line resolvePoolMember just owed the transcript says so. Any other slug nothing holds
     // is refused by resolveProviderExec. A Codex pool always resolves to its gateway above, never to the
@@ -957,7 +930,7 @@ export class QueueService {
       resolveProviderExec({
         engine,
         declaredProvider: poolFallback ? AgentProvider.CLAUDE : declared,
-        declaredProviderBuiltin: poolFallback || declaredProviderBuiltin,
+        declaredProviderBuiltin: poolFallback || session.providerBuiltin,
         customRow,
         openCodeKeys,
         sessionModel,
@@ -972,7 +945,7 @@ export class QueueService {
         antigravityAccount: accounts.antigravityAccount,
         kimiAccount: accounts.kimiAccount,
         cursorAccount: accounts.cursorAccount,
-        runnerEngines: session.assignedRunner?.engines,
+        runner: session.assignedRunner,
       });
     let exec = resolveExec(session.model);
     // Snapshot an inherited default on the session at its first claim, and refresh one the runtime
@@ -980,7 +953,7 @@ export class QueueService {
     // already-established conversation on reclaim/resume — only a model that is no longer offered
     // at all moves, and then the row must stop naming it or the pickers would keep showing a dead
     // id the session isn't running.
-    if (!refused && (session.model === null || session.model.trim() === '' || exec.retiredPin)) {
+    if (session.model === null || session.model.trim() === '' || exec.retiredPin) {
       // A user may PATCH an explicit session model after this snapshot was read. Compare against
       // the exact value that resolution ran on, so materialization is a compare-and-set instead of
       // overwriting that concurrent choice.
@@ -1044,9 +1017,8 @@ export class QueueService {
     // every runner has always received, so nothing about their behaviour changes (SR46).
     const source = sessionSourceSnapshot(session, await this.sourceBinding(session.sourceCodebaseId));
     // A session nothing else will name is named by the engine about to run it (engineNamingJob).
-    const naming = maintenance ? undefined : engineNamingJob(session, provider, configuredRow);
-    // A maintenance session's run goes on top: its guardrails, and the clean start the runner reads it by.
-    return withWikiMaintenanceRun({
+    const naming = engineNamingJob(session, provider, configuredRow);
+    return {
       sessionId: session.id,
       provider,
       runtimeSessionId,
@@ -1143,7 +1115,6 @@ export class QueueService {
           provider,
           runSource: session.runSource,
           spawnDepth: session.spawnDepth,
-          maintenance,
           env: exec.env,
         }),
         // Per-session effort wins; otherwise use the workspace's effort setting.
@@ -1163,7 +1134,7 @@ export class QueueService {
       },
       source,
       ...(naming ? { naming } : {}),
-    }, maintenance);
+    };
   }
 
   /** Manual pauses wait at dispatch, before a credential or runner default can be consumed. */

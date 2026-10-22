@@ -1,0 +1,1124 @@
+{
+  "about": [
+    "Cursor CLI quota from end to end, one set of cases both ends are proved against. Each case is what",
+    "Cursor's dashboard answered each of a runner's Cursor CLI accounts (`dashboard`, by account id: the bodies",
+    "of GetCurrentPeriodUsage and GetPlanInfo, docs/cursor-runtime-contract.md §11 — Free from P0a's and",
+    "Premium from P0c's recordings, Pro a monthly variant no recording has; an account missing did not get an",
+    "answer), when a turn on an account met the usage limit (`limitReachedAt`), the heartbeat planUsage the",
+    "runner sends for that (`planUsage`, fetchedAt left out), and what the control plane decides from it: the",
+    "account a new session starts on (`startOn`, accountToStartOn), and per account until when its quota holds",
+    "a run back (`blockedUntil`, planUsageBlockedUntil), whether it is reported at all (`reported`,",
+    "planUsageReported) and when a run that just met its limit is retried (`resetsAt`, usageLimitResetsAt).",
+    "src/runner-go cursor_usage_test.go serves `dashboard` and must send `planUsage` (its subtest named by the",
+    "case's `id`); cursor-plan-usage.spec.ts reads `planUsage` and must decide the rest (its case named by `name`)."
+  ],
+  "now": "2026-10-18T12:00:00.000Z",
+  "accounts": [
+    {
+      "id": "default",
+      "home": "/root/.orbit/cursor/default",
+      "auth": "yes"
+    },
+    {
+      "id": "c41e0b7a",
+      "name": "Team",
+      "home": "/root/.orbit/cursor-accounts/c41e0b7a",
+      "auth": "yes"
+    }
+  ],
+  "cases": [
+    {
+      "id": "paid-reading-before-free",
+      "name": "a paid account with a reading takes the session before a Free one whose usage Cursor cannot report",
+      "dashboard": {
+        "default": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1790267546082",
+            "billingCycleEnd": "1792859546082",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 0
+            },
+            "spendLimitUsage": {
+              "pooledLimit": "0",
+              "pooledRemaining": "0",
+              "individualLimit": 0,
+              "limitType": "user",
+              "overallLimit": 0,
+              "overallRemaining": 0
+            },
+            "displayThreshold": 200,
+            "displayMessage": "You've used 0% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Free",
+              "price": "Free",
+              "billingCycleEnd": "1792859546082"
+            },
+            "nextUpgrade": {
+              "tier": "pro",
+              "name": "Pro",
+              "includedAmountCents": 2000,
+              "price": "$20/mo",
+              "description": "Upgrade to Cursor Pro",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_MONTHLY"
+            }
+          }
+        },
+        "c41e0b7a": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1792200736338",
+            "billingCycleEnd": "1792805536338",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 34
+            },
+            "spendLimitUsage": {
+              "limitType": "user"
+            },
+            "displayThreshold": 200,
+            "enabled": true,
+            "displayMessage": "You've used 34% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Premium",
+              "price": "",
+              "billingCycleEnd": "1794879072850",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY",
+              "includedUsageResetsAt": "1792805536338"
+            },
+            "nextUpgrade": {
+              "tier": "super",
+              "name": "Super",
+              "includedAmountCents": 16159,
+              "description": "Get more usage with Super",
+              "dashboardAction": {
+                "action": "xaiCommercePaywall",
+                "args": {
+                  "tier": "super",
+                  "entrypoint": "plan_info",
+                  "sku": "sku_WWvZ1VL9fabh"
+                }
+              },
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY"
+            },
+            "isMerged": true
+          }
+        }
+      },
+      "planUsage": {
+        "cursor": {
+          "provider": "cursor",
+          "account": "default",
+          "planName": "Free",
+          "includedUsage": {
+            "startsAt": "2026-09-24T16:32:26.082Z",
+            "resetsAt": "2026-10-24T16:32:26.082Z"
+          },
+          "accounts": {
+            "c41e0b7a": {
+              "provider": "cursor",
+              "account": "c41e0b7a",
+              "planName": "Premium",
+              "includedUsage": {
+                "period": "weekly",
+                "startsAt": "2026-10-17T01:32:16.338Z",
+                "resetsAt": "2026-10-24T01:32:16.338Z",
+                "percentUsed": 34
+              }
+            }
+          }
+        }
+      },
+      "startOn": "c41e0b7a",
+      "blockedUntil": {
+        "default": null,
+        "c41e0b7a": null
+      },
+      "reported": {
+        "default": true,
+        "c41e0b7a": true
+      },
+      "resetsAt": {
+        "default": "2026-10-24T16:32:26.082Z",
+        "c41e0b7a": "2026-10-24T01:32:16.338Z"
+      }
+    },
+    {
+      "id": "limit-met-spends-until-reset",
+      "name": "an account a turn met the usage limit on is spent until its included usage resets, and the next session starts on the other",
+      "dashboard": {
+        "default": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1790267546082",
+            "billingCycleEnd": "1792859546082",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 0
+            },
+            "spendLimitUsage": {
+              "pooledLimit": "0",
+              "pooledRemaining": "0",
+              "individualLimit": 0,
+              "limitType": "user",
+              "overallLimit": 0,
+              "overallRemaining": 0
+            },
+            "displayThreshold": 200,
+            "displayMessage": "You've used 0% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Free",
+              "price": "Free",
+              "billingCycleEnd": "1792859546082"
+            },
+            "nextUpgrade": {
+              "tier": "pro",
+              "name": "Pro",
+              "includedAmountCents": 2000,
+              "price": "$20/mo",
+              "description": "Upgrade to Cursor Pro",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_MONTHLY"
+            }
+          }
+        },
+        "c41e0b7a": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1792200736338",
+            "billingCycleEnd": "1792805536338",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 34
+            },
+            "spendLimitUsage": {
+              "limitType": "user"
+            },
+            "displayThreshold": 200,
+            "enabled": true,
+            "displayMessage": "You've used 34% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Premium",
+              "price": "",
+              "billingCycleEnd": "1794879072850",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY",
+              "includedUsageResetsAt": "1792805536338"
+            },
+            "nextUpgrade": {
+              "tier": "super",
+              "name": "Super",
+              "includedAmountCents": 16159,
+              "description": "Get more usage with Super",
+              "dashboardAction": {
+                "action": "xaiCommercePaywall",
+                "args": {
+                  "tier": "super",
+                  "entrypoint": "plan_info",
+                  "sku": "sku_WWvZ1VL9fabh"
+                }
+              },
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY"
+            },
+            "isMerged": true
+          }
+        }
+      },
+      "limitReachedAt": {
+        "c41e0b7a": "2026-10-18T09:00:00.000Z"
+      },
+      "planUsage": {
+        "cursor": {
+          "provider": "cursor",
+          "account": "default",
+          "planName": "Free",
+          "includedUsage": {
+            "startsAt": "2026-09-24T16:32:26.082Z",
+            "resetsAt": "2026-10-24T16:32:26.082Z"
+          },
+          "accounts": {
+            "c41e0b7a": {
+              "provider": "cursor",
+              "account": "c41e0b7a",
+              "planName": "Premium",
+              "includedUsage": {
+                "period": "weekly",
+                "startsAt": "2026-10-17T01:32:16.338Z",
+                "resetsAt": "2026-10-24T01:32:16.338Z",
+                "percentUsed": 34,
+                "limitReachedAt": "2026-10-18T09:00:00.000Z"
+              }
+            }
+          }
+        }
+      },
+      "startOn": "default",
+      "blockedUntil": {
+        "default": null,
+        "c41e0b7a": "2026-10-24T01:32:16.338Z"
+      },
+      "reported": {
+        "default": true,
+        "c41e0b7a": true
+      },
+      "resetsAt": {
+        "default": "2026-10-24T16:32:26.082Z",
+        "c41e0b7a": "2026-10-24T01:32:16.338Z"
+      }
+    },
+    {
+      "id": "free-request-limit",
+      "name": "the Free plan's request limit met holds its account back until its billing month ends, though Cursor still reports 0%",
+      "dashboard": {
+        "default": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1790267546082",
+            "billingCycleEnd": "1792859546082",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 0
+            },
+            "spendLimitUsage": {
+              "pooledLimit": "0",
+              "pooledRemaining": "0",
+              "individualLimit": 0,
+              "limitType": "user",
+              "overallLimit": 0,
+              "overallRemaining": 0
+            },
+            "displayThreshold": 200,
+            "displayMessage": "You've used 0% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Free",
+              "price": "Free",
+              "billingCycleEnd": "1792859546082"
+            },
+            "nextUpgrade": {
+              "tier": "pro",
+              "name": "Pro",
+              "includedAmountCents": 2000,
+              "price": "$20/mo",
+              "description": "Upgrade to Cursor Pro",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_MONTHLY"
+            }
+          }
+        },
+        "c41e0b7a": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1792200736338",
+            "billingCycleEnd": "1792805536338",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 34
+            },
+            "spendLimitUsage": {
+              "limitType": "user"
+            },
+            "displayThreshold": 200,
+            "enabled": true,
+            "displayMessage": "You've used 34% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Premium",
+              "price": "",
+              "billingCycleEnd": "1794879072850",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY",
+              "includedUsageResetsAt": "1792805536338"
+            },
+            "nextUpgrade": {
+              "tier": "super",
+              "name": "Super",
+              "includedAmountCents": 16159,
+              "description": "Get more usage with Super",
+              "dashboardAction": {
+                "action": "xaiCommercePaywall",
+                "args": {
+                  "tier": "super",
+                  "entrypoint": "plan_info",
+                  "sku": "sku_WWvZ1VL9fabh"
+                }
+              },
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY"
+            },
+            "isMerged": true
+          }
+        }
+      },
+      "limitReachedAt": {
+        "default": "2026-10-16T17:52:00.000Z"
+      },
+      "planUsage": {
+        "cursor": {
+          "provider": "cursor",
+          "account": "default",
+          "planName": "Free",
+          "includedUsage": {
+            "startsAt": "2026-09-24T16:32:26.082Z",
+            "resetsAt": "2026-10-24T16:32:26.082Z",
+            "limitReachedAt": "2026-10-16T17:52:00.000Z"
+          },
+          "accounts": {
+            "c41e0b7a": {
+              "provider": "cursor",
+              "account": "c41e0b7a",
+              "planName": "Premium",
+              "includedUsage": {
+                "period": "weekly",
+                "startsAt": "2026-10-17T01:32:16.338Z",
+                "resetsAt": "2026-10-24T01:32:16.338Z",
+                "percentUsed": 34
+              }
+            }
+          }
+        }
+      },
+      "startOn": "c41e0b7a",
+      "blockedUntil": {
+        "default": "2026-10-24T16:32:26.082Z",
+        "c41e0b7a": null
+      },
+      "reported": {
+        "default": true,
+        "c41e0b7a": true
+      },
+      "resetsAt": {
+        "default": "2026-10-24T16:32:26.082Z",
+        "c41e0b7a": "2026-10-24T01:32:16.338Z"
+      }
+    },
+    {
+      "id": "every-account-spent",
+      "name": "with every account spent, the session starts on the one that frees up first",
+      "dashboard": {
+        "default": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1790267546082",
+            "billingCycleEnd": "1792859546082",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 0
+            },
+            "spendLimitUsage": {
+              "pooledLimit": "0",
+              "pooledRemaining": "0",
+              "individualLimit": 0,
+              "limitType": "user",
+              "overallLimit": 0,
+              "overallRemaining": 0
+            },
+            "displayThreshold": 200,
+            "displayMessage": "You've used 0% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Free",
+              "price": "Free",
+              "billingCycleEnd": "1792859546082"
+            },
+            "nextUpgrade": {
+              "tier": "pro",
+              "name": "Pro",
+              "includedAmountCents": 2000,
+              "price": "$20/mo",
+              "description": "Upgrade to Cursor Pro",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_MONTHLY"
+            }
+          }
+        },
+        "c41e0b7a": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1792200736338",
+            "billingCycleEnd": "1792805536338",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 34
+            },
+            "spendLimitUsage": {
+              "limitType": "user"
+            },
+            "displayThreshold": 200,
+            "enabled": true,
+            "displayMessage": "You've used 34% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Premium",
+              "price": "",
+              "billingCycleEnd": "1794879072850",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY",
+              "includedUsageResetsAt": "1792805536338"
+            },
+            "nextUpgrade": {
+              "tier": "super",
+              "name": "Super",
+              "includedAmountCents": 16159,
+              "description": "Get more usage with Super",
+              "dashboardAction": {
+                "action": "xaiCommercePaywall",
+                "args": {
+                  "tier": "super",
+                  "entrypoint": "plan_info",
+                  "sku": "sku_WWvZ1VL9fabh"
+                }
+              },
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY"
+            },
+            "isMerged": true
+          }
+        }
+      },
+      "limitReachedAt": {
+        "default": "2026-10-16T17:52:00.000Z",
+        "c41e0b7a": "2026-10-18T09:00:00.000Z"
+      },
+      "planUsage": {
+        "cursor": {
+          "provider": "cursor",
+          "account": "default",
+          "planName": "Free",
+          "includedUsage": {
+            "startsAt": "2026-09-24T16:32:26.082Z",
+            "resetsAt": "2026-10-24T16:32:26.082Z",
+            "limitReachedAt": "2026-10-16T17:52:00.000Z"
+          },
+          "accounts": {
+            "c41e0b7a": {
+              "provider": "cursor",
+              "account": "c41e0b7a",
+              "planName": "Premium",
+              "includedUsage": {
+                "period": "weekly",
+                "startsAt": "2026-10-17T01:32:16.338Z",
+                "resetsAt": "2026-10-24T01:32:16.338Z",
+                "percentUsed": 34,
+                "limitReachedAt": "2026-10-18T09:00:00.000Z"
+              }
+            }
+          }
+        }
+      },
+      "startOn": "c41e0b7a",
+      "blockedUntil": {
+        "default": "2026-10-24T16:32:26.082Z",
+        "c41e0b7a": "2026-10-24T01:32:16.338Z"
+      },
+      "reported": {
+        "default": true,
+        "c41e0b7a": true
+      },
+      "resetsAt": {
+        "default": "2026-10-24T16:32:26.082Z",
+        "c41e0b7a": "2026-10-24T01:32:16.338Z"
+      }
+    },
+    {
+      "id": "paid-zero-is-no-reading",
+      "name": "a paid account at 0% is no reading: it ranks after an account with one, however soon its week ends, and is never taken for spent",
+      "dashboard": {
+        "default": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1792200736338",
+            "billingCycleEnd": "1792805536338",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 0
+            },
+            "spendLimitUsage": {
+              "limitType": "user"
+            },
+            "displayThreshold": 200,
+            "enabled": true,
+            "displayMessage": "You've used 0% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Premium",
+              "price": "",
+              "billingCycleEnd": "1794879072850",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY",
+              "includedUsageResetsAt": "1792805536338"
+            },
+            "nextUpgrade": {
+              "tier": "super",
+              "name": "Super",
+              "includedAmountCents": 16159,
+              "description": "Get more usage with Super",
+              "dashboardAction": {
+                "action": "xaiCommercePaywall",
+                "args": {
+                  "tier": "super",
+                  "entrypoint": "plan_info",
+                  "sku": "sku_WWvZ1VL9fabh"
+                }
+              },
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY"
+            },
+            "isMerged": true
+          }
+        },
+        "c41e0b7a": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1790928000000",
+            "billingCycleEnd": "1793606400000",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 12
+            },
+            "spendLimitUsage": {
+              "limitType": "user"
+            },
+            "displayThreshold": 200,
+            "enabled": true,
+            "displayMessage": "You've used 12% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Pro",
+              "price": "$20/mo",
+              "billingCycleEnd": "1793606400000",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_MONTHLY",
+              "includedUsageResetsAt": "1793606400000"
+            },
+            "nextUpgrade": {
+              "tier": "super",
+              "name": "Super",
+              "includedAmountCents": 16159,
+              "description": "Get more usage with Super",
+              "dashboardAction": {
+                "action": "xaiCommercePaywall",
+                "args": {
+                  "tier": "super",
+                  "entrypoint": "plan_info",
+                  "sku": "sku_WWvZ1VL9fabh"
+                }
+              },
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY"
+            },
+            "isMerged": true
+          }
+        }
+      },
+      "planUsage": {
+        "cursor": {
+          "provider": "cursor",
+          "account": "default",
+          "planName": "Premium",
+          "includedUsage": {
+            "period": "weekly",
+            "startsAt": "2026-10-17T01:32:16.338Z",
+            "resetsAt": "2026-10-24T01:32:16.338Z"
+          },
+          "accounts": {
+            "c41e0b7a": {
+              "provider": "cursor",
+              "account": "c41e0b7a",
+              "planName": "Pro",
+              "includedUsage": {
+                "period": "monthly",
+                "startsAt": "2026-10-02T08:00:00.000Z",
+                "resetsAt": "2026-11-02T08:00:00.000Z",
+                "percentUsed": 12
+              }
+            }
+          }
+        }
+      },
+      "startOn": "c41e0b7a",
+      "blockedUntil": {
+        "default": null,
+        "c41e0b7a": null
+      },
+      "reported": {
+        "default": true,
+        "c41e0b7a": true
+      },
+      "resetsAt": {
+        "default": "2026-10-24T01:32:16.338Z",
+        "c41e0b7a": "2026-11-02T08:00:00.000Z"
+      }
+    },
+    {
+      "id": "reading-at-limit-holds-nothing",
+      "name": "a reading at its limit goes last but holds nothing back: past its included usage a paid plan can go on, on demand",
+      "dashboard": {
+        "default": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1790267546082",
+            "billingCycleEnd": "1792859546082",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 0
+            },
+            "spendLimitUsage": {
+              "pooledLimit": "0",
+              "pooledRemaining": "0",
+              "individualLimit": 0,
+              "limitType": "user",
+              "overallLimit": 0,
+              "overallRemaining": 0
+            },
+            "displayThreshold": 200,
+            "displayMessage": "You've used 0% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Free",
+              "price": "Free",
+              "billingCycleEnd": "1792859546082"
+            },
+            "nextUpgrade": {
+              "tier": "pro",
+              "name": "Pro",
+              "includedAmountCents": 2000,
+              "price": "$20/mo",
+              "description": "Upgrade to Cursor Pro",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_MONTHLY"
+            }
+          }
+        },
+        "c41e0b7a": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1792200736338",
+            "billingCycleEnd": "1792805536338",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 100
+            },
+            "spendLimitUsage": {
+              "limitType": "user"
+            },
+            "displayThreshold": 200,
+            "enabled": true,
+            "displayMessage": "You've used 100% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Premium",
+              "price": "",
+              "billingCycleEnd": "1794879072850",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY",
+              "includedUsageResetsAt": "1792805536338"
+            },
+            "nextUpgrade": {
+              "tier": "super",
+              "name": "Super",
+              "includedAmountCents": 16159,
+              "description": "Get more usage with Super",
+              "dashboardAction": {
+                "action": "xaiCommercePaywall",
+                "args": {
+                  "tier": "super",
+                  "entrypoint": "plan_info",
+                  "sku": "sku_WWvZ1VL9fabh"
+                }
+              },
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY"
+            },
+            "isMerged": true
+          }
+        }
+      },
+      "planUsage": {
+        "cursor": {
+          "provider": "cursor",
+          "account": "default",
+          "planName": "Free",
+          "includedUsage": {
+            "startsAt": "2026-09-24T16:32:26.082Z",
+            "resetsAt": "2026-10-24T16:32:26.082Z"
+          },
+          "accounts": {
+            "c41e0b7a": {
+              "provider": "cursor",
+              "account": "c41e0b7a",
+              "planName": "Premium",
+              "includedUsage": {
+                "period": "weekly",
+                "startsAt": "2026-10-17T01:32:16.338Z",
+                "resetsAt": "2026-10-24T01:32:16.338Z",
+                "percentUsed": 100
+              }
+            }
+          }
+        }
+      },
+      "startOn": "default",
+      "blockedUntil": {
+        "default": null,
+        "c41e0b7a": null
+      },
+      "reported": {
+        "default": true,
+        "c41e0b7a": true
+      },
+      "resetsAt": {
+        "default": "2026-10-24T16:32:26.082Z",
+        "c41e0b7a": "2026-10-24T01:32:16.338Z"
+      }
+    },
+    {
+      "id": "limit-before-period-is-over",
+      "name": "a usage limit met before the period began is over",
+      "dashboard": {
+        "default": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1792200736338",
+            "billingCycleEnd": "1792805536338",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 34
+            },
+            "spendLimitUsage": {
+              "limitType": "user"
+            },
+            "displayThreshold": 200,
+            "enabled": true,
+            "displayMessage": "You've used 34% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Premium",
+              "price": "",
+              "billingCycleEnd": "1794879072850",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY",
+              "includedUsageResetsAt": "1792805536338"
+            },
+            "nextUpgrade": {
+              "tier": "super",
+              "name": "Super",
+              "includedAmountCents": 16159,
+              "description": "Get more usage with Super",
+              "dashboardAction": {
+                "action": "xaiCommercePaywall",
+                "args": {
+                  "tier": "super",
+                  "entrypoint": "plan_info",
+                  "sku": "sku_WWvZ1VL9fabh"
+                }
+              },
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY"
+            },
+            "isMerged": true
+          }
+        },
+        "c41e0b7a": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1790928000000",
+            "billingCycleEnd": "1793606400000",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 12
+            },
+            "spendLimitUsage": {
+              "limitType": "user"
+            },
+            "displayThreshold": 200,
+            "enabled": true,
+            "displayMessage": "You've used 12% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Pro",
+              "price": "$20/mo",
+              "billingCycleEnd": "1793606400000",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_MONTHLY",
+              "includedUsageResetsAt": "1793606400000"
+            },
+            "nextUpgrade": {
+              "tier": "super",
+              "name": "Super",
+              "includedAmountCents": 16159,
+              "description": "Get more usage with Super",
+              "dashboardAction": {
+                "action": "xaiCommercePaywall",
+                "args": {
+                  "tier": "super",
+                  "entrypoint": "plan_info",
+                  "sku": "sku_WWvZ1VL9fabh"
+                }
+              },
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY"
+            },
+            "isMerged": true
+          }
+        }
+      },
+      "limitReachedAt": {
+        "default": "2026-10-16T17:52:00.000Z"
+      },
+      "planUsage": {
+        "cursor": {
+          "provider": "cursor",
+          "account": "default",
+          "planName": "Premium",
+          "includedUsage": {
+            "period": "weekly",
+            "startsAt": "2026-10-17T01:32:16.338Z",
+            "resetsAt": "2026-10-24T01:32:16.338Z",
+            "percentUsed": 34
+          },
+          "accounts": {
+            "c41e0b7a": {
+              "provider": "cursor",
+              "account": "c41e0b7a",
+              "planName": "Pro",
+              "includedUsage": {
+                "period": "monthly",
+                "startsAt": "2026-10-02T08:00:00.000Z",
+                "resetsAt": "2026-11-02T08:00:00.000Z",
+                "percentUsed": 12
+              }
+            }
+          }
+        }
+      },
+      "startOn": "default",
+      "blockedUntil": {
+        "default": null,
+        "c41e0b7a": null
+      },
+      "reported": {
+        "default": true,
+        "c41e0b7a": true
+      },
+      "resetsAt": {
+        "default": "2026-10-24T01:32:16.338Z",
+        "c41e0b7a": "2026-11-02T08:00:00.000Z"
+      }
+    },
+    {
+      "id": "dashboard-unanswered",
+      "name": "an account Cursor's dashboard did not answer for is unavailable: not reported, and taken after one that is",
+      "dashboard": {
+        "c41e0b7a": {
+          "GetCurrentPeriodUsage": {
+            "billingCycleStart": "1792200736338",
+            "billingCycleEnd": "1792805536338",
+            "planUsage": {
+              "remainingBonus": false,
+              "bonusTooltip": "We work with model providers to give you free usage beyond what you've purchased. Amounts may vary.",
+              "autoPercentUsed": 0,
+              "apiPercentUsed": 0,
+              "totalPercentUsed": 34
+            },
+            "spendLimitUsage": {
+              "limitType": "user"
+            },
+            "displayThreshold": 200,
+            "enabled": true,
+            "displayMessage": "You've used 34% of your included usage",
+            "autoModelSelectedDisplayMessage": "You've used 0% of your included total usage",
+            "namedModelSelectedDisplayMessage": "You've used 0% of your included API usage",
+            "autoBucketModels": [
+              "default"
+            ]
+          },
+          "GetPlanInfo": {
+            "planInfo": {
+              "planName": "Premium",
+              "price": "",
+              "billingCycleEnd": "1794879072850",
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY",
+              "includedUsageResetsAt": "1792805536338"
+            },
+            "nextUpgrade": {
+              "tier": "super",
+              "name": "Super",
+              "includedAmountCents": 16159,
+              "description": "Get more usage with Super",
+              "dashboardAction": {
+                "action": "xaiCommercePaywall",
+                "args": {
+                  "tier": "super",
+                  "entrypoint": "plan_info",
+                  "sku": "sku_WWvZ1VL9fabh"
+                }
+              },
+              "includedUsagePeriod": "INCLUDED_USAGE_PERIOD_WEEKLY"
+            },
+            "isMerged": true
+          }
+        }
+      },
+      "planUsage": {
+        "cursor": {
+          "provider": "cursor",
+          "accounts": {
+            "c41e0b7a": {
+              "provider": "cursor",
+              "account": "c41e0b7a",
+              "planName": "Premium",
+              "includedUsage": {
+                "period": "weekly",
+                "startsAt": "2026-10-17T01:32:16.338Z",
+                "resetsAt": "2026-10-24T01:32:16.338Z",
+                "percentUsed": 34
+              }
+            }
+          }
+        }
+      },
+      "startOn": "c41e0b7a",
+      "blockedUntil": {
+        "default": null,
+        "c41e0b7a": null
+      },
+      "reported": {
+        "default": false,
+        "c41e0b7a": true
+      },
+      "resetsAt": {
+        "default": null,
+        "c41e0b7a": "2026-10-24T01:32:16.338Z"
+      }
+    },
+    {
+      "id": "limit-met-without-reading",
+      "name": "a usage limit met on an account Cursor's dashboard did not answer for: passed over while another can run, with no reset to hold a run back until",
+      "dashboard": {},
+      "limitReachedAt": {
+        "default": "2026-10-18T09:00:00.000Z"
+      },
+      "planUsage": {
+        "cursor": {
+          "provider": "cursor",
+          "account": "default",
+          "includedUsage": {
+            "limitReachedAt": "2026-10-18T09:00:00.000Z"
+          }
+        }
+      },
+      "startOn": "c41e0b7a",
+      "blockedUntil": {
+        "default": null,
+        "c41e0b7a": null
+      },
+      "reported": {
+        "default": false,
+        "c41e0b7a": false
+      },
+      "resetsAt": {
+        "default": null,
+        "c41e0b7a": null
+      }
+    }
+  ]
+}

@@ -27,8 +27,11 @@ import io.orbitd.android.cards.PromotionHints
 import io.orbitd.android.cards.PromotionReview
 import io.orbitd.android.cards.SheetHead
 import io.orbitd.android.core.cards.*
+import io.orbitd.android.projects.LandingEntryLink
 import io.orbitd.android.projects.LandingLine
 import io.orbitd.android.projects.ProjectLandingHead
+import io.orbitd.android.reader.LandingSessionCopy
+import io.orbitd.android.reader.landingEntry
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.wiki.WikiDate
 import java.time.Instant
@@ -44,12 +47,18 @@ import kotlinx.serialization.json.JsonObject
  */
 @Composable
 internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeCard.Shape, landing: LandingLine?, blockedBy: String?, now: Instant,
-    onLanding: (() -> Unit)?, onDetails: (String) -> Unit, onCoordinator: (() -> Unit)?) {
+    onLanding: (() -> Unit)?, roundLanding: String?, mergeJob: JsonObject?, mergeJobDetail: String?, jobCount: Int,
+    openLanding: (String) -> Unit, abandon: suspend (String) -> String?, rerunCheck: suspend (String) -> String?,
+    onDetails: (String) -> Unit, onCoordinator: (() -> Unit)?) {
     val view = merge.current
-    val tint = when (shape) {
-        ProjectMergeCard.Shape.CHECKING -> MaterialTheme.colorScheme.onSurfaceVariant
-        ProjectMergeCard.Shape.ASKING, ProjectMergeCard.Shape.BLOCKED -> LocalOrbitColors.current.needsYou
-        ProjectMergeCard.Shape.MERGING -> MaterialTheme.colorScheme.primary
+    // A merge job the server judged timed out turns the WHOLE card amber, as the landing card does (owner 2026-10-19),
+    // whichever moment it is in.
+    val timedOut = landing?.timedOut == true
+    val tint = when {
+        timedOut -> LocalOrbitColors.current.needsYou
+        shape == ProjectMergeCard.Shape.CHECKING -> MaterialTheme.colorScheme.onSurfaceVariant
+        shape == ProjectMergeCard.Shape.ASKING || shape == ProjectMergeCard.Shape.BLOCKED -> LocalOrbitColors.current.needsYou
+        else -> MaterialTheme.colorScheme.primary
     }
     val scope = rememberCoroutineScope()
     var acting by remember { mutableStateOf(false) }
@@ -60,18 +69,66 @@ internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeC
         acting = true; actionError = null
         scope.launch { try { actionError = press(candidate) } finally { acting = false } }
     }
-    val shapeModifier = if (shape == ProjectMergeCard.Shape.CHECKING) Modifier.background(tint.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
-        else Modifier.background(tint.copy(alpha = 0.08f), RoundedCornerShape(14.dp)).border(1.dp, tint.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+    /** One of the timed-out card's doors: no second press while it is out, and a refusal said under the card in the server's words. */
+    fun run(label: String, press: suspend () -> String?) {
+        if (acting) return
+        acting = true; actionError = null
+        scope.launch { try { actionError = press()?.let { "$label — ${it.trimEnd('.')}." } } finally { acting = false } }
+    }
+    // A merge job the server judged timed out: the checking card's own line and doors (board v4 04 c5/c6).
+    val timedOutDoors: @Composable () -> Unit = {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            // A check can be run again (J-T9, revision 16) on the candidate it was run for; a merge that stopped at the push has no
+            // retry, only the end (J-T10).
+            val promotionId = view?.text("promotionId")
+            if (mergeJob?.text("kind") == "CHECK_PROMOTION" && promotionId != null) Button(onClick = { run(LandingSessionCopy.RERUN_FAILED) { rerunCheck(promotionId) } },
+                enabled = !acting, modifier = Modifier.heightIn(min = 40.dp).testTag("project-merge-card:rerun")) { Text(LandingSessionCopy.RERUN_THE_CHECK) }
+            Spacer(Modifier.weight(1f))
+            mergeJob?.text("jobId")?.let { jobId ->
+                OutlinedButton(onClick = { run(LandingSessionCopy.ABANDON_FAILED) { abandon(jobId) } }, enabled = !acting,
+                    modifier = Modifier.heightIn(min = 40.dp).testTag("project-merge-card:abandon"),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text(LandingSessionCopy.ABANDON) }
+            }
+        }
+    }
+    /** The other jobs the round stands for, kept out of sight by the card: their way in here — "+N job queued · All jobs ›". */
+    val queuedFoot: @Composable () -> Unit = {
+        if (jobCount > 1 && onLanding != null) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            LandingSessionCopy.moreJobsQueued(jobCount)?.let { Text(it, Modifier.testTag("project-merge-card:more-jobs"),
+                style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = onLanding, modifier = Modifier.testTag("project-merge-card:all-jobs")) {
+                Text("${LandingSessionCopy.ALL_JOBS} ›", fontWeight = FontWeight.SemiBold) }
+        }
+    }
+    val shapeModifier = when {
+        timedOut -> Modifier.background(tint.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+            .border(1.dp, tint.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+        shape == ProjectMergeCard.Shape.CHECKING -> Modifier.background(tint.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
+        else -> Modifier.background(tint.copy(alpha = 0.08f), RoundedCornerShape(14.dp))
+            .border(1.dp, tint.copy(alpha = 0.3f), RoundedCornerShape(14.dp))
+    }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).then(shapeModifier).padding(12.dp)
         .testTag("project-merge-card:${shape.name.lowercase()}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (shape) {
             ProjectMergeCard.Shape.CHECKING -> {
-                landing?.let { LandingHeadRow(it, onLanding) }
-                // What a pass leads to, drawn as the merging card's note: the Automatic setting merges it, or it becomes the card that asks.
-                PromotionCards.onPassLine(view)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                landing?.let { LandingHeadRow(it, onLanding, roundLanding, openLanding) }
+                if (timedOut) {
+                    mergeJobDetail?.let { Text(it, Modifier.testTag("project-merge-card:detail"), style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    timedOutDoors()
+                } else {
+                    // What a pass leads to, drawn as the merging card's note: the Automatic setting merges it, or it becomes the card that asks.
+                    PromotionCards.onPassLine(view)?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    queuedFoot()
+                }
             }
             ProjectMergeCard.Shape.ASKING -> view?.let { Asking(it, merge.criteriaMet, tint, now, acting, ::act, merge, onDetails) }
-            ProjectMergeCard.Shape.MERGING -> view?.let { Merging(it, tint, landing, onLanding, acting) { act(merge::cancel) } }
+            // A timed-out merge has no Cancel: the attempt is already over as far as the server is concerned, and its doors are the
+            // two the checking card draws (J-T9's re-check, J-T10's end).
+            ProjectMergeCard.Shape.MERGING -> view?.let { Merging(it, tint, landing, onLanding, roundLanding, openLanding, timedOut, mergeJobDetail,
+                acting, queuedFoot, timedOutDoors) { act(merge::cancel) } }
             ProjectMergeCard.Shape.BLOCKED -> view?.let {
                 Blocked(it, PromotionCards.holder(it.text("promotionId").orEmpty(), merge.openItems), blockedBy, tint, now, onDetails, onCoordinator)
             }
@@ -82,10 +139,20 @@ internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeC
 }
 
 /** The merge job's live row — the merged line's own anatomy, so the check and the merge it becomes are one shape (iOS 3b23aa163,
- * board docs/mocks/project-merge-check-row); a press opens the jobs in flight, where the server lists them. */
+ * board docs/mocks/project-merge-check-row). Since 2026-10-19 (方案 A) the whole row opens THIS ROUND's landing session; a server
+ * that names none keeps main's press, the jobs list. */
 @Composable
-private fun LandingHeadRow(line: LandingLine, onLanding: (() -> Unit)?) = ProjectLandingHead(line.word, line.head, line.running, line.timedOut,
-    if (onLanding != null) Modifier.clickable(role = Role.Button, onClick = onLanding) else Modifier)
+private fun LandingHeadRow(line: LandingLine, onLanding: (() -> Unit)?, roundLanding: String?, openLanding: (String) -> Unit) {
+    val press: (() -> Unit)? = if (roundLanding != null) ({ openLanding(roundLanding) }) else onLanding
+    Box(Modifier.fillMaxWidth().testTag("project-merge-card:landing").then(if (press != null) Modifier.clickable(role = Role.Button, onClick = press) else Modifier)) {
+        ProjectLandingHead(line.word, line.head, line.running, line.timedOut)
+    }
+}
+
+/** The CONFIRMED card's foot names the round's landing beside Cancel (方案 A); a server that names none says so in grey. */
+@Composable
+private fun OpenLandingFoot(roundLanding: String?, openLanding: (String) -> Unit) =
+    LandingEntryLink(landingEntry(roundLanding), "project-merge-card:open-landing", openLanding)
 
 /** The card's head: the moment's mark in the tint's tile, its title, and the badge while it asks. The merging card wears the same
  * merge mark as the asking one rather than a spinner (owner decision 2026-10-07, iOS 39adc7561): its one moving mark is the landing
@@ -140,16 +207,28 @@ private fun Asking(view: JsonObject, criteriaMet: Pair<Int, Int>?, tint: Color, 
     }
 }
 
-/** B: under way, and the reader may walk away; Cancel until the push begins. */
+/** B: under way, and the reader may walk away; Cancel until the push begins, and the round's landing at the card's foot (方案 A). A
+ * round the server judged timed out has no Cancel left: its two doors are the checking card's. */
 @Composable
-private fun Merging(view: JsonObject, tint: Color, landing: LandingLine?, onLanding: (() -> Unit)?, acting: Boolean, cancel: () -> Unit) {
+private fun Merging(view: JsonObject, tint: Color, landing: LandingLine?, onLanding: (() -> Unit)?, roundLanding: String?,
+    openLanding: (String) -> Unit, timedOut: Boolean, detail: String?, acting: Boolean,
+    queuedFoot: @Composable () -> Unit, timedOutDoors: @Composable () -> Unit, cancel: () -> Unit) {
     Head(PromotionCards.pageTitle(view), R.drawable.ic_merge, tint, tint)
     Text(PromotionCards.mergingStatusLine(view), Modifier.testTag("project-merge-card:status"), style = MaterialTheme.typography.labelLarge)
-    landing?.let { LandingHeadRow(it, onLanding) }
-    Text(PromotionCards.pageNothingToDo, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        OutlinedButton(onClick = cancel, enabled = !acting && PromotionCards.cancellable(view),
-            modifier = Modifier.heightIn(min = 48.dp).testTag("project-merge-card:cancel")) { Text(PromotionCards.cancel) }
+    landing?.let { LandingHeadRow(it, onLanding, roundLanding, openLanding) }
+    if (timedOut) {
+        detail?.let { Text(it, Modifier.testTag("project-merge-card:detail"), style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        timedOutDoors()
+    } else {
+        Text(PromotionCards.pageNothingToDo, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        queuedFoot()
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OpenLandingFoot(roundLanding, openLanding)
+            Spacer(Modifier.weight(1f))
+            OutlinedButton(onClick = cancel, enabled = !acting && PromotionCards.cancellable(view),
+                modifier = Modifier.heightIn(min = 48.dp).testTag("project-merge-card:cancel")) { Text(PromotionCards.cancel) }
+        }
     }
 }
 

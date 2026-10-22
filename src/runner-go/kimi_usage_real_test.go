@@ -156,7 +156,7 @@ func TestRealKimiDefaultPlanUsageHeartbeat(t *testing.T) {
 	}))
 	defer cp.Close()
 	if _, err := NewTransport(cp.URL, "orbit-test").heartbeat(HeartbeatRequest{
-		Status: "ONLINE", Version: version, PlanUsage: combinePlanUsage(nil, nil, usage.snapshot()),
+		Status: "ONLINE", Version: version, PlanUsage: combinePlanUsage(nil, nil, usage.snapshot(), nil),
 	}); err != nil {
 		t.Fatal(err)
 	}

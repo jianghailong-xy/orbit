@@ -1,0 +1,34 @@
+{
+  "deleteRequestedAt": "2026-10-20T22:34:33.899+00:00",
+  "grace": 240,
+  "log": "/mnt/data/managed-runner-lab/test-server/state/logs/t03-runner-7ace36ca-49ae-4b63-9432-46f895d773b1.log",
+  "logMarks": {
+    "stopping": "2026-10-20T22:34:33.923368157Z"
+  },
+  "logTail": [
+    "2026-10-20T22:28:13.418926456Z [orbit-runner 2026-10-20T22:28:13.418Z] runner \"t03\" online -> https://10.0.2.2:13711 (max 2 concurrent)",
+    "2026-10-20T22:28:13.996553420Z [orbit-runner 2026-10-20T22:28:13.996Z] integration job 4371b571-75e2-4cb7-85b5-97508a14f2b0 LAND_TASK refs/heads/orbit/task-t03-r1-landing-probe-add-r1-txt-98f4fe -> refs/heads/project/34hN5f2XmUTCDFMGa5mTR",
+    "2026-10-20T22:28:14.382240064Z [orbit-runner 2026-10-20T22:28:14.382Z] reclaiming session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 T03 fake-model persistence session 2",
+    "2026-10-20T22:28:15.549444689Z [orbit-runner 2026-10-20T22:28:15.549Z] session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148ba-a3da-7330-94bc-3ba0bd62959a (branch orbit/t03-fake-model-persistence-session-2-244d43)",
+    "2026-10-20T22:28:15.550497420Z [orbit-runner 2026-10-20T22:28:15.550Z] reclaiming session 01a148d5-9efb-7758-ab03-7ae6a6276ea3 \u2014 T03 git identity check",
+    "2026-10-20T22:28:16.339269253Z [orbit-runner 2026-10-20T22:28:16.339Z] session 01a148d5-9efb-7758-ab03-7ae6a6276ea3 \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148d5-9efb-7758-ab03-7ae6a6276ea3 (branch orbit/t03-git-identity-check-7dded5)",
+    "2026-10-20T22:28:16.340308520Z [orbit-runner 2026-10-20T22:28:16.340Z] reclaiming session 01a148d5-daad-7081-9956-db8a8259f03c \u2014 t03 landing probe",
+    "2026-10-20T22:28:16.935975477Z [orbit-runner 2026-10-20T22:28:16.935Z] session 01a148d5-daad-7081-9956-db8a8259f03c \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148d5-daad-7081-9956-db8a8259f03c (branch orbit/t03-landing-probe-5a6c35)",
+    "2026-10-20T22:28:16.937066409Z [orbit-runner 2026-10-20T22:28:16.937Z] reclaiming session 01a15b67-58bd-70bc-8f14-ff0b214b5d43 \u2014 T03 real DeepSeek session",
+    "2026-10-20T22:28:17.622352771Z [orbit-runner 2026-10-20T22:28:17.622Z] session 01a15b67-58bd-70bc-8f14-ff0b214b5d43 \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a15b67-58bd-70bc-8f14-ff0b214b5d43 (branch orbit/t03-real-deepseek-session-5d6195)",
+    "2026-10-20T22:28:17.628883976Z [orbit-runner 2026-10-20T22:28:17.628Z] gc: removed orphan uploads dir 72ee6f63-2c33-52cb-98cc-5745d8f95b4e",
+    "2026-10-20T22:31:18.077867287Z [orbit-runner 2026-10-20T22:31:18.077Z] integration job 4371b571-75e2-4cb7-85b5-97508a14f2b0 result delivered: LANDED accepted=true receipts=1",
+    "2026-10-20T22:31:18.108683110Z [orbit-runner 2026-10-20T22:31:18.108Z] integration job 5721ddfc-bf41-4daa-8520-44576d8dfb79 CHECK_PROMOTION refs/heads/project/34hN5f2XmUTCDFMGa5mTR -> refs/heads/master",
+    "2026-10-20T22:34:18.359110772Z [orbit-runner 2026-10-20T22:34:18.359Z] integration job 5721ddfc-bf41-4daa-8520-44576d8dfb79 result delivered: READY accepted=true receipts=0",
+    "2026-10-20T22:34:33.923368157Z [orbit-runner 2026-10-20T22:34:33.923Z] runner stopping; draining session supervisors..."
+  ],
+  "podGoneAt": "2026-10-20T22:34:35.256+00:00",
+  "podUid": "7ace36ca-49ae-4b63-9432-46f895d773b1",
+  "runnerTerminated": {
+    "containerID": "containerd://f73640f55b65c04bd784e35b54fb8d8367fe955ab6c1076583e0e6889fcff143",
+    "exitCode": 0,
+    "finishedAt": "2026-10-20T22:34:33Z",
+    "reason": "Completed",
+    "startedAt": "2026-10-20T22:28:13Z"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "at": "2026-10-18T06:25:31.771+00:00",
+  "changes": [
+    [
+      "2026-10-18T06:25:31.771+00:00",
+      {
+        "attempt": 0,
+        "demand_revision": 5,
+        "desired_state": "RUNNING",
+        "drain": null,
+        "generation": 10,
+        "management_state": "FAILED",
+        "pod": null,
+        "reason": "PVC_MISSING",
+        "revision": 148
+      }
+    ]
+  ],
+  "owner": "nia",
+  "reached": {
+    "reason": "PVC_MISSING",
+    "state": "FAILED"
+  }
+}

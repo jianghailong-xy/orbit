@@ -131,6 +131,26 @@ def fixture_snapshot():
                                     for p in selected}, 'engineCalls': records}, sort_keys=True))
 
 
+def fixture_git_identity():
+    # The runner's autoInitGit baseline (src/runner-go/worktree.go initGitRepo) on a fresh volume:
+    # no identity in the environment, the repository or the user's config, only the image's.
+    repo = Path('/tmp/identity-check')
+    repo.mkdir()
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith(('GIT_AUTHOR_', 'GIT_COMMITTER_')) and key != 'EMAIL'}
+    def git(*args):
+        return subprocess.run(['git', '-C', str(repo), *args], env=env, check=True,
+                              capture_output=True, text=True).stdout.strip()
+    git('init')
+    git('add', '-A')
+    git('commit', '--no-verify', '--allow-empty', '-m', 'orbit: baseline')
+    baseline = git('log', '-1', '--format=%an <%ae>|%cn <%ce>')
+    git('config', 'user.name', 'Repository User')
+    git('config', 'user.email', 'repository@example.invalid')
+    git('commit', '--no-verify', '--allow-empty', '-m', 'repository identity')
+    print(json.dumps({'baseline': baseline, 'repository': git('log', '-1', '--format=%an <%ae>')}))
+
+
 def fixture_tripwire():
     args = sys.argv[2:]
     row = {'engine': sys.argv[1], 'argv': args, 'fakeOnly': True,
@@ -219,6 +239,10 @@ def main():
         version = create(command=('-c', "import json,subprocess;from pathlib import Path;print(json.dumps({'manifest':json.loads(Path('/usr/local/share/orbit/tool-versions.json').read_text()),'codex':subprocess.check_output(['codex','--version'],text=True).strip()}))"),
                          extra=('--env', 'HOME=/tmp/versions', '--env', 'CODEX_HOME=/tmp/versions/.codex'))
         scope['versions'] = json.loads(call('start', '-a', version))
+        scope['gitIdentity'] = json.loads(call('start', '-a', create(command=('/fixtures/image-smoke.py', '--fixture-git-identity'))))
+        assert scope['gitIdentity'] == {'baseline': 'Orbit Runner <runner@orbit.invalid>|Orbit Runner <runner@orbit.invalid>',
+                                        'repository': 'Repository User <repository@example.invalid>'}, \
+            'A fresh volume must commit as the image default, and a repository identity must win over it'
         (evidence / 'scope.json').write_text(json.dumps(scope, indent=2) + '\n')
         mock = create(command=('/fixtures/image-smoke.py', '--fixture-server'))
         call('start', mock)
@@ -281,7 +305,8 @@ def main():
 
 if __name__ == '__main__':
     actions = {'--fixture-server': fixture_server, '--fixture-seed': fixture_seed,
-               '--fixture-snapshot': fixture_snapshot, '--fixture-tripwire': fixture_tripwire}
+               '--fixture-snapshot': fixture_snapshot, '--fixture-tripwire': fixture_tripwire,
+               '--fixture-git-identity': fixture_git_identity}
     if len(sys.argv) > 1 and sys.argv[1] in actions:
         action = actions[sys.argv.pop(1)]
         action()

@@ -9,6 +9,7 @@ import type {
   WikiMaintenanceSettings,
   WikiOpInput,
   WikiOpOutcome,
+  WikiPlanBuildResult,
   WikiPlanDecisionResult,
   WikiPlanDocInput,
   WikiPlanGateError,
@@ -171,7 +172,7 @@ export function revertWikiChangeset(changesetId: string): Promise<WikiRevertAnsw
 export interface WikiSpaceUpdate {
   reviewMode?: WikiReviewMode;
   automaticSpotChecks?: boolean;
-  maintenance?: Partial<Pick<WikiMaintenanceSettings, 'enabled' | 'workspaceId' | 'provider' | 'dailyRunLimit' | 'lookbackDays'>>;
+  maintenance?: Partial<Pick<WikiMaintenanceSettings, 'enabled' | 'workspaceId' | 'dailyRunLimit' | 'lookbackDays'>>;
 }
 
 /** `PATCH /api/wiki/spaces/:id` — the owner's settings; refused to every session. */
@@ -183,8 +184,8 @@ export function updateWikiSpace(spaceId: string, body: WikiSpaceUpdate): Promise
 
 /**
  * `POST /api/wiki/spaces/:id/plan/redraft` — ask for a draft of the plan; with `instructions`, a revision
- * of its newest version. The server makes it a task of the space's maintenance list, queued behind the
- * list's unfinished task or held with why; a draft that has not ended answers a second press.
+ * of its newest version. The server makes it a wiki-worker job, or holds it with why; a draft that has not
+ * ended answers a second press.
  */
 export function redraftWikiPlan(spaceId: string, instructions: string | null): Promise<WikiPlanRedraftResult> {
   const words = instructions?.trim() ?? '';
@@ -197,6 +198,14 @@ export function redraftWikiPlan(spaceId: string, instructions: string | null): P
 /** `POST …/plan/versions/:version/confirm` — the owner's confirmation of the space's draft. */
 export function confirmWikiPlan(spaceId: string, version: number): Promise<WikiPlanVersion> {
   return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/plan/versions/${version}/confirm`, { method: 'POST', body: {} });
+}
+
+/**
+ * `POST …/plan/versions/:version/build` — the documents of the version in force asked for again (contract
+ * `plan.jobs.rebuild`), while the server executes the wiki: the build that has not ended answers a second press.
+ */
+export function buildWikiPlan(spaceId: string, version: number): Promise<WikiPlanBuildResult> {
+  return api(`/wiki/spaces/${encodeURIComponent(spaceId)}/plan/versions/${version}/build`, { method: 'POST', body: {} });
 }
 
 /**

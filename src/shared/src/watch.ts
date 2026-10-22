@@ -219,6 +219,21 @@ export interface WatchTargetView {
    * absent from an older server.
    */
   targetStatus?: WatchTargetStatusView | null;
+  /**
+   * The task a SESSION target's session runs (`sessions.task_id`), named and standing as a TASK target
+   * on that task reads, so a client can draw a task and its run session as one thing. Null on a
+   * session that runs no task — a conversation opened by an @-mention is about a task without running
+   * it — on a task or session this account cannot read, and on every TASK target. Absent from an
+   * older server.
+   */
+  targetTask?: WatchTargetTaskView | null;
+}
+
+/** The task a session target runs (`WatchTargetView.targetTask`): its id, title and standing. */
+export interface WatchTargetTaskView {
+  id: string;
+  title: string;
+  status: WatchTargetStatusView;
 }
 
 /**

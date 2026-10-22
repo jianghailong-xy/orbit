@@ -874,8 +874,11 @@ test('(q) this change adds no compose service and no resident process', () => {
   // which the two-space regex above cannot tell apart from a service.)
   // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
   // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this change.
+  // docker-channel is the managed runners' restricted Docker channel, which the account owner allowed on
+  // 2026-10-17 under a Compose profile a fresh install switches on (docs/managed-runner-design.md,
+  // "Implementation record: new deployments"), not this change.
   assert.deepEqual(services.sort(), [
-    'apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web', 'wiki-worker',
+    'apiserver', 'docker-channel', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web', 'wiki-worker',
   ], 'the deployment is exactly the services it already had');
 
   // A resident process would arrive as a new long-running start script or a new scheduled job.
@@ -1132,8 +1135,11 @@ test('(v) this is subtraction: nothing new runs, and less SQL is in force than b
   // landed. The list shrank; the claim is still that nothing here ADDS a service.
   // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
   // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this change.
+  // docker-channel is the managed runners' restricted Docker channel, which the account owner allowed on
+  // 2026-10-17 under a Compose profile a fresh install switches on (docs/managed-runner-design.md,
+  // "Implementation record: new deployments"), not this change.
   assert.deepEqual(services.sort(), [
-    'apiserver', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web', 'wiki-worker',
+    'apiserver', 'docker-channel', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web', 'wiki-worker',
   ], 'the deployment is exactly the services it already had');
   const packageJson = JSON.parse(read('package.json'));
   const apiserver = JSON.parse(read('src/apiserver/package.json'));

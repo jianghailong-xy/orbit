@@ -1,0 +1,3 @@
+case default
+mock:tool write_to_file|write_file {"Path":"@WS@/denied.txt","Content":"x\n"}
+mock:text after

@@ -205,8 +205,10 @@ describe('DeepSeek Harness, on the DeepSeek keys', () => {
     expect(dsh.providers).toEqual([]);
   });
 
-  it('offers no connection on a runner too old for it, and none at all where there is a key', () => {
-    expect(engineOf(engineChoices(sources({ dshRunner: { capabilities: [], engines: [] } })), DSH)).toBeUndefined();
+  it('says "Update runner" instead of a connection on a runner too old for it, and nothing where there is a key', () => {
+    const dsh = engineOf(engineChoices(sources({ dshRunner: { capabilities: [], engines: [] } })), DSH)!;
+    expect(dsh).toMatchObject({ slug: 'dsh', provider: null, unavailable: 'Update runner', fixEngine: 'dsh' });
+    expect(dsh.fixHref).toBeUndefined();
     expect(engineOf(engineChoices(sources({ configured: [deepseek], dshRunner: dshReady })), DSH)?.unavailable).toBeUndefined();
   });
 

@@ -406,12 +406,13 @@ describe('the runner account a session runs on', { timeout: 60_000 }, () => {
     await render(() => document.querySelector('.np-list'));
     // Each engine by its CLI's name (ENGINE_CLI_NAMES), in ALL_ENGINES order. OpenCode is listed
     // whether or not the runner has it — this one hasn't — so it is a row here too, carrying its reason
-    // rather than vanishing.
+    // rather than vanishing; so is DeepSeek Harness, as "Update runner" on a runner too old for it.
     expect([...document.querySelectorAll('.np-list .np-row-name')].map((row) => row.textContent)).toEqual([
       'Claude Code',
       'Codex',
       'Kimi Code',
       'OpenCode',
+      'DeepSeek Harness',
       'Connect a provider…',
     ]);
     await click([...document.querySelectorAll('.np-list .np-row')].find((row) => row.textContent?.startsWith('Claude Code')));

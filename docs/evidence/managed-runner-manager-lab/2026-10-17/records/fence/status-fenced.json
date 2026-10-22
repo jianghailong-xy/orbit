@@ -1,0 +1,44 @@
+{
+  "at": "2026-10-17T22:08:59.548+00:00",
+  "display": {
+    "acceptsWork": false,
+    "detail": "The previous runner instance is gone, and nothing proves it stopped, so no new instance is started and the data volume is kept. It waits for proof that it stopped or for an operator\u2019s fencing receipt.",
+    "ensure": false,
+    "kind": "waitingOperator",
+    "moving": false,
+    "retry": false,
+    "signIn": false,
+    "startsNewSession": false,
+    "title": "Waiting for an operator"
+  },
+  "owner": "carol",
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": false,
+      "canWake": false
+    },
+    "agentId": "34hhrlQmmkpxJaHZB6QbB",
+    "contractVersion": 1,
+    "desiredState": "RUNNING",
+    "enabled": true,
+    "heartbeatStatus": "ONLINE",
+    "initialProvider": null,
+    "lastHeartbeatAt": "2026-10-17T22:08:56.784Z",
+    "managementState": "FENCING",
+    "reason": {
+      "code": "PREDECESSOR_STOP_UNPROVEN",
+      "message": "The previous runner instance is gone, and nothing proves it stopped, so no new instance is started and the data volume is kept. It waits for proof that it stopped or for an operator\u2019s fencing receipt.",
+      "retryable": false
+    },
+    "retryAfter": null,
+    "revision": 68,
+    "runnerId": "34hhrlQOb3MVDzFDVV6sP",
+    "runnerPublicId": "34hhrlQOb3MVDzFDVV6sP",
+    "usable": false,
+    "workspaceId": "34hhrlQmmkpxJaHZB6QbB",
+    "workspacePublicId": "34hhrlQmmkpxJaHZB6QbB"
+  }
+}

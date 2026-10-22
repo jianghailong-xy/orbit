@@ -1,0 +1,224 @@
+{
+  "claude": {
+    "projects/-var-lib-orbit-home--orbit-worktrees-01a148b5-1ca5-73eb-8ffa-77f5bef212e1/0451bf1d-25d5-47ea-9e7a-75445cb8be40.jsonl": {
+      "lines": 42,
+      "sha256": "7e0f4a16647d178f91b507219df70440398b9f83b46a69034419736579f7538b"
+    },
+    "projects/-var-lib-orbit-home--orbit-worktrees-01a148ba-1d44-72fc-bcd0-2ab14fdebe29/12847510-1349-4ef0-9752-4f57a289bb8f.jsonl": {
+      "lines": 21,
+      "sha256": "2b408404f949690ef889fd383c1c96f0d9f284c2df79446bd24b396fd5eb5ca5"
+    },
+    "projects/-var-lib-orbit-home--orbit-worktrees-01a148ba-a3da-7330-94bc-3ba0bd62959a/d01e5d9f-0e61-4d4c-ae38-3565e1c7c934.jsonl": {
+      "lines": 58,
+      "sha256": "40c9c0b7b052a6f1de94793a4d2f9b0d559baa2726709bafd25fae89b9b10a06"
+    },
+    "projects/-var-lib-orbit-home--orbit-worktrees-01a148d5-daad-7081-9956-db8a8259f03c/a294a71b-1ad1-4918-a2f3-d3a051364766.jsonl": {
+      "lines": 21,
+      "sha256": "13cba75695cef1f9f663b39ebd77eff5a47c3cb32b7fbc19bff9c7c63a26bac4"
+    },
+    "projects/-var-lib-orbit-home--orbit-worktrees-01a15b67-58bd-70bc-8f14-ff0b214b5d43/e001cc18-451c-46ba-a156-bfcfaf87ae91.jsonl": {
+      "lines": 43,
+      "sha256": "a26e15e0817aaaf90d312037768b04d6547083c485ff3849ba2514aafab84e57"
+    },
+    "projects/-var-lib-orbit-home--orbit-worktrees-02a86ce8-5f30-5ae6-b543-03b2bc72083b/76e155a1-80d8-43ea-8a49-3660bf902925.jsonl": {
+      "lines": 22,
+      "sha256": "7b3ac18baf7d0f0dba3f02fd888e7187acb2bbb51679eaf58dec05611b0d5ef8"
+    }
+  },
+  "config": {
+    "autoInstallEngines": null,
+    "maxConcurrent": 2,
+    "name": "t03",
+    "runnerId": "01a148b4-0c67-7688-b666-fdea8b9a55ed",
+    "serverUrl": "https://10.0.2.2:13711",
+    "workDir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "configSha256": "0f8ab256b7b5b271fc93d668f871f0a74380da5a00f3b77e5d70f0f9b86eb9c5",
+  "containerIdentity": {
+    "layoutVersion": 1,
+    "runnerId": "01a148b4-0c67-7688-b666-fdea8b9a55ed",
+    "serverUrl": "https://10.0.2.2:13711",
+    "workDir": "/var/lib/orbit/home/orbit-repos/default"
+  },
+  "modes": {
+    "/var/lib/orbit/home": "0o700",
+    "/var/lib/orbit/home/.orbit": "0o700",
+    "/var/lib/orbit/home/.orbit/config.json": "0o600"
+  },
+  "mount": [
+    {
+      "fstype": "ext4",
+      "source": "/dev/rbd1"
+    }
+  ],
+  "process": {
+    "capEff": "0000000000000000",
+    "gid": 10001,
+    "uid": 10001
+  },
+  "runs": {
+    "01a148b5-1ca5-73eb-8ffa-77f5bef212e1": {
+      "claudeConfigDir": null,
+      "provider": "claude",
+      "runtimeSessionId": "0451bf1d-25d5-47ea-9e7a-75445cb8be40",
+      "sessionUuid": "0451bf1d-25d5-47ea-9e7a-75445cb8be40",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a148b5-1ca5-73eb-8ffa-77f5bef212e1"
+    },
+    "01a148ba-1d44-72fc-bcd0-2ab14fdebe29": {
+      "claudeConfigDir": null,
+      "provider": "claude",
+      "runtimeSessionId": "12847510-1349-4ef0-9752-4f57a289bb8f",
+      "sessionUuid": "12847510-1349-4ef0-9752-4f57a289bb8f",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a148ba-1d44-72fc-bcd0-2ab14fdebe29"
+    },
+    "01a148ba-a3da-7330-94bc-3ba0bd62959a": {
+      "claudeConfigDir": null,
+      "provider": "claude",
+      "runtimeSessionId": "d01e5d9f-0e61-4d4c-ae38-3565e1c7c934",
+      "sessionUuid": "d01e5d9f-0e61-4d4c-ae38-3565e1c7c934",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a148ba-a3da-7330-94bc-3ba0bd62959a"
+    },
+    "01a148d5-9efb-7758-ab03-7ae6a6276ea3": {
+      "claudeConfigDir": null,
+      "provider": "claude",
+      "runtimeSessionId": "10b90036-e7e7-44ea-a958-660efe711063",
+      "sessionUuid": "10b90036-e7e7-44ea-a958-660efe711063",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a148d5-9efb-7758-ab03-7ae6a6276ea3"
+    },
+    "01a148d5-daad-7081-9956-db8a8259f03c": {
+      "claudeConfigDir": null,
+      "provider": "claude",
+      "runtimeSessionId": "a294a71b-1ad1-4918-a2f3-d3a051364766",
+      "sessionUuid": "a294a71b-1ad1-4918-a2f3-d3a051364766",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a148d5-daad-7081-9956-db8a8259f03c"
+    },
+    "01a15b67-58bd-70bc-8f14-ff0b214b5d43": {
+      "claudeConfigDir": null,
+      "provider": "claude",
+      "runtimeSessionId": "e001cc18-451c-46ba-a156-bfcfaf87ae91",
+      "sessionUuid": "e001cc18-451c-46ba-a156-bfcfaf87ae91",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a15b67-58bd-70bc-8f14-ff0b214b5d43"
+    },
+    "02a86ce8-5f30-5ae6-b543-03b2bc72083b": {
+      "claudeConfigDir": null,
+      "provider": "claude",
+      "runtimeSessionId": "76e155a1-80d8-43ea-8a49-3660bf902925",
+      "sessionUuid": "76e155a1-80d8-43ea-8a49-3660bf902925",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/02a86ce8-5f30-5ae6-b543-03b2bc72083b"
+    }
+  },
+  "sqlite": {},
+  "takenAt": "2026-10-20T22:22:58.453+00:00",
+  "uploads": {
+    "01a148ba-a3da-7330-94bc-3ba0bd62959a/t03-attachment-3.txt": "d952062eb1d2c3923ef856749cc1f7bdec05f7d37fae42ffd8ef8b8a96589f33",
+    "01a15b67-58bd-70bc-8f14-ff0b214b5d43/t03-real-attachment.txt": "1963388c480e7fd56a812f91db15ae43ff23bc3cb5a1f5dc577b589575540b0a"
+  },
+  "workspace": {
+    "branch": "master",
+    "files": {
+      ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697"
+    },
+    "head": "f75c2d0414d4cc18273c7e950ecbe99c18e8079c",
+    "worktreeList": [
+      "worktree /var/lib/orbit/home/orbit-repos/default",
+      "HEAD f75c2d0414d4cc18273c7e950ecbe99c18e8079c",
+      "branch refs/heads/master",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a148b5-1ca5-73eb-8ffa-77f5bef212e1",
+      "HEAD 688cc7b3be32665d8da87d492cb7d97e8eb78336",
+      "branch refs/heads/orbit/t03-model-free-worktree-session-248543",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a148ba-1d44-72fc-bcd0-2ab14fdebe29",
+      "HEAD f75c2d0414d4cc18273c7e950ecbe99c18e8079c",
+      "branch refs/heads/orbit/t03-fake-model-persistence-session-bf4fb2",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a148ba-a3da-7330-94bc-3ba0bd62959a",
+      "HEAD 75466e7f2f5357b324d2075fb515325a5e09f71a",
+      "branch refs/heads/orbit/t03-fake-model-persistence-session-2-244d43",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a148d5-daad-7081-9956-db8a8259f03c",
+      "HEAD f75c2d0414d4cc18273c7e950ecbe99c18e8079c",
+      "branch refs/heads/orbit/t03-landing-probe-5a6c35",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a15b67-58bd-70bc-8f14-ff0b214b5d43",
+      "HEAD be34204b1289382cf32b98d42721812fa2f09df2",
+      "branch refs/heads/orbit/t03-real-deepseek-session-5d6195",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/02a86ce8-5f30-5ae6-b543-03b2bc72083b",
+      "HEAD ff06725dc966d2a8c3a3d3c072cd8049a8e06484",
+      "branch refs/heads/orbit/task-t03-landing-probe-add-landed-txt-61600f"
+    ]
+  },
+  "worktrees": {
+    "01a148b5-1ca5-73eb-8ffa-77f5bef212e1": {
+      "branch": "orbit/t03-model-free-worktree-session-248543",
+      "commonDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+      "files": {
+        ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+        "t03-shell.txt": "cb652a7869aa8113f9f541ee41e4031db5db810b25c2b2d4672317c0e92f594f"
+      },
+      "head": "688cc7b3be32665d8da87d492cb7d97e8eb78336",
+      "status": []
+    },
+    "01a148ba-1d44-72fc-bcd0-2ab14fdebe29": {
+      "branch": "orbit/t03-fake-model-persistence-session-bf4fb2",
+      "commonDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+      "files": {
+        ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697"
+      },
+      "head": "f75c2d0414d4cc18273c7e950ecbe99c18e8079c",
+      "status": []
+    },
+    "01a148ba-a3da-7330-94bc-3ba0bd62959a": {
+      "branch": "orbit/t03-fake-model-persistence-session-2-244d43",
+      "commonDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+      "files": {
+        ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+        "before-recreate.txt": "227d75ed23d45d2cb9881141be6026b41fc630d7587f223cee401c6f31f3f53e",
+        "draft-uncommitted.txt": "7dad230d1b65e7ed61b86f6a9d9c61aae68bf65a0907efa83c0447d9d24c0961"
+      },
+      "head": "75466e7f2f5357b324d2075fb515325a5e09f71a",
+      "status": [
+        "?? draft-uncommitted.txt"
+      ]
+    },
+    "01a148d5-9efb-7758-ab03-7ae6a6276ea3": {
+      "branch": "orbit/t03-git-identity-check-7dded5",
+      "commonDir": "/var/lib/orbit/home/orbit-repos/identity-check/.git",
+      "files": {
+        ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697"
+      },
+      "head": "1ca8b73fa41e264d12f0463abad3d3167eeb0b0c",
+      "status": []
+    },
+    "01a148d5-daad-7081-9956-db8a8259f03c": {
+      "branch": "orbit/t03-landing-probe-5a6c35",
+      "commonDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+      "files": {
+        ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697"
+      },
+      "head": "f75c2d0414d4cc18273c7e950ecbe99c18e8079c",
+      "status": []
+    },
+    "01a15b67-58bd-70bc-8f14-ff0b214b5d43": {
+      "branch": "orbit/t03-real-deepseek-session-5d6195",
+      "commonDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+      "files": {
+        ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+        "REAL.md": "dfbe774c1104f77ec5070bc56402c13489fc4f0d44d73bbc16818e808833d951"
+      },
+      "head": "be34204b1289382cf32b98d42721812fa2f09df2",
+      "status": []
+    },
+    "02a86ce8-5f30-5ae6-b543-03b2bc72083b": {
+      "branch": "orbit/task-t03-landing-probe-add-landed-txt-61600f",
+      "commonDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+      "files": {
+        ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+        "LANDED.txt": "be78fde0ff32746e7c0de9ae7ef170313cf373bb89e6519649d8aa78b602efa1"
+      },
+      "head": "ff06725dc966d2a8c3a3d3c072cd8049a8e06484",
+      "status": []
+    }
+  }
+}

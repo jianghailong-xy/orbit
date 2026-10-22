@@ -530,6 +530,28 @@ final class TranscriptReducerTests: XCTestCase {
         XCTAssertEqual(card?.result, "Interrupted: the turn was stopped while this tool was running.")
     }
 
+    /// One conversation with both kinds of interrupt, as session 34dLFOCjLz8KqyCiaECec recorded them
+    /// on 2026-10-13: the owner's Stop (claude's interrupt names the Stop's request), then the runner
+    /// restarting under a turn still in flight (`reason: runner_restart`, runner-go's
+    /// watchShutdownDrain). Only the second row is the runner's doing; an engine whose Stop carries
+    /// nothing is a Stop too (web parity: Transcript.test.tsx).
+    func testAnInterruptRowKnowsWhenTheRunnerRestartCutTheTurnOff() {
+        var r = TranscriptReducer()
+        r.apply(RunEvent(seq: 1, type: .user, payload: .object(["text": .string("Why was it sent twice?")])))
+        r.apply(RunEvent(seq: 2, type: .interrupt, payload: .object(["requestId": .string("req-22-1")])))
+        r.apply(RunEvent(seq: 3, type: .turnEnd, payload: .object(["subtype": .string("interrupted")])))
+        r.apply(RunEvent(seq: 4, type: .user, payload: .object(["text": .string("Carry on.")])))
+        r.apply(RunEvent(seq: 5, type: .interrupt, payload: .object(["reason": .string("runner_restart")])))
+        r.apply(RunEvent(seq: 6, type: .user, payload: .object(["text": .string("Stop there.")])))
+        r.apply(RunEvent(seq: 7, type: .interrupt, payload: .object([:])))
+
+        let marks = r.state.items.compactMap { item -> String? in
+            guard case .interrupt(_, let seq, let runnerRestart) = item else { return nil }
+            return "\(seq):\(runnerRestart ? "runner restart" : "stop")"
+        }
+        XCTAssertEqual(marks, ["2:stop", "5:runner restart", "7:stop"])
+    }
+
     /// The composer's context gauge reads the latest positive `contextTokens` from any event. New
     /// runners normally report it on `turn_end`; a lightweight status/unknown event may also
     /// refresh it without ending the active turn. Later events that omit it keep the last known

@@ -1,0 +1,463 @@
+{
+ "checks": [
+  {
+   "check": "amy: the next generation runs the final image",
+   "ok": true,
+   "value": {
+    "spec": [
+     "docker.io/library/orbit-managed-runner-lab@sha256:7b6b64fb6ca7cc66b78967f647e8f6feb810407976fc9e09555173342d063fbf"
+    ],
+    "uid": "4f1a0cc4-352d-41c1-ad51-24f05a0ab097"
+   }
+  },
+  {
+   "check": "amy: the runner's start found the repositories it cannot read and said so",
+   "ok": true,
+   "value": [
+    "[orbit-runner 2026-10-19T17:50:20.950Z] volume check: the Git repository at /var/lib/orbit/home/orbit-repos/default cannot be read: commit 22957bc1bfe49e80238e5dab4f1fe44c011cb96e, where its branch master points, cannot be read",
+    "[orbit-runner 2026-10-19T17:50:20.950Z] volume check: the Git repository at /var/lib/orbit/home/.orbit/worktrees/01a15527-aade-766a-b161-b52aff12bcba cannot be read: commit 8b58c463928ab1a27f892bb6fd0527321e588198, where its branch orbit/t02c-amy-s1-a-session-t03-secret-amys1-f-08a072 points, cannot be read",
+    "[orbit-runner 2026-10-19T17:50:20.950Z] volume check: the Git repository at /var/lib/orbit/home/.orbit/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922 cannot be read: commit 22957bc1bfe49e80238e5dab4f1fe44c011cb96e, where its branch orbit/t02c-amy-s2-a-session-t03-secret-amys2-f-3dfc91 points, cannot be read",
+    "[orbit-runner 2026-10-19T17:50:20.950Z] volume check: the Git repository at /var/lib/orbit/home/.orbit/worktrees/01a15527-bf1b-72da-9733-60e06f0238d1 cannot be read: its .git names no repository",
+    "[orbit-runner 2026-10-19T17:50:20.950Z] volume check: 4 checkouts in 1 repositories after start; 0 stale lock files removed, 0 branches restored, 4 checkouts damaged",
+    "3.919Z] session 01a15527-aade-766a-b161-b52aff12bcba \u2014 not starting: REPOSITORY_DAMAGED: the Git repository at /var/lib/orbit/home/orbit-repos/default cannot be read: commit 22957bc1bfe49e80238e5dab4f1fe44c011cb96e, where its branch master points, cannot be read. The runner does not work in a damaged repository or start a new one over it: repair it, or move it aside to start afresh, then try again",
+    "4.935Z] session 01a15527-b3fa-74d6-b522-8cd7dcf92922 \u2014 not starting: REPOSITORY_DAMAGED: the Git repository at /var/lib/orbit/home/orbit-repos/default cannot be read: commit 22957bc1bfe49e80238e5dab4f1fe44c011cb96e, where its branch master points, cannot be read. The runner does not work in a damaged repository or start a new one over it: repair it, or move it aside to start afresh, then try again",
+    "5.485Z] session 01a15527-bf1b-72da-9733-60e06f0238d1 \u2014 not starting: REPOSITORY_DAMAGED: the Git repository at /var/lib/orbit/home/orbit-repos/default cannot be read: commit 22957bc1bfe49e80238e5dab4f1fe44c011cb96e, where its branch master points, cannot be read. The runner does not work in a damaged repository or start a new one over it: repair it, or move it aside to start afresh, then try again"
+   ]
+  },
+  {
+   "check": "amy: the session was refused with the reason, naming the repository",
+   "ok": true,
+   "value": "{\"message\": \"REPOSITORY_DAMAGED: the Git repository at /var/lib/orbit/home/orbit-repos/default cannot be read: commit 22957bc1bfe49e80238e5dab4f1fe44c011cb96e, where its branch master points, cannot be read. The runner does not work in a damaged repository or start a new one over it: repair it, or move it aside to start afresh, then try again\"}"
+  },
+  {
+   "check": "amy: the session failed with the refusal",
+   "ok": true,
+   "value": {
+    "status": "FAILED"
+   }
+  },
+  {
+   "check": "amy: no engine saw the message: the model was never asked about it",
+   "ok": true
+  },
+  {
+   "check": "amy: no new repository over the broken one: the workspace's HEAD still names master and its objects are still the empty ones",
+   "ok": true,
+   "value": {
+    "bytes": 23,
+    "content": "ref: refs/heads/master"
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T17:51:04.509+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "damaged",
+ "result": {
+  "asleep": {
+   "sleep": 202,
+   "until": {
+    "at": "2026-10-19T17:51:04.509+00:00",
+    "changes": [
+     {
+      "at": "2026-10-19T17:50:33.813+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "asked",
+       "generation": 4,
+       "management_state": "DRAINING",
+       "pod": "4f1a0cc4",
+       "reason": null,
+       "revision": 152
+      }
+     },
+     {
+      "at": "2026-10-19T17:50:51.357+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "accepted",
+       "generation": 4,
+       "management_state": "DRAINING",
+       "pod": "4f1a0cc4",
+       "reason": null,
+       "revision": 152
+      }
+     },
+     {
+      "at": "2026-10-19T17:50:54.069+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "accepted",
+       "generation": 4,
+       "management_state": "DRAINING",
+       "pod": "4f1a0cc4",
+       "reason": null,
+       "revision": 155
+      }
+     },
+     {
+      "at": "2026-10-19T17:51:04.509+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 5,
+       "management_state": "SLEEPING",
+       "pod": null,
+       "reason": null,
+       "revision": 156
+      }
+     }
+    ],
+    "reached": "SLEEPING",
+    "seconds": 30.7
+   }
+  },
+  "images": {
+   "spec": [
+    "docker.io/library/orbit-managed-runner-lab@sha256:7b6b64fb6ca7cc66b78967f647e8f6feb810407976fc9e09555173342d063fbf"
+   ],
+   "uid": "4f1a0cc4-352d-41c1-ad51-24f05a0ab097"
+  },
+  "live": {
+   "commits": {},
+   "ext4Options": [
+    "rw",
+    "bsddf",
+    "nogrpid",
+    "block_validity",
+    "dioread_nolock",
+    "nodiscard",
+    "delalloc",
+    "nowarn_on_error",
+    "journal_checksum",
+    "barrier",
+    "auto_da_alloc",
+    "user_xattr",
+    "acl",
+    "noquota",
+    "resuid=0",
+    "resgid=0",
+    "errors=continue",
+    "commit=5",
+    "min_batch_time=0",
+    "max_batch_time=15000",
+    "i_version",
+    "stripe=1024",
+    "data=ordered",
+    "inode_readahead_blks=32",
+    "init_itable=10",
+    "max_dir_size_kb=0",
+    "prefetch_block_bitmaps"
+   ],
+   "git": "git version 2.47.3",
+   "kernel": "7.0.0-34-generic",
+   "mount": {
+    "fstype": "ext4",
+    "options": "rw,relatime",
+    "source": "/dev/rbd0",
+    "superOptions": "rw,stripe=1024"
+   },
+   "repos": {
+    "01a15527-aade-766a-b161-b52aff12bcba": {
+     "branch": {
+      "loose": "8b58c463928ab1a27f892bb6fd0527321e588198",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-amy-s1-a-session-t03-secret-amys1-f-08a072"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a15527-aade-766a-b161-b52aff12bcba",
+     "emptyCheckoutFiles": [
+      "t08-amylast.txt"
+     ],
+     "emptyGitFiles": [
+      "ORIG_HEAD",
+      "logs/refs/heads/orbit/t02c-amy-hold-a-turn-still-running-at-th-53371a",
+      "objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "objects/39/d9388b8e409ed655b0b6795b0e42ac1e2e6264",
+      "objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1",
+      "objects/61/0505e6f03b89887c6c327db2dd36dfca6fc644",
+      "objects/71/4f86b9093f7257af99c57b247d87c3a6718dd1",
+      "objects/8b/58c463928ab1a27f892bb6fd0527321e588198",
+      "objects/a5/def714b843e09fcbd492df0f71cec8cdabc5ff",
+      "objects/ab/cac63107d5ff01e0ca1c94f9f1ff7dd464e8ea",
+      "objects/ed/3bfdce83a22aa4db85a8759471aa065e4b52cc",
+      "refs/orbit-base/01a15527-bf1b-72da-9733-60e06f0238d1",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/COMMIT_EDITMSG",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/ORIG_HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/commondir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/gitdir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/logs/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/ORIG_HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/commondir",
+      "worktrees/_rebase-scratch-default-1e74b5/gitdir",
+      "worktrees/_rebase-scratch-default-1e74b5/logs/HEAD"
+     ],
+     "fsck": {
+      "err": "8e409ed655b0b6795b0e42ac1e2e6264: invalid sha1 pointer in cache-tree of /var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-aade-766a-b161-b52aff12bcba/index\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1 is empty\nerror: 47d2b922da21e8a2b10c084728746e82a3a8fcf1: invalid sha1 pointer in cache-tree of /var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922/index",
+      "exit": 11,
+      "out": "missing blob abcac63107d5ff01e0ca1c94f9f1ff7dd464e8ea\nmissing blob 714f86b9093f7257af99c57b247d87c3a6718dd1"
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-aade-766a-b161-b52aff12bcba",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-amy-s1-a-session-t03-secret-amys1-f-08a072"
+     },
+     "indexBytes": 305,
+     "locks": [],
+     "log": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nfatal: bad object HEAD",
+      "exit": 128,
+      "out": ""
+     },
+     "revParseHead": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nfatal: Needed a single revision",
+      "exit": 128,
+      "out": ""
+     },
+     "status": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nfatal: bad object HEAD",
+      "exit": 128,
+      "out": ""
+     }
+    },
+    "workspace": {
+     "branch": {
+      "loose": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "looseBytes": 41,
+      "ref": "refs/heads/master"
+     },
+     "checkout": "/var/lib/orbit/home/orbit-repos/default",
+     "emptyCheckoutFiles": [
+      "t02c-runner-amy.txt",
+      "t08-amys2.txt"
+     ],
+     "emptyGitFiles": [
+      "ORIG_HEAD",
+      "logs/refs/heads/orbit/t02c-amy-hold-a-turn-still-running-at-th-53371a",
+      "objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "objects/39/d9388b8e409ed655b0b6795b0e42ac1e2e6264",
+      "objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1",
+      "objects/61/0505e6f03b89887c6c327db2dd36dfca6fc644",
+      "objects/71/4f86b9093f7257af99c57b247d87c3a6718dd1",
+      "objects/8b/58c463928ab1a27f892bb6fd0527321e588198",
+      "objects/a5/def714b843e09fcbd492df0f71cec8cdabc5ff",
+      "objects/ab/cac63107d5ff01e0ca1c94f9f1ff7dd464e8ea",
+      "objects/ed/3bfdce83a22aa4db85a8759471aa065e4b52cc",
+      "refs/orbit-base/01a15527-bf1b-72da-9733-60e06f0238d1",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/COMMIT_EDITMSG",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/ORIG_HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/commondir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/gitdir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/logs/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/ORIG_HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/commondir",
+      "worktrees/_rebase-scratch-default-1e74b5/gitdir",
+      "worktrees/_rebase-scratch-default-1e74b5/logs/HEAD"
+     ],
+     "fsck": {
+      "err": "8e409ed655b0b6795b0e42ac1e2e6264: invalid sha1 pointer in cache-tree of /var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-aade-766a-b161-b52aff12bcba/index\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1 is empty\nerror: 47d2b922da21e8a2b10c084728746e82a3a8fcf1: invalid sha1 pointer in cache-tree of /var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922/index",
+      "exit": 11,
+      "out": "missing blob abcac63107d5ff01e0ca1c94f9f1ff7dd464e8ea\nmissing blob 714f86b9093f7257af99c57b247d87c3a6718dd1"
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+     "headFile": {
+      "bytes": 23,
+      "content": "ref: refs/heads/master"
+     },
+     "indexBytes": 313,
+     "locks": [],
+     "log": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: bad object HEAD",
+      "exit": 128,
+      "out": ""
+     },
+     "revParseHead": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: Needed a single revision",
+      "exit": 128,
+      "out": ""
+     },
+     "status": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: bad object HEAD",
+      "exit": 128,
+      "out": ""
+     }
+    }
+   },
+   "transcripts": {
+    ".claude/projects/-tmp-orbit-cmsg-749075719/b91e2104-4697-4484-a2cd-47ba4d844b63.jsonl": {
+     "bytes": 0,
+     "lines": 0,
+     "markers": {}
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15527-aade-766a-b161-b52aff12bcba/c1682585-7d95-425e-9a6d-8fe34c5c5b25.jsonl": {
+     "bytes": 738021,
+     "lines": 37,
+     "markers": {}
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15527-b3fa-74d6-b522-8cd7dcf92922/14c264b6-ac91-45af-8c2f-bbb9b458f4c4.jsonl": {
+     "bytes": 731895,
+     "lines": 29,
+     "markers": {}
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15527-bf1b-72da-9733-60e06f0238d1/095d2bd7-414a-4b61-9d8e-91bf7d98fea9.jsonl": {
+     "bytes": 0,
+     "lines": 0,
+     "markers": {}
+    },
+    ".claude/projects/-var-lib-orbit-home-orbit-repos-default/095d2bd7-414a-4b61-9d8e-91bf7d98fea9.jsonl": {
+     "bytes": 726982,
+     "lines": 26,
+     "markers": {}
+    },
+    ".claude/projects/-var-lib-orbit/c1682585-7d95-425e-9a6d-8fe34c5c5b25.jsonl": {
+     "bytes": 744477,
+     "lines": 45,
+     "markers": {}
+    }
+   },
+   "uid": 10001
+  },
+  "ready": {
+   "at": "2026-10-19T17:50:30.351+00:00",
+   "changes": [
+    {
+     "at": "2026-10-19T17:50:04.159+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 4,
+      "management_state": "PROVISIONING",
+      "pod": null,
+      "reason": null,
+      "revision": 141
+     }
+    },
+    {
+     "at": "2026-10-19T17:50:04.701+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 4,
+      "management_state": "STARTING",
+      "pod": "4f1a0cc4",
+      "reason": null,
+      "revision": 149
+     }
+    },
+    {
+     "at": "2026-10-19T17:50:30.351+00:00",
+     "line": {
+      "attempt": 0,
+      "drain": null,
+      "generation": 4,
+      "management_state": "READY",
+      "pod": "4f1a0cc4",
+      "reason": null,
+      "revision": 150
+     }
+    }
+   ],
+   "reached": "READY",
+   "seconds": 26.2
+  },
+  "refusal": "{\"message\": \"REPOSITORY_DAMAGED: the Git repository at /var/lib/orbit/home/orbit-repos/default cannot be read: commit 22957bc1bfe49e80238e5dab4f1fe44c011cb96e, where its branch master points, cannot be read. The runner does not work in a damaged repository or start a new one over it: repair it, or move it aside to start afresh, then try again\"}",
+  "refusedEvent": {
+   "created_at": "2026-10-19T17:50:28.05",
+   "ingested_at": "2026-10-19T17:50:28.08388+00:00",
+   "ingested_by_runner_id": "01a15527-25d2-71d3-aa77-728a7ef56711",
+   "seq": 47,
+   "session_id": "01a15527-aade-766a-b161-b52aff12bcba",
+   "type": "error"
+  },
+  "runnerLog": [
+   "[orbit-runner 2026-10-19T17:50:20.950Z] volume check: the Git repository at /var/lib/orbit/home/orbit-repos/default cannot be read: commit 22957bc1bfe49e80238e5dab4f1fe44c011cb96e, where its branch master points, cannot be read",
+   "[orbit-runner 2026-10-19T17:50:20.950Z] volume check: the Git repository at /var/lib/orbit/home/.orbit/worktrees/01a15527-aade-766a-b161-b52aff12bcba cannot be read: commit 8b58c463928ab1a27f892bb6fd0527321e588198, where its branch orbit/t02c-amy-s1-a-session-t03-secret-amys1-f-08a072 points, cannot be read",
+   "[orbit-runner 2026-10-19T17:50:20.950Z] volume check: the Git repository at /var/lib/orbit/home/.orbit/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922 cannot be read: commit 22957bc1bfe49e80238e5dab4f1fe44c011cb96e, where its branch orbit/t02c-amy-s2-a-session-t03-secret-amys2-f-3dfc91 points, cannot be read",
+   "[orbit-runner 2026-10-19T17:50:20.950Z] volume check: the Git repository at /var/lib/orbit/home/.orbit/worktrees/01a15527-bf1b-72da-9733-60e06f0238d1 cannot be read: its .git names no repository",
+   "[orbit-runner 2026-10-19T17:50:20.950Z] volume check: 4 checkouts in 1 repositories after start; 0 stale lock files removed, 0 branches restored, 4 checkouts damaged",
+   "3.919Z] session 01a15527-aade-766a-b161-b52aff12bcba \u2014 not starting: REPOSITORY_DAMAGED: the Git repository at /var/lib/orbit/home/orbit-repos/default cannot be read: commit 22957bc1bfe49e80238e5dab4f1fe44c011cb96e, where its branch master points, cannot be read. The runner does not work in a damaged repository or start a new one over it: repair it, or move it aside to start afresh, then try again",
+   "4.935Z] session 01a15527-b3fa-74d6-b522-8cd7dcf92922 \u2014 not starting: REPOSITORY_DAMAGED: the Git repository at /var/lib/orbit/home/orbit-repos/default cannot be read: commit 22957bc1bfe49e80238e5dab4f1fe44c011cb96e, where its branch master points, cannot be read. The runner does not work in a damaged repository or start a new one over it: repair it, or move it aside to start afresh, then try again",
+   "5.485Z] session 01a15527-bf1b-72da-9733-60e06f0238d1 \u2014 not starting: REPOSITORY_DAMAGED: the Git repository at /var/lib/orbit/home/orbit-repos/default cannot be read: commit 22957bc1bfe49e80238e5dab4f1fe44c011cb96e, where its branch master points, cannot be read. The runner does not work in a damaged repository or start a new one over it: repair it, or move it aside to start afresh, then try again"
+  ],
+  "sessionStatus": {
+   "status": "FAILED"
+  },
+  "sleptFirst": {
+   "sleep": 202,
+   "until": {
+    "at": "2026-10-19T17:50:04.051+00:00",
+    "changes": [
+     {
+      "at": "2026-10-19T17:49:38.188+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "asked",
+       "generation": 3,
+       "management_state": "DRAINING",
+       "pod": "b50d75c9",
+       "reason": null,
+       "revision": 135
+      }
+     },
+     {
+      "at": "2026-10-19T17:49:48.713+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "accepted",
+       "generation": 3,
+       "management_state": "DRAINING",
+       "pod": "b50d75c9",
+       "reason": null,
+       "revision": 135
+      }
+     },
+     {
+      "at": "2026-10-19T17:49:53.678+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": "accepted",
+       "generation": 3,
+       "management_state": "DRAINING",
+       "pod": "b50d75c9",
+       "reason": null,
+       "revision": 138
+      }
+     },
+     {
+      "at": "2026-10-19T17:50:04.051+00:00",
+      "line": {
+       "attempt": 0,
+       "drain": null,
+       "generation": 4,
+       "management_state": "SLEEPING",
+       "pod": null,
+       "reason": null,
+       "revision": 139
+      }
+     }
+    ],
+    "reached": "SLEEPING",
+    "seconds": 25.9
+   }
+  },
+  "turn": {
+   "answer": {
+    "code": null,
+    "id": null,
+    "message": null,
+    "seq": 5,
+    "status": null
+   },
+   "at": "2026-10-19T17:50:04.066+00:00",
+   "kind": "turn",
+   "session": "34ijd4vUOpVCPPXsUr1pa",
+   "status": 201
+  }
+ },
+ "seconds": 86.5,
+ "startedAt": "2026-10-19T17:49:37.997+00:00",
+ "step": "wake"
+}

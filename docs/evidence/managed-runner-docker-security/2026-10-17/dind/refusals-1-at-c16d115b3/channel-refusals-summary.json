@@ -1,0 +1,194 @@
+{
+  "byCategory": {
+    "authentication": {
+      "cases": 41,
+      "dockerUnchanged": 41,
+      "refusedAsExpected": 41
+    },
+    "cap-add": {
+      "cases": 7,
+      "dockerUnchanged": 7,
+      "refusedAsExpected": 7
+    },
+    "device": {
+      "cases": 8,
+      "dockerUnchanged": 8,
+      "refusedAsExpected": 8
+    },
+    "docker-socket": {
+      "cases": 13,
+      "dockerUnchanged": 13,
+      "refusedAsExpected": 13
+    },
+    "host-cgroupns": {
+      "cases": 1,
+      "dockerUnchanged": 1,
+      "refusedAsExpected": 1
+    },
+    "host-directory": {
+      "cases": 17,
+      "dockerUnchanged": 17,
+      "refusedAsExpected": 17
+    },
+    "host-ipc": {
+      "cases": 4,
+      "dockerUnchanged": 4,
+      "refusedAsExpected": 4
+    },
+    "host-network": {
+      "cases": 8,
+      "dockerUnchanged": 8,
+      "refusedAsExpected": 8
+    },
+    "host-pid": {
+      "cases": 6,
+      "dockerUnchanged": 6,
+      "refusedAsExpected": 6
+    },
+    "host-userns": {
+      "cases": 1,
+      "dockerUnchanged": 1,
+      "refusedAsExpected": 1
+    },
+    "host-uts": {
+      "cases": 1,
+      "dockerUnchanged": 1,
+      "refusedAsExpected": 1
+    },
+    "image": {
+      "cases": 11,
+      "dockerUnchanged": 11,
+      "refusedAsExpected": 11
+    },
+    "limit": {
+      "cases": 31,
+      "dockerUnchanged": 31,
+      "refusedAsExpected": 31
+    },
+    "other-docker-parameter": {
+      "cases": 36,
+      "dockerUnchanged": 36,
+      "refusedAsExpected": 36
+    },
+    "privileged": {
+      "cases": 10,
+      "dockerUnchanged": 10,
+      "refusedAsExpected": 10
+    },
+    "route": {
+      "cases": 25,
+      "dockerUnchanged": 23,
+      "refusedAsExpected": 23
+    },
+    "single-container": {
+      "cases": 6,
+      "dockerUnchanged": 6,
+      "refusedAsExpected": 6
+    },
+    "unlabelled": {
+      "cases": 41,
+      "dockerUnchanged": 41,
+      "refusedAsExpected": 41
+    }
+  },
+  "controlContainer": {
+    "appArmorProfile": "docker-default",
+    "binds": [],
+    "capAdd": [],
+    "capDrop": [
+      "ALL"
+    ],
+    "deviceRequests": [],
+    "devices": [],
+    "envKeys": [
+      "CLAUDE_CONFIG_DIR",
+      "CODEX_HOME",
+      "DISABLE_AUTOUPDATER",
+      "GOTOOLCHAIN",
+      "HOME",
+      "NODE_VERSION",
+      "ORBIT_HOME",
+      "ORBIT_MANAGED_RUNNER_INSTANCE_FILE",
+      "ORBIT_NO_ENGINE_UPDATE",
+      "ORBIT_NO_SELFUPDATE",
+      "ORBIT_RUNNER_CREDENTIAL_FILE",
+      "ORBIT_RUNNER_EXPECTED_ID",
+      "ORBIT_RUNNER_MAX_CONCURRENT",
+      "ORBIT_RUNNER_NAME",
+      "ORBIT_RUNNER_SERVER_URL",
+      "PATH",
+      "PYTHONDONTWRITEBYTECODE"
+    ],
+    "image": "sha256:e70dc4770beb31947330a29364cf3f722da2243cb71fd7c91b0cfb2c7336e906",
+    "ipcMode": "private",
+    "memory": 536870912,
+    "memorySwap": 536870912,
+    "mounts": [
+      "tmpfs  -> /tmp rw=True",
+      "volume mr-boot-1bf35650-fb45-455e-9e50-c4c36400d41d-g1 -> /run/orbit-bootstrap rw=True",
+      "volume mr-data-1bf35650-fb45-455e-9e50-c4c36400d41d -> /var/lib/orbit rw=True"
+    ],
+    "nanoCpus": 500000000,
+    "networkMode": "orbit-managed-runners",
+    "pidMode": "",
+    "pidsLimit": 256,
+    "privileged": false,
+    "readonlyRootfs": true,
+    "securityOpt": [
+      "no-new-privileges:true"
+    ],
+    "tmpfs": [
+      {
+        "Target": "/tmp",
+        "TmpfsOptions": {
+          "Mode": 1023,
+          "SizeBytes": 67108864
+        },
+        "Type": "tmpfs"
+      }
+    ],
+    "user": "10001:10001"
+  },
+  "endedAt": "2026-10-17T13:11:33Z",
+  "failed": [
+    {
+      "answer": {
+        "code": null,
+        "message": "",
+        "status": 200
+      },
+      "case": "PUT credential for runner id with a trailing newline",
+      "category": "route",
+      "expected": {
+        "code": "NAME_REFUSED",
+        "status": 400
+      }
+    },
+    {
+      "answer": {
+        "code": null,
+        "message": "",
+        "status": 200
+      },
+      "case": "PUT volume with an ownerId ending in a newline",
+      "category": "route",
+      "expected": {
+        "code": "PARAMETER_REFUSED",
+        "status": 400
+      }
+    }
+  ],
+  "foreignObjectsListedInResources": [],
+  "holdersOfR2ShowOnlyAnUnmanagedCount": true,
+  "image": "sha256:e70dc4770beb31947330a29364cf3f722da2243cb71fd7c91b0cfb2c7336e906",
+  "instanceId": "orbit-e08a3eef",
+  "network": "orbit-managed-runners",
+  "refusalCases": 267,
+  "requests": 299,
+  "serverUrl": "http://172.19.0.1:2086",
+  "startedAt": "2026-10-17T13:11:09Z",
+  "strayObjectsCleanedUp": [
+    "credential file named <uuid>\\n.json",
+    "volume labelled with an owner ending in a newline"
+  ]
+}

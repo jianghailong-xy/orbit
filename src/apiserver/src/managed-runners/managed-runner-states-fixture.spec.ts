@@ -4,7 +4,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 
 import type { ManagedRunner, RunnerStatus } from '@prisma/client';
-import { MANAGED_RUNNER_CAPACITY_UNAVAILABLE } from '@orbit/shared';
+import { MANAGED_RUNNER_CAPACITY_UNAVAILABLE, type LoginEngine } from '@orbit/shared';
 
 import { AuthController } from '../auth/auth.controller';
 import { addTwins } from '../common/public-id-body';
@@ -26,7 +26,10 @@ interface ServerInput {
   eligible?: boolean;
   ownerDisabled?: boolean;
   mapping: (Partial<Record<keyof ManagedRunner, unknown>> & { lastErrorCode?: string; capacityShort?: CapacityDimension[] }) | null;
-  runner: { status: RunnerStatus; lastHeartbeatAt: string | null } | null;
+  /** `engines`: what the runner's last heartbeat reported; absent, nothing yet. */
+  runner: { status: RunnerStatus; lastHeartbeatAt: string | null; engines?: unknown } | null;
+  /** The owner's first own model key a managed runner runs (ownerManagedKeys); absent, none. */
+  firstSessionKey?: { slug: string; engine: LoginEngine };
 }
 
 interface Fixture {
@@ -119,8 +122,13 @@ test('every state in the fixture is the body GET /api/managed-runner answers for
       ownerDisabled: server.ownerDisabled,
       mapping: server.mapping ? row(server.mapping) : null,
       runner: server.runner
-        ? { status: server.runner.status, lastHeartbeatAt: server.runner.lastHeartbeatAt ? new Date(server.runner.lastHeartbeatAt) : null }
+        ? {
+            status: server.runner.status,
+            lastHeartbeatAt: server.runner.lastHeartbeatAt ? new Date(server.runner.lastHeartbeatAt) : null,
+            engines: server.runner.engines ?? null,
+          }
         : null,
+      firstSessionKey: server.firstSessionKey ?? null,
       now: NOW,
       heartbeatFreshMs: fixture.heartbeatFreshMs,
     });

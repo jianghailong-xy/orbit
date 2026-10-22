@@ -241,7 +241,13 @@ public struct TranscriptReducer: Sendable, Codable {
     /// `watchShutdownDrain`): nobody asked for that one, and the control plane goes on to deliver the
     /// turn it cut short and every turn queued behind it.
     public static func dropsQueue(_ ev: RunEvent) -> Bool {
-        ev.type == .interrupt && ev.payload["reason"]?.stringValue != "runner_restart"
+        ev.type == .interrupt && !cutByRunnerRestart(ev)
+    }
+
+    /// Whether this interrupt is that one of the runner's own: its row names the restart instead of
+    /// reading as a Stop nobody pressed (web parity).
+    static func cutByRunnerRestart(_ ev: RunEvent) -> Bool {
+        ev.payload["reason"]?.stringValue == "runner_restart"
     }
 
     public mutating func apply(_ ev: RunEvent) {
@@ -294,7 +300,7 @@ public struct TranscriptReducer: Sendable, Codable {
         case .user:           state.promptSuggestion = nil; appendUser(ev)
         case .promptSuggestion: state.promptSuggestion = nonEmpty(str(ev, "text")?.trimmingCharacters(in: .whitespacesAndNewlines))
         case .userDelivery:   applyUserDelivery(ev)
-        case .interrupt:      appendInterrupt(seq: ev.seq, dropsQueue: Self.dropsQueue(ev))
+        case .interrupt:      appendInterrupt(seq: ev.seq, runnerRestart: Self.cutByRunnerRestart(ev))
         case .error:          appendError(ev)
         case .approvalRequest:  upsertApproval(ev)
         case .approvalResolved: resolveApproval(ev)
@@ -573,7 +579,7 @@ public struct TranscriptReducer: Sendable, Codable {
         case .assistant(let b):         seq = b.seq
         case .thinking(let b):          seq = b.seq
         case .toolCall(let c):          seq = c.inputSeq
-        case .interrupt(_, let s):      seq = s
+        case .interrupt(_, let s, _):   seq = s
         case .autoRetry(let n):         seq = n.seq
         case .user, .error, .authError: seq = nil
         case .notice:                   seq = nil
@@ -733,8 +739,7 @@ public struct TranscriptReducer: Sendable, Codable {
         // that turn's durable `user` event. Never resurrect such a stale row below the transcript.
         for turn in turns where !deliveredTurnIDs.contains(turn.turnId) {
             // The receipt for a message written into the running turn that never made it: a steer
-            // that is over, which the queue never listed and this end has no line for. It stays out
-            // of the tail, as it always has.
+            // that is over, no turn of the queue's. Drawn after everything still waiting, below.
             if turn.delivery != nil { continue }
             let incomingAttachments = turn.attachments?.map {
                 TurnAttachment(id: $0.id, mime: $0.mimeType)
@@ -836,6 +841,41 @@ public struct TranscriptReducer: Sendable, Codable {
             } else {
                 reconciled.append(bubble)
             }
+        }
+        // The reader's own messages only the server's receipt says did not land — refused or
+        // stranded before any runner echoed them — at the end of the tail, after everything still
+        // waiting: nothing else will ever draw one, and it is the one record of what was typed (web
+        // parity: `queuedTurnsOutsideTranscript` and `QueuedTurnMeta`). Not one the conversation or
+        // the tray holds, read after the receipts above settled theirs: its echo says how it came
+        // out. Not one Orbit filed, which stays out of sight as it always has.
+        let echoed = Set(state.items.compactMap { item -> String? in
+            if case .user(let b) = item { return b.turnId }
+            return nil
+        }).union(state.unreadSteers.compactMap(\.turnId))
+        for turn in turns where turn.delivery != nil && !echoed.contains(turn.turnId) {
+            // The placeholder a runner's report already marked undelivered keeps its row.
+            var bubble = previous.first { $0.turnId == turn.turnId }
+                ?? UserBubble(id: "receipt-\(turn.turnId)", text: turn.content, pending: false)
+            bubble.text = turn.content
+            if let attachments = turn.attachments {
+                bubble.attachments = attachments.map { TurnAttachment(id: $0.id, mime: $0.mimeType) }
+            }
+            bubble.turnId = turn.turnId
+            bubble.ts = turn.createdAt ?? bubble.ts
+            bubble.pending = false
+            bubble.queued = false
+            bubble.steer = SteerDelivery.isSteerKind(turn.kind)
+            bubble.shell = turn.kind == "shell"
+            bubble.cards = turn.cards
+            bubble.authoredByOrbit = turn.authoredByOrbit == true
+            bubble.delivery = turn.delivery
+            bubble.undelivered = turn.delivery == "failed"
+            bubble.receipt = true
+            bubble.deliveryCode = turn.deliveryCode
+            bubble.deliveryReason = turn.deliveryReason
+            guard SteerDelivery.isReadersOwn(bubble) else { continue }
+            reconciled.removeAll { $0.turnId == turn.turnId }
+            reconciled.append(bubble)
         }
         state.accepted = accepted
         state.queued = reconciled
@@ -1447,15 +1487,15 @@ public struct TranscriptReducer: Sendable, Codable {
         }
     }
 
-    private mutating func appendInterrupt(seq: Int, dropsQueue: Bool) {
+    private mutating func appendInterrupt(seq: Int, runnerRestart: Bool) {
         turnAccountedFor = true
         flushStreaming()
-        state.items.append(.interrupt(id: nextID(), seq: seq))
+        state.items.append(.interrupt(id: nextID(), seq: seq, runnerRestart: runnerRestart))
         state.status = .interrupted
         // A Stop drops still-queued follow-ups server-side — they never get a durable `user` event
         // to reconcile them — so clear the local queue to match (web parity). A runner restart drops
         // nothing, and its queue reconciles as each turn in it is delivered.
-        if dropsQueue { state.queued.removeAll() }
+        if !runnerRestart { state.queued.removeAll() }
     }
 
     private mutating func appendError(_ ev: RunEvent) {

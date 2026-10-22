@@ -1,0 +1,145 @@
+{
+  "at": "2026-10-18T01:37:15.688+00:00",
+  "demands": 8,
+  "mappingBefore": {
+    "demand_revision": 19,
+    "generation": 9,
+    "management_state": "SLEEPING",
+    "revision": 129
+  },
+  "owner": "amy",
+  "results": [
+    {
+      "answer": {
+        "code": null,
+        "id": null,
+        "message": null,
+        "seq": 4,
+        "status": null
+      },
+      "at": "2026-10-18T01:37:15.690+00:00",
+      "kind": "turn",
+      "session": "34hlxjW1Gs60pKc1WJR04",
+      "status": 201
+    },
+    {
+      "answer": {
+        "code": null,
+        "id": null,
+        "message": null,
+        "seq": 3,
+        "status": null
+      },
+      "at": "2026-10-18T01:37:15.690+00:00",
+      "kind": "turn",
+      "session": "34hmgG10qzcJyPJ3ti7gK",
+      "status": 201
+    },
+    {
+      "answer": {
+        "code": null,
+        "id": null,
+        "message": null,
+        "seq": 3,
+        "status": null
+      },
+      "at": "2026-10-18T01:37:15.691+00:00",
+      "kind": "turn",
+      "session": "34hmobgL0eMgjoeczvNWE",
+      "status": 201
+    },
+    {
+      "answer": {
+        "code": null,
+        "id": null,
+        "message": null,
+        "seq": 4,
+        "status": null
+      },
+      "at": "2026-10-18T01:37:15.691+00:00",
+      "kind": "turn",
+      "session": "34hn3UMRRtUwiALoatSxr",
+      "status": 201
+    },
+    {
+      "answer": {
+        "assignedRunnerId": "34hlwBWrKOm4SMrYIA6An",
+        "code": null,
+        "engine": "claude",
+        "id": "34hnJ8rUybzo0MjkzIYiR",
+        "message": null,
+        "provider": "deepseek",
+        "status": "PENDING"
+      },
+      "at": "2026-10-18T01:37:15.720+00:00",
+      "kind": "session",
+      "managedState": "SLEEPING",
+      "status": 201
+    },
+    {
+      "answer": {
+        "assignedRunnerId": "34hlwBWrKOm4SMrYIA6An",
+        "code": null,
+        "engine": "claude",
+        "id": "34hnJ8rUybzo0Ohwn73yO",
+        "message": null,
+        "provider": "deepseek",
+        "status": "PENDING"
+      },
+      "at": "2026-10-18T01:37:15.720+00:00",
+      "kind": "session",
+      "managedState": "SLEEPING",
+      "status": 201
+    },
+    {
+      "at": "2026-10-18T01:37:15.721+00:00",
+      "execute": {
+        "answer": {
+          "code": null,
+          "id": null,
+          "message": null,
+          "sessionId": "65FaY6OUcHT5lNvIAHFW0k",
+          "status": null
+        },
+        "at": "2026-10-18T01:37:15.741+00:00",
+        "status": 201
+      },
+      "kind": "task",
+      "runAt": null,
+      "status": 201,
+      "task": {
+        "assigneeId": "34hlwBX3PDHoZvmmu6hPq",
+        "code": null,
+        "id": "34hnJ8quqzvvREiAOzMwE",
+        "message": null,
+        "runAt": null,
+        "status": "OPEN"
+      }
+    },
+    {
+      "at": "2026-10-18T01:37:15.704+00:00",
+      "execute": {
+        "answer": {
+          "code": null,
+          "id": null,
+          "message": null,
+          "sessionId": "1u3rmYWGYANyBuihNZkDrv",
+          "status": null
+        },
+        "at": "2026-10-18T01:37:15.737+00:00",
+        "status": 201
+      },
+      "kind": "task",
+      "runAt": null,
+      "status": 201,
+      "task": {
+        "assigneeId": "34hlwBX3PDHoZvmmu6hPq",
+        "code": null,
+        "id": "34hnJ8qEXjJweR3gzsDGD",
+        "message": null,
+        "runAt": null,
+        "status": "OPEN"
+      }
+    }
+  ]
+}

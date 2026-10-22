@@ -1,0 +1,9 @@
+b4d9c80c72201b8471d49ff638cb5903876548ba042901ea4e28cdead4aa3a75: used by [orbit-pgbackup ]
+c7d5c5409a2250f8dfa5d7a79499f51c6e14d13c2e0533de445588be7f005179: used by [orbit-docker-channel ]
+probe now: c7d5c5409a2250f8dfa5d7a79499f51c6e14d13c2e0533de445588be7f005179 rw=false
+bind  -> /archive
+bind  -> /ssh
+volume orbit_pg-socket -> /var/run/postgresql
+bind  -> /usr/local/bin/pg-backup.sh
+volume b4d9c80c72201b8471d49ff638cb5903876548ba042901ea4e28cdead4aa3a75 -> /var/lib/postgresql/data
+

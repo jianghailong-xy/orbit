@@ -3,10 +3,23 @@ import { randomUUID } from 'crypto';
 import { INTEGRATION_CLAIM_STALE_MS } from '@orbit/shared';
 import { notifyRunnerWakeOnCommit } from '../realtime/runner-wake';
 import { LANDING_SESSION_CANDIDATES, LANDING_WORK_SESSION_SELECT, landingWorkSession } from './landing-source-branch';
+import {
+  discardOpenedLanding,
+  openPromotionRound,
+  openTaskLanding,
+  type OpenedLanding,
+} from './landing-session';
 import { startOnFirstIntegration } from './project-integration-line';
+import {
+  appendIntegrationJobEvent,
+  enqueuedText,
+  timedOutText,
+  type EnqueueCause,
+} from './project-integration-event';
 import {
   INTEGRATION_ITEM_KINDS,
   markOpenItemsHandling,
+  resolveLeaseExpiredItems,
   type OpenItemHandlingStart,
 } from './project-open-item';
 // Type-only, so the two modules do not import each other at run time: this one needs the two closed
@@ -83,10 +96,21 @@ export const INTEGRATION_ERROR_CODES = [
   'RUNNER_DRAINING',
   'INTEGRATION_REPOSITORY_UNKNOWN',
   // Written by the platform, never reported: the runner stopped reporting past the job's limit and
-  // a retry ended the job to queue the next generation (§2.2 J-T9).
+  // the job was ended on the spot (§2.2 J-T9, J-T8).
   'RUNNER_LOST',
+  // The same end, for a landing whose push outcome the server cannot know (§2.6 J12): a legacy
+  // claim reports PUSH on a best-effort basis, so "no push recorded" is not "nothing was pushed".
+  'PUSH_OUTCOME_UNKNOWN',
+  // A v2 claim's synchronous PUSH report — the one that must be answered before anything is pushed
+  // (§2.2 J-T4) — never got its answer inside the lease window. The runner does not push in that
+  // case, so the job ends here with the target untouched.
+  'PUSH_REPORT_UNREACHABLE',
 ] as const;
 export type IntegrationErrorCode = (typeof INTEGRATION_ERROR_CODES)[number];
+
+/** The sub-steps a v2 claim names beside `phase` (§2.2 J-T4). */
+export const INTEGRATION_JOB_STEPS = ['WAITING_LOCAL_LOCK', 'PREPARE'] as const;
+export type IntegrationJobStep = (typeof INTEGRATION_JOB_STEPS)[number];
 
 /** A job the runner is not going to touch again. */
 const TERMINAL_STATES: ReadonlySet<string> = new Set<IntegrationJobState>([
@@ -261,15 +285,23 @@ export function checksFor(row: IntegrationCheckSource): IntegrationCheckSpec[] {
  * How long a running job's current step may go without a report before the integration view says
  * it timed out (§1.6 `inFlightJobs`, §2.2 J-T9); null for a job that is not running.
  *
- * The runner reports when a step STARTS and says nothing during it, so a healthy check is silent for
- * as long as it runs: while checking, the limit is every check's budget plus the lease. Every other
- * step is git work, and the lease is what J-T3 already treats as a lost claim.
+ * This is §7.2 V6's one definition: `inFlightJobs.timedOut`, the retry doors, the abandon door and
+ * the stop J-T8 makes all read it here.
+ *
+ * A v2 claim (§2.2 J-T4) reports every 30 seconds whatever it is doing, so ten minutes of silence is
+ * a lost runner in every phase: the limit is the lease, checking included. A LEGACY claim reports
+ * only when a step STARTS and says nothing during it, so a healthy check is silent for as long as it
+ * runs: while checking, the limit is every check's budget plus the lease. Every other legacy step is
+ * git work, and the lease is what J-T3 already treats as a lost claim.
  */
 export function integrationJobLimitSeconds(
-  job: IntegrationCheckSource & { state: string; phase: string | null },
+  job: IntegrationCheckSource & {
+    state: string; phase: string | null; progressProtocol?: string | null;
+  },
 ): number | null {
   if (job.state !== 'RUNNING') return null;
   const lease = INTEGRATION_CLAIM_STALE_MS / 1_000;
+  if (job.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL) return lease;
   if (job.phase !== 'CHECK') return lease;
   return checksFor(job).reduce((total, check) => total + check.timeoutSeconds, lease);
 }
@@ -279,6 +311,42 @@ export const INTEGRATION_JOBS_PER_HEARTBEAT = 2;
 
 /** The capability a runner declares before it is handed any of this (J-T2). */
 export const INTEGRATION_JOB_CLAIM = 'integration-job/v1';
+
+/**
+ * The capability a runner declares when it speaks the periodic progress protocol (§2.2 J-T4): a
+ * report inside every 30 seconds, a synchronous `phase = PUSH` report before it pushes, and a stop
+ * read off every answer. A claim made by a runner that declared it records `progress_protocol = 'v2'`;
+ * every other claim (and every claim made before this existed) is legacy.
+ */
+export const INTEGRATION_PROGRESS_V2 = 'integration-progress/v2';
+
+/** What `progress_protocol` holds for a v2 claim. NULL is legacy; the column's CHECK admits only
+ *  this value, so a typo cannot quietly turn a v2 claim into a legacy one. */
+export const INTEGRATION_PROGRESS_V2_PROTOCOL = 'v2';
+
+/**
+ * §2.2 J-T4's push boundary, for one job's CURRENT claim: has this claim got as far as pushing?
+ *
+ * A v2 claim answers from the row fact the synchronous PUSH report writes —
+ * `push_reported_generation = claim_generation` — and never from `phase`. A legacy claim has only
+ * `phase`, and both `PUSH` and `VERIFY` count: the runner reports VERIFY after it pushed, so a
+ * cancel accepted at VERIFY would record a merge that happened as CANCELLED.
+ *
+ * Not RUNNING is not past the boundary: there is no push in flight.
+ */
+export function pushBoundaryPassed(job: {
+  state: string;
+  phase: string | null;
+  progressProtocol: string | null;
+  pushReportedGeneration: bigint | null;
+  claimGeneration: bigint;
+}): boolean {
+  if (job.state !== 'RUNNING') return false;
+  if (job.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL) {
+    return job.pushReportedGeneration != null && job.pushReportedGeneration === job.claimGeneration;
+  }
+  return job.phase === 'PUSH' || job.phase === 'VERIFY';
+}
 
 /**
  * The capability a runner declares when it honours an automatic landing's one extra rule (§3.3
@@ -701,6 +769,7 @@ export async function queueLandingBehindTheWork(
       sessionId: ended.sessionId,
       finishedAt: ended.finishedAt,
     }),
+    cause: 'BEHIND_WORK',
   });
 }
 
@@ -765,19 +834,72 @@ export interface LandingRetryRequest {
 
 /**
  * End a RUNNING landing whose runner stopped reporting past its limit, for the retry that replaces it
- * in the same transaction (§2.2 J-T9). Nobody reported this end, so it is the platform's: ERROR with
- * `RUNNER_LOST`, the step it was last at, and whether that step was past the push.
+ * in the same transaction (§2.2 J-T9). Nobody reported this end, so it is the platform's: ERROR, the
+ * step it was last at, and whether that step was past the push.
+ *
+ * WHICH ERROR CODE IS J12'S ONE RULE, AND IT BRANCHES ON THE KIND OF JOB. A `CHECK_PROMOTION` never
+ * pushes — `promoteOnce` answers READY before M-S4 is reached (`integrate.go:716-720`) — so a check
+ * whose runner is gone is `RUNNER_LOST` whatever its claim was. `LAND_TASK` and `LAND_PROMOTION` do
+ * push, and can only be called `RUNNER_LOST` when the server KNOWS nothing was pushed: the current
+ * claim is a v2 one and `push_reported_generation IS NULL`. A v2 claim reports PUSH synchronously and
+ * waits for the answer, so its silence without that report proves it never pushed. Everything else
+ * is `PUSH_OUTCOME_UNKNOWN`: a legacy claim's PUSH report is best-effort on the way out and cannot
+ * prove the negative, and a `push_reported_generation` left by an earlier claim (a takeover of a
+ * legacy one) says a push may have happened under it.
  *
  * A compare-and-set on what the timeout was judged from: still RUNNING, and the heartbeat the read
  * saw. A report, a takeover claim or a result that arrived since moved one of them, and the caller is
  * told so rather than ending a job that is talking again. The claim generation moves with it, so a
- * runner that was alive after all is refused when it reports.
+ * runner that was alive after all is refused when it reports. The answer is the error code written,
+ * or null when the compare-and-set lost.
  */
+export function timedOutErrorCode(job: {
+  kind: string;
+  progressProtocol: string | null;
+  pushReportedGeneration: bigint | null;
+}): 'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN' {
+  // A check answers READY before the push step exists for it, so nothing about it can have pushed.
+  if (job.kind === 'CHECK_PROMOTION') return 'RUNNER_LOST';
+  // LAND_TASK / LAND_PROMOTION: only a v2 claim that never recorded a PUSH can prove the negative.
+  if (job.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL && job.pushReportedGeneration == null) {
+    return 'RUNNER_LOST';
+  }
+  return 'PUSH_OUTCOME_UNKNOWN';
+}
+
+/** Which door ended a timed-out attempt, for the timeline's `TIMED_OUT` fact (§2.9 LS2). The two
+ *  the job row cannot tell apart from an ordinary J-T9 end are the candidate's recheck gate and
+ *  M-T13's retirement, which today write the same `error_detail` as the retry door. */
+export type TimeoutEndCause = 'RETRY' | 'RECHECK' | 'M13' | 'STOP' | 'SUPERSEDE' | 'TASK_REOPEN';
+
 export async function endTimedOutLanding(
   tx: Prisma.TransactionClient,
-  job: { jobId: string; phase: string | null; heartbeatAt: Date | null; startedAt: Date;
-         limitSeconds: number | null; runnerName: string | null },
-): Promise<boolean> {
+  job: { jobId: string; kind: string; phase: string | null; heartbeatAt: Date | null; startedAt: Date;
+         limitSeconds: number | null; runnerName: string | null; round?: number | null },
+  cause: TimeoutEndCause = 'STOP',
+): Promise<'RUNNER_LOST' | 'PUSH_OUTCOME_UNKNOWN' | null> {
+  // J12 reads the current claim's protocol and the push fact off the row rather than off a caller:
+  // every door that ends a timed-out job (the retry door, the abandon door, M-T13, the stop J-T8
+  // makes) takes its answer from this one function, and each of them sees the row as it is now.
+  const [claim] = await tx.$queryRaw<Array<{
+    progressProtocol: string | null; pushReportedGeneration: bigint | null; claimGeneration: bigint;
+  }>>(Prisma.sql`
+    SELECT "progress_protocol" AS "progressProtocol",
+           "push_reported_generation" AS "pushReportedGeneration",
+           "claim_generation" AS "claimGeneration"
+      FROM "project_integration_job"
+     WHERE "id" = ${job.jobId}::uuid`);
+  const errorCode = timedOutErrorCode({
+    kind: job.kind,
+    progressProtocol: claim?.progressProtocol ?? null,
+    pushReportedGeneration: claim?.pushReportedGeneration ?? null,
+  });
+  // §2.2 J-T4's push boundary, as the row states it: a v2 claim is past it when the server recorded
+  // a PUSH under this very generation; a legacy claim only has `phase` to say so, where VERIFY is
+  // reported after the push and counts with PUSH.
+  const pushRecorded = claim?.progressProtocol === INTEGRATION_PROGRESS_V2_PROTOCOL
+    ? claim.pushReportedGeneration != null && claim.pushReportedGeneration === claim.claimGeneration
+    : job.phase === 'PUSH' || job.phase === 'VERIFY';
   const detail = {
     detail: `no report from ${job.runnerName ? `runner ${job.runnerName}` : 'its runner'} within `
       + `${Math.round((job.limitSeconds ?? 0) / 60)} minutes`,
@@ -785,17 +907,46 @@ export async function endTimedOutLanding(
     lastReportAt: (job.heartbeatAt ?? job.startedAt).toISOString(),
     limitSeconds: job.limitSeconds,
     runnerName: job.runnerName,
-    pushRecorded: job.phase === 'PUSH' || job.phase === 'VERIFY',
+    pushRecorded,
+    // What J12 lets this row say about the push, so a reader does not have to re-derive it from the
+    // kind and the protocol of a claim the row no longer names.
+    pushOutcome: errorCode === 'RUNNER_LOST' ? 'NOT_PUSHED' : 'UNKNOWN',
   };
   const ended = await tx.$executeRaw(Prisma.sql`
     UPDATE "project_integration_job"
-       SET "state" = 'ERROR', "error_code" = 'RUNNER_LOST',
+       SET "state" = 'ERROR', "error_code" = ${errorCode},
            "error_detail" = ${JSON.stringify(detail)}::jsonb,
            "claim_generation" = "claim_generation" + 1,
            "finished_at" = now(), "updated_at" = now()
      WHERE "id" = ${job.jobId}::uuid AND "state" = 'RUNNING'
        AND "heartbeat_at" IS NOT DISTINCT FROM ${job.heartbeatAt}::timestamptz`);
-  return ended === 1;
+  if (ended !== 1) return null;
+  // §2.9 LS2: the end is a fact, and which door ended it is the part the row cannot tell apart
+  // afterwards — the recheck gate, M-T13's retirement and J-T9's retry door all leave the same
+  // `error_detail`. Written in the compare-and-set's own transaction; a lost CAS wrote nothing.
+  await appendIntegrationJobEvent(tx, {
+    jobId: job.jobId,
+    key: 'timed-out',
+    kind: 'TIMED_OUT',
+    claim: Number(claim?.claimGeneration ?? 0n),
+    round: job.round ?? null,
+    phase: job.phase,
+    actor: { type: 'PLATFORM' },
+    data: {
+      cause,
+      errorCode,
+      limitSeconds: job.limitSeconds,
+      lastReportAt: (job.heartbeatAt ?? job.startedAt).toISOString(),
+      runnerName: job.runnerName,
+      pushOutcome: detail.pushOutcome,
+    },
+    text: timedOutText({ limitSeconds: job.limitSeconds, heartbeatAt: job.heartbeatAt, at: new Date() }),
+  });
+  // §4.6 X-E5: the claim this end is about is over, so the owner's item about its silence is too.
+  // One place for every door that ends a timed-out job (the retry doors, the stop J-T8 makes, a
+  // superseded or retired candidate), because all of them come through this compare-and-set.
+  await resolveLeaseExpiredItems(tx, job.jobId);
+  return errorCode;
 }
 
 /**
@@ -826,7 +977,7 @@ export async function queueLandingRetry(
      */
     skipMergeCheck?: LandingSkipMergeCheck;
   },
-): Promise<{ jobId: string; generation: number; sourceRef: string } | null> {
+): Promise<{ jobId: string; generation: number; sourceRef: string; landingSessionId: string } | null> {
   const task = await tx.task.findFirst({
     where: { id: input.taskId, ownerId: input.ownerId, projectId: input.projectId },
     select: { codeless: true, sessions: workSessionsOfTaskSelect() },
@@ -838,7 +989,7 @@ export async function queueLandingRetry(
     select: { id: true, canonicalRepoUrl: true, integrationRef: true, upstreamRef: true },
   });
   if (!codebase || codebase.integrationRef === codebase.upstreamRef) return null;
-  const jobId = await queueLandTask(tx, {
+  const queued = await queueLandTask(tx, {
     ownerId: input.ownerId,
     projectId: input.projectId,
     taskId: input.taskId,
@@ -846,13 +997,19 @@ export async function queueLandingRetry(
     session: { id: work.id, branch: work.branch, runnerId: work.assignedRunnerId },
     retry: input.retry,
     skipMergeCheck: input.skipMergeCheck,
+    cause: 'RETRY',
   });
-  if (jobId === null) return null;
-  const queued = await tx.projectIntegrationJob.findUniqueOrThrow({
-    where: { id: jobId },
+  if (queued === null) return null;
+  const job = await tx.projectIntegrationJob.findUniqueOrThrow({
+    where: { id: queued.jobId },
     select: { generation: true, sourceRef: true },
   });
-  return { jobId, generation: queued.generation, sourceRef: queued.sourceRef };
+  return {
+    jobId: queued.jobId,
+    generation: job.generation,
+    sourceRef: job.sourceRef,
+    landingSessionId: queued.landingSessionId,
+  };
 }
 
 // ── enqueue (J-T1a) ───────────────────────────────────────────────────────────────────────────
@@ -1014,9 +1171,23 @@ export async function enqueueForDoneTask(
     ownerId, projectId, taskId, codebase, session, line: first.line,
   });
   if (queued === null) {
+    // A generation this task already has in flight is the ordinary answer. But a generation somebody
+    // ASKED TO STOP is not: J-T8 leaves it QUEUED/RUNNING while its runner catches up, so the DONE
+    // that was written after the reopen has nowhere to queue. The marker is kept for that case —
+    // the result transaction that ends the stopped generation queues this DONE's generation itself,
+    // whatever that generation reported (a legacy runner never reads the stop), and consumes the
+    // marker there (J-T8). Any other in-flight generation is already serving this DONE, so the
+    // marker has done its work.
+    const stopped = await tx.projectIntegrationJob.findFirst({
+      where: {
+        taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] },
+        cancelRequestedAt: { not: null },
+      },
+      select: { id: true },
+    });
     // The explicit reopen was already answered by an existing generation; do not let its marker
     // leak into a later, unrelated DONE.
-    await tx.taskReopenIntent.deleteMany({ where: { taskId } });
+    if (!stopped) await tx.taskReopenIntent.deleteMany({ where: { taskId } });
     return { enqueued: false, reason: 'ALREADY_QUEUED', projectId };
   }
 
@@ -1131,6 +1302,8 @@ async function queueLandingForWork(
      * started line's refs cannot change (`INTEGRATION_LINE_LOCKED`).
      */
     idempotencyKey?: string;
+    /** Which door queued it, for the enqueue event's sentence (`enqueuedText`). */
+    cause?: EnqueueCause;
   },
 ): Promise<LandingQueued | null> {
   if (input.line === 'MAIN') {
@@ -1140,20 +1313,22 @@ async function queueLandingForWork(
       taskId: input.taskId,
       codebase: input.codebase,
       session: input.session,
+      cause: input.cause,
     });
     return candidate === null
       ? null
       : { kind: 'PROMOTION', promotionId: candidate.promotionId, jobId: candidate.jobId };
   }
-  const jobId = await queueLandTask(tx, {
+  const queued = await queueLandTask(tx, {
     ownerId: input.ownerId,
     projectId: input.projectId,
     taskId: input.taskId,
     codebase: input.codebase,
     session: input.session,
     idempotencyKey: input.idempotencyKey,
+    cause: input.cause,
   });
-  return jobId === null ? null : { kind: 'LAND_TASK', jobId };
+  return queued === null ? null : { kind: 'LAND_TASK', jobId: queued.jobId };
 }
 
 /**
@@ -1179,8 +1354,10 @@ async function queueLandTask(
     retry?: LandingRetryRequest;
     /** Set only for the generation `integration_skip_merge_check` asked for (0393). */
     skipMergeCheck?: LandingSkipMergeCheck;
+    /** Which door queued it, for the enqueue event's sentence. */
+    cause?: EnqueueCause;
   },
-): Promise<string | null> {
+): Promise<{ jobId: string; landingSessionId: string } | null> {
   const inflight = await tx.projectIntegrationJob.count({
     where: { taskId: input.taskId, kind: 'LAND_TASK', state: { in: ['QUEUED', 'RUNNING'] } },
   });
@@ -1191,6 +1368,26 @@ async function queueLandTask(
     _max: { generation: true },
   });
   const generation = (previous._max.generation ?? 0) + 1;
+  const idempotencyKey = input.idempotencyKey ?? integrationIdempotencyKey({
+    kind: 'LAND_TASK',
+    subjectId: input.taskId,
+    generation,
+  });
+  // The key is decided before the subject is opened: a generation already owed (a retried
+  // `landingBehindTheWorkKey`, or a retry of this very transaction) must not leave an empty subject
+  // behind. A race that loses the insert below discards the subject it opened for the same reason.
+  const alreadyOwed = await tx.projectIntegrationJob.findUnique({
+    where: { idempotencyKey },
+    select: { id: true },
+  });
+  if (alreadyOwed) return null;
+  // §2.9 LS1: the subject opens in the enqueue transaction, and this attempt carries it from INSERT.
+  const landing = await openTaskLanding(tx, {
+    ownerId: input.ownerId,
+    projectId: input.projectId,
+    codebaseId: input.codebase.id,
+    taskId: input.taskId,
+  });
   const jobId = randomUUID();
   const created = await tx.projectIntegrationJob.createManyAndReturn({
     data: [{
@@ -1201,6 +1398,7 @@ async function queueLandTask(
       kind: 'LAND_TASK' satisfies IntegrationJobKind,
       generation,
       taskId: input.taskId,
+      landingId: landing.id,
       sessionId: input.session.id,
       serialKey: integrationSerialKey({
         kind: 'LAND_TASK',
@@ -1212,11 +1410,7 @@ async function queueLandTask(
       upstreamRef: input.codebase.upstreamRef,
       sourceRef: `refs/heads/${input.session.branch}`,
       runnerId: input.session.runnerId,
-      idempotencyKey: input.idempotencyKey ?? integrationIdempotencyKey({
-        kind: 'LAND_TASK',
-        subjectId: input.taskId,
-        generation,
-      }),
+      idempotencyKey,
       ...(input.retry
         ? {
             retryOfJobId: input.retry.ofJobId,
@@ -1246,8 +1440,41 @@ async function queueLandTask(
   // starts — the floor a Merge press had until sessions.service woke its runner, on the path that
   // runs for every task the platform completes. Only when a row was really written: a duplicate
   // (`skipDuplicates`) means the generation is already queued and already someone's to run.
-  if (created[0]?.id) await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.session.id));
-  return created[0]?.id ?? null;
+  if (!created[0]?.id) {
+    // A unique index won the race — the one-inflight landing key or the idempotency key. The
+    // subject this call may have opened belongs to no attempt, so it goes with it.
+    await discardOpenedLanding(tx, landing);
+    return null;
+  }
+  // §2.9 LS2: the enqueue is a fact, recorded in the transaction that queued it. What queued it and
+  // why somebody asked is not copied here — the retry columns and the decision rows keep that, and
+  // the timeline derives it at read time (LS4); this row only says that it was queued, when, and
+  // for which branch.
+  const cause = input.cause ?? 'DONE';
+  await appendIntegrationJobEvent(tx, {
+    jobId: created[0].id,
+    key: 'enqueued',
+    kind: 'ENQUEUED',
+    claim: 0,
+    data: {
+      kind: 'LAND_TASK',
+      generation,
+      targetRef: input.codebase.integrationRef,
+      sourceRef: `refs/heads/${input.session.branch}`,
+      cause,
+      ...(input.skipMergeCheck ? { skippedCheck: true } : {}),
+    },
+    text: enqueuedText({
+      kind: 'LAND_TASK',
+      sourceRef: `refs/heads/${input.session.branch}`,
+      targetRef: input.codebase.integrationRef,
+      cause,
+    }),
+  });
+  await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.session.id));
+  // §2.9: the subject's session id travels with the row it was queued under, so a caller that
+  // answers with "which landing did I queue" (the retry doors) needs no second read.
+  return { jobId: created[0].id, landingSessionId: landing.sessionId };
 }
 
 /**
@@ -1327,18 +1554,20 @@ async function backfillFinishedCodeTasks(
         taskId: candidate.id,
         codebase: input.codebase,
         session,
+        cause: 'BACKFILL',
       });
       if (made) queued.push(candidate.id);
       continue;
     }
-    const jobId = await queueLandTask(tx, {
+    const job = await queueLandTask(tx, {
       ownerId: input.ownerId,
       projectId: input.projectId,
       taskId: candidate.id,
       codebase: input.codebase,
       session,
+      cause: 'BACKFILL',
     });
-    if (jobId) queued.push(candidate.id);
+    if (job) queued.push(candidate.id);
   }
   return queued;
 }
@@ -1375,6 +1604,8 @@ export async function queueTaskBranchCandidate(
     taskId: string;
     codebase: CodebaseForJob;
     session: { id: string; branch: string; runnerId: string | null };
+    /** Which door offered it, for the enqueue event's sentence. */
+    cause?: EnqueueCause;
   },
 ): Promise<{ promotionId: string; jobId: string } | null> {
   const promotionId = randomUUID();
@@ -1414,6 +1645,7 @@ export async function queueTaskBranchCandidate(
       sessionId: input.session.id,
     },
     canonicalRepoUrl: input.codebase.canonicalRepoUrl,
+    cause: input.cause,
   });
   await tx.projectPromotion.update({ where: { id: promotionId }, data: { checkJobId: jobId } });
   return { promotionId, jobId };
@@ -1457,6 +1689,8 @@ export async function queuePromotionJob(
     confirmedAutomatically?: boolean;
     /** Set only for the check a coordinator asked to run again (§4.7 H1, migration 0368). */
     retry?: LandingRetryRequest;
+    /** Which door queued it, for the enqueue event's sentence (`enqueuedText`). */
+    cause?: EnqueueCause;
   },
 ): Promise<string> {
   // Raw SQL, never `projectIntegrationJob.aggregate`: Prisma compiles an aggregate to a MAX over an
@@ -1468,6 +1702,66 @@ export async function queuePromotionJob(
      WHERE "promotion_id" = ${input.promotion.id}::uuid AND "kind" = ${input.kind}
   `;
   const generation = Number(previous?.generation ?? 0) + 1;
+  const idempotencyKey = integrationIdempotencyKey({
+    kind: input.kind,
+    subjectId: input.promotion.id,
+    generation,
+  });
+  const alreadyOwed = await tx.projectIntegrationJob.findUnique({
+    where: { idempotencyKey },
+    select: { id: true },
+  });
+  if (alreadyOwed) return alreadyOwed.id;
+  // §2.9 LS1 / §2.9's subject table: which subject this attempt belongs to, never read off
+  // `project_promotion.task_id` (it always names the last landed task, which is not the round's).
+  //
+  //  * A later generation of THIS candidate (a rerun, a check after main moved, the owner's
+  //    confirmation, the next generation after a push was stolen, Automatic's landing) inherits the
+  //    landing its earlier attempts already name. Re-deriving it would let a re-check open a second
+  //    session for one candidate.
+  //  * A candidate on a MAIN line is one task's branch, so it belongs to that task's segment; the
+  //    task is the source session's own.
+  //  * A candidate on a PROJECT_BRANCH line is one round of merging the project branch into the
+  //    upstream. The first candidate after the last round settled opens the round; every later
+  //    candidate joins it.
+  const inherited = await tx.projectIntegrationJob.findFirst({
+    where: { promotionId: input.promotion.id, landingId: { not: null } },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { landingId: true },
+  });
+  let landingId: string | null = inherited?.landingId ?? null;
+  let opened: OpenedLanding | null = null;
+  if (!landingId) {
+    const codebase = await tx.projectCodebase.findUnique({
+      where: { id: input.promotion.codebaseId },
+      select: { integrationRef: true, upstreamRef: true },
+    });
+    const line = codebase && codebase.integrationRef === codebase.upstreamRef ? 'MAIN' : 'PROJECT_BRANCH';
+    if (line === 'MAIN') {
+      const source = input.promotion.sessionId
+        ? await tx.session.findFirst({
+            where: { id: input.promotion.sessionId },
+            select: { taskId: true },
+          })
+        : null;
+      if (source?.taskId) {
+        opened = await openTaskLanding(tx, {
+          ownerId: input.promotion.ownerId,
+          projectId: input.promotion.projectId,
+          codebaseId: input.promotion.codebaseId,
+          taskId: source.taskId,
+        });
+      }
+    } else {
+      opened = await openPromotionRound(tx, {
+        ownerId: input.promotion.ownerId,
+        projectId: input.promotion.projectId,
+        codebaseId: input.promotion.codebaseId,
+        promotionId: input.promotion.id,
+      });
+    }
+    landingId = opened?.id ?? null;
+  }
   const jobId = randomUUID();
   const [created] = await tx.projectIntegrationJob.createManyAndReturn({
     data: [{
@@ -1485,6 +1779,7 @@ export async function queuePromotionJob(
       taskId: null,
       sessionId: input.promotion.sessionId,
       promotionId: input.promotion.id,
+      landingId,
       serialKey: integrationSerialKey({
         kind: input.kind,
         canonicalRepoUrl: input.canonicalRepoUrl,
@@ -1498,11 +1793,7 @@ export async function queuePromotionJob(
       sourceRef: input.promotion.sourceRef,
       sourceSha: input.promotion.sourceSha,
       confirmedAutomatically: input.confirmedAutomatically === true,
-      idempotencyKey: integrationIdempotencyKey({
-        kind: input.kind,
-        subjectId: input.promotion.id,
-        generation,
-      }),
+      idempotencyKey,
       ...(input.retry
         ? {
             retryOfJobId: input.retry.ofJobId,
@@ -1516,8 +1807,40 @@ export async function queuePromotionJob(
     skipDuplicates: true,
     select: { id: true },
   });
+  if (!created?.id) {
+    // A unique index won a race after the pre-check above. A subject opened for an attempt that
+    // was not written goes with it; one that was inherited leaves no trace of this call.
+    if (opened) await discardOpenedLanding(tx, opened);
+    const raced = await tx.projectIntegrationJob.findUnique({
+      where: { idempotencyKey },
+      select: { id: true },
+    });
+    return raced?.id ?? jobId;
+  }
   // As for a landing: the runner that will run this check (or landing) is woken when this
   // transaction commits, rather than up to 30s from now on its heartbeat.
-  if (created?.id) await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.promotion.sessionId));
-  return created?.id ?? jobId;
+  // §2.9 LS2: the enqueue fact, in the transaction that queued it. A promotion job's generation is
+  // its section in the round's timeline (`Merge check · 2`, `Merge to main · 1`).
+  await appendIntegrationJobEvent(tx, {
+    jobId: created.id,
+    key: 'enqueued',
+    kind: 'ENQUEUED',
+    claim: 0,
+    data: {
+      kind: input.kind,
+      generation,
+      targetRef: input.promotion.upstreamRef,
+      sourceRef: input.promotion.sourceRef,
+      ...(input.confirmedAutomatically ? { automatic: true } : {}),
+    },
+    text: enqueuedText({
+      kind: input.kind,
+      sourceRef: input.promotion.sourceRef,
+      targetRef: input.promotion.upstreamRef,
+      cause: input.cause,
+      automatic: input.confirmedAutomatically === true,
+    }),
+  });
+  await notifyRunnerWakeOnCommit(tx, await jobRunnerId(tx, input.promotion.sessionId));
+  return created.id;
 }

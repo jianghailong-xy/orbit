@@ -1,0 +1,159 @@
+{
+  "args": [
+    "acp",
+    "--disable-auto-update",
+    "--disable-indexing",
+    "--disable-project-configs"
+  ],
+  "cards": null,
+  "checks": [
+    {
+      "name": "no-card",
+      "pass": true,
+      "detail": "0 cards"
+    },
+    {
+      "name": "command-refused-unasked",
+      "pass": true,
+      "detail": "dontask-cmd.txt absent"
+    },
+    {
+      "name": "command-answered-reject-once",
+      "pass": true,
+      "detail": "requests [[\"`touch dontask-cmd.txt`\" \"reject-once\"]]"
+    },
+    {
+      "name": "orbit-tool-allowed",
+      "pass": true,
+      "detail": "requests [[\"orbit-task_get: task_get\" \"allow-once\"]]"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.config/cursor",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.config/cursor: no such file or directory)"
+    },
+    {
+      "name": "real-cursor-home-untouched /root/.local/share/cursor-agent",
+      "pass": true,
+      "detail": "absent before and after (lstat: lstat /root/.local/share/cursor-agent: no such file or directory)"
+    }
+  ],
+  "completions": [
+    {
+      "error": "",
+      "result": "I'll run the three steps in order, one tool call each, and then report which ones succeeded. Starting with the shell command.\n\nThe file write succeeded. Next I’ll call Orbit `task_get` with no arguments.\n\nTwo of the three steps succeeded.\n\n1. **Shell** — `touch dontask-cmd.txt` was refused, so `dontask-cmd.txt` was not created.\n2. **File edit** — `dontask-edit.txt` was created in the current directory with the word `edit`.\n3. **Orbit `task_get`** — the call succeeded and returned [P5c probe task](orbit-task:3RLvoIBSQcbsWzHrmqrUZj), status `IN_PROGRESS`.",
+      "status": "SUCCEEDED",
+      "subtype": "completed",
+      "turn": "turn-1"
+    }
+  ],
+  "events": [
+    {
+      "payload": {
+        "cliVersion": "2026.10.14-941492e",
+        "provider": "cursor",
+        "resumed": false,
+        "runtime": "acp",
+        "sessionId": "<UUID_1>",
+        "subtype": "init"
+      },
+      "turn": "",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_2>-0\nfc_<UUID_3>_0",
+        "input": {
+          "command": "touch dontask-cmd.txt"
+        },
+        "name": "Bash"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "name": "Bash",
+        "provider": "cursor",
+        "reason": "Don't Ask refuses without asking",
+        "subtype": "permission_denied",
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "system"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_2>-0\nfc_<UUID_3>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_4>-1\nfc_<UUID_5>_0",
+        "input": {
+          "content": "edit",
+          "file_path": "<RUN>/work/dontask-edit.txt"
+        },
+        "name": "Write"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "",
+        "isError": false,
+        "toolUseId": "call-<UUID_4>-1\nfc_<UUID_5>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    },
+    {
+      "payload": {
+        "id": "call-<UUID_6>-2\nfc_<UUID_7>_0",
+        "input": {},
+        "mcpServer": "orbit",
+        "mcpTool": "task_get",
+        "name": "mcp__orbit__task_get"
+      },
+      "turn": "turn-1",
+      "type": "tool_use"
+    },
+    {
+      "payload": {
+        "content": "Done. Cursor CLI does not pass an MCP tool's result on to Orbit.",
+        "isError": false,
+        "toolUseId": "call-<UUID_6>-2\nfc_<UUID_7>_0"
+      },
+      "turn": "turn-1",
+      "type": "tool_result"
+    }
+  ],
+  "facts": {
+    "workspaceEditWritten": true
+  },
+  "mode": "dontAsk",
+  "process": "session",
+  "processes": [
+    "<CLI>/cursor-agent --use-system-ca <CLI>/index.js acp --disable-auto-update --disable-indexing --disable-project-configs",
+    "<CLI>/rg --files --follow --max-depth 16 --no-messages",
+    "<ORBIT> mcp",
+    "<CLI>/node <CLI>/index.js worker-server",
+    "(stub served task_get 1 time(s))"
+  ],
+  "prompts": [
+    7
+  ],
+  "scenario": "dont-ask",
+  "status": "SUCCEEDED",
+  "version": "2026.10.14-941492e"
+}

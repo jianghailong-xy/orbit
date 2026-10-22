@@ -4,12 +4,12 @@ import { goCompare, goTrim } from './wiki-plan-format';
 
 /**
  * What the drafting job reads of Orbit besides the repository (contract `plan.jobs.materials`), laid out the way
- * the runner's job lays it out (`src/runner-go/wiki_plan_materials.go`, the sample's prep_online.py): counts, and
+ * the runner's job laid it out (`src/runner-go/wiki_plan_materials.go`, the sample's prep_online.py): counts, and
  * the session titles clustered — TF-IDF over words and Chinese bigrams, spherical k-means — so the model sees
  * what the work has been about without reading three thousand titles.
  *
- * On the server the materials are the same function the runner door answers with (`wikiPlanMaterials`), read
- * once at the job's first run and kept on the plan job, so a replay drafts from the same words.
+ * On the server the materials are the same function the runner door answered with before P11 (`wikiPlanMaterials`),
+ * read once at the job's first run and kept on the plan job, so a replay drafts from the same words.
  *
  * THE CLUSTERING IS CPU WORK ON THE EVENT LOOP of a process that renews leases on timers (design §4.5): a few
  * thousand titles, eight rounds of k-means, some tens of milliseconds to a few hundred. It is cut into slices —

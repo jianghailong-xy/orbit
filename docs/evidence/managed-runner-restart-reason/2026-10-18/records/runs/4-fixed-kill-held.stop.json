@@ -1,0 +1,123 @@
+{
+  "ended": {
+    "containers": [
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+        "name": "private-volume-directories",
+        "restartCount": 0,
+        "state": {
+          "terminated": {
+            "containerID": "containerd://f726559a79049b75319945ba498b53ba962ab3960af59b3f623a2fc88e6f3d07",
+            "exitCode": 0,
+            "finishedAt": "2026-10-18T09:11:05Z",
+            "reason": "Completed",
+            "startedAt": "2026-10-18T09:11:04Z"
+          }
+        }
+      },
+      {
+        "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312",
+        "name": "runner",
+        "restartCount": 0,
+        "state": {
+          "terminated": {
+            "containerID": "containerd://8418490b888bb247282abc0215b102379dbfb48d6fccf725d15346570c27ddfb",
+            "exitCode": 137,
+            "finishedAt": "2026-10-18T09:13:22Z",
+            "reason": "Error",
+            "startedAt": "2026-10-18T09:11:05Z"
+          }
+        }
+      }
+    ],
+    "deletionTimestamp": null,
+    "generation": "4",
+    "images": [
+      "docker.io/library/orbit-managed-runner-lab@sha256:cdb090148c194e536fe86c22f1507b45f74f2aa6929df26f7360747604102312"
+    ],
+    "name": "mr-01a14e3f-b2c3-755a-ae7b-0a99e998e42d",
+    "node": "orbit-mr-lab",
+    "phase": "Failed",
+    "uid": "9fcc3fce-a7ae-4943-b0e0-c5c056330798"
+  },
+  "generation": 4,
+  "owner": "amy",
+  "pid": "8",
+  "pod": "9fcc3fce-a7ae-4943-b0e0-c5c056330798",
+  "processes": [
+    {
+      "argv": [
+        "/usr/bin/tini",
+        "--",
+        "/usr/local/bin/orbit-container",
+        "run"
+      ],
+      "pid": 1
+    },
+    {
+      "argv": [
+        "orbit",
+        "run"
+      ],
+      "pid": 8
+    }
+  ],
+  "sentAt": "2026-10-18T09:13:22.037+00:00",
+  "signal": "KILL",
+  "timeline": [
+    {
+      "at": "2026-10-18T09:13:22.165+00:00",
+      "containers": [
+        {
+          "private-volume-directories": [
+            "terminated"
+          ]
+        },
+        {
+          "runner": [
+            "running"
+          ]
+        }
+      ],
+      "deleting": false,
+      "phase": "Running",
+      "present": true
+    },
+    {
+      "at": "2026-10-18T09:13:23.222+00:00",
+      "containers": [
+        {
+          "private-volume-directories": [
+            "terminated"
+          ]
+        },
+        {
+          "runner": [
+            "terminated"
+          ]
+        }
+      ],
+      "deleting": false,
+      "phase": "Running",
+      "present": true
+    },
+    {
+      "at": "2026-10-18T09:13:24.286+00:00",
+      "containers": [
+        {
+          "private-volume-directories": [
+            "terminated"
+          ]
+        },
+        {
+          "runner": [
+            "terminated"
+          ]
+        }
+      ],
+      "deleting": false,
+      "phase": "Failed",
+      "present": true
+    }
+  ]
+}

@@ -156,6 +156,20 @@ internal data class WatchTargetStatus(val status: String, val running: Boolean, 
     }
 }
 
+/** The task a session target's session runs (`sessions.task_id`, OrbitKit `WatchTargetTask`): its id, title and standing, as a
+ * task target on it reads. */
+internal data class WatchTargetTask(val id: String, val title: String, val status: WatchTargetStatus) {
+    companion object {
+        /** Null for a session that runs no task, for every task target, from a server older than the field, and for anything that
+         * isn't a whole task. */
+        fun decode(element: JsonElement?): WatchTargetTask? {
+            val c = element as? JsonObject ?: return null
+            val id = c["id"].watchText()?.takeIf(String::isNotEmpty) ?: return null
+            return WatchTargetTask(id, c["title"].watchText() ?: return null, WatchTargetStatus.decode(c["status"]) ?: return null)
+        }
+    }
+}
+
 /** One frozen target and what the evaluator last recorded about it. */
 internal data class WatchTarget(
     val targetKind: WatchTargetKind,
@@ -168,11 +182,13 @@ internal data class WatchTarget(
     /** The target's own title, read with the watch; null when this account can't read the row. */
     val targetTitle: String? = null,
     val targetStatus: WatchTargetStatus? = null,
+    /** The task a session target's session runs; null on a session that runs none and on every task target. */
+    val targetTask: WatchTargetTask? = null,
 ) {
     companion object {
         fun decode(c: JsonObject) = WatchTarget(WatchTargetKind.of(c["targetKind"].watchText()), c["targetResourceId"].watchText().orEmpty(),
             WatchTargetState.of(c["state"].watchText()), c["targetEpoch"].int() ?: 0, c["lastEvaluatedAt"].watchText(),
-            c["targetTitle"].watchText(), WatchTargetStatus.decode(c["targetStatus"]))
+            c["targetTitle"].watchText(), WatchTargetStatus.decode(c["targetStatus"]), WatchTargetTask.decode(c["targetTask"]))
     }
 }
 

@@ -1,0 +1,4 @@
+total 0
+drwxrwx---   3 runner  staff             96 Oct 13 04:34 .
+drwx------+ 14 runner  staff            448 Oct 18 07:43 ..
+drwxrwx---   2 runner  _analyticsusers   64 Oct 13 04:34 Retired

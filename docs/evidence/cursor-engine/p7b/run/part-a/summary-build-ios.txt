@@ -1,0 +1,10 @@
+Test Case '-[CursorProbeUITests.CursorShotTests test1NewSession]' started.
+Test Case '-[CursorProbeUITests.CursorShotTests test1NewSession]' passed (376.578 seconds).
+Test Case '-[CursorProbeUITests.CursorShotTests test2Infrastructure]' started.
+Test Case '-[CursorProbeUITests.CursorShotTests test2Infrastructure]' passed (637.587 seconds).
+Test Case '-[CursorProbeUITests.CursorShotTests test3Accounts]' started.
+Test Case '-[CursorProbeUITests.CursorShotTests test3Accounts]' passed (273.691 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 1287.856 (1287.863) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 1287.856 (1287.864) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 1287.856 (1287.865) seconds
+** TEST SUCCEEDED **

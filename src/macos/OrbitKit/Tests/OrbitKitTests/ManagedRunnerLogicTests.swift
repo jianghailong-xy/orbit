@@ -9,6 +9,12 @@ import XCTest
 /// every one of these answers is what it was.
 final class ManagedRunnerLogicTests: XCTestCase {
     private static func state(_ name: String) throws -> ManagedRunnerStatus {
+        let data = try JSONSerialization.data(withJSONObject: stateObject(name))
+        return try JSONDecoder().decode(ManagedRunnerStatus.self, from: data)
+    }
+
+    /// The fixture's `status` body for `name`, as the server sends it.
+    private static func stateObject(_ name: String) throws -> [String: Any] {
         var directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         var source: URL?
         for _ in 0..<12 {
@@ -19,8 +25,7 @@ final class ManagedRunnerLogicTests: XCTestCase {
         let object = try JSONSerialization.jsonObject(with: Data(contentsOf: XCTUnwrap(source))) as? [String: Any]
         let states = try XCTUnwrap(object?["states"] as? [[String: Any]])
         let entry = try XCTUnwrap(states.first { $0["name"] as? String == name }, name)
-        let data = try JSONSerialization.data(withJSONObject: XCTUnwrap(entry["status"]))
-        return try JSONDecoder().decode(ManagedRunnerStatus.self, from: data)
+        return try XCTUnwrap(entry["status"] as? [String: Any], name)
     }
 
     private static let ownRunner = "33zx0JhRhJo8rd25d3qAM"
@@ -57,8 +62,9 @@ final class ManagedRunnerLogicTests: XCTestCase {
 
     // MARK: a first session in the default workspace
 
-    func testBeforeTheRunnerWasEverReadyItsDefaultWorkspaceHasNoEngineForAFirstSession() throws {
+    func testWithNothingTheServerNamesItsDefaultWorkspaceHasNoEngineForAFirstSession() throws {
         for name in ["preparing: starting", "model unavailable: started without a signed-in runtime",
+                     "model unavailable: none of the owner's keys runs on what it reported",
                      "waiting for capacity before the first start", "failed: retryable"] {
             let status = try Self.state(name)
             let draft = try XCTUnwrap(ManagedRunnerLogic.console(status: status, runnerID: status.runnerId,
@@ -69,6 +75,34 @@ final class ManagedRunnerLogicTests: XCTestCase {
                                                                     agentID: status.workspaceId, isDraft: false)).blocksNewSession)
             XCTAssertFalse(try XCTUnwrap(ManagedRunnerLogic.console(status: status, runnerID: status.runnerId,
                                                                     agentID: Self.ownWorkspace, isDraft: true)).blocksNewSession)
+        }
+    }
+
+    func testBeforeReadyAFirstSessionWaitsOnTheOwnersKeyTheServerNames() throws {
+        for name in ["preparing: starting, a first session waits on the owner's key",
+                     "preparing: the cluster's resource quota has no room for its first Pod, a first session waits on the owner's key",
+                     "waiting for capacity before the first start, a first session waits on the owner's key"] {
+            let status = try Self.state(name)
+            XCTAssertNil(status.initialProvider, name)
+            XCTAssertEqual(status.firstSessionProvider, "deepseek", name)
+            XCTAssertEqual(ManagedRunnerLogic.firstSessionProvider(status), "deepseek", name)
+            let draft = try XCTUnwrap(ManagedRunnerLogic.console(status: status, runnerID: status.runnerId,
+                                                                 agentID: status.workspaceId, isDraft: true), name)
+            XCTAssertFalse(draft.blocksNewSession, name)
+            // The runner's state still stands above the composer while it is not up.
+            XCTAssertTrue(draft.showsBanner, name)
+        }
+    }
+
+    func testAnOlderServerWithoutTheFieldIsReadByInitialProvider() throws {
+        for name in ["waiting for capacity before the first start, a first session waits on the owner's key", "sleeping"] {
+            var object = try Self.stateObject(name)
+            XCTAssertNotNil(object.removeValue(forKey: "firstSessionProvider"), name)
+            let older = try JSONDecoder().decode(ManagedRunnerStatus.self, from: JSONSerialization.data(withJSONObject: object))
+            XCTAssertNil(older.firstSessionProvider, name)
+            XCTAssertEqual(ManagedRunnerLogic.firstSessionProvider(older), older.initialProvider, name)
+            XCTAssertEqual(ManagedRunnerLogic.display(older)?.startsNewSession,
+                           (ManagedRunnerLogic.display(older)?.acceptsWork ?? false) && older.initialProvider != nil, name)
         }
     }
 

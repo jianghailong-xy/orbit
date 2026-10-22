@@ -52,6 +52,11 @@ var cliParityExemptTools = map[string]string{
 	// open_item_resolve, a command typed outside a session could only ever be refused; inside one,
 	// the coordinator reaches it over MCP.
 	"integration_retry": "reruns a landing as the project's coordinator session: a terminal outside one is refused by the server",
+	// integration_abandon ends a running job AS the project's coordinator conversation (contract
+	// §2.2 J-T10), and the runner door reads no missing header as the account owner — the owner's
+	// abandon is the user API's own door. A command typed outside a session could only ever be
+	// refused; inside one, the coordinator reaches it over MCP.
+	"integration_abandon": "abandons a running job as the project's coordinator session: a terminal outside one is refused by the server",
 }
 
 // Params whose CLI spelling is not the mechanical --kebab-case of the MCP name.
@@ -103,7 +108,7 @@ func TestCLICapabilitiesCoverEveryMCPToolAndParameter(t *testing.T) {
 	// One direction only: every MCP tool needs a command, and a command needs no tool. The person's
 	// own commands (userCLICapabilities: login, logout, whoami, api) have none — MCP runs only inside
 	// sessions, where the CLI never acts as the person (docs/personal-access-token-design.md §7.4).
-	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, wikiPlanCLICapabilities, userCLICapabilities} {
+	for _, list := range [][]cliCapabilitySpec{baseCLICapabilities, providerCLICapabilities, projectCLICapabilities, notifyCLICapabilities, mergeReceiptCLICapabilities, sessionCLICapabilities, agentCLICapabilities, watchCLICapabilities, wikiCLICapabilities, wikiImportCLICapabilities, userCLICapabilities} {
 		for _, spec := range list {
 			specs[spec.Tool] = spec
 		}

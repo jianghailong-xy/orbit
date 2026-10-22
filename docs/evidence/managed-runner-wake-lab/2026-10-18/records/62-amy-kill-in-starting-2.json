@@ -1,0 +1,154 @@
+{
+ "tries": [
+  {
+   "at": "2026-10-18T01:45:26.716+00:00",
+   "state": "STARTING",
+   "exit": 1,
+   "err": "1, 'argv': ['/usr/bin/tini', '--', '/usr/local/bin/orbit-container', 'run']}, {'pid': 7, 'argv': ['/usr/bin/python3', '/usr/local/bin/orbit-container', 'run']}]"
+  },
+  {
+   "at": "2026-10-18T01:45:30.658+00:00",
+   "state": "STARTING",
+   "exit": 0,
+   "err": ""
+  }
+ ],
+ "kill": {
+  "ended": {
+   "containers": [
+    {
+     "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+     "name": "private-volume-directories",
+     "restartCount": 0,
+     "state": {
+      "terminated": {
+       "containerID": "containerd://ec5ad72e3996f65322ed045ee9924d2380a9ae8d1f46841ce24024faf0dc6d47",
+       "exitCode": 0,
+       "finishedAt": "2026-10-18T01:45:25Z",
+       "reason": "Completed",
+       "startedAt": "2026-10-18T01:45:25Z"
+      }
+     }
+    },
+    {
+     "imageID": "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d",
+     "name": "runner",
+     "restartCount": 0,
+     "state": {
+      "terminated": {
+       "containerID": "containerd://66c53c044037c53fddb5d0e46a47ce286833fda8bcacdd5d58f149eff3c5bed2",
+       "exitCode": 137,
+       "finishedAt": "2026-10-18T01:45:28Z",
+       "reason": "Error",
+       "startedAt": "2026-10-18T01:45:26Z"
+      }
+     }
+    }
+   ],
+   "deletionTimestamp": null,
+   "generation": "11",
+   "images": [
+    "docker.io/library/orbit-managed-runner-lab@sha256:54441a07125b7cd5ec11def5705608ebcd0f3f7243c98918556dd29d03aef98d"
+   ],
+   "name": "mr-01a14c74-cd3c-72d1-b8fe-f3f3fd64b585",
+   "node": "orbit-mr-lab",
+   "phase": "Failed",
+   "uid": "fd9b4f78-a593-4291-b0f0-c201d758a506"
+  },
+  "generation": 11,
+  "owner": "amy",
+  "pid": "7",
+  "pod": "fd9b4f78-a593-4291-b0f0-c201d758a506",
+  "processes": [
+   {
+    "argv": [
+     "/usr/bin/tini",
+     "--",
+     "/usr/local/bin/orbit-container",
+     "run"
+    ],
+    "pid": 1
+   },
+   {
+    "argv": [
+     "orbit",
+     "run"
+    ],
+    "pid": 7
+   },
+   {
+    "argv": [
+     "/usr/local/bin/claude",
+     "--version"
+    ],
+    "pid": 28
+   },
+   {
+    "argv": [
+     "codex",
+     "debug",
+     "models"
+    ],
+    "pid": 29
+   }
+  ],
+  "sentAt": "2026-10-18T01:45:27.455+00:00",
+  "signal": "KILL",
+  "timeline": [
+   {
+    "at": "2026-10-18T01:45:28.523+00:00",
+    "containers": [
+     {
+      "private-volume-directories": [
+       "terminated"
+      ]
+     },
+     {
+      "runner": [
+       "running"
+      ]
+     }
+    ],
+    "deleting": false,
+    "phase": "Running",
+    "present": true
+   },
+   {
+    "at": "2026-10-18T01:45:29.053+00:00",
+    "containers": [
+     {
+      "private-volume-directories": [
+       "terminated"
+      ]
+     },
+     {
+      "runner": [
+       "terminated"
+      ]
+     }
+    ],
+    "deleting": false,
+    "phase": "Running",
+    "present": true
+   },
+   {
+    "at": "2026-10-18T01:45:30.651+00:00",
+    "containers": [
+     {
+      "private-volume-directories": [
+       "terminated"
+      ]
+     },
+     {
+      "runner": [
+       "terminated"
+      ]
+     }
+    ],
+    "deleting": false,
+    "phase": "Failed",
+    "present": true
+   }
+  ]
+ }
+}

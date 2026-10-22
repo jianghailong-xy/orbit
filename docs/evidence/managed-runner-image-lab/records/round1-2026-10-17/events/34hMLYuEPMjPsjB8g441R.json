@@ -1,0 +1,91 @@
+[
+ {
+  "seq": 1,
+  "type": "user",
+  "payload": {
+   "text": "T03-SECRET bluefinch. This is the lab's FAKE model, not a real model: reply with anything.",
+   "delivery": "enqueued",
+   "attachments": [
+    {
+     "id": "34hMLYlMNAVDdqYwQtefa",
+     "mime": "text/plain",
+     "name": "t03-attachment-3.txt",
+     "publicId": "34hMLYlMNAVDdqYwQtefa"
+    }
+   ]
+  },
+  "turnId": "34hMLZCwsaArdh6CVDHzb",
+  "ts": "2026-10-17T07:18:42.240Z",
+  "turnPublicId": "34hMLZCwsaArdh6CVDHzb"
+ },
+ {
+  "seq": 2,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMLZCwsaArdh6CVDHzb",
+   "delivery": "written",
+   "turnPublicId": "34hMLZCwsaArdh6CVDHzb"
+  },
+  "turnId": "34hMLZCwsaArdh6CVDHzb",
+  "ts": "2026-10-17T07:18:42.241Z",
+  "turnPublicId": "34hMLZCwsaArdh6CVDHzb"
+ },
+ {
+  "seq": 3,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-v4-flash",
+   "subtype": "init",
+   "sessionId": "YwOUUmopXWevLvclGuxY7",
+   "sessionPublicId": "YwOUUmopXWevLvclGuxY7"
+  },
+  "turnId": "34hMLZCwsaArdh6CVDHzb",
+  "ts": "2026-10-17T07:18:44.235Z",
+  "turnPublicId": "34hMLZCwsaArdh6CVDHzb"
+ },
+ {
+  "seq": 5,
+  "type": "system",
+  "payload": {
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"deepseek-v4-flash\",\"query_source\":\"sdk\"}\n"
+  },
+  "turnId": "34hMLZCwsaArdh6CVDHzb",
+  "ts": "2026-10-17T07:18:44.249Z",
+  "turnPublicId": "34hMLZCwsaArdh6CVDHzb"
+ },
+ {
+  "seq": 6,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hMLZCwsaArdh6CVDHzb",
+   "delivery": "acknowledged",
+   "turnPublicId": "34hMLZCwsaArdh6CVDHzb"
+  },
+  "turnId": "34hMLZCwsaArdh6CVDHzb",
+  "ts": "2026-10-17T07:18:44.354Z",
+  "turnPublicId": "34hMLZCwsaArdh6CVDHzb"
+ },
+ {
+  "seq": 7,
+  "type": "assistant",
+  "payload": {
+   "text": "There's an issue with the selected model (deepseek-v4-flash). It may not exist or you may not have access to it. Run --model to pick a different model."
+  },
+  "turnId": "34hMLZCwsaArdh6CVDHzb",
+  "ts": "2026-10-17T07:18:44.356Z",
+  "turnPublicId": "34hMLZCwsaArdh6CVDHzb"
+ },
+ {
+  "seq": 8,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0,
+   "subtype": "success",
+   "numTurns": 1,
+   "contextTokens": 0
+  },
+  "turnId": "34hMLZCwsaArdh6CVDHzb",
+  "ts": "2026-10-17T07:18:44.390Z",
+  "turnPublicId": "34hMLZCwsaArdh6CVDHzb"
+ }
+]

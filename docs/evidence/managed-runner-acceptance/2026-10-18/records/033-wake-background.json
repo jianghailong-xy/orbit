@@ -1,0 +1,377 @@
+{
+ "checks": [
+  {
+   "check": "bob is asleep",
+   "ok": true
+  },
+  {
+   "check": "bob: the scheduled task is accepted",
+   "ok": true,
+   "value": 201
+  },
+  {
+   "check": "bob: the same runner, PVC, PV, volume handle, RBD image and workspace after the scheduled wake",
+   "ok": true,
+   "value": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8"
+  },
+  {
+   "check": "bob: a new Pod of a later generation than the one that slept",
+   "ok": true,
+   "value": {
+    "slept": [
+     1,
+     "a0c62ecc-5825-40b9-ba8d-3ab33f74d620"
+    ],
+    "woken": [
+     2,
+     "5950726c-5e88-4d89-ab77-867cff86f0f3"
+    ]
+   }
+  },
+  {
+   "check": "bob: the task's run went to bob's managed runner",
+   "ok": true,
+   "value": {
+    "assigned_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "created_at": "2026-10-18T12:45:56.993",
+    "engine": "claude",
+    "id": "94834aeb-0a4b-511c-837e-227821526188",
+    "provider": "deepseek-3",
+    "runtime_session_id": "da926734-a553-4baa-876a-7a045dd1b5cd",
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14f0b-6ca6-70eb-a3bd-f97e34259e09"
+   }
+  },
+  {
+   "check": "bob: the engine resumed the session after the scheduled wake: its request carried the earlier conversation",
+   "ok": true,
+   "value": {
+    "messages": 17,
+    "secrets": [
+     "bobfirst"
+    ]
+   }
+  },
+  {
+   "check": "bob: the probe data unchanged, integrity_check ok",
+   "ok": true,
+   "value": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   }
+  },
+  {
+   "check": "bob: uploads, worktrees, the engine's transcripts and the runner ID as before after the wake",
+   "ok": true,
+   "value": {
+    "transcripts": 1,
+    "uploads": 1,
+    "worktrees": 1
+   }
+  },
+  {
+   "check": "bob: every SQLite database on the volume passes integrity_check after the wake",
+   "ok": true,
+   "value": [
+    "t08-probe/p1/rows.sqlite"
+   ]
+  },
+  {
+   "check": "bob: the session's worktree is there after the wake",
+   "ok": true,
+   "value": [
+    "01a14f04-a753-774e-ae62-e1572e6de075",
+    "94834aeb-0a4b-511c-837e-227821526188"
+   ]
+  }
+ ],
+ "endedAt": "2026-10-18T12:46:03.551+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "wake",
+ "result": {
+  "answered": {
+   "event": {
+    "created_at": "2026-10-18T12:46:01.006",
+    "ingested_at": "2026-10-18T12:46:01.105561+00:00",
+    "ingested_by_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "seq": 8,
+    "session_id": "94834aeb-0a4b-511c-837e-227821526188",
+    "type": "assistant"
+   },
+   "modelRequests": [],
+   "session": {
+    "assigned_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "created_at": "2026-10-18T12:45:56.993",
+    "engine": "claude",
+    "id": "94834aeb-0a4b-511c-837e-227821526188",
+    "provider": "deepseek-3",
+    "runtime_session_id": "da926734-a553-4baa-876a-7a045dd1b5cd",
+    "status": "AWAITING_INPUT",
+    "task_id": "01a14f0b-6ca6-70eb-a3bd-f97e34259e09"
+   }
+  },
+  "answeredAfterDueSeconds": 5.1,
+  "dueAt": "2026-10-18T12:45:56Z",
+  "identityAfter": {
+   "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+   "generation": 2,
+   "podUid": "5950726c-5e88-4d89-ab77-867cff86f0f3",
+   "pool": "orbit-mr-rbd",
+   "pvName": "pvc-f5cccf9b-6093-453e-b5de-f05993a2a483",
+   "pvUid": "c700b627-4ede-49b3-838b-2d34f0a720e4",
+   "pvcName": "mr-data-01a14f03-ec5a-749b-9877-e882a1a198eb",
+   "pvcUid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+   "rbdImage": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+   "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+   "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+   "workspaceId": "01a14f03-ec5d-74fe-ab6f-e1dcb89d3341"
+  },
+  "identityAwake": {
+   "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+   "generation": 1,
+   "podUid": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620",
+   "pool": "orbit-mr-rbd",
+   "pvName": "pvc-f5cccf9b-6093-453e-b5de-f05993a2a483",
+   "pvUid": "c700b627-4ede-49b3-838b-2d34f0a720e4",
+   "pvcName": "mr-data-01a14f03-ec5a-749b-9877-e882a1a198eb",
+   "pvcUid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+   "rbdImage": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+   "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+   "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+   "workspaceId": "01a14f03-ec5d-74fe-ab6f-e1dcb89d3341"
+  },
+  "identityBefore": {
+   "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+   "generation": 2,
+   "podUid": null,
+   "pool": "orbit-mr-rbd",
+   "pvName": "pvc-f5cccf9b-6093-453e-b5de-f05993a2a483",
+   "pvUid": "c700b627-4ede-49b3-838b-2d34f0a720e4",
+   "pvcName": "mr-data-01a14f03-ec5a-749b-9877-e882a1a198eb",
+   "pvcUid": "f5cccf9b-6093-453e-b5de-f05993a2a483",
+   "rbdImage": "csi-vol-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+   "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+   "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-89d3b261-afdc-45cd-b89a-0fe94e3f46b8",
+   "workspaceId": "01a14f03-ec5d-74fe-ab6f-e1dcb89d3341"
+  },
+  "message": {
+   "answer": {
+    "code": null,
+    "id": null,
+    "message": null,
+    "seq": 4,
+    "status": null
+   },
+   "at": "2026-10-18T12:46:01.561+00:00",
+   "kind": "turn",
+   "session": "34i3WAGAkWMoXGCZw2Tmn",
+   "status": 201
+  },
+  "probe": {
+   "action": "check",
+   "allSame": true,
+   "at": "2026-10-18T12:46:03.149+00:00",
+   "data": {
+    "gitFsckExit": 0,
+    "gitHead": "4a360b598010aecf3623dcfa9a2b2312f7af0730",
+    "integrityCheck": "ok",
+    "maxRow": 150,
+    "mount": [
+     [
+      "/dev/rbd2",
+      "/var/lib/orbit",
+      "ext4"
+     ]
+    ],
+    "randomSha256": "b356e3f5736553695d257fd9dd6b362c3f53f881c79d4a700bd46e8270111e42",
+    "rows": 150,
+    "rowsSha256": "9d524463da72e3d8d70cff13f279bbe32a26382d08b0e90c3940f12d86b4b195"
+   },
+   "generation": 2,
+   "owner": "bob",
+   "pod": "5950726c-5e88-4d89-ab77-867cff86f0f3",
+   "run": "p1",
+   "same": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   },
+   "sameRunnerId": true,
+   "volume": {
+    "managedInstance": {
+     "generation": 2,
+     "podUid": "5950726c-5e88-4d89-ab77-867cff86f0f3",
+     "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb"
+    },
+    "repos": [
+     "default"
+    ],
+    "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "worktrees": [
+     "01a14f04-a753-774e-ae62-e1572e6de075",
+     "94834aeb-0a4b-511c-837e-227821526188"
+    ]
+   },
+   "writtenAt": "2026-10-18T12:39:13.076+00:00",
+   "writtenByGeneration": 1,
+   "writtenByPod": "a0c62ecc-5825-40b9-ba8d-3ab33f74d620"
+  },
+  "resumed": {
+   "event": {
+    "created_at": "2026-10-18T12:46:02.085",
+    "ingested_at": "2026-10-18T12:46:02.219093+00:00",
+    "ingested_by_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "seq": 48,
+    "session_id": "01a14f04-a753-774e-ae62-e1572e6de075",
+    "type": "assistant"
+   },
+   "modelRequests": [
+    {
+     "at": "2026-10-18T12:46:02Z",
+     "kind": "text",
+     "messages": 17,
+     "n": 17,
+     "secrets": [
+      "bobfirst"
+     ],
+     "tool": null
+    }
+   ],
+   "session": {
+    "assigned_runner_id": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+    "created_at": "2026-10-18T12:37:47.475",
+    "engine": "claude",
+    "id": "01a14f04-a753-774e-ae62-e1572e6de075",
+    "provider": "deepseek-3",
+    "runtime_session_id": "c8974823-c3e4-4082-a8d3-c855eaef7411",
+    "status": "AWAITING_INPUT",
+    "task_id": null
+   }
+  },
+  "snapshot": {
+   "managedInstance": {
+    "generation": 2,
+    "podUid": "5950726c-5e88-4d89-ab77-867cff86f0f3",
+    "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb"
+   },
+   "mount": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd2"
+    }
+   ],
+   "podUid": "5950726c-5e88-4d89-ab77-867cff86f0f3",
+   "prefix": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a753-774e-ae62-e1572e6de075/c8974823-c3e4-4082-a8d3-c855eaef7411.jsonl": "59663fbfe3e2235dc022b6e73751a16b5b9866a0b217e3cb0987e94d5144237e"
+   },
+   "runnerId": "01a14f03-ec5a-749b-9877-e882a1a198eb",
+   "runs": {
+    "01a14f04-a753-774e-ae62-e1572e6de075": {
+     "provider": "claude",
+     "runtimeSessionId": "c8974823-c3e4-4082-a8d3-c855eaef7411",
+     "sessionUuid": "c8974823-c3e4-4082-a8d3-c855eaef7411",
+     "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a14f04-a753-774e-ae62-e1572e6de075"
+    },
+    "94834aeb-0a4b-511c-837e-227821526188": {
+     "provider": "claude",
+     "runtimeSessionId": "da926734-a553-4baa-876a-7a045dd1b5cd",
+     "sessionUuid": "da926734-a553-4baa-876a-7a045dd1b5cd",
+     "workDir": "/var/lib/orbit/home/.orbit/worktrees/94834aeb-0a4b-511c-837e-227821526188"
+    }
+   },
+   "sqlite": {
+    "t08-probe/p1/rows.sqlite": "ok"
+   },
+   "takenAt": "2026-10-18T12:46:03.353+00:00",
+   "transcripts": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a753-774e-ae62-e1572e6de075/c8974823-c3e4-4082-a8d3-c855eaef7411.jsonl": {
+     "lines": 53,
+     "sha256": "04b8928d09ee04d2728cad3c0ef2c2027025f4782481e92130b8d9c7a8bdfa8b"
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-94834aeb-0a4b-511c-837e-227821526188/da926734-a553-4baa-876a-7a045dd1b5cd.jsonl": {
+     "lines": 21,
+     "sha256": "d95928d71f61353421fefa52a092f087854ca45af376de747d0e0f50742fdd08"
+    }
+   },
+   "uid": 10001,
+   "uploads": {
+    "01a14f04-a753-774e-ae62-e1572e6de075/t08-bob-note.txt": "a4d8206da6b9d5bfd2f59d07f1b3ebc632cf7d5becbde43db75b54b84f735216"
+   },
+   "workspace": {
+    "fsckExit": 0,
+    "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+    "worktrees": [
+     "worktree /var/lib/orbit/home/orbit-repos/default",
+     "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+     "branch refs/heads/master",
+     "",
+     "worktree /var/lib/orbit/home/.orbit/worktrees/01a14f04-a753-774e-ae62-e1572e6de075",
+     "HEAD 32d48c95c39372dfd3e51504a9c970dacdfde7a4",
+     "branch refs/heads/orbit/t08-bob-first-session-d2213c",
+     "",
+     "worktree /var/lib/orbit/home/.orbit/worktrees/94834aeb-0a4b-511c-837e-227821526188",
+     "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+     "branch refs/heads/orbit/task-t08-bob-scheduled-task-840053"
+    ]
+   },
+   "worktrees": {
+    "01a14f04-a753-774e-ae62-e1572e6de075": {
+     "branch": "orbit/t08-bob-first-session-d2213c",
+     "files": {
+      ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+      "t08-bob1.txt": "60477fcb9906a12d70ea8b641cb966255bc822703a5308963a1e2e3060742019"
+     },
+     "head": "32d48c95c39372dfd3e51504a9c970dacdfde7a4",
+     "status": []
+    },
+    "94834aeb-0a4b-511c-837e-227821526188": {
+     "branch": "orbit/task-t08-bob-scheduled-task-840053",
+     "files": {
+      ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697"
+     },
+     "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+     "status": []
+    }
+   }
+  },
+  "task": {
+   "at": "2026-10-18T12:45:11.200+00:00",
+   "kind": "task",
+   "runAt": "2026-10-18T12:45:56Z",
+   "status": 201,
+   "task": {
+    "assigneeId": "34i3Ux0ZvyovI6M6JYbWD",
+    "code": null,
+    "id": "34i3hPv7EFgwD3bLg3X3Z",
+    "message": null,
+    "runAt": "2026-10-18T12:45:56.000Z",
+    "status": "OPEN"
+   }
+  },
+  "times": {
+   "generation": 2,
+   "initialProvider": "deepseek-3",
+   "mappingCreatedAt": "2026-10-18T12:36:59.615+00:00",
+   "node": "orbit-mr-lab",
+   "podCreatedAt": "2026-10-18T12:45:57Z",
+   "pvcCreatedAt": "2026-10-18T12:36:59Z",
+   "readyAt": "2026-10-18T12:46:01.625+00:00",
+   "runner": {
+    "capabilities_reported_at": "2026-10-18T12:46:00.177+00:00",
+    "enrolled_at": "2026-10-18T12:36:59.61",
+    "last_heartbeat_at": "2026-10-18T12:46:00.176",
+    "status": "ONLINE",
+    "version": "managed-ebf54ab8ddcb35224a4d8f0c1feae0e480186b38"
+   },
+   "runnerContainerStartedAt": "2026-10-18T12:45:59Z",
+   "secretCreatedAt": "2026-10-18T12:45:57Z"
+  }
+ },
+ "seconds": 52.5,
+ "startedAt": "2026-10-18T12:45:11.059+00:00",
+ "step": "background"
+}

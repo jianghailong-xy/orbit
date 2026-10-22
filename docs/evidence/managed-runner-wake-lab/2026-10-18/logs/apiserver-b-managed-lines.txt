@@ -1,0 +1,34 @@
+[Nest] 1026336  - 10/18/2026, 8:41:13 AM     LOG [ManagedRunners] managed runners are enabled in orbit-mr-lab (namespace orbit-mr-test)
+[Nest] 1026336  - 10/18/2026, 8:43:51 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: asleep; generation 1 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 1026336  - 10/18/2026, 8:49:58 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: idle; draining generation 2 to sleep
+[Nest] 1026336  - 10/18/2026, 8:58:01 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: idle; draining generation 3 to sleep
+[Nest] 1252124  - 10/18/2026, 9:06:46 AM     LOG [ManagedRunners] managed runners are enabled in orbit-mr-lab (namespace orbit-mr-test)
+[Nest] 1252124  - 10/18/2026, 9:19:37 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: asleep; generation 5 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 1252124  - 10/18/2026, 9:21:32 AM     LOG [ManagedRunnerDemand] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: demand (turn) while SLEEPING
+[Nest] 1252124  - 10/18/2026, 9:21:32 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: waking for demand (generation 6)
+[Nest] 1252124  - 10/18/2026, 9:23:13 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: idle; draining generation 6 to sleep
+[Nest] 1252124  - 10/18/2026, 9:29:55 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: work waiting while it sleeps; waking it
+[Nest] 1252124  - 10/18/2026, 9:32:12 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: asleep; generation 8 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 1252124  - 10/18/2026, 9:40:30 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: asleep; generation 9 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 1252124  - 10/18/2026, 9:50:05 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: idle; draining generation 13 to sleep
+[Nest] 1252124  - 10/18/2026, 9:50:41 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: asleep; generation 13 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 1252124  - 10/18/2026, 9:53:53 AM    WARN [ManagedRunnerManager] managed runner 01a14cb7-1f25-76fc-9e0a-d1f8e214df04: its owner's account is disabled; asleep from WAITING_CAPACITY, nothing having started
+[Nest] 1252124  - 10/18/2026, 9:54:48 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: idle; draining generation 14 to sleep
+[Nest] 1252124  - 10/18/2026, 9:57:10 AM    WARN [ManagedRunnerManager] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: idle; draining generation 2 to sleep
+[Nest] 1252124  - 10/18/2026, 9:57:50 AM    WARN [ManagedRunnerManager] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: asleep; generation 2 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 1252124  - 10/18/2026, 9:59:43 AM     LOG [ManagedRunnerDemand] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: demand (turn) while STARTING
+[Nest] 1252124  - 10/18/2026, 10:01:39 AM    WARN [ManagedRunnerManager] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: its owner's account is disabled; draining generation 4 to sleep
+[Nest] 1252124  - 10/18/2026, 10:02:14 AM    WARN [ManagedRunnerManager] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: asleep; generation 4 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 1252124  - 10/18/2026, 10:07:40 AM    WARN [ManagedRunnerManager] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: work waiting while it sleeps; waking it
+[Nest] 1252124  - 10/18/2026, 10:07:40 AM    WARN [ManagedRunnerManager] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: waking for demand (generation 5)
+[Nest] 1252124  - 10/18/2026, 10:11:02 AM    WARN [ManagedRunnerManager] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: asleep; generation 5 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 1252124  - 10/18/2026, 10:12:02 AM    WARN [ManagedRunnerManager] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: work waiting while it sleeps; waking it
+[Nest] 1252124  - 10/18/2026, 10:12:02 AM    WARN [ManagedRunnerManager] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: waking for demand (generation 6)
+[Nest] 1252124  - 10/18/2026, 10:13:18 AM    WARN [ManagedRunnerManager] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: asleep; generation 6 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 2033774  - 10/18/2026, 10:27:00 AM     LOG [ManagedRunners] managed runners are enabled in orbit-mr-lab (namespace orbit-mr-test)
+[Nest] 2033774  - 10/18/2026, 10:27:00 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: idle; draining generation 15 to sleep
+[Nest] 2033774  - 10/18/2026, 10:27:41 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: asleep; generation 15 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 2033774  - 10/18/2026, 10:28:30 AM     LOG [AutoRetry] session 01a14cc4-e830-7738-8326-34c35f6ee50b resumed (retry 3)
+[Nest] 2033774  - 10/18/2026, 10:29:57 AM    WARN [ManagedRunnerManager] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: idle; draining generation 7 to sleep
+[Nest] 2033774  - 10/18/2026, 10:30:38 AM    WARN [ManagedRunnerManager] managed runner 01a14cb2-fd34-7230-bb47-a0736a4a5c85: asleep; generation 7 stopped (OBSERVED_STOP), compute released, volume kept
+[Nest] 2033774  - 10/18/2026, 10:32:59 AM    WARN [ManagedRunnerManager] managed runner 01a14c74-cd40-70fe-9eaf-66a6bf073d61: asleep; generation 16 stopped (OBSERVED_STOP), compute released, volume kept

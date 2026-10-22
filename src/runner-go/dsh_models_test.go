@@ -94,7 +94,7 @@ func TestDshModelCatalogCredentiallessProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	executable, capturePath := dshModelProbeFixture(t, "success")
-	models, err := fetchDshModelCatalogWithExecutable(context.Background(), executable)
+	models, err := fetchDshModelCatalogWithExecutable(context.Background(), "", executable)
 	if err != nil || len(models) != 2 || !dshCatalogReadable() {
 		t.Fatalf("catalogue read = %#v, %v; readable=%v", models, err, dshCatalogReadable())
 	}
@@ -124,6 +124,24 @@ func TestDshModelCatalogCredentiallessProbe(t *testing.T) {
 	}
 }
 
+// On a runner without Node 26 the catalogue is read on Orbit's copy, which starts the entry point itself.
+func TestDshModelCatalogRunsOnOrbitsNode(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	executable, _ := dshModelProbeFixture(t, "success")
+	dir := t.TempDir()
+	calls, node := filepath.Join(dir, "node-calls"), filepath.Join(dir, "node")
+	if err := os.WriteFile(node, []byte("#!/bin/sh\nprintf '%s\\n' \"$1\" >> "+shellQuote(calls)+"\nexec \"$@\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	models, err := fetchDshModelCatalogWithExecutable(context.Background(), node, executable)
+	if err != nil || len(models) != 2 {
+		t.Fatalf("catalogue read on Orbit's Node = %#v, %v", models, err)
+	}
+	if got, _ := os.ReadFile(calls); strings.TrimSpace(string(got)) != executable {
+		t.Fatalf("the catalogue probe did not start the entry point on Orbit's Node: %q", got)
+	}
+}
+
 func TestDshModelCatalogRejectsStartupAndProtocolFailures(t *testing.T) {
 	for _, mode := range []string{"missing-executable", "non-json", "protocol-version", "session-new-error", "startup-diagnostic", "empty-catalogue", "exit-after-close"} {
 		t.Run(mode, func(t *testing.T) {
@@ -131,7 +149,7 @@ func TestDshModelCatalogRejectsStartupAndProtocolFailures(t *testing.T) {
 			if mode == "missing-executable" {
 				executable += "-does-not-exist"
 			}
-			models, err := fetchDshModelCatalogWithExecutable(context.Background(), executable)
+			models, err := fetchDshModelCatalogWithExecutable(context.Background(), "", executable)
 			if err == nil || len(models) != 0 || dshCatalogReadable() {
 				t.Fatalf("failed probe accepted: %#v, %v; readable=%v", models, err, dshCatalogReadable())
 			}

@@ -1,0 +1,7 @@
+mac-ready: no window after launch; pressing ⌘N
+mac-ready: 1 window(s)
+mac-1-ready-card: head
+  Merge check: (370.0, 164.0, 82.0, 16.0)
+  Ready: (950.0, 165.5, 32.0, 13.0)
+  Passed the check · waiting for the owner: (370.0, 182.0, 196.0, 13.0)
+mac-1-ready-card: texts containing `Stopped · not landed`: 0

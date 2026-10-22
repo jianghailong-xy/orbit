@@ -18,11 +18,12 @@ import { PHONE_QUERY } from '../lib/useMediaQuery';
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   api: vi.fn(),
+  fetchUserAvatarDataUrl: vi.fn(),
 }));
 const toast = { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() };
 vi.mock('../lib/toast', () => ({ useToast: () => toast }));
-const { api } = await import('../api');
-const { AdminUsersPage, DELETE_USER, DISABLE_USER, ENABLE_USER, RESET_PASSWORD, VIEW_AS } = await import('./AdminUsersPage');
+const { api, fetchUserAvatarDataUrl } = await import('../api');
+const { AdminUsersPage, DELETE_USER, DISABLE_USER, ENABLE_USER, RESET_PASSWORD, UPDATE_WIKI_DOCS, VIEW_AS } = await import('./AdminUsersPage');
 
 interface Row {
   id: string;
@@ -33,6 +34,7 @@ interface Row {
   signInMethods: SignInMethods;
   disabledAt: string | null;
   lastActive: { at: string; via: string } | null;
+  avatarUpdatedAt?: string | null;
 }
 
 const HOUR = 3_600_000;
@@ -96,6 +98,9 @@ const rowOf = (email: string) => userRows().find((row) => row.querySelector('.ad
 const headers = () => [...container!.querySelectorAll('thead th')].map((th) => th.textContent?.trim() ?? '');
 const cellOf = (email: string, title: string) => rowOf(email)?.querySelectorAll('td')[headers().indexOf(title)];
 const confirmDialog = () => document.body.querySelector<HTMLElement>('.orbit-confirm[data-open]');
+const avatarOf = (email: string) => rowOf(email)?.querySelector('.orbit-avatar');
+/** The photo the stand-in server holds for an account: its version, as a data URL. */
+const photoOf = (id: string) => `data:image/png;base64,${btoa(`${id} ${users.find((u) => u.id === id)?.avatarUpdatedAt}`)}`;
 const menuItems = () => [...document.body.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]')];
 async function openMenu(email: string): Promise<void> {
   await click(rowOf(email)?.querySelector(`button[aria-label="More actions for ${email}"]`), `${email}'s menu`);
@@ -140,6 +145,8 @@ beforeEach(() => {
     { id: 'U3', email: 'gone@example.test', name: 'Gone', role: 'MEMBER', createdAt: '2026-03-01T12:00:00.000Z', signInMethods: password, disabledAt: '2026-10-07T09:30:00.000Z', lastActive: null },
     { id: 'U4', email: 'ops@example.test', name: '', role: 'ADMIN', createdAt: '2026-04-01T12:00:00.000Z', signInMethods: password, disabledAt: null, lastActive: { at: new Date(now - 26 * HOUR).toISOString(), via: 'ios' } },
   ];
+  vi.mocked(fetchUserAvatarDataUrl).mockReset();
+  vi.mocked(fetchUserAvatarDataUrl).mockImplementation(async (id: string) => photoOf(id));
   vi.mocked(api).mockReset();
   vi.mocked(api).mockImplementation(async (path: string, options: { method?: string; body?: unknown } = {}) => {
     const method = options.method ?? 'GET';
@@ -193,6 +200,33 @@ describe('Admin → Users · one row an account', { timeout: 60_000 }, () => {
     expect(rowOf('gone@example.test')?.className).toBe('admin-users-off');
   });
 
+  it('draws the photo of an account that has one, by its version, and the initial of one that has none', async () => {
+    users[1].avatarUpdatedAt = '2026-10-16T08:30:00.000Z';
+    await open();
+    await vi.waitFor(() => expect(avatarOf('dev@example.test')?.querySelector('img')?.getAttribute('src')).toBe(photoOf('U2')));
+    expect(avatarOf('dev@example.test')?.textContent).toBe('');
+    expect(avatarOf('admin@example.test')?.querySelector('img')).toBeNull();
+    expect(avatarOf('admin@example.test')?.textContent).toBe('A');
+    expect(avatarOf('ops@example.test')?.textContent).toBe('O');
+    // Only an account with a photo has one fetched.
+    expect(vi.mocked(fetchUserAvatarDataUrl).mock.calls).toEqual([['U2']]);
+
+    // The list read again with the photo as it was: it is not fetched again.
+    await fromMenu('gone@example.test', DELETE_USER);
+    await click(button(confirmDialog()?.querySelector('.orbit-overlay-footer'), DELETE_USER), 'Delete in the dialog');
+    await vi.waitFor(() => expect(emails()).not.toContain('gone@example.test'));
+    expect(vi.mocked(fetchUserAvatarDataUrl).mock.calls).toEqual([['U2']]);
+
+    // A new photo is a new version: fetched, and drawn in the old one's place.
+    const before = photoOf('U2');
+    users[1].avatarUpdatedAt = '2026-10-17T09:00:00.000Z';
+    await fromMenu('ops@example.test', DELETE_USER);
+    await click(button(confirmDialog()?.querySelector('.orbit-overlay-footer'), DELETE_USER), 'Delete in the dialog');
+    await vi.waitFor(() => expect(avatarOf('dev@example.test')?.querySelector('img')?.getAttribute('src')).toBe(photoOf('U2')));
+    expect(photoOf('U2')).not.toBe(before);
+    expect(vi.mocked(fetchUserAvatarDataUrl).mock.calls).toEqual([['U2'], ['U2']]);
+  });
+
   it('searches names and emails as they are typed, and says when nothing matches', async () => {
     await open();
     const search = container!.querySelector<HTMLInputElement>('input[aria-label="Search users"]');
@@ -217,11 +251,11 @@ describe('Admin → Users · one row an account', { timeout: 60_000 }, () => {
       expect(button(rowOf(email), VIEW_AS), email).toBeUndefined();
       expect(button(rowOf(email), ENABLE_USER), email).toBeUndefined();
     }
-    expect(await menuOf('dev@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', 'Unlink Google', 'Make admin', DISABLE_USER, DELETE_USER]);
-    expect(await menuOf('gone@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', 'Make admin', DELETE_USER]);
-    expect(await menuOf('ops@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', 'Make member', DISABLE_USER, DELETE_USER]);
+    expect(await menuOf('dev@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', UPDATE_WIKI_DOCS, 'Unlink Google', 'Make admin', DISABLE_USER, DELETE_USER]);
+    expect(await menuOf('gone@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', UPDATE_WIKI_DOCS, 'Make admin', DELETE_USER]);
+    expect(await menuOf('ops@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', UPDATE_WIKI_DOCS, 'Make member', DISABLE_USER, DELETE_USER]);
     // Your own account cannot be disabled or deleted, so its menu does not offer either.
-    expect(await menuOf('admin@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', 'Make member']);
+    expect(await menuOf('admin@example.test')).toEqual([RESET_PASSWORD, 'Access tokens', UPDATE_WIKI_DOCS, 'Make member']);
   });
 
   it('resets a password once asked, then shows the one-time password', async () => {

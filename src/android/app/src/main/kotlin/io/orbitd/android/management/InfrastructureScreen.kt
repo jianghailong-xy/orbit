@@ -21,6 +21,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
@@ -309,8 +310,9 @@ private fun PoolsSection(memberPools: List<Pool>, ownPools: List<Pool>, now: Lon
 }
 
 /** The account's own keys, each vendor's together, each with the model a session on it starts on and the engines it runs on — and
- * Disabled for one that is switched off. A DeepSeek key's row ends with its account's balance, and opens the key's page. Keys are
- * added and changed on the web. */
+ * Disabled for one that is switched off. A DeepSeek key's row ends with its account's balance, and opens the key's page; so does a
+ * Cursor key's, which says Rejected there once Cursor refused it (iOS 4 ①②) and starts a session on Auto. Keys are added and changed
+ * on the web. */
 @Composable
 private fun KeysSection(model: InfrastructureModel, page: (String) -> Unit) {
     FormSection(Infrastructure.API_KEYS, footer = Infrastructure.API_KEYS_DETAIL + " " + DeepSeekBalance.EDIT_ON_WEB) {
@@ -324,11 +326,17 @@ private fun KeysSection(model: InfrastructureModel, page: (String) -> Unit) {
         KeyEngines.byVendor(model.keys).forEachIndexed { index, key ->
             if (index > 0) HorizontalDivider()
             val deepSeek = DeepSeekBalance.key(key, model.keys)?.str("id")
-            Row(Modifier.fillMaxWidth().then(if (deepSeek != null) Modifier.clickable(role = Role.Button) { page("key:$deepSeek") } else Modifier)
-                .padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            val cursor = key.str("id")?.takeIf { it.isNotEmpty() && CursorCopy.isKey(key) }
+            val record = deepSeek?.let { "key:$it" } ?: cursor?.let { "cursor-key:$it" }
+            Row(Modifier.fillMaxWidth().then(if (record != null) Modifier.clickable(role = Role.Button) { page(record) } else Modifier)
+                .padding(vertical = 8.dp).testTag("api-key:${key.text("slug")}"), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(Modifier.weight(1f)) {
                     Text(key.str("label") ?: key.text("slug"), maxLines = 1)
-                    Infrastructure.defaultModel(key)?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
+                    // A Cursor key has no model list of its own: its sessions start on Cursor CLI's Auto.
+                    (if (cursor != null) CursorRuntime.AUTO else Infrastructure.defaultModel(key))?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
+                    }
                     // Every engine it runs on: one key, under each engine that can spend it.
                     KeyEngines.line(key)?.let { Text(it, Modifier.testTag("key-engines"), style = MaterialTheme.typography.bodySmall, color = Ink.muted) }
                 }
@@ -336,7 +344,8 @@ private fun KeysSection(model: InfrastructureModel, page: (String) -> Unit) {
                 else if (deepSeek != null) DeepSeekBalance.rowValue(DeepSeekBalance.state(model.balances[deepSeek]))?.let {
                     Text(it.label, color = poolTone(it.tone), style = MaterialTheme.typography.bodySmall)
                 }
-                if (deepSeek != null) Text("›", Modifier.clearAndSetSemantics { }, color = Ink.muted)
+                else if (cursor != null) CursorCopy.rowValue(key)?.let { Text(it.label, color = poolTone(it.tone), style = MaterialTheme.typography.bodySmall) }
+                if (record != null) Text("›", Modifier.clearAndSetSemantics { }, color = Ink.muted)
             }
         }
     }

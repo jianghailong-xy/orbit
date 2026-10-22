@@ -1,7 +1,10 @@
 /**
  * `orbit wiki import`'s server half — the `note` source and the import's proposals — over real HTTP
  * and against a real PostgreSQL (criterion 1 of the wiki's phase 2; contracts/wiki.contract.json
- * `import`, migration 0316).
+ * `import`, migration 0316). The runner door registers each file as a note and makes the server's
+ * import job of them; what that job proposes goes through the one write entry point as the session that
+ * ran the import, origin `import` (wiki-worker/wiki-import-job.ts) — which is how the proposals below
+ * are made, with no model in between.
  *
  * The five things the criterion's verification names are five cases here, each read back from the
  * database and, where it matters, from the push a session would be handed:
@@ -12,13 +15,14 @@
  *      note already there, and no second row is made;
  *   3. a note is cited by its owner and by nobody else;
  *   4. what an import proposes takes effect as the space's review mode says: all of it waits in Manual,
- *      Tiered applies it Unreviewed and draws its spot check, Automatic holds it for a verification that
- *      reads the note's own text — and the floors hold in every mode;
+ *      Tiered applies it Unreviewed and draws its spot check, Automatic holds it for the server's
+ *      verification, which reads the note's own text — and the floors hold in every mode;
  *   5. the caps a batch is held to: thirty ops a changeset, five that wait for review a request, fifteen
  *      a session, thirty a space.
  *
  * Around them, the door: a session the runner hosts is required, a session that judges work is refused,
- * another owner's space is a 404, and a note is held to its limits.
+ * another owner's space is a 404, a note is held to its limits, and the text the server reads is handed
+ * back to no session.
  *
  *     bash scripts/run-pg-spec.sh src/apiserver/src/wiki/wiki-import.pg.spec.ts
  *
@@ -31,7 +35,7 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { after, test } from 'node:test';
 
-import { type INestApplication, Module, ValidationPipe } from '@nestjs/common';
+import { HttpException, type INestApplication, Module, ValidationPipe } from '@nestjs/common';
 import { NestFactory, Reflector } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import type { Prisma, PrismaClient } from '@prisma/client';
@@ -51,7 +55,8 @@ import { WikiController } from './wiki.controller';
 import { wikiImportPrincipal } from './wiki-import';
 import { appendWikiContext } from './wiki-push';
 import { WikiRetrieval } from './wiki-retrieval';
-import { isSpotCheckDraw, WikiService } from './wiki.service';
+import { isSpotCheckDraw, submissionStatus, WikiService } from './wiki.service';
+import { wikiVerifyPrincipal } from '../wiki-worker/wiki-verify-job';
 
 const URL = process.env.COORDINATOR_PG_URL;
 const skip = !URL;
@@ -275,6 +280,14 @@ interface Importer {
   spaceId: string;
   session: string;
   as: Caller;
+  /** Who its proposals are recorded as. */
+  by: Proposer;
+}
+
+/** Who an import's proposals are recorded as: the account, and the session that ran `orbit wiki import`. */
+interface Proposer {
+  ownerId: string;
+  sessionId: string;
 }
 
 async function importer(h: Harness, name: string, mode: Mode, env?: Record<string, string>): Promise<Importer> {
@@ -283,31 +296,52 @@ async function importer(h: Harness, name: string, mode: Mode, env?: Record<strin
   const workspaceId = await workspace(h, owner.id, env);
   const spaceId = await modeSpace(h, owner, mode, workspaceId);
   const importing = await session(h, owner.id, { workspaceId, runnerId: machine.id });
-  return { owner, machine, workspaceId, spaceId, session: importing, as: { runner: machine.token, session: importing } };
+  return {
+    owner, machine, workspaceId, spaceId, session: importing,
+    as: { runner: machine.token, session: importing },
+    by: { ownerId: owner.id, sessionId: importing },
+  };
 }
 
+/** One file registered through the door, as the command registers it: the server reads the note, so it says so. */
 async function registerNote(h: Harness, who: Caller, spaceId: string, path: string, text: string): Promise<Answer> {
-  return call(h, who, 'POST', `/runner/wiki/spaces/${spaceId}/notes`, { path, text });
+  return call(h, who, 'POST', `/runner/wiki/spaces/${spaceId}/notes`, { path, text, readBy: 'server' });
 }
 
-async function note(h: Harness, who: Importer, path: string, text: string): Promise<{ id: string; text: string; created: boolean }> {
+async function note(h: Harness, who: Importer, path: string, text: string): Promise<{ id: string; created: boolean }> {
   const answer = await registerNote(h, who.as, who.spaceId, path, text);
   expectStatus(answer, 200, `the file ${path} is registered as a note`);
   return answer.body;
 }
 
+/** The note as it is stored: the text the server's import job hands its model. */
+async function storedNote(h: Harness, noteId: string) {
+  return h.prisma.wikiNote.findFirstOrThrow({ where: { id: toUuid(noteId) } });
+}
+
+/**
+ * What the server's import job proposes (wiki-worker/wiki-import-job.ts): the ops through the one write entry
+ * point as the session that ran the import, origin `import` — answered with the status a door serves that
+ * answer with (`submissionStatus`), or a refusal of the whole request with its own.
+ */
 async function propose(
   h: Harness,
-  who: Caller,
+  who: Proposer,
   spaceId: string,
   ops: unknown[],
   extra: Record<string, unknown> = {},
 ): Promise<Answer> {
-  return call(h, who, 'POST', `/runner/wiki/spaces/${spaceId}/imports`, {
-    rationale: 'orbit wiki import: what the local model found in the file',
-    ops,
-    ...extra,
-  });
+  try {
+    const body = await h.service.submitChangeset(wikiImportPrincipal(who.ownerId, who.sessionId), toUuid(spaceId), {
+      rationale: 'orbit wiki import: what the System model found in the file',
+      ops,
+      ...extra,
+    });
+    return { status: submissionStatus(body), body };
+  } catch (error) {
+    if (error instanceof HttpException) return { status: error.getStatus(), body: error.getResponse() };
+    throw error;
+  }
 }
 
 /** A valid draft of each kind, retitled per use. */
@@ -466,15 +500,17 @@ test('import · a note keeps its text redacted, and nothing stored holds a seede
     const answer = registered.body;
     assert.equal(answer.created, true);
     assert.equal(answer.redacted, true, 'the answer says something was taken out');
-    assert.match(answer.text, /\[redacted\]/u);
-    assert.equal(answer.contentSha256, sha256(answer.text), 'the hash is the stored text\'s');
+    assert.equal('text' in answer, false, 'the text the server reads is handed back to no session');
+    const kept = await storedNote(h, answer.id);
+    assert.match(kept.text, /\[redacted\]/u);
+    assert.equal(answer.contentSha256, sha256(kept.text), 'the hash is the stored text\'s');
     assert.notEqual(answer.contentSha256, sha256(raw), 'and never the hash of the text as it was sent');
     // The text around each secret is still there to be read and quoted.
-    assert.match(answer.text, /POSTGRES_PASSWORD=\[redacted\]/u);
-    assert.match(answer.text, /Log in to the database with DB_PASS set to \[redacted\] and nothing else\./u);
+    assert.match(kept.text, /POSTGRES_PASSWORD=\[redacted\]/u);
+    assert.match(kept.text, /Log in to the database with DB_PASS set to \[redacted\] and nothing else\./u);
 
-    // An entry quoting the redacted text around a secret, as the model that read it would.
-    const proposed = await propose(h, who.as, who.spaceId, [
+    // An entry quoting the redacted text around a secret, as the server's model, which reads the stored text, would.
+    const proposed = await propose(h, who.by, who.spaceId, [
       addFrom(answer.id, 'pitfall', 'Postgres needs its password at start', 'docker run -e POSTGRES_PASSWORD=[redacted] postgres:16'),
       addFrom(answer.id, 'convention', 'Database logins read DB_PASS alone', 'with DB_PASS set to [redacted] and nothing else'),
     ]);
@@ -492,7 +528,7 @@ test('import · a note keeps its text redacted, and nothing stored holds a seede
     for (const seed of SEEDS) {
       for (const secret of [seed.secret].flat()) {
         assert.equal(survivingPiece(stored, secret), undefined, `a seeded secret leaked into what is stored: ${secret}`);
-        assert.equal(survivingPiece(answer.text, secret), undefined, `a seeded secret leaked into the answer: ${secret}`);
+        assert.equal(survivingPiece(JSON.stringify(answer), secret), undefined, `a seeded secret leaked into the answer: ${secret}`);
       }
     }
     // A path is redacted the same way.
@@ -524,7 +560,7 @@ test('import · one content is one note: importing again makes no new source', {
     assert.equal(rows[0].path, 'CLAUDE.md', 'the path is the one it was first read from');
 
     // Entries proposed from it, then the whole import run again: still one note.
-    const proposed = await propose(h, who.as, who.spaceId, [addFrom(first.id, 'convention', 'Every pg spec runs through the script', 'a skip is red')]);
+    const proposed = await propose(h, who.by, who.spaceId, [addFrom(first.id, 'convention', 'Every pg spec runs through the script', 'a skip is red')]);
     expectStatus(proposed, 200, 'an entry citing the note is recorded');
     const rerun = await note(h, who, 'CLAUDE.md', text);
     assert.equal(rerun.created, false);
@@ -548,7 +584,7 @@ test('import · a note is cited by its owner and by nobody else', { skip, concur
     const theirs = await importer(h, 'note-stranger', 'manual');
     const kept = await note(h, mine, 'memory/release.md', 'release.sh next tags at once: it is not a dry run.');
 
-    const cited = await propose(h, theirs.as, theirs.spaceId, [addFrom(kept.id, 'pitfall', 'release.sh next tags at once')]);
+    const cited = await propose(h, theirs.by, theirs.spaceId, [addFrom(kept.id, 'pitfall', 'release.sh next tags at once')]);
     expectStatus(cited, 422, "another owner's import cannot cite the note");
     assert.equal((cited.body.ops as Outcome[])[0].reasons?.[0].code, 'WIKI_SOURCE_UNRESOLVED');
     const agent = await call(h, theirs.as, 'POST', '/runner/wiki/changesets', {
@@ -561,13 +597,13 @@ test('import · a note is cited by its owner and by nobody else', { skip, concur
 
     const intoMine = await registerNote(h, theirs.as, mine.spaceId, 'memory/x.md', 'A note for somebody else.');
     expectStatus(intoMine, 404, "another owner's space is not there to register into");
-    const proposeIntoMine = await propose(h, theirs.as, mine.spaceId, [addFrom(kept.id, 'pitfall', 'Into a space not mine')]);
+    const proposeIntoMine = await propose(h, theirs.by, mine.spaceId, [addFrom(kept.id, 'pitfall', 'Into a space not mine')]);
     expectStatus(proposeIntoMine, 404, "another owner's space is not there to propose into");
     assert.equal(await h.prisma.wikiChangeset.count({ where: { ownerId: theirs.owner.id } }), 0);
     assert.equal(await h.prisma.wikiNote.count({ where: { ownerId: theirs.owner.id } }), 0);
 
     // The owner cites it — with a quote from its text, and with none.
-    const own = await propose(h, mine.as, mine.spaceId, [
+    const own = await propose(h, mine.by, mine.spaceId, [
       addFrom(kept.id, 'pitfall', 'release.sh next tags at once', 'it is not a dry run'),
       addFrom(kept.id, 'concept', 'What release.sh next does'),
     ]);
@@ -583,23 +619,23 @@ test('import · a note is cited by its owner and by nobody else', { skip, concur
   await t.test('a quote is checked against the note, and a ref that names no note resolves to nothing', async () => {
     const who = await importer(h, 'note-quote', 'manual');
     const kept = await note(h, who, 'memory/quotes.md', 'The   overlay    must stay\nuntil the acceptance run is over.');
-    const whitespace = await propose(h, who.as, who.spaceId, [addFrom(kept.id, 'convention', 'Keep the overlay', 'The overlay must stay until the acceptance run')]);
+    const whitespace = await propose(h, who.by, who.spaceId, [addFrom(kept.id, 'convention', 'Keep the overlay', 'The overlay must stay until the acceptance run')]);
     expectStatus(whitespace, 200, 'a quote the model wrapped differently is still the note\'s');
-    const wrong = await propose(h, who.as, who.spaceId, [addFrom(kept.id, 'convention', 'Remove the overlay', 'remove the overlay at once')]);
+    const wrong = await propose(h, who.by, who.spaceId, [addFrom(kept.id, 'convention', 'Remove the overlay', 'remove the overlay at once')]);
     expectStatus(wrong, 422, 'a quote the note does not hold is refused');
     assert.equal((wrong.body.ops as Outcome[])[0].reasons?.[0].code, 'WIKI_QUOTE_NOT_FOUND');
     for (const ref of ['n1', randomUUID()]) {
-      const none = await propose(h, who.as, who.spaceId, [addFrom(ref, 'concept', `A note that is not there ${ref}`)]);
+      const none = await propose(h, who.by, who.spaceId, [addFrom(ref, 'concept', `A note that is not there ${ref}`)]);
       expectStatus(none, 422, `a ref that names no note (${ref})`);
       assert.equal((none.body.ops as Outcome[])[0].reasons?.[0].code, 'WIKI_SOURCE_UNRESOLVED');
     }
     // A ref that can be no note's id — the file's path, which the import knows as well — is refused by its
-    // path on the import door, its dry run alike, and writes nothing (contract `sourceInput.rowIdKinds`).
+    // path, its dry run alike, and writes nothing (contract `sourceInput.rowIdKinds`).
     const changesets = () => h.prisma.wikiChangeset.count({ where: { ownerId: who.owner.id } });
     const before = await changesets();
     const byPath = [addFrom('memory/quotes.md', 'concept', 'A note cited by its path')];
-    const dryByPath = await propose(h, who.as, who.spaceId, byPath, { dryRun: true });
-    const byPathAnswer = await propose(h, who.as, who.spaceId, byPath);
+    const dryByPath = await propose(h, who.by, who.spaceId, byPath, { dryRun: true });
+    const byPathAnswer = await propose(h, who.by, who.spaceId, byPath);
     expectStatus(byPathAnswer, 400, "a note cited by its file's path");
     expectStatus(dryByPath, 400, "a note cited by its file's path, on the dry run");
     assert.deepEqual(dryByPath.body.ops, byPathAnswer.body.ops, 'the dry run refuses what the request does');
@@ -619,7 +655,7 @@ test('import · what an import proposes takes effect as the space\'s review mode
   await t.test('Manual: every imported entry waits for review, recorded as the import of the session that ran it', async () => {
     const who = await importer(h, 'manual', 'manual');
     const kept = await note(h, who, 'CLAUDE.md', 'Conventions for agents working in this repository.');
-    const proposed = await propose(h, who.as, who.spaceId, [
+    const proposed = await propose(h, who.by, who.spaceId, [
       addFrom(kept.id, 'convention', 'A convention from CLAUDE.md'),
       addFrom(kept.id, 'pitfall', 'A pitfall from CLAUDE.md'),
       addFrom(kept.id, 'decision', 'A decision from CLAUDE.md'),
@@ -647,7 +683,7 @@ test('import · what an import proposes takes effect as the space\'s review mode
       addFrom(kept.id, 'decision', 'Code stays in English'),
       ...concepts(kept.id, 8, 'Tiered'),
     ];
-    const proposed = await propose(h, who.as, who.spaceId, ops);
+    const proposed = await propose(h, who.by, who.spaceId, ops);
     expectStatus(proposed, 200, 'the import is recorded');
     const outcomes = proposed.body.ops as Outcome[];
     assert.ok(outcomes.every((op) => op.status === 'applied'), JSON.stringify(outcomes));
@@ -669,20 +705,26 @@ test('import · what an import proposes takes effect as the space\'s review mode
     const who = await importer(h, 'automatic', 'automatic');
     const text = 'Wait for GET /health to answer 200 before calling the local model: the tunnel drops.';
     const kept = await note(h, who, 'memory/vllm-health.md', text);
-    const proposed = await propose(h, who.as, who.spaceId, [
+    const proposed = await propose(h, who.by, who.spaceId, [
       addFrom(kept.id, 'pitfall', 'The local model tunnel drops', 'the tunnel drops'),
       addFrom(kept.id, 'convention', 'Check the local model health first'),
     ]);
     expectStatus(proposed, 200, 'the import is recorded');
+    assert.equal(proposed.body.servedBy, 'server', 'the server verifies what the import left waiting');
     const outcomes = proposed.body.ops as Outcome[];
     assert.deepEqual(outcomes.map((op) => [op.status, op.waitsFor]), [['pending', 'verification'], ['pending', 'verification']]);
     for (const op of outcomes) assert.equal((await opRow(h, op.opId!)).decision, 'verifying');
     assert.equal((await pushed(h, who)).size, 0, 'nothing is live before its verdict');
 
-    // What `orbit wiki verify`, run in the session that imported, is handed: the note's own text.
-    const list = await call(h, who.as, 'GET', `/runner/wiki/spaces/${who.spaceId}/verifications`);
-    expectStatus(list, 200, 'the importing session lists what waits for its verdict');
-    const items = list.body.items as Array<{ opId: string; sources: Array<{ kind: string; text: string | null; quote: string | null }> }>;
+    // The verify job queued for the session that imported, and what it reads: the note's own text.
+    const { rows: queued } = await h.sql.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM "wiki_job" WHERE "owner_id" = $1 AND "kind" = 'verify' AND "input" ->> 'sessionId' = $2`,
+      [who.owner.id, who.session],
+    );
+    assert.equal(Number(queued[0].n), 1, 'one verify job, for the session that imported');
+    const verifier = wikiVerifyPrincipal(who.owner.id, who.session);
+    const list = await h.service.listVerifications(verifier, toUuid(who.spaceId));
+    const items = list.items as unknown as Array<{ opId: string; sources: Array<{ kind: string; text: string | null; quote: string | null }> }>;
     assert.equal(items.length, 2);
     for (const item of items) {
       assert.equal(item.sources[0].kind, 'note');
@@ -690,7 +732,7 @@ test('import · what an import proposes takes effect as the space\'s review mode
     }
     assert.equal(items[0].sources[0].quote, 'the tunnel drops');
 
-    const verified = await h.service.recordVerifications(wikiImportPrincipal(who.owner.id, who.session), toUuid(who.spaceId), [
+    const verified = await h.service.recordVerifications(verifier, toUuid(who.spaceId), [
       { opId: items[0].opId, verdict: 'supported', reason: 'The note says the tunnel drops.', model: 'qwen3.8-27b-fp8' },
       { opId: items[1].opId, verdict: 'partial', reason: 'The note says to wait, not that it is a rule.', model: 'qwen3.8-27b-fp8' },
     ]);
@@ -704,13 +746,13 @@ test('import · what an import proposes takes effect as the space\'s review mode
   await t.test('the floors: a principle is refused, and an import in a session that read the web waits', async () => {
     const who = await importer(h, 'floors', 'tiered');
     const kept = await note(h, who, 'memory/values.md', 'Delete means forget: nothing is kept for later.');
-    const principle = await propose(h, who.as, who.spaceId, [addFrom(kept.id, 'principle', 'Delete means forget')]);
+    const principle = await propose(h, who.by, who.spaceId, [addFrom(kept.id, 'principle', 'Delete means forget')]);
     expectStatus(principle, 403, 'a principle is the owner\'s alone, whoever imports it');
     assert.equal((principle.body.ops as Outcome[])[0].reasons?.[0].code, 'WIKI_KIND_OWNER_ONLY');
 
     const tainted = await session(h, who.owner.id, { workspaceId: who.workspaceId, runnerId: who.machine.id });
     await toolCall(h, tainted, 'WebFetch', 'a page from the web');
-    const fromTheWeb = await propose(h, { runner: who.machine.token, session: tainted }, who.spaceId, [addFrom(kept.id, 'convention', 'Nothing is kept for later')]);
+    const fromTheWeb = await propose(h, { ownerId: who.owner.id, sessionId: tainted }, who.spaceId, [addFrom(kept.id, 'convention', 'Nothing is kept for later')]);
     expectStatus(fromTheWeb, 200, 'the op is recorded');
     const op = (fromTheWeb.body.ops as Outcome[])[0];
     assert.equal(op.status, 'pending', 'a tainted op waits for the owner even in Tiered');
@@ -721,7 +763,7 @@ test('import · what an import proposes takes effect as the space\'s review mode
     const who = await importer(h, 'breaker', 'tiered');
     await activeEntries(h, who.owner.id, toUuid(who.spaceId), 100);
     const kept = await note(h, who, 'memory/many.md', 'Many small facts about the repository.');
-    const proposed = await propose(h, who.as, who.spaceId, concepts(kept.id, 12, 'Breaker'));
+    const proposed = await propose(h, who.by, who.spaceId, concepts(kept.id, 12, 'Breaker'));
     expectStatus(proposed, 200, 'the import is recorded up to the breaker');
     const outcomes = proposed.body.ops as Outcome[];
     assert.equal(outcomes.filter((op) => op.status === 'applied').length, 10, 'ten percent of a hundred');
@@ -737,7 +779,7 @@ test('import · a batch is capped, and what needs review arrives a batch at a ti
   await t.test(`a changeset holds at most ${WIKI_LIMITS.opsPerChangeset} ops`, async () => {
     const who = await importer(h, 'thirty', 'tiered');
     const kept = await note(h, who, 'memory/thirty.md', 'Thirty-one facts, one too many for a run.');
-    const proposed = await propose(h, who.as, who.spaceId, concepts(kept.id, WIKI_LIMITS.opsPerChangeset + 1, 'Cap'));
+    const proposed = await propose(h, who.by, who.spaceId, concepts(kept.id, WIKI_LIMITS.opsPerChangeset + 1, 'Cap'));
     expectStatus(proposed, 200, 'the first thirty are recorded');
     const outcomes = proposed.body.ops as Outcome[];
     assert.equal(outcomes.filter((op) => op.status === 'applied').length, WIKI_LIMITS.opsPerChangeset);
@@ -749,28 +791,28 @@ test('import · a batch is capped, and what needs review arrives a batch at a ti
     const who = await importer(h, 'batches', 'manual');
     const kept = await note(h, who, 'memory/batches.md', 'Facts the owner has to review.');
 
-    const dry = await propose(h, who.as, who.spaceId, concepts(kept.id, 6, 'Dry'), { dryRun: true });
+    const dry = await propose(h, who.by, who.spaceId, concepts(kept.id, 6, 'Dry'), { dryRun: true });
     expectStatus(dry, 200, 'a dry run answers');
     assert.deepEqual((dry.body.ops as Outcome[]).map((op) => op.status), ['pending', 'pending', 'pending', 'pending', 'pending', 'refused']);
     assert.equal((dry.body.ops as Outcome[])[5].reasons?.[0].code, 'WIKI_QUOTA');
     assert.equal(await h.prisma.wikiChangeset.count({ where: { ownerId: who.owner.id } }), 0, 'a dry run records nothing');
 
-    const first = await propose(h, who.as, who.spaceId, concepts(kept.id, 6, 'First'));
+    const first = await propose(h, who.by, who.spaceId, concepts(kept.id, 6, 'First'));
     expectStatus(first, 200, 'five are recorded');
     assert.deepEqual((first.body.ops as Outcome[]).map((op) => op.status), ['pending', 'pending', 'pending', 'pending', 'pending', 'refused']);
     for (const batch of ['Second', 'Third']) {
-      expectStatus(await propose(h, who.as, who.spaceId, concepts(kept.id, 5, batch)), 200, `the ${batch.toLowerCase()} batch`);
+      expectStatus(await propose(h, who.by, who.spaceId, concepts(kept.id, 5, batch)), 200, `the ${batch.toLowerCase()} batch`);
     }
-    const fourth = await propose(h, who.as, who.spaceId, concepts(kept.id, 1, 'Fourth'));
+    const fourth = await propose(h, who.by, who.spaceId, concepts(kept.id, 1, 'Fourth'));
     expectStatus(fourth, 429, 'a session has put fifteen in front of the owner');
     assert.equal((fourth.body.ops as Outcome[])[0].reasons?.[0].code, 'WIKI_QUOTA');
 
     // Another session of the same import fills the space's queue to thirty, and no further.
     const next = await session(h, who.owner.id, { workspaceId: who.workspaceId, runnerId: who.machine.id });
-    const as = { runner: who.machine.token, session: next };
+    const as = { ownerId: who.owner.id, sessionId: next };
     for (const batch of ['Fifth', 'Sixth', 'Seventh']) expectStatus(await propose(h, as, who.spaceId, concepts(kept.id, 5, batch)), 200, batch);
     const third = await session(h, who.owner.id, { workspaceId: who.workspaceId, runnerId: who.machine.id });
-    const full = await propose(h, { runner: who.machine.token, session: third }, who.spaceId, concepts(kept.id, 2, 'Overflow'));
+    const full = await propose(h, { ownerId: who.owner.id, sessionId: third }, who.spaceId, concepts(kept.id, 2, 'Overflow'));
     expectStatus(full, 429, 'the space holds thirty waiting for review');
     assert.deepEqual((full.body.ops as Outcome[]).map((op) => op.reasons?.[0].code), ['WIKI_REVIEW_QUEUE_FULL', 'WIKI_REVIEW_QUEUE_FULL']);
     assert.equal(await h.prisma.wikiChangesetOp.count({ where: { ownerId: who.owner.id, decision: 'pending' } }), WIKI_LIMITS.pendingOpsPerSpace);
@@ -781,8 +823,8 @@ test('import · a batch is capped, and what needs review arrives a batch at a ti
     const kept = await note(h, who, 'memory/replay.md', 'A batch sent again after a lost answer.');
     const ops = concepts(kept.id, 3, 'Replay');
     const key = `wiki-import:${randomUUID()}`;
-    const once = await propose(h, who.as, who.spaceId, ops, { idempotencyKey: key });
-    const twice = await propose(h, who.as, who.spaceId, ops, { idempotencyKey: key });
+    const once = await propose(h, who.by, who.spaceId, ops, { idempotencyKey: key });
+    const twice = await propose(h, who.by, who.spaceId, ops, { idempotencyKey: key });
     expectStatus(twice, 200, 'the replay answers');
     assert.equal(twice.body.replayed, true);
     assert.equal(twice.body.changesetId, once.body.changesetId);
@@ -798,9 +840,10 @@ test('import · the door: a session the runner hosts, not one that judges work, 
   await t.test('a headless call, a session another machine hosts and a session that judges work are refused', async () => {
     const who = await importer(h, 'door', 'manual');
     const kept = await note(h, who, 'memory/door.md', 'A note for the door checks.');
+    const jobsOf = () => h.prisma.wikiJob.count({ where: { ownerId: who.owner.id, kind: 'import' } });
     for (const [route, body] of [
-      [`/runner/wiki/spaces/${who.spaceId}/notes`, { path: 'x.md', text: 'x' }],
-      [`/runner/wiki/spaces/${who.spaceId}/imports`, { rationale: 'r', ops: [addFrom(kept.id, 'concept', 'Headless')] }],
+      [`/runner/wiki/spaces/${who.spaceId}/notes`, { path: 'x.md', text: 'x', readBy: 'server' }],
+      [`/runner/wiki/spaces/${who.spaceId}/import-jobs`, { id: randomUUID(), maxOps: 5, notes: [{ noteId: kept.id, file: 'memory/door.md', date: '2026-10-19' }] }],
     ] as const) {
       expectStatus(await call(h, { runner: who.machine.token }, 'POST', route, body), 400, `${route} without a session`);
       const elsewhere = await runner(h, who.owner.id);
@@ -815,7 +858,8 @@ test('import · the door: a session the runner hosts, not one that judges work, 
       expectStatus(excluded, 403, `${route} for a session that forems work`);
       assert.equal(excluded.body.code, 'WIKI_SESSION_EXCLUDED');
     }
-    assert.equal(await h.prisma.wikiChangeset.count({ where: { ownerId: who.owner.id } }), 0);
+    assert.equal(await h.prisma.wikiNote.count({ where: { ownerId: who.owner.id } }), 1, 'no note but the first was registered');
+    assert.equal(await jobsOf(), 0, 'and no import job was made');
   });
 
   await t.test('a session with no workspace imports into the space it names', async () => {
@@ -826,10 +870,15 @@ test('import · the door: a session the runner hosts, not one that judges work, 
     const as = { runner: machine.token, session: loose };
     const registered = await registerNote(h, as, spaceId, 'AGENTS.md', 'Agents read this before they start.');
     expectStatus(registered, 200, 'a note into the named space');
-    const proposed = await propose(h, as, spaceId, [addFrom(registered.body.id, 'concept', 'What agents read first')]);
-    expectStatus(proposed, 200, 'an import into the named space');
-    const changeset = await h.prisma.wikiChangeset.findFirstOrThrow({ where: { id: toUuid(proposed.body.changesetId) } });
-    assert.equal(changeset.spaceId, toUuid(spaceId));
+    assert.equal((await storedNote(h, registered.body.id)).spaceId, toUuid(spaceId));
+    // The import job is the named space's: what it proposes, it proposes there (wiki-worker/wiki-import-job.ts).
+    const id = randomUUID();
+    const made = await call(h, as, 'POST', `/runner/wiki/spaces/${spaceId}/import-jobs`, {
+      id, maxOps: 5, notes: [{ noteId: registered.body.id, file: 'AGENTS.md', date: '2026-10-19' }],
+    });
+    expectStatus(made, 200, 'an import job of the named space');
+    const job = await h.prisma.wikiJob.findFirstOrThrow({ where: { id } });
+    assert.deepEqual([job.spaceId, job.kind, (job.input as { sessionId?: string }).sessionId], [toUuid(spaceId), 'import', loose]);
   });
 
   await t.test('a note is held to its limits, and an empty one is not a note', async () => {

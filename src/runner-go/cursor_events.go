@@ -12,7 +12,11 @@ package main
 // it in_progress, and complete it. So a card goes out once its input is whole — at in_progress, and an
 // edit at its completion, the only update that carries the change it made — under the name and input
 // of the Orbit tool it is (cursorToolCall). There is no `failed` status: the outcome is read from
-// rawOutput (cursorToolResult).
+// rawOutput (cursorToolResult) — except a call Orbit refused, which Cursor completes with nothing at all
+// when it is a command or an edit: the permission bridge marks its card first (refuse), and it settles
+// as not run, also when the turn ends before Cursor completes it. A call whose approval card the turn's end
+// withdrew before anybody answered it was answered cancelled and did not run either: the bridge marks it as
+// it withdraws the card (withdraw), and the turn's settlement says so, with how the turn ended.
 //
 // A sub-agent's own updates arrive under the sub-agent's session id, which subagent_spawned binds to
 // the Task card that launched it: they go out stamped with that card's id (parentToolUseId, which the
@@ -55,6 +59,11 @@ type cursorTool struct {
 	// subagent is the kind of sub-agent a Task card launched, once subagent_spawned names it.
 	subagent      string
 	emitted, done bool
+	// refused: Orbit answered the permission request about this call with no allow, so it did not run.
+	refused bool
+	// withdrawn: the turn's end withdrew the approval card of this call's permission request before anybody
+	// answered it, and the request was answered cancelled, so it did not run.
+	withdrawn bool
 }
 
 type cursorTurn struct {
@@ -68,6 +77,8 @@ type cursorTurn struct {
 	plans   int
 	// held is the session's own chunk shaped like Cursor CLI's error sentence, not yet put out.
 	held string
+	// asked holds the cards a permission request was matched to by its subject (permissionAsk).
+	asked map[string]bool
 }
 
 type cursorEventMapper struct {
@@ -89,6 +100,13 @@ type cursorEventMapper struct {
 	onCommands func(names []string)
 	// onTool hears a card of a turn open (its tool_use put out) and close (its result), under the lock.
 	onTool func(turnID, toolID string, open bool)
+	// onSwitchMode hears, under the lock, a card of the kind the model switches Cursor's mode with: the
+	// CLI approves that itself, asking nobody and announcing no mode (§4.2). Its title names the mode only
+	// later ("Switch Mode: unknown" at first). It may not block.
+	onSwitchMode func(turnID, title string)
+	// onMode hears the mode Cursor reports after a session/set_mode (current_mode_update), without the
+	// lock. It may not block.
+	onMode func(modeID string)
 }
 
 func newCursorEventMapper(emitFor emitTurnFn) *cursorEventMapper {
@@ -129,7 +147,7 @@ func (m *cursorEventMapper) begin(turnID string) error {
 	case m.settled[turnID]:
 		return fmt.Errorf("cursor turn %s has already settled", turnID)
 	}
-	m.active = &cursorTurn{id: turnID, tools: map[string]*cursorTool{}, agents: map[string]*cursorStretch{}}
+	m.active = &cursorTurn{id: turnID, tools: map[string]*cursorTool{}, agents: map[string]*cursorStretch{}, asked: map[string]bool{}}
 	return nil
 }
 
@@ -176,6 +194,13 @@ func (m *cursorEventMapper) update(params map[string]interface{}) {
 			report(names)
 		}
 		return
+	case "current_mode_update":
+		report := m.onMode
+		m.mu.Unlock()
+		if mode := firstString(update, "currentModeId"); own && report != nil && mode != "" {
+			report(mode)
+		}
+		return
 	}
 	defer m.mu.Unlock()
 	turn := m.active
@@ -200,9 +225,9 @@ func (m *cursorEventMapper) update(params map[string]interface{}) {
 		// The sub-agent has stopped: what it was saying is all it will say.
 		m.flushAgent(turn, firstString(update, "subagentSessionId"))
 	default:
-		// user_message_chunk is a session/load replay of Orbit's own prompt; a mode change has no
-		// transcript form; config_option_update and usage_update are never sent (§4.1).
-		logUnhandledStreamKind("cursor", kind, "user_message_chunk", "current_mode_update", "config_option_update", "usage_update")
+		// user_message_chunk is a session/load replay of Orbit's own prompt; config_option_update and
+		// usage_update are never sent (§4.1).
+		logUnhandledStreamKind("cursor", kind, "user_message_chunk", "config_option_update", "usage_update")
 	}
 }
 
@@ -302,6 +327,10 @@ func (m *cursorEventMapper) tool(turn *cursorTurn, session string, update map[st
 		tool.title = title
 	}
 	if kind := firstString(update, "kind"); kind != "" {
+		// A sub-agent's own switch is refused by the CLI (§4.2); only the session's agent changes the mode.
+		if kind == "switch_mode" && tool.kind != kind && tool.parent == "" && m.onSwitchMode != nil {
+			m.onSwitchMode(turn.id, firstNonEmpty(firstString(update, "title"), tool.title))
+		}
 		tool.kind = kind
 	}
 	if input := mapValue(update["rawInput"]); input != nil {
@@ -319,9 +348,13 @@ func (m *cursorEventMapper) tool(turn *cursorTurn, session string, update map[st
 			m.emitToolUse(turn, tool)
 		}
 	case "completed", "failed":
-		m.emitToolUse(turn, tool)
-		content, isError := cursorToolResult(tool)
-		m.emitToolResult(turn, tool, content, isError)
+		// A call whose card the turn's end withdrew did not run, whatever Cursor completes it with (it takes the
+		// cancelled answer as a refusal): the turn's settlement closes its card.
+		if !tool.withdrawn {
+			m.emitToolUse(turn, tool)
+			content, isError := cursorToolResult(tool)
+			m.emitToolResult(turn, tool, content, isError)
+		}
 	}
 }
 
@@ -449,8 +482,18 @@ func (m *cursorEventMapper) settle(turnID string, result map[string]interface{},
 		tool := turn.tools[id]
 		if !tool.done {
 			// A cancelled card is never completed (§3.3), and nothing more comes for any once the turn is over.
+			// A call Orbit refused did not run, however the turn ended: Cursor CLI runs nothing before it has the
+			// answer (§5.2), so it settles as its completion would have. Nor did one whose approval card the
+			// turn's end withdrew unanswered: it settles as not run, saying how the turn ended.
+			content, isError := cursorUnfinishedTool(request.Status), true
+			switch {
+			case tool.refused:
+				content, isError = cursorToolResult(tool)
+			case tool.withdrawn:
+				content = cursorWithdrawnTool(request.Status)
+			}
 			m.emitToolUse(turn, tool)
-			m.emitToolResult(turn, tool, cursorUnfinishedTool(request.Status), true)
+			m.emitToolResult(turn, tool, content, isError)
 		}
 		m.retired[id] = true
 	}
@@ -490,6 +533,16 @@ func cursorUnfinishedTool(status string) string {
 		return "Interrupted: the turn was stopped before this tool finished; it may have run in part."
 	}
 	return "Cursor CLI ended the turn before this tool reported a result; it may have run."
+}
+
+// cursorWithdrawnTool is what a call settles with whose approval card its turn's end withdrew before anybody
+// answered it: the request was answered cancelled, which Cursor CLI takes as a refusal, so the call did not
+// run (§5.2; measured, p5c/accept-edits-stop and p5c/accept-edits-disconnect).
+func cursorWithdrawnTool(status string) string {
+	if status == stInterrupted {
+		return "Not run: the turn was stopped before this tool call was approved."
+	}
+	return "Not run: the turn ended before this tool call was approved."
 }
 
 // cursorTurnFailure is how Orbit reports a turn that ended on chunk, when chunk is the error sentence
@@ -612,10 +665,12 @@ func cursorTodos(value interface{}) []interface{} {
 }
 
 // cursorToolResult is a completed card's outcome. Cursor has no failed status (§4.1): a refusal, an
-// error or a non-zero exit code is read from rawOutput.
+// error or a non-zero exit code is read from rawOutput. A command or an edit Orbit refused completes
+// with no rawOutput at all, which would read as a success with nothing to show, so that refusal is Orbit's
+// own (refused); an MCP call Orbit refused says {rejected:true}.
 func cursorToolResult(tool *cursorTool) (string, bool) {
 	out := mapValue(tool.rawOutput)
-	if out["rejected"] == true {
+	if tool.refused || out["rejected"] == true {
 		return "Not run: the tool call was rejected.", true
 	}
 	if failure := out["error"]; failure != nil && failure != false {
@@ -627,6 +682,13 @@ func cursorToolResult(tool *cursorTool) (string, bool) {
 		}
 		wire, _ := json.Marshal(failure)
 		return string(wire), true
+	}
+	if success, ok := out["success"].(bool); ok && len(out) == 1 && firstString(tool.rawInput, "providerIdentifier") != "" {
+		// All Cursor CLI passes on of an MCP call over ACP (§6).
+		if success {
+			return "Done. Cursor CLI does not pass an MCP tool's result on to Orbit.", false
+		}
+		return "The MCP tool call failed. Cursor CLI does not pass on what the tool said.", true
 	}
 	if _, ok := out["exitCode"]; ok {
 		var lines []string
@@ -662,4 +724,151 @@ func cursorToolResult(tool *cursorTool) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// permissionAsk is what a session/request_permission is about, as the running turn's card shows it: the
+// card the request names by its id — a command, an MCP call, a read — or, for a web fetch or search, whose
+// request carries an id of its own (web_fetch_<n>, §5.2), the open card of that kind for the same URL or
+// query that no request has claimed yet. An edit is read from the request, which carries the change (the
+// card has it only once done). A request with no such card is read from the request alone, under an id of
+// this turn's, so that no card of another turn or process can ever answer it. False with no turn running,
+// or when the request names nothing Orbit can show.
+func (m *cursorEventMapper) permissionAsk(toolCall map[string]interface{}) (cursorPermissionAsk, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	turn := m.active
+	if turn == nil || toolCall == nil {
+		return cursorPermissionAsk{}, false
+	}
+	id, kind := firstString(toolCall, "toolCallId"), firstString(toolCall, "kind")
+	card := turn.tools[id]
+	if card == nil && (kind == "fetch" || kind == "search") {
+		subject := cursorWebSubject(toolCall)
+		for i := len(turn.order) - 1; i >= 0 && subject != ""; i-- {
+			tool := turn.tools[turn.order[i]]
+			if tool.kind == kind && !tool.done && !turn.asked[tool.id] &&
+				firstNonEmpty(firstString(tool.rawInput, "url"), firstString(tool.rawInput, "query")) == subject {
+				card = tool
+				break
+			}
+		}
+	}
+	ask := cursorPermissionAsk{TurnID: turn.id}
+	tool := card
+	if card == nil || kind == "edit" {
+		tool = cursorRequestTool(toolCall)
+		if tool == nil {
+			return ask, false
+		}
+	}
+	if card != nil {
+		turn.asked[card.id] = true
+		ask.ToolUseID = card.id
+	} else {
+		ask.ToolUseID = turn.id + "/" + firstNonEmpty(id, fmt.Sprintf("request-%d", len(turn.asked)+1))
+	}
+	switch {
+	case kind == "fetch" || kind == "search":
+		subject := cursorWebSubject(toolCall)
+		if subject == "" {
+			return ask, false
+		}
+		ask.Name, ask.Input = "WebFetch", map[string]interface{}{"url": subject}
+		if kind == "search" {
+			ask.Name, ask.Input = "WebSearch", map[string]interface{}{"query": subject}
+		}
+	case tool.kind == "delete":
+		ask.Name, ask.Input = "Delete", map[string]interface{}{"file_path": firstString(tool.rawInput, "path")}
+	default:
+		ask.Name, ask.Input, _ = cursorToolCall(tool)
+	}
+	return ask, ask.Name != ""
+}
+
+// refuse marks the running turn's card toolID as a call Orbit did not allow, before Orbit's answer goes
+// out: whatever Cursor CLI completes it with, or if the turn ends before it does, it settles as not run
+// (cursorToolResult, settle). No card of that id in that turn, nothing to mark.
+func (m *cursorEventMapper) refuse(turnID, toolID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if turn := m.active; turn != nil && turn.id == turnID {
+		if tool := turn.tools[toolID]; tool != nil {
+			tool.refused = true
+		}
+	}
+}
+
+// withdraw marks the running turn's card toolID as a call whose approval card the turn's end withdrew before
+// anybody answered it, before the turn settles: its request is answered cancelled, so it settles as not run
+// (settle). No card of that id in that turn, nothing to mark.
+func (m *cursorEventMapper) withdraw(turnID, toolID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if turn := m.active; turn != nil && turn.id == turnID {
+		if tool := turn.tools[toolID]; tool != nil {
+			tool.withdrawn = true
+		}
+	}
+}
+
+// cursorRequestTool reads a permission request's own tool call the way formatOperation writes it
+// (6136.index.js@58262): a command as its backquoted title, an edit as its diff, a deletion, a read or an
+// MCP call by its title.
+func cursorRequestTool(toolCall map[string]interface{}) *cursorTool {
+	title := strings.TrimSpace(firstString(toolCall, "title"))
+	content, _ := toolCall["content"].([]interface{})
+	tool := &cursorTool{id: firstString(toolCall, "toolCallId"), kind: firstString(toolCall, "kind"), title: title, content: content}
+	switch tool.kind {
+	case "execute":
+		command := strings.TrimSuffix(strings.TrimPrefix(title, "`"), "`")
+		if command == title || command == "" {
+			return nil
+		}
+		tool.rawInput = map[string]interface{}{"command": strings.ReplaceAll(command, "\\`", "`")}
+	case "edit":
+		for _, block := range content {
+			if path := firstString(mapValue(block), "path"); firstString(mapValue(block), "type") == "diff" && path != "" {
+				tool.rawInput = map[string]interface{}{"path": path}
+			}
+		}
+		if path, ok := strings.CutPrefix(title, "Delete "); ok && tool.rawInput == nil {
+			tool.kind = "delete"
+			tool.rawInput = map[string]interface{}{"path": strings.Trim(path, "`")}
+		}
+		if tool.rawInput == nil {
+			return nil
+		}
+	case "read":
+		path, ok := strings.CutPrefix(title, "Read ")
+		if !ok {
+			return nil
+		}
+		tool.rawInput = map[string]interface{}{"path": strings.Trim(path, "`")}
+	case "fetch", "search":
+		// Named by its subject alone (permissionAsk).
+	default:
+		if title == "" {
+			return nil
+		}
+		var texts []string
+		for _, block := range content {
+			if text := kimiContentText(mapValue(block)["content"]); text != "" {
+				texts = append(texts, text)
+			}
+		}
+		tool.rawInput = map[string]interface{}{"request": strings.Join(texts, "\n")}
+	}
+	return tool
+}
+
+// cursorWebSubject is the URL a web fetch's permission request is about, or the query of a search, from
+// its title ("Fetch https://example.com/", §5.2).
+func cursorWebSubject(toolCall map[string]interface{}) string {
+	title := strings.TrimSpace(firstString(toolCall, "title"))
+	for _, prefix := range []string{"Web Fetch: ", "Web Search: ", "Fetch ", "Search "} {
+		if rest, ok := strings.CutPrefix(title, prefix); ok {
+			return strings.TrimSpace(rest)
+		}
+	}
+	return title
 }

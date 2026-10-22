@@ -46,7 +46,7 @@ func TestSelfUpdateWaitsForAnAcceptanceCommandInFlight(t *testing.T) {
 		return "0.1.186", true
 	}
 	reason, remote := waitForRunLoopStop(context.Background(), nil, "https://control.example", interval,
-		updateWhenNoTurnInFlight(published, pool, interval), nil)
+		updateWhenNoTurnInFlight(published, pool, noOperations, interval), nil)
 	settledBeforeTheUpdate := s.settledTurn("accept-1") != nil
 	stopLoop(errRunnerSelfUpdate)
 
@@ -83,7 +83,7 @@ func TestAnUpdateWaitsForTheTurnInFlightAndNoLonger(t *testing.T) {
 	s := registerPoolSession(t, p, "a", true)
 	check := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) {
 		return "0.1.186", true
-	}, p, time.Minute)
+	}, p, noOperations, time.Minute)
 
 	if remote, ok := check(context.Background(), "https://control.example"); ok || remote != "" {
 		t.Fatalf("check with a turn in flight = %q, %v; want it deferred", remote, ok)
@@ -97,10 +97,38 @@ func TestAnUpdateWaitsForTheTurnInFlightAndNoLonger(t *testing.T) {
 	}
 }
 
+// noOperations is a runner with no heartbeat work running, for a case about turns.
+func noOperations() int { return 0 }
+
+// The heartbeat's work is waited out as a turn is: a landing's checks would otherwise get only the
+// stop's operations budget before being stopped and handed back to be run again (shutdownSequence).
+// The pool stays open meanwhile, and the first check that finds nothing running gets the update.
+func TestAnUpdateWaitsForTheHeartbeatOperationsInFlight(t *testing.T) {
+	p := newSessionPool(2)
+	var ops countedOps
+	ops.Add(1)
+	check := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) {
+		return "0.1.186", true
+	}, p, ops.inFlight, time.Minute)
+
+	if remote, ok := check(context.Background(), "https://control.example"); ok || remote != "" {
+		t.Fatalf("check with a landing in flight = %q, %v; want it deferred", remote, ok)
+	}
+	s := registerPoolSession(t, p, "a", true)
+	if !waitsForNothing(p, s) {
+		t.Fatal("a deferred update closed the pool: sessions could not go on while the landing ran")
+	}
+	parkPoolSession(p, s)
+	ops.Done()
+	if remote, ok := check(context.Background(), "https://control.example"); !ok || remote != "0.1.186" {
+		t.Fatalf("check with nothing in flight = %q, %v; want the update", remote, ok)
+	}
+}
+
 // No release, no closing: an idle runner that checks and finds nothing new goes on taking turns.
 func TestACheckThatFindsNoReleaseLeavesThePoolOpen(t *testing.T) {
 	p := newSessionPool(1)
-	check := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) { return "", false }, p, time.Minute)
+	check := updateWhenNoTurnInFlight(func(context.Context, string) (string, bool) { return "", false }, p, noOperations, time.Minute)
 	if remote, ok := check(context.Background(), "https://control.example"); ok || remote != "" {
 		t.Fatalf("check = %q, %v; want nothing to update to", remote, ok)
 	}
@@ -175,7 +203,7 @@ func TestTheRunLoopOnlyUpdatesThroughTheTurnGate(t *testing.T) {
 	}
 	body := string(src)
 	body = body[strings.Index(body, "func runLoop("):]
-	gated := strings.Count(body, "updateWhenNoTurnInFlight(availableSelfUpdate, pool, selfUpdateCheckInterval)")
+	gated := strings.Count(body, "updateWhenNoTurnInFlight(availableSelfUpdate, pool, operationsInFlight, selfUpdateCheckInterval)")
 	if gated != 1 || strings.Count(body, "availableSelfUpdate") != gated {
 		t.Fatal("runLoop checks for a release without updateWhenNoTurnInFlight: an update can stop the runner mid-turn")
 	}

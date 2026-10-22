@@ -84,6 +84,26 @@ const cases = [
       '    command: node src/apiserver/dist/wiki-worker/main.js\n    volumes:\n      - ./data:/data\n')],
   ['the System model key given to the apiserver', 'are given to the wiki worker and to no other service',
     replace('      PORT: "3000"', '      ORBIT_WIKI_MODEL_API_KEY: "${ORBIT_WIKI_MODEL_API_KEY:-}"\n      PORT: "3000"')],
+  // The Docker channel of 2026-10-17: off unless its profile is on, pinned whole, the only holder of the Docker
+  // socket; and the apiserver's managed runner switch, off by default, with its directory read-only.
+  ['the Docker channel outside its profile', 'the Docker channel is exactly the service the owner allowed',
+    replace('    profiles: [managed-runners-docker]\n', '')],
+  ['the managed runners profile on another service', 'nothing was added back:',
+    replace('  web:\n', '  web:\n    profiles: [managed-runners-docker]\n')],
+  ['a port on the Docker channel', 'the Docker channel is exactly the service the owner allowed',
+    replace('    network_mode: none\n', '    network_mode: none\n    ports:\n      - "127.0.0.1:2375:2375"\n')],
+  ['a privileged Docker channel', 'the Docker channel is exactly the service the owner allowed',
+    replace('    network_mode: none\n', '    network_mode: none\n    privileged: true\n')],
+  ['the Docker socket given to the apiserver', 'is given to the Docker channel and to no other service',
+    replace('      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"',
+      '      - "${ORBIT_MANAGED_RUNNERS_DIR:-/dev/null}:/var/lib/orbit-managed-runners:ro"\n      - /var/run/docker.sock:/var/run/docker.sock')],
+  ['managed runners on by default', 'nothing beyond the approved configuration was added',
+    replace('${ORBIT_MANAGED_RUNNERS_ENABLED:-false}', '${ORBIT_MANAGED_RUNNERS_ENABLED:-true}')],
+  ['a writable managed runners directory in the apiserver', 'nothing beyond the approved configuration was added',
+    replace('/var/lib/orbit-managed-runners:ro"', '/var/lib/orbit-managed-runners"')],
+  ['a Kubernetes template mounted by the Docker channel', 'Compose names nothing of Kubernetes',
+    replace('      - /var/run/docker.sock:/var/run/docker.sock\n',
+      '      - /var/run/docker.sock:/var/run/docker.sock\n      - ./deploy/managed-runner/storage:/templates:ro\n')],
 ];
 
 test('the topology checks accept the control and reject deployment counterexamples', async (t) => {

@@ -112,6 +112,9 @@ function fixture(
       },
     },
     taskListEvent: { upsert: async () => ({}) },
+    // J-T8's stop reads the task's in-flight landings: none here, so the FAILED write is the plain
+    // status write this fixture is about.
+    projectIntegrationJob: { findMany: async () => [] },
   };
   const service = new TasksService(prisma as never, {} as never, {
     publishForUser() {},

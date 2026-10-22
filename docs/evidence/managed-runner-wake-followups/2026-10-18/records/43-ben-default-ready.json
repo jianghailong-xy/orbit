@@ -1,0 +1,31 @@
+{
+  "at": "2026-10-18T04:11:47.613+00:00",
+  "owner": "ben",
+  "runner": {
+    "last_heartbeat_at": "2026-10-18T04:11:35.181",
+    "never_reported": false,
+    "status": "ONLINE"
+  },
+  "status": {
+    "actions": {
+      "canDelete": false,
+      "canEnsure": false,
+      "canRetry": false,
+      "canSleep": true,
+      "canWake": false
+    },
+    "desiredState": "RUNNING",
+    "initialProvider": "deepseek-2",
+    "managementState": "READY",
+    "reason": null,
+    "retryAfter": null,
+    "usable": true
+  },
+  "workspace": {
+    "id": "34hqzCRPfKpZiB4SUUcbU",
+    "lastEngine": "claude",
+    "lastProvider": "deepseek-2",
+    "name": "Default",
+    "providerBuiltin": false
+  }
+}

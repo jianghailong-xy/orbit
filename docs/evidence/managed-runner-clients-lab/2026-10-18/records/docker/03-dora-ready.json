@@ -1,0 +1,33 @@
+{
+  "changes": [
+    [
+      "2026-10-18T06:30:15Z",
+      {
+        "desiredState": "RUNNING",
+        "managementState": "STARTING",
+        "reason": null,
+        "revision": 9
+      }
+    ],
+    [
+      "2026-10-18T06:30:16Z",
+      {
+        "desiredState": "RUNNING",
+        "managementState": "STARTING",
+        "reason": null,
+        "revision": 10
+      }
+    ],
+    [
+      "2026-10-18T06:30:21Z",
+      {
+        "desiredState": "RUNNING",
+        "managementState": "READY",
+        "reason": null,
+        "revision": 11
+      }
+    ]
+  ],
+  "owner": "dora",
+  "reached": "READY"
+}

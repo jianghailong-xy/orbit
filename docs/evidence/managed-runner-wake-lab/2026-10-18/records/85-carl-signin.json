@@ -1,0 +1,17 @@
+{
+  "created": false,
+  "owner": "carl",
+  "preferences": {
+    "defaultPermissionMode": "bypassPermissions",
+    "status": 200
+  },
+  "signIn": {
+    "at": "2026-10-18T01:53:51.864+00:00",
+    "ms": 50.1,
+    "status": 201
+  },
+  "user": {
+    "email": "t06-carl@lab.invalid",
+    "id": "34hlvKQH4jAzpEYmxhJ3k"
+  }
+}

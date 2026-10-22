@@ -29,9 +29,9 @@ import { shortWikiHash } from './wiki-plan-repo';
 /**
  * The drafting job's own gate (contract `plan.jobs.server`): what the server's gate checks that a draft can be
  * held to here, and what only the repository can answer — before anything is submitted. Ported word for word
- * from `src/runner-go/wiki_plan_gate.go`; what differs is where the repository is read: the space's snapshot of
- * origin/main (wiki-plan-repo.ts), not a checkout — which is what lets the plan's gate on the server check the
- * repository at all.
+ * from `src/runner-go/wiki_plan_gate.go` before P11 deleted it; what differs is where the repository is read: the
+ * space's snapshot of origin/main (wiki-plan-repo.ts), not a checkout — which is what lets the plan's gate on the
+ * server check the repository at all.
  *
  *   schema      every line of the answers is a field of the plan, every field within its limits, a section's
  *               kind one of the closed set, a category for the agents' conventions there;
@@ -62,11 +62,11 @@ const SLUG = new RegExp(WIKI_SLUG_PATTERN, 'u');
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/u;
 const DOC_PATH = /^plan\.docs\[(\d+)\]/u;
 
-/** What a message would not show, as Go's wikiQuote finds it: controls, format characters, separators and every space but U+0020. */
+/** What a message would not show, as Go's wikiQuote found it: controls, format characters, separators and every space but U+0020. */
 const UNSEEN = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Zs}]/u;
 
 /**
- * A value a model wrote as a refusal names it back (wiki_verify.go `wikiQuote`): a JSON string, with every
+ * A value a model wrote as a refusal names it back (wiki_verify.go `wikiQuote`, before P11): a JSON string, with every
  * character that would not show written as \uXXXX — the backticks around a value, a space at either end and an
  * invisible character all show.
  */
@@ -89,7 +89,7 @@ export function wikiQuote(value: string): string {
 const WRAPPERS: ReadonlyArray<readonly [string, string]> = [['`', '`'], ['"', '"'], ["'", "'"], ['“', '”'], ['‘', '’'], ['「', '」'], ['『', '』'], ['«', '»']];
 
 /**
- * A closed-set value as a check reads it (wiki_verify.go `wikiUnwrap`): the white space at either end taken off,
+ * A closed-set value as a check reads it (wiki_verify.go `wikiUnwrap`, before P11): the white space at either end taken off,
  * then whatever backticks or quotes wrap the whole of it — a pair at its two ends with no more of either inside —
  * as often as they do.
  */

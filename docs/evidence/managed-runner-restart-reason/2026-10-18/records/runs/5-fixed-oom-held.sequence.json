@@ -1,0 +1,110 @@
+[
+  {
+    "file": "/mnt/data/tmp/34hxIkHX/lab/records/5-fixed-oom-held.jsonl",
+    "from": "2026-10-18T09:15:55.582+00:00",
+    "runs": [
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "Sessions here run on the runner Orbit manages for you.",
+          "kind": "available",
+          "retry": false,
+          "title": "Managed runner ready"
+        },
+        "from": "2026-10-18T09:15:55.582+00:00",
+        "generations": [
+          5
+        ],
+        "reason": null,
+        "samples": 21,
+        "seconds": 10.0,
+        "state": "READY",
+        "until": "2026-10-18T09:16:05.584+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "The runner ran out of memory and stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.",
+          "kind": "waking",
+          "retry": false,
+          "title": "Waking your managed runner"
+        },
+        "from": "2026-10-18T09:16:06.085+00:00",
+        "generations": [
+          5
+        ],
+        "reason": "POD_RESTARTING_OUT_OF_MEMORY",
+        "samples": 10,
+        "seconds": 4.5,
+        "state": "REQUESTED",
+        "until": "2026-10-18T09:16:10.585+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": "POD_RESTARTING_OUT_OF_MEMORY",
+        "display": {
+          "acceptsWork": true,
+          "detail": "The previous instance has stopped and its data volume is still detaching. The next instance starts once it is detached.",
+          "kind": "waking",
+          "retry": false,
+          "title": "Waking your managed runner"
+        },
+        "from": "2026-10-18T09:16:11.086+00:00",
+        "generations": [
+          5
+        ],
+        "reason": "VOLUME_STILL_ATTACHED",
+        "samples": 31,
+        "seconds": 15.0,
+        "state": "REQUESTED",
+        "until": "2026-10-18T09:16:26.089+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "The runner ran out of memory and stopped, so it is being started again on the same data volume. Messages sent meanwhile wait for it.",
+          "kind": "waking",
+          "retry": false,
+          "title": "Waking your managed runner"
+        },
+        "from": "2026-10-18T09:16:26.589+00:00",
+        "generations": [
+          6
+        ],
+        "reason": "POD_RESTARTING_OUT_OF_MEMORY",
+        "samples": 31,
+        "seconds": 15.0,
+        "state": "STARTING",
+        "until": "2026-10-18T09:16:41.592+00:00"
+      },
+      {
+        "attempt": 1,
+        "carriedRestart": null,
+        "display": {
+          "acceptsWork": true,
+          "detail": "Sessions here run on the runner Orbit manages for you.",
+          "kind": "available",
+          "retry": false,
+          "title": "Managed runner ready"
+        },
+        "from": "2026-10-18T09:16:42.092+00:00",
+        "generations": [
+          6
+        ],
+        "reason": null,
+        "samples": 1,
+        "seconds": 0.0,
+        "state": "READY",
+        "until": "2026-10-18T09:16:42.092+00:00"
+      }
+    ],
+    "samples": 94,
+    "until": "2026-10-18T09:16:42.092+00:00"
+  }
+]

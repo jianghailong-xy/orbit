@@ -1,0 +1,36 @@
+{
+  "answerEvent": {
+    "created_at": "2026-10-18T02:28:11.717",
+    "ingested_at": "2026-10-18T02:28:11.948484+00:00",
+    "ingested_by_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "seq": 30,
+    "session_id": "01a14cc4-e817-7398-8017-ae9243b0d3b7",
+    "type": "assistant"
+  },
+  "answered": true,
+  "marker": "T06-WOKE-OFFF",
+  "modelRequests": [
+    {
+      "apiErrors": null,
+      "at": "2026-10-18T02:28:11Z",
+      "kind": "text",
+      "messages": 11,
+      "n": 43,
+      "tool": null
+    }
+  ],
+  "owner": "ben",
+  "session": {
+    "assigned_runner_id": "01a14cb2-fd31-761c-ae11-591d4b8f6360",
+    "created_at": "2026-10-18T02:08:55.319",
+    "engine": "claude",
+    "id": "01a14cc4-e817-7398-8017-ae9243b0d3b7",
+    "provider": "deepseek-2",
+    "retry_at": null,
+    "retry_attempts": 0,
+    "status": "AWAITING_INPUT",
+    "task_id": null,
+    "title": "T06-BEN-OFFF FAKE-WAKEUP 1040 OFFF a wakeup due while the sw"
+  },
+  "turns": []
+}

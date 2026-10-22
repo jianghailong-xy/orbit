@@ -220,3 +220,52 @@ test('without since, the Open list is still the plain array older clients read',
   await o.session('one');
   assert.ok(Array.isArray(await o.read('/sessions?view=open')));
 });
+
+/**
+ * LS6: the project grouping's landing-aware read is a different list, so its cursor is its own —
+ * the landing appears to that delta, which the plain list's never sees.
+ */
+test('a landing-aware delta is its own cursor and carries the landings the plain one never sees', { skip }, async () => {
+  const o = await owner();
+  const project = await o.h.db.project.create({ data: { ownerId: o.ownerId, title: 'delta landing project' } });
+  const codebase = await o.h.db.projectCodebase.create({
+    data: {
+      ownerId: o.ownerId, projectId: project.id,
+      canonicalRepoUrl: `https://github.com/example/delta-landing-${project.id}`,
+      upstreamRef: 'refs/heads/main', integrationRef: 'refs/heads/main', refAuthority: 'REMOTE',
+    },
+  });
+  const taskId = (await o.h.db.task.create({
+    data: {
+      ownerId: o.ownerId, creatorType: 'USER', creatorId: o.ownerId, title: 'delta landing task',
+      projectId: project.id, completionCriterion: 'OWNER_CONFIRMED',
+    },
+  })).id;
+  await o.session('kept');
+  const projectId = uuidToBase62(project.id);
+  const landingPath = `/sessions?view=open&projectId=${projectId}&includeLanding=1`;
+  const landingCursor = await o.read(`${landingPath}&since=`) as Delta;
+  assert.equal(landingCursor.full, true);
+  const plainCursor = await o.since('');
+
+  const sessionId = await o.session('Land the task', {
+    sessionKind: 'LANDING', provider: 'orbit', providerBuiltin: true, startsTaskWork: false,
+  });
+  await o.h.db.projectLanding.create({
+    data: {
+      id: randomUUID(), projectId: project.id, ownerId: o.ownerId, codebaseId: codebase.id,
+      subject: 'TASK', taskId, episode: 1, sessionId,
+    },
+  });
+  const arrived = delta(await o.read(
+    `${landingPath}&since=${encodeURIComponent(landingCursor.cursor)}`) as Delta);
+  assert.deepEqual(arrived.upserts.map((row) => [row.id, row.title]), [[uuidToBase62(sessionId), 'Land the task']]);
+  assert.deepEqual(arrived.removedIds, []);
+  // The plain list did not change: its cursor is still a hit and knows nothing of the landing.
+  assert.deepEqual(await o.since(plainCursor.cursor), {
+    full: false, upserts: [], removedIds: [], cursor: plainCursor.cursor,
+  });
+  // And a cursor from the plain list names no list this read holds: it is answered whole.
+  assert.equal((await o.read(
+    `${landingPath}&since=${encodeURIComponent(plainCursor.cursor)}`) as Delta).full, true);
+});

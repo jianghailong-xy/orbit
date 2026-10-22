@@ -1,0 +1,230 @@
+{
+ "checks": [
+  {
+   "check": "a new claim, PV and RBD image, none of them the original",
+   "ok": true,
+   "value": {
+    "image": "csi-vol-8d69402c-79c4-4510-a1af-53a75ab41378",
+    "pv": "pvc-ca673121-f036-4163-8687-9ff134e2f606"
+   }
+  },
+  {
+   "check": "the archive reached the guest intact",
+   "ok": true,
+   "value": [
+    [
+     "1b9899115d969df32ff99f9daf2c84fd84bce4c6646576228cb3d95af9b3e267",
+     "/work/volume.img.gz"
+    ]
+   ]
+  },
+  {
+   "check": "the bytes imported are the exported image (SHA-256)",
+   "ok": true,
+   "value": "4a5777903d90cfb3"
+  },
+  {
+   "check": "the new image reads back byte for byte as the backup (SHA-256 of all of it)",
+   "ok": true,
+   "value": "4a5777903d90cfb3"
+  },
+  {
+   "check": "the scratch image is gone",
+   "ok": true
+  },
+  {
+   "check": "the check Pod ran to completion",
+   "ok": true,
+   "value": "Succeeded"
+  },
+  {
+   "check": "the new PVC is the new image, an ext4 RBD filesystem",
+   "ok": true,
+   "value": {
+    "mount": [
+     {
+      "fstype": "ext4",
+      "source": "/dev/rbd1"
+     }
+    ],
+    "rbd": {
+     "name": "csi-vol-8d69402c-79c4-4510-a1af-53a75ab41378",
+     "pool": "orbit-mr-rbd"
+    }
+   }
+  },
+  {
+   "check": "the probe data in the restored PVC: same random bytes, SQLite rows and Git commit, integrity_check ok",
+   "ok": true,
+   "value": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   }
+  },
+  {
+   "check": "ann: uploads, worktrees, the engine's transcripts and the runner ID as before in the restored PVC",
+   "ok": true,
+   "value": {
+    "transcripts": 1,
+    "uploads": 1,
+    "worktrees": 1
+   }
+  },
+  {
+   "check": "ann: every SQLite database on the volume passes integrity_check in the restored PVC",
+   "ok": true,
+   "value": [
+    "t08-probe/b125243/rows.sqlite",
+    "t08-probe/p1/rows.sqlite"
+   ]
+  },
+  {
+   "check": "ann: the session's worktree is there in the restored PVC",
+   "ok": true,
+   "value": [
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d"
+   ]
+  },
+  {
+   "check": "the workspace repository passes git fsck in the restored PVC",
+   "ok": true,
+   "value": 0
+  }
+ ],
+ "endedAt": "2026-10-18T12:56:34.344+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "backup",
+ "result": {
+  "checkPod": "t08-restore-check-20261018t125553z",
+  "claim": "t08-restore-20261018t125553z",
+  "image": "csi-vol-8d69402c-79c4-4510-a1af-53a75ab41378",
+  "phase": "Succeeded",
+  "pv": "pvc-ca673121-f036-4163-8687-9ff134e2f606",
+  "pvc": {
+   "creationTimestamp": "2026-10-18T12:56:08Z",
+   "uid": "ca673121-f036-4163-8687-9ff134e2f606"
+  },
+  "rbdInfo": {
+   "access_timestamp": "Sun Oct 18 12:56:08 2026",
+   "block_name_prefix": "rbd_data.2f67f1cfadb5f",
+   "create_timestamp": "Sun Oct 18 12:56:08 2026",
+   "features": [
+    "layering"
+   ],
+   "flags": [],
+   "format": 2,
+   "id": "2f67f1cfadb5f",
+   "modify_timestamp": "Sun Oct 18 12:56:08 2026",
+   "name": "csi-vol-8d69402c-79c4-4510-a1af-53a75ab41378",
+   "object_size": 4194304,
+   "objects": 512,
+   "op_features": [],
+   "order": 22,
+   "size": 2147483648,
+   "snapshot_count": 0
+  },
+  "restoreSeconds": 25.8,
+  "same": {
+   "gitHead": true,
+   "randomSha256": true,
+   "rows": true,
+   "rowsSha256": true
+  },
+  "scratchImage": "t08-restore-scratch-20261018t125553z",
+  "sha256": {
+   "archive": "1b9899115d969df32ff99f9daf2c84fd84bce4c6646576228cb3d95af9b3e267",
+   "imported": "4a5777903d90cfb3e17c57a14793951aaea39a50b76893fc1d8c72a9561de04a",
+   "readBack": "4a5777903d90cfb3e17c57a14793951aaea39a50b76893fc1d8c72a9561de04a"
+  },
+  "view": {
+   "managedInstance": {
+    "generation": 5,
+    "podUid": "9f389de8-9abe-430f-a6fb-40041929e1a4",
+    "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36"
+   },
+   "mount": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd1"
+    }
+   ],
+   "prefix": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a754-73a1-9d1b-91a624ffc84d/9412b32d-8af2-4596-a874-0be0e646f1f4.jsonl": "ea0a358355554663b8d422a402af8b59897780780dce1f44e448791cb2855a2c"
+   },
+   "probe": {
+    "gitFsckExit": 0,
+    "gitHead": "7f8108f5328cfc3357e2c01ac8eb1a4d121a5e37",
+    "integrityCheck": "ok",
+    "maxRow": 150,
+    "mount": [
+     [
+      "/dev/rbd1",
+      "/var/lib/orbit",
+      "ext4"
+     ]
+    ],
+    "randomSha256": "b146e40fe13f66c4cd0ce89ee7e865a774da66b107108013528efe79d6c67207",
+    "rows": 150,
+    "rowsSha256": "8436f7a9143c40be270617776226e4957e33183e8a50cb8ae90591334ede5596"
+   },
+   "rbdDevice": {
+    "name": "csi-vol-8d69402c-79c4-4510-a1af-53a75ab41378",
+    "pool": "orbit-mr-rbd"
+   },
+   "runnerId": "01a14f03-ec2d-7673-9917-a5b4bc4bae36",
+   "runs": {
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d": {
+     "provider": "claude",
+     "runtimeSessionId": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+     "sessionUuid": "9412b32d-8af2-4596-a874-0be0e646f1f4",
+     "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a14f04-a754-73a1-9d1b-91a624ffc84d"
+    }
+   },
+   "sqlite": {
+    "t08-probe/b125243/rows.sqlite": "ok",
+    "t08-probe/p1/rows.sqlite": "ok"
+   },
+   "transcripts": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a14f04-a754-73a1-9d1b-91a624ffc84d/9412b32d-8af2-4596-a874-0be0e646f1f4.jsonl": {
+     "lines": 97,
+     "sha256": "ea0a358355554663b8d422a402af8b59897780780dce1f44e448791cb2855a2c"
+    }
+   },
+   "uid": 10001,
+   "uploads": {
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d/t08-ann-note.txt": "47b104235806bd367051f1b5bdd828df3fc5fbd77508c8a997a05e8c0d99110c"
+   },
+   "workspace": {
+    "fsckExit": 0,
+    "head": "af1c50c35d463e019800bfe8f5cda9ee8e631936",
+    "worktrees": [
+     "worktree /var/lib/orbit/home/orbit-repos/default",
+     "HEAD af1c50c35d463e019800bfe8f5cda9ee8e631936",
+     "branch refs/heads/master",
+     "",
+     "worktree /var/lib/orbit/home/.orbit/worktrees/01a14f04-a754-73a1-9d1b-91a624ffc84d",
+     "HEAD b3da4b68be18c1bb2ad735b863515e5d53c86717",
+     "branch refs/heads/orbit/t08-ann-first-session-a0df10"
+    ]
+   },
+   "worktrees": {
+    "01a14f04-a754-73a1-9d1b-91a624ffc84d": {
+     "branch": "orbit/t08-ann-first-session-a0df10",
+     "files": {
+      ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+      "t08-ann1.txt": "dd4a213dc6ebc5bc9ec1e1fc8014cc9e231298a70d955f818ca4cf29b3e9ce5d"
+     },
+     "head": "b3da4b68be18c1bb2ad735b863515e5d53c86717",
+     "status": []
+    }
+   }
+  },
+  "writeSeconds": 17.9
+ },
+ "seconds": 25.8,
+ "startedAt": "2026-10-18T12:56:08.584+00:00",
+ "step": "restore-new-pvc"
+}

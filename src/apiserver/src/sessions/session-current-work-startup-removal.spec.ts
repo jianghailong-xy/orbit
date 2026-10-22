@@ -172,8 +172,15 @@ test('(h) no compose service, no resident process, and the files it lived in shr
   // wiki-worker and its start:wiki-worker are the wiki's server-side executor, which the account owner
   // added on 2026-10-07 (docs/wiki-server-execution-design.md §4.1), not this removal;
   // test/compose-topology.test.mjs (l) pins its whole definition.
+  // docker-channel is the managed runners' restricted Docker channel, which the account owner allowed on
+  // 2026-10-17 under a Compose profile a fresh install switches on (docs/managed-runner-design.md,
+  // "Implementation record: new deployments"), not this removal; test/compose-topology.test.mjs (m) pins it.
+  // managed-runner-firewall is the managed runners' host firewall, which the account owner decided on
+  // 2026-10-19 under a Compose profile of its own (docs/managed-runner-design.md, "Implementation record: the
+  // managed runners' host firewall"), not this removal; test/compose-topology.test.mjs (n) pins it.
   assert.deepEqual(services, [
-    'postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway', 'pg-socket',
+    'postgres', 'pgbackup', 'apiserver', 'wiki-worker', 'web', 'gateway', 'docker-channel', 'managed-runner-firewall',
+    'pg-socket',
   ], 'the removal must not have added a service');
 
   const apiPackage = JSON.parse(read('src/apiserver/package.json')) as {

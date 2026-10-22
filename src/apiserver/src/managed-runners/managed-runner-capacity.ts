@@ -229,18 +229,21 @@ export function shortDimensions(pool: CapacityPool, compute: ComputeAmounts | nu
 type Db = Prisma.TransactionClient;
 
 /**
- * The budget row of `profile`'s environment, created on first use and brought to the profile's
- * totals when they differ (a restart with an edited profile). A change of totals moves the revision,
- * which is what tells intents waiting for capacity to look again. What is reserved is never touched
- * here, and totals below it simply admit nothing more until releases bring it under.
+ * The budget row of a backend's environment (its `location`), created on first use and brought to
+ * the backend's totals when they differ (a restart with an edited profile). A change of totals moves
+ * the revision, which is what tells intents waiting for capacity to look again. What is reserved is
+ * never touched here, and totals below it simply admit nothing more until releases bring it under.
  */
-export async function syncCapacityPool(client: Db, profile: Pick<ManagedRunnerProfile, 'clusterKey' | 'kubernetes' | 'capacity'>): Promise<CapacityPool> {
-  const b = capacityBudget(profile);
+export async function syncCapacityPool(
+  client: Db,
+  location: { clusterKey: string; namespace: string },
+  b: CapacityBudget,
+): Promise<CapacityPool> {
   const [row] = await client.$queryRaw<PoolRow[]>`
     INSERT INTO managed_runner_capacity AS c (
       id, cluster_key, namespace, cpu_millis, memory_bytes, ephemeral_bytes, pods, attachments, active_users,
       storage_usable_bytes, storage_headroom_bytes, updated_at)
-    VALUES (gen_random_uuid(), ${profile.clusterKey}, ${profile.kubernetes.namespace}, ${b.cpuMillis}, ${b.memoryBytes},
+    VALUES (gen_random_uuid(), ${location.clusterKey}, ${location.namespace}, ${b.cpuMillis}, ${b.memoryBytes},
       ${b.ephemeralBytes}, ${b.pods}, ${b.attachments}, ${b.activeUsers}, ${b.storageUsableBytes}, ${b.storageHeadroomBytes}, now())
     ON CONFLICT (cluster_key, namespace) DO UPDATE SET
       cpu_millis = EXCLUDED.cpu_millis, memory_bytes = EXCLUDED.memory_bytes, ephemeral_bytes = EXCLUDED.ephemeral_bytes,
@@ -256,7 +259,7 @@ export async function syncCapacityPool(client: Db, profile: Pick<ManagedRunnerPr
   // Unchanged totals: the conflict updated nothing and returned nothing.
   const [current] = await client.$queryRaw<PoolRow[]>`
     SELECT ${POOL_COLUMNS} FROM managed_runner_capacity
-     WHERE cluster_key = ${profile.clusterKey} AND namespace = ${profile.kubernetes.namespace}`;
+     WHERE cluster_key = ${location.clusterKey} AND namespace = ${location.namespace}`;
   return poolOf(current);
 }
 

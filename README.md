@@ -86,40 +86,40 @@ runner on a private network until you have put HTTPS and host controls in place.
 
 ### 1. Start the self-hosted control plane
 
-Requirements: Docker Engine with the Compose plugin, Git, and a machine that can build the images. Node and Go are
-not required for the Compose install.
+Requirements: Docker Engine with the Compose plugin, Git, OpenSSL, and a machine that can build the images. Node
+and Go are not required for the Compose install.
 
 ```bash
 git clone https://github.com/jianghailong-xy/orbit.git
 cd orbit
 # Optional but recommended: pin a reviewed release, for example:
 # git checkout v0.1.2-beta.138
-cp .env.example .env
-
-# Generate two independent secrets and write them to the local .env (never commit it).
-jwt_secret="$(openssl rand -base64 32)"
-provider_secret_key="$(openssl rand -base64 32)"
-sed -i \
-  -e "s|^JWT_SECRET=.*$|JWT_SECRET=\"${jwt_secret}\"|" \
-  -e "s|^PROVIDER_SECRET_KEY=.*$|PROVIDER_SECRET_KEY=\"${provider_secret_key}\"|" \
-  .env
-unset jwt_secret provider_secret_key
-
-docker compose up -d --build
+scripts/install-server.sh
 docker compose ps
 ```
 
+The install script writes `.env` with two independently generated secrets (never commit it), switches on
+[managed runners](docs/self-hosting.md#managed-runners), builds the images and starts the stack. With managed
+runners on, every account gets a runner of its own, a container on this host's Docker, when it signs in. Read who
+gets one and how far a container isolates it before you open sign-up. `--no-managed-runners` installs without them.
+To install by hand instead, write `.env` as [self-hosting](docs/self-hosting.md#1-configure-the-deployment)
+describes and run `docker compose up -d --build`.
+
 The build stamps the downloadable runner with the commit from the checkout. If you build from a source archive,
-which carries no Git metadata, name that revision explicitly:
+which carries no Git metadata, name that revision explicitly (the install script reads it too):
 `ORBIT_SOURCE_SHA=<40-character commit> docker compose up -d --build`. Do not put it in `.env`, where it would
 become stale after an upgrade.
 
 The gateway listens on <http://localhost:2086> by default. The first visitor is redirected to `/setup` and
-becomes the initial administrator. For a network deployment, set `PUBLIC_ORIGIN` to the external HTTPS origin
-before building the web image and follow the [self-hosting hardening guide](docs/self-hosting.md) and
-[security policy](SECURITY.md).
+becomes the initial administrator. For a network deployment, give the external HTTPS origin before the web image
+is built (`scripts/install-server.sh --public-origin https://orbit.example.com`, or `PUBLIC_ORIGIN` in `.env`) and
+follow the [self-hosting hardening guide](docs/self-hosting.md) and [security policy](SECURITY.md).
 
 ### 2. Add a runner
+
+With managed runners on, every account is already given one at sign-in, and it takes sessions once a runtime is
+signed in on it. Register a machine of your own as well when the work needs that machine's repositories, network or
+credentials.
 
 In the web UI, open **Infrastructure → Add → Register a machine**, choose Linux or macOS, and copy the command shown for your
 deployment. The current installer is one command because it downloads the static runner and then runs

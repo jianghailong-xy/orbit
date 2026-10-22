@@ -81,6 +81,7 @@ import {
 import { QUEUED_LABEL } from '../lib/runnerSlots';
 import { refreshTaskScheduleViews, scheduledStart } from '../lib/taskSchedule';
 import { MD } from './Transcript';
+import { LandingLink } from './LandingLink';
 import { TaskAttributionCard } from './TaskAttributionCard';
 import { TaskDependencyList } from './TaskDependencyList';
 import { TaskScheduleEditor, type WriteToast } from './TaskScheduleEditor';
@@ -437,6 +438,12 @@ export function ownerConfirmedTask(
  * loses the appointment they set. Saying so is cheaper than a confirmation dialog, and it is the
  * same sentence the Start at editor carries, so the two cannot disagree.
  *
+ * The fifth is not a gate either: it is the task this button is the only start for. Auto-run never
+ * picks up an OPEN task in no project that has no prerequisites — the dependency sweep wants a
+ * prerequisite, the independent release a project (independent-task-release.pg.spec.ts (11)) — so
+ * it looks ready and waits until somebody presses this. After the schedule, because a schedule does
+ * start it by itself.
+ *
  * '' means no tooltip at all — the Tooltip renders nothing for empty content, which is right for an
  * unscheduled task with nothing standing in its way.
  *
@@ -452,10 +459,13 @@ export function runNowHint({
   canExecute,
   running,
   scheduledLocal,
+  projectId,
+  prerequisites,
 }: {
   /** This row is owned by a check or an aggregate and has no task_start work of its own. */
   completionOwned?: boolean;
-  /** On such a row, which sentence it gets — see `verificationSubjectAction`. */
+  /** On such a row, which sentence it gets — see `verificationSubjectAction`; on any other, an OPEN
+   *  task is one that may be waiting for this press. */
   status?: string | null;
   verificationState?: ProjectTaskVerificationState | null;
   blocked: boolean;
@@ -464,6 +474,10 @@ export function runNowHint({
   running: boolean;
   /** The scheduled start in the viewer's own wall clock, absent on an unscheduled task. */
   scheduledLocal?: string | null;
+  /** The project the task is filed under; null or absent for a task in no project. */
+  projectId?: string | null;
+  /** How many prerequisites the task has, satisfied or not. */
+  prerequisites?: number;
 }): string {
   if (completionOwned) return verificationSubjectAction(status, verificationState).hint;
   if (blocked) {
@@ -474,6 +488,9 @@ export function runNowHint({
   if (!canExecute) return 'Assign a workspace first';
   if (running) return 'Task running…';
   if (scheduledLocal) return `Starts immediately and clears the start scheduled for ${scheduledLocal}.`;
+  if (status === 'OPEN' && !projectId && prerequisites === 0) {
+    return 'Nothing starts this task by itself: auto-run needs a prerequisite or a project, and it has neither.';
+  }
   return '';
 }
 
@@ -1190,6 +1207,8 @@ export function TaskDetailPanel({
   // Named by the project's main branch, which the task read carries beside its landing.
   const mainBranch = mainBranchName(q.data?.integration?.mainBranch);
   const landing = landingBadge(q.data?.integration, mainBranch);
+  // The landing session of the task's newest generation (§2.9 LS6), which its Landing section opens.
+  const landingSessionId = q.data?.integration?.landTask?.landingSessionId ?? null;
   const supersession = supersessionNote(task);
   const comments = q.data?.comments ?? [];
   const sessions = q.data?.sessions ?? [];
@@ -1281,6 +1300,8 @@ export function TaskDetailPanel({
     canExecute,
     running,
     scheduledLocal: scheduled?.local,
+    projectId: q.data?.projectId,
+    prerequisites: dependsOn.length,
   });
   // OWNER_CONFIRMED: the account owner settles this task, and it has one place to do that at a
   // time. While a run of it is waiting on them, that place is the confirmation card in the run's own
@@ -1517,11 +1538,18 @@ export function TaskDetailPanel({
       ) : (
         <div className="tdp-body">
           {/* Where the task's work stands after DONE (§2.7a): the newest landing attempt and why it
-              waits or where it stopped, apart from the status above. Nothing to press here. */}
+              waits or where it stopped, apart from the status above. The one press is the way into
+              that segment's landing session — one link, because the task's read gives the newest
+              generation and the same segment's attempts share one session (§2.9 LS6, board v4 06). */}
           {landing ? (
             <section className="tdp-section" aria-label="Task landing">
               <div className="tdp-section-title">Landing</div>
               <LandTaskStatus integration={q.data.integration} taskStatus={q.data.status} main={mainBranch} />
+              {landingSessionId ? (
+                <div className="tdp-landing-open">
+                  <LandingLink className="tdp-landing-link" sessionId={landingSessionId} />
+                </div>
+              ) : null}
             </section>
           ) : null}
           {/* The check that settles this row, under the row it checks — the relation the database
@@ -1622,7 +1650,14 @@ export function TaskDetailPanel({
                 matchTriggerWidth={false}
                 options={[
                   { value: '', label: "Assignee's" },
-                  { label: '', options: ALL_ENGINES.filter(webShowsEngine).map((engine) => ({ value: engine, label: ENGINE_CLI_NAMES[engine] })) },
+                  {
+                    label: '',
+                    // Cursor CLI once a runner of the account knows it (webShowsEngine).
+                    options: ALL_ENGINES.filter((engine) => webShowsEngine(engine, runnersQ.data)).map((engine) => ({
+                      value: engine,
+                      label: ENGINE_CLI_NAMES[engine],
+                    })),
+                  },
                 ]}
                 renderOption={(option) =>
                   option.value ? (

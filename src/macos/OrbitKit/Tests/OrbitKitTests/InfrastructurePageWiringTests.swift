@@ -116,7 +116,9 @@ final class InfrastructurePageWiringTests: XCTestCase {
         let sections = code(try appSource(Self.sectionsFile))
         let keys = try slice(sections, from: "struct InfrastructureKeysSection: View {", to: "\n}\n")
         for piece in ["var balances: [String: ProviderBalanceReading] = [:]",
-                      "if let id = DeepSeekBalance.key(for: key, mine: keys)?.providerID {",
+                      "if let id = Self.pageID(key, mine: keys) {",
+                      // …as a Cursor key's opens its own, with its last check (board iOS 4 ①).
+                      "DeepSeekBalance.key(for: key, mine: mine)?.providerID ?? (CursorRuntime.isKey(key) ? key.providerID : nil)",
                       "Button { open(.providerDetail(providerID: id)) } label: {",
                       "} else if let balance, let value = DeepSeekBalance.rowValue(DeepSeekBalance.state(balance)) {"] {
             XCTAssertTrue(keys.contains(piece), "the API keys section lost `\(piece)`")
@@ -405,7 +407,7 @@ final class InfrastructurePageWiringTests: XCTestCase {
     /// nothing sent to a machine that is offline.
     func testTheEnginePageSignsInEachAccount() throws {
         let page = code(try appSource("Views/RunnerEnginePage.swift"))
-        for piece in ["RunnerPageFormat.accountLines(health)",
+        for piece in ["RunnerPageFormat.accountLines(health, usage:",
                       "RunnerPageFormat.accountWindows(runner, engine: engine, account: line.id)",
                       "RunnerSignInView(runnerID: runner.id, engine: login, account: line.signInAccount, autoStart: true,",
                       "onClose: { closeSignIn() }, onSignedIn: { landed(line.id) })",
@@ -425,13 +427,13 @@ final class InfrastructurePageWiringTests: XCTestCase {
                       "guard let added = newAccount(health), added.auth == \"yes\" else { return false }",
                       "return !newAccountFocused && newAccountWaiting == nil && !newAccountRenaming",
                       ".swipeActions(edge: .trailing, allowsFullSwipe: false) {",
-                      "if !line.isDefault {",
+                      "if RunnerPageFormat.offersRemove(line, health: health, runner: runner) {",
                       "Button(role: .destructive) { pendingRemoval = line } label: {",
                       ".orbitConfirmation({ _ in removalTitle },",
                       "await runners.removeAccount(id, engine: login, account: line.id)",
                       ".disabled(offline || removal?.pending == true)",
                       "Text(RunnerPageCopy.RUNNER_ENGINES_OFFLINE_FOOTER)",
-                      "RunnerAttention.updateNoteOf(health.update, nowMs: RunnerPageFormat.nowMs(now))"] {
+                      "RunnerAttention.updateNoteOf(health.update, nowMs: RunnerPageFormat.nowMs(now),"] {
             XCTAssertTrue(page.contains(piece), "the engine page lost \(piece)")
         }
         // Any account — Default too — is renamed from its long-press menu, never from the swipe, and
@@ -469,6 +471,54 @@ final class InfrastructurePageWiringTests: XCTestCase {
         XCTAssertTrue(model.contains("api.startRunnerLogin(runnerID, engine: engine, account: account, accountName: name, region: site?.rawValue)"))
         XCTAssertTrue(model.contains("if adding { return startedHere }"),
                       "a card adding an account owns only the sign-in it started")
+    }
+
+    /// Default removed from Orbit (web `AccountRow` / `RemovedDefault`): its swipe and its long-press menu
+    /// offer Remove by `RunnerPageFormat.offersRemove` — Default's while another account is there — and
+    /// press it offline by `canRemove`; the question is `removalQuestion`'s; and the accounts end with
+    /// Default's line and Use again, which posts the restore route, offline too, and stays busy until the
+    /// list read after it.
+    func testDefaultIsRemovedFromOrbitAndUsedAgain() throws {
+        let page = code(try appSource("Views/RunnerEnginePage.swift"))
+        let swipe = try slice(page, from: "private func trailingActions(", to: "private func accountMenu(")
+        try assertInOrder(swipe, ["if RunnerPageFormat.offersRemove(line, health: health, runner: runner) {",
+                                  "RowSwipeAction(title: \"Remove\", systemImage: \"trash\", tint: .red, role: .destructive,",
+                                  "isEnabled: RunnerPageFormat.canRemove(line, offline: offline),",
+                                  "perform: { pendingRemoval = line }"],
+                          "the swipe offers Remove as RunnerPageFormat decides it")
+        XCTAssertFalse(swipe.contains("isDefault"), "the swipe leaves who may be removed to RunnerPageFormat")
+        let menu = try slice(page, from: "private func accountMenu(", to: "private func addAccountRow(")
+        try assertInOrder(menu, ["if RunnerPageFormat.offersRemove(line, health: health, runner: runner) {",
+                                 "Label(\"Remove…\", systemImage: \"trash\")",
+                                 ".disabled(!RunnerPageFormat.canRemove(line, offline: offline))"],
+                          "the menu offers the same Remove")
+        XCTAssertFalse(menu.contains("isDefault"), "the menu leaves who may be removed to RunnerPageFormat")
+        let words = try slice(page, from: "private var removalTitle: String {", to: "private func closeSignIn()")
+        XCTAssertTrue(words.contains("return removalQuestion(line).title"))
+        XCTAssertTrue(words.contains("removalQuestion(line).message"))
+        XCTAssertTrue(words.contains("RunnerPageFormat.removalQuestion(line, health: health, runner: runner)"))
+
+        let section = try slice(page, from: "@ViewBuilder private func accountsSection(", to: "} header: {")
+        try assertInOrder(section, ["ForEach(RunnerPageFormat.accountLines(health, usage:",
+                                    "if let removed = RunnerPageFormat.removedDefaultLine(health),",
+                                    "removedDefaultRow(removed, name: name, login: login)",
+                                    "if RunnerPageFormat.canAddAccount(runner, engine: engine) {"],
+                          "the accounts that remain, then Default's line, then Add Account")
+        let row = try slice(page, from: "private func removedDefaultRow(", to: "private func cursorUsageUnavailable(")
+        try assertInOrder(row, ["Text(line)",
+                                "Button(RunnerAccountCopy.RUNNER_DEFAULT_USE_AGAIN) { restoreDefault(login, name: name) }",
+                                ".disabled(restoring)"],
+                          "Default's line, then Use again")
+        XCTAssertFalse(row.contains("offline"), "Use again is Orbit's own record: offline too")
+        let press = try slice(page, from: "private func restoreDefault(", to: "private func updateEngines()")
+        try assertInOrder(press, ["restoring = true", "await runners.restoreDefault(id, engine: login)",
+                                  "show(RunnerAccountCopy.runnerDefaultUseAgainFailed(name: name) + \"\\n\" + failure)",
+                                  "restoring = false"],
+                          "Use again stays busy until the list is read again, and says when it could not")
+
+        let model = code(try appSource("RunnersModel.swift"))
+        XCTAssertTrue(model.contains("await press { try await self.api.restoreRunnerDefault(id, engine: engine) }"),
+                      "Use again reads the runners again after the write")
     }
 
     /// On a phone an account's row says only where it stands, and its presses are on its left swipe
