@@ -236,6 +236,68 @@ abstract class LandingSessionFrames {
         assertTrue(text("landing-head:detail")!!.endsWith(" · claim 1 · round 1 · updated just now"))
         assertTrue(exists(hasText("Merge check started · claim 1 · wikova")))
         shot("08-merge-checking")
+
+        // ⑨ A check that failed (05 g, A11-20 b): its last six printed lines inline, in the dark block the running check wears.
+        // The integration read lists the job with its landing session, so this page's own read keeps it for ⑪.
+        ProjectShell.inFlightJobs = """[{"jobId":"j-1","kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskId":"t-landing",
+            "taskTitle":"Wire the page","generation":1,"startedAt":"${ago(200)}","heartbeatAt":"${ago(5)}","runnerName":"wikova",
+            "timedOut":false,"limitSeconds":600,"retryable":false,"progressProtocol":"v2","claim":1,"round":1,
+            "check":{"name":"TASK_ACCEPTANCE","index":1,"count":3,"budgetSeconds":3600,"startedAt":"${ago(200)}"},
+            "stepStartedAt":"${ago(200)}","outputMovedAt":"${ago(6)}","liveness":"LIVE","landingSessionId":"$landing"}]"""
+        val printed = listOf("> orbit@0.1 test", "> vitest run src/panel.test.tsx", "", " FAIL  src/panel.test.tsx > the panel > counts",
+            "AssertionError: expected 2 to be 3", "  at src/panel.test.tsx:41:18", "", " Test Files  1 failed (1)", "      Tests  1 failed | 41 passed (42)")
+            .joinToString("\n") + "\n"
+        ProjectShell.landingLog = """{"jobId":"j-1","entries":[{"claim":1,"round":1,"seq":0,"text":${kotlinx.serialization.json.JsonPrimitive(printed)},
+            "truncatedBytes":0}],"nextCursor":null}"""
+        openLanding(view(state = "CHECK_FAILED", liveness = null,
+            checks = """[{"name":"TASK_ACCEPTANCE","expectedExitCode":0,"exitCode":1,"timedOut":false,"durationMs":232000}]""",
+            timeline = """{"sections":[{"title":"Generation 1","jobId":"j-1","kind":"LAND_TASK","generation":1,"state":"CHECK_FAILED","entries":[
+                {"kind":"CLAIMED","at":"${ago(900)}","claim":1,"text":"Claimed by runner wikova · claim 1"},
+                {"kind":"CHECK_STARTED","at":"${ago(840)}","claim":1,"round":1,"check":{"name":"TASK_ACCEPTANCE","index":1},"text":"Task acceptance started · claim 1 · wikova"},
+                {"kind":"CHECK_FINISHED","at":"${ago(608)}","claim":1,"round":1,"check":{"name":"TASK_ACCEPTANCE","index":1},
+                 "data":{"exitCode":1,"expectedExitCode":0,"timedOut":false},"text":"Task acceptance failed · exit 1"}]}],"facts":[]}"""))
+        await { exists(hasTestTag("landing:inline-output")) }
+        assertEquals(printed.split("\n").filter { it.isNotBlank() }.takeLast(6).joinToString("\n"),
+            compose.onAllNodes(hasTestTag("landing:output") and hasAnyAncestor(hasTestTag("landing:inline-output")), true).fetchSemanticsNodes()
+                .single().config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text })
+        await { ProjectShell.calls.count { it == "GET projects/$launch/integration" } >= 1 }
+        shot("09-failed-check")
+
+        // ⑩ Its Log › open: the whole log in the theme's own ink — light on the dark theme, dark on the light one.
+        compose.onNodeWithTag("landing:log:2").performClick()
+        await { exists(hasTestTag("landing:log-text")) }
+        assertInkFollowsTheTheme("landing:log-text")
+        shot("10-log-open")
+
+        // ⑪ Opened again while the server cannot be read (A11-20 e): the job this page's last read kept, its clock frozen at that
+        // read, `Update unavailable`, how long ago that was, and no door and no menu.
+        ProjectShell.landingStatus = 503
+        openLanding(view())
+        await { text("landing-head:detail") == "Update unavailable" }
+        assertFalse(exists(hasTestTag("landing-more")))
+        assertTrue(text("landing:live")!!.startsWith("Updated "))
+        shot("11-offline-frozen")
+    }
+
+    /** The ink a text is drawn in, read off its pixels (semantics carry no colour): on the dark theme its strokes are light, on the
+     *  light theme dark. A near-black ink on the dark theme leaves no light pixel in the text's bounds. */
+    private fun assertInkFollowsTheTheme(tag: String) {
+        compose.waitForIdle()
+        val view = compose.activity.window.decorView
+        val bitmap = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
+        view.draw(Canvas(bitmap))
+        val bounds = compose.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().first().boundsInWindow
+        var light = 0; var dark = 0
+        for (x in bounds.left.toInt().coerceAtLeast(0) until bounds.right.toInt().coerceAtMost(bitmap.width))
+            for (y in bounds.top.toInt().coerceAtLeast(0) until bounds.bottom.toInt().coerceAtMost(bitmap.height)) {
+                val c = bitmap.getPixel(x, y)
+                val luma = (android.graphics.Color.red(c) * 299 + android.graphics.Color.green(c) * 587 + android.graphics.Color.blue(c) * 114) / 1000
+                if (luma > 170) light++ else if (luma < 85) dark++
+            }
+        bitmap.recycle()
+        File(output, "ink-$tag.txt").writeText("theme=$theme light=$light dark=$dark bounds=$bounds\n")
+        if (theme == "dark") assertTrue("light ink on the dark theme: $light light and $dark dark pixels", light > 50)
+        else assertTrue("dark ink on the light theme: $light light and $dark dark pixels", dark > 50)
     }
 
     /** The page's ⋮ rows, in the order the board draws them. */

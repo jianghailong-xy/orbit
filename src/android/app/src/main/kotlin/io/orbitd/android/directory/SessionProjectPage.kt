@@ -290,8 +290,11 @@ internal fun SessionProjectPage(app: OrbitApplication, handle: SessionHandle, ro
     /** The landing line's read; a read that fails keeps the last answer and says it is stale. */
     suspend fun loadIntegration() {
         val view = try { projects.integration(projectId) } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { null }
-        if (view != null) { state.integration = view; state.integrationReadAt = Instant.now(); state.integrationReadFailed = false }
-        else state.integrationReadFailed = true
+        if (view != null) {
+            state.integration = view; state.integrationReadAt = Instant.now(); state.integrationReadFailed = false
+            // Each landing job's description, for its landing page to draw frozen when the server cannot be read (A11-20 e).
+            app.landingJobs.remember(handle, view)
+        } else state.integrationReadFailed = true
     }
     /** The start row's read, while the sidebar says nobody has started the project — and the Landings group's holders, on any
      *  project whose landing waits on a decision (§2.9 LS6): its rows say what stopped the landing and which side holds it. One

@@ -232,6 +232,38 @@ abstract class LandingEntriesShots {
         shot("08-landings-group")
     }
 
+    /** I · the merge card while a stop is asked for (board v4 04 11:41; A11-20 p, iOS 262153779): cancelling before the push — when
+     * the runner stops, that it may still merge, the head's clause, the dead `Cancel requested` and no queue foot — then too late. */
+    @Test fun theMergeCardWhileAStopIsAskedFor() {
+        fun confirmed(phase: String, pastPush: Boolean) = """{"promotionId":"pr-1","state":"CONFIRMED","sourceRef":"refs/heads/project/launch",
+            "sourceSha":"5e5bfca23aa1","upstreamRef":"refs/heads/main","commitsAhead":7,"filesChanged":10,"taskIds":["t1"],
+            "tasks":[{"taskId":"t1","title":"Fix D1"}],"conflicts":[],"landsAs":"MERGE_COMMIT","merged":null,"landingSessionId":"$landing",
+            "execution":{"state":"RUNNING","phase":"$phase","startedAt":"${ago(4)}"},"cancelRequested":true,"pushBoundaryPassed":$pastPush}"""
+        ProjectShell.mergeCheck = true; ProjectShell.mergeJobKind = "LAND_PROMOTION"
+        ProjectShell.inFlightJobs = "[${job("j-1", kind = "LAND_PROMOTION")},${job("j-2", state = "QUEUED")}]"
+        ProjectShell.promotion = confirmed("CHECK", pastPush = false)
+        openPage()
+        await { exists(hasTestTag("project-merge-card:title") and hasText("Cancelling the merge…"), unmerged = true) &&
+            exists(hasTestTag("project-merge-card:cancel-requested")) }
+        shot("09-merge-cancelling")
+        ProjectShell.promotion = confirmed("PUSH", pastPush = true)
+        await { exists(hasTestTag("project-merge-card:title") and hasText("Too late to cancel — the push has started"), unmerged = true) }
+        shot("10-merge-too-late")
+    }
+
+    /** J · a timed-out merge check on the merge card (board v4 04 c5; A11-20 l): Re-run the check, and Abandon in the boards' light red
+     * secondary — a red wash and red ink, no outline. */
+    @Test fun theTimedOutMergeCheckCardsDoors() {
+        // The candidate the check was run for, which Re-run the check names (as LandingEntriesShellTest sets it up).
+        ProjectShell.promotion = """{"promotionId":"pr-1","state":"MERGED","sourceRef":"refs/heads/project/launch","sourceSha":"5e5bfca23aa1",
+            "upstreamRef":"refs/heads/main","taskIds":["t1"],"tasks":[{"taskId":"t1","title":"Fix D1"}],"conflicts":[],"merged":null}"""
+        ProjectShell.mergeCheck = true
+        ProjectShell.inFlightJobs = "[${job("j-1", kind = "CHECK_PROMOTION", timedOut = true)}]"
+        openPage()
+        await { exists(hasTestTag("project-merge-card:rerun")) && exists(hasTestTag("project-merge-card:abandon")) }
+        shot("11-merge-check-timed-out")
+    }
+
     // MARK: the cards' fixtures
 
     private fun xe5(): JsonObject {

@@ -216,9 +216,11 @@ class LandingSessionShellTest {
         signIn(); open("orbit-session:$landing")
         await { exists(hasTestTag("landing:mark:3")) }
         assertEquals(listOf("✓", "✗", "✓", "✗"), (0..3).map { text("landing:mark:$it") })
-        // Only the check that did not pass reads its tail inline (05 g).
-        await { exists(hasTestTag("landing:log-text")) }
-        assertEquals(1, compose.onAllNodesWithTag("landing:log-block", useUnmergedTree = true).fetchSemanticsNodes().size)
+        // Only the check that did not pass reads its tail inline (05 g): its last lines in the dark block, not the whole log.
+        await { exists(hasTestTag("landing:inline-output")) }
+        assertEquals(1, compose.onAllNodesWithTag("landing:inline-output", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals("FAILED something", inlineText())
+        assertFalse("the whole log opens only from Log ›", exists(hasTestTag("landing:log-block"), unmerged = true))
         val logs = ProjectShell.calls.filter { it.startsWith("GET sessions/$landing/landing/log?") }
         assertTrue(logs.any { it.contains("check=2") })
         assertTrue(logs.none { it.contains("check=1") })
@@ -257,6 +259,136 @@ class LandingSessionShellTest {
         await { exists(hasTestTag("landing:failure"), unmerged = true) }
         assertEquals("Stopped · not landed", text("landing:failure"))
     }
+
+    // MARK: a failed check's tail (A11-20 b; iOS and web `LandingInlineOutput`)
+
+    /** One page of the landing log holding [printed] as one chunk. */
+    private fun log(printed: String) =
+        """{"jobId":"j-1","entries":[{"claim":1,"round":1,"seq":0,"text":${kotlinx.serialization.json.JsonPrimitive(printed)},"truncatedBytes":0}],"nextCursor":null}"""
+    private val failedCheck get() = timeline("""{"kind":"CHECK_FINISHED","at":"${ago(600)}","claim":1,"round":1,
+        "check":{"name":"TASK_ACCEPTANCE","index":1},"data":{"exitCode":1,"expectedExitCode":0,"timedOut":false},
+        "text":"Task acceptance failed · exit 1"}""")
+    private fun inlineText() = compose.onAllNodes(hasTestTag("landing:output") and hasAnyAncestor(hasTestTag("landing:inline-output")), true)
+        .fetchSemanticsNodes().firstOrNull()?.config?.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+
+    /** 05 g: the tail a failed check died on is its last six lines that are not blank, in the dark block; `Log ›` opens the whole
+     *  log in its place. */
+    @Test fun aFailedChecksTailIsItsLastSixLinesAndLogOpensTheWhole() {
+        val printed = (1..9).joinToString("\n") { "line $it" } + "\n\n   \n"
+        ProjectShell.landing = view(state = "CHECK_FAILED", timeline = failedCheck); ProjectShell.landingLog = log(printed)
+        signIn(); open("orbit-session:$landing")
+        await { exists(hasTestTag("landing:inline-output")) }
+        assertEquals((4..9).joinToString("\n") { "line $it" }, inlineText())
+        assertFalse(exists(hasTestTag("landing:log-block"), unmerged = true))
+        compose.onNodeWithTag("landing:log:0").performClick()
+        await { exists(hasTestTag("landing:log-block")) }
+        assertEquals(printed, text("landing:log-text"))
+        assertFalse("the opened log takes the tail's place", exists(hasTestTag("landing:inline-output"), unmerged = true))
+    }
+
+    /** A log that printed nothing but blank lines, or one this device could not read, draws nothing inline — no "printed nothing", no
+     *  "couldn't read": the check's line says it failed, and `Log ›` still says what the read found. */
+    @Test fun aFailedCheckWithNothingPrintedDrawsNoTail() {
+        ProjectShell.landing = view(state = "CHECK_FAILED", timeline = failedCheck); ProjectShell.landingLog = log(" \n\t\n\n")
+        signIn(); open("orbit-session:$landing")
+        await { exists(hasTestTag("landing:log:0")) && ProjectShell.calls.any { it.startsWith("GET sessions/$landing/landing/log?") } }
+        settle()
+        assertFalse(exists(hasTestTag("landing:inline-output"), unmerged = true))
+        assertFalse(exists(hasText(io.orbitd.android.reader.LandingSessionCopy.LOG_EMPTY), unmerged = true))
+        compose.onNodeWithTag("landing:log:0").performClick()
+        await { exists(hasTestTag("landing:log-block")) }
+        assertTrue(exists(hasText(" \n\t\n\n") and hasTestTag("landing:log-text"), unmerged = true))
+    }
+
+    @Test fun aFailedCheckWhoseLogCannotBeReadDrawsNoTail() {
+        ProjectShell.landing = view(state = "CHECK_FAILED", timeline = failedCheck); ProjectShell.landingLogStatus = 503
+        signIn(); open("orbit-session:$landing")
+        await { exists(hasTestTag("landing:log:0")) && ProjectShell.calls.any { it.startsWith("GET sessions/$landing/landing/log?") } }
+        settle()
+        assertFalse(exists(hasTestTag("landing:inline-output"), unmerged = true))
+        assertFalse(exists(hasText(io.orbitd.android.reader.LandingSessionCopy.LOG_UNAVAILABLE), unmerged = true))
+        compose.onNodeWithTag("landing:log:0").performClick()
+        await { exists(hasText(io.orbitd.android.reader.LandingSessionCopy.LOG_UNAVAILABLE), unmerged = true) }
+    }
+
+    // MARK: a server this device cannot read (A11-20 e; iOS `offlineCard`, `landingInFlightCache`)
+
+    /** The job an integration read lists for this landing (`inFlightJobs`, with its `landingSessionId`), 200 s into its check. */
+    private fun listedJob() = """[{"jobId":"j-1","kind":"LAND_TASK","state":"RUNNING","phase":"CHECK","taskId":"t-landing",
+        "taskTitle":"Wire the page","generation":1,"startedAt":"${ago(200)}","queuedAt":"${ago(260)}","heartbeatAt":"${ago(5)}",
+        "runnerName":"wikova","timedOut":false,"limitSeconds":600,"retryable":false,"progressProtocol":"v2","claim":1,"round":1,
+        "check":{"name":"TASK_ACCEPTANCE","index":1,"count":3,"budgetSeconds":3600,"startedAt":"${ago(200)}"},
+        "stepStartedAt":"${ago(200)}","outputMovedAt":"${ago(6)}","typicalMs":null,"liveness":"LIVE","landingSessionId":"$landing"}]"""
+
+    /** The project sessions page's poll read the landing's job; then the server cannot be read. The link still opens the landing
+     *  page — the read that would say its kind failed, and that job names this id — and the card is the job frozen. */
+    @Test fun aLinkTheServerCannotAnswerOpensTheLandingFrozenFromTheSessionsPagesRead() {
+        ProjectShell.landing = view(); ProjectShell.inFlightJobs = listedJob()
+        signIn(); openSessionsPage()
+        await { ProjectShell.calls.contains("GET projects/$launch/integration") }
+        ProjectShell.landingStatus = 503
+        open("orbit-session:$landing")
+        assertFrozen()
+    }
+
+    /** Work overview's read keeps the job the same way. */
+    @Test fun workOverviewsReadKeepsTheJobForItsLandingPage() {
+        ProjectShell.landing = view(); ProjectShell.inFlightJobs = listedJob()
+        signIn(); open("orbit-project:$launch")
+        await { exists(hasTestTag("project-detail")) && ProjectShell.calls.contains("GET projects/$launch/integration") }
+        ProjectShell.landingStatus = 503
+        open("orbit-session:$landing")
+        assertFrozen()
+    }
+
+    /** And so does the landing page's own read: opened again once the server cannot be read, it draws what it last read. */
+    @Test fun theLandingPagesOwnReadKeepsTheJobForALaterVisit() {
+        ProjectShell.landing = view(); ProjectShell.inFlightJobs = listedJob()
+        signIn(); open("orbit-session:$landing")
+        await { exists(hasTestTag("landing-more")) && ProjectShell.calls.contains("GET projects/$launch/integration") }
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        await { !exists(hasTestTag("landing-page")) }
+        ProjectShell.landingStatus = 503
+        open("orbit-session:$landing")
+        assertFrozen()
+    }
+
+    /** No read named the id as a landing's: a kind that cannot be read still opens the reader, as it did. */
+    @Test fun aLinkTheServerCannotAnswerAndNoReadNamedOpensTheReader() {
+        ProjectShell.landing = view(); ProjectShell.landingStatus = 503
+        signIn(); open("orbit-session:$landing")
+        await { exists(hasTestTag("transcript-list")) }
+        assertFalse(exists(hasTestTag("landing-page")))
+    }
+
+    /** The frozen page: the job's word and its clock where the read left it, `Update unavailable`, how long ago that read was, no
+     *  door and no menu, and nothing of the conversation. */
+    private fun assertFrozen() {
+        await { exists(hasTestTag("landing-page")) && text("landing-head:detail") == "Update unavailable" }
+        assertTrue(ProjectShell.calls.contains("GET sessions/$landing"))
+        assertEquals("Landing", text("landing-head:title"))
+        val clock = text("landing-head:right")!!
+        assertTrue("$clock is the step's clock at the read, 200 s or more into it", clock.matches(Regex("[3-9]m \\d{1,2}s")))
+        assertTrue(text("landing:live")!!.matches(Regex("Updated \\d+m ago")))
+        assertFalse(exists(hasTestTag("landing:status-note"), unmerged = true))
+        listOf("landing-more", "landing:retry", "landing:rerun", "landing:abandon", "landing:footer", "transcript-list").forEach {
+            assertFalse(it, exists(hasTestTag(it), unmerged = true))
+        }
+        settle()
+        assertEquals("the clock does not run on a read that failed", clock, text("landing-head:right"))
+        assertTrue(ProjectShell.calls.none { it.startsWith("GET sessions/$landing/events") })
+    }
+
+    private fun openSessionsPage() {
+        await { exists(hasTestTag("workspace:${ProjectShell.ALPHA}")) }
+        compose.onNodeWithTag("workspace:${ProjectShell.ALPHA}").performClick()
+        await { exists(hasTestTag("project-row:$launch")) }
+        compose.onNodeWithTag("project-row:$launch").performClick()
+        await { exists(hasTestTag("project-sessions")) }
+    }
+
+    /** Lets what a read answered reach the screen, for an assertion that something is NOT drawn. */
+    private fun settle() { repeat(3) { compose.waitForIdle(); Thread.sleep(400) }; compose.waitForIdle() }
 
     // MARK: the journey's hands and eyes
 

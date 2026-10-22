@@ -30,6 +30,7 @@ import io.orbitd.android.core.cards.*
 import io.orbitd.android.projects.LandingEntryLink
 import io.orbitd.android.projects.LandingLine
 import io.orbitd.android.projects.ProjectLandingHead
+import io.orbitd.android.reader.AbandonButton
 import io.orbitd.android.reader.LandingSessionCopy
 import io.orbitd.android.reader.landingEntry
 import io.orbitd.android.ui.LocalOrbitColors
@@ -85,9 +86,8 @@ internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeC
                 enabled = !acting, modifier = Modifier.heightIn(min = 40.dp).testTag("project-merge-card:rerun")) { Text(LandingSessionCopy.RERUN_THE_CHECK) }
             Spacer(Modifier.weight(1f))
             mergeJob?.text("jobId")?.let { jobId ->
-                OutlinedButton(onClick = { run(LandingSessionCopy.ABANDON_FAILED) { abandon(jobId) } }, enabled = !acting,
-                    modifier = Modifier.heightIn(min = 40.dp).testTag("project-merge-card:abandon"),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text(LandingSessionCopy.ABANDON) }
+                AbandonButton({ run(LandingSessionCopy.ABANDON_FAILED) { abandon(jobId) } }, !acting,
+                    Modifier.heightIn(min = 40.dp).testTag("project-merge-card:abandon"))
             }
         }
     }
@@ -113,7 +113,7 @@ internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeC
         .testTag("project-merge-card:${shape.name.lowercase()}"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         when (shape) {
             ProjectMergeCard.Shape.CHECKING -> {
-                landing?.let { LandingHeadRow(it, onLanding, roundLanding, openLanding) }
+                landing?.let { LandingHeadRow(it, onLanding, roundLanding, openLanding, PromotionCards.cancelRequested(view)) }
                 if (timedOut) {
                     mergeJobDetail?.let { Text(it, Modifier.testTag("project-merge-card:detail"), style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -140,12 +140,14 @@ internal fun ProjectMergeCardView(merge: ProjectMergeModel, shape: ProjectMergeC
 
 /** The merge job's live row — the merged line's own anatomy, so the check and the merge it becomes are one shape (iOS 3b23aa163,
  * board docs/mocks/project-merge-check-row). Since 2026-10-19 (方案 A) the whole row opens THIS ROUND's landing session; a server
- * that names none keeps main's press, the jobs list. */
+ * that names none keeps main's press, the jobs list. A stop asked for and not yet answered is the head's own clause (§3.3 M-T10). */
 @Composable
-private fun LandingHeadRow(line: LandingLine, onLanding: (() -> Unit)?, roundLanding: String?, openLanding: (String) -> Unit) {
+private fun LandingHeadRow(line: LandingLine, onLanding: (() -> Unit)?, roundLanding: String?, openLanding: (String) -> Unit,
+    stopRequested: Boolean) {
     val press: (() -> Unit)? = if (roundLanding != null) ({ openLanding(roundLanding) }) else onLanding
+    val head = if (stopRequested) line.head.copy(detail = "${line.head.detail} · ${PromotionCards.stopRequestedClause}") else line.head
     Box(Modifier.fillMaxWidth().testTag("project-merge-card:landing").then(if (press != null) Modifier.clickable(role = Role.Button, onClick = press) else Modifier)) {
-        ProjectLandingHead(line.word, line.head, line.running, line.timedOut)
+        ProjectLandingHead(line.word, head, line.running, line.timedOut)
     }
 }
 
@@ -208,25 +210,32 @@ private fun Asking(view: JsonObject, criteriaMet: Pair<Int, Int>?, tint: Color, 
 }
 
 /** B: under way, and the reader may walk away; Cancel until the push begins, and the round's landing at the card's foot (方案 A). A
- * round the server judged timed out has no Cancel left: its two doors are the checking card's. */
+ * round the server judged timed out has no Cancel left: its two doors are the checking card's. Once the owner asked it to stop
+ * (§3.3 M-T10, the server's `cancelRequested`) the card says it is cancelling — or, past the push boundary, that the ask came too
+ * late — Cancel is the dead `Cancel requested`, and the queue's foot is not drawn. */
 @Composable
 private fun Merging(view: JsonObject, tint: Color, landing: LandingLine?, onLanding: (() -> Unit)?, roundLanding: String?,
     openLanding: (String) -> Unit, timedOut: Boolean, detail: String?, acting: Boolean,
     queuedFoot: @Composable () -> Unit, timedOutDoors: @Composable () -> Unit, cancel: () -> Unit) {
-    Head(PromotionCards.pageTitle(view), R.drawable.ic_merge, tint, tint)
-    Text(PromotionCards.mergingStatusLine(view), Modifier.testTag("project-merge-card:status"), style = MaterialTheme.typography.labelLarge)
-    landing?.let { LandingHeadRow(it, onLanding, roundLanding, openLanding) }
+    val cancelling = PromotionCards.cancelRequested(view)
+    Head(PromotionCards.mergingCardTitle(view), R.drawable.ic_merge, tint, tint)
+    Text(PromotionCards.mergingCardStatus(view), Modifier.testTag("project-merge-card:status"), style = MaterialTheme.typography.labelLarge)
+    landing?.let { LandingHeadRow(it, onLanding, roundLanding, openLanding, cancelling) }
     if (timedOut) {
         detail?.let { Text(it, Modifier.testTag("project-merge-card:detail"), style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant) }
         timedOutDoors()
     } else {
-        Text(PromotionCards.pageNothingToDo, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        queuedFoot()
+        Text(PromotionCards.mergingCardNote(view), Modifier.testTag("project-merge-card:note"), style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (!cancelling) queuedFoot()
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OpenLandingFoot(roundLanding, openLanding)
             Spacer(Modifier.weight(1f))
-            OutlinedButton(onClick = cancel, enabled = !acting && PromotionCards.cancellable(view),
+            // The board's and the web's dead press in Cancel's own place (board v4 04 11:41), not a second Cancel to press.
+            if (cancelling) OutlinedButton(onClick = {}, enabled = false,
+                modifier = Modifier.heightIn(min = 48.dp).testTag("project-merge-card:cancel-requested")) { Text(PromotionCards.cancelRequestedLabel) }
+            else OutlinedButton(onClick = cancel, enabled = !acting && PromotionCards.cancellable(view),
                 modifier = Modifier.heightIn(min = 48.dp).testTag("project-merge-card:cancel")) { Text(PromotionCards.cancel) }
         }
     }
