@@ -28,7 +28,8 @@ import org.robolectric.annotation.Config
 /** A05-3 (iOS d2858a5e8): the session page's ⋯ in the bar replaces its Share button — Share… / Copy Link; Rename… /
  * Pin / Move… / Tags…; Open Task or Open Project for a session one of them runs; Complete Session or Move to Open; Move
  * to Trash. A trashed session offers only Move to Open and, asked first, Delete Permanently; what would stop a live run
- * says so. */
+ * says so. Android's own Session details (A06-18: the session's name under the bar opened it until that row went) heads
+ * the Open Task / Open Project group, and comes first in a trashed session's. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = NavShellApplication::class, qualifiers = "w411dp-h891dp")
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -47,7 +48,8 @@ class SessionMenuTest {
         NavShell.ended = setOf(NavShell.SESSION)
         signIn(); open("orbit-session:${NavShell.SESSION}")
         menu()
-        assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Open Task", "Complete Session", "Move to Trash"), items())
+        assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Session details", "Open Task", "Complete Session",
+            "Move to Trash"), items())
         assertTrue("an ended run has nothing to stop", compose.onAllNodes(hasText("Stops the current run")).fetchSemanticsNodes().isEmpty())
         compose.onAllNodesWithContentDescription("Share session").assertCountEquals(0)
     }
@@ -55,7 +57,7 @@ class SessionMenuTest {
     @Test fun aSessionInNoTaskOrProjectHasNoOpenItem() {
         signIn(); open("orbit-session:${NavShell.PLAIN}")
         menu()
-        assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Complete Session", "Move to Trash"), items())
+        assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Session details", "Complete Session", "Move to Trash"), items())
     }
 
     @Test fun whatWouldStopALiveRunSaysSo() {
@@ -80,18 +82,29 @@ class SessionMenuTest {
         NavShell.lifecycle = NavShell.lifecycle + (NavShell.SESSION to "COMPLETED")
         signIn(); open("orbit-session:${NavShell.SESSION}")
         menu()
-        assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Open Task", "Move to Open", "Move to Trash"), items())
+        assertEquals(listOf("Share…", "Copy Link", "Rename…", "Pin", "Move…", "Tags…", "Session details", "Open Task", "Move to Open",
+            "Move to Trash"), items())
     }
 
     @Test fun aTrashedSessionOffersMoveToOpenAndDeletePermanentlyAskedFirst() {
         NavShell.lifecycle = NavShell.lifecycle + (NavShell.SESSION to "TRASH")
         signIn(); open("orbit-session:${NavShell.SESSION}")
         menu()
-        assertEquals(listOf("Move to Open", "Delete Permanently"), items())
+        assertEquals(listOf("Session details", "Move to Open", "Delete Permanently"), items())
         item("Delete Permanently").performClick()
         compose.onNodeWithText("Delete permanently?").assertExists()
         compose.onNodeWithText("This session and its full transcript will be permanently deleted. This can't be undone.").assertExists()
         assertTrue("nothing is deleted before it is confirmed", NavShell.calls.none { it.startsWith("DELETE") })
+    }
+
+    /** A06-18: the details the session's name under the bar used to open, from the ⋯ now. */
+    @Test fun sessionDetailsOpensFromTheMenu() {
+        signIn(); open("orbit-session:${NavShell.SESSION}")
+        menu()
+        item("Session details").performClick()
+        await { compose.onAllNodesWithTag("session-details").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Close session details").performClick()
+        await { compose.onAllNodesWithTag("session-details").fetchSemanticsNodes().isEmpty() }
     }
 
     @Test fun openTaskOpensTheTaskOverTheSession() {

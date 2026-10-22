@@ -14,9 +14,10 @@ import org.robolectric.annotation.Config
 
 /**
  * iOS `ConsoleView.foldsChrome` in the production shell: on a phone's width, while the composer holds the keyboard,
- * the conversation gets the screen — the shell's bar, the session's title and state rows and the cards above the
- * composer fold away together and give it back when the keyboard goes. The cards are folded, not removed, so what
- * was open in them stays open. A wide page keeps all of it.
+ * the conversation gets the screen — the shell's bar, with the session's ⋯ in it, and the cards above the composer fold
+ * away together and give it back when the keyboard goes. The cards are folded, not removed, so what was open in them
+ * stays open. A wide page keeps all of it. Since A06-18 (iOS d87e5fa67) no rows sit under the bar to fold: the session's
+ * name and state are not drawn on the page.
  */
 abstract class ReaderChromeFoldFixture : ComposerShellTest() {
     private val title = "Composer increments"
@@ -38,6 +39,8 @@ abstract class ReaderChromeFoldFixture : ComposerShellTest() {
 
     protected fun listHeight() = compose.onNodeWithTag("transcript-list").fetchSemanticsNode().boundsInWindow.height
     protected fun titleRow() = hasText(title)
+    protected fun stateRow() = hasText("AWAITING_INPUT")
+    protected fun sessionMenu() = hasContentDescription("Session actions")
     protected fun lastRead() = hasText(lastLine)
 }
 
@@ -48,16 +51,16 @@ class ReaderChromeFoldTest : ReaderChromeFoldFixture() {
         session()
         signIn(); openSession()
         await { has(hasTestTag("app-bar")) }
-        assertTrue("the title row above the transcript", has(titleRow()))
-        assertTrue("the state row", has(hasText("AWAITING_INPUT")))
+        assertTrue("the session's ⋯ in the bar", has(sessionMenu()))
+        assertFalse("no title row under the bar", has(titleRow()))
+        assertFalse("nor a state row", has(stateRow()))
         assertTrue("the branch bar above the composer", has(hasTestTag("worktree-bar")))
         assertTrue("the last line reads while nothing types", has(lastRead()))
         val resting = listHeight()
 
         compose.onNodeWithTag("composer-input").performClick()
         await { !has(hasTestTag("app-bar")) }
-        assertFalse("the title row folds away with the bar", has(titleRow()))
-        assertFalse("so does the state row", has(hasText("AWAITING_INPUT")))
+        assertFalse("the ⋯ folds away with the bar", has(sessionMenu()))
         assertFalse("and the branch bar above the composer", has(hasTestTag("worktree-bar")))
         val typing = listHeight()
         assertTrue("the conversation got the chrome's room: $resting → $typing", typing > resting)
@@ -66,7 +69,7 @@ class ReaderChromeFoldTest : ReaderChromeFoldFixture() {
         // The keyboard going gives all of it back, as it was.
         compose.onNodeWithTag("composer-model").performSemanticsAction(SemanticsActions.RequestFocus)
         await { has(hasTestTag("app-bar")) }
-        assertTrue(has(titleRow()))
+        assertTrue(has(sessionMenu()))
         assertTrue(has(hasTestTag("worktree-bar")))
         assertEquals(resting, listHeight(), 1f)
     }
@@ -75,7 +78,7 @@ class ReaderChromeFoldTest : ReaderChromeFoldFixture() {
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], application = ComposerShellApplication::class, qualifiers = "w800dp-h1000dp")
 class WideReaderChromeTest : ReaderChromeFoldFixture() {
-    /** The fold is the phone's alone: a page wide enough for the two-column shell keeps its bar and its rows. */
+    /** The fold is the phone's alone: a page wide enough for the two-column shell keeps its bar and its cards. */
     @Test fun aWidePageKeepsItsChrome() {
         session()
         signIn(); openSession()
@@ -83,8 +86,8 @@ class WideReaderChromeTest : ReaderChromeFoldFixture() {
         val resting = listHeight()
         compose.onNodeWithTag("composer-input").performClick()
         compose.waitForIdle()
-        assertTrue("the bar stays", has(hasTestTag("app-bar")))
-        assertTrue("and the rows under it", has(titleRow()) && has(hasText("AWAITING_INPUT")))
+        assertTrue("the bar stays, with its ⋯", has(hasTestTag("app-bar")) && has(sessionMenu()))
+        assertFalse("no rows under it, typing or not", has(titleRow()) || has(stateRow()))
         assertTrue("and the cards above the composer", has(hasTestTag("worktree-bar")))
         assertEquals(resting, listHeight(), 1f)
     }

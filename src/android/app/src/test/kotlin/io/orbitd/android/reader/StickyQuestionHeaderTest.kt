@@ -1,108 +1,132 @@
 package io.orbitd.android.reader
 
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
-import io.orbitd.android.MainActivity
-import io.orbitd.android.TestOrbitApplication
-import io.orbitd.android.core.realtime.RunEvent
+import io.orbitd.android.composer.ComposerShell
+import io.orbitd.android.composer.ComposerShellApplication
+import io.orbitd.android.composer.ComposerShellTest
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
-import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
-/** The sticky "↑ Your question" header over a transcript list laid out the way SessionReader lays it out. */
+/**
+ * A06-18 (iOS d87e5fa67, e9c1552f5) in the production shell at a small phone's width: the sticky question is a capsule in the
+ * bar's middle, between back and the ⋯, and only while the reader is off the live tail — scrolled up, or reading a window
+ * opened at a record. At the tail the bar's middle is empty: no question and no "Session". The capsule still names the
+ * question above the fold, by the arrow alone and the question's first line, steps back through the earlier ones, hides where
+ * none is above, and goes back to the one it names; up in the bar its coming moves nothing in the transcript.
+ */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [29], application = TestOrbitApplication::class, qualifiers = "w411dp-h891dp")
-class StickyQuestionHeaderTest {
-    @get:Rule val compose = createAndroidComposeRule<MainActivity>()
-    private fun text(t: String) = buildJsonObject { put("text", t) }
-    private val rows = transcriptRows(buildList {
-        add(RunEvent("user", 1, text("First question")))
-        (2L..11L).forEach { add(RunEvent("assistant", it, text("Answer $it"))) }
-        add(RunEvent("user", 12, text("Second question\nwith a second line")))
-        (13L..30L).forEach { add(RunEvent("assistant", it, text("Answer $it"))) }
-    })
-    private val jumped = mutableListOf<String>()
-    private lateinit var list: LazyListState
+@Config(sdk = [29], application = ComposerShellApplication::class, qualifiers = "w360dp-h640dp")
+class StickyQuestionHeaderTest : ComposerShellTest() {
+    private val record = "34A06fQuestionRecord01"
 
-    private var hidden by androidx.compose.runtime.mutableStateOf(false)
+    private fun event(type: String, seq: Long, text: String) = buildJsonObject {
+        put("type", type); put("seq", seq); put("payload", buildJsonObject { put("text", text) })
+    }
+    private fun answer(seq: Long) = event("assistant", seq, "Answer $seq\n\nIt goes on for a while, so that a few of these fill the phone's " +
+        "page.\n\nAnd a little more after that.")
+    private val transcript = buildList {
+        add(event("user", 1, "First question"))
+        (2L..11L).forEach { add(answer(it)) }
+        add(event("user", 12, "Second question\nwith a second line"))
+        (13L..30L).forEach { add(answer(it)) }
+    }
 
-    private fun show() {
-        compose.runOnUiThread { compose.activity.setContent { MaterialTheme {
-            list = androidx.compose.foundation.lazy.rememberLazyListState()
-            Column(Modifier.fillMaxSize()) {
-                StickyQuestion(rows, list, hidden) { jumped += it.key }
-                LazyColumn(Modifier.weight(1f).testTag("transcript-list"), state = list,
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    item(key = "older") { }
-                    items(rows, key = { it.key }) { Text(it.event.body(), Modifier.height(96.dp)) }
-                    item(key = "tail") { Spacer(Modifier.height(1.dp)) }
-                }
-            }
-        } } }
+    private fun session() {
+        ComposerShell.events = transcript
+        signIn(); openSession()
+        await { has(hasTestTag("event:30")) && has(hasTestTag("app-bar")) }
         compose.waitForIdle()
     }
-    private fun scrollTo(index: Int) { compose.onNodeWithTag("transcript-list").performScrollToIndex(index); compose.waitForIdle() }
-    private val header get() = compose.onAllNodesWithContentDescription("Jump to your last question")
 
-    @Test fun hiddenAtTheTopThenNamesTheQuestionAboveTheFoldAndStepsBack() {
-        show()
-        header.assertCountEquals(0)
-        scrollTo(rows.size + 1)
-        header.assertCountEquals(1)
-        named("↑ Your question", "Second question")
-        compose.onNodeWithText("with a second line", substring = true, useUnmergedTree = true).assertDoesNotExist()
-        scrollTo(7)
-        named("↑ Your question", "First question")
-        header.onFirst().performClick()
-        assertEquals(listOf("event:1"), jumped)
-        scrollTo(0)
-        header.assertCountEquals(0)
+    private val capsule = hasTestTag("question-capsule")
+    private fun inCapsule(matcher: SemanticsMatcher) = has(matcher and hasAnyAncestor(capsule), unmerged = true)
+    private fun names(line: String) = inCapsule(hasText("↑")) && inCapsule(hasText(line))
+    private fun top(tag: String) = compose.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode().boundsInWindow.top
+    private fun barTexts() = compose.onAllNodes(hasAnyAncestor(hasTestTag("app-bar")) and hasText("", substring = true), useUnmergedTree = true)
+        .fetchSemanticsNodes()
+
+    /** Back up the transcript as a finger does: a slow drag that stops before it lifts, so nothing flings. */
+    private fun dragBack(distance: Float) = compose.onNodeWithTag("transcript-list").performTouchInput {
+        down(center); repeat(10) { moveBy(Offset(0f, distance / 10)) }; advanceEventTime(200); up()
     }
 
-    @Test fun foldsAwayWhileTheComposerHoldsTheKeyboard() {
-        show()
-        scrollTo(rows.size + 1)
-        header.assertCountEquals(1)
-        compose.runOnIdle { hidden = true }
-        header.assertCountEquals(0)
-        compose.runOnIdle { hidden = false }
-        named("↑ Your question", "Second question")
+    /** 末尾不显示: following the answer at the tail, the bar carries no question — though one is above the fold — and no title. */
+    @Test fun atTheLiveTailTheBarsMiddleIsEmpty() {
+        session()
+        assertTrue("the second question is above the fold", has(hasTestTag("event:12")).not() || top("event:12") < top("transcript-list"))
+        assertFalse("no capsule at the tail", has(capsule))
+        assertTrue("nothing written in the bar: ${barTexts()}", barTexts().isEmpty())
+        assertTrue("back and the ⋯ are there", has(hasContentDescription("Back")) && has(hasContentDescription("Session actions")))
+        assertFalse("nor the jump row", has(hasTestTag("transcript-jump")))
     }
 
-    /** The header sits in the list's flow, yet its coming and going leaves the line being read where it was (A06's prepend guarantee). */
-    @Test fun theHeaderComingAndGoingLeavesTheReadLineInPlace() {
-        show()
-        scrollTo(15)
-        header.assertCountEquals(1)
-        val line = compose.onNodeWithText("Answer 20")
-        val top = line.fetchSemanticsNode().boundsInRoot.top
-        compose.runOnIdle { hidden = true }
-        header.assertCountEquals(0)
-        assertEquals(top, line.fetchSemanticsNode().boundsInRoot.top, 1f)
-        compose.runOnIdle { hidden = false }
-        header.assertCountEquals(1)
-        assertEquals(top, line.fetchSemanticsNode().boundsInRoot.top, 1f)
+    /** 往上翻显示: scrolled up, the capsule names the question above the fold; a tap goes back to it, and it steps back. */
+    @Test fun scrollingUpPutsTheQuestionInTheBarAndATapGoesBackToIt() {
+        session()
+        val listTop = top("transcript-list")
+        dragBack(300f)
+        await { names("Second question") }
+        assertFalse("its first line only", inCapsule(hasText("with a second line", substring = true)))
+        assertFalse("the arrow alone over the reader's own words", inCapsule(hasText("Your question", substring = true)))
+        assertTrue("the jump row shows with it", has(hasTestTag("transcript-jump")))
+        assertEquals("up in the bar it moves nothing", listTop, top("transcript-list"), 1f)
+
+        compose.onNode(capsule).performClick()
+        await { names("First question") }
+        val below = top("event:12") - top("transcript-list")
+        assertTrue("the question it named is at the top of the transcript: $below px under it",
+            below >= 0f && below <= with(compose.density) { 48.dp.toPx() })
+
+        compose.onNodeWithTag("transcript-list").performScrollToIndex(0)
+        await { !has(capsule) }
+
+        compose.onNodeWithText("Jump to latest").performClick()
+        await { has(hasTestTag("event:30")) && !has(hasTestTag("transcript-jump")) }
+        assertFalse("back at the tail, the bar's middle is empty again", has(capsule))
     }
 
-    private fun named(label: String, line: String) {
-        val bar = hasAnyAncestor(hasContentDescription("Jump to your last question"))
-        compose.onNode(hasText(label) and bar, useUnmergedTree = true).assertIsDisplayed()
-        compose.onNode(hasText(line) and bar, useUnmergedTree = true).assertIsDisplayed()
+    /** 记录窗口显示: a window opened at a record is off the live tail, so the capsule names the question above the record. */
+    @Test fun aWindowOpenedAtARecordShowsTheQuestionInTheBar() {
+        ComposerShell.events = transcript
+        ComposerShell.around = buildJsonObject {
+            put("events", JsonArray(transcript.take(20))); put("hasMore", false); put("after", 20)
+            put("anchor", buildJsonObject { put("kind", "event"); put("id", record); put("seq", 16) })
+        }
+        signIn()
+        open("orbit-session:${ComposerShell.SESSION}?at=$record")
+        await { has(hasTestTag("composer-model") and isEnabled()) }
+        await { names("Second question") }
+        assertTrue("the record's window has newer messages after it", has(hasText("Load newer messages")) || has(hasTestTag("transcript-jump")))
+        compose.onNode(capsule).performClick()
+        await { names("First question") }
+    }
+
+    /** The capsule is the bar's: it folds away with it while the composer holds the keyboard, and comes back with it. */
+    @Test fun theCapsuleFoldsAwayWithTheBarWhileTheComposerHoldsTheKeyboard() {
+        session()
+        dragBack(300f)
+        await { names("Second question") }
+        compose.onNodeWithTag("composer-input").performClick()
+        await { !has(hasTestTag("app-bar")) }
+        assertFalse(has(capsule))
+        compose.onNodeWithTag("composer-model").performSemanticsAction(SemanticsActions.RequestFocus)
+        await { has(hasTestTag("app-bar")) && names("Second question") }
+    }
+
+    /** The band it replaced moved the list by its height and scrolled it back; the capsule's coming leaves the line read where it was. */
+    @Test fun theCapsuleComingLeavesTheReadLineInPlace() {
+        session()
+        val line = top("event:30")
+        // A touch on the transcript stops following the tail without moving it.
+        compose.onNodeWithTag("transcript-list").performTouchInput { click(Offset(4.dp.toPx(), centerY)) }
+        await { names("Second question") }
+        assertEquals(line, top("event:30"), 1f)
     }
 }

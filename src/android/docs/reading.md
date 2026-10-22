@@ -54,8 +54,9 @@ reading/cache APIs; auth, wire DTOs, the unified destination and A07/A08 interfa
   deliberately excludes the content-padding origin. A touch pauses following for selection;
   scrolling to the bottom or Jump to latest resumes it. Historical reading stays in place.
   A linked record has its own saved position, so reading it does not replace the return source's
-  bookmark. Recreating an already-open record restores its current position. Connection notices
-  share a fixed-height status row so reconnecting does not displace the transcript.
+  bookmark. Recreating an already-open record restores its current position. The reconnect notice
+  ("Saved messages · Reconnecting…" and Retry) shows only while reconnecting, under the transcript,
+  so its coming and going never displaces the line being read (A06-18).
 - Saved reading windows use account-scoped storage, at most 200 events and 1 MiB. Large windows
   shrink around the anchor. If even one event exceeds that limit, only position metadata is
   stored and restoration pages to its sequence; offline failure offers Retry rather than
@@ -75,7 +76,7 @@ reading/cache APIs; auth, wire DTOs, the unified destination and A07/A08 interfa
   fetches truncated payloads first, so a collapsed preview is not silently copied as full output.
 - Tool inputs/results, error status, live snapshots, subagent records and background jobs remain
   readable. Background REST fields are `toolUseId`, `shellId` and `latestOutput`, with live whole
-  snapshots overlaid. Session details include branch/base/worktree state, changed files, diff,
+  snapshots overlaid. Session details (the ⋯ menu's, A06-18) include branch/base/worktree state, changed files, diff,
   and related task/project/session routes. Interactive cards remain their feature tasks' work.
 - An unexplained failed `turn_end` has a readable, copyable notice at its original sequence.
   Success/completed, absent subtype, authoritative status and already explained outcomes do not
@@ -187,9 +188,12 @@ Each is a projection in `reader/` beside the A06 rows, not a second renderer.
   provider failing becomes an `auto_retry` row (`variant` quota/apiError, `stale`, `afterUserMsg`) or an error
   row, classified by the copy of @orbit/shared `events.ts` that `EngineErrorsParityTest` reads back — Codex's
   exhausted 429 budget is transient (A06-2). The countdown/Retry card itself is A07c's.
-- **Sticky "↑ Your question" header** (`StickyQuestions.kt`): the newest question above the item that owns the
+- **Sticky question capsule** (`StickyQuestions.kt`): the newest question above the item that owns the
   list's top line; card turns are named by their card's words and a background job's news is not a question.
-  Both answers go through `StickyQuestionHold` (A06-4). It folds away while a phone's composer is focused.
+  Both answers go through `StickyQuestionHold` (A06-4). Since A06-18 (iOS d87e5fa67, e9c1552f5) it is a one-line
+  capsule in the bar's middle — the arrow alone over the reader's own words, a card's label as it stands — shown only
+  off the live tail (when the jump row shows), and the bar names no session; it folds away with the bar while a
+  phone's composer is focused.
 - **Tail pinning on resize** (`TailPinning.kt`, A06-5): the list's own measure asks `followsResize`.
 - **Workflow progress** (`TaskProgress.kt`, `TaskProgressViews.kt`): `task_progress` frames, or the end's
   `progress` (background_task / REST background list), drawn as phases, agent rows and totals on Agent/Workflow
