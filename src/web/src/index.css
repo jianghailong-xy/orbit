@@ -1041,6 +1041,41 @@ button.toast--pill:focus-visible {
     opacity: 1;
   }
 }
+/* A Workspace row's ⋯ (Configure, Delete): it takes the ⌘N's place while the row is hovered or its
+   menu is open, and always shows in the touch drawer, which has no hover. A right-click on the row
+   opens the same menu. */
+.tp-workspace-actions {
+  display: none;
+  flex: none;
+}
+.tp-item:hover .tp-workspace-actions,
+.tp-item.menu-open .tp-workspace-actions {
+  display: flex;
+}
+.tp-workspace-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-3);
+  font-size: 14px;
+  cursor: pointer;
+}
+.tp-workspace-more:hover,
+.tp-workspace-more[data-popup-open] {
+  background: var(--bg-hover-strong);
+  color: var(--text-1);
+}
+@media (max-width: 960px) {
+  .tp-workspace-actions {
+    display: flex;
+  }
+}
 /* A Workspace row while the list is arranged: it opens nothing, and a drag handle like a machine
    card's on Infrastructure stands in the folder's column. */
 .tp-item.editing {
@@ -1334,6 +1369,10 @@ button.toast--pill:focus-visible {
      indicators. */
   .app-shell .app-nav:not(.collapsed) .tp-workspace-shortcut {
     display: inline;
+  }
+  .app-shell .app-nav:not(.collapsed) .tp-item:hover .tp-workspace-shortcut,
+  .app-shell .app-nav:not(.collapsed) .tp-item.menu-open .tp-workspace-shortcut {
+    display: none;
   }
   .app-shell .app-nav:not(.collapsed) .tp-nav-shortcut {
     display: inline;

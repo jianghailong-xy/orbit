@@ -3,6 +3,7 @@ import {
   CaretDownOutlined,
   CheckOutlined,
   CodeOutlined,
+  DeleteOutlined,
   DisconnectOutlined,
   FolderOutlined,
   HolderOutlined,
@@ -10,6 +11,7 @@ import {
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  MoreOutlined,
   SettingOutlined,
   TeamOutlined,
   UserOutlined,
@@ -70,7 +72,8 @@ import { wikiShown, wikiWaitingOnYou } from '../lib/wiki';
 import { wikiWaiting, writeWikiFromWorkspace } from '../lib/wikiSpace';
 import { SidebarNavIcon } from './SidebarNavIcon';
 import { Avatar } from './ui/Avatar';
-import { Menu } from './ui/Menu';
+import { useConfirm } from './ui/ConfirmDialog';
+import { Menu, type MenuItem } from './ui/Menu';
 import { Tooltip } from './ui/Tooltip';
 
 const IS_MAC_PLATFORM =
@@ -551,6 +554,49 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
     onSuccess: (data) => qc.setQueryData(['workspaces'], data),
     onSettled: () => void qc.invalidateQueries({ queryKey: ['workspaces'] }),
   });
+  // A row's own actions (its ⋯, or a right-click): Configure opens it in its machine's Workspaces
+  // section, Delete is that section's Delete with the same confirmation. A refusal (a project it
+  // still coordinates) is shown in the dialog, which stays open.
+  const [confirm, confirmation] = useConfirm();
+  const workspaceMenu = (a: Workspace): MenuItem[] => {
+    const runnerId = workspaceRunnerId(a);
+    return [
+      ...(runnerId
+        ? [
+            {
+              key: 'configure',
+              icon: <SettingOutlined />,
+              label: 'Configure',
+              onSelect: () => {
+                onNavigate?.();
+                navigate(`/runners/${encodeId(runnerId)}?workspace=${encodeId(a.id)}`);
+              },
+            },
+            { type: 'separator' as const, key: 'divider' },
+          ]
+        : []),
+      {
+        key: 'delete',
+        icon: <DeleteOutlined />,
+        label: 'Delete workspace…',
+        danger: true,
+        onSelect: () =>
+          void confirm({
+            title: `Delete workspace “${a.name}”?`,
+            description:
+              'The workspace leaves your list but is not erased — its sessions and tasks are kept and stay linked to it. To park one you still use, disable it instead.',
+            confirmText: 'Delete',
+            danger: true,
+            cancelText: 'Cancel',
+            onConfirm: async () => {
+              await api(`/workspaces/${a.id}`, { method: 'DELETE' });
+              if (a.id === litWorkspaceId) navigate('/');
+              await qc.invalidateQueries({ queryKey: ['workspaces'] });
+            },
+          }),
+      },
+    ];
+  };
   const workspaceSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -875,6 +921,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                       needsYou={workspaceNeedsYou.get(a.id) ?? 0}
                       shortcutLabel={workspaceShortcutLabel(dragPreviewIds?.indexOf(a.id) ?? index)}
                       onOpen={openWorkspace}
+                      menu={workspaceMenu(a)}
                       dragHandle={dragHandle}
                     />
                   );
@@ -892,6 +939,7 @@ export function TasksSidePanel({ open = false, onNavigate }: { open?: boolean; o
                 })}
             </SortableContext>
           </DndContext>
+          {confirmation}
         </div>
 
         {orderedWorkspaces.length > 0 && openProjects.length > 0 && <div className="tp-divider" />}
@@ -1180,6 +1228,7 @@ export function WorkspaceRow({
   needsYou,
   shortcutLabel,
   onOpen,
+  menu,
   dragHandle,
 }: {
   workspace: Workspace;
@@ -1191,6 +1240,8 @@ export function WorkspaceRow({
   needsYou: number;
   shortcutLabel?: string | null;
   onOpen: (a: Workspace) => void;
+  /** The row's ⋯ menu, also opened by a right-click on the row. */
+  menu: MenuItem[];
   /** Set while the list is being arranged (Edit): see the branch below. */
   dragHandle?: ReactNode;
 }) {
@@ -1205,6 +1256,7 @@ export function WorkspaceRow({
       </span>
     </span>
   );
+  const [menuOpen, setMenuOpen] = useState(false);
   const shortcut = shortcutLabel && (
     <kbd
       className="tp-count tp-workspace-shortcut"
@@ -1235,8 +1287,12 @@ export function WorkspaceRow({
   const showJobsDot = jobs > 0 && !running && !offline;
   return (
     <div
-      className={`tp-item ${active ? 'active' : ''}`}
+      className={`tp-item ${active ? 'active' : ''}${menuOpen ? ' menu-open' : ''}`}
       onClick={() => onOpen(workspace)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenuOpen(true);
+      }}
     >
       <span
         className="tp-ico tp-workspace-icon"
@@ -1277,6 +1333,20 @@ export function WorkspaceRow({
         needsYou={needsYou}
         runnerLabel={runnerLabel}
       />
+      <span className="tp-workspace-actions" onClick={(e) => e.stopPropagation()}>
+        <Menu
+          side="bottom"
+          align="end"
+          items={menu}
+          open={menuOpen}
+          onOpenChange={setMenuOpen}
+          trigger={
+            <button type="button" className="tp-workspace-more" aria-label={`${workspace.name} actions`} title="Actions">
+              <MoreOutlined />
+            </button>
+          }
+        />
+      </span>
     </div>
   );
 }
