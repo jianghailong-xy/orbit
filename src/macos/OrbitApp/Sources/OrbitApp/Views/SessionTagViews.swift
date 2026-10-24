@@ -2,23 +2,16 @@ import SwiftUI
 import OrbitKit
 
 // Session tags (Files.app-style colored labels). The library lives on `AppModel.sessionTags`
-// (loaded from GET /session-tags — 7 system colors + custom tags); this file is the UI: the small
-// row dots, the multi-select picker sheet, and the add/rename/recolor editor. Presented from a
-// session row's "Tags…" action (see SessionRowActions) and filtered/grouped in AgentPanes.
+// (loaded from GET /session-tags — 7 system colors + custom tags); this file is the UI: the
+// multi-select picker sheet and the add/rename/recolor editor. Presented from a session row's
+// "Tags…" action (see SessionRowActions) and filtered/grouped in AgentPanes. The rows themselves
+// draw no tags (the owner, 2026-10-22, docs/mocks/session-recap-display/04-decided).
 
 extension Color {
     /// A Color from a `#RRGGBB` hex (the session-tag palette). Falls back to gray on a malformed
     /// value so a row never crashes on bad data.
     init(tagHex hex: String) {
         guard let c = TagChipColor.components(hex: hex) else { self = .gray; return }
-        self.init(red: c.red, green: c.green, blue: c.blue)
-    }
-
-    /// The same tag colour used as chip *text* — a legible shade of it rather than the raw hex; see
-    /// `TagChipColor`, which web's `lib/tagColor` mirrors. Falls back to the row's secondary text
-    /// colour on a malformed hex: unusual, but never unreadable.
-    init(tagLabelHex hex: String, dark: Bool) {
-        guard let c = TagChipColor.label(hex: hex, dark: dark) else { self = .secondary; return }
         self.init(red: c.red, green: c.green, blue: c.blue)
     }
 }
@@ -29,82 +22,6 @@ enum TagPalette {
     static let colors: [String] = [
         "#FF3B30", "#FF9500", "#FFCC00", "#34C759", "#007AFF", "#AF52DE", "#8E8E93",
     ]
-}
-
-/// The small colored dots on a session row marking its tags. Up to 3, then a "+N" overflow; renders
-/// nothing when the session is untagged. Tags arrive server-ordered (system first).
-struct SessionTagDots: View {
-    let tags: [SessionTag]
-    private var shown: [SessionTag] { Array(tags.prefix(3)) }
-    private var overflow: Int { max(0, tags.count - shown.count) }
-
-    var body: some View {
-        if !tags.isEmpty {
-            HStack(spacing: 3) {
-                ForEach(shown) { t in
-                    Circle().fill(Color(tagHex: t.color)).frame(width: 8, height: 8)
-                }
-                if overflow > 0 {
-                    Text("+\(overflow)").font(.orbitMeta).foregroundStyle(.secondary)
-                }
-            }
-            .accessibilityLabel("Tags: \(tags.map(\.name).joined(separator: ", "))")
-        }
-    }
-}
-
-/// The *named* tags on a compact session row — the tag's own name on a wash of its colour, the
-/// native port of web's `.session-tag-chip`. Same overflow rule as the dots (3, then "+N") and the
-/// same nothing-when-untagged. The dots above say only "there are two of them": the naming pass
-/// writes semantic tags ("登录", "性能") and a swatch cannot show a word, so on iPhone — where there
-/// is no hover tooltip to fall back to — the meaning was unreadable.
-struct SessionTagChips: View {
-    let tags: [SessionTag]
-    @Environment(\.colorScheme) private var scheme
-    // Dynamic-Type-scaled: the chip is sized to its 11pt label, so a grown label in a fixed 18pt
-    // capsule would be clipped.
-    @ScaledMetric(relativeTo: .caption2) private var height: CGFloat = 18
-    @ScaledMetric(relativeTo: .caption2) private var maxNameWidth: CGFloat = 80
-
-    private var shown: [SessionTag] { Array(tags.prefix(3)) }
-    private var overflow: Int { max(0, tags.count - shown.count) }
-
-    var body: some View {
-        if !tags.isEmpty {
-            HStack(spacing: 5) {
-                ForEach(shown) { chip($0) }
-                if overflow > 0 {
-                    Text("+\(overflow)").font(.orbitMeta).foregroundStyle(.secondary)
-                }
-            }
-            // Ideal width, not the width offered: without this each label's `maxWidth` frame would
-            // stretch to fill the row (a `maxWidth` frame grows into whatever it is proposed), so
-            // every chip would come out the same over-wide size. Fixed here, the chips take exactly
-            // what their names need — capped — and the row's preview text takes the rest.
-            .fixedSize(horizontal: true, vertical: false)
-            // One element speaking every tag, including the ones "+N" hides — the chips are a
-            // glance affordance, not three separate things to swipe through.
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Tags: \(tags.map(\.name).joined(separator: ", "))")
-        }
-    }
-
-    private func chip(_ t: SessionTag) -> some View {
-        Text(t.name)
-            .font(.orbitMeta)
-            .foregroundStyle(Color(tagLabelHex: t.color, dark: scheme == .dark))
-            .lineLimit(1)
-            .truncationMode(.tail)
-            // A long tag can't push the row's text off screen; the full name stays in the
-            // picker and in VoiceOver.
-            .frame(maxWidth: maxNameWidth, alignment: .leading)
-            .padding(.horizontal, 7)
-            .frame(height: height)
-            // The wash the label colour was measured against — a stronger one in dark, where 13%
-            // over a near-black row is invisible (web's `.session-tag-chip` splits the same way).
-            .background(Color(tagHex: t.color)
-                .opacity(TagChipColor.backgroundOpacity(dark: scheme == .dark)), in: Capsule())
-    }
 }
 
 /// Which tag the editor sheet is acting on: a brand-new tag, or an existing custom one being

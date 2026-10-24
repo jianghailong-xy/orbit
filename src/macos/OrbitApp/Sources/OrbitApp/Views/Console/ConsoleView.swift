@@ -641,6 +641,12 @@ struct TranscriptView: View {
     /// Bumped by the bar's ↓: the floating disc's jump (`jumpToLatest`).
     var jumpRequest = 0
     @State private var reviewSessionID: String?
+    /// Which session's Recap card has stepped aside for this visit. It is set once that conversation
+    /// starts a new turn, because the reader is in it now and a card arriving under each answer
+    /// would push the answer up. It is cleared when this view opens another session: the Mac and
+    /// iPad split keep one console view across sessions (`AgentsView`), so a plain flag would carry
+    /// one conversation's choice into the next.
+    @State private var recapAsideFor: String?
     private let bottomID = TranscriptRow.bottom.id
     // Mirrors web's `atBottom` (AgentView.tsx): flips false once the user scrolls up off the live
     // tail. Drives the floating jump-to-latest button AND gates the auto-follow below, so reading
@@ -962,6 +968,12 @@ struct TranscriptView: View {
         }
         // The folded band's ↓, pressed: the disc's jump.
         .onChange(of: jumpRequest) { jumpToLatest(proxy) }
+        // One observer for both, so a switch to a session that is already working is decided in one
+        // step: the card is back for a newly opened session, and away once it starts a turn.
+        .onChange(of: RecapVisit(sessionID: console.sessionID, rests: recapRests), initial: true) { old, new in
+            if old.sessionID != new.sessionID { recapAsideFor = nil }
+            if !new.rests { recapAsideFor = new.sessionID }
+        }
         // Whether a pinned transcript is stranded off its tail, decided once it has sat that way for
         // a moment. A publish restarts the wait: the follow it triggers lands a frame or two after
         // the rows grew, and the gap read in between — the normal state while a reply streams (see
@@ -1068,7 +1080,22 @@ struct TranscriptView: View {
                              canPageOlder: canPageOlder,
                              showWorkingIndicator: console.showWorkingIndicator,
                              decisionCards: console.decisionCards,
-                             clocks: console.receiptClocks)
+                             clocks: console.receiptClocks,
+                             recap: recapCard)
+    }
+
+    /// The conversation's last row while it is at rest (`RecapCard`), unless it stepped aside for
+    /// this visit. Read off the session the list and the header read, under the account's Session
+    /// recaps switch, which governs the list row's recap too.
+    private var recapCard: RecapCard? {
+        guard recapAsideFor != console.sessionID, let session = app.session(id: console.sessionID) else { return nil }
+        return RecapCard.make(for: session, recaps: app.user?.preferences?.showRecaps ?? true)
+    }
+
+    /// Whether this conversation is at rest for its card right now (`RecapCard.rests`); a session
+    /// not loaded yet counts as at rest, so nothing steps aside before there is a session.
+    private var recapRests: Bool {
+        app.session(id: console.sessionID).map(RecapCard.rests) ?? true
     }
 
     /// Only the load-earlier spinner and the tail row differ from the chat-flow insets.
@@ -1116,6 +1143,9 @@ struct TranscriptView: View {
         case .approval(let approval):
             // No `AnchorRow`: an approval isn't a "Your question" the sticky header names.
             ApprovalCard(console: console, approval: approval)
+        case .recap(let card):
+            // No `AnchorRow`: the recap sums the conversation up; it asks nothing.
+            RecapCardView(card: card, sessionID: console.sessionID)
         case .working:
             WorkingIndicatorView()
         case .queued(let bubble):
@@ -1914,4 +1944,11 @@ struct TranscriptItemView: View {
         guard let console, SteerDelivery.offersPutBack(bubble) else { return nil }
         return { Task { await console.putBack(bubble) } }
     }
+}
+
+/// What `TranscriptView` watches to decide its Recap card's step-aside: which session it shows, and
+/// whether that conversation is at rest for the card.
+private struct RecapVisit: Equatable {
+    let sessionID: String
+    let rests: Bool
 }

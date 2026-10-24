@@ -445,6 +445,8 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
     case statusCard(LocalStatusCard)
     case decisionCard(DeliveredDecisionCard)
     case approval(PendingApproval)
+    /// The conversation's last row while it is at rest (`RecapCard`): its recap, whole.
+    case recap(RecapCard)
     case working
     case queued(UserBubble)
     case bottom
@@ -465,6 +467,7 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
         case .statusCard(let card):  return "local-status-\(card.id)"
         case .decisionCard(let card): return card.id
         case .approval(let appr):    return "approval-\(appr.id)"
+        case .recap:                 return "session-recap"
         case .working:               return "working-indicator"
         case .queued(let bubble):    return "queued-\(bubble.id)"
         case .bottom:                return "transcript-bottom"
@@ -474,14 +477,20 @@ public enum TranscriptRow: Identifiable, Equatable, Sendable {
 
 public enum TranscriptRows {
     /// Flatten one snapshot into the rows to render, in web's order: history and the accepted head
-    /// at its end, then pending approvals, then the working indicator, then queued sends, then the
-    /// scroll-to-bottom target.
+    /// at its end, the Recap card of a conversation at rest, then pending approvals, then the
+    /// working indicator, then queued sends, then the scroll-to-bottom target.
+    ///
+    /// `recap` is the caller's to decide (`RecapCard.make`, and whether it has stepped aside for
+    /// this visit): this only places it — under everything the conversation said, and above the
+    /// questions still trailing at the tail, which stay nearest the composer (web parity: the card
+    /// is drawn after the transcript and before the cards that ask the owner something).
     public static func build(state: TranscriptState,
                              statusCards: [LocalStatusCard],
                              canPageOlder: Bool,
                              showWorkingIndicator: Bool,
                              decisionCards: [DeliveredDecisionCard] = [],
-                             clocks known: ReceiptAnchor.Clocks? = nil) -> [TranscriptRow] {
+                             clocks known: ReceiptAnchor.Clocks? = nil,
+                             recap: RecapCard? = nil) -> [TranscriptRow] {
         var rows: [TranscriptRow] = []
         // A command run before the first transcript event belongs above events that arrive later;
         // the rest are placed after the item that was last at invocation time.
@@ -565,6 +574,9 @@ public enum TranscriptRows {
                   anchoredDecisions[anchor] != nil else { continue }
             trailingDecisions.append(card)
         }
+        // Only under a conversation there is something of: a window with nothing loaded yet has
+        // nothing for the recap to sum up.
+        if let recap, !state.items.isEmpty { rows.append(.recap(recap)) }
         rows.append(contentsOf: trailingDecisions.map(TranscriptRow.decisionCard))
 
         // Approvals render as the agent's latest turn (web's AgentView puts the panel right after

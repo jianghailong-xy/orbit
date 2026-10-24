@@ -1675,6 +1675,14 @@ public final class APIClient: @unchecked Sendable {
         _ = try await postRaw("sessions/\(sessionID)/diff/refresh", body: Optional<Empty>.none)
     }
 
+    // MARK: recap
+
+    /// Write this session's recap again now, past the settle hooks' two-minute window — the
+    /// conversation's Recap card's refresh. Answers once the pass has finished, with what it did.
+    public func refreshRecap(sessionID: String) async throws -> RecapOutcome {
+        try await postEmpty("sessions/\(sessionID)/recap")
+    }
+
     public func commit(sessionID: String) async throws {
         _ = try await postRaw("sessions/\(sessionID)/commit", body: Optional<Empty>.none)
     }

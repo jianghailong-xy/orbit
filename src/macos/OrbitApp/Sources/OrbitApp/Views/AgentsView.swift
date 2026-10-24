@@ -1580,18 +1580,11 @@ struct AgentSessionRow: View {
     // Second line: the recap / last-reply / live-state preview (mirrors the web Agent console).
     // `live` mirrors web's `openable` — false on the Trash tab (a deleted session isn't live), true
     // elsewhere — and `recaps` is the account's Session recaps switch, read from the same `me` every
-    // other preference comes from (absent means on).
+    // other preference comes from (absent means on). The whole line is the sentence: no tags beside
+    // it and no "Recap · <time>" before it (the owner, 2026-10-22). Tags are filed and filtered by.
     private var line: SessionLine {
         SessionLine.make(for: session, live: !deleted, watching: watching,
                          recaps: app.user?.preferences?.showRecaps ?? true)
-    }
-
-    /// The second line as one text run: the recap's muted label, a space, then the line. Built by
-    /// concatenation (not an HStack) so the label and the text truncate together as one line, the
-    /// way web's inline spans do. Lines with no label — all but the recap — are the text alone.
-    private var lineText: Text {
-        guard let label = line.label else { return Text(line.text) }
-        return Text("\(label) ").foregroundStyle(.tertiary) + Text(line.text)
     }
 
     var body: some View {
@@ -1617,13 +1610,10 @@ struct AgentSessionRow: View {
             HStack(spacing: 8) {
                 StatusGlyphView(glyph: .make(for: session, watching: watching))
                 VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(session.title ?? "Untitled session").lineLimit(1)
-                        SessionTagDots(tags: session.tags ?? [])
-                    }
+                    Text(session.title ?? "Untitled session").lineLimit(1)
                     HStack(spacing: 7) {
                         SessionCoordinatorBadge(session: session)
-                        lineText.font(.orbitListSubtitle)
+                        Text(line.text).font(.orbitListSubtitle)
                             .foregroundStyle(lineColor(line.tone)).lineLimit(1)
                     }
                 }
@@ -1649,9 +1639,7 @@ struct AgentSessionRow: View {
 
     #if os(iOS)
     /// The regular-width iPad row: two stable scan lines. Title and time own the first line; live
-    /// state takes the timestamp's slot while working. The second line spends space on at most one
-    /// named tag, then lets the preview truncate. This keeps filing metadata reachable without
-    /// letting a tag collection squeeze the session's actual identity out of the middle column.
+    /// state takes the timestamp's slot while working. The second line is the preview, truncated.
     private var regularIOSRow: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
@@ -1669,12 +1657,7 @@ struct AgentSessionRow: View {
             }
             HStack(spacing: 7) {
                 SessionCoordinatorBadge(session: session)
-                if let tags = session.tags, let first = tags.first {
-                    SessionTagChips(tags: [first])
-                        // Only one chip is visual; VoiceOver still hears the complete filing context.
-                        .accessibilityLabel("Tags: \(tags.map(\.name).joined(separator: ", "))")
-                }
-                lineText
+                Text(line.text)
                     .font(.orbitListSubtitle)
                     .foregroundStyle(lineColor(line.tone))
                     .lineLimit(1)
@@ -1700,17 +1683,9 @@ struct AgentSessionRow: View {
                     Text(rel).font(.orbitMeta).foregroundStyle(.secondary)
                 }
             }
-            // Named tags lead the second line and the preview follows them — the same trade web
-            // makes (see `session-sub`). They sat beside the title as bare dots, but the title line
-            // is already carrying the live cue and the timestamp, so chips there truncate the title;
-            // the preview is the echo of a reply rather than the handle you file a session under, so
-            // it's the one that yields (the chips are fixed-size, web's `flex: none`).
             HStack(spacing: 7) {
                 SessionCoordinatorBadge(session: session)
-                if let tags = session.tags, !tags.isEmpty {
-                    SessionTagChips(tags: tags)
-                }
-                lineText.font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
+                Text(line.text).font(.orbitListSubtitle).foregroundStyle(lineColor(line.tone)).lineLimit(1)
             }
         }
         .padding(.vertical, 2)

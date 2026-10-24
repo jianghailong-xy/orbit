@@ -2359,6 +2359,23 @@ final class AppModel {
         }
     }
 
+    /// Write a session's recap again now (`POST /sessions/:id/recap`, the conversation's Recap
+    /// card), then read the lists again so the card and the row show the line it wrote — the server
+    /// publishes the session too, but a list on a stream gap would otherwise wait for its next
+    /// snapshot. Answers with what to tell the reader when the pass wrote nothing
+    /// (`RecapCard.notice`); nil when it wrote, or when another pass wrote first.
+    func refreshRecap(_ sessionID: String) async -> RecapCard.Notice? {
+        guard let api else { return RecapCard.notice(for: "error") }
+        do {
+            let outcome = try await api.refreshRecap(sessionID: sessionID)
+            let notice = outcome.written ? nil : RecapCard.notice(for: outcome.reason ?? "error")
+            if notice == nil { await reloadSessionLists() }
+            return notice
+        } catch {
+            return RecapCard.notice(for: "error")
+        }
+    }
+
     // MARK: session tags
 
     /// Load the owner's tag library (best-effort — an older server without the endpoint leaves it
