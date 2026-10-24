@@ -7,10 +7,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Runner } from './TasksSidePanel';
 
 /**
- * The session list's second line over a session the server has recapped (0418): the recap, and
- * the time it was written, take the place of the raw last reply the row used to show. What is
- * asserted here is that priority — a recap-less session still shows its reply, and a working
- * session still shows its tool rather than the recap of the turn before it.
+ * The session list's second line over a session the server has recapped (0418): the recap takes
+ * the place of the raw last reply the row used to show, and the whole line is the recap — no
+ * "Recap · <time>" in front of it and no tags beside it (the owner, 2026-10-22). What is asserted
+ * here is that priority — a recap-less session still shows its reply, and a working session still
+ * shows its tool rather than the recap of the turn before it — and the conversation's end: a
+ * session at rest closes with its Recap card, which steps aside for the visit once a turn starts.
  */
 
 vi.mock('../api', async (importOriginal) => {
@@ -61,15 +63,17 @@ const row = (id: string, title: string, extra: Record<string, unknown>) => ({
   ...extra,
 });
 
-// Written just now, so the label is a bare clock time: the date only joins it on another day.
+// Written just now, so the card's time is a bare clock time: the date only joins it on another day.
 const RECAP_AT = new Date().toISOString();
 const RECAP_TEXT = 'Moved the recap onto the list row; the three states are covered by tests.';
 const clock = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-const RECAP_LABEL = `Recap · ${clock(RECAP_AT)}`;
+const TAG = { id: '0195c0de-0000-7000-8000-0000000000e1', name: 'Performance', color: '#AF52DE' };
 
 const RECAPPED = row(RECAPPED_PUBLIC, 'Recap on the list row', {
-  recapText: RECAP_TEXT, recapAt: RECAP_AT, lastAssistantText: 'Committed the row change.',
+  recapText: RECAP_TEXT, recapAt: RECAP_AT, lastAssistantText: 'Committed the row change.', tags: [TAG],
 });
+/** What GET /sessions/:id answers for the recapped session: the list row, until a test moves it. */
+let recappedDetail: Record<string, unknown> = RECAPPED;
 const REPLY = row(REPLY_PUBLIC, 'Drawer shadow fix', {
   lastAssistantText: 'Fixed the drawer shadow; tests pass.',
 });
@@ -118,8 +122,9 @@ beforeEach(() => {
   vi.mocked(getSessionEventPage).mockReset();
   vi.mocked(getSessionEventPage).mockResolvedValue({ events: [], hasMore: false } as never);
   vi.mocked(getSession).mockReset();
+  recappedDetail = RECAPPED;
   vi.mocked(getSession).mockImplementation(async (id: string) =>
-    ([RECAPPED, REPLY, RUNNING].find((r) => r.id === id) ?? REPLY) as never);
+    (id === RECAPPED.id ? recappedDetail : [REPLY, RUNNING].find((r) => r.id === id) ?? REPLY) as never);
   apiMock.mockReset();
   apiMock.mockImplementation(((path: string, init?: { method?: string }) => {
     const reply = (value: unknown) => Promise.resolve(value) as Promise<never>;
@@ -136,7 +141,7 @@ beforeEach(() => {
         if (path.includes('/diff')) return reply({ files: [] });
         if (path.includes('/turns') || path.includes('/approvals') || path.includes('/background')) return reply([]);
         if (path.includes('/created-tasks')) return reply({ total: 0, running: 0, failed: 0, done: 0, items: [], projects: [] });
-        return reply(session);
+        return reply(session.id === RECAPPED.id ? recappedDetail : session);
       }
     }
     if (path.startsWith('/sessions')) return reply([RECAPPED, REPLY, RUNNING]);
@@ -180,10 +185,10 @@ afterEach(async () => {
   }
 });
 
-/** Mount the real WorkspaceView on the list, with the reply-only session open, so the recap and
- *  working rows are drawn from the list's own copy of them rather than the opened session's
- *  detail — then wait until the recapped row is on screen. */
-async function mountList(): Promise<void> {
+/** Mount the real WorkspaceView on the list, by default with the reply-only session open, so the
+ *  recap and working rows are drawn from the list's own copy of them rather than the opened
+ *  session's detail — then wait until the recapped row is on screen. */
+async function mountList(open: string = REPLY_PUBLIC): Promise<void> {
   const nextClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } } });
   const nextContainer = document.createElement('div');
   const nextRoot = createRoot(nextContainer);
@@ -194,7 +199,7 @@ async function mountList(): Promise<void> {
   await act(async () => {
     nextRoot.render(
       <QueryClientProvider client={nextClient}>
-        <MemoryRouter initialEntries={[`/sessions/${REPLY_PUBLIC}`]}>
+        <MemoryRouter initialEntries={[`/sessions/${open}`]}>
           <WorkspaceView runner={RUNNER} />
         </MemoryRouter>
       </QueryClientProvider>,
@@ -206,25 +211,23 @@ async function mountList(): Promise<void> {
 }
 
 describe('the session list over a recapped session', { timeout: 60_000 }, () => {
-  it('shows the recap and its time, and leaves a reply-only or working row alone', async () => {
+  it('shows the recap as the whole line, and leaves a reply-only or working row alone', async () => {
     await mountList();
 
-    // With a recap: its label carries the time the server wrote it, and the line is the recap —
-    // not the raw reply it replaced.
+    // With a recap: the line is the recap, nothing in front of it — not the raw reply it replaced,
+    // and not the time it was written, which is the Recap card's to say.
     const recapped = line(RECAPPED.title);
-    expect(recapped.querySelector('.session-preview-label')?.textContent).toBe(RECAP_LABEL);
-    expect(recapped.textContent).toBe(`${RECAP_LABEL} ${RECAP_TEXT}`);
+    expect(recapped.textContent).toBe(RECAP_TEXT);
     expect(recapped.textContent).not.toContain(RECAPPED.lastAssistantText);
+    expect(recapped.textContent).not.toContain(clock(RECAP_AT));
+    // Its tags are filed and filtered by, not drawn on the row.
+    expect(listRow(RECAPPED.title).textContent).not.toContain(TAG.name);
 
-    // No recap: the reply preview it always had, and no label in front of it.
-    const reply = line(REPLY.title);
-    expect(reply.querySelector('.session-preview-label')).toBeNull();
-    expect(reply.textContent).toBe(REPLY.lastAssistantText);
+    // No recap: the reply preview it always had.
+    expect(line(REPLY.title).textContent).toBe(REPLY.lastAssistantText);
 
     // Working: the tool in flight outranks the recap of the turn before it.
-    const running = line(RUNNING.title);
-    expect(running.querySelector('.session-preview-label')).toBeNull();
-    expect(running.textContent).toBe('Running Bash…');
+    expect(line(RUNNING.title).textContent).toBe('Running Bash…');
   });
 
   // The account's Session recaps switch (Settings): off, the same recapped session falls through
@@ -234,8 +237,77 @@ describe('the session list over a recapped session', { timeout: 60_000 }, () => 
     await mountList();
 
     const recapped = line(RECAPPED.title);
-    expect(recapped.querySelector('.session-preview-label')).toBeNull();
     expect(recapped.textContent).toBe(RECAPPED.lastAssistantText);
     expect(recapped.textContent).not.toContain(RECAP_TEXT);
+  });
+});
+
+/** The opened conversation's Recap card, once it is drawn (or null while it is not). */
+const recapCard = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.chat-recap');
+
+/** Read the session again, as a control-plane event would make the view do. */
+async function refetch(): Promise<void> {
+  await act(async () => {
+    await client!.invalidateQueries();
+  });
+}
+
+describe('the opened conversation over a recapped session', { timeout: 60_000 }, () => {
+  // The transcript the card sums up: a conversation with nothing in it closes with no card.
+  const transcript = { events: [{ seq: 1, type: 'assistant', ts: '2026-10-02T05:30:00Z', payload: { text: 'Committed the row change.' } }], hasMore: false };
+
+  it('ends at rest in a Recap card: the recap whole, with when it was written', async () => {
+    vi.mocked(getSessionEventPage).mockResolvedValue(transcript as never);
+    await mountList(RECAPPED_PUBLIC);
+    await act(async () => {
+      await vi.waitFor(() => expect(recapCard()).not.toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+    const card = recapCard()!;
+    expect(card.querySelector('.chat-recap-word')?.textContent).toBe('Recap');
+    expect(card.querySelector('.chat-recap-when')?.textContent).toBe(`· ${clock(RECAP_AT)}`);
+    expect(card.querySelector('.chat-recap-text')?.textContent).toBe(RECAP_TEXT);
+    expect(card.querySelector('button')?.getAttribute('aria-label')).toBe('Refresh recap');
+  });
+
+  it('steps aside for the visit once a turn starts, and stays aside when the session parks again', async () => {
+    vi.mocked(getSessionEventPage).mockResolvedValue(transcript as never);
+    await mountList(RECAPPED_PUBLIC);
+    await act(async () => {
+      await vi.waitFor(() => expect(recapCard()).not.toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+
+    // A turn starts: the reader is in the conversation now.
+    recappedDetail = { ...RECAPPED, status: 'RUNNING', runState: 'RUNNING', engineStartedAt: '2026-10-02T05:40:00Z', lastToolUse: 'Bash' };
+    await refetch();
+    await act(async () => {
+      await vi.waitFor(() => expect(recapCard()).toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+
+    // It parks with a fresh recap, and the card does not come back under the answer just read.
+    recappedDetail = { ...RECAPPED, recapText: 'A newer recap.' };
+    await refetch();
+    await act(async () => {
+      await vi.waitFor(() => expect(line(RECAPPED.title).textContent).toBe('A newer recap.'), { timeout: 20_000, interval: 20 });
+    });
+    expect(recapCard()).toBeNull();
+  });
+
+  it('draws no card for a session with no recap', async () => {
+    vi.mocked(getSessionEventPage).mockResolvedValue(transcript as never);
+    await mountList(REPLY_PUBLIC);
+    await act(async () => {
+      await vi.waitFor(() => expect(mounted().querySelector('.chat-assistant')).not.toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+    expect(recapCard()).toBeNull();
+  });
+
+  it('draws no card when the account turned Session recaps off', async () => {
+    mePreferences = { recaps: false };
+    vi.mocked(getSessionEventPage).mockResolvedValue(transcript as never);
+    await mountList(RECAPPED_PUBLIC);
+    await act(async () => {
+      await vi.waitFor(() => expect(mounted().querySelector('.chat-assistant')).not.toBeNull(), { timeout: 20_000, interval: 20 });
+    });
+    expect(recapCard()).toBeNull();
   });
 });

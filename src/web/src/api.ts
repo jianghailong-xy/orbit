@@ -1931,6 +1931,17 @@ export const getSessionDiff = (idOrPublicId: string) =>
 export const refreshSessionDiff = (idOrPublicId: string) =>
   api<void>(`/sessions/${idOrPublicId}/diff/refresh`, { method: 'POST' });
 
+/** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why
+ *  it wrote none. */
+export type RecapOutcome =
+  | { written: true; recapText: string; recapEventSeq: number }
+  | { written: false; reason: string };
+
+/** Rewrite this session's recap now, past the settle hooks' two-minute window (POST
+ *  /sessions/:id/recap). Answers once the pass has finished, with what it did. */
+export const refreshSessionRecap = (idOrPublicId: string) =>
+  api<RecapOutcome>(`/sessions/${idOrPublicId}/recap`, { method: 'POST' });
+
 /** Enable per-session worktree isolation for a workspace whose workDir isn't a git repo:
  *  flips `autoInitGit` so the runner `git init`s the dir (default .gitignore + baseline
  *  commit) on the workspace's next run, after which sessions isolate on their own branch. */

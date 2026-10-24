@@ -361,6 +361,7 @@ import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip'
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
 import { isLandingSessionDetail } from '../lib/landingSession';
 import { Glyph, landingCard } from './ProjectPanoramaHeader';
+import { SessionRecapCard } from './SessionRecapCard';
 import { LandingJobsSheet } from './LandingJobsSheet';
 import { LandingLink } from './LandingLink';
 import { SessionProjectLandings } from './SessionProjectLandings';
@@ -473,7 +474,6 @@ import { lastTypedUserMessage } from '../lib/deliveredMessage';
 import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
-import { tagChipLabels } from '../lib/tagColor';
 import {
   isSessionBusy,
   isSessionLive,
@@ -1065,22 +1065,6 @@ const fmtTime = (d?: string): string => {
 // plain tool names (Bash, Read, Edit) pass through unchanged.
 const fmtTool = (name: string): string => name.replace(/^mcp__[^_]+__/, '');
 
-// "5:38 PM" today, "Wed, Aug 6, 5:38 PM" beyond it — a bare clock time on another day misleads
-// (the same call the transcript's turn foot makes).
-const fmtClock = (at: Date): string => {
-  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  return at.toDateString() === new Date().toDateString()
-    ? time
-    : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
-};
-
-// The recap's prefix: what the line is, and when the server wrote it (Session.recapAt). A recap
-// that arrived with no time on it — an older control plane — keeps the word without one.
-const recapLabel = (recapAt?: string | null): string => {
-  const at = recapAt ? new Date(recapAt) : null;
-  return at && !Number.isNaN(at.getTime()) ? `Recap · ${fmtClock(at)}` : 'Recap';
-};
-
 // The runner's own sentence about a finished commit — which background jobs were live in the
 // checkout while it committed, and what it did about them (commitResultMessage). Trimmed because a
 // whitespace-only value would otherwise draw an empty detail row; null and blank both mean "the
@@ -1142,8 +1126,6 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 type SessionLine = {
   text: string;
   tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
-  /** A muted prefix naming what the line is, before `text` — the recap's "Recap · 5:38 PM". */
-  label?: string;
 };
 // The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
 // line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
@@ -1280,12 +1262,28 @@ export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | 
   // the server wrote about the session, not the raw last reply flattened down to one line. Only
   // here — below every live line above — so a working session still says what it is doing. Off
   // with the account's Session recaps switch, the row falls through to the reply preview below.
+  // Unlabelled, as a project row's always was (the owner, 2026-10-22): the whole line is the
+  // sentence, and when it was written is the Recap card's to say, at the conversation's end.
   if (recaps && typeof s.recapText === 'string' && s.recapText.trim())
-    return { label: recapLabel(s.recapAt), text: s.recapText.trim(), tone: 'preview' };
+    return { text: s.recapText.trim(), tone: 'preview' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
   // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
   // row from before the server kept the pending message): say what happened rather than nothing.
   return { text: statusLabel(s), tone: 'preview' };
+};
+
+// Whether a conversation is at rest for its Recap card (SessionRecapCard): nothing it is doing or
+// asking outranks the summary of what it did. The lines that outrank the recap on its row
+// (sessionLine above) and are work in hand — waiting on you, starting, generating, queued, an agent
+// it started — keep the card away. A watch it is parked on, or a process it left running, is no
+// turn of its own and does not.
+export const restsForRecap = (s: any): boolean => {
+  const state = sessionReadingState(s);
+  return (s.pendingApprovals ?? 0) === 0
+    && !waitingNoticeFor(s)
+    && !isGenerating(s, state)
+    && state !== 'QUEUED'
+    && (s.runningSubagentCount ?? 0) === 0;
 };
 
 /**
@@ -1609,53 +1607,6 @@ export function SessionProjectListRow({
         </div>
       </div>
     </div>
-  );
-}
-
-/** Compact tag summary for a session-list row. The first tag is the one users can scan; the
- * fixed count survives when that name has to ellipsize, and a container query swaps to the total
- * count when the resizable session column becomes too narrow to show a useful name. */
-export function SessionTagChips({
-  tags,
-  tooltipOpen,
-}: {
-  tags?: SessionTagRef[] | null;
-  tooltipOpen?: boolean;
-}) {
-  if (!tags?.length) return null;
-
-  const first = tags[0];
-  const label = tagChipLabels(first.color);
-  const names = tags.map((tag) => tag.name).join(', ');
-
-  return (
-    <>
-      <Tooltip content={names} open={tooltipOpen}>
-        <span className="session-tag-chips" aria-hidden="true">
-          <span className="session-tag-named">
-            <span
-              className="session-tag-chip"
-              style={
-                {
-                  '--chip': first.color,
-                  '--chip-label': label.light,
-                  '--chip-label-dark': label.dark,
-                } as React.CSSProperties
-              }
-            >
-              <span className="session-tag-chip-label">{first.name}</span>
-            </span>
-          </span>
-          {tags.length > 1 && (
-            <span className="session-tag-more session-tag-more--remaining">+{tags.length - 1}</span>
-          )}
-          <span className="session-tag-more session-tag-more--total">+{tags.length}</span>
-        </span>
-      </Tooltip>
-      {/* Generic spans cannot reliably take an accessible name from aria-label. Keep the real
-          names as text outside the visual summary so compact layouts may hide the named chip. */}
-      <span className="sr-only">Tags: {names}</span>
-    </>
   );
 }
 
@@ -3237,6 +3188,23 @@ export function WorkspaceView({
     });
   }, [message, pendingOperationQueries, pendingOperations, qc]);
   const live = !!selectedSession && !selectedTrashed && isSessionLive(selectedSession);
+  // The Recap card at the conversation's end steps aside for the rest of a visit once the
+  // conversation starts a new turn: the reader is in the conversation now, and a card arriving under
+  // each answer would push the answer up the screen. It is back the next time the session is opened
+  // (the owner, 2026-10-22).
+  const selectedRests = selectedSession ? restsForRecap(selectedSession) : true;
+  const [recapAsideFor, setRecapAsideFor] = useState<string | null>(null);
+  useEffect(() => {
+    setRecapAsideFor(null);
+  }, [selectedId]);
+  useEffect(() => {
+    if (selectedId && !selectedRests) setRecapAsideFor(selectedId);
+  }, [selectedId, selectedRests]);
+  const selectedRecap =
+    selectedSession && recapsEnabled && !selectedTrashed && selectedRests && recapAsideFor !== selectedId
+      && typeof selectedSession.recapText === 'string'
+      ? selectedSession.recapText.trim()
+      : '';
   // On older servers, infer resumability exactly as before. Newer servers know whether runner
   // context still exists and are authoritative — notably preventing a false-positive Resume.
   const legacyResumable =
@@ -10432,27 +10400,13 @@ export function WorkspaceView({
                         ) : (
                           <>
                             <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
-                            {/* Tags lead the second line and the reply preview follows them. They sat
-                                beside the title as bare colour dots until the naming pass started
-                                writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
-                                meaning lived only in a tooltip. Here they read at a glance and the
-                                preview yields, being the echo of a reply rather than the handle you
-                                file the session under. */}
+                            {/* One line under the title, and all of it is what the session is doing
+                                or waiting on, else its recap (sessionLine). Tags are filed and
+                                filtered by, not drawn on the row (the owner, 2026-10-22). */}
                             <div className="session-sub">
-                              <SessionTagChips
-                                tags={s.tags as SessionTagRef[] | null | undefined}
-                                tooltipOpen={hoverTipOpen}
-                              />
                               <div
                                 className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
                               >
-                                {/* The label and the space after it are drawn together, so a line
-                                    with no label carries no separator of its own. */}
-                                {line.label && (
-                                  <>
-                                    <span className="session-preview-label">{line.label}</span>{' '}
-                                  </>
-                                )}
                                 {line.text}
                               </div>
                             </div>
@@ -11077,6 +11031,19 @@ export function WorkspaceView({
                   </AuthErrorCtx.Provider>
                 </EventFullCtx.Provider>
               </SessionNavCtx.Provider>
+              {/* The conversation's last row while it is at rest: its recap whole, the line its list
+                  row reads in one (SessionRecapCard). Above the cards that ask the owner something,
+                  which stay nearest the composer, and only once the transcript it sums up is drawn.
+                  Keyed by the session like its siblings, so a refresh in flight stays with the
+                  conversation that asked for it. */}
+              {selected && selectedId && selectedRecap && transcriptEvents.length > 0 && (
+                <SessionRecapCard
+                  key={`recap:${selectedId}`}
+                  sessionId={selectedId}
+                  text={selectedRecap}
+                  recapAt={selectedSession?.recapAt ?? null}
+                />
+              )}
               {/* The delivered card, in the conversation it was delivered to and scrolling with
                   it: the server's own ask about this project's ruler. Its content is re-derived on
                   every render — the frame keeps the proposal's address and nothing else — so a

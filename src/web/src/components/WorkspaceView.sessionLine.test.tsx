@@ -419,10 +419,10 @@ describe('sessionLine over a session parked on a watch', () => {
  * The rolling recap (Session.recapText, 0418): the sentence the server wrote about the session
  * takes the place of the raw last reply the row used to flatten — and only that place. A session
  * still working, still waiting on you, or holding a message you just sent keeps its own line.
+ * The whole line is the sentence (the owner, 2026-10-22): when it was written is the Recap card's
+ * to say, at the conversation's end (SessionRecapCard.test).
  */
 describe('sessionLine over a session with a recap', () => {
-  const clock = (at: Date) => at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  // Written now, so the label is a bare clock time: the date only joins it on another day.
   const written = new Date();
   const recapText = 'Moved the recap onto the list row; the three states are covered by tests.';
   const parked = {
@@ -434,30 +434,14 @@ describe('sessionLine over a session with a recap', () => {
     lastAssistantText: 'Committed the row change.',
   };
 
-  it('shows the recap and when it was written, in place of the last reply', () => {
-    expect(sessionLine(parked, true)).toEqual({
-      label: `Recap · ${clock(written)}`,
-      text: recapText,
-      tone: 'preview',
-    });
+  it('shows the recap, and nothing but the recap, in place of the last reply', () => {
+    expect(sessionLine(parked, true)).toEqual({ text: recapText, tone: 'preview' });
   });
 
-  it('dates the label once the recap is from another day', () => {
-    const old = new Date(2026, 7, 6, 17, 38); // Aug 6, local: a bare clock time would mislead
-    const day = old.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-    expect(sessionLine({ ...parked, recapAt: old.toISOString() }, true)).toEqual({
-      label: `Recap · ${day}, ${clock(old)}`,
-      text: recapText,
-      tone: 'preview',
-    });
-  });
-
-  it('keeps the label and drops only the time when the payload carries no recapAt', () => {
-    expect(sessionLine({ ...parked, recapAt: null }, true)).toEqual({
-      label: 'Recap',
-      text: recapText,
-      tone: 'preview',
-    });
+  it('reads the same whether the recap was written today, on another day or at no stated time', () => {
+    const old = new Date(2026, 7, 6, 17, 38);
+    expect(sessionLine({ ...parked, recapAt: old.toISOString() }, true)).toEqual({ text: recapText, tone: 'preview' });
+    expect(sessionLine({ ...parked, recapAt: null }, true)).toEqual({ text: recapText, tone: 'preview' });
   });
 
   it('falls back to the reply when there is no recap', () => {
@@ -483,11 +467,7 @@ describe('sessionLine over a session with a recap', () => {
   });
 
   it('keeps its line in Trash, where no live state is left to outrank it', () => {
-    expect(sessionLine(parked, false)).toEqual({
-      label: `Recap · ${clock(written)}`,
-      text: recapText,
-      tone: 'preview',
-    });
+    expect(sessionLine(parked, false)).toEqual({ text: recapText, tone: 'preview' });
   });
 
   it('never hides work that is still happening behind it', () => {

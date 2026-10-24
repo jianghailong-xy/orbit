@@ -105,7 +105,7 @@ export function SettingsPage() {
             it off holds on the phone and the Mac too — it is one account-wide answer. */}
         <Field
           label="Session recaps"
-          hint="Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply."
+          hint="Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the conversation."
         >
           <Switch
             aria-label="Session recaps"

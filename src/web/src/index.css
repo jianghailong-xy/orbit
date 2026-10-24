@@ -3205,10 +3205,6 @@ button.toast--pill:focus-visible {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  /* The desktop session column is user-resizable, so row density follows this content box rather
-     than the viewport. 280/220px here correspond roughly to the 320/260px outer column widths
-     after its desktop gutters. Browsers without container queries keep the safe one-tag default. */
-  container: session-list / inline-size;
   /* overflow-y:auto alone makes the browser compute overflow-x to `auto` too, so the
      few sub-pixels the rows spill once the vertical scrollbar narrows the client width
      surface a stray horizontal scrollbar along the bottom. Pin it hidden — a vertical
@@ -3271,7 +3267,7 @@ button.toast--pill:focus-visible {
   height: 8px;
   border-radius: 50%;
 }
-/* Second line of a row: capped tags, then the reply preview. The preview takes what's left (and
+/* Second line of a row: a project row's progress, then the line. The line takes what's left (and
    ellipsizes), so neither wraps the 64px row taller. */
 .session-sub {
   display: flex;
@@ -3279,70 +3275,6 @@ button.toast--pill:focus-visible {
   gap: 6px;
   min-width: 0;
   margin-top: 4px;
-}
-/* Per-row tags: one named chip plus a fixed "+N" summary. The group has both a proportional and
-   an absolute cap; otherwise two or three ordinary names can consume the reply preview completely
-   in a resized column. The colour remains a scan aid only; the adjacent sr-only text carries every
-   name independently of colour. */
-.session-tag-chips {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: min(30%, 112px);
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-.session-tag-named {
-  display: flex;
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-}
-.session-tag-chip {
-  display: inline-flex;
-  align-items: center;
-  min-width: 0;
-  max-width: 72px;
-  height: 18px;
-  padding: 0 7px;
-  border-radius: 9px;
-  font-size: 11.5px;
-  line-height: 1;
-  color: var(--chip-label, var(--chip));
-  background: color-mix(in srgb, var(--chip) 13%, transparent);
-}
-.session-tag-chip-label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-html[data-theme='dark'] .session-tag-chip {
-  color: var(--chip-label-dark, var(--chip));
-  background: color-mix(in srgb, var(--chip) 22%, transparent);
-}
-.session-tag-more {
-  flex: none;
-  font-size: 11px;
-  color: var(--text-4);
-}
-.session-tag-more--total {
-  display: none;
-}
-/* At the default 320px outer column the list content is about 280px wide. Below that, a named tag
-   no longer leaves a useful reply preview, so show the exact total instead. */
-@container session-list (max-width: 279px) {
-  .session-tag-chips {
-    flex: none;
-    max-width: none;
-  }
-  .session-tag-named,
-  .session-tag-more--remaining {
-    display: none;
-  }
-  .session-tag-more--total {
-    display: inline;
-  }
 }
 /* View + tag menu. Names the current view rather than showing a bare icon, so the list is
    never silently scoped; tinted once it's off its defaults so a narrowed list is explained. */
@@ -5652,9 +5584,8 @@ html[data-theme='dark'] .session-tag-chip {
   line-height: 1;
   color: var(--error);
 }
-/* Last assistant reply, flattened to one line. Shares the second line with the row's tags
-   (.session-sub owns the spacing above) — darker than the time so it reads as content,
-   not metadata. */
+/* The row's line: the recap, or the last reply flattened to one line (.session-sub owns the
+   spacing above) — darker than the time so it reads as content, not metadata. */
 .session-preview {
   flex: 1;
   min-width: 0;
@@ -5664,11 +5595,6 @@ html[data-theme='dark'] .session-tag-chip {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-/* What kind of line this is, before its text — the recap's "Recap · 5:38 PM". Muted like the
-   row's time so it reads as the line's header and not as part of the sentence it introduces. */
-.session-preview-label {
-  color: var(--text-3);
 }
 /* Live status line (in place of a reply, while the agent works). Colour matches the
    status glyph: blue = running, amber = waiting on you, grey = queued, a background
@@ -9091,6 +9017,55 @@ button.chat-jump-start:hover {
 }
 .chat-turn-foot > .chat-copy {
   margin-left: -4px;
+}
+/* The conversation's last row while it is at rest (SessionRecapCard): the recap its list row reads
+   in one line, here whole. Inset like .chat-assistant's text, on a grey wash like the native card's
+   (grey 12%), so it reads as the session's summary rather than as one more reply. */
+.chat-recap {
+  margin: 4px 12px 16px;
+  padding: 8px 12px 11px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--text-3) 12%, transparent);
+}
+.chat-recap-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.chat-recap-word {
+  font-weight: 600;
+}
+.chat-recap-refresh {
+  margin: 0 -6px 0 auto;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+.chat-recap-refresh:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.chat-recap-refresh:disabled {
+  cursor: default;
+}
+.chat-recap-text {
+  margin-top: 2px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text-1);
+}
+.chat-recap.is-busy .chat-recap-text {
+  opacity: 0.45;
 }
 /* A turn's head row (TurnHead): how long the turn worked, over its own output — the line Codex
    draws above an answer. Inset like .chat-assistant's text so it starts on the reply's edge, and
