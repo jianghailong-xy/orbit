@@ -63,6 +63,9 @@ import io.orbitd.android.core.net.HttpMethod
 import io.orbitd.android.core.protocol.Wire
 import io.orbitd.android.core.realtime.*
 import io.orbitd.android.directory.*
+import io.orbitd.android.management.LocalSessionRecaps
+import io.orbitd.android.toast.OrbitToasts
+import io.orbitd.android.toast.ToastTone
 import io.orbitd.android.navigation.*
 import io.orbitd.android.text.*
 import io.orbitd.android.ui.LocalOrbitColors
@@ -202,6 +205,29 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
         }
     } }
     val scope = rememberCoroutineScope()
+    // The conversation's last row while it is at rest (RecapCard). It steps aside for the rest of this visit once the conversation
+    // starts a new turn — the reader is in it now, and a card arriving under each answer would push the answer up — and is back the
+    // next time the session is opened (the owner, 2026-10-22).
+    val recapRests = listed?.let { RecapCard.rests(it) } ?: true
+    var recapAside by remember(handle, route.id) { mutableStateOf(false) }
+    LaunchedEffect(recapRests) { if (!recapRests) recapAside = true }
+    val recapCard = if (recapAside) null else listed?.let { RecapCard.make(it, LocalSessionRecaps.current) }
+    var recapRefreshing by remember(handle, route.id) { mutableStateOf(false) }
+    val refreshRecap: () -> Unit = {
+        if (!recapRefreshing) {
+            recapRefreshing = true
+            scope.launch {
+                val notice = try {
+                    val outcome = api.refreshRecap(route.id!!)
+                    if (outcome.written) null else RecapCard.notice(outcome.reason ?: "error")
+                } catch (cancel: CancellationException) { throw cancel } catch (_: Exception) { RecapCard.notice("error") }
+                // A pass that wrote is read back by the session and the lists, which the card and the row draw from.
+                if (notice == null) { app.realtime.refreshSession(); app.realtime.refreshDirectory() }
+                else OrbitToasts.show(notice.text, tone = if (notice.failed) ToastTone.ERROR else ToastTone.INFO)
+                recapRefreshing = false
+            }
+        }
+    }
     LaunchedEffect(snapshotDetail) { snapshotDetail?.let(worktree::offer) }
     val worktreeState by worktree.state.collectAsState()
     LaunchedEffect(worktreeState.detail, snapshotDetail) { console.detail = worktreeState.detail ?: snapshotDetail }
@@ -361,6 +387,10 @@ fun SessionReader(app: OrbitApplication, handle: SessionHandle, route: OrbitRout
                         items(accepted, key = { "accepted:${it.turnId}" }) { head ->
                             Box(Modifier.testTag("accepted:${head.turnId}")) { TranscriptRowView(TranscriptRow(head), model, live, openLink) }
                         }
+                    }
+                    // At the live tail, under everything the conversation said and above the cards that ask the owner something.
+                    if (live != null && displayedRows.isNotEmpty()) recapCard?.let { card ->
+                        item(key = "recap") { RecapCardView(card, recapRefreshing, refreshRecap) }
                     }
                     item(key = "newer") { if (displayedWindow.newerAfter != null) TextButton(enabled = !displayedLoading, onClick = model::newer) { Text("Load newer messages") } }
                     item(key = "interaction-cards") {

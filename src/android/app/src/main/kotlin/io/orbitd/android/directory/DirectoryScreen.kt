@@ -16,9 +16,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.*
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import io.orbitd.android.OrbitApplication
 import io.orbitd.android.R
@@ -26,7 +23,6 @@ import io.orbitd.android.management.LocalSessionRecaps
 import io.orbitd.android.navigation.*
 import io.orbitd.android.ui.LocalOrbitColors
 import io.orbitd.android.watch.WatchSessionSummary
-import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 
@@ -207,21 +203,14 @@ fun SessionRow(session: DirectorySession, onOpen: () -> Unit, onOptions: () -> U
                 Text(session.stateLabel, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else Text(session.stateLabel, color = if (session.pendingApprovals > 0) LocalOrbitColors.current.needsYou else MaterialTheme.colorScheme.onSurfaceVariant)
             // The second line, in the web's order (`sessionLine`): a message of yours that has no answer yet, then the server's
-            // rolling recap under its own muted label, then the raw last reply. Off with the account's Session recaps switch,
-            // the recap is skipped as though the row never had one.
+            // rolling recap, then the raw last reply. Off with the account's Session recaps switch, the recap is skipped as
+            // though the row never had one. The line is the sentence alone, and the row draws no tags (the owner, 2026-10-22):
+            // when the recap was written is the Recap card's to say, and tags are filed and filtered by.
             val unreplied = session.lastUserText?.takeIf { it.isNotBlank() }
             val recap = if (LocalSessionRecaps.current) session.recapText?.trim()?.takeIf { it.isNotEmpty() } else null
-            when {
-                unreplied != null -> Text(unreplied, maxLines = 2, style = MaterialTheme.typography.bodyMedium)
-                recap != null -> Text(buildAnnotatedString {
-                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
-                        append(recapLabel(session.recapAt, Instant.now()) + " ")
-                    }
-                    append(recap)
-                }, maxLines = 2, style = MaterialTheme.typography.bodyMedium)
-                else -> session.lastAssistantText?.takeIf { it.isNotBlank() }?.let { Text(it, maxLines = 2, style = MaterialTheme.typography.bodyMedium) }
+            (unreplied ?: recap ?: session.lastAssistantText?.takeIf { it.isNotBlank() })?.let {
+                Text(it, maxLines = 2, style = MaterialTheme.typography.bodyMedium)
             }
-            if (session.tags.isNotEmpty()) Text(session.tags.joinToString(" · ") { it.name }, style = MaterialTheme.typography.bodySmall)
             if (session.runningBgJobCount > 0) Text("${session.runningBgJobCount} background jobs", style = MaterialTheme.typography.bodySmall)
             if (session.pinnedAt != null) Text("Pinned", style = MaterialTheme.typography.bodySmall)
         }

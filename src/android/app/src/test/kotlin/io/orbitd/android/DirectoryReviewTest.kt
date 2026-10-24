@@ -15,10 +15,6 @@ import io.orbitd.android.management.LocalSessionRecaps
 import io.orbitd.android.navigation.*
 import io.orbitd.android.ui.OrbitTheme
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
-import java.util.Locale
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
@@ -53,16 +49,14 @@ class DirectoryReviewTest {
         compose.onNodeWithText("Tagged session").assertIsDisplayed()
     }
 
-    /** The second line over a session the server has recapped (0418): the recap, under its own muted "Recap · <time>" label, takes
-     * the place of the raw last reply — and with the account's Session recaps switch off it falls straight back to that reply. */
-    @Test fun theRowShowsTheRecapUnderItsLabelAndTheSwitchTakesItAway() {
+    /** The second line over a session the server has recapped (0418): the recap alone — no "Recap · <time>" in front of it, and no
+     * tags on the row (the owner, 2026-10-22) — takes the place of the raw last reply, and with the account's Session recaps switch
+     * off it falls straight back to that reply. */
+    @Test fun theRowShowsTheRecapAloneAndTheSwitchTakesItAway() {
         val recap = "Moved the recap onto the list row; the three states are covered by tests."
-        val writtenAt = Instant.now().truncatedTo(ChronoUnit.SECONDS)
-        // Deterministic in any time zone: the instant is today's, by the same formatter and zone the row's label reads it with.
-        val label = "Recap · " + DateTimeFormatter.ofPattern("h:mm a", Locale.US).withZone(ZoneId.systemDefault()).format(writtenAt)
         val rows = listOf(
-            DirectorySession("a", title = "Recap on the list row", workspaceId = "w",
-                lastAssistantText = "Committed the row change.", recapText = recap, recapAt = writtenAt.toString()),
+            DirectorySession("a", title = "Recap on the list row", workspaceId = "w", lastAssistantText = "Committed the row change.",
+                recapText = recap, recapAt = Instant.now().toString(), tags = listOf(Tag("t1", "Performance", "#AF52DE"))),
             DirectorySession("b", title = "Drawer shadow fix", workspaceId = "w", lastAssistantText = "Fixed the drawer shadow."))
         val api = api { ApiResponse(200, "[]".encodeToByteArray()) }
         var recaps by mutableStateOf(true)
@@ -73,17 +67,19 @@ class DirectoryReviewTest {
             }
         } } }
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("Recap on the list row"))
-        // The label and the recap, drawn as one line, and not the reply it replaced.
-        compose.onNodeWithText("$label $recap", substring = true).assertIsDisplayed()
+        // The recap, and not the reply it replaced; nothing in front of it, and no tag beside it.
+        compose.onNodeWithText(recap, substring = true).assertIsDisplayed()
         compose.onAllNodesWithText("Committed the row change.", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Recap ·", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Performance", substring = true).assertCountEquals(0)
         // A session with no recap is the reply preview it always had.
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("Drawer shadow fix"))
         compose.onNodeWithText("Fixed the drawer shadow.", substring = true).assertIsDisplayed()
 
-        // The switch off: the same row falls back to the reply, with no label in front of it.
+        // The switch off: the same row falls back to the reply.
         recaps = false
         compose.onNodeWithText("Committed the row change.", substring = true).assertIsDisplayed()
-        compose.onAllNodesWithText("$label $recap", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText(recap, substring = true).assertCountEquals(0)
     }
 
     @Test fun forbiddenObjectWithdrawsOldDetailsLinksAndActionsThenRecovers() = objectRefresh(403)

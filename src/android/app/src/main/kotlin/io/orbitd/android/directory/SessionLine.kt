@@ -8,9 +8,6 @@ import io.orbitd.android.projects.StartProjectCopy
 import io.orbitd.android.tasks.OwnerConfirmationCopy
 import io.orbitd.android.watch.WatchSessionSummary
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -19,10 +16,9 @@ import kotlinx.serialization.json.contentOrNull
  * The line under a session's title (OrbitKit `SessionLine`, a port of web's `sessionLine`): for a live session that is
  * generating, what it is doing — the tool in flight, that it waits on you, the message you sent, or a bare "Running…" —
  * and otherwise the server's recap of the session, falling back to the last reply flattened and then to the run's own state
- * word, so the line is never empty. [tone] drives the colour, and [label] is a muted prefix naming what the line is — the
- * recap's "Recap · 5:38 PM". A project row says one of these (A05-6), in these words.
+ * word, so the line is never empty. [tone] drives the colour. A project row says one of these (A05-6), in these words.
  */
-data class SessionLine(val text: String, val tone: Tone, val label: String? = null) {
+data class SessionLine(val text: String, val tone: Tone) {
     enum class Tone {
         /** Reply content: the default, secondary colour. */
         PREVIEW,
@@ -74,8 +70,9 @@ data class SessionLine(val text: String, val tone: Tone, val label: String? = nu
             s.lastUserText?.takeIf { it.isNotEmpty() }?.let { return sentLine(it) }
             // The rolling recap (0418) takes the place of the reply preview it used to show, below every live line above and
             // above the raw reply. Off with the account's Session recaps switch, the line falls through to the reply exactly
-            // as it did before the recap existed.
-            if (recaps) s.recapText?.trim()?.takeIf { it.isNotEmpty() }?.let { return SessionLine(it, Tone.PREVIEW, recapLabel(s.recapAt, now)) }
+            // as it did before the recap existed. Unlabelled (the owner, 2026-10-22): the whole line is the sentence, and when
+            // it was written is the Recap card's to say, at the conversation's end ([RecapCard]).
+            if (recaps) s.recapText?.trim()?.takeIf { it.isNotEmpty() }?.let { return SessionLine(it, Tone.PREVIEW) }
             s.lastAssistantText?.takeIf { it.isNotEmpty() }?.let { return SessionLine(plainPreview(it), Tone.PREVIEW) }
             // Nothing to preview: the run's own state word, so the row still says what happened.
             return SessionLine(SessionHeader.statusWord(s, now = now), Tone.PREVIEW)
@@ -85,22 +82,6 @@ data class SessionLine(val text: String, val tone: Tone, val label: String? = nu
     }
 }
 
-/** The recap's prefix: what the line is, and when the server wrote it ([DirectorySession.recapAt]). A recap whose time the payload
- * does not carry — an older control plane — keeps the word without one. A bare clock time is today's; on another day the date joins
- * it, because "5:38 PM" alone would mislead (the web and Swift `recapLabel`, which word this the same way). */
-internal fun recapLabel(recapAt: String?, now: Instant, zone: ZoneId = ZoneId.systemDefault()): String {
-    val at = ProjectTime.parse(recapAt) ?: return SessionLineCopy.recap
-    val zoned = at.atZone(zone)
-    val clock = recapClock.format(zoned)
-    return if (zoned.toLocalDate() == now.atZone(zone).toLocalDate()) SessionLineCopy.recapWithTime(clock)
-           else SessionLineCopy.recapWithTime("${recapDay.format(zoned)}, $clock")
-}
-
-// Built once and reused: "5:38 PM" and "Wed, Aug 6", the shapes the web's `toLocaleTimeString`/`toLocaleDateString` produce
-// in its default locale. US English because the words are English (RunnerPage's rule for its own dates).
-private val recapClock = DateTimeFormatter.ofPattern("h:mm a", Locale.US)
-private val recapDay = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US)
-
 /** Every word SessionLine.swift and SessionHeader.swift spell for a session's list line, held to those sources word for word by
  * SessionLineCopyParityTest. Words another surface owns stay that surface's: the confirmation card's, the start card's, the done
  * card's, the needs-you bar's and the review bar's. */
@@ -108,9 +89,6 @@ internal object SessionLineCopy {
     /** A turn running with nothing more to say. */
     const val running = "Running…"
     const val queued = "Queued"
-    /** The recap's prefix, on its own when the payload carries no time it was written (`recapLabel`). */
-    const val recap = "Recap"
-    fun recapWithTime(clock: String) = "Recap · $clock"
     fun runningTool(tool: String) = "Running $tool…"
     /** A message of yours the agent hasn't answered yet: marked, since the line is otherwise the agent's voice. */
     fun sent(text: String) = "You: $text"

@@ -28,6 +28,9 @@ class DirectoryApi(private val api: OrbitApi, private val handle: SessionHandle)
     suspend fun rename(id: String, name: String) { mutate(listOf("sessions", id), HttpMethod.PATCH, buildJsonObject { put("title", name.trim()) }) }
     suspend fun pin(id: String, pinned: Boolean) { mutate(listOf("sessions", id, "pin"), if (pinned) HttpMethod.POST else HttpMethod.DELETE) }
     suspend fun complete(id: String) { mutate(listOf("sessions", id, "complete")) }
+    /** Write the session's recap again now, past the settle hooks' two-minute window: the conversation's Recap card's refresh.
+     * Answers once the pass has finished, with what it did. */
+    suspend fun refreshRecap(id: String): RecapOutcome = Wire.decode(mutate(listOf("sessions", id, "recap")), RecapOutcome.serializer())
     suspend fun restore(id: String) { mutate(listOf("sessions", id, "restore")) }
     suspend fun delete(id: String, permanent: Boolean) { mutate(listOf("sessions", id) + if (permanent) listOf("purge") else emptyList(), HttpMethod.DELETE) }
     suspend fun end(id: String) { mutate(listOf("sessions", id, "end")) }

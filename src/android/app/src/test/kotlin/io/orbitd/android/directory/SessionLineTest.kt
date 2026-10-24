@@ -2,9 +2,6 @@ package io.orbitd.android.directory
 
 import io.orbitd.android.directory.SessionLine.Tone
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlinx.serialization.json.*
 import org.junit.Assert.*
 import org.junit.Test
@@ -25,15 +22,10 @@ class SessionLineTest {
             recapText = recapText, recapAt = recapAt)
     private fun line(s: DirectorySession, live: Boolean = true) = SessionLine.make(s, live, now = now)
 
-    // The recap (0418): its label is the clock time the server wrote it, computed here with the same formatter and zone the
-    // row's own `recapLabel` uses, so the expectation holds wherever the test runs.
+    // The recap (0418). When it was written is the Recap card's to say (RecapCardTest); the line is the sentence alone.
     private val recap = "Moved the recap onto the list row; the three states are covered by tests."
     /** The instant `line` builds every line at — the same one a same-day recap is written at, in every time zone. */
     private val recapAt = now.toString()
-    private fun clock(iso: String, zone: ZoneId = ZoneId.systemDefault()) =
-        DateTimeFormatter.ofPattern("h:mm a", Locale.US).withZone(zone).format(Instant.parse(iso))
-    private fun day(iso: String, zone: ZoneId = ZoneId.systemDefault()) =
-        DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US).withZone(zone).format(Instant.parse(iso))
 
     /** A turn the runtime started for itself keeps the session parked while it streams: the row says it is working. */
     @Test fun selfDrivenTurnReadsAsWorkingNotParked() {
@@ -61,34 +53,23 @@ class SessionLineTest {
         assertEquals(SessionLine("2 background processes running…", Tone.BACKGROUND), line(session("AWAITING_INPUT", runningBgCount = 2)))
     }
 
-    /** The rolling recap (0418) takes the place of the raw last reply, under its own muted label — and only that place. */
+    /** The rolling recap (0418) takes the place of the raw last reply — and only that place — and the whole line is the
+     * sentence (the owner, 2026-10-22): today's, another day's or a timeless recap read the same. */
     @Test fun recapTakesThePlaceOfTheReplyPreview() {
-        val recapped = line(session("AWAITING_INPUT", "Committed the row change.", recapText = recap, recapAt = recapAt))
-        assertEquals(Tone.PREVIEW, recapped.tone)
-        assertEquals(recap, recapped.text)
-        assertEquals("Recap · ${clock(recapAt)}", recapped.label)
-
-        // A payload that carried the text without a time keeps the word.
-        assertEquals(SessionLine(recap, Tone.PREVIEW, "Recap"),
-            line(session("AWAITING_INPUT", "Committed the row change.", recapText = recap, recapAt = null)))
-
-        // Another day's recap wears the date too: a bare clock time on yesterday's row misleads.
-        val old = "2026-10-01T10:00:00Z"
-        assertEquals("Recap · ${day(old)}, ${clock(old)}",
-            line(session("AWAITING_INPUT", "Committed the row change.", recapText = recap, recapAt = old)).label)
-
+        for (at in listOf(recapAt, "2026-10-01T10:00:00Z", null)) {
+            assertEquals(SessionLine(recap, Tone.PREVIEW), line(session("AWAITING_INPUT", "Committed the row change.", recapText = recap, recapAt = at)))
+            // Trash keeps it too: nothing live is left to outrank it there.
+            assertEquals(SessionLine(recap, Tone.PREVIEW), line(session("AWAITING_INPUT", "reply", recapText = recap, recapAt = at), live = false))
+        }
         // No recap — or a blank one, which the server never stores — is the reply preview it always had.
         assertEquals(SessionLine("Committed the row change.", Tone.PREVIEW), line(session("AWAITING_INPUT", "Committed the row change.")))
         assertEquals(SessionLine("Committed the row change.", Tone.PREVIEW), line(session("AWAITING_INPUT", "Committed the row change.", recapText = "   ")))
-        // Trash keeps it too: nothing live is left to outrank it there.
-        assertEquals("Recap · ${clock(recapAt)}",
-            line(session("AWAITING_INPUT", "reply", recapText = recap, recapAt = recapAt), live = false).label)
     }
 
     /** The account's Session recaps switch (Settings): off, the same row falls through to the reply. */
     @Test fun recapsOffFallsBackToTheReply() {
         val recapped = session("AWAITING_INPUT", "Committed the row change.", recapText = recap, recapAt = recapAt)
-        assertEquals(SessionLine(recap, Tone.PREVIEW, "Recap · ${clock(recapAt)}"),
+        assertEquals(SessionLine(recap, Tone.PREVIEW),
             SessionLine.make(recapped, live = true, recaps = true, now = now))
         assertEquals(SessionLine("Committed the row change.", Tone.PREVIEW),
             SessionLine.make(recapped, live = true, recaps = false, now = now))
