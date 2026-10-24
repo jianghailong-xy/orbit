@@ -9,8 +9,9 @@ import { truncatePayload } from './truncate-payload';
  * The rolling session recap (Session.recapText): the sentence or two the session list shows in
  * place of the last raw reply.
  *
- * It is written off the settle path. Turn completion and finalization ask for a pass and never
- * wait on one (enqueueRecap), the pass folds the events since the previous pass's cursor
+ * It is written off the settle path. A completed turn (a delivered turn's /turn-complete, or the end
+ * of one the engine started itself) and finalization ask for a pass and never wait on one
+ * (recapAfterSettle, enqueueRecap), the pass folds the events since the previous pass's cursor
  * (recapEventSeq) together with the recap that came before, and a compare-and-set write advances
  * the cursor — so a long session costs one small call per settle rather than a re-read of the
  * whole transcript. Everything that can go wrong is a silent skip: no key, a provider answer
@@ -433,27 +434,62 @@ export async function generateRecap(input: RecapInput, opts: RecapOptions = {}):
   }
 }
 
+/** How far past the window's end a trailing pass starts, so it is not itself inside the window. */
+const RECAP_TRAILING_MARGIN_MS = 500;
+
+/** The trailing passes waiting for their session's window to close: one timer per session. */
+const trailingRecaps = new Map<string, { timer: ReturnType<typeof setTimeout>; at: number }>();
+
 /**
- * The settle hooks' gate, before anything is queued: whether this settlement is worth a pass at
- * all. One indexed read of the session row plus one aggregate over its events — never the whole
- * transcript, and never an LLM call. A pass re-checks both on its own, so a hook may skip this and
- * a race cannot produce two recaps from one cursor.
+ * Ask again when the window closes. A settle the window skipped used to leave the recap a turn
+ * behind until the session's NEXT settle, and a session that has just parked may never have one:
+ * that is how the list came to show a 4:05 PM recap for a session whose last turn ran at 4:07.
+ *
+ * One timer per session, at the latest window anybody has asked about: a skipped settle whose
+ * window closes later moves it, and one whose window closes earlier is already covered, because a
+ * pass reads every event after the cursor. When it fires it asks the way a settle does, so a pass
+ * written in between (a finalize, a person's refresh) is found and only what came after it waits
+ * again. Process-local, like the queue: a restart drops a waiting timer, and the recap stands as it
+ * did before the settle. The timer never holds the process open.
  */
-export async function recapDue(input: RecapInput, opts: { now?: Date } = {}): Promise<boolean> {
+function scheduleTrailingRecap(input: RecapInput, closesAt: number): void {
+  const at = closesAt + RECAP_TRAILING_MARGIN_MS;
+  const waiting = trailingRecaps.get(input.sessionId);
+  if (waiting && waiting.at >= at) return;
+  if (waiting) clearTimeout(waiting.timer);
+  const timer = setTimeout(() => {
+    trailingRecaps.delete(input.sessionId);
+    void recapAfterSettle({ db: input.db, sessionId: input.sessionId });
+  }, Math.max(0, at - Date.now()));
+  timer.unref?.();
+  trailingRecaps.set(input.sessionId, { timer, at });
+}
+
+/**
+ * What a settled turn asks for, off the settle path: a pass now when one is due; when the
+ * two-minute window is all that stands in the way, one when it closes (scheduleTrailingRecap);
+ * nothing when any other gate refuses. One indexed read of the session row plus one aggregate over
+ * its events comes before anything is queued, never the whole transcript, and a throttled settle
+ * reaches no provider. A pass re-checks every gate on its own, so a race cannot produce two recaps
+ * from one cursor. Resolves when the pass it asked for does, and NEVER rejects.
+ */
+export async function recapAfterSettle(input: RecapInput, opts: { now?: Date } = {}): Promise<void> {
   try {
-    if (!recapEnabled()) return false;
+    if (!recapEnabled()) return;
     const session = await input.db.session.findFirst({
       where: { id: input.sessionId },
       select: { recapAt: true },
     });
-    if (!session) return false;
-    const skip = recapSkipReason(session, await countRecapEvents(input.db, input.sessionId), {
-      finalize: input.finalize || input.force,
-      now: opts.now ?? new Date(),
-    });
-    return skip === null;
+    if (!session) return;
+    const now = opts.now ?? new Date();
+    const skip = recapSkipReason(session, await countRecapEvents(input.db, input.sessionId), { now });
+    if (skip === 'throttled') {
+      scheduleTrailingRecap(input, session.recapAt!.getTime() + RECAP_MIN_INTERVAL_MS);
+      return;
+    }
+    if (skip === null) await enqueueRecap({ db: input.db, sessionId: input.sessionId });
   } catch {
-    return false;
+    // A broken read is a skipped recap, never a failed settle.
   }
 }
 

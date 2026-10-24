@@ -185,7 +185,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
-import { enqueueRecap, recapDue } from '../sessions/recap';
+import { recapAfterSettle } from '../sessions/recap';
 import { enqueueTurnSuggestion } from '../sessions/turn-suggestion';
 import { normalizeStoredRememberRules } from '../sessions/remember-rules';
 import {
@@ -6231,8 +6231,9 @@ export class RunnerApiController {
       // And the rolling recap (sessions/recap.ts) may fold the turn that just committed into the
       // session's one-line summary. Off the response path in both halves — the due check is two
       // reads and the pass may wait on a model — because a list line is cosmetic and the runner
-      // is blocked on this reply. A settle the two-minute window skips is what `recapDue` is for;
-      // a session's LAST settle does not come through here at all (RealtimeService.publish).
+      // is blocked on this reply. A settle inside the two-minute window asks again when it closes;
+      // a session's LAST settle does not come through here at all (RealtimeService.publish), and a
+      // turn the engine started itself ends in the event ingest instead (`events`).
       void this.recapAfterTurn(sessionId);
       // And a merge recovery may be owed a check now that this turn has ended — off the response
       // path as well, for the same reason (SessionsService.checkAfterRepairTurn).
@@ -6302,19 +6303,15 @@ export class RunnerApiController {
   }
 
   /**
-   * Ask for a rolling recap after a completed turn, without waiting for one. The due check is read
-   * here rather than left to the pass so a throttled settle never takes a queue slot, and the pass
-   * re-reads both it and the cursor on its own — a race costs one skipped run, never a wrong recap.
-   * NEVER rejects and is never awaited: a recap is cosmetic, and the settle that asked for it has
-   * already answered the runner by the time this runs.
+   * Ask for a rolling recap after a completed turn, without waiting for one: a pass now when one is
+   * due, one when the two-minute window closes when that is all that stands in the way (recap.ts,
+   * recapAfterSettle). A throttled settle never takes a queue slot, and the pass re-reads both the
+   * window and the cursor on its own — a race costs one skipped run, never a wrong recap. NEVER
+   * rejects and is never awaited: a recap is cosmetic, and the settle that asked for it has already
+   * answered the runner by the time this runs.
    */
   private async recapAfterTurn(sessionId: string): Promise<void> {
-    try {
-      if (!(await recapDue({ db: this.prisma, sessionId }))) return;
-      await enqueueRecap({ db: this.prisma, sessionId });
-    } catch {
-      // The generator already swallows every failure of its own; this covers the reads around it.
-    }
+    await recapAfterSettle({ db: this.prisma, sessionId });
   }
 
   /**
@@ -7062,6 +7059,10 @@ export class RunnerApiController {
     // hand rather than by asking the fuse on every ingest — this is the hottest path there is, and
     // a batch carrying neither is the overwhelming majority.
     if (durable.some((e) => e.type === RunEventType.TURN_END && !e.turnId)) {
+      // A turn nobody delivered is one the engine started itself (a background task reporting in,
+      // a scheduled wake-up). It never reaches /turn-complete, so this is where its recap is asked
+      // for; without it the list kept the recap from before the turn that wrote the conclusion.
+      void this.recapAfterTurn(sessionId);
       await this.fuse?.afterCoordinatorSpend(sessionId, 'run_event');
     } else if (events.some((e) => e.type === RunEventType.TOOL_USE)) {
       await this.fuse?.afterCoordinatorSpend(sessionId, 'tool_call');

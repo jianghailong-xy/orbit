@@ -9,13 +9,14 @@ import {
   fitRecapActivity,
   generateRecap,
   parseRecap,
-  recapDue,
+  recapAfterSettle,
   recapEnabled,
   recapSkipReason,
   RECAP_CONCURRENCY,
   RECAP_EVENT_CHARS,
   RECAP_INPUT_TOKEN_BUDGET,
   RECAP_MAX_CHARS,
+  RECAP_MIN_INTERVAL_MS,
   sanitizeRecap,
 } from './recap';
 
@@ -198,7 +199,7 @@ test('ORBIT_RECAP_ENABLED=0 turns every path off before anything is read or aske
     const { db, writes } = fakeDb({ events: events(10) });
     const outcome = await generateRecap({ db, sessionId: 's1' });
     assert.deepEqual(outcome, { written: false, reason: 'disabled' });
-    assert.equal(await recapDue({ db, sessionId: 's1' }), false);
+    await recapAfterSettle({ db, sessionId: 's1' });
     assert.deepEqual(await enqueueRecap({ db, sessionId: 's1' }), { written: false, reason: 'disabled' });
     assert.equal(calls, 0);
     assert.equal(writes.length, 0);
@@ -490,23 +491,79 @@ test('a pass with nothing new to fold in asks nobody', async () => {
     });
     assert.equal(calls, 0);
     assert.equal(writes.length, 0);
-    assert.equal(await recapDue({ db, sessionId: 's1' }), true, 'the count is still worth a queue slot');
+    // The settle's gate counts events rather than reading them, so it still queues a pass, and the
+    // pass is what finds nothing new.
+    await recapAfterSettle({ db, sessionId: 's1' });
+    assert.equal(calls, 0);
+    assert.equal(writes.length, 0);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv('DEEPSEEK_API_KEY', originalKey);
   }
 });
 
-test('recapDue reads the session and its event count, and never throws on a broken read', async () => {
-  const fresh = fakeDb({ session: { recapAt: new Date(Date.now() - 30_000) }, events: events(10) });
-  assert.equal(await recapDue({ db: fresh.db, sessionId: 's1' }), false);
-  assert.equal(await recapDue({ db: fresh.db, sessionId: 's1', finalize: true }), true);
-  const thin = fakeDb({ events: events(3) });
-  assert.equal(await recapDue({ db: thin.db, sessionId: 's1' }), false);
+test('a settle asks for a pass when one is due, and for nothing a gate refuses', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  process.env.DEEPSEEK_API_KEY = 'test-key';
+  let calls = 0;
+  globalThis.fetch = (() => {
+    calls += 1;
+    return Promise.resolve(textResponse('Settled: the suite passes.'));
+  }) as typeof fetch;
+  try {
+    const due = fakeDb({ events: events(10) });
+    await recapAfterSettle({ db: due.db, sessionId: 's-due' });
+    assert.equal(calls, 1, 'a due settle reaches the provider');
+    assert.equal(due.stored.recapText, 'Settled: the suite passes.', 'and resolves once the pass wrote');
 
-  const broken = { session: { findFirst: async () => { throw new Error('database is down'); } } } as never;
-  assert.equal(await recapDue({ db: broken, sessionId: 's1' }), false);
-  assert.deepEqual(await generateRecap({ db: broken, sessionId: 's1' }), { written: false, reason: 'error' });
+    const thin = fakeDb({ events: events(3) });
+    await recapAfterSettle({ db: thin.db, sessionId: 's-thin' });
+    assert.equal(calls, 1, 'a session with too little to say asks nobody');
+    assert.equal(thin.writes.length, 0);
+
+    const broken = { session: { findFirst: async () => { throw new Error('database is down'); } } } as never;
+    await recapAfterSettle({ db: broken, sessionId: 's-broken' });
+    assert.deepEqual(await generateRecap({ db: broken, sessionId: 's-broken' }), { written: false, reason: 'error' });
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv('DEEPSEEK_API_KEY', originalKey);
+  }
+});
+
+test('a settle the window skipped asks once more when the window closes', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalKey = process.env.DEEPSEEK_API_KEY;
+  process.env.DEEPSEEK_API_KEY = 'test-key';
+  let calls = 0;
+  globalThis.fetch = (() => {
+    calls += 1;
+    return Promise.resolve(textResponse('Caught up with the last turn.'));
+  }) as typeof fetch;
+  try {
+    // The last pass wrote just under two minutes ago, so the window closes in a moment.
+    const { db, stored } = fakeDb({
+      session: { recapText: 'Before the last turn.', recapAt: new Date(Date.now() - (RECAP_MIN_INTERVAL_MS - 200)) },
+      events: events(10),
+    });
+    await recapAfterSettle({ db, sessionId: 's-trailing' });
+    // A second turn settles inside the same window: the pass the first one asked for covers it.
+    await recapAfterSettle({ db, sessionId: 's-trailing' });
+    assert.equal(calls, 0, 'a settle inside the window reaches no provider then');
+    assert.equal(stored.recapText, 'Before the last turn.');
+
+    const deadline = Date.now() + 5_000;
+    while (stored.recapText === 'Before the last turn.' && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    assert.equal(stored.recapText, 'Caught up with the last turn.', 'the recap catches up once the window closes');
+    assert.equal(stored.recapEventSeq, 10, 'covering every event the skipped settles left behind');
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(calls, 1, 'one pass for both skipped settles');
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnv('DEEPSEEK_API_KEY', originalKey);
+  }
 });
 
 test('queued recaps bound how many passes are in flight at once', async () => {
