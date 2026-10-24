@@ -74,6 +74,12 @@ export interface RecapInput {
    * the kill switch, the minimum event count, and a provider that may simply have no key.
    */
   force?: boolean;
+  /**
+   * Told once this pass has written, so the clients drawing the session hear about the new recap
+   * from a `session.updated` summary rather than from whatever event next happens to carry it,
+   * which for a session that has just parked may be none at all.
+   */
+  onWritten?: () => void;
 }
 
 export interface RecapOptions {
@@ -424,6 +430,11 @@ export async function generateRecap(input: RecapInput, opts: RecapOptions = {}):
           data: { recapText: recap, recapAt: now, recapEventSeq: activity.lastSeq },
         });
         if (updated.count === 0) return { written: false, reason: 'cas-lost' };
+        try {
+          input.onWritten?.();
+        } catch {
+          // Telling the clients is best-effort, like the pass itself: the recap is written either way.
+        }
         return { written: true, recapText: recap, recapEventSeq: activity.lastSeq };
       }
       if (attempt >= retries) return { written: false, reason: 'llm-failed' };
@@ -459,7 +470,7 @@ function scheduleTrailingRecap(input: RecapInput, closesAt: number): void {
   if (waiting) clearTimeout(waiting.timer);
   const timer = setTimeout(() => {
     trailingRecaps.delete(input.sessionId);
-    void recapAfterSettle({ db: input.db, sessionId: input.sessionId });
+    void recapAfterSettle({ db: input.db, sessionId: input.sessionId, onWritten: input.onWritten });
   }, Math.max(0, at - Date.now()));
   timer.unref?.();
   trailingRecaps.set(input.sessionId, { timer, at });
@@ -487,7 +498,7 @@ export async function recapAfterSettle(input: RecapInput, opts: { now?: Date } =
       scheduleTrailingRecap(input, session.recapAt!.getTime() + RECAP_MIN_INTERVAL_MS);
       return;
     }
-    if (skip === null) await enqueueRecap({ db: input.db, sessionId: input.sessionId });
+    if (skip === null) await enqueueRecap({ db: input.db, sessionId: input.sessionId, onWritten: input.onWritten });
   } catch {
     // A broken read is a skipped recap, never a failed settle.
   }

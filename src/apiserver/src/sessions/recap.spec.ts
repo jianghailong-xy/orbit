@@ -461,9 +461,11 @@ test('a pass that loses the cursor race to another writer concedes without writi
     return Promise.resolve(textResponse('Stale by construction.'));
   }) as typeof fetch;
   try {
-    const outcome = await generateRecap({ db, sessionId: 's1' }, { now: NOW, retries: 0 });
+    let told = 0;
+    const outcome = await generateRecap({ db, sessionId: 's1', onWritten: () => { told += 1; } }, { now: NOW, retries: 0 });
 
     assert.deepEqual(outcome, { written: false, reason: 'cas-lost' });
+    assert.equal(told, 0, 'a pass that wrote nothing tells nobody it did');
     assert.equal(writes.length, 1);
     assert.deepEqual(writes[0].where, { id: 's1', recapEventSeq: 5 });
     assert.equal(stored.recapText, null, 'the newer pass keeps its recap');
@@ -512,15 +514,19 @@ test('a settle asks for a pass when one is due, and for nothing a gate refuses',
     return Promise.resolve(textResponse('Settled: the suite passes.'));
   }) as typeof fetch;
   try {
+    let told = 0;
+    const onWritten = () => { told += 1; };
     const due = fakeDb({ events: events(10) });
-    await recapAfterSettle({ db: due.db, sessionId: 's-due' });
+    await recapAfterSettle({ db: due.db, sessionId: 's-due', onWritten });
     assert.equal(calls, 1, 'a due settle reaches the provider');
     assert.equal(due.stored.recapText, 'Settled: the suite passes.', 'and resolves once the pass wrote');
+    assert.equal(told, 1, 'and the pass that wrote says so, for the clients drawing the session');
 
     const thin = fakeDb({ events: events(3) });
-    await recapAfterSettle({ db: thin.db, sessionId: 's-thin' });
+    await recapAfterSettle({ db: thin.db, sessionId: 's-thin', onWritten });
     assert.equal(calls, 1, 'a session with too little to say asks nobody');
     assert.equal(thin.writes.length, 0);
+    assert.equal(told, 1);
 
     const broken = { session: { findFirst: async () => { throw new Error('database is down'); } } } as never;
     await recapAfterSettle({ db: broken, sessionId: 's-broken' });
@@ -546,9 +552,11 @@ test('a settle the window skipped asks once more when the window closes', async 
       session: { recapText: 'Before the last turn.', recapAt: new Date(Date.now() - (RECAP_MIN_INTERVAL_MS - 200)) },
       events: events(10),
     });
-    await recapAfterSettle({ db, sessionId: 's-trailing' });
+    let told = 0;
+    const onWritten = () => { told += 1; };
+    await recapAfterSettle({ db, sessionId: 's-trailing', onWritten });
     // A second turn settles inside the same window: the pass the first one asked for covers it.
-    await recapAfterSettle({ db, sessionId: 's-trailing' });
+    await recapAfterSettle({ db, sessionId: 's-trailing', onWritten });
     assert.equal(calls, 0, 'a settle inside the window reaches no provider then');
     assert.equal(stored.recapText, 'Before the last turn.');
 
@@ -560,6 +568,7 @@ test('a settle the window skipped asks once more when the window closes', async 
     assert.equal(stored.recapEventSeq, 10, 'covering every event the skipped settles left behind');
     await new Promise((resolve) => setTimeout(resolve, 300));
     assert.equal(calls, 1, 'one pass for both skipped settles');
+    assert.equal(told, 1, 'and the late pass tells the clients itself: no settle is left to carry it');
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnv('DEEPSEEK_API_KEY', originalKey);

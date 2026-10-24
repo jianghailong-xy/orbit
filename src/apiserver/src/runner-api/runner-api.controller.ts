@@ -6311,7 +6311,12 @@ export class RunnerApiController {
    * answered the runner by the time this runs.
    */
   private async recapAfterTurn(sessionId: string): Promise<void> {
-    await recapAfterSettle({ db: this.prisma, sessionId });
+    await recapAfterSettle({
+      db: this.prisma,
+      sessionId,
+      // A pass writes after this settle has already published, so it publishes its own summary.
+      onWritten: () => this.realtime.publishSessionUpdated(sessionId),
+    });
   }
 
   /**

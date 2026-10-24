@@ -64,10 +64,19 @@ function connect(url: string) {
   // The real one, not a proxy: the last settle's recap is enqueued from inside `publish`, so the
   // `/finalize` case exercises that branch exactly as production does — NOTIFY and all.
   const realtime = new RealtimeService(prisma, push);
+  // Every `session.updated` the doors publish, and when: a pass that writes after its settle has
+  // answered must publish one of its own, or a list already on screen keeps the old recap.
+  const published: Array<{ sessionId: string; at: number }> = [];
+  const publishSessionUpdated = realtime.publishSessionUpdated.bind(realtime);
+  realtime.publishSessionUpdated = (sessionId: string) => {
+    published.push({ sessionId, at: Date.now() });
+    publishSessionUpdated(sessionId);
+  };
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   return {
     db,
     realtime,
+    published,
     sessions: new SessionsService(prisma, queue, realtime),
     api: new RunnerApiController(
       prisma,
@@ -294,6 +303,11 @@ async function until<T>(check: () => Promise<T | null>, ms = 20_000): Promise<T 
   }
 }
 
+/** A `session.updated` for this session published at or after `since`, once one is. */
+function publishedSince(published: Array<{ sessionId: string; at: number }>, sessionId: string, since: number) {
+  return until(async () => (published.some((p) => p.sessionId === sessionId && p.at >= since) ? true : null), 5_000);
+}
+
 /** The session's recap, once its cursor has reached `seq` — i.e. once the released pass wrote. */
 function recapped(sql: Client, sessionId: string, seq: number) {
   return until(async () => {
@@ -310,7 +324,7 @@ test('the settle hooks write the recap, and only on the terms they promise', {
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
-  const { db, api, sessions } = connect(url);
+  const { db, api, sessions, published } = connect(url);
 
   // Every pass spends the server's own key, which is what the settle hooks resolve to on a
   // deployment that has one; the provider behind it is answered by this file, never by the network.
@@ -388,10 +402,16 @@ test('the settle hooks write the recap, and only on the terms they promise', {
     // Before this, the recap stayed a turn behind until the session's next settle, which a parked
     // session may never have. The window closing is now enough.
     assert.equal(await passedThrough(provider), 1, 'the window closing asked for the pass the settle could not');
+    const releasedAt = Date.now();
     provider.release('Fixed the login flow; tests are green.');
     const row = await recapped(sql, f.sessionId, 4);
     assert.ok(row, 'and the recap catches up with the turn the window held back');
     assert.equal(row.recap_text, 'Fixed the login flow; tests are green.');
+    assert.equal(
+      await publishedSince(published, f.sessionId, releasedAt),
+      true,
+      'and the late pass publishes the session, since no settle is left to carry its recap',
+    );
   });
 
   await t.test('(3) a provider that fails delays nothing and is never written', async () => {
@@ -511,9 +531,11 @@ test('the settle hooks write the recap, and only on the terms they promise', {
     await sayUndelivered(api, f, 5, RunEventType.TURN_END, {});
     assert.equal(await passedThrough(provider), 1, 'its TURN_END asked for a pass');
     assert.equal(provider.answered, false, 'and the ingest answered while that pass was unanswered');
+    const releasedAt = Date.now();
     provider.release('Research done: integrate Copilot CLI first.');
     const row = await recapped(sql, f.sessionId, 4);
     assert.ok(row, 'the recap catches the conclusion that turn wrote');
     assert.equal(row.recap_text, 'Research done: integrate Copilot CLI first.');
+    assert.equal(await publishedSince(published, f.sessionId, releasedAt), true, 'and the clients hear about it');
   });
 });

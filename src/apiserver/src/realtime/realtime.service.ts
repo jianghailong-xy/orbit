@@ -466,7 +466,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // arrives inside the two-minute window needs: the pass ignores the window, and the write is
       // what the session list draws next. Fire and forget, like the push above it: the pass is
       // queued and this call returns, and nothing the pass can meet may fail a settlement.
-      void enqueueRecap({ db: this.prisma, sessionId: runId, finalize: true }).catch(() => undefined);
+      void enqueueRecap({
+        db: this.prisma,
+        sessionId: runId,
+        finalize: true,
+        onWritten: () => this.publishSessionUpdated(runId),
+      }).catch(() => undefined);
     }
   }
 

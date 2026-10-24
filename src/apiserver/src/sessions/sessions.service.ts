@@ -4948,7 +4948,12 @@ export class SessionsService {
     // A landing writes no run_event, so every one of recap.ts's four gates would refuse it anyway;
     // the door says so as the structural refusal rather than as "too little to recap" (§2.9 LS6).
     assertEngineSessionRow(session);
-    return enqueueRecap({ db: this.prisma, sessionId: id, force: true });
+    return enqueueRecap({
+      db: this.prisma,
+      sessionId: id,
+      force: true,
+      onWritten: () => this.realtime.publishSessionUpdated(id),
+    });
   }
 
   // The session list shows the last reply as a single ellipsised line, so it only
