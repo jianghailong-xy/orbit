@@ -74,6 +74,7 @@ export const LEDGERS = {
   p0a: { file: 'prompts.jsonl', cap: 30, task: 'P0a 34h05eeSDrtKGW2ret55v' },
   p0b: { file: 'p0b-prompts.jsonl', cap: 30, task: 'P0b 34h05fIoCOHhRY79oksON' },
   p0c: { file: 'p0c-prompts.jsonl', cap: 10, task: 'P0c 34h3xGGSqUnA6DTMj1iop' },
+  p0bm: { file: 'p0bm-prompts.jsonl', cap: 10, task: 'P0b 跟进 34hO5vUuVSUNrTdtUxF6b' },
 };
 export const LEDGER_NAME = process.env.CURSOR_P0_LEDGER ?? 'p0c';
 if (!LEDGERS[LEDGER_NAME]) throw new Error(`unknown ledger ${LEDGER_NAME}; known: ${Object.keys(LEDGERS).join(', ')}`);

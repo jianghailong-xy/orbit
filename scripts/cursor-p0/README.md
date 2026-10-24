@@ -55,7 +55,9 @@ macOS 专属场景：`macos-keychain-store`（Keychain 条目名与不变性）�
 | 账本 | 文件（`/mnt/data/cursor-p0/ledger/`） | 上限 | 证据目录 | 回放样本目录 |
 | --- | --- | --- | --- | --- |
 | `p0a` | `prompts.jsonl` | 30 | `docs/evidence/cursor-cli/<版本>/` | `src/runner-go/testdata/cursor/` |
+| `p0b` | `p0b-prompts.jsonl` | 30 | `docs/evidence/cursor-cli/macos-<版本>/`（`--out` 指定） | 无（P0b 未发 prompt） |
 | `p0c`（默认） | `p0c-prompts.jsonl` | 10 | `docs/evidence/cursor-cli/<版本>/p0c/` | `src/runner-go/testdata/cursor/p0c/` |
+| `p0bm`（P0b 跟进，macOS） | `p0bm-prompts.jsonl` | 10 | `docs/evidence/cursor-cli/macos-<版本>/`（`--out` 指定） | `/mnt/data/cursor-p0/macos-fixtures/`（`--fixtures` 指定） |
 
 - 每本账的运行写进自己的目录，后一个任务不会盖掉前一个任务的录制。证据目录的 `prompts-ledger.json` 记着它属于哪本账，
   拿别的账本往里写时脚本直接拒绝；只有零 prompt 运行的目录没有这个文件。
