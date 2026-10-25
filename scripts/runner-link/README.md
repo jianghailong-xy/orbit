@@ -172,12 +172,21 @@ node scripts/runner-link/loadgen-baseline.mjs <state>/loadgen/runs/cost-hb <stat
 ```
 
 It prints the table below and the statements each operation runs, most database time first. Measured on 2026-10-25 at
-commit ada118b91, one apiserver, the stack's idle use under 0.02 cores:
+commit 572171c2e (the apiserver and the gateway of project tip 529d161bd, B4a and D0 included), on a fresh stack with
+one apiserver, the stack's idle use under 0.02 cores. CPU counts the steady window; statements and commits count the
+whole run, connects included:
 
 | Per operation | apiserver CPU | database CPU | gateway CPU | SQL statements | commits |
 | --- | --- | --- | --- | --- | --- |
-| heartbeat | 3.29 ms | 7.67 ms | 0.60 ms | 27.9 | 27.9 |
-| event batch (1.22 events) | 2.20 ms | 2.69 ms | 0.16 ms | 13.6 | 6.3 |
+| heartbeat | 3.80 ms | 8.08 ms | 0.48 ms | 28.3 | 28.4 |
+| event batch (1.22 events) | 2.41 ms | 2.82 ms | 0.18 ms | 13.7 | 6.3 |
+
+The first baseline, at ada118b91 before B4a and D0, measured the heartbeat at 3.29 / 7.67 / 0.60 ms and 27.9
+statements, and the batch at 2.20 / 2.69 / 0.16 ms and 13.6 statements.
+- The heartbeat's 0.4 more statements are B4a's welcome route. Every connect runs four more: the guard's three reads
+  and the durable-seq walk, spread over the run's six beats a connect.
+- The CPU figures moved by 5 to 20%, about what this host varies between runs: other work used 6 to 10 of its 24
+  cores. A first pass at this head measured the heartbeat at 3.98 / 8.86 / 0.60 ms.
 
 - A heartbeat is the full reconcile on every beat: every statement is its own transaction. It rewrites the runner row
   with all its facts, upserts presence, and runs about 20 reads and conditional updates for the commands it may
@@ -186,6 +195,6 @@ commit ada118b91, one apiserver, the stack's idle use under 0.02 cores:
   5 reads, each its own transaction: the guard's runner, owner and managed-instance reads, and the engine-session
   check. Design §6.6 batches several sessions' events into one write.
 - At the cell's target (500 beats/s and 2,000 events/s, which the B8 cadence sends as about 1,290 batches/s of 1.55
-  events), these costs come to about 4.5 apiserver cores (6 or more Node processes at 75%) and about 7.3 database
-  cores on average, 11 at 10-second peaks.
+  events), these costs come to about 5 apiserver cores (7 or more Node processes at 75%) and about 7.7 database cores
+  on average, 11 to 12 at 10-second peaks.
 
