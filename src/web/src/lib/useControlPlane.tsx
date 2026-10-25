@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type Query, type QueryFilters } from '@tanstack/react-query';
 import { getToken } from '../api';
 
 // Coalesce a burst of control events (a turn end fires status + approval back-to-back) into a
@@ -33,6 +33,13 @@ const WATCHDOG_TICK_MS = 15_000;
 // database time on 2026-10-20 — and a request a minute costs nothing beside them.
 const QUICK_RETRIES = 20;
 const SLOW_RETRY_MS = 60_000;
+// How many of the stream's refetches are out at once (see `refresh`). A stream that opens asks for
+// every list again, and on a large account that is one read per project the workspace list shows
+// besides the lists themselves: about fifty requests, which all left in the same instant. Each time
+// a tab was reloaded or its stream reopened on 2026-10-24/25, 60 to 130 requests took 0.5 s or more
+// within a few seconds, nearly all of them that tab's. A few at a time, the server answers them as
+// fast as it would one by one, and the whole reconcile still lands within a second or two.
+const FETCH_CONCURRENCY = 4;
 
 const ControlPlaneLiveContext = createContext(false);
 
@@ -67,11 +74,57 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     let fails = 0;
     let lastMsgAt = Date.now();
 
+    // How every refetch below reaches the server. The matching queries are marked stale at once,
+    // so one mounted later reads afresh, and the ones on screen are fetched through `pump`, at most
+    // FETCH_CONCURRENCY at a time.
+    //
+    // A query nudged while its own fetch is still out is not asked for a second time. React Query's
+    // invalidateQueries would ask (cancelRefetch), and no queryFn here reads the abort signal, so
+    // the first request is not even aborted: the server builds both. On a slow server that
+    // compounds, because a list nudged twice a second while each read takes two seconds is four
+    // reads deep. Such a query is fetched once more when its fetch lands instead, since that fetch
+    // may have started too early to see what the nudge announced. A first read is the exception, and
+    // left alone as React Query itself leaves it: it was asked for a moment ago, when the page or the
+    // list opened, and on a page load that is every list at once. A fetch that starts after a nudge
+    // answers it, whoever started it (an interval poll, a mount), so a queued query is dropped then.
+    const queued = new Map<string, Query>();
+    const refetchWhenLanded = new Set<string>();
+    let inFlight = 0;
+    const pump = (): void => {
+      for (const [hash, query] of queued) {
+        if (inFlight >= FETCH_CONCURRENCY) return;
+        queued.delete(hash);
+        if (!query.isActive()) continue;
+        inFlight += 1;
+        void qc.refetchQueries({ queryKey: query.queryKey, exact: true }, { cancelRefetch: false }).finally(() => {
+          inFlight -= 1;
+          if (!stopped) pump();
+        });
+      }
+    };
+    const refresh = (filters: QueryFilters): void => {
+      void qc.invalidateQueries({ ...filters, refetchType: 'none' });
+      for (const query of qc.getQueryCache().findAll({ ...filters, type: 'active' })) {
+        if (query.state.fetchStatus === 'idle') queued.set(query.queryHash, query);
+        else if (query.state.data !== undefined) refetchWhenLanded.add(query.queryHash);
+      }
+      pump();
+    };
+    const unsubscribeCache = qc.getQueryCache().subscribe((event) => {
+      if (event.type !== 'updated') return;
+      const { query, action } = event;
+      if (action.type === 'fetch') queued.delete(query.queryHash);
+      else if (query.state.fetchStatus === 'idle' && refetchWhenLanded.delete(query.queryHash)) {
+        queued.set(query.queryHash, query);
+        pump();
+      }
+    });
+
     const refetchSessions = (): void => {
-      void qc.invalidateQueries({ queryKey: ['sessions'] });
+      refresh({ queryKey: ['sessions'] });
       // The sidebar's per-workspace tallies are derived from the same rows, but keyed apart so the
       // list's optimistic edits can't touch them — so they need their own invalidation here.
-      void qc.invalidateQueries({ queryKey: ['session-counts'] });
+      refresh({ queryKey: ['session-counts'] });
     };
     // The lists index, rate-limited to one refetch per LISTS_MIN_INTERVAL_MS. Leading —
     // an idle tab still reflects a single task change immediately — then at most one trailing
@@ -84,7 +137,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       listsTimer = setTimeout(() => {
         listsTimer = undefined;
         listsRefetchedAt = Date.now();
-        void qc.invalidateQueries({ queryKey: ['task-lists'] });
+        refresh({ queryKey: ['task-lists'] });
       }, wait);
     };
     // The task list/board queries: every paged view — all tasks, one list, the unlisted bucket —
@@ -93,32 +146,32 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // session event doesn't needlessly refetch them. This is what makes MCP-created/updated tasks
     // appear without a manual page refresh; before, tasks had no push path and rode a 5–15s poll only.
     const refetchTasks = (): void => {
-      void qc.invalidateQueries({ queryKey: ['tasks'] });
+      refresh({ queryKey: ['tasks'] });
       refetchTaskLists();
-      void qc.invalidateQueries({ queryKey: ['task'] });
+      refresh({ queryKey: ['task'] });
     };
     // The workspace list (sidebar, pickers, workspace page). Like the task queries it only refetches on an
     // `workspace.*` event or on reconnect — it has no interval poll at all, so before this a workspace
     // created/updated through MCP (workspace_create/workspace_update) only appeared after a page reload.
     const refetchWorkspaces = (): void => {
-      void qc.invalidateQueries({ queryKey: ['workspaces'] });
+      refresh({ queryKey: ['workspaces'] });
     };
     // The owner's tag library and the deployment's provider catalog: both are edited elsewhere
     // (tags on the native clients, providers in the admin area) and neither polls, so push is the
     // only way another client's edit reaches this tab.
     const refetchTags = (): void => {
-      void qc.invalidateQueries({ queryKey: ['session-tags'] });
+      refresh({ queryKey: ['session-tags'] });
     };
     const refetchProviders = (): void => {
-      void qc.invalidateQueries({ queryKey: ['providers'] });
+      refresh({ queryKey: ['providers'] });
     };
     // The owner's session folders, made, renamed or deleted on another client. Filing a session
     // moves one list row and arrives as `session.updated` instead.
     const refetchFolders = (): void => {
-      void qc.invalidateQueries({ queryKey: ['session-folders'] });
+      refresh({ queryKey: ['session-folders'] });
     };
     const refetchProjects = (): void => {
-      void qc.invalidateQueries({ queryKey: ['projects', 'sidebar'] });
+      refresh({ queryKey: ['projects', 'sidebar'] });
     };
     const scheduleProjectRefresh = (): void => {
       if (projectsTimer) clearTimeout(projectsTimer);
@@ -132,7 +185,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (previous) clearTimeout(previous);
       projectSessionTimers.set(projectId, setTimeout(() => {
         projectSessionTimers.delete(projectId);
-        void qc.invalidateQueries({ queryKey: ['project-sessions', projectId] });
+        refresh({ queryKey: ['project-sessions', projectId] });
       }, REFRESH_DEBOUNCE_MS));
     };
     // The two reads a decision card is drawn from, which none of the list refetches above reach.
@@ -141,12 +194,12 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // proposal being filed or decided arrives as its own event naming the project; an event that
     // names none dirties every project's copy.
     const refetchPendingDecisions = (): void => {
-      void qc.invalidateQueries({
+      refresh({
         predicate: ({ queryKey }) => queryKey[0] === 'session' && queryKey[2] === 'pending-decisions',
       });
     };
     const refetchCriteriaDecisions = (projectId: string): void => {
-      void qc.invalidateQueries({
+      refresh({
         predicate: ({ queryKey }) =>
           queryKey[0] === 'project' &&
           queryKey[2] === 'pending-criteria-decisions' &&
@@ -165,18 +218,18 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     const refetchSessionDetail = (id: string): void => {
       // Exact: the diff under `['session', id, 'diff']` is refreshed on turn_end by the console
       // itself, and is far too expensive to re-run on every status change.
-      void qc.invalidateQueries({ queryKey: ['session', id], exact: true });
+      refresh({ queryKey: ['session', id], exact: true });
     };
     // The owner's watches: re-read with the burst, then once more WATCH_SETTLE_MS later for the
     // evaluation that burst set off. A later burst restarts that second read instead of adding one.
     // `['watches']` is the whole group — the four list reads and any single watch under
     // `['watches', 'one', id]` (queries.ts) — so one invalidation reaches every card on screen.
     const refetchWatches = (): void => {
-      void qc.invalidateQueries({ queryKey: ['watches'] });
+      refresh({ queryKey: ['watches'] });
       if (watchesTimer) clearTimeout(watchesTimer);
       watchesTimer = setTimeout(() => {
         watchesTimer = undefined;
-        void qc.invalidateQueries({ queryKey: ['watches'] });
+        refresh({ queryKey: ['watches'] });
       }, WATCH_SETTLE_MS);
     };
     // The owner's wiki: `['wiki']` is the whole group — the space list, a space's entries, one
@@ -186,7 +239,7 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
     // `realtime.redaction`). It is an accelerant and nothing more (contract `realtime.correctness`),
     // which is why no wiki read is made to depend on it.
     const refetchWiki = (): void => {
-      void qc.invalidateQueries({ queryKey: ['wiki'] });
+      refresh({ queryKey: ['wiki'] });
     };
     const REFETCH: Record<string, () => void> = {
       sessions: refetchSessions,
@@ -270,22 +323,28 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       lastMsgAt = Date.now();
       es = new EventSource(`/api/events?access_token=${encodeURIComponent(getToken() ?? '')}`);
       es.onopen = () => {
-        fails = 0;
         lastMsgAt = Date.now();
         setLive(true);
         // No sinceSeq replay — reconcile every list with a fresh snapshot on (re)connect so
         // changes missed during the gap surface too. Any open session detail with it: the gap
         // could have swallowed exactly the revive this tab needs to stop drawing a session as
-        // ended (see refetchSessionDetail). Prefix key, so a session id isn't needed here.
+        // ended (see refetchSessionDetail). Prefix key, so a session id isn't needed here. The
+        // queue serves them in this order, so the project reads, the bulk of it, go last.
         for (const refetch of Object.values(REFETCH)) refetch();
-        void qc.invalidateQueries({ queryKey: ['project-sessions'] });
-        void qc.invalidateQueries({ queryKey: ['session'] });
+        refresh({ queryKey: ['session'] });
         // Keyed under ['project'], so the prefix above misses it: a proposal filed or decided
         // during the gap would otherwise wait out its poll.
         refetchCriteriaDecisions('');
+        refresh({ queryKey: ['project-sessions'] });
       };
       es.onmessage = (e) => {
         lastMsgAt = Date.now();
+        // The backoff starts over once something came down the stream, not when it opened. A
+        // stream that opens and dies before its first message is a failure like any other: on
+        // 2026-10-24 at 22:45Z one tab's opened and died every three seconds for a minute and a half,
+        // and with the count reset at every open it was asked for again a second later each time,
+        // and each time every list was read again (some 2,000 requests).
+        fails = 0;
         let ev: {
           type?: string;
           sessionId?: string;
@@ -358,6 +417,9 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       if (watchesTimer) clearTimeout(watchesTimer);
       if (projectsTimer) clearTimeout(projectsTimer);
       for (const timer of projectSessionTimers.values()) clearTimeout(timer);
+      unsubscribeCache();
+      queued.clear();
+      refetchWhenLanded.clear();
       es?.close();
     };
   }, [qc]);
