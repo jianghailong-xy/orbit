@@ -90,6 +90,7 @@ function connect(url: string): Harness {
   const prisma = db as unknown as PrismaService;
   const realtime = {
     publish: () => undefined,
+    publishBatch: () => undefined,
     publishSessionUpdated: () => undefined,
     publishQueuedTurnsChanged: () => undefined,
     notifyInbox: () => undefined,
