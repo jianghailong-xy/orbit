@@ -424,7 +424,11 @@ export class SessionsController {
     // what Nest sends after it is a no-op on a finished response. Other views keep Express's
     // body-hash ETag. A landing-aware read is a different list, so it has its own version scope:
     // an insert or a settlement moves that one and leaves the plain list's where it was.
-    if (res && isOpenListView(view)) {
+    // A plain project read (`projectId` without `includeLanding`) is built every time instead: a
+    // workspace list sends one for each project it shows, every 4 s while its stream is down, and
+    // the version reads the whole account (~230 ms on 6.7k sessions) to spare a few rows that take
+    // milliseconds — one such tab was most of production's database time on 2026-10-20.
+    if (res && isOpenListView(view) && (projectId === undefined || withLanding)) {
       const etag = openListEtag(await this.sessions.openListVersion(user.userId, withLanding), {
         runnerId: filters.runnerId,
         workspaceId: filters.workspaceId,
