@@ -346,6 +346,7 @@ import {
 } from '../tasks/task-completion-evidence.service';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { CurrentRunnerLink, type RunnerLinkContext } from './runner-link-call';
+import { readRunnerLinkHints, type RunnerLinkHints } from './runner-link-hints';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -1302,7 +1303,7 @@ export class RunnerApiController {
     @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
     /** Set when the link gateway forwarded this beat (runner-link-call.ts): presence records it as LINK. */
     @CurrentRunnerLink() link?: RunnerLinkContext,
-  ): Promise<RunnerHeartbeatResponse> {
+  ): Promise<RunnerHeartbeatResponse & { linkHints?: RunnerLinkHints }> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     // Idle sleep (managed-runners/managed-runner-sleep.ts), only for an authorized managed instance
     // while the switch is on. Its report is stored as sent, or as NULL when it sends none: a runner
@@ -1435,12 +1436,12 @@ export class RunnerApiController {
       },
     }).catch(beatLost);
     // Heard over HTTPS, or forwarded by the link gateway: either way this beat sent its facts in full
-    // above, so none of the hashes a link heartbeat may carry instead. Which gateway node holds the
-    // connection is not something a forwarded call says yet.
+    // above, so none of the hashes a link heartbeat may carry instead. A forwarded beat names the gateway
+    // node holding the connection (X-Orbit-Link-Gateway-Id).
     await recordRunnerBeat(this.prisma, {
       runnerId: runner.id,
       processId: heartbeatLeaseOwner,
-      gatewayId: null,
+      gatewayId: link?.gatewayId ?? null,
       linkState: link ? 'LINK' : 'HTTP',
       at: beatAt,
     }).catch(beatLost);
@@ -1790,6 +1791,18 @@ export class RunnerApiController {
     const cursorKeyChecks = runnerSupportsCapability(capabilities, CURSOR_KEY_CHECK_V1)
       ? cursorKeyCheckRelay.take(runner.id)
       : [];
+    // A beat the link gateway forwarded is also answered with what waits for the runner (runner-link-hints.ts), which
+    // the gateway states in HeartbeatAck.hints. Read last, and only for a link call; a read that fails leaves it out,
+    // and the gateway then states nothing rather than that nothing waits.
+    const linkHints = link
+      ? await readRunnerLinkHints(this.prisma, runner.id).then(
+          (waiting): RunnerLinkHints => {
+            const watchers = this.realtime.linkWatchersOf(supervisedSessionIds);
+            return { ...waiting, ...(watchers ? { watchers } : {}) };
+          },
+          () => undefined,
+        )
+      : undefined;
     // Hand back the authoritative max-concurrent (the editable DB value) so the runner
     // syncs its self-gate to a UI/API change without needing a restart. The free-space floor
     // rides along for the same reason: the runner reclaims its own session checkouts under disk
@@ -1823,6 +1836,8 @@ export class RunnerApiController {
       ...(managedBeat.sleep ? { managedSleep: managedBeat.sleep } : {}),
       // Present only when this beat hands a key over, for the same reason.
       ...(cursorKeyChecks.length > 0 ? { cursorKeyChecks } : {}),
+      // Only on a link call, which the gateway takes it out of: an HTTPS response keeps its shape.
+      ...(linkHints ? { linkHints } : {}),
     };
   }
 

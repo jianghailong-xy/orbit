@@ -39,8 +39,15 @@ type gateway struct {
 	// hints relays runner hints from NATS (hints.go); nil when LINK_NATS_URL is not set.
 	hints *hintRelay
 
-	// forward hands an Rpc to a backend. Version 0 has none: the gateway forwards nothing, and B4 adds it behind
-	// mayForward.
+	// backends are the apiserver instances calls are forwarded to (backend.go); nil in MODE_HTTP.
+	backends *backendPool
+	// credit is the ingest queue's depth and the credit it grants (events.go).
+	credit *creditBook
+	// watchers is who watches which session live, by runner (live.go).
+	watchers *watcherBook
+
+	// forward hands an Rpc to a backend: forwardRPC in MODE_LINK, behind mayForward; nil in MODE_HTTP, which forwards
+	// nothing.
 	forward func(c *conn, rpc *linkpb.Rpc)
 }
 
@@ -57,6 +64,15 @@ func newGateway(cfg config, logger *slog.Logger) *gateway {
 		now:         time.Now,
 	}
 	g.metrics = newGatewayMetrics(version, deny, func() float64 { return float64(shadowPending.Load()) })
+	g.credit = newCreditBook(g, cfg.link)
+	g.watchers = newWatcherBook(cfg.link.WatchersTTL)
+	g.metrics.ingestEvents.fn = func() float64 { return float64(g.credit.depth().Events) }
+	g.metrics.ingestBytes.fn = func() float64 { return float64(g.credit.depth().Bytes) }
+	g.metrics.watchedSessions.fn = func() float64 { return float64(g.watchers.watched()) }
+	if cfg.Mode == linkpb.Mode_MODE_LINK && len(cfg.InternalAPIURLs) > 0 {
+		g.backends = newBackendPool(cfg, g.metrics, logger)
+		g.forward = forwardRPC
+	}
 	return g
 }
 
@@ -113,7 +129,9 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ws.SetReadLimit(maxFrameBytes)
-	newConn(g, ws, claims, ip).run(started)
+	c := newConn(g, ws, claims, ip)
+	c.token = bearer(r)
+	c.run(started)
 }
 
 // refuseHTTP answers an upgrade request the gateway will not upgrade. The body's code names the CloseCode the same
@@ -303,6 +321,10 @@ func serveMain(args []string) int {
 		logger.Error("runner hints not relayed: NATS refused the configuration", "err", err)
 	} else {
 		g.hints = relay
+	}
+	go g.sweepWatchers(ctx.Done())
+	if g.backends != nil {
+		logger.Info("MODE_LINK: runner calls are forwarded", "backends", g.backends.String(), "timeout", cfg.RPCTimeout)
 	}
 
 	hup := make(chan os.Signal, 1)

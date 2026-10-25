@@ -20,13 +20,16 @@ import (
 )
 
 // conn is one runner's connection after the upgrade (docs/runner-link-design.md §6.1): the handler's goroutine reads,
-// one goroutine writes from two queues (control frames ahead of everything else) and one pings. Its state lives in
-// memory only; a runner that loses it reconnects.
+// one goroutine writes from three queues (control frames first, then hints and RPC results, then the live stream's)
+// and one pings. Its state lives in memory only; a runner that loses it reconnects.
 type conn struct {
 	g      *gateway
 	ws     *websocket.Conn
 	id     string
 	claims *linkClaims
+	// token is the link token the connection was opened with, which every call forwarded for it presents
+	// (X-Orbit-Runner-Link-Token): the apiserver checks it on each one.
+	token  string
 	remote string
 	mode   linkpb.Mode
 	log    *slog.Logger
@@ -36,9 +39,10 @@ type conn struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	ctrl   chan outItem
-	normal chan outItem
+	queues [tierCount]chan outItem
 	outID  atomic.Uint64
+	// writeWS writes one WebSocket message: the connection's, or a test's stand-in.
+	writeWS func(ctx context.Context, b []byte) error
 
 	closeOnce  sync.Once
 	drainOnce  sync.Once
@@ -46,13 +50,17 @@ type conn struct {
 	writerDone chan struct{}
 	reason     atomic.Pointer[string] // why the connection ended; the first to say so wins
 
-	mu       sync.Mutex
-	hello    *linkpb.Hello
-	timers   []*time.Timer
-	welcomed bool
+	mu         sync.Mutex
+	hello      *linkpb.Hello
+	timers     []*time.Timer
+	welcomed   bool
+	welcomedAt time.Time
 
 	chunks reassembler
 	shadow *shadowState
+	// link is what a MODE_LINK connection forwards with (forward.go, heartbeat.go, events.go, live.go); nil in
+	// MODE_HTTP.
+	link *linkState
 	// readError is why reading stopped; only the reading goroutine touches it.
 	readError error
 }
@@ -69,22 +77,49 @@ type closeRequest struct {
 	text   string
 }
 
+// The three priorities frames are written in (§5.1). A tier is written only while every tier above it is empty, and
+// a frame sent in pieces (Chunk) yields to a higher tier between two pieces.
+type tier int
+
+const (
+	// tierControl: Welcome, Close, Drain, HeartbeatAck, EventAck, Credit. A full queue means the runner is not
+	// reading, and closes the connection (CLOSE_CODE_SLOW_CONSUMER).
+	tierControl tier = iota
+	// tierNormal: hints and RPC results. A hint finding the queue full is dropped; an RPC result closes the
+	// connection, as a control frame does, since the runner waits for it.
+	tierNormal
+	// tierLive: what serves the live stream (TurnPrefixRequest). Best effort: a full queue drops the frame.
+	tierLive
+	tierCount
+)
+
 const (
 	controlQueue = 64
 	normalQueue  = 256
+	liveQueue    = 64
 	writeTimeout = 10 * time.Second
 )
+
+var tierNames = [tierCount]string{"control", "normal", "live"}
 
 func newConn(g *gateway, ws *websocket.Conn, claims *linkClaims, remote string) *conn {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &conn{
 		g: g, ws: ws, id: newConnectionID(), claims: claims, remote: remote, mode: g.cfg.Mode,
 		ctx: ctx, cancel: cancel,
-		ctrl: make(chan outItem, controlQueue), normal: make(chan outItem, normalQueue),
+		queues: [tierCount]chan outItem{
+			tierControl: make(chan outItem, controlQueue),
+			tierNormal:  make(chan outItem, normalQueue),
+			tierLive:    make(chan outItem, liveQueue),
+		},
 		closing: make(chan struct{}), writerDone: make(chan struct{}),
 	}
 	c.log = g.log.With("conn", c.id, "runner", claims.RunnerID, "process", claims.LeaseOwner, "remote", remote)
+	c.writeWS = func(ctx context.Context, b []byte) error { return ws.Write(ctx, websocket.MessageBinary, b) }
 	c.shadow = newShadowState(c)
+	if c.mode == linkpb.Mode_MODE_LINK {
+		c.link = newLinkState(c)
+	}
 	return c
 }
 
@@ -153,6 +188,9 @@ func (c *conn) handshake() bool {
 	c.mu.Lock()
 	c.hello = hello
 	c.mu.Unlock()
+	if c.link != nil {
+		c.link.greeted(hello)
+	}
 	if old := c.g.reg.activate(c); old != nil {
 		old.closeWith(linkpb.CloseCode_CLOSE_CODE_SUPERSEDED, "a newer connection of this process took over", 0,
 			websocket.StatusNormalClosure, "superseded")
@@ -163,23 +201,28 @@ func (c *conn) handshake() bool {
 	c.mu.Lock()
 	m.connections.add(1)
 	m.handshakes.inc("ok")
+	credit := c.g.credit.current()
 	c.send(&linkpb.Frame{Body: &linkpb.Frame_Welcome{Welcome: &linkpb.Welcome{
 		ProtocolVersion:     1,
 		Mode:                c.mode,
 		HeartbeatIntervalMs: uint32(c.g.cfg.HeartbeatInterval / time.Millisecond),
 		Limits:              &linkpb.Limits{MaxFrameBytes: maxFrameBytes},
-		Credit:              &linkpb.Credit{MaxUnackedEvents: 10000, MaxUnackedBytes: 64 << 20},
+		Credit:              &linkpb.Credit{MaxUnackedEvents: credit.Events, MaxUnackedBytes: credit.Bytes},
 		Hints:               &linkpb.HintState{},
 		ConnectionId:        c.id,
 	}}}, true)
 	c.welcomed = true
+	c.welcomedAt = time.Now()
 	c.mu.Unlock()
+	if c.link != nil {
+		c.link.start(credit)
+	}
 	// Subscribed once Welcome is queued, so no hint can be written ahead of it.
 	if c.g.hints != nil {
 		c.g.hints.hold(c.claims.RunnerID)
 	}
 
-	// The token's lifetime is the connection's: version 0 cannot renew it in the connection (TokenRefresh), so the
+	// The token's lifetime is the connection's: this version cannot renew it in the connection (TokenRefresh), so the
 	// runner opens its next connection with a fresh token before this one expires.
 	c.after(time.Until(c.claims.ExpiresAt), func() {
 		c.closeWith(linkpb.CloseCode_CLOSE_CODE_UNAUTHENTICATED, "the link token expired", 0,
@@ -233,7 +276,8 @@ func (c *conn) readLoop() {
 	}
 }
 
-// dispatch handles one frame from the runner and reports whether to go on reading.
+// dispatch handles one frame from the runner and reports whether to go on reading. Nothing in it waits for a backend:
+// what is forwarded is handed to the connection's workers (forward.go, heartbeat.go, events.go), which bound it.
 func (c *conn) dispatch(f *linkpb.Frame) bool {
 	c.g.metrics.framesReceived.inc(bodyName(f))
 	c.logFrame("in", f)
@@ -241,12 +285,24 @@ func (c *conn) dispatch(f *linkpb.Frame) bool {
 	case *linkpb.Frame_Heartbeat:
 		c.onHeartbeat(f.GetId(), body.Heartbeat, proto.Size(f))
 	case *linkpb.Frame_EventBatch:
-		// No EventAck: in MODE_HTTP nothing is stored, and an ack says the events are (§5.8).
-		if c.mode == linkpb.Mode_MODE_HTTP {
+		switch {
+		case c.link != nil:
+			c.link.onEvents(body.EventBatch)
+		case c.mode == linkpb.Mode_MODE_HTTP:
+			// No EventAck: in MODE_HTTP nothing is stored, and an ack says the events are (§5.8).
 			c.shadow.typed(f.GetId(), &shadowEntry{kind: "events", events: body.EventBatch}, proto.Size(f))
 		}
 	case *linkpb.Frame_Rpc:
 		c.onRpc(body.Rpc, proto.Size(f))
+	case *linkpb.Frame_LiveBatch:
+		// In MODE_HTTP a live batch is counted and dropped: the shadow period publishes no live stream.
+		if c.link != nil {
+			c.link.onLive(body.LiveBatch)
+		}
+	case *linkpb.Frame_TurnPrefixResponse:
+		if c.link != nil {
+			c.link.onPrefixAnswer(body.TurnPrefixResponse)
+		}
 	case *linkpb.Frame_Chunk:
 		joined, err := c.chunks.add(body.Chunk)
 		if err != nil {
@@ -260,15 +316,20 @@ func (c *conn) dispatch(f *linkpb.Frame) bool {
 		c.closeWith(linkpb.CloseCode_CLOSE_CODE_PROTOCOL_ERROR, "a second Hello", 0, websocket.StatusProtocolError, "protocol_error")
 		return false
 	}
-	// LiveBatch and TurnPrefixResponse are counted and dropped: version 0 publishes no live stream. Bodies the
-	// gateway sends rather than receives, and those of a newer protocol, are ignored (contracts/runner-link/v1).
+	// Bodies the gateway sends rather than receives, and those of a newer protocol, are ignored
+	// (contracts/runner-link/v1).
 	return true
 }
 
-// onHeartbeat records the beat and answers it (§5.7). Version 0 reconciles nothing: the answer says MODE_HTTP, and
-// the runner keeps working over HTTPS.
+// onHeartbeat records the beat and answers it (§5.7). In MODE_LINK the beat is forwarded to the apiserver's heartbeat
+// route and answered with what it says (heartbeat.go). In MODE_HTTP it is the typed half of a mirror: answered at once
+// with MODE_HTTP and nothing to apply, and compared, never forwarded.
 func (c *conn) onHeartbeat(frameID uint64, hb *linkpb.Heartbeat, size int) {
 	c.g.metrics.heartbeats.inc()
+	if c.link != nil {
+		c.link.onHeartbeat(hb)
+		return
+	}
 	c.send(&linkpb.Frame{Body: &linkpb.Frame_HeartbeatAck{HeartbeatAck: &linkpb.HeartbeatAck{
 		Mode: c.mode, Hints: &linkpb.HintState{},
 	}}}, true)
@@ -277,14 +338,15 @@ func (c *conn) onHeartbeat(frameID uint64, hb *linkpb.Heartbeat, size int) {
 	}
 }
 
-// mayForward is the one check an Rpc passes before it may reach a backend; version 0 has no forwarder behind it
-// (B4 adds one). Two things hold whatever is added: a connection in MODE_HTTP forwards nothing, and a shadow
-// mirror (request_id "shadow:...") is never forwarded, in any mode. TestRpcForwardingInvariants pins both.
+// mayForward is the one check an Rpc passes before it may reach a backend. Two things hold whatever is behind it: a
+// connection in MODE_HTTP forwards nothing, and a shadow mirror (request_id "shadow:...") is never forwarded, in any
+// mode. TestRpcForwardingInvariants pins both.
 func mayForward(mode linkpb.Mode, rpc *linkpb.Rpc) bool {
 	return mode == linkpb.Mode_MODE_LINK && !strings.HasPrefix(rpc.GetRequestId(), shadowPrefix)
 }
 
-// onRpc compares a mirror with its typed frame and answers every Rpc with exactly one RpcResult.
+// onRpc compares a mirror with its typed frame and answers every Rpc with exactly one RpcResult: forwarded in
+// MODE_LINK (forward.go), refused otherwise.
 func (c *conn) onRpc(rpc *linkpb.Rpc, size int) {
 	shadow := strings.HasPrefix(rpc.GetRequestId(), shadowPrefix)
 	if shadow {
@@ -295,7 +357,7 @@ func (c *conn) onRpc(rpc *linkpb.Rpc, size int) {
 		c.g.forward(c, rpc)
 		return
 	}
-	code, message := "NOT_FORWARDED", "this gateway forwards no requests yet"
+	code, message := "NOT_FORWARDED", "this gateway has no backend to forward requests to"
 	switch {
 	case c.mode != linkpb.Mode_MODE_LINK:
 		code, message = "LINK_MODE_HTTP", "this connection is in MODE_HTTP: daemon requests go over HTTPS, and a mirror is compared, never forwarded"
@@ -313,22 +375,27 @@ func (c *conn) onRpc(rpc *linkpb.Rpc, size int) {
 	}}}, false)
 }
 
-// send queues a frame, control frames ahead of the rest. A queue that is full means the runner is not reading:
-// the connection is closed as a slow consumer rather than allowed to hold memory (§6.1).
+// send queues a frame the runner must get: a control frame (control) or an RPC result. A queue that is full means the
+// runner is not reading: the connection is closed as a slow consumer rather than allowed to hold memory (§6.1).
 func (c *conn) send(f *linkpb.Frame, control bool) {
-	f.Id = c.outID.Add(1)
-	q := c.normal
+	t := tierNormal
 	if control {
-		q = c.ctrl
+		t = tierControl
 	}
+	c.sendTier(f, t)
+}
+
+func (c *conn) sendTier(f *linkpb.Frame, t tier) {
+	f.Id = c.outID.Add(1)
 	select {
 	case <-c.closing:
 		return
 	default:
 	}
 	select {
-	case q <- outItem{frame: f}:
+	case c.queues[t] <- outItem{frame: f}:
 	default:
+		c.g.metrics.queueFull.inc(tierNames[t], "closed")
 		c.closeWith(linkpb.CloseCode_CLOSE_CODE_SLOW_CONSUMER, "the runner reads too slowly", 0,
 			websocket.StatusPolicyViolation, "slow_consumer")
 	}
@@ -338,6 +405,16 @@ func (c *conn) send(f *linkpb.Frame, control bool) {
 // connection: a burst of hints must not cost a runner that is slow to read its connection. Nothing is offered before
 // Welcome.
 func (c *conn) offer(f *linkpb.Frame) bool {
+	return c.offerTier(f, tierNormal)
+}
+
+// offerLive queues a frame of the live stream's tier, dropping it when the queue is full (§6.1: a full live queue
+// drops, it never closes the connection).
+func (c *conn) offerLive(f *linkpb.Frame) bool {
+	return c.offerTier(f, tierLive)
+}
+
+func (c *conn) offerTier(f *linkpb.Frame, t tier) bool {
 	c.mu.Lock()
 	welcomed := c.welcomed
 	c.mu.Unlock()
@@ -351,61 +428,108 @@ func (c *conn) offer(f *linkpb.Frame) bool {
 	}
 	f.Id = c.outID.Add(1)
 	select {
-	case c.normal <- outItem{frame: f}:
+	case c.queues[t] <- outItem{frame: f}:
 		return true
 	default:
+		c.g.metrics.queueFull.inc(tierNames[t], "dropped")
 		return false
 	}
 }
 
+// writeLoop writes what the queues hold, one WebSocket message at a time: the highest tier first, and within a tier
+// in order. A frame over Limits.max_frame_bytes goes out as several messages (Chunk), and between two of them the loop
+// looks again, so a control frame queued meanwhile is written before the frame's next piece (§5.1).
 func (c *conn) writeLoop() {
 	defer close(c.writerDone)
+	// The pieces still to write of the frame each tier is in the middle of, and that frame.
+	var rest [tierCount][][]byte
+	var current [tierCount]*linkpb.Frame
 	for {
-		var it outItem
-		select {
-		case it = <-c.ctrl:
-		default:
-			select {
-			case it = <-c.ctrl:
-			case it = <-c.normal:
-			case <-c.ctx.Done():
-				return
-			}
-		}
-		if it.close != nil {
-			if it.close.frame != nil {
-				_ = c.write(it.close.frame)
-			}
-			_ = c.ws.Close(it.close.status, it.close.text)
+		t, it, ok := c.nextToWrite(&rest)
+		if !ok {
 			return
 		}
-		if err := c.write(it.frame); err != nil {
+		if len(rest[t]) == 0 {
+			if it.close != nil {
+				if it.close.frame != nil {
+					_ = c.writeFrameWhole(it.close.frame)
+				}
+				_ = c.ws.Close(it.close.status, it.close.text)
+				return
+			}
+			msgs, err := encodeFrame(it.frame, maxFrameBytes, func() uint64 { return c.outID.Add(1) })
+			if err != nil {
+				c.log.Error("a frame does not encode; not sent", "frame", summarize(it.frame), "err", err)
+				continue
+			}
+			rest[t], current[t] = msgs, it.frame
+		}
+		if err := c.writeMessage(rest[t][0]); err != nil {
 			c.setReason("connection_lost")
 			_ = c.ws.CloseNow()
 			return
 		}
+		rest[t] = rest[t][1:]
+		if len(rest[t]) == 0 {
+			c.wrote(current[t])
+			current[t] = nil
+		}
 	}
 }
 
-func (c *conn) write(f *linkpb.Frame) error {
+// nextToWrite is the tier to write next and, when that tier has no frame in progress, the item it starts. It waits
+// when nothing is ready, and reports false once the connection is over.
+func (c *conn) nextToWrite(rest *[tierCount][][]byte) (tier, outItem, bool) {
+	for t := tierControl; t < tierCount; t++ {
+		if len(rest[t]) > 0 {
+			return t, outItem{}, true
+		}
+		select {
+		case it := <-c.queues[t]:
+			return t, it, true
+		default:
+		}
+	}
+	select {
+	case it := <-c.queues[tierControl]:
+		return tierControl, it, true
+	case it := <-c.queues[tierNormal]:
+		return tierNormal, it, true
+	case it := <-c.queues[tierLive]:
+		return tierLive, it, true
+	case <-c.ctx.Done():
+		return 0, outItem{}, false
+	}
+}
+
+func (c *conn) writeMessage(b []byte) error {
+	ctx, cancel := context.WithTimeout(c.ctx, writeTimeout)
+	defer cancel()
+	return c.writeWS(ctx, b)
+}
+
+// writeFrameWhole writes a frame's every piece back to back: the Close frame, after which nothing else is written.
+func (c *conn) writeFrameWhole(f *linkpb.Frame) error {
 	msgs, err := encodeFrame(f, maxFrameBytes, func() uint64 { return c.outID.Add(1) })
 	if err != nil {
 		return err
 	}
 	for _, b := range msgs {
-		ctx, cancel := context.WithTimeout(c.ctx, writeTimeout)
-		err := c.ws.Write(ctx, websocket.MessageBinary, b)
-		cancel()
-		if err != nil {
+		if err := c.writeMessage(b); err != nil {
 			return err
 		}
 	}
+	c.wrote(f)
+	return nil
+}
+
+// wrote counts and logs a frame once its last piece is written.
+func (c *conn) wrote(f *linkpb.Frame) {
 	c.g.metrics.framesSent.inc(bodyName(f))
 	if f.GetWelcome() != nil {
 		c.g.metrics.handshakeDuration.observe(time.Since(c.started))
 	}
 	c.logFrame("out", f)
-	return nil
 }
 
 // closeWith closes the connection once: the Close frame saying why, then the WebSocket close. reason is what the
@@ -422,7 +546,7 @@ func (c *conn) closeWith(code linkpb.CloseCode, message string, retryAfter time.
 		}
 		close(c.closing)
 		select {
-		case c.ctrl <- outItem{close: &closeRequest{frame: f, status: status, text: text}}:
+		case c.queues[tierControl] <- outItem{close: &closeRequest{frame: f, status: status, text: text}}:
 		default:
 			go func() { _ = c.ws.Close(status, text) }()
 		}
@@ -431,6 +555,13 @@ func (c *conn) closeWith(code linkpb.CloseCode, message string, retryAfter time.
 
 func (c *conn) setReason(reason string) {
 	c.reason.CompareAndSwap(nil, &reason)
+}
+
+// welcomeTime is when the connection's Welcome was queued; zero before.
+func (c *conn) welcomeTime() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.welcomedAt
 }
 
 // drain tells the runner to open its next connection after delay, and closes this one if it is still open after
@@ -485,7 +616,8 @@ func (c *conn) pingLoop() {
 }
 
 // finish runs when reading has stopped: it lets the writer finish a close in progress, then lets go of everything
-// the connection held.
+// the connection held. Cancelling the connection's context aborts every call still forwarded for it, so a route
+// that watches its request close (the claim) sees the runner hang up, as over HTTPS (§6.4).
 func (c *conn) finish() {
 	select {
 	case <-c.closing:
@@ -512,8 +644,14 @@ func (c *conn) finish() {
 		return
 	}
 	c.g.reg.remove(c)
+	if c.link != nil {
+		c.link.close()
+	}
 	if c.g.hints != nil {
 		c.g.hints.release(c.claims.RunnerID)
+	} else if len(c.g.reg.connsOf(c.claims.RunnerID)) == 0 {
+		// Without NATS the watchers came from heartbeat answers alone; nobody is left to tell.
+		c.g.watchers.drop(c.claims.RunnerID)
 	}
 	reason := "connection_lost"
 	if r := c.reason.Load(); r != nil {

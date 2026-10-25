@@ -37,6 +37,8 @@ type natsStandIn struct {
 	clients map[*natsClient]struct{}
 	// ops is every SUB and UNSUB received, as "SUB <subject>" or "UNSUB <subject>", in order.
 	ops []string
+	// published is every message a client published, by subject, in order: what the gateway sent on NATS.
+	published map[string][][]byte
 }
 
 type natsClient struct {
@@ -52,7 +54,7 @@ func listenNATS(t testing.TB, addr string) *natsStandIn {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &natsStandIn{t: t, ln: ln, addr: ln.Addr().String(), clients: map[*natsClient]struct{}{}}
+	s := &natsStandIn{t: t, ln: ln, addr: ln.Addr().String(), clients: map[*natsClient]struct{}{}, published: map[string][][]byte{}}
 	go s.accept()
 	t.Cleanup(s.close)
 	return s
@@ -116,7 +118,16 @@ func (s *natsStandIn) serve(c *natsClient) {
 			if _, err := io.ReadFull(r, payload); err != nil {
 				return
 			}
+			s.record(f[1], payload[:size])
 			s.publish(f[1], payload[:size])
+		case "HPUB": // HPUB <subject> [reply] <header size> <total size>
+			hdr, _ := strconv.Atoi(f[len(f)-2])
+			total, _ := strconv.Atoi(f[len(f)-1])
+			payload := make([]byte, total+2)
+			if _, err := io.ReadFull(r, payload); err != nil {
+				return
+			}
+			s.record(f[1], payload[hdr:total])
 		}
 		// CONNECT and PONG need no answer from a server that is not asked for +OK.
 	}
@@ -146,6 +157,70 @@ func (s *natsStandIn) publish(subject string, payload []byte) int {
 	s.mu.Unlock()
 	for _, t := range targets {
 		t.c.write(fmt.Sprintf("MSG %s %s %d\r\n%s\r\n", subject, t.sid, len(payload), payload))
+	}
+	return len(targets)
+}
+
+func (s *natsStandIn) record(subject string, payload []byte) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.published[subject] = append(s.published[subject], slices.Clone(payload))
+}
+
+// publishedOn is what clients published on subject so far.
+func (s *natsStandIn) publishedOn(subject string) [][]byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Clone(s.published[subject])
+}
+
+// publishedUnder is every subject clients published on that starts with prefix.
+func (s *natsStandIn) publishedUnder(prefix string) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []string
+	for subject := range s.published {
+		if strings.HasPrefix(subject, prefix) {
+			out = append(out, subject)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// deliverMsg delivers payload on subject as the apiserver publishes it with headers and a reply subject: an HMSG when
+// there are headers, a MSG with a reply subject otherwise.
+func (s *natsStandIn) deliverMsg(subject, reply string, header map[string]string, payload []byte) int {
+	s.mu.Lock()
+	type target struct {
+		c   *natsClient
+		sid string
+	}
+	var targets []target
+	for c := range s.clients {
+		for sid, subj := range c.subs {
+			if subj == subject {
+				targets = append(targets, target{c, sid})
+			}
+		}
+	}
+	s.mu.Unlock()
+	replyField := ""
+	if reply != "" {
+		replyField = " " + reply
+	}
+	for _, t := range targets {
+		if len(header) == 0 {
+			t.c.write(fmt.Sprintf("MSG %s %s%s %d\r\n%s\r\n", subject, t.sid, replyField, len(payload), payload))
+			continue
+		}
+		var h strings.Builder
+		h.WriteString("NATS/1.0\r\n")
+		for k, v := range header {
+			h.WriteString(k + ": " + v + "\r\n")
+		}
+		h.WriteString("\r\n")
+		t.c.write(fmt.Sprintf("HMSG %s %s%s %d %d\r\n%s%s\r\n", subject, t.sid, replyField, h.Len(), h.Len()+len(payload), h.String(), payload))
 	}
 	return len(targets)
 }
