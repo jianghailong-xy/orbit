@@ -140,7 +140,7 @@ const batchQueries = per(ev, ev.whole.batchesAcked).filter((q) => !hbSet.has(q.q
 
 const run = hb.report;
 const baseline = {
-  commit: run.sha, runs: [hb.report.run, ev.report.run], fleet: { runners: run.loadgen.config.runners,
+  commit: run.sha, runs: [hb.report.run, ev.report.run], loadTestLock: [hb, ev].map((r) => r.report.loadTestLock ?? null), fleet: { runners: run.loadgen.config.runners,
     activeSessions: ev.report.loadgen.config.activeSessions, perSessionEventsPerSecond: ev.report.loadgen.config.perSessionRate },
   rates: { heartbeatsOnly: { beatsPerSec }, withEvents: { beatsPerSec: evBeatsPerSec, batchesPerSec, eventsPerSec: ev.steady.eventsAckedPerSecond } },
   hostOtherCores: [hb.report.host.otherCgroupCores, ev.report.host.otherCgroupCores],
@@ -152,6 +152,8 @@ if (jsonOut) writeFileSync(jsonOut, JSON.stringify(baseline, null, 2) + '\n');
 
 const out = [];
 out.push(`Commit \`${run.sha.slice(0, 12)}\`, runs ${baseline.runs.join(' and ')}: ${baseline.fleet.runners} runners, ${baseline.fleet.activeSessions} running sessions.`);
+const unlocked = [hb, ev, full].filter(Boolean).filter((r) => r.report.loadTestLock !== true).map((r) => r.report.run);
+out.push(unlocked.length === 0 ? "Every run held the host's load test lock." : `Not under the host's load test lock: ${unlocked.join(', ')}.`);
 out.push(`Heartbeats only: ${beatsPerSec} beats/s. With events: ${evBeatsPerSec} beats/s, ${batchesPerSec} batches/s (${perBatch.eventsPerBatch} events each, ${ev.steady.eventsAckedPerSecond} events/s).`, '');
 out.push('| Per operation | apiserver CPU ms | database CPU ms | gateway CPU ms | SQL statements | commits |');
 out.push('| --- | --- | --- | --- | --- | --- |');

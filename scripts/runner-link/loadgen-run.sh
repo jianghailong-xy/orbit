@@ -27,6 +27,9 @@
 # --mark-every <seconds> moves every runner's change count that often during the run (runner_presence.changes, task
 # O1), as a writer of something a heartbeat delivers does: each beat then reconciles in full. loadgen-baseline.mjs
 # --full takes such a run to tell an unflagged beat's cost from a full reconcile's.
+#
+# On a shared host one load test runs at a time: each run, arm included, is wrapped in
+# `flock /var/tmp/orbit-loadgen.lock`. run.json's `loadTestLock` says whether this run held that lock.
 set -euo pipefail
 # shellcheck source=staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
@@ -39,7 +42,7 @@ while [ $# -gt 0 ]; do
     --name) name="$2"; shift 2 ;;
     --) shift; args=("$@"); break ;;
     --mark-every) mark_every="$2"; shift 2 ;;
-    -h|--help) sed -n '2,29p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,32p' "$0"; exit 0 ;;
     *) die "unknown option $1 (see --help)" ;;
   esac
 done
@@ -88,12 +91,25 @@ db_totals() {
 }
 
 # --- The run's configuration. ------------------------------------------------------------------------------------------
+# Whether this run holds the host's load test lock: a flock on the lock file held by this script or one of its
+# ancestors (the `flock` wrapped around it).
+holds_lock() {
+  local file=/var/tmp/orbit-loadgen.lock holders p
+  [ -e "$file" ] || return 1
+  holders=" $(awk -v ino="$(stat -c %i "$file")" '$2 == "FLOCK" && $6 ~ (":" ino "$") { printf "%s ", $5 }' /proc/locks)"
+  p=$$
+  while [ -n "$p" ] && [ "$p" -gt 1 ]; do
+    [[ "$holders" == *" $p "* ]] && return 0
+    p="$(ps -o ppid= -p "$p" | tr -d ' ')"
+  done
+  return 1
+}
 {
   printf '{"name":"%s","project":"%s","sha":"%s","dirty":%s,"dbCpus":"%s","backends":"%s","hostCpus":%s,"hostMemKb":%s,' \
     "$name" "$project" "$(git -C "$repo" rev-parse HEAD)" \
     "$([ -n "$(git -C "$repo" status --porcelain -- src scripts)" ] && echo true || echo false)" \
     "$(setting STAGING_DB_CPUS 0)" "$(setting STAGING_BACKENDS 1)" "$(nproc)" "$(awk '/^MemTotal/{print $2}' /proc/meminfo)"
-  printf '"markEverySeconds":%s,' "${mark_every:-null}"
+  printf '"markEverySeconds":%s,"loadTestLock":%s,' "${mark_every:-null}" "$(holds_lock && echo true || echo false)"
   if [ ${#args[@]} -gt 0 ]; then printf '"loadgenArgs":%s,' "$(printf '%s\n' "${args[@]}" | jq -R . | jq -cs .)"; else printf '"loadgenArgs":[],'; fi
   printf '"containers":{'
   first=1
