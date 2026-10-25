@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/rand/v2"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -426,8 +427,9 @@ func (r *runner) dial(ctx context.Context, renewal bool) {
 	r.dialing = true
 	first := !r.connectedOnce
 	token, exp, linkURL := r.token, r.tokenExp, r.linkURL
+	h := r.hello()
 	go func() {
-		d := r.open(ctx, first, renewal, token, exp, linkURL)
+		d := r.open(ctx, first, renewal, token, exp, linkURL, h)
 		select {
 		case r.conns <- d:
 		case <-ctx.Done():
@@ -438,9 +440,24 @@ func (r *runner) dial(ctx context.Context, renewal bool) {
 	}()
 }
 
+// hello is the runner's Hello: the process's terms, and where each session it supervises stands (Hello.sessions,
+// src/runner-go/link_mode.go resumeStates): the last seq it assigned in each and the turn it runs there.
+func (r *runner) hello() *linkpb.Hello {
+	h := hello(r.process)
+	for _, id := range r.sessionIDs {
+		resume := &linkpb.SessionResume{SessionId: id}
+		if s := r.byID[id]; s != nil {
+			resume.LastSeq, resume.TurnId = s.seq, s.turn
+		}
+		h.Sessions = append(h.Sessions, resume)
+	}
+	sort.Slice(h.Sessions, func(i, j int) bool { return h.Sessions[i].GetSessionId() < h.Sessions[j].GetSessionId() })
+	return h
+}
+
 // open trades the runner token for a link token when the one in hand will not do, dials, says Hello and waits for
 // Welcome. It runs on its own goroutine: it reads only what dial passed it.
-func (r *runner) open(ctx context.Context, first, renewal bool, token string, exp time.Time, linkURL string) dialResult {
+func (r *runner) open(ctx context.Context, first, renewal bool, token string, exp time.Time, linkURL string, h *linkpb.Hello) dialResult {
 	g := r.g
 	d := dialResult{renewal: renewal, token: token, tokenExp: exp, linkURL: linkURL}
 	if first {
@@ -492,7 +509,7 @@ func (r *runner) open(ctx context.Context, first, renewal bool, token string, ex
 	}
 	ws.SetReadLimit(readLimit)
 	c := &rconn{ws: ws, frames: make(chan *linkpb.Frame, 256), done: make(chan struct{}), quit: make(chan struct{}), opened: started}
-	if err := c.send(&linkpb.Frame{Body: &linkpb.Frame_Hello{Hello: hello(r.process)}}); err != nil {
+	if err := c.send(&linkpb.Frame{Body: &linkpb.Frame_Hello{Hello: h}}); err != nil {
 		_ = ws.CloseNow()
 		d.err, d.kind = err, "hello_failed"
 		return d
@@ -594,6 +611,27 @@ func (r *runner) onDial(ctx context.Context, d dialResult, now time.Time) {
 	r.beatInterval = time.Duration(c.welcome.GetHeartbeatIntervalMs()) * time.Millisecond
 	if r.beatInterval <= 0 {
 		r.beatInterval = 30 * time.Second
+	}
+	// Where Welcome says each session stands (B4a): events stored that no EventAck covered, on a connection that ended
+	// before its answer came, are not sent again; a lease this process no longer holds is an error of the seed or of the
+	// server.
+	for _, st := range c.welcome.GetSessions() {
+		if !st.GetLeaseHeld() {
+			g.stats.fail("welcome_lease_not_held", fmt.Sprintf("runner %s conn %s: Welcome says session %s is not this process's", r.id, c.id, st.GetSessionId()))
+		}
+		s := r.byID[st.GetSessionId()]
+		if s == nil {
+			continue
+		}
+		if st.GetDurableSeq() > s.seq {
+			g.stats.fail("welcome_durable_ahead", fmt.Sprintf("runner %s conn %s: Welcome says session %s is stored through %d, past the %d produced",
+				r.id, c.id, s.id, st.GetDurableSeq(), s.seq))
+			continue
+		}
+		if st.GetDurableSeq() > s.durable {
+			g.noteN("events_acknowledged_by_welcome", int64(st.GetDurableSeq()-s.durable))
+			r.ackThrough(s, st.GetDurableSeq(), now)
+		}
 	}
 	// A runner beats as soon as it has read Welcome, every part whole: this connection holds none of them yet.
 	r.beatOut = time.Time{}

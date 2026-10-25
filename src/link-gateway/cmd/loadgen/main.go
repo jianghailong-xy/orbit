@@ -222,9 +222,11 @@ func readFleet(path string, limit int) ([]fleetRunner, error) {
 	return fleet, nil
 }
 
-func (g *loadgen) note(kind string) {
+func (g *loadgen) note(kind string) { g.noteN(kind, 1) }
+
+func (g *loadgen) noteN(kind string, n int64) {
 	g.notesMu.Lock()
-	g.notes[kind]++
+	g.notes[kind] += n
 	g.notesMu.Unlock()
 }
 

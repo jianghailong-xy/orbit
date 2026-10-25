@@ -5,7 +5,10 @@
 heartbeats and 2,000 durable events a second). Each simulated runner behaves as a runner in link mode does:
 
 - it trades its runner token for a link token (`POST /api/runner/link-token`), dials the link, says `Hello` with a
-  runner's capabilities, engines and write contract, and reads `Welcome`;
+  runner's capabilities, engines and write contract and, as a runner names them (`Hello.sessions`), every session it
+  supervises with the last seq it assigned there and the turn it runs. It reads `Welcome`: a session stored further than
+  an `EventAck` said (an answer lost with its connection) is not sent again, and a lease `Welcome` says this process no
+  longer holds is an error;
 - it beats every `Welcome` interval (30 s), naming its open sessions, with the parts of a runner's heartbeat
   (engines, model catalog, commands, skills, repos and the rest, about 7 KB of JSON): whole on a connection's first
   beat and when the gateway asks for them, by digest otherwise. Each runner's beats start at a random point of the

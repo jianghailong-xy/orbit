@@ -98,8 +98,9 @@ func TestFactsCarryTheDigestOfTheirOwnBytes(t *testing.T) {
 }
 
 // fakeGateway acknowledges heartbeats and stores event batches as the link gateway and the ingest do (stored once per
-// seq, refused when a batch would leave a gap), and misbehaves on purpose: every failEvery-th batch fails retryable,
-// the cutConn-th connection is cut after a few frames, and a process's new connection supersedes its old one. With
+// seq, refused when a batch would leave a gap), states in Welcome where each session the Hello names stands, and
+// misbehaves on purpose: every failEvery-th batch fails retryable, the cutConn-th connection is cut right after it
+// stores its third batch, before acknowledging it, and a process's new connection supersedes its old one. With
 // supersedeFirst the old connection is closed before the new one's Welcome is sent, so the runner sees its old
 // connection end before its renewal's dial comes back.
 type fakeGateway struct {
@@ -118,6 +119,8 @@ type fakeGateway struct {
 	byProc   map[string]*websocket.Conn
 	gaps     int
 	welcomes int
+	// helloSessions is how many sessions each Hello named, in order.
+	helloSessions []int
 }
 
 func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
@@ -151,6 +154,15 @@ func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	old := f.byProc[process]
 	f.byProc[process] = ws
 	f.welcomes++
+	f.helloSessions = append(f.helloSessions, len(first.GetHello().GetSessions()))
+	var states []*linkpb.SessionState
+	for _, named := range first.GetHello().GetSessions() {
+		var durable uint64
+		if seqs := f.stored[named.GetSessionId()]; len(seqs) > 0 {
+			durable = seqs[len(seqs)-1]
+		}
+		states = append(states, &linkpb.SessionState{SessionId: named.GetSessionId(), DurableSeq: durable, LeaseHeld: true})
+	}
 	f.mu.Unlock()
 	supersede := func() {
 		if old != nil {
@@ -164,23 +176,25 @@ func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	if err := write(&linkpb.Frame{Body: &linkpb.Frame_Welcome{Welcome: &linkpb.Welcome{ProtocolVersion: 1, Mode: linkpb.Mode_MODE_LINK,
-		HeartbeatIntervalMs: uint32(f.beat / time.Millisecond), ConnectionId: fmt.Sprintf("c-%d", n),
+		HeartbeatIntervalMs: uint32(f.beat / time.Millisecond), ConnectionId: fmt.Sprintf("c-%d", n), Sessions: states,
 		Credit: &linkpb.Credit{MaxUnackedEvents: 10_000, MaxUnackedBytes: 64 << 20}}}}); err != nil {
 		return
 	}
 	if !f.supersedeFirst {
 		supersede()
 	}
-	frames := 0
+	batches := 0
 	for {
 		fr, err := read()
 		if err != nil {
 			return
 		}
-		frames++
-		if n == f.cutConn && frames == 6 {
-			_ = ws.CloseNow() // gone without a word
-			return
+		if eb := fr.GetEventBatch(); eb != nil && n == f.cutConn {
+			if batches++; batches == 3 {
+				f.store(eb)
+				_ = ws.CloseNow() // stored, and gone without a word: the next Welcome says so
+				return
+			}
 		}
 		switch body := fr.GetBody().(type) {
 		case *linkpb.Frame_Heartbeat:
@@ -324,6 +338,14 @@ func playFleet(t *testing.T, supersedeFirst bool) {
 	}
 	if supersedeFirst && sum.Notes["superseded_before_adoption"] == 0 {
 		t.Errorf("no renewal saw its old connection end first: notes %v", sum.Notes)
+	}
+	for i, n := range fg.helloSessions {
+		if n != 2 {
+			t.Errorf("Hello %d named %d sessions, want the runner's 2", i, n)
+		}
+	}
+	if sum.Notes["events_acknowledged_by_welcome"] == 0 {
+		t.Errorf("the batch stored on the cut connection was not taken from the next Welcome: notes %v", sum.Notes)
 	}
 	for kind := range sum.Whole.Errors {
 		switch kind {
