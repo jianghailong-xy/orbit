@@ -248,6 +248,15 @@ model OAuthLoginFlow {               // oauth_login_flow：短命，兑换即删
   - 池网关 token（`orbit-gw-` / `orbit-gwl-`）同理：两处 `caller()` 本来每次就按 `tokenHash` 查 token，同一次查询带出会话
     owner 的 `disabledAt`，停用即回 403 `ACCOUNT_DISABLED`（codex 读的 OpenAI 错误形状，文案与 runner 凭证相同），当场生效。
     停用前已在 runner 上跑着的 Codex 会话因此不能再经池网关消耗池主的 key 或登录账号；token 不吊销，恢复后照常可用。
+  - 池主停用即停池（所有者 2026-10-25 决定）：池网关两处 `forward()` 在读请求体、向上游发任何请求之前，先看池主
+    （`provider_pool.owner_id`）停没停用，再看这次请求要用的凭证的主人停没停用——API key 的贡献者（`contributor_id`），
+    或 ChatGPT 登录的签入者（`pool_codex_login.user_id`，0366 起可以是池里的成员）。池主停用，整个池对谁都不再服务：
+    池里所有 key 和 ChatGPT 登录都拒，成员自己放进来的 key 也拒。某份凭证的主人停用，只拒这一份，池里其他凭证照常。
+    一律回 403 `ACCOUNT_DISABLED`，错误形状与上一条相同；文案说明停用的是池主或这份凭证的主人，因为调用者本人并没有停用。
+    被拒的请求不到 OpenAI、ChatGPT 后端，也不到 token 端点（不会因此刷新登录）。判定用 `JwtAuthGuard` 那份内存停用集合
+    （`DisabledAccounts`）：在本服务器上经管理接口停用或恢复，立即生效；在别的服务器上，半分钟内生效，恢复后半分钟内恢复服务。
+    领取不看这一条，会话仍可能被放到这样的凭证上，被网关拒，直到那个账号恢复，或池管理员把这个人移出池（移出时他的 key
+    和登录一起移出）。
   - 不删任何数据，可以恢复。身份行保留，同一个 Google 账号不能靠重新注册绕过（5.2 第 1 条先命中）。
 - 删除照旧：仍拥有 runner、workspace、任务的用户删不掉。处置滥用用停用，不用删除。
 

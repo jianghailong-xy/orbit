@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { AgentProvider } from '@orbit/shared';
-import { ACCOUNT_DISABLED } from '../auth/disabled-accounts';
+import { ACCOUNT_DISABLED, DisabledAccounts } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +12,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { ACCESS_TOKEN_FALLBACK_MS, accountOf, maskedAccount } from './codex-login';
 import {
   ACCESS_TOKEN_REFRESH_WINDOW_MS,
+  accountName,
   codexUsageSnapshot,
   loginBackendBase,
   loginForwardedHeaders,
@@ -28,8 +29,10 @@ import {
 import { CodexLoginService } from './codex-login.service';
 import { responseCostMicros } from './openai-prices';
 import {
+  credentialOwnerDisabled,
   gatewayTarget,
   parseJson,
+  poolOwnerDisabled,
   readAll,
   readBody,
   refuse,
@@ -96,6 +99,11 @@ type Refreshed =
  *   nothing more: which upstream a request goes to is the session's (PoolGatewayController) — an owner's
  *   session the claim put on one of the pool's API keys (migration 0358) goes to OpenAI's API on that key,
  *   through PoolGatewayService, on this same token.
+ * - DISABLED ACCOUNTS (`forward`, before anything else): a pool whose owner an administrator disabled serves
+ *   nobody, and neither does a ChatGPT account whose contributor is disabled — 403 ACCOUNT_DISABLED, nothing
+ *   sent to the backend or the token endpoint (docs/google-sign-in-design.md §5.5). Read from
+ *   DisabledAccounts, the set JwtAuthGuard reads: at once on the server whose administrator disabled or
+ *   enabled the account, within 30 seconds on every other.
  * - WHAT: only the allowed paths (codex-login-gateway.ts loginGatewayAllows — the turn, and the ChatGPT
  *   backend calls the CLI makes for itself when signed in: routing, plugins, settings, analytics);
  *   anything else is 403.
@@ -143,6 +151,7 @@ export class PoolLoginGatewayService {
     realtime: RealtimeService,
     @Inject(POOL_LOGIN_UPSTREAM) private readonly upstream: string,
     @Inject(POOL_LOGIN_TOKEN_ENDPOINT) private readonly tokenEndpoint: string,
+    private readonly disabled: DisabledAccounts,
   ) {
     this.notices = new PoolNotices(prisma, realtime);
   }
@@ -156,6 +165,11 @@ export class PoolLoginGatewayService {
   async forward(req: Request, res: Response, caller: GatewayCaller): Promise<void> {
     const started = Date.now();
     const target = gatewayTarget(req.originalUrl ?? req.url);
+    if (this.disabled.has(caller.poolOwnerId)) {
+      refuse(res, 403, ACCOUNT_DISABLED, poolOwnerDisabled(caller.poolLabel));
+      this.log.log(`session ${caller.sessionId} pool ${caller.poolId}: its owner's account is disabled — refused`);
+      return;
+    }
     // The account the session is on, if the pool still holds it: the token that got here may have been
     // minted on another, before the session moved (migration 0355). None when the session names an
     // account the pool has since lost, and when it names none — the same answer either way.
@@ -174,6 +188,11 @@ export class PoolLoginGatewayService {
     // somebody else's — its contributor, whoever in the pool signed it in (migration 0371).
     const byContributor = caller.userId === login.userId;
     const account = maskedAccount(login.accountId);
+    if (this.disabled.has(login.userId)) {
+      refuse(res, 403, ACCOUNT_DISABLED, credentialOwnerDisabled(`The ChatGPT account ${accountName(login)}`, caller.poolLabel));
+      this.log.log(`session ${caller.sessionId} account ${account}: its contributor's account is disabled — refused`);
+      return;
+    }
     if (login.state !== 'ACTIVE') {
       // Every session it refuses is told, once, whichever of them saw it signed out first.
       await this.owe(caller.sessionId, loginSignedOutNotice(login, caller.poolLabel, byContributor));

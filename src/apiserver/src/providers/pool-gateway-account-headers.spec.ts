@@ -24,6 +24,7 @@ import { after, before, test } from 'node:test';
 
 import express from 'express';
 
+import { DisabledAccounts } from '../auth/disabled-accounts';
 import type { PrismaService } from '../prisma/prisma.service';
 import { loginForwardedHeaders } from './codex-login-gateway';
 import { forwardedHeaders, PoolGatewayService, type GatewayCaller } from './pool-gateway.service';
@@ -116,7 +117,9 @@ before(async () => {
     });
   });
   await new Promise<void>((resolve) => openai.listen(0, '127.0.0.1', resolve));
-  const gateway = new PoolGatewayService(prisma, pools, ledger, `http://127.0.0.1:${(openai.address() as AddressInfo).port}/v1`);
+  const gateway = new PoolGatewayService(
+    prisma, pools, ledger, `http://127.0.0.1:${(openai.address() as AddressInfo).port}/v1`, new DisabledAccounts(prisma),
+  );
   // The path and the caller are PoolGatewayController's to settle; this is the session it settled on.
   const app = express();
   app.post('/api/gw/codex/responses', (req, res) => gateway.forward(req, res, CALLER));
