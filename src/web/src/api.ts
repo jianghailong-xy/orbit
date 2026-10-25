@@ -242,7 +242,9 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   }
   if (res.status === 401) {
     clearToken();
-    if (location.pathname !== '/login') location.href = '/login';
+    // The privacy policy is read signed out as well: a stored session found dead under it (the
+    // theme's read of the account) is cleared, and the reader stays on the policy.
+    if (location.pathname !== '/login' && location.pathname !== '/privacy') location.href = '/login';
   }
   return res;
 }
