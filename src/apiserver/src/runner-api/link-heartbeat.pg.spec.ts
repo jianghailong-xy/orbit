@@ -51,7 +51,7 @@ import { enqueueWikiJob } from '../wiki-worker/wiki-jobs';
 import { WikiRepoOps } from '../wiki-worker/wiki-repo-ops';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { IntegrationJobRelay } from './integration-job-relay';
-import { LINK_RECONCILE_EVERY_MS, readLinkBeat } from './link-heartbeat';
+import { LINK_RECONCILE_EVERY_MS, readFactsHash, readLinkBeat } from './link-heartbeat';
 import { RunnerApiController } from './runner-api.controller';
 import type { RunnerLinkContext } from './runner-link-call';
 import { runnerLinkCredential } from './runner-link-token';
@@ -758,6 +758,24 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     } finally {
       await one.$disconnect().catch(() => undefined);
     }
+  });
+
+  // ── 12 ─────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('12. a report the beat no longer carries leaves the record, and nothing is written for it', async () => {
+    await settle();
+    const probed = async () => (await sql.query(
+      `SELECT work_dir_free_bytes::text AS "free", work_dir_probed_at::text AS "probedAt" FROM workspace WHERE id = $1`, [workspaceId])).rows[0];
+    const before = await probed();
+    assert.ok(readFactsHash((await presence()).factsHash)?.agentDirProbes, 'the record holds the probes the beats carried');
+    // A runner that has not scanned its directories since it started carries none.
+    const without = { agentDirProbes: undefined } as Partial<RunnerHeartbeatRequest>;
+    const dropped = await beat(without);
+    assert.equal(isFull(dropped.answer), false, 'answered as any beat whose reports alone moved');
+    assert.equal(dropped.statements.length, 2, dropped.statements.join('\n---\n'));
+    assert.match(dropped.statements[1], /^\s*WITH facts AS/, 'the second statement writes the record alone');
+    assert.equal(readFactsHash((await presence()).factsHash)?.agentDirProbes, undefined, 'which no longer holds them');
+    assert.deepEqual(await probed(), before, 'and the workspace keeps what the last probe wrote, as a full reconcile would');
+    assert.equal((await beat(without)).statements.length, 1, 'the next beat is quiet');
   });
 
   // The open statuses the lease check reads are the leaseLostSessionIds rule's (common/session-scheduling.ts).

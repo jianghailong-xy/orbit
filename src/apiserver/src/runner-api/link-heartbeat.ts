@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
 import type { PlanUsage, RunnerHeartbeatRequest, RunnerHeartbeatResponse } from '@orbit/shared';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
@@ -195,7 +195,7 @@ export type HeartbeatDelivery =
 
 /** 96 bits of SHA-256, which is plenty to tell one report from the next and keeps the stored map small. */
 function digest(text: string): string {
-  return createHash('sha256').update(text).digest('base64url').slice(0, 16);
+  return hash('sha256', text, 'base64url').slice(0, 16);
 }
 
 /** The headers a process declares on every call, which decide what each drain hands it. */
@@ -282,7 +282,7 @@ export const LINK_RECONCILE_EVERY_MS = 5 * 60_000;
  * failover emptied — every runner reconciling within the same half minute — does not reconcile together again.
  */
 export function reconcilePhaseMs(runnerId: string): number {
-  return parseInt(createHash('sha256').update(runnerId.toLowerCase()).digest('hex').slice(0, 8), 16) % LINK_RECONCILE_EVERY_MS;
+  return parseInt(hash('sha256', runnerId.toLowerCase(), 'hex').slice(0, 8), 16) % LINK_RECONCILE_EVERY_MS;
 }
 
 /**
@@ -583,8 +583,10 @@ export async function writeLinkBeatReports(
   const kept = { ...input.digests.facts };
   if (input.storedFacts.planUsage === undefined) delete kept.planUsage;
   else kept.planUsage = input.storedFacts.planUsage;
+  // A report the beat no longer carries writes nothing (an absent member keeps what the server holds): its digest
+  // leaves the record, and that is the whole statement.
   const rows = await prisma.$queryRaw<Array<{ planUsageStored: boolean }>>`
-    WITH ${Prisma.join(ctes, '')}facts AS (
+    WITH ${ctes.length > 0 ? Prisma.join(ctes, '') : Prisma.empty}facts AS (
       UPDATE "runner_presence" p
          SET "facts_hash" = CASE WHEN ${planUsageStored} THEN ${factsHashOf(input.digests.facts)}::text ELSE ${factsHashOf(kept)}::text END
        WHERE p."runner_id" = ${input.runnerId}::uuid AND ${after()}
