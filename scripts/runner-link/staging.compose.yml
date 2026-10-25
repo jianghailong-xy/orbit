@@ -19,6 +19,11 @@ services:
 
   web:
     container_name: ${STAGING_PROJECT}-web
+    # The web gateway addresses this container by its production name, orbit-web (gateway/nginx.conf says why): within
+    # the project's network the renamed container answers to it too, so the stack serves the web and /dl.
+    networks:
+      default:
+        aliases: [orbit-web]
 
   gateway:
     container_name: ${STAGING_PROJECT}-gateway
