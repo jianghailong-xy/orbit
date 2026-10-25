@@ -369,6 +369,8 @@ func (e *linkEvents) close() {
 	<-e.done
 	for _, s := range e.snapshot() {
 		s.persist()
+		// Handed to the next process: no longer this one's unflushed work (managed_sleep.go).
+		s.dropBacklog()
 	}
 }
 

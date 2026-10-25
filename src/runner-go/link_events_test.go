@@ -416,10 +416,16 @@ func TestLinkEventsKeptAcrossARestartAreSentFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	s.release()
+	if n := unflushedEventCount(); n != 20 {
+		t.Fatalf("a managed runner sees %d unflushed events, want the 20 held", n)
+	}
 	r.m.close() // the runner stops: 11..30 are kept
 	files, _ := filepath.Glob(filepath.Join(home, "link-spool", "*", "*.jsonl"))
 	if len(files) == 0 {
 		t.Fatal("nothing was kept on disk")
+	}
+	if n := unflushedEventCount(); n != 0 {
+		t.Errorf("once they are kept for the next process, a managed runner still sees %d unflushed events", n)
 	}
 	in.setDown(false)
 
