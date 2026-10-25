@@ -495,6 +495,23 @@ model SignInProvider {
   @@map("sign_in_provider")
 }
 
+/// The runner dispatch pause (docs/runner-link-design.md §11.1, §11.3, D8; migration 0442): at most one
+/// row, id 1, written only by an administrator through PUT /api/admin/dispatch-pause
+/// (queue/dispatch-pause.ts). While `paused`, no runner is handed new work — no session is claimed, the
+/// inbox hands out no message, shell or reload, and no queued integration job is claimed — and the work
+/// already running carries on. No row is the same as a row that is off. `dispatch_pause_one_row_chk`
+/// (`id` = 1) lives only in the migration.
+model DispatchPause {
+  id          Int      @id @default(1) @db.SmallInt
+  paused      Boolean
+  /// When `paused` was last switched. A request for the state it is already in writes nothing.
+  updatedAt   DateTime @default(now()) @map("updated_at") @db.Timestamptz(3)
+  /// The administrator who switched it. An id rather than a relation, so deleting them writes nothing here.
+  updatedById String?  @map("updated_by_id") @db.Uuid
+
+  @@map("dispatch_pause")
+}
+
 /// The Google account an Orbit account signs in with (docs/google-sign-in-design.md §5.1, migration
 /// 0391). Found by Google's `sub` — stable and never reused — and never by the email, which is kept
 /// only to show. One Orbit account per Google account, and in v1 one Google account per Orbit
