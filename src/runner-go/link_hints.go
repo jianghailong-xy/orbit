@@ -153,7 +153,7 @@ func (gs *linkGates) markAll() {
 	}
 }
 
-// hint takes one Hint frame. A watchers hint concerns the live stream, which is not sent over the link yet (task B8).
+// hint takes one Hint frame. A watchers hint is the live stream's (link_events_live.go), which link_work.go hands it to.
 func (gs *linkGates) hint(h *linkpb.Hint) {
 	switch kind := h.GetKind().(type) {
 	case *linkpb.Hint_Claim:

@@ -663,7 +663,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 1,
     replay: "Not retried, and nothing to retry: the UPDATE is conditional on the state it changes, so asking again does nothing and records nothing. The refusals before the transaction — the administrator's own account, the last administrator not disabled — are reads, not locks: two administrators disabling each other at the same instant can both pass them, as two demotions or deletions of the last administrators can.",
-    effects: "After commit: DisabledAccounts.reload reads the disabled accounts again for this server's JwtAuthGuard. It writes nothing; every other server reads them within 30 seconds.",
+    effects: "After commit: DisabledAccounts.reload reads the disabled accounts again for this server's JwtAuthGuard and pool gateways. It writes nothing; every other server reads them within 30 seconds.",
     answer: "A conflict reaches the global boundary — a typed 503 for a transient one, a 500 otherwise — with nothing written; the administrator can simply ask again.",
   },
   {
