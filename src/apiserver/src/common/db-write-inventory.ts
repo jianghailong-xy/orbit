@@ -791,14 +791,14 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     answer: 'Typed 503; the runner re-posts the completion, which the duplicate-ack check absorbs.',
   },
   {
-    at: 'runner-api/runner-api.controller.ts#events',
+    at: 'runner-api/runner-api.controller.ts#ingestEvents',
     shape: 'TX_RETRIED',
     locks: 'session FOR UPDATE via lockSessionLeaseOwner (rank 30), then run_event / tool_call / approval child rows (rank 60), then ONE session UPDATE (I3).',
-    identity: 'The batch itself: `run_event` is unique on `(sessionId, seq)` with skipDuplicates, tool_call outcomes — and the PENDING approvals a returned call collects — are keyed by tool_use id, and the running sets are set-valued.',
+    identity: 'The batch itself: `run_event` is unique on `(sessionId, seq)` with skipDuplicates — a runner link batch\'s tombstones too, one per refused event\'s seq — tool_call outcomes — and the PENDING approvals a returned call collects — are keyed by tool_use id, and the running sets are set-valued.',
     isolation: '',
     attempts: 4,
-    replay: 'Every write in it is already idempotent, `durable` and `events` are derived from the request body above the closure, and the single Session write is accumulated from a row re-read under its lock on every attempt.',
-    effects: 'The live broadcast, outside the loop — so a retried batch is published once, after the attempt that committed. That includes one approval_resolved frame per card the batch collected.',
+    replay: 'Every write in it is already idempotent, `durable`, `events` and the tombstones are derived from the request body on every attempt — a link batch\'s without the seqs the session already holds, read after the lock (storedSeqs), so a batch sent again or a second copy of it derives nothing twice — and the single Session write is accumulated from a row re-read under its lock on every attempt. A link batch the database refuses a value of is stored again in halves (storeLinkEvents), each half this same unit.',
+    effects: 'The live broadcast, outside the loop — so a retried batch is published once, after the attempt that committed, and announced to the other replicas in one notification. That includes one approval_resolved frame per card the batch collected.',
     answer: 'Typed 503; the runner re-sends the batch, which is idempotent.',
   },
   {
