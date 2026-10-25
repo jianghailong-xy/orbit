@@ -121,6 +121,40 @@ const UPGRADE_SESSION = {
   error: 'OpenCode requires Orbit runner 0.1.82 or newer; update this runner first',
 };
 
+/**
+ * P9's rollback drill (§8.1): a Cursor CLI conversation that has talked, sent a message while no runner
+ * could run Cursor CLI. Its last run's engine spoke, so `engineStartedAt` is set; the queued run's reason
+ * is in `error`, in the server's own words (runner-provider-support.ts).
+ */
+const CURSOR_UPGRADE = 'Cursor CLI requires a newer Orbit runner with Cursor CLI support; update this runner first';
+const CURSOR_NOT_INSTALLED = "Cursor CLI isn't installed on this runner; install it from Infrastructure, then try again";
+const LAST_REPLY = 'P9 marker C3-R1-9A75BA';
+const TALKED_EVENTS = [
+  { seq: 1, type: 'user', payload: { text: 'Write the marker file, then repeat its line.' }, turnId: 't1', ts: '2026-10-25T05:21:43Z' },
+  { seq: 2, type: 'assistant', payload: { text: LAST_REPLY }, turnId: 't1', ts: '2026-10-25T05:22:03Z' },
+  { seq: 3, type: 'turn_end', payload: { subtype: 'success' }, turnId: 't1', ts: '2026-10-25T05:22:04Z' },
+];
+const TALKED_SESSION = {
+  ...BASE,
+  title: 'P9 rollout drill (c3) on r1',
+  provider: 'cursor',
+  engine: 'cursor',
+  numTurns: 3,
+  engineStartedAt: '2026-10-25T05:28:02.000Z',
+  // A gate the ordinary queued note would name at once, so the page has a note to draw in its place.
+  queuedReason: 'runner_at_capacity',
+};
+/** A runner whose release knows Cursor CLI, with the CLI uninstalled (P9 F1). */
+const CURSOR_RUNNER = {
+  ...RUNNER,
+  capabilities: ['provider:claude', 'cursor-account-login/v1'],
+  engines: [
+    { engine: 'claude', installed: true, auth: 'yes' },
+    { engine: 'cursor', installed: false, auth: 'unknown',
+      installationError: "CURSOR_NOT_INSTALLED: Cursor CLI 2026.10.14-941492e is not installed in Orbit's version directory" },
+  ],
+} satisfies Runner;
+
 class FakeEventSource {
   onmessage: ((e: { data: string }) => void) | null = null;
   onerror: (() => void) | null = null;
@@ -165,7 +199,7 @@ describe('a session whose run never started', { timeout: 60_000 }, () => {
     [...mounted().querySelectorAll<HTMLButtonElement>('.chat-authfix button')]
       .find((b) => (b.textContent ?? '').trim() === label) ?? null;
 
-  const mount = async (session: { title: string }, expectCard = true): Promise<void> => {
+  const mount = async (session: { title: string }, expectCard = true, runner: Runner = RUNNER): Promise<void> => {
     vi.mocked(getSession).mockResolvedValue(session as never);
     const nextClient = new QueryClient({
       defaultOptions: { queries: { retry: false, gcTime: 0 }, mutations: { retry: false } },
@@ -180,7 +214,7 @@ describe('a session whose run never started', { timeout: 60_000 }, () => {
       nextRoot.render(
         <QueryClientProvider client={nextClient}>
           <MemoryRouter initialEntries={[`/sessions/${SESSION_PUBLIC}`]}>
-            <WorkspaceView runner={RUNNER} />
+            <WorkspaceView runner={runner} />
           </MemoryRouter>
         </QueryClientProvider>,
       );
@@ -347,6 +381,86 @@ describe('a session whose run never started', { timeout: 60_000 }, () => {
     expect(page).not.toContain('Starting');
     // …and the header wears the word a run that is over wears, not the wait's.
     expect(page).toContain('Failed');
+  });
+
+  /** Waits for the conversation's history to be on the page, then answers where the card stands. */
+  const afterHistory = async (): Promise<{ html: string; cardAt: number; replyAt: number }> => {
+    await act(async () => {
+      await vi.waitFor(() => expect(mounted().textContent).toContain(LAST_REPLY), { timeout: 20_000, interval: 20 });
+    });
+    const html = mounted().innerHTML;
+    return { html, cardAt: html.indexOf('data-run-never-started'), replyAt: html.indexOf(LAST_REPLY) };
+  };
+
+  it('explains a queued message on a Cursor CLI conversation that has talked, below its last turn', async () => {
+    vi.mocked(getSessionEventPage).mockResolvedValue({ events: TALKED_EVENTS, hasMore: false } as never);
+    await mount({ ...TALKED_SESSION, status: 'PENDING', error: CURSOR_UPGRADE });
+    const { cardAt, replyAt } = await afterHistory();
+
+    const found = card();
+    expect(found?.getAttribute('data-run-never-started')).toBe('RUNNER_UPGRADE');
+    const text = found!.textContent ?? '';
+    // What it waits for, and how that ends.
+    expect(text).toContain('This run never started');
+    expect(text).toContain('Waiting for a newer runner');
+    expect(text).toContain(CURSOR_UPGRADE);
+    expect(text).toContain('The runner updates itself when no session is running on it, and this run starts then.');
+    expect(button('Open the runner')).not.toBeNull();
+    // Where the reader is: under the conversation's last turn, not above its history.
+    expect(replyAt).toBeGreaterThan(-1);
+    expect(cardAt).toBeGreaterThan(replyAt);
+    // …and in place of the note that would read as an ordinary wait for a slot.
+    expect(mounted().querySelector('.chat-slot-wait')).toBeNull();
+    expect(mounted().querySelectorAll('[data-run-never-started]')).toHaveLength(1);
+  });
+
+  it('names a Cursor CLI that is not installed on the runner, and installs it from the card', async () => {
+    vi.mocked(getSessionEventPage).mockResolvedValue({ events: TALKED_EVENTS, hasMore: false } as never);
+    await mount({ ...TALKED_SESSION, status: 'PENDING', error: CURSOR_NOT_INSTALLED }, true, CURSOR_RUNNER);
+    const { cardAt, replyAt } = await afterHistory();
+
+    const found = card();
+    expect(found?.getAttribute('data-run-never-started')).toBe('ENGINE_NOT_INSTALLED');
+    const text = found!.textContent ?? '';
+    expect(text).toContain('Cursor CLI isn’t installed on longdeMac-mini.local');
+    expect(text).toContain('Install it from Infrastructure, and this run starts as soon as it’s installed.');
+    expect(text).not.toMatch(/newer Orbit runner|update this runner first|send your message again/);
+    expect(cardAt).toBeGreaterThan(replyAt);
+    expect(mounted().querySelector('.chat-slot-wait')).toBeNull();
+
+    // Install is Cursor CLI's own, on this runner — never another engine's.
+    await act(async () => {
+      button('Install')!.click();
+    });
+    await act(async () => {
+      await vi.waitFor(() => expect(apiMock.mock.calls.some(([path]) => String(path).endsWith('/install'))).toBe(true), {
+        timeout: 20_000,
+        interval: 20,
+      });
+    });
+    const installs = apiMock.mock.calls.filter(([path]) => String(path).endsWith('/install'));
+    expect(installs).toHaveLength(1);
+    expect(String(installs[0][0])).toBe(`/runners/${encodeId(RUNNER_ID)}/install`);
+    expect(installs[0][1]).toMatchObject({ method: 'POST', body: { engine: 'cursor' } });
+  });
+
+  it('keeps the ordinary queued note, and no card, for a follow-up merely waiting for a slot', async () => {
+    vi.mocked(getSessionEventPage).mockResolvedValue({ events: TALKED_EVENTS, hasMore: false } as never);
+    await mount({ ...TALKED_SESSION, status: 'PENDING', error: null }, false);
+    await afterHistory();
+
+    expect(card()).toBeNull();
+    // The note the page has always drawn for this wait, naming the gate the server reported.
+    expect(mounted().querySelector('.chat-slot-wait')?.textContent).toContain('This session starts as soon as a slot frees up.');
+  });
+
+  it('draws no card under a turn that is running', async () => {
+    vi.mocked(getSessionEventPage).mockResolvedValue({ events: TALKED_EVENTS, hasMore: false } as never);
+    await mount({ ...TALKED_SESSION, status: 'RUNNING', queuedReason: null, engineStartedAt: '2026-10-25T05:40:30.000Z', error: null }, false);
+    await afterHistory();
+
+    expect(card()).toBeNull();
+    expect(mounted().querySelector('.chat-slot-wait')).toBeNull();
   });
 
   it('draws nothing of the sort for a run whose engine spoke', async () => {

@@ -383,6 +383,7 @@ import {
   PROVIDER_UNAVAILABLE_ERROR,
   SOURCE_PROTOCOL_UNSUPPORTED_ERROR,
   advertisedRunnerProviders,
+  cursorRunnerRefusal,
   dshRuntimeUnavailable,
   runnerAdvertisesProvider,
   runnerKnowsCursor,
@@ -738,6 +739,16 @@ async function persistedDshRefusal(db: Prisma.TransactionClient, runnerId: strin
   });
   if (!snapshot?.capabilitiesReportedAt || !snapshot.capabilities.includes('provider:dsh')) return DSH_RUNNER_UPGRADE_ERROR;
   return dshRuntimeUnavailable(snapshot.engines);
+}
+
+/**
+ * The notice Cursor CLI sessions wait with on a runner that has not declared Cursor CLI, by what its
+ * persisted heartbeat says it knows (cursorRunnerRefusal): the CLI to install there, or a newer release.
+ */
+async function persistedCursorRefusal(db: Prisma.TransactionClient, runnerId: string): Promise<string> {
+  return cursorRunnerRefusal(await db.runner.findUnique({
+    where: { id: runnerId }, select: { capabilities: true, capabilitiesReportedAt: true, engines: true },
+  }));
 }
 
 /**
@@ -2805,7 +2816,8 @@ export class RunnerApiController {
       // migration 0080's and 0367's triggers, 0372's for the borrowed slugs) already keeps them away
       // from a legacy runner, so failing the request would only strand this runner's other work.
       const providerWhere = await providerDispatchWhereOn(this.prisma, runner.ownerId, provider);
-      await this.markProviderUpgradeRequired(runner.id, providerWhere, upgradeError);
+      const notice = provider === AgentProvider.CURSOR ? await persistedCursorRefusal(this.prisma, runner.id) : upgradeError;
+      await this.markProviderUpgradeRequired(runner.id, providerWhere, notice);
     }
     if (!supportsSourcePin) {
       // Same shape, same reason (SR35): the claim SQL already withholds these rows, and failing the
@@ -2951,7 +2963,7 @@ export class RunnerApiController {
       await this.markProviderUpgradeRequired(
         runner.id,
         await providerDispatchWhereOn(this.prisma, runner.ownerId, provider),
-        upgradeError,
+        provider === AgentProvider.CURSOR ? await persistedCursorRefusal(this.prisma, runner.id) : upgradeError,
         onProvider
           .filter(
             (session) =>
