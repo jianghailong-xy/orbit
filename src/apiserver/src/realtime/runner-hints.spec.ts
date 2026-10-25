@@ -5,7 +5,15 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { QueueService } from '../queue/queue.service';
 import { RealtimeService } from './realtime.service';
-import { RunnerHints, runnerHintMessage, runnerHintSubject, type HintBus, type RunnerHint } from './runner-hints';
+import {
+  INSTANCE_HEADER,
+  RunnerHints,
+  runnerHintMessage,
+  runnerHintSubject,
+  turnPrefixRequestMessage,
+  type HintBus,
+  type RunnerHint,
+} from './runner-hints';
 
 /**
  * The runner link's hints (runner-hints.ts; docs/runner-link-design.md §5.5): each wake signal is published on
@@ -25,7 +33,14 @@ const ROOT = path.resolve(__dirname, '../../../..');
 /** A NATS stand-in that records what is published, up or down as the test says. */
 function fakeBus(up = true): HintBus & { sent: Array<[string, string]>; up: boolean } {
   const sent: Array<[string, string]> = [];
-  return { up, sent, publish: (subject, message) => void sent.push([subject, message]), close: async () => undefined };
+  return {
+    up,
+    sent,
+    publish: (subject, message) => void sent.push([subject, message]),
+    subscribe: () => () => undefined,
+    request: async () => null,
+    close: async () => undefined,
+  };
 }
 
 /** Sessions and the runners they are assigned to, and every lookup the hints make. */
@@ -74,14 +89,23 @@ test('a hint is a link Frame carrying only that Hint, in protobuf JSON, on its r
 
 test('the gateway\'s fixtures are what this encoder writes, case by case', () => {
   const fixture = JSON.parse(readFileSync(path.join(ROOT, 'src/link-gateway/testdata/b1-hints.json'), 'utf8')) as {
-    cases: Array<{ name: string; runnerId: string; hint: RunnerHint; subject: string; message: string }>;
+    cases: Array<{ name: string; runnerId: string; hint: RunnerHint; subject: string; message: string; headers?: Record<string, string> }>;
+    requests: Array<{ name: string; runnerId: string; sessionId: string; requestId: string; subject: string; message: string }>;
   };
-  assert.deepEqual(fixture.cases.map((c) => Object.keys(c.hint)[0]).sort(), ['claim', 'commands', 'inbox'],
+  assert.deepEqual(fixture.cases.map((c) => Object.keys(c.hint)[0]).sort(), ['claim', 'commands', 'inbox', 'watchers'],
     'every kind of hint the apiserver publishes has a fixture the gateway decodes');
   for (const c of fixture.cases) {
     assert.equal(runnerHintSubject(c.runnerId), c.subject, c.name);
     assert.equal(runnerHintMessage(c.hint), c.message,
       `${c.name}: regenerate with node scripts/runner-link/gen-hint-fixtures.mjs`);
+    // A watchers hint names the instance it counts for; no other hint carries a header.
+    assert.deepEqual(Object.keys(c.headers ?? {}), 'watchers' in c.hint ? [INSTANCE_HEADER] : [], c.name);
+  }
+  assert.equal(fixture.requests.length, 1);
+  for (const r of fixture.requests) {
+    assert.equal(runnerHintSubject(r.runnerId), r.subject, r.name);
+    assert.equal(turnPrefixRequestMessage(r.requestId, r.sessionId), r.message,
+      `${r.name}: regenerate with node scripts/runner-link/gen-hint-fixtures.mjs`);
   }
 });
 

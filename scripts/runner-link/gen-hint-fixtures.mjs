@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Writes src/link-gateway/testdata/b1-hints.json: the NATS subject and message the apiserver publishes for each kind of
 // runner link hint, as its own encoder writes them (src/apiserver/src/realtime/runner-hints.ts, runnerHintSubject and
-// runnerHintMessage). The link gateway decodes every message strictly (src/link-gateway/hints_test.go), and the
-// apiserver's spec holds the encoder to the same file (src/apiserver/src/realtime/runner-hints.spec.ts), so a field
-// renamed on either side turns one of them red.
+// runnerHintMessage), with the header a watchers hint names its apiserver instance in, and the turn prefix request it
+// sends a runner's gateway (turnPrefixRequestMessage). The link gateway decodes every message strictly
+// (src/link-gateway/hints_test.go), and the apiserver's spec holds the encoder to the same file
+// (src/apiserver/src/realtime/runner-hints.spec.ts), so a field renamed on either side turns one of them red.
 //
 //   npx tsc -p src/apiserver/tsconfig.json     # or npm run build -w @orbit/apiserver
 //   node scripts/runner-link/gen-hint-fixtures.mjs
@@ -19,20 +20,33 @@ if (!existsSync(compiled)) {
   process.exit(1);
 }
 const require = createRequire(import.meta.url);
-const { runnerHintSubject, runnerHintMessage } = require(compiled);
+const { runnerHintSubject, runnerHintMessage, turnPrefixRequestMessage, INSTANCE_HEADER } = require(compiled);
 
 const runnerId = '0190a0b0-0000-7000-8000-000000000001';
 const sessionId = '0190a0b0-0000-7000-8000-0000000000a1';
+const instance = '0190a0b0-0000-4000-8000-0000000000e1';
 const cases = [
   ['claim: a session is queued for the runner', { claim: {} }],
   ['commands: something its heartbeat delivers is waiting', { commands: {} }],
   ['inbox: a message is waiting in one of its sessions', { inbox: { sessionId } }],
-].map(([name, hint]) => ({ name, runnerId, hint, subject: runnerHintSubject(runnerId), message: runnerHintMessage(hint) }));
+  ['watchers: one apiserver instance counts the live streams of one of its sessions', { watchers: { sessionId, watchers: 2 } },
+    { [INSTANCE_HEADER]: instance }],
+].map(([name, hint, headers]) => ({
+  name, runnerId, hint, subject: runnerHintSubject(runnerId), message: runnerHintMessage(hint), ...(headers ? { headers } : {}),
+}));
+const requestId = '0190a0b0-0000-4000-8000-0000000000c1';
+const requests = [{
+  name: 'turn prefix: what the current turn of one of its sessions has streamed so far',
+  runnerId, sessionId, requestId,
+  subject: runnerHintSubject(runnerId),
+  message: turnPrefixRequestMessage(requestId, sessionId),
+}];
 
 const out = path.join(repo, 'src/link-gateway/testdata/b1-hints.json');
 writeFileSync(out, `${JSON.stringify({
   generatedBy: 'scripts/runner-link/gen-hint-fixtures.mjs, with src/apiserver/src/realtime/runner-hints.ts',
   cases,
+  requests,
 }, null, 2)}\n`);
-console.log(`wrote ${cases.length} cases to ${path.relative(repo, out)}`);
-for (const c of cases) console.log(`  ${c.subject} ${c.message}`);
+console.log(`wrote ${cases.length} cases and ${requests.length} request to ${path.relative(repo, out)}`);
+for (const c of [...cases, ...requests]) console.log(`  ${c.subject} ${c.message}`);

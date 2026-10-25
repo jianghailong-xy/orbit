@@ -302,7 +302,11 @@ func TestHintFixturesDecodeStrictly(t *testing.T) {
 			Hint     map[string]json.RawMessage `json:"hint"`
 			Subject  string                     `json:"subject"`
 			Message  string                     `json:"message"`
+			Headers  map[string]string          `json:"headers"`
 		} `json:"cases"`
+		Requests []struct {
+			Name, RunnerID, SessionID, RequestID, Subject, Message string
+		} `json:"requests"`
 	}
 	if err := json.Unmarshal(raw, &fixture); err != nil {
 		t.Fatal(err)
@@ -339,12 +343,40 @@ func TestHintFixturesDecodeStrictly(t *testing.T) {
 					t.Fatalf("%s: session %q, want %q", c.Name, f.GetHint().GetInbox().GetSessionId(), inbox.SessionID)
 				}
 			}
+			if kind == "watchers" {
+				var w struct {
+					SessionID string `json:"sessionId"`
+					Watchers  uint32 `json:"watchers"`
+				}
+				_ = json.Unmarshal(body, &w)
+				got := f.GetHint().GetWatchers()
+				if w.SessionID == "" || got.GetSessionId() != w.SessionID || got.GetWatchers() != w.Watchers {
+					t.Fatalf("%s: decoded %v, want %+v", c.Name, got, w)
+				}
+				// The instance it counts for is named in a header, which the gateway sums by.
+				if c.Headers[instanceHeader] == "" {
+					t.Fatalf("%s: no %s header", c.Name, instanceHeader)
+				}
+			}
 			kinds = append(kinds, kind)
 		}
 	}
 	slices.Sort(kinds)
-	if !slices.Equal(kinds, []string{"claim", "commands", "inbox"}) {
-		t.Fatalf("fixtures cover %v, want every kind the apiserver publishes: claim, commands, inbox", kinds)
+	if !slices.Equal(kinds, []string{"claim", "commands", "inbox", "watchers"}) {
+		t.Fatalf("fixtures cover %v, want every kind the apiserver publishes: claim, commands, inbox, watchers", kinds)
+	}
+	if len(fixture.Requests) == 0 {
+		t.Fatal("no turn prefix request in the fixture")
+	}
+	for _, r := range fixture.Requests {
+		var f linkpb.Frame
+		if err := protojson.Unmarshal([]byte(r.Message), &f); err != nil {
+			t.Fatalf("%s: %s does not decode as a Frame: %v", r.Name, r.Message, err)
+		}
+		req := f.GetTurnPrefixRequest()
+		if req == nil || req.GetRequestId() != r.RequestID || req.GetSessionId() != r.SessionID || r.Subject != hintSubjectPrefix+r.RunnerID {
+			t.Fatalf("%s: decoded %s", r.Name, summarize(&f))
+		}
 	}
 }
 

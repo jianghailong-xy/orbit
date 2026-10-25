@@ -123,7 +123,9 @@ func startHintRelay(g *gateway, url string) (*hintRelay, error) {
 	return h, nil
 }
 
-// hold subscribes to the runner's hints for one more of its connections; the first one subscribes.
+// hold subscribes to the runner's hints for one more of its connections; the first one subscribes. One subscription
+// per runner is also what lets the gateway answer a turn prefix request: nats-server lets a connection answer a request
+// once (nats.conf, allow_responses), and one that got it on two subscriptions may answer it on neither.
 func (h *hintRelay) hold(runnerID string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
