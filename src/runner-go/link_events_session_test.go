@@ -613,3 +613,101 @@ func TestTheSwitchTurnedOffMidStreamLosesNothing(t *testing.T) {
 		t.Errorf("the session's events run %s", joined)
 	}
 }
+
+// A client draws deltas into a draft the durable event that ends it replaces. Over the link the live stream is the
+// faster of the two, so the deltas emitted before an assistant block go at once, ahead of it, and those emitted after
+// it (the next block's) wait until it is stored: a client never draws a block's text again after its end, nor loses
+// the next block's first words to it.
+func TestLiveDeltasKeepTheirPlaceAroundTheDurableEventsThatEndThem(t *testing.T) {
+	r, in := newLinkEventsRig(t)
+	in.ackDelay = 400 * time.Millisecond
+	c := r.useLink(t)
+	s, buf := linkSessionBuffer(r, "session-ord")
+	defer s.release()
+	watch(t, c, s, 1)
+	buf.add("turn-1", evTextDelta, map[string]interface{}{"text": "Hel"}, nil)
+	buf.add("turn-1", evTextDelta, map[string]interface{}{"text": "lo"}, nil)
+	buf.add("turn-1", evAssistant, map[string]interface{}{"text": "Hello"}, nil)
+	buf.add("turn-1", evTextDelta, map[string]interface{}{"text": "Next"}, nil)
+	if err := s.submit(buf.take()); err != nil {
+		t.Fatal(err)
+	}
+	live := in.waitLive(t, "session-ord", 3)
+	batches := in.batchesOf("session-ord")
+	if len(batches) != 1 {
+		t.Fatalf("%d durable batches", len(batches))
+	}
+	stored := batches[0].at.Add(in.ackDelay)
+	for _, e := range live[:2] {
+		if !e.at.Before(stored) {
+			t.Errorf("a delta of the block went %s after the block was stored", e.at.Sub(stored))
+		}
+	}
+	if next := live[2]; string(next.event.GetPayloadJson()) != `{"text":"Next"}` || next.at.Before(stored) {
+		t.Errorf("the next block's delta went %s before the block that precedes it was stored", stored.Sub(next.at))
+	}
+}
+
+// What the live stream queued that a stored durable event has since ended is stale, and never goes; what waits for an
+// unstored one holds back everything behind it.
+func TestLiveQueueDropsWhatAStoredEventEndedAndHoldsWhatWaits(t *testing.T) {
+	l := &linkLiveStream{watched: true}
+	q := func(typ, text string, waitFor, endedBy uint64) *linkQueuedLive {
+		return &linkQueuedLive{ev: &linkpb.LiveEvent{Type: typ, PayloadJson: []byte(`{"text":"` + text + `"}`)}, waitFor: waitFor, endedBy: endedBy}
+	}
+	l.queue = []*linkQueuedLive{q(evTextDelta, "stale", 0, 5), q(evToolOutput, "snapshot", 0, 0), q(evTextDelta, "next", 5, 0),
+		q(evTextDelta, "after", 0, 0)}
+	now := time.Now()
+	l.since = now.Add(-time.Second)
+	frame, taken, _ := l.batch("s", now, 4) // seq 5 is not stored yet
+	if got := linkLiveTexts(frame); got != "stale snapshot" || len(taken) != 2 {
+		t.Fatalf("before seq 5 is stored the batch is %q", got)
+	}
+	frame, _, _ = l.batch("s", now, 4)
+	if frame != nil {
+		t.Fatalf("what waits for seq 5 went before it was stored: %q", linkLiveTexts(frame))
+	}
+	l.queue = append([]*linkQueuedLive{q(evTextDelta, "late", 0, 5)}, l.queue...)
+	frame, _, _ = l.batch("s", now, 5)
+	if got := linkLiveTexts(frame); got != "next after" {
+		t.Errorf("once seq 5 is stored the batch is %q: what it ended went too, or what waited for it did not", got)
+	}
+}
+
+func linkLiveTexts(f *linkpb.Frame) string {
+	var out []string
+	for _, e := range f.GetLiveBatch().GetEvents() {
+		var p map[string]interface{}
+		_ = json.Unmarshal(e.GetPayloadJson(), &p)
+		out = append(out, fmt.Sprint(p["text"]))
+	}
+	return strings.Join(out, " ")
+}
+
+// A boundary event numbered over the link has the session's flush hand it over at once, not at its next tick; over
+// HTTPS the flush keeps its tick.
+func TestABoundaryOverTheLinkWakesTheFlush(t *testing.T) {
+	r, _ := newLinkEventsRig(t)
+	s, buf := linkSessionBuffer(r, "session-soon")
+	defer s.release()
+	buf.soon = make(chan struct{}, 1)
+	buf.add("turn-1", evTurnEnd, map[string]interface{}{}, nil)
+	select {
+	case <-buf.soon:
+		t.Fatal("over HTTPS a boundary woke the flush")
+	default:
+	}
+	r.useLink(t)
+	buf.add("turn-1", evToolUse, map[string]interface{}{"id": "toolu_1"}, nil)
+	select {
+	case <-buf.soon:
+		t.Fatal("a tool call, which waits for the cadence, woke the flush")
+	default:
+	}
+	buf.add("turn-1", evTurnEnd, map[string]interface{}{}, nil)
+	select {
+	case <-buf.soon:
+	default:
+		t.Fatal("a boundary over the link did not wake the flush")
+	}
+}

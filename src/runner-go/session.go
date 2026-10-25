@@ -106,9 +106,11 @@ type sessionEventBuffer struct {
 	// clock times reasoning (thinking_clock.go). It sees events in the order they are buffered.
 	clock *thinkingClock
 	// link is the session's event stream on the runner link (link_events.go), nil without a link mode; provider names
-	// the engine the session runs on.
+	// the engine the session runs on; soon, when set, is told of a boundary event numbered over the link, for the flush
+	// to hand it over at once.
 	link     *linkEventStream
 	provider func() string
+	soon     chan struct{}
 }
 
 // add takes one emitted event. It is numbered and buffered, unless over the link it takes no seq: a live event, a noise
@@ -131,6 +133,17 @@ func (b *sessionEventBuffer) add(turnID, eventType string, payload map[string]in
 	ev := RunEvent{Seq: b.next, Type: eventType, TS: nowISO(), TurnID: turnID, Payload: payload}
 	b.next++
 	b.events = append(b.events, ev)
+	if b.link != nil && b.link.onLink() {
+		// What it ends of the live stream goes ahead of it, and what follows it waits for it; a boundary goes without
+		// waiting for the flush's next tick (link_events_live.go, link_events_kind.go).
+		b.link.durableNumbered(ev.Seq, eventType, payload)
+		if linkBoundaryEvent(eventType, payload) && b.soon != nil {
+			select {
+			case b.soon <- struct{}{}:
+			default:
+			}
+		}
+	}
 	if buffered != nil {
 		buffered(ev)
 	}
@@ -768,7 +781,7 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 	// stretch of reasoning took is written onto the block that closes it by a clock that sees them in
 	// the order they are buffered (thinking_clock.go).
 	eventBuf := &sessionEventBuffer{next: seq, clock: &thinkingClock{}, link: linkStream,
-		provider: func() string { return engineProvider.Load().(string) }}
+		provider: func() string { return engineProvider.Load().(string) }, soon: make(chan struct{}, 1)}
 	// A coordinator context can be acknowledged only after its compaction boundary is durable on
 	// the control plane. The provider emits and completes on different goroutines, so count under
 	// the same lock that appends the event and drain every generation before /turn-complete.
@@ -1043,6 +1056,8 @@ func runInteractiveSession(t *Transport, job *ClaimedSession, ctx context.Contex
 			case <-stopFlush:
 				return
 			case <-tk.C:
+				flushPeriodic()
+			case <-eventBuf.soon: // a boundary event over the link
 				flushPeriodic()
 			}
 		}

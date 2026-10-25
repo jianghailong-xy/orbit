@@ -22,6 +22,12 @@ import (
 //     (linkConn.trySend), and is dropped, never queued without bound, when it cannot be.
 //   - not while the connection's credit holds the session's durable events back (§5.8): the live stream is dropped
 //     then.
+//   - in order with the durable events that end what it drafts. A client draws deltas into a draft that the durable
+//     event closing it (an assistant block, a turn's end, a thinking block, a tool's result) replaces, as over HTTPS,
+//     where both came in one batch in seq order. Over the link the live stream is the faster of the two, so a delta
+//     emitted before such an event goes at once when it is emitted, and is dropped if it is still unsent once that event
+//     is stored; and a delta emitted after it waits until it is stored. Otherwise a client would draw a reply's last
+//     words again after its end, or lose a block's first words to the end of the block before it.
 //
 // The stream also keeps what the session's current turn has streamed so far, by the rules the API's single-replica
 // buffer applies (RealtimeService.retainTurnPrefix and supersededPrefixes in src/apiserver/src/realtime/
@@ -54,10 +60,13 @@ type linkLiveStream struct {
 	watched bool
 	// queue holds the live events not sent yet, oldest first; since is when the oldest of them was queued, and
 	// retryAt when a batch that found the connection busy goes again.
-	queue      []*linkpb.LiveEvent
+	queue      []*linkQueuedLive
 	queueBytes int
 	since      time.Time
 	retryAt    time.Time
+	// The newest durable event that ends a reply draft, and a thinking draft: a delta of that kind emitted after it
+	// waits until it is stored.
+	holdText, holdThinking uint64
 
 	// The turn prefix: the reply text and the thinking streamed since the last boundary, each given up (gone) once it
 	// passes linkTurnPrefixMaxChars, until the next boundary; the turn they belong to; the live_seq of the last delta
@@ -91,15 +100,84 @@ func (s *linkEventStream) emitted(turnID, eventType string, payload map[string]i
 				l.since = now
 				defer s.e.poke()
 			}
-			l.queue = append(l.queue, &linkpb.LiveEvent{LiveSeq: l.seq, Type: eventType, TsUnixMs: now.UnixMilli(), TurnId: turnID, PayloadJson: raw})
-			l.queueBytes += len(raw)
-			for l.queueBytes > linkLiveQueueBytes && len(l.queue) > 1 {
-				l.queueBytes -= len(l.queue[0].GetPayloadJson())
-				l.queue = l.queue[1:]
+			q := &linkQueuedLive{ev: &linkpb.LiveEvent{LiveSeq: l.seq, Type: eventType, TsUnixMs: now.UnixMilli(), TurnId: turnID,
+				PayloadJson: raw}}
+			switch eventType {
+			case evTextDelta:
+				q.waitFor = l.holdText
+			case evThinkingDelta:
+				q.waitFor = l.holdThinking
 			}
+			l.queue = append(l.queue, q)
+			l.queueBytes += len(raw)
+			l.trimLocked()
 		}
 	}
 	return fate, payload
+}
+
+// linkQueuedLive is a live event not sent yet, with where it stands among the session's durable events.
+type linkQueuedLive struct {
+	ev *linkpb.LiveEvent
+	// waitFor is a durable event emitted before it that ends the draft it extends: it goes only once that is stored.
+	waitFor uint64
+	// endedBy is the first durable event emitted after it that ends the draft it extends, or replaces the snapshot it
+	// is: once that is stored, it is stale, and never goes.
+	endedBy uint64
+}
+
+// trimLocked drops the oldest queued events past linkLiveQueueBytes.
+func (l *linkLiveStream) trimLocked() {
+	for l.queueBytes > linkLiveQueueBytes && len(l.queue) > 1 {
+		l.queueBytes -= len(l.queue[0].ev.GetPayloadJson())
+		l.queue = l.queue[1:]
+	}
+}
+
+// durableNumbered takes a durable event its session just numbered, under the session's buffer lock: one that ends a
+// draft has what is queued of that draft sent at once, ahead of it, and holds back what of that kind comes after it.
+// A tool's result does the same to the tool's output snapshots.
+func (s *linkEventStream) durableNumbered(seq int, eventType string, payload map[string]interface{}) {
+	ends := linkSupersededPrefix(eventType, payload)
+	if ends == "" && eventType != evToolResult {
+		return
+	}
+	l := &s.live
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	queued := false
+	for _, q := range l.queue {
+		if q.endedBy != 0 {
+			continue
+		}
+		switch q.ev.GetType() {
+		case evTextDelta:
+			if ends != "both" {
+				continue
+			}
+		case evThinkingDelta:
+			if ends == "" {
+				continue
+			}
+		case evToolOutput:
+			if eventType != evToolResult {
+				continue
+			}
+		default:
+			continue
+		}
+		q.endedBy, queued = uint64(seq), true
+	}
+	switch ends {
+	case "both":
+		l.holdText, l.holdThinking = uint64(seq), uint64(seq)
+	case "thinking":
+		l.holdThinking = uint64(seq)
+	}
+	if queued {
+		l.since = time.Time{} // ahead of the event that ends them: at once
+		s.e.poke()
+	}
 }
 
 // linkSupersededPrefix is which of the turn prefix an event ends: "both", "thinking", or "" for neither. The server's
@@ -182,56 +260,79 @@ func (l *linkLiveStream) reconnected() {
 	l.mu.Unlock()
 }
 
-// batch is the session's next LiveBatch, when one is due, and else when one will be.
-func (l *linkLiveStream) batch(sessionID string, now time.Time) (*linkpb.Frame, time.Time) {
+// batch is the session's next LiveBatch, when one is due, and else when one will be. stored is how far the session's
+// durable events are stored: a queued event that a stored one has ended is dropped, and one that waits for an
+// unstored one stops the batch there, so the stream keeps its order.
+func (l *linkLiveStream) batch(sessionID string, now time.Time, stored uint64) (*linkpb.Frame, []*linkQueuedLive, time.Time) {
 	never := now.Add(linkEventsIdle)
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if len(l.queue) == 0 {
-		return nil, never
-	}
 	if !l.watched {
 		l.queue, l.queueBytes = nil, 0
-		return nil, never
+	}
+	kept := l.queue[:0]
+	for _, q := range l.queue {
+		if q.endedBy != 0 && q.endedBy <= stored {
+			l.queueBytes -= len(q.ev.GetPayloadJson())
+			continue
+		}
+		kept = append(kept, q)
+	}
+	l.queue = kept
+	if len(l.queue) == 0 {
+		return nil, nil, never
+	}
+	urgent := false
+	for _, q := range l.queue {
+		urgent = urgent || q.endedBy != 0
 	}
 	due := l.since.Add(linkLiveFlushEvery)
+	if urgent {
+		due = now
+	}
 	if l.retryAt.After(due) {
 		due = l.retryAt
 	}
 	if now.Before(due) {
-		return nil, due
+		return nil, nil, due
 	}
+	var events []*linkpb.LiveEvent
 	n, size := 0, 0
-	for n < len(l.queue) && (n == 0 || size+len(l.queue[n].GetPayloadJson()) <= linkLiveBatchBytes) {
-		size += len(l.queue[n].GetPayloadJson())
+	for n < len(l.queue) {
+		q := l.queue[n]
+		if q.waitFor > stored || (n > 0 && size+len(q.ev.GetPayloadJson()) > linkLiveBatchBytes) {
+			break
+		}
+		events = append(events, q.ev)
+		size += len(q.ev.GetPayloadJson())
 		n++
 	}
-	events := l.queue[:n:n]
+	if n == 0 {
+		return nil, nil, never // what waits for a durable event goes once its ack wakes the sender
+	}
+	taken := append([]*linkQueuedLive(nil), l.queue[:n]...)
 	l.queue, l.queueBytes = l.queue[n:], l.queueBytes-size
 	if len(l.queue) > 0 {
-		l.since = now.Add(-linkLiveFlushEvery) // the rest goes at once
+		l.since = now.Add(-linkLiveFlushEvery) // the rest goes at once, as far as it may
 	}
-	return &linkpb.Frame{Body: &linkpb.Frame_LiveBatch{LiveBatch: &linkpb.LiveBatch{SessionId: sessionID, Events: events}}}, never
+	return &linkpb.Frame{Body: &linkpb.Frame_LiveBatch{LiveBatch: &linkpb.LiveBatch{SessionId: sessionID, Events: events}}}, taken, never
 }
 
-// putBack returns a batch the connection was too busy to take, ahead of what was queued since.
-func (l *linkLiveStream) putBack(f *linkpb.Frame, now time.Time) {
-	events := f.GetLiveBatch().GetEvents()
+// putBack returns a batch the connection was too busy to take, ahead of what was queued since. What a durable event
+// has ended since is dropped by the next batch.
+func (l *linkLiveStream) putBack(events []*linkQueuedLive, now time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if !l.watched {
 		return
 	}
 	size := 0
-	for _, ev := range events {
-		size += len(ev.GetPayloadJson())
+	for _, q := range events {
+		size += len(q.ev.GetPayloadJson())
 	}
-	l.queue = append(append([]*linkpb.LiveEvent(nil), events...), l.queue...)
+	l.queue = append(append([]*linkQueuedLive(nil), events...), l.queue...)
 	l.queueBytes += size
-	for l.queueBytes > linkLiveQueueBytes && len(l.queue) > 1 {
-		l.queueBytes -= len(l.queue[0].GetPayloadJson())
-		l.queue = l.queue[1:]
-	}
+	l.trimLocked()
 	l.since, l.retryAt = now.Add(-linkLiveFlushEvery), now.Add(linkLiveRetryEvery)
 }
 
@@ -247,7 +348,10 @@ func (e *linkEvents) passLive(conn *linkWorkConn, now time.Time) time.Time {
 			s.live.mu.Unlock()
 			continue
 		}
-		frame, due := s.live.batch(s.id, now)
+		s.mu.Lock()
+		stored := s.stored
+		s.mu.Unlock()
+		frame, taken, due := s.live.batch(s.id, now, stored)
 		if frame == nil {
 			if due.Before(next) {
 				next = due
@@ -260,7 +364,7 @@ func (e *linkEvents) passLive(conn *linkWorkConn, now time.Time) time.Time {
 			return next
 		}
 		if !sent {
-			s.live.putBack(frame, now)
+			s.live.putBack(taken, now)
 			if retry := now.Add(linkLiveRetryEvery); retry.Before(next) {
 				next = retry
 			}
