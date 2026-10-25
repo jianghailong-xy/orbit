@@ -17,7 +17,7 @@
 // (an upper bound for merged calls, which carry more batches a call as the rate grows). When the gateway merged the
 // batches (src/link-gateway/events_merge.go), its calls are reported beside them: batches a call, and how long each
 // call's transaction held its sessions.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -36,10 +36,13 @@ const load = (dir) => {
   const before = read('db-before.json');
   const after = read('db-after.json');
   const statements = read('pgss.json');
+  // Every statement's calls (pgss-totals.json); a run recorded before loadgen-run.sh kept them has the 60 listed alone,
+  // which miss whatever a varying statement text pushes off the list.
+  const totals = existsSync(join(dir, 'pgss-totals.json')) ? read('pgss-totals.json') : null;
   return {
-    dir, report, summary, statements,
+    dir, report, summary, statements, totals,
     commits: after.xactCommit - before.xactCommit,
-    calls: statements.reduce((n, q) => n + q.calls, 0),
+    calls: totals ? Number(totals.calls) : statements.reduce((n, q) => n + q.calls, 0),
     steady: summary.steady,
     whole: summary.whole.counters,
   };
@@ -140,7 +143,10 @@ out.push(`Commit \`${run.sha.slice(0, 12)}\`, runs ${baseline.runs.join(' and ')
 out.push(`Heartbeats only: ${beatsPerSec} beats/s. With events: ${evBeatsPerSec} beats/s, ${batchesPerSec} batches/s (${perBatch.eventsPerBatch} events each, ${ev.steady.eventsAckedPerSecond} events/s).`);
 const heavy = [hb, ev].filter((r, i) => baseline.swapInPagesPerSec[i] > HEAVY_SWAP_IN).map((r) => r.report.run);
 out.push(`Host swap-in over the steady windows: ${baseline.swapInPagesPerSec.join(' and ')} pages/s`
-  + (heavy.length ? `: **${heavy.join(' and ')} swapped past ${HEAVY_SWAP_IN} pages/s, which inflates CPU; run it again**.` : '.'), '');
+  + (heavy.length ? `: **${heavy.join(' and ')} swapped past ${HEAVY_SWAP_IN} pages/s, which inflates CPU; run it again**.` : '.'));
+const listedOnly = [hb, ev].filter((r) => !r.totals).map((r) => r.report.run);
+if (listedOnly.length) out.push(`Statements of ${listedOnly.join(' and ')} are the 60 listed alone (no pgss-totals.json): a lower bound.`);
+out.push('');
 out.push('| Per operation | apiserver CPU ms | database CPU ms | gateway CPU ms | SQL statements | commits |');
 out.push('| --- | --- | --- | --- | --- | --- |');
 out.push(`| heartbeat | ${perBeat.apiserverCpuMs} | ${perBeat.databaseCpuMs} | ${perBeat.gatewayCpuMs} | ${perBeat.sqlStatements} | ${perBeat.commits} |`);

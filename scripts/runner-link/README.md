@@ -123,7 +123,8 @@ scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 20
   pressure (PSI) and memory of each container and of the loadgen every 5 s, with the host's CPU, load, memory and swap
   (`samples.jsonl`); every service's and container's CPU on the host every 15 s, for what else ran (`slices.jsonl`);
   the gateway's `/metrics` every 15 s (`metrics.prom`); the database's sessions, transactions, rows and WAL every 15 s
-  (`db.jsonl`), its statements (`pgss.json`, after `pg_stat_statements_reset()` at the start) and sizes; and each
+  (`db.jsonl`), its statements (`pgss.json`, the 60 with the most time, after `pg_stat_statements_reset()` at the start;
+  `pgss-totals.json`, every statement's calls) and sizes; and each
   container's log over the run (`logs/`).
 - **The report** takes every figure over the steady window. Errors are counted wherever a part can report them: the
   runners, the gateway's counters and its WARN/ERROR lines, the apiserver's ERROR lines and any 5xx of the web

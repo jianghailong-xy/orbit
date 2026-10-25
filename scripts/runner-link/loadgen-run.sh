@@ -201,6 +201,11 @@ psql_at -c "SELECT coalesce(json_agg(q), '[]') FROM (
          round(max_exec_time::numeric, 1) AS max_ms, rows, shared_blks_hit, shared_blks_read, wal_bytes::bigint,
          left(regexp_replace(query, '\s+', ' ', 'g'), 400) AS query
   FROM pg_stat_statements ORDER BY total_exec_time DESC LIMIT 60) q" > "$out/pgss.json"
+# Every statement's calls, which the 60 above leave out once a statement's text varies: a multi-row INSERT is a text of
+# its own for each number of rows, and twenty of them pushed the approval writes off the list (O2, 2026-10-26).
+psql_at -c "SELECT json_build_object('statements', count(*), 'calls', coalesce(sum(calls), 0),
+  'totalMs', round(coalesce(sum(total_exec_time), 0)::numeric, 1), 'rows', coalesce(sum(rows), 0))
+  FROM pg_stat_statements" > "$out/pgss-totals.json"
 psql_at -c "SELECT s.relname, pg_size_pretty(pg_total_relation_size(s.relid)), s.n_live_tup, s.n_dead_tup
   FROM pg_stat_user_tables s
   WHERE s.schemaname = 'public' AND s.relname IN ('run_event', 'tool_call', 'session', 'runner', 'runner_presence', 'workspace')" > "$out/sizes.txt"
