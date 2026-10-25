@@ -1,6 +1,6 @@
 // The scenes the infra-focus board is made of. `tree` is the vite tree they run on: `today` is HEAD's own
 // src/web + src/shared, `proposal` the same with the board prototype.
-import { IDS, infraRoutes } from './data.mjs';
+import { IDS, infraRoutes, runners } from './data.mjs';
 
 /** localStorage the Infrastructure page keeps its folds in. */
 export const folds = (runnersOpen = [], groupsOpen = []) => ({
@@ -35,6 +35,49 @@ export const around = (sel, { up, pad = 0, to, toFirst } = {}) => async (page) =
 const flag = (name) => ({ fn: (k) => localStorage.setItem(k, '1'), arg: name });
 
 export const SCENES = {
+  /* States the board never drew: an engine one of whose two accounts is signed out, a machine with
+     nothing installed, an offline one; and the keys while they are being read. */
+  'impl-edges': {
+    tree: 'impl', path: '/infrastructure', height: 1400,
+    routes: infraRoutes({
+      runnerList: () => {
+        const [wikova, workstation, mac, hpc] = runners();
+        const claude = wikova.engines.find((e) => e.engine === 'claude');
+        const partly = { ...claude, accounts: [claude.accounts[0], { ...claude.accounts[1], auth: 'no' }] };
+        return [
+          { ...hpc, name: 'lab', displayName: 'lab', engines: hpc.engines.map((e) => (e.engine === 'claude' ? partly : e)) },
+          { ...mac, name: 'fresh-box', displayName: 'fresh-box', hostname: 'fresh-box',
+            engines: ['claude', 'codex', 'kimi'].map((engine) => ({ engine, installed: false, auth: 'unknown' })) },
+          { ...workstation, name: 'thinkpad', displayName: 'thinkpad', online: false, activeSessions: 0,
+            lastHeartbeatAt: new Date(Date.parse('2026-09-28T12:00:00Z') - 26 * 3600_000).toISOString() },
+        ];
+      },
+    }),
+    clip: around('#machines', { pad: 4 }), boxes: { partly: '.mc-chip.out' },
+  },
+  'impl-loading': {
+    tree: 'impl', path: '/infrastructure', height: 1400,
+    routes: () => ({ ...infraRoutes()(), 'GET /api/providers/mine': () => new Promise((resolve) => setTimeout(() => resolve([]), 20_000)) }),
+    clip: around('#keys', { pad: 4 }), boxes: { loading: '.vk-loading' },
+  },
+
+  /* ── the implementation (the worktree's src/web), the same scenes as the board's 改后 ── */
+  'impl-page': {
+    tree: 'impl', path: '/infrastructure', routes: infraRoutes(), height: 1400, grow: '.infra-engines',
+    clip: column(),
+    boxes: { chips: '.mc-row', signin: '.mc-signin', keys: '#keys', vendor: '.vk-card', more: '.pv-more', pools: '#pools', index: '.infra-engines' },
+  },
+  'impl-fold': { tree: 'impl', path: '/infrastructure', routes: infraRoutes(), viewport: true, width: 1280, height: 900, boxes: {} },
+  'impl-signin': {
+    tree: 'impl', path: '/infrastructure', routes: infraRoutes(), height: 1800,
+    act: async (page) => { await page.locator('.mc-signin').first().click(); await page.waitForTimeout(900); },
+    clip: around('.re-runner-card', { pad: 1 }), boxes: { panel: '.re-panel:has(.rsi)', row: '[data-engine="kimi"]' },
+  },
+  'impl-phone': {
+    tree: 'impl', path: '/infrastructure', routes: infraRoutes(), size: 'phone', height: 844, grow: '.vk-card',
+    clip: around('.prov-page-head', { pad: 8, toFirst: '.vk-card' }), boxes: { chips: '.mc-row' },
+  },
+
   'new-page': {
     tree: 'proposal', path: '/infrastructure', routes: infraRoutes(), height: 1400, grow: '.infra-index',
     clip: column(),
