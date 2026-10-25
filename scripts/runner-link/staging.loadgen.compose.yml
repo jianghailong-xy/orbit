@@ -1,0 +1,27 @@
+# The load test's settings (loadgen-run.sh, src/link-gateway/cmd/loadgen), on top of staging.compose.yml when
+# ORBIT_LINK_STAGING_LOADGEN=1. They change what a load test would otherwise measure wrongly, and bound what an
+# overloaded stack may take from the host it shares: past its memory cap a container is OOM-killed inside its own
+# cgroup, never a process of the host's.
+services:
+  link-gateway:
+    environment:
+      # 15,000 runners' frames, every one summarized, would be gigabytes of log an hour, written by the process under
+      # test. Hello, Welcome, Drain and Close are still logged.
+      LINK_FRAME_LOG: lifecycle
+      # Every simulated runner dials from this one host, so the per-address limit (1 a second, 20 at once) would hold
+      # the whole fleet to one connection a second. The limit across all clients (LINK_HANDSHAKE_RATE) stays.
+      LINK_IP_RATE: "100000"
+      LINK_IP_BURST: "100000"
+    mem_limit: 4g
+
+  apiserver:
+    mem_limit: 3g
+
+  apiserver-b:
+    mem_limit: 3g
+
+  postgres:
+    # The database's CPU allocation, ORBIT_LINK_STAGING_DB_CPUS: the capacity "database CPU" is a share of in the load
+    # test's report. 0 leaves it unlimited.
+    cpus: ${STAGING_DB_CPUS:-0}
+    mem_limit: 4g
