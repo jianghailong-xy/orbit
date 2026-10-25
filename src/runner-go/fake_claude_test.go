@@ -139,9 +139,14 @@ func clearCallingSession() {
 // fakeStep is one instruction of a fake CLI script: emit a frame, or block until one
 // arrives. Steps run in order; the process outlives the last one.
 type fakeStep struct {
-	// Emit: system_init | assistant | thinking_delta | thinking | tool_use | tool_result |
-	// result | prompt_suggestion | control_request | control_response | replay_user |
-	// local_command_stdout | task_notification | stop_reading | eof (eof exits, closing stdout).
+	// Emit: system_init | system_status | assistant | text_delta | thinking_delta | thinking |
+	// tool_use | tool_result | result | prompt_suggestion | control_request | control_response |
+	// replay_user | local_command_stdout | task_notification | stop_reading | eof (eof exits,
+	// closing stdout).
+	//
+	// system_status is a bare system message, a progress ping the control plane stores nowhere
+	// (subtype "status", or Subtype); text_delta one chunk of the reply as
+	// --include-partial-messages streams it.
 	//
 	// task_notification is a background task's lifecycle report, which Claude sends as a
 	// user-role message holding one bare string — the same shape as its local-command output.
@@ -410,8 +415,22 @@ func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 			init["claude_code_version"] = s.Version
 		}
 		return marshalFrame(init), nil
+	case "system_status":
+		subtype := s.Subtype
+		if subtype == "" {
+			subtype = "status"
+		}
+		return marshalFrame(map[string]interface{}{"type": "system", "subtype": subtype, "session_id": sessionID, "model": model}), nil
 	case "assistant":
 		return assistantFrame(sessionID, map[string]interface{}{"type": "text", "text": s.Text}), nil
+	case "text_delta":
+		return marshalFrame(map[string]interface{}{
+			"type": "stream_event", "session_id": sessionID, "parent_tool_use_id": nil,
+			"event": map[string]interface{}{
+				"type": "content_block_delta", "index": 0,
+				"delta": map[string]interface{}{"type": "text_delta", "text": s.Text},
+			},
+		}), nil
 	case "thinking_delta":
 		// One chunk of reasoning as --include-partial-messages streams it.
 		return marshalFrame(map[string]interface{}{

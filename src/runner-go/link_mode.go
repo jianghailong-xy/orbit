@@ -108,10 +108,11 @@ func startLink(cfg *RunnerConfig, t *Transport) func() {
 // linkMode is the link mode of the daemon's transport t: where the control plane says its work goes, the work
 // connection, the hints its long polls wait on, and what each session's resume needs.
 type linkMode struct {
-	t     *Transport
-	log   func(...any)
-	work  *linkWork
-	gates *linkGates
+	t      *Transport
+	log    func(...any)
+	work   *linkWork
+	gates  *linkGates
+	events *linkEvents // the sessions' durable and live event streams over the link (link_events.go)
 
 	mu sync.Mutex
 	// server is the transport the control plane last said the daemon's work goes over, in a Welcome or a HeartbeatAck
@@ -147,6 +148,7 @@ type linkSession struct {
 func newLinkMode(t *Transport, log func(...any)) *linkMode {
 	m := &linkMode{t: t, log: log, gates: newLinkGates(), changed: make(chan struct{}), sessions: map[string]*linkSession{}}
 	m.work = newLinkWork(m, newLinkClient(t.baseURL, t.token, t.leaseOwner, m.hello), log)
+	m.events = newLinkEvents(m, log)
 	return m
 }
 
@@ -219,6 +221,7 @@ func (m *linkMode) linkUnusable(why string) {
 // waits on the change. off says why it goes out of use.
 func (m *linkMode) updateLocked(off string) {
 	use := m.inUseLocked()
+	m.events.setOnLink(use)
 	if use == m.work.running() {
 		return
 	}
@@ -239,13 +242,15 @@ func (m *linkMode) updateLocked(off string) {
 	setLinkAssignedRelease(nil)
 }
 
-// close ends the link mode with the runner.
+// close ends the link mode with the runner. What the sessions' event streams still hold is kept in the spool for the
+// next process (link_events.go).
 func (m *linkMode) close() {
 	m.mu.Lock()
 	m.closed = true
 	m.updateLocked("")
 	m.mu.Unlock()
 	m.work.wait(5 * time.Second)
+	m.events.close()
 }
 
 // doVia is a call of the daemon's transport (Transport.doVia). A call to a daemon route goes over the link while the
@@ -343,9 +348,10 @@ func (m *linkMode) call(ctx context.Context, route, method, path string, body, o
 	var session string
 	if route == linkRouteTurnComplete {
 		// A turn completion is handled once the session's events it follows are stored (§5.6): its delivery receipt
-		// among them.
+		// among them. Whatever of them the session's event stream still holds goes at once.
 		session = linkPathSegment(path, 2)
 		rpc.SessionId, rpc.AfterSeq = session, m.sentSeq(session)
+		m.events.hurry(session)
 	}
 	var pendingSince time.Time
 	for {
@@ -458,23 +464,6 @@ func (m *linkMode) storedEvents(sessionID string, events []RunEvent) {
 	}
 }
 
-// linkEventRuns is a batch as the link's event ingest takes it: its events in seq order, cut wherever the next seq is
-// not one more than the last. A session's emitters number events under one lock and buffer them under another, so a
-// batch can hold two of them swapped, which the HTTPS ingest stores as they come and the link's refuses whole.
-func linkEventRuns(events []RunEvent) [][]RunEvent {
-	sorted := append([]RunEvent(nil), events...)
-	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Seq < sorted[j].Seq })
-	var runs [][]RunEvent
-	start := 0
-	for i := 1; i <= len(sorted); i++ {
-		if i == len(sorted) || sorted[i].Seq != sorted[i-1].Seq+1 {
-			runs = append(runs, sorted[start:i])
-			start = i
-		}
-	}
-	return runs
-}
-
 // handedTurn records a turn the inbox handed this process: a message or shell turn is what it executes until the
 // turn's completion.
 func (m *linkMode) handedTurn(sessionID string, r *RunInboxResponse) {
@@ -513,43 +502,50 @@ func (m *linkMode) supervising(ids []string) {
 	m.gates.keepInbox(ids)
 }
 
-// sentSeq is the highest event seq handed to the control plane for a session: what a call depending on its events
-// waits for (after_seq).
+// sentSeq is the highest event seq handed to the control plane for a session, over HTTPS or to its event stream on
+// the link: what a call depending on its events waits for (after_seq).
 func (m *linkMode) sentSeq(sessionID string) uint64 {
+	tail, _ := m.events.tail(sessionID)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s := m.sessions[sessionID]; s != nil {
-		return s.sent
+		return max(s.sent, tail)
 	}
-	return 0
+	return tail
 }
 
 func (m *linkMode) storedSeq(sessionID string) uint64 {
+	_, stored := m.events.tail(sessionID)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if s := m.sessions[sessionID]; s != nil {
-		return s.stored
+		return max(s.stored, stored)
 	}
-	return 0
+	return stored
 }
 
-// resumeStates is Hello.sessions (§5.4): every session the newest heartbeat named, and every other one the link holds
-// state of, each with the last event seq sent for it and the turn this process is executing in it.
+// resumeStates is Hello.sessions (§5.4): every session the newest heartbeat named, every other one the link holds
+// state of, and every one whose event stream holds events, so that the Welcome says how far each is stored. Each comes
+// with the last event seq handed over for it and the turn this process is executing in it.
 func (m *linkMode) resumeStates() []*linkpb.SessionResume {
+	held := m.events.held()
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	ids := make(map[string]bool, len(m.supervised)+len(m.sessions))
+	ids := make(map[string]bool, len(m.supervised)+len(m.sessions)+len(held))
 	for _, id := range m.supervised {
 		ids[id] = true
 	}
 	for id := range m.sessions {
 		ids[id] = true
 	}
+	for id := range held {
+		ids[id] = true
+	}
 	out := make([]*linkpb.SessionResume, 0, len(ids))
 	for id := range ids {
-		r := &linkpb.SessionResume{SessionId: id}
+		r := &linkpb.SessionResume{SessionId: id, LastSeq: held[id]}
 		if s := m.sessions[id]; s != nil {
-			r.LastSeq, r.TurnId = s.sent, s.turn
+			r.LastSeq, r.TurnId = max(s.sent, held[id]), s.turn
 		}
 		out = append(out, r)
 	}

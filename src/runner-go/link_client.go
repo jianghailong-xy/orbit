@@ -484,6 +484,22 @@ func (c *linkConn) readLoop(chunks linkReassembler) {
 func (c *linkConn) send(f *linkpb.Frame) (uint64, error) {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
+	return c.sendLocked(f)
+}
+
+// trySend writes f only when nothing else is being written on the connection, and reports whether it did: what a live
+// stream frame takes, so that it never holds up a control frame or a call behind it (§5.1). The caller drops or keeps
+// a frame that did not go.
+func (c *linkConn) trySend(f *linkpb.Frame) (bool, error) {
+	if !c.writeMu.TryLock() {
+		return false, nil
+	}
+	defer c.writeMu.Unlock()
+	_, err := c.sendLocked(f)
+	return err == nil, err
+}
+
+func (c *linkConn) sendLocked(f *linkpb.Frame) (uint64, error) {
 	c.lastID++
 	f.Id = c.lastID
 	msgs, err := encodeLinkFrame(f, linkMaxFrameBytes, func() uint64 { c.lastID++; return c.lastID })
