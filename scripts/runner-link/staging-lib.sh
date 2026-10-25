@@ -2,7 +2,7 @@
 # Compose is run for it (README.md beside this file).
 #
 # The stack is the root docker-compose.yml under its own Compose project, with staging.compose.yml on top (and
-# staging.acme.compose.yml in the ACME TLS mode). Compose runs with an empty environment plus the env file
+# staging.acme.compose.yml in the ACME TLS mode, staging.loadgen.compose.yml for a load test). Compose runs with an empty environment plus the env file
 # staging-up.sh writes, so nothing from the calling shell, an agent session's ORBIT_* variables included, reaches the
 # stack: Compose prefers the shell's environment to an env file.
 
@@ -28,6 +28,9 @@ compose_files() {
   printf '%s\n' -f "$repo/docker-compose.yml" -f "$here/staging.compose.yml"
   if [ "$(setting STAGING_TLS files)" = acme ]; then
     printf '%s\n' -f "$here/staging.acme.compose.yml"
+  fi
+  if [ "$(setting STAGING_LOADGEN 0)" = 1 ]; then
+    printf '%s\n' -f "$here/staging.loadgen.compose.yml"
   fi
 }
 

@@ -18,6 +18,9 @@ be taken for a deployment's.
 | `nats-auth-check.sh` | Check `src/link-gateway/nats.conf` on a throwaway nats-server with fresh keys: it refuses to start without both public keys, and admits each user to what it does alone. |
 | `gen-hint-fixtures.mjs` | Regenerate `src/link-gateway/testdata/b1-hints.json` from the apiserver's hint encoder. |
 | `gen-token-fixtures.mjs` | Regenerate `src/link-gateway/testdata/a3-tokens.json` from the apiserver's token code. |
+| `loadgen-seed.sh` | The load test's fleet in the stack's database: `seed` (owners, runners, a workspace each, idle sessions), `arm` before each run (fresh running sessions, presence, the fleet file `<state>/loadgen/fleet.jsonl`), `disarm` after it, `remove`. See [Load test](#load-test). |
+| `loadgen-run.sh` | One load test run: `src/link-gateway/cmd/loadgen` against the stack, with the stack's CPU, memory, metrics, database and logs collected beside it, then the report. |
+| `loadgen-report.mjs` | A run's report: each criterion with the figure it rests on (`report.md`, `report.json`). |
 
 ```bash
 scripts/runner-link/staging-up.sh
@@ -47,6 +50,8 @@ else the default:
 | `ORBIT_LINK_STAGING_NATS_MONITOR_PORT` | `18222` | NATS's monitoring, on 127.0.0.1. |
 | `ORBIT_LINK_STAGING_MODE` | `http` | The link gateway's `LINK_MODE`: `http`, the shadow period that `staging-check.sh` checks, or `link`, forwarding, that `staging-check-link.sh` checks. Switching recreates only the gateway. |
 | `ORBIT_LINK_STAGING_BACKENDS` | `1` | How many apiservers the gateway forwards to: `2` adds `apiserver-b`, the first one's whole definition on the same database, which `staging-check-link.sh` kills and starts again. |
+| `ORBIT_LINK_STAGING_LOADGEN` | `0` | `1` adds `staging.loadgen.compose.yml` for a load test: the gateway logs only Hello, Welcome, Drain and Close, admits any number of connections from one address (the per-address limit; the limit across all clients stays), and the gateway, apiservers and database are capped in memory. |
+| `ORBIT_LINK_STAGING_DB_CPUS` | `0` | With `LOADGEN=1`, the database's CPU allocation (Compose `cpus`), the capacity a load test's database CPU is a share of. `0` is unlimited. |
 
 Two stacks can run side by side under different projects, state directories and ports. Compose runs with an empty
 environment plus the env file the scripts write, so nothing from the calling shell reaches the stack. That includes an
@@ -85,3 +90,41 @@ agent session's `ORBIT_*` variables, which Compose would otherwise prefer to the
 - **Metrics.** `curl -s http://127.0.0.1:19464/metrics | grep ^link_`.
 - **Logs and frames.** `docker logs <project>-link-gateway` summarizes every frame in both directions; staging sets
   `LINK_FRAME_LOG=all`. `link-gateway dump` decodes a frame from its log line.
+
+## Load test
+
+The cell-scale load test (task C2, design §9) runs on a stack in MODE_LINK with the load test's settings. A private
+stack keeps it from the shared one's drills, and its database from their sessions:
+
+```bash
+export ORBIT_LINK_STAGING_PROJECT=orbit-link-c2 ORBIT_LINK_STAGING_DIR=/var/tmp/orbit-link-c2
+ORBIT_LINK_STAGING_HTTP_PORT=61086 ORBIT_LINK_STAGING_LINK_PORT=61443 ORBIT_LINK_STAGING_METRICS_PORT=61464 \
+  ORBIT_LINK_STAGING_NATS_PORT=61422 ORBIT_LINK_STAGING_NATS_MONITOR_PORT=61822 ORBIT_LINK_STAGING_PEBBLE_PORT=61500 \
+  ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_LOADGEN=1 scripts/runner-link/staging-up.sh
+scripts/runner-link/loadgen-seed.sh seed            # 10,000 owners, 15,000 runners, 40,000 open sessions
+scripts/runner-link/loadgen-seed.sh arm             # 5,000 of them running, and the fleet file
+scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 2000
+```
+
+- **The fleet** follows the cell's planning numbers per owner (design §1.3): 1.5 runners, 4 open sessions, 0.5 turns
+  running. Its rows are SQL inserts, and each runner's token and process id are kept in the `loadgen` schema. A
+  running session is leased to its runner's process and has an engine session id, as a claim and an engine start leave
+  it. `arm` gives each run new running sessions, so a run starts from seq 1 on sessions the reaper never finished;
+  `loadgen-run.sh` disarms them as soon as the loadgen exits, before the reaper reads the fleet's silence (90 s) and
+  queues their cancellation for the runners' next processes.
+- **The connections** go to the gateway container's own address (`-connect`), so no docker-proxy stands between, and
+  TLS still checks the certificate's `link-gateway` name.
+- **What is collected**, besides what the runners saw (`series.jsonl`, `summary.json`, `errors.log`): CPU, CPU
+  pressure (PSI) and memory of each container and of the loadgen every 5 s, with the host's CPU, load, memory and swap
+  (`samples.jsonl`); every service's and container's CPU on the host every 15 s, for what else ran (`slices.jsonl`);
+  the gateway's `/metrics` every 15 s (`metrics.prom`); the database's sessions, transactions, rows and WAL every 15 s
+  (`db.jsonl`), its statements (`pgss.json`, after `pg_stat_statements_reset()` at the start) and sizes; and each
+  container's log over the run (`logs/`).
+- **The report** takes every figure over the steady window. Errors are counted wherever a part can report them: the
+  runners, the gateway's counters and its WARN/ERROR lines, the apiserver's ERROR lines and any 5xx of the web
+  gateway, the database's ERROR/FATAL/PANIC lines and deadlocks, NATS's `[ERR]` lines. The database's CPU peak is the
+  highest 10 s average of its container's CPU time, as a share of `ORBIT_LINK_STAGING_DB_CPUS` when set.
+- **On a shared host**, the loadgen runs in a scope of its own (`systemd-run`), and the run stops itself when the
+  host's available memory stays under `LOADGEN_MIN_AVAILABLE_MB` (800) for 15 s. The report's host section says what
+  else used the CPUs and how long the stack's containers waited for one (CPU pressure).
+
