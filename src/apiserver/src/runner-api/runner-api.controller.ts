@@ -1649,7 +1649,10 @@ export class RunnerApiController {
     // compare-and-set, so the Codex reset block in it only moves forwards: a block relayed by another
     // process, an older read, an old process or a late heartbeat never takes a newer one back.
     let planUsageStored = true;
-    if (dto?.planUsage != null) {
+    // A link beat's full reconcile leaves a plan usage the runner reported unchanged where it is: its compare-and-set
+    // would rewrite the runner row with the value it holds (link-heartbeat.ts).
+    const planUsageUnchanged = !!linkBeat && !!storedFacts && storedFacts.planUsage === linkBeat.digests.facts.planUsage;
+    if (dto?.planUsage != null && !planUsageUnchanged) {
       planUsageStored = false;
       try {
         planUsageStored = await storeHeartbeatPlanUsage(this.prisma, runner.id, dto.planUsage, heartbeatLeaseOwner);
