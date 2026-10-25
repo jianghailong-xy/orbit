@@ -826,7 +826,7 @@ export function parseRunnerCapabilities(
     .slice(0, 128);
 }
 
-function parseLeaseGeneration(value?: string, field = 'leaseGeneration'): string | null {
+export function parseLeaseGeneration(value?: string, field = 'leaseGeneration'): string | null {
   if (value == null || value === '') return null;
   if (!LEASE_GENERATION_RE.test(value)) {
     throw new BadRequestException(`${field} must be a UUID`);

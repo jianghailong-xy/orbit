@@ -355,6 +355,51 @@ its address or key; if the endpoint refuses the key, correct it and recreate the
 account's wiki jobs with this model. To pause them, stop it with `docker compose stop wiki-worker`: the jobs wait in
 the queue until it is started again.
 
+## Runner link
+
+Runners reach the control plane over HTTPS. The runner link is the connection that is to replace those requests: one
+WebSocket per runner, to a link gateway that serves the runners of its cell. The gateway is not part of this stack yet.
+What the control plane provides today is the connection token a runner trades its runner token for before it
+connects, and the list of revoked credentials whose tokens the gateway refuses.
+
+The link is off unless all three of these are set in `.env`. While it is off, its routes answer 404 and runners keep
+working over HTTP. A value that cannot be used leaves it off too, and the apiserver logs why when it starts:
+
+```dotenv
+RUNNER_LINK_SIGNING_KEY="base64 of an Ed25519 private key in PEM"
+RUNNER_LINK_URL="wss://link.orbit.example.com"
+RUNNER_LINK_GATEWAY_TOKEN="a secret only the gateway is given"
+```
+
+Generate the key and the secret. The gateway is given the public key and the secret, never the private key:
+
+```bash
+openssl genpkey -algorithm ed25519 -out runner-link.pem
+base64 -w0 runner-link.pem                # RUNNER_LINK_SIGNING_KEY
+openssl pkey -in runner-link.pem -pubout  # the public key, for the gateway
+openssl rand -base64 32                   # RUNNER_LINK_GATEWAY_TOKEN, at least 32 characters
+```
+
+Keep `runner-link.pem` with the deployment's other protected secrets, then recreate the apiserver and check its log:
+
+```bash
+docker compose up -d apiserver
+docker compose logs --tail=50 apiserver | grep RunnerLink
+```
+
+How the tokens work:
+
+- A runner calls `POST /api/runner/link-token` with its runner token and the process identity it heartbeats with.
+  The token it gets back lasts one hour and names the runner, its account, its cell (`cell-1`, the only cell) and
+  the address in `RUNNER_LINK_URL`, which the response repeats.
+- Tokens are signed EdDSA over Ed25519 and name their key (`kid`, the public key's RFC 7638 thumbprint), so the
+  gateway verifies them with the public key alone and can accept an old and a new key while the signing key is
+  replaced. Tokens signed with the old key stop working within the hour.
+- Deleting a runner, `orbit unregister`, rotating a runner's token and registering a runner again under the same
+  name revoke every token minted with its old credential. The gateway reads `GET /api/runner/link-token/revocations`
+  with `Authorization: Bearer <RUNNER_LINK_GATEWAY_TOKEN>` and refuses those tokens; one it has not yet heard of
+  stops working when it expires.
+
 ## Managed runners
 
 A new deployment gives every account a runner of its own, so nobody has to register a machine before a first
@@ -578,6 +623,8 @@ docker compose up -d --wait --no-deps --force-recreate docker-channel
 ## Production checklist
 
 - [ ] `JWT_SECRET` and `PROVIDER_SECRET_KEY` are unique, protected, and backed up.
+- [ ] The runner link is off, or `RUNNER_LINK_SIGNING_KEY` and `RUNNER_LINK_GATEWAY_TOKEN` are unique and protected,
+      and the gateway holds the public key, not the private one.
 - [ ] The public endpoint uses HTTPS and the configured origin matches it.
 - [ ] Only the gateway is publicly reachable.
 - [ ] The first administrator uses a strong password and user access is reviewed.

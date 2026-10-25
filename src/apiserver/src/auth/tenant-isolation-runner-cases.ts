@@ -1466,4 +1466,10 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
     + 'its body is an AdmissionReview whose ids are Kubernetes UIDs and names, and it reads only the managed_runner '
     + 'rows owning the claims the reviewed Pod names, in the configured cluster and namespace, answering allowed or '
     + 'not — managed-runner-admission.controller.ts:97',
+  'GET /runner/link-token/revocations':
+    'the runner link gateway\'s door, protected by the gateway service secret: the bearer must be '
+    + 'RUNNER_LINK_GATEWAY_TOKEN, compared in constant time (404 with the link off) — '
+    + 'runner-link-token.controller.ts:61, runner-link-token.ts:241; it takes no id, and answers only the '
+    + 'fingerprints of the runner credentials revoked within a token\'s lifetime, which name no account and no '
+    + 'runner — runner-link-token.controller.ts:122',
 };

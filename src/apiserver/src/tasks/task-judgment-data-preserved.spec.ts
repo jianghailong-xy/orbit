@@ -2458,7 +2458,18 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `project_acceptance_*` object is named. None of the six preserved triggers/functions is named
       // or replaced and the DONE writer fence is untouched, so it is not another writer of it. Its one
       // INSERT seeds the new table from a read of `task` and `task_dependency`.
-      '0441_project_rollup_candidate'],
+      '0441_project_rollup_candidate',
+      // The runner link's connection tokens (0443, docs/runner-link-design.md §6.2): two new tables —
+      // `tenant_cell`, the cell directory, with a CHECK naming its one cell and a foreign key to `user`
+      // that cascades, and `runner_link_revocation`, with a reason CHECK, two indexes and no foreign
+      // key — and one trigger function with its AFTER DELETE OR UPDATE OF "token_hash" trigger on
+      // `runner`. Read against every claim above: `runner` and `user` are none of the preserved
+      // relations, so no `task`, `session`, `project` or `project_acceptance_*` object is named and
+      // the 0177 pair and every stored task and criterion row are out of its reach. The function writes
+      // `runner_link_revocation` and nothing else, and names none of the six preserved
+      // triggers/functions, so it is not another writer of the DONE fence. No INSERT, UPDATE or
+      // DELETE runs: both tables start empty, and the trigger records only changes made after it.
+      '0443_runner_link_token'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

@@ -357,6 +357,9 @@ model User {
   /// The account's one managed runner mapping, when it has one (migration 0399).
   managedRunner    ManagedRunner?
 
+  /// The cell serving this account's runners, once one asked for a link token (migration 0443).
+  tenantCell       TenantCell?
+
   @@map("user")
   mentionDeliveries TaskCommentMentionDelivery[]
 }
@@ -906,6 +909,37 @@ model EnrollmentToken {
   createdAt DateTime  @default(now()) @map("created_at")
 
   @@map("enrollment_token")
+}
+
+/// The runner link's cell directory (docs/runner-link-design.md §6.2, migration 0443): which cell
+/// serves a tenant's runners. A tenant is placed on its runners' first link-token request and stays
+/// where it was placed. `cell-1` is the only cell; a CHECK in 0443 holds it.
+model TenantCell {
+  ownerId    String   @id @map("owner_id") @db.Uuid
+  owner      User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  cellId     String   @map("cell_id")
+  assignedAt DateTime @default(now()) @map("assigned_at") @db.Timestamptz(3)
+
+  @@map("tenant_cell")
+}
+
+/// A runner credential that stopped vouching for connection tokens (migration 0443): the runner was
+/// deleted, or its credential replaced. Written only by the `runner_link_credential_revoke` trigger on
+/// `runner`, read by the link gateway through GET /api/runner/link-token/revocations, and purged by
+/// the reaper once older than a token's lifetime. No foreign keys: a revocation outlives its runner.
+model RunnerLinkRevocation {
+  id         BigInt   @id @default(autoincrement())
+  /// `runnerLinkCredential(token_hash)` (runner-api/runner-link-token.ts) of the credential that stopped.
+  credential String
+  runnerId   String   @map("runner_id") @db.Uuid
+  ownerId    String   @map("owner_id") @db.Uuid
+  /// `RUNNER_DELETED` | `CREDENTIAL_REPLACED` (a CHECK in 0443).
+  reason     String
+  revokedAt  DateTime @default(now()) @map("revoked_at") @db.Timestamptz(3)
+
+  @@index([revokedAt])
+  @@index([credential])
+  @@map("runner_link_revocation")
 }
 
 // A pending `orbit register` device-login session (RFC 8628-style browser flow).

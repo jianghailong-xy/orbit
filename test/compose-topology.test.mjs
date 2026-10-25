@@ -29,6 +29,11 @@
 // network and NET_ADMIN, never the Docker socket, under a profile of its own that only the install switches on, whose
 // whole definition (n) pins. A deployment whose .env does not name that profile, every one installed before it
 // included, runs exactly what it ran.
+//
+// On 2026-10-25 the runner link's connection tokens (project 34bc0CsOzPh9KshG7H3DW, task A3, whose plan the account
+// owner confirmed; its coordinator approved this pin) added three lines to the apiserver's environment: the token
+// signing key, the gateway's address and the gateway's secret, each empty unless the host's .env sets it. No service,
+// mount or port is added, and a deployment whose .env names none of them runs with the link off, as before.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -243,6 +248,14 @@ function directivesNotInBaseline(block, baselineBlock) {
 // The exception is an approved block of the apiserver's. It is listed here as directives — comments
 // explaining it do not count — so a line added anywhere else still turns this red exactly as it did before.
 const APPROVED_APISERVER_BLOCKS = [
+  // The runner link's connection tokens (2026-10-25, the top of this file): the Ed25519 signing key, the link
+  // gateway's address and the secret the gateway reads revocations with, each empty unless the host's .env sets it.
+  // Listed first because the lines come before the managed runners' in the file.
+  [
+    '      RUNNER_LINK_SIGNING_KEY: "${RUNNER_LINK_SIGNING_KEY:-}"',
+    '      RUNNER_LINK_URL: "${RUNNER_LINK_URL:-}"',
+    '      RUNNER_LINK_GATEWAY_TOKEN: "${RUNNER_LINK_GATEWAY_TOKEN:-}"',
+  ],
   // Managed runners on this host's Docker (2026-10-17, the top of this file): the switch, off unless the
   // host's .env says true; the profile's fixed path; and the directory holding the profile and the Docker
   // channel's token and socket, read-only, with /dev/null standing in where .env names none, so that an
