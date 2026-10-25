@@ -147,6 +147,20 @@ func (h *histogram) observe(d time.Duration) {
 	h.mu.Unlock()
 }
 
+// observeCount observes a count rather than a duration: the bounds are counts too.
+func (h *histogram) observeCount(n int) {
+	v := float64(n)
+	h.mu.Lock()
+	for i, b := range h.bounds {
+		if v <= b {
+			h.counts[i]++
+		}
+	}
+	h.sum += v
+	h.count++
+	h.mu.Unlock()
+}
+
 func (h *histogram) snapshot() (count uint64, sum float64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -242,6 +256,13 @@ type gatewayMetrics struct {
 	eventBatches      *counter
 	eventsStored      *counter
 	eventAckDuration  *histogram
+	// Merged ingest (events_merge.go).
+	mergeCalls        *counter
+	mergeFlushes      *counter
+	mergeAlone        *counter
+	mergeBatches      *histogram
+	mergeCallDuration *histogram
+	mergeHeld         *histogram
 	ingestEvents      *gauge
 	ingestBytes       *gauge
 	creditReduced     *gauge
@@ -306,6 +327,12 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		eventBatches:      newCounter("link_event_batches_total", "Event batches in MODE_LINK, by what became of them.", "result"),
 		eventsStored:      newCounter("link_events_stored_total", "Durable events the ingest route stored and the gateway acknowledged."),
 		eventAckDuration:  newHistogram("link_event_ack_duration_seconds", "From an event batch's arrival to its EventAck.", linkDurationBounds...),
+		mergeCalls:        newCounter("link_event_merge_calls_total", "Merged ingest calls, by outcome: answered (each batch its own answer), alone (every batch forwarded alone instead), failed (no answer, or the database turned the call away: each batch failed as it would have alone).", "result"),
+		mergeFlushes:      newCounter("link_event_merge_flushes_total", "Merged ingest calls sent, by why they went: window, batches or bytes (full), turn_end, due (after a call slot freed).", "reason"),
+		mergeAlone:        newCounter("link_event_merge_alone_total", "Event batches forwarded alone rather than merged, by why: too_large, answered_alone (the call answered sendAlone), call (the call was not taken whole).", "reason"),
+		mergeBatches:      newHistogram("link_event_merge_batches", "Event batches per merged ingest call.", 1, 2, 4, 8, 16, 32, 64, 128, 256),
+		mergeCallDuration: newHistogram("link_event_merge_call_duration_seconds", "From a merged ingest call's start to its answer, retries included.", mergeDurationBounds...),
+		mergeHeld:         newHistogram("link_event_merge_held_seconds", "How long a merged ingest call's transaction held its sessions, until its commit, as the apiserver stated it.", mergeDurationBounds...),
 		ingestEvents:      newGauge("link_ingest_queue_events", "Durable events queued for or in flight to the apiserver, across connections: the depth credit is granted by."),
 		ingestBytes:       newGauge("link_ingest_queue_bytes", "The payload bytes of those events."),
 		creditReduced:     newGauge("link_credit_reduced", "1 while the ingest queue is past its high-water mark and every connection's credit is reduced."),
@@ -343,7 +370,16 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		}
 	}
 	m.hints.preset("unknown", "malformed")
-	for _, kind := range []string{"rpc", "heartbeat", "events", "welcome"} {
+	for _, r := range []string{"answered", "alone", "failed"} {
+		m.mergeCalls.preset(r)
+	}
+	for _, r := range []string{"window", "batches", "bytes", "turn_end", "due"} {
+		m.mergeFlushes.preset(r)
+	}
+	for _, r := range []string{"too_large", "answered_alone", "call"} {
+		m.mergeAlone.preset(r)
+	}
+	for _, kind := range []string{"rpc", "heartbeat", "events", "events_merged", "welcome"} {
 		for _, result := range []string{"answered", "timeout", "cancelled", "cut_off", "unavailable"} {
 			m.backendCalls.preset(kind, result)
 		}
@@ -382,6 +418,7 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		m.backendCalls, m.backendRetries, m.backendDuration, m.rpcResults, m.rpcDuration,
 		m.heartbeatForwards, m.heartbeatDuration, m.heartbeatFacts, m.welcomeLookups,
 		m.eventBatches, m.eventsStored, m.eventAckDuration, m.ingestEvents, m.ingestBytes, m.creditReduced, m.creditChanges,
+		m.mergeCalls, m.mergeFlushes, m.mergeAlone, m.mergeBatches, m.mergeCallDuration, m.mergeHeld,
 		m.liveEvents, m.watchedSessions, m.prefixRequests, m.queueFull,
 	}
 	return m
@@ -390,6 +427,11 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 // linkDurationBounds are the buckets of the forwarding paths' durations, in seconds: an event acknowledgement's p99 is
 // held under one second (§9).
 var linkDurationBounds = []float64{0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60}
+
+// mergeDurationBounds are finer, for a merged call's own p50 and p99: how long it holds its sessions is what each of
+// their other writers may wait behind it.
+var mergeDurationBounds = []float64{0.001, 0.0025, 0.005, 0.0075, 0.01, 0.015, 0.02, 0.03, 0.04, 0.05, 0.075, 0.1, 0.15,
+	0.2, 0.3, 0.5, 0.75, 1, 2.5, 5, 10, 30}
 
 func (m *gatewayMetrics) writeTo(out io.Writer) error {
 	w := bufio.NewWriter(out)
