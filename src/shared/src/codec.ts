@@ -425,8 +425,9 @@ export const PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'createdById',
   'approvedById',
   'decidedById',
-  // The administrator who last saved a sign-in provider (`sign_in_provider`, migration 0390): a user,
-  // named the way `createdById` names one.
+  // The administrator who last saved a sign-in provider (`sign_in_provider`, migration 0390), or who last
+  // switched the runner dispatch pause (`dispatch_pause`, migration 0442): a user, named the way
+  // `createdById` names one.
   'updatedById',
   // The signed-in user a Google LINK flow would link to (`oauth_login_flow`, migration 0391).
   'linkUserId',

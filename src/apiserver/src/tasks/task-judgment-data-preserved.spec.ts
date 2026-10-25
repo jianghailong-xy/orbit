@@ -2459,6 +2459,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // or replaced and the DONE writer fence is untouched, so it is not another writer of it. Its one
       // INSERT seeds the new table from a read of `task` and `task_dependency`.
       '0441_project_rollup_candidate',
+      // The runner dispatch pause (0442, docs/runner-link-design.md §11.1, §11.3): one new table,
+      // `dispatch_pause`, of at most one row (`dispatch_pause_one_row_chk`, `id` = 1) with no foreign
+      // key — `updated_by_id` names an administrator by id only. Read against every claim above: no
+      // `task`, `session`, `project` or `project_acceptance_*` object is named, the 0177 pair and every
+      // stored task and criterion row are out of its reach, and no function, trigger or type is
+      // created, replaced or dropped, so it is not another writer of the DONE fence and names none of
+      // the six preserved objects. No INSERT, UPDATE or DELETE: no row means the pause is off, and the
+      // row is written only when an administrator switches it. Every statement can run twice.
+      '0442_dispatch_pause',
       // The runner link's connection tokens (0443, docs/runner-link-design.md §6.2): two new tables —
       // `tenant_cell`, the cell directory, with a CHECK naming its one cell and a foreign key to `user`
       // that cascades, and `runner_link_revocation`, with a reason CHECK, two indexes and no foreign

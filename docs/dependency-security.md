@@ -122,6 +122,48 @@ lockfiles, `go.mod`, and the Swift packages were not affected.
 from `postcss` and `css-tree`). KaTeX needs the root override listed under [Active overrides](#active-overrides); the
 lockfile takes 0.18.2, the first patched release, which keeps KaTeX's own `commander` dependency at the locked 8.3.0.
 
+## Runner link protocol dependencies (2026-10-25)
+
+The runner link protocol (`contracts/runner-link`, designed in `docs/runner-link-design.md` §5.1) gives the runner its
+first external Go module and adds protobuf code generation to `@orbit/shared`. Each package was reviewed before it was
+added:
+
+| Package | Version | Added to | Purpose | License |
+| --- | --- | --- | --- | --- |
+| `google.golang.org/protobuf` | v1.36.12 | `src/runner-go/go.mod` | Runtime of the generated `src/runner-go/linkpb`; `protoc-gen-go` is built from the same module. | BSD-3-Clause |
+| `@bufbuild/protobuf` | 2.16.0 | `@orbit/shared` dependencies | Runtime of the generated `src/shared/src/runner-link`. | Apache-2.0 AND BSD-3-Clause |
+| `@bufbuild/protoc-gen-es` | 2.16.0 | `@orbit/shared` devDependencies | Generates that TypeScript. Brings `@bufbuild/protoplugin` 2.16.0, its own `typescript` 5.4.5 and `@typescript/vfs` 1.6.5. | Apache-2.0 |
+| `@bufbuild/buf` | 1.75.0 | `@orbit/shared` devDependencies | Runs `buf lint`, `buf breaking` and `buf generate`, in CI and locally. | Apache-2.0 |
+
+- **Source and integrity.** `google.golang.org/protobuf` is the Go project's own protobuf implementation
+  (go.googlesource.com/protobuf); the npm packages are Buf's, published from its protobuf-es and buf repositories.
+  `go.sum` records the module's hashes, which the Go checksum database vouched for when it was downloaded, and
+  `go mod verify` passes; `package-lock.json` pins every npm package by integrity. All four are pinned to exact
+  versions, so each generator stays the same release as the runtime its output runs on.
+- **Known vulnerabilities: none at these versions.** govulncheck v1.9.0 finds nothing reachable from `linkpb`, and its
+  module scan lists only standard-library advisories of the scanning host's go1.27.1 toolchain (fixed in go1.27.2 and
+  go1.27.3), none in this module. OSV lists nothing for any package above. The module's two past advisories,
+  GO-2023-1631 (a panic on invalid messages, fixed in v1.29.1) and GO-2024-2611 (a `protojson` infinite loop, fixed in
+  v1.33.0), predate v1.36.12. `npm audit` reports the same findings with and without these packages.
+- **Reach.** Only `src/runner-go/linkpb` imports the module. The `orbit` binary does not import that package yet: built
+  from this change it is byte-identical to the binary built from main, and its build downloads nothing. Once the link
+  client imports `linkpb`, the binary will decode binary frames from the link gateway, over a TLS connection it
+  authenticated; `protojson`, where GO-2024-2611 lived, is not on that path.
+- **Transitive modules.** The module's `go.mod` requires `github.com/google/go-cmp` v0.7.0 and
+  `github.com/golang/protobuf` v1.5.0 for its own tests. Neither is compiled into the runner: `go.sum` lists go-cmp
+  only as a checksum, because a test of `internal/filedesc` imports it, and golang/protobuf is pruned from the graph.
+- **Install scripts.** `@bufbuild/buf` declares a postinstall script, which npm does not run without approval
+  (`allowScripts`). Nothing needs it: the package's `bin/buf` runs the binary from the matching optional
+  `@bufbuild/buf-<platform>` package, which the lockfile pins as well. The other packages declare none.
+- **Production tree.** `@bufbuild/protobuf` has no dependencies of its own. It enters the production tree through
+  `@orbit/shared`, but `src/shared/src/index.ts` does not export the generated code, so neither the API server nor the
+  web bundle loads any of it until something imports it.
+- **Updates.** Dependabot's existing `npm` (`/`) and `gomod` (`/src/runner-go`) entries cover all four. Move
+  `@bufbuild/protobuf` and `@bufbuild/protoc-gen-es` together, since the generator requires the runtime of its own
+  version, and regenerate after updating any of the four (`npm run generate:runner-link -w @orbit/shared`).
+
+Decision: accepted, with no override or audit exception.
+
 ## Verification
 
 Run from a clean checkout:
