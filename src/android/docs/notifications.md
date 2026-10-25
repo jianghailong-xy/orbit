@@ -320,8 +320,26 @@ that binding, and sign-out unregisters it. Between the two test methods the scri
 hands the stopped app one FCM-shaped data message through Firebase's own receiver,
 as root in place of Google Play services, and checks the tray entry and the
 `OrbitPush` receipt line. No message travels through FCM in this check: sending
-needs the backend's service account, which only production holds, and the
-emulator cannot sign in to production as the account owner.
+needs the backend's service account, which only production holds.
+
+`push-fcm-production.sh LOGIN_ENV DIR` is the delivery half, run since production
+sends FCM (2026-10-25). The release package signs in to orbitd.io with the account in
+`LOGIN_ENV` (`ORBIT_LOGIN_EMAIL`, `ORBIT_LOGIN_PASSWORD`), through
+`RealPushDeviceTest`. The file is pushed to the device, read inside the test and
+removed right after sign-in. The run registers Google's token with production. Then,
+acting as the Orbit session that runs it, the script has the server send real pushes
+through the orbit CLI:
+- with Orbit stopped in the background, an entry is opened from the tray;
+- with the process killed (not force-stopped), an entry is swiped away;
+- with Orbit on screen, an entry joins the silent group;
+- a scratch session's approval arrives as a needs-you entry, and ending that session
+  from the host makes the server's sync push remove it.
+
+The run records the server's notify answers, the receipt lines, Orbit's event-log
+lines and screenshots, and signs out (unregisters) at the end. Every notify and the
+approval also alert the account's other devices. A loopback server
+(`http://127.0.0.1:PORT`) runs the fixture instead: sign-in, registration and
+sign-out only.
 
 Any emulator operation must hold `flock /var/lib/orbit/android/ui.lock`
 exclusively for the whole device flow and name `emulator-5554` (or the API
