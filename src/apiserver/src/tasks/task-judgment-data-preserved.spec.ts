@@ -2487,7 +2487,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // created, replaced or dropped, so it names none of the six preserved triggers/functions and is
       // not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty and
       // only heartbeats write it.
-      '0444_runner_presence'],
+      '0444_runner_presence',
+      // The runner link request id a session was claimed under (0445, docs/runner-link-design.md §5.6):
+      // one nullable TEXT column, `session.claim_request_id`, added with IF NOT EXISTS and no default,
+      // read and written only by the claim (QueueService.trySessionClaim). Read against every claim
+      // above: `session` gains a column and nothing of it changes — no CHECK, no index, no constraint,
+      // no trigger — and no `task`, `project` or `project_acceptance_*` object is named, so the 0177
+      // pair and every stored task and criterion row are out of its reach. No function or trigger is
+      // created, and no INSERT, UPDATE or DELETE runs: every existing session reads NULL there.
+      '0445_session_claim_request_id'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
