@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsage, RunnerEngineAccount, RunnerEngineHealth } from '@orbit/shared';
 import { formatResetTime } from '../lib/providerPools';
-import { RunnerEngines, summaryOf } from './RunnerEngines';
+import { machineChipsOf, RunnerEngines, summaryOf } from './RunnerEngines';
 import { clickRunnerMenuItem, dialogName, openRunnerCards, openRunnerMenu } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
@@ -254,7 +254,14 @@ describe('a runner with two Claude accounts', () => {
 
   it('counts a signed-out account against the card, and shows nothing on an engine without', () => {
     const box = runner({ accounts: [DEFAULT, WORK] });
-    expect(summaryOf(box)).toBe('2 of 3 signed in');
+    // Claude Code's chip says 1 of its 2 accounts is in, and the folded line has nothing to add.
+    expect(machineChipsOf(box).find((chip) => chip.engine === 'claude')).toEqual({
+      engine: 'claude',
+      logins: 1,
+      accounts: 2,
+      signedOut: false,
+    });
+    expect(summaryOf(box)).toBeNull();
     const page = mount([box]);
     // Kimi keeps one login for the machine: no group, no rows, and no Add account anywhere near it.
     const kimiRow = rows(page, '.re-row').find(

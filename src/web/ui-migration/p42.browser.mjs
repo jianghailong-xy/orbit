@@ -104,7 +104,8 @@ const phone = (testInfo) => !!testInfo.project.use.isMobile;
 /** A row of the Providers page's engine cards or pool cards, by the name it shows. */
 const engineRow = (page, label) => page.locator('.re-row').filter({ has: page.locator('.re-name', { hasText: new RegExp(`^${escape(label)}`) }) }).first();
 const poolRow = (page, label) => page.locator('.pool-row').filter({ has: page.locator('.pool-member-label', { hasText: new RegExp(`^${escape(label)}$`) }) }).first();
-const keyRow = (page, label) => page.locator('tr').filter({ has: page.locator('.prov-cell-name', { hasText: new RegExp(`^${escape(label)}$`) }) }).first();
+// A key's row on its vendor's card (docs/mocks/infrastructure-focus; it was a row of the keys table).
+const keyRow = (page, label) => page.locator('.vk-row').filter({ has: page.locator('.vk-name', { hasText: new RegExp(`^${escape(label)}$`) }) }).first();
 
 test.describe('P4.2 providers', () => {
   test('engines: an account menu, its remove question and the pause dialog', async ({ evidence }, testInfo) => {
@@ -196,9 +197,10 @@ test.describe('P4.2 providers', () => {
     const trace = [];
     fixtures.state.holdProviders = gate();
     // Main 33e0e2e09: the keys are the Infrastructure page's #keys section, headed "API keys" (the deleted
-    // Providers page said "Your API keys").
+    // Providers page said "Your API keys"). Since docs/mocks/infrastructure-focus they are a card per vendor,
+    // one card spinning while they are read, where the table was.
     await page.goto(P42_PATHS.keys);
-    const keys = page.locator('.provider-keys');
+    const keys = page.locator('.vk-cards');
     const heading = page.getByRole('heading', { name: 'API keys', exact: true });
     await expect(heading).toBeVisible();
     await expect(keys).toBeVisible();
@@ -213,10 +215,10 @@ test.describe('P4.2 providers', () => {
     await expect(lab).toBeVisible();
     await top(heading);
     await frames(page);
-    trace.push({ ...(await observe(page, fixtures, 'keys')), rows: await keys.locator('tbody tr').allInnerTexts() });
+    trace.push({ ...(await observe(page, fixtures, 'keys')), rows: await keys.locator('.vk-row').allInnerTexts() });
     await capture('p42-keys', { table: keys, row: lab });
 
-    await lab.getByRole('button', { name: named(phone(testInfo) ? 'Delete Lab gateway' : 'Delete') }).click();
+    await lab.getByRole('button', { name: named('Delete Lab gateway') }).click();
     const ask = question(page, 'Delete Lab gateway?');
     await expect(ask).toBeVisible();
     await frames(page);
@@ -704,9 +706,9 @@ test.describe('P4.2 runners', () => {
     fixtures.state.runners = [];
     await page.reload();
     // Main 33e0e2e09: with no machine the Machines section invites one to be registered (the Runners page said "No
-    // runners yet" beside Register Runner). The overview under the page head is drawn once every list on the page has
+    // runners yet" beside Register Runner). By engine, at the page's end, is drawn once every list on the page has
     // answered, so the invitation is read after the empty list arrived, not while it is being read.
-    await expect(page.getByRole('heading', { name: 'What your agents can run on', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'By engine', exact: true })).toBeVisible();
     await expect(machines.getByRole('heading', { name: 'Already pay for Claude, Codex or Kimi?', exact: true })).toBeVisible();
     await frames(page);
     trace.push(await observe(page, fixtures, 'no runners'));

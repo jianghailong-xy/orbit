@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { PlanUsageSnapshot, RunnerEngineAccount, RunnerEngineHealth, RunnerLoginState } from '@orbit/shared';
-import { RunnerEngines, summaryOf } from './RunnerEngines';
+import { machineChipsOf, RunnerEngines, summaryOf } from './RunnerEngines';
 import { openRunnerCards } from './RunnerEngines.test-helpers';
 import type { Runner } from './TasksSidePanel';
 
@@ -153,7 +153,8 @@ describe('Cursor CLI on a machine’s card', () => {
     const old = runner(null, { capabilities: ['provider:dsh'] });
     const page = mount([old]);
     expect(page.querySelector('[data-engine="cursor"]')).toBeNull();
-    expect(summaryOf(old)).toBe('All signed in');
+    expect(page.querySelector('.mc-row')?.textContent).not.toContain('Cursor');
+    expect(summaryOf(old)).toBeNull();
   });
 
   it('comes last, after DeepSeek Harness, with the pinned version, the accounts it can run on and Add account', () => {
@@ -206,8 +207,9 @@ describe('Cursor CLI on a machine’s card', () => {
     expect(text(row.querySelector('.re-login-note'))).toBe(
       'This runner predates Cursor CLI. It updates itself when no session is running on it.',
     );
-    // A machine with nothing of Cursor CLI to sign in counts none.
-    expect(summaryOf(old)).toBe('All signed in');
+    // A machine with nothing of Cursor CLI to sign in draws no chip of it.
+    expect(machineChipsOf(old).map((chip) => chip.engine)).not.toContain('cursor');
+    expect(summaryOf(old)).toBeNull();
   });
 
   it('offers to install the pinned build where none is, and to put it back over another build', async () => {
@@ -219,8 +221,8 @@ describe('Cursor CLI on a machine’s card', () => {
     let row = cursorRow(page);
     expect(text(row.querySelector('.re-meta'))).toBe('Not installed — Orbit can install it here');
     expect(tags(row)).toEqual(['Not installed']);
-    // Not signed in on the machine, as any engine it hasn't installed.
-    expect(summaryOf(missing)).toBe('3 of 4 signed in');
+    // Nothing on the head, as any engine it hasn't installed.
+    expect(machineChipsOf(missing).map((chip) => chip.engine)).not.toContain('cursor');
     await act(async () => all(row, 'button').find((b) => labelOf(b) === 'Install')!.click());
     expect(apiMock).toHaveBeenCalledWith(`/runners/${RUNNER_ID}/install`, { method: 'POST', body: { engine: 'cursor' } });
 
@@ -259,8 +261,8 @@ describe('Cursor CLI on a machine’s card', () => {
     const page = mount([mac]);
     const row = cursorRow(page);
     expect(tags(row)).toEqual(['Not supported here']);
-    // Nothing of Cursor CLI to sign in there, so the machine's count leaves it out.
-    expect(summaryOf(mac)).toBe('All signed in');
+    // Nothing of Cursor CLI to sign in there, so the machine's head leaves it out.
+    expect(machineChipsOf(mac).map((chip) => chip.engine)).not.toContain('cursor');
     expect(buttons(row)).toEqual([]);
     expect(text(row.querySelector('.re-login-note'))).toBe(
       `Orbit runs Cursor CLI ${PIN} only on linux/amd64 runners; this runner is darwin/arm64.`,
@@ -275,6 +277,7 @@ describe('Cursor CLI on a machine’s card', () => {
     expect(text(row.querySelector('.re-quota'))).toBe('Sign in to see quota');
     expect(buttons(row)).toEqual(expect.arrayContaining(['Add account', 'Sign in']));
     expect(text(row.querySelector('.re-dup'))).toBe('Sessions on this runner can’t use Cursor CLI until you sign in again.');
-    expect(summaryOf(r)).toBe('3 of 4 signed in');
+    // And the head says so with an amber chip of its own.
+    expect(machineChipsOf(r).find((chip) => chip.engine === 'cursor')).toEqual({ engine: 'cursor', logins: 0, accounts: 0, signedOut: true });
   });
 });

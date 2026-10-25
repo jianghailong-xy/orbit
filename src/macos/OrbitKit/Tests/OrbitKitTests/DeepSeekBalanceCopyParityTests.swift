@@ -14,7 +14,7 @@ import XCTest
 final class DeepSeekBalanceCopyParityTests: XCTestCase {
     private static let component = "src/web/src/components/DeepSeekBalance.tsx"
     private static let lib = "src/web/src/lib/deepseekBalance.ts"
-    private static let keys = "src/web/src/pages/InfrastructurePage.tsx"
+    private static let keys = "src/web/src/components/ProviderKeyCards.tsx"
     private static let editPage = "src/web/src/pages/ProviderConnectPage.tsx"
 
     private struct Missing: Error, CustomStringConvertible {
