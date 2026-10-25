@@ -69,6 +69,11 @@ func (t *Transport) wikiRetire(c *http.Client) {
 func newWikiClient(client *http.Client) *http.Client {
 	c := *client
 	base := c.Transport
+	// The link shadow's tap (link_shadow.go) watches the daemon's own calls: the wiki door's pool is cut
+	// from the transport under it, as it was before the tap.
+	if tap, ok := base.(*linkShadowTap); ok {
+		base = tap.next
+	}
 	if base == nil {
 		base = http.DefaultTransport
 	}

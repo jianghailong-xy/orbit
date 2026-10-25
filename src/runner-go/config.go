@@ -69,6 +69,10 @@ type RunnerConfig struct {
 	// an older config reads as "no" — a background service must not start installing
 	// software on someone's machine unasked.
 	AutoInstallEngines bool `json:"autoInstallEngines,omitempty"`
+	// LinkShadow is whether this runner mirrors the heartbeats and event batches it delivers
+	// over HTTPS to the runner link gateway, during the link's shadow period (link_shadow.go).
+	// Absent reads as on; false turns it off, as ORBIT_LINK_SHADOW=0 does.
+	LinkShadow *bool `json:"linkShadow,omitempty"`
 }
 
 // machineHome is where the runner stores its config + run scratch. One runner per
