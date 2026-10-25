@@ -52,7 +52,76 @@ const drawer = (tree, label) => ({
   boxes: { nav: navRow(label) },
 });
 
+/* 02: Machines & models reached from Settings (mm-set = mm-new + mm/settings-web.py), beside mm-new (renamed only). */
+
+/** The sidebar's fixed rows (Projects, Tasks, Wiki, and Machines & models where it still is), as one box. */
+const topRows = (labels) => async (page) => page.evaluate((labels) => {
+  const rows = labels.map((label) => [...document.querySelectorAll('body *')].find((e) => e.children.length === 0 && e.textContent.trim() === label && e.getBoundingClientRect().left < 340))
+    .filter(Boolean).map((el) => (el.closest('a, button, [role="button"], [role="link"], li') ?? el).getBoundingClientRect());
+  if (rows.length === 0) return null;
+  const x = Math.min(...rows.map((r) => r.left)), y = Math.min(...rows.map((r) => r.top));
+  return { x, y, width: Math.max(...rows.map((r) => r.right)) - x, height: Math.max(...rows.map((r) => r.bottom)) - y };
+}, labels);
+/** The Settings card titled so. */
+const card = (title) => async (page) => page.evaluate((title) => {
+  const h = [...document.querySelectorAll('.orbit-card-title')].find((e) => e.textContent.trim() === title);
+  if (!h) return null;
+  const r = h.closest('.orbit-card').getBoundingClientRect();
+  return { x: r.left, y: r.top, width: r.width, height: r.height };
+}, title);
+/** A row of the open menu. */
+const menuRow = (label) => async (page) => page.evaluate((label) => {
+  const el = [...document.querySelectorAll('.orbit-menu .orbit-menu-label')].find((e) => e.textContent.trim() === label);
+  if (!el) return null;
+  const r = el.closest('[role^="menuitem"]').getBoundingClientRect();
+  return { x: r.left, y: r.top, width: r.width, height: r.height };
+}, label);
+const WORK = ['Projects', 'Tasks', 'Wiki'];
+
+const settingsDesk = (tree, boxes) => ({
+  tree, path: '/settings', routes: infraRoutes(), width: 1280, height: 1020, viewport: true, boxes,
+});
+const accountMenu = (tree, boxes) => ({
+  tree, path: '/settings', routes: infraRoutes(), width: 1280, height: 900,
+  act: async (page) => { await page.locator('button.tp-user-trigger').first().click(); await page.waitForTimeout(700); },
+  mouse: null,
+  clip: async (page) => page.evaluate(() => {
+    const a = document.querySelector('.orbit-menu').getBoundingClientRect();
+    const b = document.querySelector('button.tp-user-trigger').getBoundingClientRect();
+    const x = 0, y = Math.max(0, Math.min(a.top, b.top) - 16);
+    return { x, y, width: Math.max(a.right, b.right) + 16, height: Math.min(innerHeight, Math.max(a.bottom, b.bottom) + 12) - y };
+  }),
+  boxes,
+});
+const pageHead = (tree, boxes) => ({
+  tree, path: '/infrastructure', routes: infraRoutes(), width: 1280, height: 900,
+  clip: async () => ({ x: 0, y: 0, width: 1280, height: 330 }), boxes,
+});
+const phoneSettings = (tree) => ({
+  tree, path: '/settings', routes: infraRoutes(), size: 'phone', height: 844,
+  act: async (page) => {
+    await page.evaluate(() => {
+      const h = [...document.querySelectorAll('.orbit-card-title')].find((e) => e.textContent.trim() === 'Machines & models');
+      h.closest('.orbit-card').scrollIntoView({ block: 'center' });
+    });
+    await page.waitForTimeout(400);
+  },
+  clip: async (page) => page.evaluate(() => {
+    const h = [...document.querySelectorAll('.orbit-card-title')].find((e) => e.textContent.trim() === 'Machines & models');
+    const r = h.closest('.orbit-card').getBoundingClientRect();
+    return { x: 0, y: Math.max(0, r.top - 110), width: 390, height: r.height + 220 };
+  }),
+  boxes: { card: card('Machines & models') },
+});
+
 export const SCENES = {
+  's-settings-B': settingsDesk('mm-new', { nav: navRow('Machines & models') }),
+  's-settings-A': settingsDesk('mm-set', { work: topRows(WORK), card: card('Machines & models') }),
+  's-menu-B': accountMenu('mm-new', { settings: menuRow('Settings') }),
+  's-menu-A': accountMenu('mm-set', { row: menuRow('Machines & models') }),
+  's-head-A': pageHead('mm-set', { back: '.provider-back', work: topRows(WORK) }),
+  's-drawer-A': { ...drawer('mm-set', 'Wiki'), boxes: { work: topRows(WORK) } },
+  's-psettings-A': phoneSettings('mm-set'),
   'drawer-today': drawer('mm-today', 'Infrastructure'),
   'drawer-new': drawer('mm-new', 'Machines & models'),
   'head-today': head('mm-today', 'Infrastructure'),
