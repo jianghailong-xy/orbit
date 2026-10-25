@@ -5,7 +5,7 @@ import { worktreeOperationFenceSql } from '../common/session-inbox-fence';
 import { EVIDENCE_REVIEW_WINDOW_SECONDS } from '../tasks/evidence-review';
 import { EVIDENCE_REVIEW_TURN_KEY_PREFIX } from './watch-turn-key';
 import { freshRunningBgJobs } from './background-job-activity';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
+import { RUNNER_OFFLINE_AFTER_MS, runnerIsOnline, runnerLastBeatSql } from '../runners/runner-presence';
 
 /**
  * A cheap stand-in for "would `SessionsService.list` answer the Open list differently now": the
@@ -74,9 +74,10 @@ export async function readOpenListVersion(
                   THEN json_build_array(s.running_bg_jobs, s.running_bg_job_activity) END AS bg
         FROM session s WHERE s.owner_id = ${o}
     ),
-    -- The runners the list rows can name, whoever owns them.
+    -- The runners the list rows can name, whoever owns them, with the last beat the rows show
+    -- (runners/runner-presence.ts).
     runners AS MATERIALIZED (
-      SELECT r.ctid::text || ':' || r.xmin::text AS v, r.status::text AS status, r.last_heartbeat_at
+      SELECT r.id, r.ctid::text || ':' || r.xmin::text AS v, r.status::text AS status, ${runnerLastBeatSql('r')} AS beat
         FROM runner r
        WHERE r.owner_id = ${o} OR r.id IN (SELECT assigned_runner_id FROM owned WHERE assigned_runner_id IS NOT NULL)
     ),
@@ -116,6 +117,8 @@ export async function readOpenListVersion(
         AND x.assigned_runner_id IN (SELECT assigned_runner_id FROM owned WHERE status = 'PENDING')`)} AS foreign_running,
       ${ownedBy('workspace')} AS workspace,
       (SELECT count(*)::text || '/' || COALESCE(sum(hashtextextended(v, 0)), 0)::text FROM runners) AS runner,
+      -- Those runners' presence rows, which a heartbeat rewrites without touching the runner's own.
+      ${rowsOf('x', Prisma.sql`FROM runner_presence x WHERE x.runner_id IN (SELECT id FROM runners)`)} AS runner_presence,
       -- ANY(ARRAY(…)), not IN: the planner reads the criterion branch above as the whole task table
       -- (a foreign-key estimate that ignores its NULLs) and would scan all of it for a few thousand ids.
       ${rowsOf('x', Prisma.sql`FROM task x WHERE x.id = ANY(ARRAY(SELECT id FROM task_ids))`)} AS task,
@@ -181,14 +184,14 @@ export async function readOpenListVersion(
           AND x.client_turn_id = v.delivery_turn_client_id
         WHERE v.owner_id = ${o}`)} AS review_turn,
       -- The thresholds the list decides on Postgres' clock. Each only flips one way as time passes.
-      (SELECT count(*) FROM runners WHERE status = 'OFFLINE' OR last_heartbeat_at IS NULL
-        OR last_heartbeat_at < now() - (${SESSION_RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond'))::text AS runners_offline_sql,
+      (SELECT count(*) FROM runners WHERE status = 'OFFLINE' OR beat IS NULL
+        OR beat < now() - (${RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond'))::text AS runners_offline_sql,
       (SELECT count(*) FROM owned WHERE fenced)::text AS fenced,
       (SELECT count(*) FROM share_link sl WHERE sl.owner_id = ${o} AND sl.revoked_at IS NULL
         AND (sl.expires_at IS NULL OR sl.expires_at > now()))::text AS share_links_live,
       -- What the thresholds decided on the JS clock are read from; not hashed (the rows are).
       (SELECT json_agg(bg) FROM owned WHERE bg IS NOT NULL) AS bg_jobs,
-      (SELECT json_agg(json_build_array(status, ${ms(Prisma.sql`last_heartbeat_at`)})) FROM runners) AS runner_clock,
+      (SELECT json_agg(json_build_array(status, ${ms(Prisma.sql`beat`)})) FROM runners) AS runner_clock,
       -- The instants at which a JS-clock threshold flips: an evidence-review window closing, a
       -- coordinator's escalation running out (from a delivered wake or a done request; at once
       -- when its session has ended, hence both), a confirmation review falling due.
@@ -214,8 +217,8 @@ export async function readOpenListVersion(
   const freshJobs = ((bg_jobs ?? []) as Array<[string[], unknown]>)
     .reduce((n, [jobs, activity]) => n + freshRunningBgJobs(jobs, activity, nowMs).length, 0);
   const runnersOnline = ((runner_clock ?? []) as Array<[string, number | null]>)
-    .filter(([status, heartbeat]) => status !== 'OFFLINE' && heartbeat != null
-      && heartbeat >= nowMs - SESSION_RUNNER_OFFLINE_AFTER_MS).length;
+    .filter(([status, beat]) => runnerIsOnline({ status, lastHeartbeatAt: beat == null ? null : new Date(beat) }, nowMs))
+    .length;
 
   return createHash('sha256')
     .update(JSON.stringify([rows, deadlinesPassed, freshJobs, runnersOnline]))

@@ -26,6 +26,7 @@ import { automaticAccount, runAccount } from '../providers/plan-usage-accounts';
 import { followsRuntimeCatalog } from '../providers/preset-overlay';
 import { signedOutEngineRefusal } from '../sessions/engine-signin-preflight';
 import { agentProviderSeed } from '../workspaces/workspace-provider';
+import { RUNNER_BEATS } from '../runners/runner-presence';
 import { readExecutableAcceptanceOutcome } from './executable-acceptance-round';
 import {
   MODEL_AT_CAPACITY_ERROR_MARKER,
@@ -73,7 +74,7 @@ export function taskRouteReads(prisma: PrismaService, ownerId: string, now: Date
       where: { id, ownerId },
       select: {
         modelCatalog: true, runtimeDefaultModels: true, planUsage: true,
-        name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true,
+        name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
         accountPauses: true, defaultRemoved: true,
       },
     })),

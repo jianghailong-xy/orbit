@@ -664,6 +664,9 @@ export const NEVER_PUBLIC_ID_FIELDS: ReadonlySet<string> = new Set([
   'claimLeaseOwner',
   'heartbeatLeaseOwner',
   'operationId',
+  // The process that beat, on a runner's presence row (`runner_presence.process_id`, migration 0444):
+  // the heartbeat's lease owner, stored as sent. A process fence like the two above, in no response.
+  'processId',
   // The login session a refresh token and a push registration belong to (migration 0425,
   // docs/push-login-session-design.md). No row of its own and in no request or response: the access
   // JWT carries it, and the push path compares the two columns byte-for-byte.

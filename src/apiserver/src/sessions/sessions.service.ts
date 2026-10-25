@@ -291,7 +291,6 @@ import {
 } from './engine-session';
 import { readLandingView } from '../projects/landing-view';
 import {
-  SESSION_RUNNER_OFFLINE_AFTER_MS,
   deriveSessionCapabilities,
   withSessionCapabilities,
   withSessionState,
@@ -304,10 +303,16 @@ import {
   changedFileCount,
   mergeTargetOf,
   moveTargetRefusal,
-  runnerIsOnline,
   runnerLabel,
   sessionMoveVerdict,
 } from './session-move';
+import {
+  RUNNER_BEATS,
+  runnerIsOnline,
+  runnerLastBeatSql,
+  runnerOfflineSql,
+  withRunnerLastBeat,
+} from '../runners/runner-presence';
 
 /**
  * A turn the control plane queued with no words of anybody's, whose content is written in at delivery:
@@ -1208,7 +1213,7 @@ export class SessionsService {
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
       select: {
-        name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true,
+        name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true, accountNames: true,
         accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true,
       },
     });
@@ -3318,7 +3323,8 @@ export class SessionsService {
         s.assigned_runner_id AS "runnerId",
         r.name  AS "runnerName",
         r.status AS "runnerStatus",
-        r.last_heartbeat_at AS "runnerLastHeartbeatAt",
+        -- Its last beat, from either record of it (runners/runner-presence.ts).
+        ${runnerLastBeatSql('r')} AS "runnerLastHeartbeatAt",
         s.task_id AS "taskId",
         t.title   AS "taskTitle",
         cp.id     AS "projectId",
@@ -3392,11 +3398,7 @@ export class SessionsService {
               -- machine is the least useful thing the UI could tell someone. Same rule
               -- deriveSessionCapabilities resumes on, so one runner cannot read online here and
               -- offline there.
-              WHEN r.id IS NULL
-                   OR r.status = 'OFFLINE'
-                   OR r.last_heartbeat_at IS NULL
-                   OR r.last_heartbeat_at
-                      < now() - (${SESSION_RUNNER_OFFLINE_AFTER_MS} * interval '1 millisecond')
+              WHEN r.id IS NULL OR ${runnerOfflineSql('r')}
                 THEN 'runner_offline'
               WHEN ${runnerActiveTurns(Prisma.sql`s.assigned_runner_id`)} >= r.max_concurrent
                 THEN 'runner_at_capacity'
@@ -3625,7 +3627,7 @@ export class SessionsService {
         workspace: true,
         assignedRunner: {
           select: {
-            id: true, name: true, displayName: true, version: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true,
+            id: true, name: true, displayName: true, version: true, engines: true, status: true, ...RUNNER_BEATS, capabilities: true,
             // What its engines are served with (servedRunner), and served without.
             accountNames: true, accountPauses: true, defaultRemoved: true,
           },
@@ -3785,7 +3787,8 @@ export class SessionsService {
     const landing = session.sessionKind === SESSION_KIND_LANDING
       ? await readLandingView(this.prisma, ownerId, session.id)
       : undefined;
-    const assignedRunner = session.assignedRunner && servedRunner(session.assignedRunner);
+    // As clients have always read it: `lastHeartbeatAt` is its last beat, from either record of it.
+    const assignedRunner = session.assignedRunner && servedRunner(withRunnerLastBeat(session.assignedRunner));
     return withSessionCapabilities({
       ...rest,
       // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
@@ -4664,7 +4667,7 @@ export class SessionsService {
       where: { id, ownerId },
       select: {
         id: true, changedFiles: true,
-        assignedRunner: { select: { status: true, lastHeartbeatAt: true } },
+        assignedRunner: { select: { status: true, ...RUNNER_BEATS } },
       },
     });
     if (!session) throw new NotFoundException('Session not found.');
@@ -8130,7 +8133,7 @@ export class SessionsService {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       include: {
-        assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true } },
+        assignedRunner: { select: { id: true, status: true, ...RUNNER_BEATS } },
       },
     });
     if (!session) throw new NotFoundException('session not found');
@@ -8349,7 +8352,7 @@ export class SessionsService {
       const current = await tx.session.findUniqueOrThrow({
         where: { id },
         include: {
-          assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true, capabilities: true, capabilitiesReportedAt: true, engines: true } },
+          assignedRunner: { select: { id: true, status: true, ...RUNNER_BEATS, capabilities: true, capabilitiesReportedAt: true, engines: true } },
         },
       });
       // Everything was locked in the order project → task → session, but the SESSION was the last
@@ -8691,7 +8694,7 @@ export class SessionsService {
   ): Promise<SessionReceiveBlockedReason | null> {
     const session = await this.prisma.session.findFirst({
       where: { id: sessionId, ownerId },
-      include: { assignedRunner: { select: { id: true, status: true, lastHeartbeatAt: true } } },
+      include: { assignedRunner: { select: { id: true, status: true, ...RUNNER_BEATS } } },
     });
     if (!session) return 'SESSION_GONE';
     const capabilities = deriveSessionCapabilities(session);
@@ -9748,7 +9751,7 @@ export class SessionsService {
         defaultMergeTarget: true,
       },
     },
-    assignedRunner: { select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true } },
+    assignedRunner: { select: { name: true, displayName: true, status: true, ...RUNNER_BEATS, engines: true } },
   } satisfies Prisma.SessionSelect;
 
   /**
@@ -9816,7 +9819,7 @@ export class SessionsService {
         runnerId: true,
         workDir: true,
         runner: {
-          select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, capabilities: true, engines: true },
+          select: { name: true, displayName: true, status: true, ...RUNNER_BEATS, capabilities: true, engines: true },
         },
       },
     });

@@ -63,6 +63,7 @@ import {
   loggedRetry,
   withTransactionRetry,
 } from '../common/transaction-retry';
+import { RUNNER_BEATS } from '../runners/runner-presence';
 
 const SWEEP_INTERVAL_MS = 30_000;
 // How long a session armed by the reaper waits for its runner to come back. Covers the
@@ -366,7 +367,7 @@ export class AutoRetryService implements OnModuleInit, OnModuleDestroy {
         runtimeSessionId: true,
         assignedRunner: {
           select: {
-            planUsage: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true, accountPauses: true,
+            planUsage: true, engines: true, status: true, ...RUNNER_BEATS, capabilities: true, accountPauses: true,
             defaultRemoved: true,
           },
         },

@@ -2479,6 +2479,15 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // triggers/functions, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE runs: both tables start empty, and the trigger records only changes made after it.
       '0443_runner_link_token',
+      // Runner presence (0444, docs/runner-link-design.md §5.7, §6.5): one new UNLOGGED table,
+      // `runner_presence`, keyed by `runner_id` with a foreign key to `runner` that cascades and a CHECK
+      // on `link_state`. Read against every claim above: `runner` is none of the preserved relations,
+      // so no `task`, `session`, `project` or `project_acceptance_*` object is named and the 0177 pair
+      // and every stored task and criterion row are out of its reach. No function, trigger or type is
+      // created, replaced or dropped, so it names none of the six preserved triggers/functions and is
+      // not another writer of the DONE fence. No INSERT, UPDATE or DELETE: the table starts empty and
+      // only heartbeats write it.
+      '0444_runner_presence',
       // The runner link request id a session was claimed under (0445, docs/runner-link-design.md §5.6):
       // one nullable TEXT column, `session.claim_request_id`, added with IF NOT EXISTS and no default,
       // read and written only by the claim (QueueService.trySessionClaim). Read against every claim

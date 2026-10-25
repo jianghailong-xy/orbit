@@ -50,6 +50,7 @@ import {
   type ManagedVolumeSwitchOutcome,
 } from './managed-runner-volume-switch';
 import type { ManagedRunnerVolumeSwitchDto } from './dto';
+import { RUNNER_BEATS } from '../runners/runner-presence';
 
 export const MANAGED_RUNNER_NOT_FOUND = 'MANAGED_RUNNER_NOT_FOUND';
 
@@ -107,7 +108,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     const runner = mapping
       ? await this.prisma.runner.findUnique({
           where: { id: mapping.runnerId },
-          select: { status: true, lastHeartbeatAt: true, engines: true, defaultRemoved: true, capabilities: true },
+          select: { status: true, ...RUNNER_BEATS, engines: true, defaultRemoved: true, capabilities: true },
         })
       : null;
     const available = !!this.runtime?.available;

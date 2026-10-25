@@ -39,6 +39,7 @@ function harness() {
   const row: Row = { id: RUNNER_ID, ownerId: OWNER, status: 'ONLINE', maxConcurrent: 4, minFreeDiskMb: null };
   const writes: Row[] = [];
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       findFirst: async ({ where }: { where: Row }) => (matches(row, where) ? { ...row } : null),
       findUnique: async ({ where }: { where: Row }) => (matches(row, where) ? { ...row } : null),

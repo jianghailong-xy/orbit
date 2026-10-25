@@ -360,9 +360,13 @@ async function storedBlock(ctx) {
 }
 
 async function runnerRow(ctx) {
+  // `age` counts from the runner's last beat as the control plane reads it (runners/runner-presence.ts
+  // runnerLastBeatSql): the later of its presence row, which every heartbeat writes, and the runner row's
+  // own last_heartbeat_at, which a heartbeat rewrites at most every five minutes.
   const { rows } = await ctx.sql.query(
     `SELECT capabilities, heartbeat_lease_owner::text AS "leaseOwner", heartbeat_draining AS "draining",
-            EXTRACT(EPOCH FROM (now() - last_heartbeat_at)) AS "age"
+            EXTRACT(EPOCH FROM (now() - GREATEST(
+              (SELECT p.last_beat_at FROM runner_presence p WHERE p.runner_id = runner.id), last_heartbeat_at))) AS "age"
        FROM runner WHERE id = $1`,
     [ctx.runnerUuid],
   );

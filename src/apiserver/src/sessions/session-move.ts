@@ -11,7 +11,6 @@ import { isSessionGenerating } from '../common/session-generating';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
 import { reportedRunAccount } from '../providers/plan-usage-accounts';
 import { makeBranchName } from './naming';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
 import { branchName } from '../projects/project-criterion-landing';
 
 /** What a runner declares when it can take in a session moved from another workspace: it checks an
@@ -146,19 +145,6 @@ export interface MoveTargetFacts {
 /** A runner as the panel names it. */
 export function runnerLabel(runner: { name: string; displayName: string | null }): string {
   return runner.displayName?.trim() || runner.name;
-}
-
-/** The runners list's rule (RunnersService isRunnerOnline, not imported: that file pulls in the
- *  runner controller): not marked offline, and heard from within the last three heartbeats. */
-export function runnerIsOnline(
-  runner: { status: string; lastHeartbeatAt: Date | null },
-  now: number = Date.now(),
-): boolean {
-  return (
-    runner.status !== 'OFFLINE' &&
-    !!runner.lastHeartbeatAt &&
-    runner.lastHeartbeatAt.getTime() >= now - SESSION_RUNNER_OFFLINE_AFTER_MS
-  );
 }
 
 /**
