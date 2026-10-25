@@ -2,8 +2,9 @@ package main
 
 // Cursor CLI plan usage against Cursor's real dashboard (cursor_usage.go), opt-in: it reads a real account
 // and spends no prompt. ORBIT_TEST_REAL_CURSOR_ACCOUNT names an account directory holding a saved sign-in
-// (xdg-config/cursor/auth.json), as `agent login` leaves it — or as the pinned CLI leaves an API key it traded
-// for a token with AGENT_CLI_CREDENTIAL_STORE=file and XDG_CONFIG_HOME=<dir>/xdg-config (contract §8.2).
+// where this platform's `agent login` leaves it (cursorStoredLoginPath: xdg-config/cursor/auth.json on Linux,
+// home/.cursor/auth.json on macOS) — or where the pinned CLI leaves an API key it traded for a token with
+// AGENT_CLI_CREDENTIAL_STORE=file, XDG_CONFIG_HOME=<dir>/xdg-config and HOME=<dir>/home (contract §8.2, §18.3).
 
 import (
 	"context"

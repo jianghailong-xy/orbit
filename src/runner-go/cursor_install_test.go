@@ -9,6 +9,9 @@ package main
 // CURSOR_CONFIG_DIR, XDG_CONFIG_HOME or HOME puts it, a compile cache, an auth.json when a credential is
 // held in a file store, a debug log unless that is switched off, and under HOME/.cursor its state file
 // and synced skills. So a test reads off the disk which home every process Orbit started was given.
+// Told it runs on macOS (its platform file), it writes where the macOS build does (§18.3, §18.4): a login
+// under HOME whatever XDG_CONFIG_HOME says, the compile cache under HOME/Library/Caches, and a credential
+// whose store was left to its default into the Keychain — which the fake records in keychain.jsonl.
 
 import (
 	"archive/tar"
@@ -81,7 +84,7 @@ func runFakeCursorAgent(dir string) int {
 			_ = f.Close()
 		}
 	}
-	fakeCursorWriteState(args)
+	fakeCursorWriteState(dir, args)
 	switch {
 	case len(args) > 0 && (args[0] == "--version" || args[0] == "-v"):
 		// A build slow to say its version, as one on a loaded machine is.
@@ -105,8 +108,47 @@ func runFakeCursorAgent(dir string) int {
 	return 2
 }
 
+// fakeCursorOnMac is whether the fake whose directory is dir runs as the macOS build: its platform file
+// says darwin (fakeCursorRelease.onMac).
+func fakeCursorOnMac(dir string) bool {
+	platform, _ := os.ReadFile(filepath.Join(dir, "platform"))
+	return strings.TrimSpace(string(platform)) == "darwin"
+}
+
+// fakeCursorSaveCredential keeps a credential the way the pinned build does by AGENT_CLI_CREDENTIAL_STORE
+// (§8.2, §18.3, §18.4): nowhere in memory; in a file — on Linux under XDG_CONFIG_HOME, on macOS always under
+// HOME/.cursor — or, with the store left to its default, in that same file on Linux and in the Keychain on
+// macOS, which the fake records in keychain.jsonl: who saved, never what.
+func fakeCursorSaveCredential(dir string, login []byte) {
+	store := os.Getenv("AGENT_CLI_CREDENTIAL_STORE")
+	if store == "memory" {
+		return
+	}
+	home := os.Getenv("HOME")
+	if fakeCursorOnMac(dir) {
+		if store != "file" {
+			entry, _ := json.Marshal(map[string]interface{}{"pid": os.Getpid(), "args": os.Args[1:], "store": store,
+				"account": "cursor-user", "service": "cursor-access-token"})
+			if f, err := os.OpenFile(filepath.Join(dir, "keychain.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+				_, _ = f.Write(append(entry, '\n'))
+				_ = f.Close()
+			}
+			return
+		}
+		_ = os.MkdirAll(filepath.Join(home, ".cursor"), 0o700)
+		_ = os.WriteFile(filepath.Join(home, ".cursor", "auth.json"), login, 0o600)
+		return
+	}
+	xdg := os.Getenv("XDG_CONFIG_HOME")
+	if xdg == "" {
+		xdg = filepath.Join(home, ".config")
+	}
+	_ = os.MkdirAll(filepath.Join(xdg, "cursor"), 0o700)
+	_ = os.WriteFile(filepath.Join(xdg, "cursor", "auth.json"), login, 0o600)
+}
+
 // fakeCursorWriteState writes what the pinned build writes as it starts.
-func fakeCursorWriteState(args []string) {
+func fakeCursorWriteState(dir string, args []string) {
 	home := os.Getenv("HOME")
 	configDir := os.Getenv("CURSOR_CONFIG_DIR")
 	if configDir == "" {
@@ -133,16 +175,12 @@ func fakeCursorWriteState(args []string) {
 	if cache == "" {
 		cache = filepath.Join(home, ".cache")
 	}
+	if fakeCursorOnMac(dir) {
+		cache = filepath.Join(home, "Library", "Caches")
+	}
 	_ = os.MkdirAll(filepath.Join(cache, "cursor-compile-cache"), 0o700)
-	if os.Getenv("AGENT_CLI_CREDENTIAL_STORE") != "memory" {
-		if credential := firstNonEmpty(os.Getenv("CURSOR_AUTH_TOKEN"), os.Getenv("CURSOR_API_KEY")); credential != "" {
-			xdg := os.Getenv("XDG_CONFIG_HOME")
-			if xdg == "" {
-				xdg = filepath.Join(home, ".config")
-			}
-			_ = os.MkdirAll(filepath.Join(xdg, "cursor"), 0o700)
-			_ = os.WriteFile(filepath.Join(xdg, "cursor", "auth.json"), []byte(`{"accessToken":"`+credential+`"}`), 0o600)
-		}
+	if credential := firstNonEmpty(os.Getenv("CURSOR_AUTH_TOKEN"), os.Getenv("CURSOR_API_KEY")); credential != "" {
+		fakeCursorSaveCredential(dir, []byte(`{"accessToken":"`+credential+`"}`))
 	}
 	if os.Getenv("CURSOR_AGENT_DISABLE_DEBUG_LOG") != "1" {
 		logs := filepath.Join(os.TempDir(), fmt.Sprintf("cursor-agent-logs-%d", os.Getuid()))
@@ -377,6 +415,7 @@ type fakeCursorRelease struct {
 
 	mu       sync.Mutex
 	served   []byte
+	paths    map[string]bool // the download paths the pinned tarball is served at
 	requests []string
 }
 
@@ -396,9 +435,9 @@ func newFakeCursorRelease(t *testing.T) *fakeCursorRelease {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		r.mu.Lock()
 		r.requests = append(r.requests, req.URL.Path)
-		body := r.served
+		body, served := r.served, r.paths[req.URL.Path]
 		r.mu.Unlock()
-		if req.URL.Path != "/"+cursorSupportedVersion+"/linux/x64/agent-cli-package.tar.gz" || body == nil {
+		if !served || body == nil {
 			http.NotFound(w, req)
 			return
 		}
@@ -411,15 +450,55 @@ func newFakeCursorRelease(t *testing.T) *fakeCursorRelease {
 	return r
 }
 
-// pin makes tarball the build this platform's runner checks downloads against.
+// pin makes tarball the build a runner checks downloads against, on every platform Orbit pins a build for
+// and on this one, each at its own download path — so a test that stands another platform in
+// (useCursorPlatform) installs it from where that platform's runner would.
 func (r *fakeCursorRelease) pin(t *testing.T, tarball []byte) {
 	t.Helper()
 	previous := cursorArtifacts
 	digest := sha256.Sum256(tarball)
-	cursorArtifacts = map[string]cursorArtifact{runtime.GOOS + "/" + runtime.GOARCH: {
-		path: "linux/x64", sha256: hex.EncodeToString(digest[:]), size: int64(len(tarball)),
-	}}
+	pinned := map[string]cursorArtifact{}
+	paths := map[string]bool{}
+	platforms := []string{runtime.GOOS + "/" + runtime.GOARCH}
+	for platform := range previous {
+		platforms = append(platforms, platform)
+	}
+	for _, platform := range platforms {
+		path := platform
+		if measured, ok := previous[platform]; ok {
+			path = measured.path
+		}
+		pinned[platform] = cursorArtifact{path: path, sha256: hex.EncodeToString(digest[:]), size: int64(len(tarball))}
+		paths["/"+cursorSupportedVersion+"/"+path+"/agent-cli-package.tar.gz"] = true
+	}
+	r.mu.Lock()
+	r.paths = paths
+	r.mu.Unlock()
+	cursorArtifacts = pinned
 	t.Cleanup(func() { cursorArtifacts = previous })
+}
+
+// onMac has the fake run as the macOS build (fakeCursorOnMac).
+func (r *fakeCursorRelease) onMac(t *testing.T) { r.behave(t, "platform", "darwin") }
+
+// keychainSaves are the credentials the fake, as the macOS build, saved into the Keychain: one per process
+// whose credential store was left to its default.
+func (r *fakeCursorRelease) keychainSaves(t *testing.T) []string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(r.dir, "keychain.jsonl"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saves []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) != "" {
+			saves = append(saves, line)
+		}
+	}
+	return saves
 }
 
 func (r *fakeCursorRelease) serve(body []byte) {
@@ -605,12 +684,12 @@ func cursorInUseMarkers(t *testing.T, versionDir string) []string {
 }
 
 // assertNoCursorStateIn fails when home holds anything a Cursor CLI or its installer writes into the
-// runner user's home: ~/.cursor, ~/.config/cursor, the compile cache, Cursor's own install tree and
-// the links it puts on PATH.
+// runner user's home: ~/.cursor, ~/.config/cursor, the compile cache (macOS keeps it in ~/Library/Caches,
+// §18.3), Cursor's own install tree and the links it puts on PATH.
 func assertNoCursorStateIn(t *testing.T, home string) {
 	t.Helper()
-	for _, rel := range []string{".cursor", ".config/cursor", ".cache/cursor-compile-cache", ".local/share/cursor-agent",
-		".local/bin/agent", ".local/bin/cursor-agent", ".local/bin/cursor"} {
+	for _, rel := range []string{".cursor", ".config/cursor", ".cache/cursor-compile-cache", "Library/Caches/cursor-compile-cache",
+		".local/share/cursor-agent", ".local/bin/agent", ".local/bin/cursor-agent", ".local/bin/cursor"} {
 		if _, err := os.Lstat(filepath.Join(home, rel)); err == nil {
 			t.Errorf("the runner user's ~/%s was written", rel)
 		} else if !os.IsNotExist(err) {

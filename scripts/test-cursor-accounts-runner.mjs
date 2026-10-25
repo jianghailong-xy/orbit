@@ -59,8 +59,8 @@ export const mandatoryGoCases = {
     // Default's directory hashes the same after another account is added, reported, signed in again, run
     // a session on and removed.
     'TestCursorDefaultAccountDirectoryIsUnchanged',
-    // D4: accounts beside Default on Linux only; elsewhere Default alone, and neither capability declared.
-    'TestCursorAccountsAreKeptOnlyOnLinux',
+    // D4: approach A measured on Linux and macOS alike, so both keep accounts beside Default and declare both capabilities; elsewhere Default alone.
+    'TestCursorAccountsAreKeptOnLinuxAndMacOS',
   ],
   'cursor_launch_test.go': [
     // The session's launch: the allowlist, the workspace's variables, the contract's over both, the
