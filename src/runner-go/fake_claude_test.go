@@ -36,6 +36,19 @@ const testOrbitMCPEnv = "ORBIT_TEST_AS_ORBIT_MCP"
 // bounded failure beats a ten-minute test timeout with no output.
 const fakeClaudeTimeout = 10 * time.Second
 
+// fakeClaudeWaitEnv, set to a duration, is how long the scripted CLI waits for its next stdin frame before it gives up,
+// in place of fakeClaudeTimeout: a staging drill whose link is down for longer than that between two turns keeps its
+// engine (/mnt/data/b8-drill).
+const fakeClaudeWaitEnv = "ORBIT_FAKE_CLAUDE_WAIT"
+
+// fakeClaudeWait is how long the scripted CLI waits for a frame.
+func fakeClaudeWait() time.Duration {
+	if d, err := time.ParseDuration(os.Getenv(fakeClaudeWaitEnv)); err == nil && d > 0 {
+		return d
+	}
+	return fakeClaudeTimeout
+}
+
 // TestMain doubles as the fake CLI's entry point. The shim sets fakeClaudeDirEnv, so the
 // dispatch happens before the testing flags are parsed — claude's own argv (`-p`,
 // `--input-format`…) never reaches the test framework. fakeCodexDirEnv does the same for the
@@ -356,7 +369,7 @@ func readFakeStdin(recordPath string, users, ctrlReqs, ctrlResps chan<- map[stri
 }
 
 func awaitFrame(ch <-chan map[string]interface{}, closed <-chan struct{}, match func(map[string]interface{}) bool) (map[string]interface{}, bool) {
-	deadline := time.After(fakeClaudeTimeout)
+	deadline := time.After(fakeClaudeWait())
 	for {
 		select {
 		case msg := <-ch:
@@ -385,7 +398,7 @@ func awaitFrame(ch <-chan map[string]interface{}, closed <-chan struct{}, match 
 // awaitRelease blocks until the test creates path (fakeClaude.Release), stdin closes, or
 // fakeClaudeTimeout passes.
 func awaitRelease(path string, closed <-chan struct{}) bool {
-	deadline := time.After(fakeClaudeTimeout)
+	deadline := time.After(fakeClaudeWait())
 	for {
 		if _, err := os.Stat(path); err == nil {
 			return true
