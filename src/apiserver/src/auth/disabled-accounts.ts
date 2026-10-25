@@ -33,7 +33,8 @@ export const accountDisabled = () =>
   });
 
 /**
- * The accounts an administrator has disabled, as JwtAuthGuard reads them on every request (§5.5):
+ * The accounts an administrator has disabled, as JwtAuthGuard reads them on every request (§5.5), and
+ * the pool gateways for a pool's owner and a pool credential's contributor (PoolGatewayService.forward):
  * held in memory and read again from the database every DISABLED_ACCOUNTS_RELOAD_MS, so a disable
  * reaches every access token and personal access token within half a minute without a query per
  * request. The administrator's own change reads them again at once, so on the server that made it,

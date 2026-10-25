@@ -262,9 +262,13 @@ open it:
 - Nothing limits how many accounts sign up, or what each one stores or runs.
 - To keep someone out, disable their account: **Admin → Users → Disable**. They are signed out everywhere and
   can no longer sign in, with their password or with Google, and their personal access tokens, runners and service
-  tokens are refused, all within 30 seconds. Their Google account cannot sign up again: it stays linked to the
-  disabled account. Nothing they own is deleted. **Enable** lets them back in: they sign in again, and their
-  personal access tokens and runners work as before. You cannot disable your own account or the last
+  tokens are refused, all within 30 seconds. A provider pool they own stops with them: within the same 30 seconds
+  it serves nobody's sessions, on any of its API keys or ChatGPT accounts, including keys other people put in it.
+  An API key or ChatGPT account they put in someone else's pool stops serving that pool, while its other keys and
+  accounts carry on. A session refused this way is told whose account is disabled. Their Google account cannot
+  sign up again: it stays linked to the disabled account. Nothing they own is deleted. **Enable** lets them back
+  in: they sign in again, their personal access tokens and runners work as before, and their pools, keys and
+  ChatGPT accounts serve again. You cannot disable your own account or the last
   administrator. Disable rather than delete: deleting an account still fails while it owns runners, workspaces or
   tasks.
 - **Admin → Users** shows how each account signs in, when it was created and when it last used Orbit (in one of
