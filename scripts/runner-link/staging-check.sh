@@ -140,8 +140,8 @@ kill "$follower" 2>/dev/null || true
 wait "$follower" 2>/dev/null || true
 check_json "$out/3-client.json" 's.drains === 1 && s.reconnectsAfterDrain === 1 && s.connects === 2 &&
   s.drainReconnectAfterMs[0] >= 1000 && s.drainReconnectAfterMs[0] <= 30000 && new Set(s.connectionIds).size === 2'
-grep -q 'msg=draining connections=1' "$out/3-old-gateway.log" || fail "the old gateway did not drain"
-grep -q 'drain reconnect_after_ms=' "$out/3-old-gateway.log" || fail "the old gateway sent no Drain"
+grep -Eq 'msg=draining( [a-z_]+=[^ ]+)* connections=1' "$out/3-old-gateway.log" || fail "the old gateway did not drain"
+grep -q 'dir=out frame="#[0-9]* drain reconnect_after_ms=' "$out/3-old-gateway.log" || fail "the old gateway sent no Drain"
 grep -q 'msg=stopped' "$out/3-old-gateway.log" || fail "the old gateway did not stop cleanly"
 [ "$(metric link_gateway_start_time_seconds)" != "$old_start" ] || fail "the gateway was not replaced"
 heartbeat_seen() { [ "$(metric link_heartbeats_total)" -ge 1 ]; }

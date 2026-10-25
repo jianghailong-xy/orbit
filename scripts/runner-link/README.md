@@ -12,10 +12,12 @@ be taken for a deployment's.
 | `staging-up.sh` | Build from this checkout, start, seed and smoke-check. Run it again to converge: images are rebuilt, changed containers recreated, and the database, secrets, certificates and seeded account kept. `--rotate-cert` gives the link gateway a new certificate in place. `--no-build` reuses the last images. |
 | `staging-down.sh` | Stop and remove the containers and the project's network, keeping the state directory. `--purge` also deletes the state directory and the project's volume. `--rmi` also deletes the images. |
 | `staging-client.sh` | Run the gateway's test client as the seeded probe runner. Arguments go to `link-gateway client`. |
+| `staging-check.sh` | Check the running stack's link gateway end to end, in five steps: refusals and TLS; a mirroring runner with heartbeats and pings; a gateway release that drains the runner, which then reconnects; a certificate rotation under a live connection; and a revocation that closes a live connection. Each step's records go to `<state>/client/check/`. Run it on a quiet stack, in the files TLS mode. Step 5 leaves the probe runner with a new token. |
 | `gen-token-fixtures.mjs` | Regenerate `src/link-gateway/testdata/a3-tokens.json` from the apiserver's token code. |
 
 ```bash
 scripts/runner-link/staging-up.sh
+scripts/runner-link/staging-check.sh
 scripts/runner-link/staging-client.sh -duration 60s
 scripts/runner-link/staging-down.sh
 ```
