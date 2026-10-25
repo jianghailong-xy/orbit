@@ -1,10 +1,11 @@
 package main
 
 // Cursor CLI's half of the account store (account_slot.go): an account IS a directory the runner keeps
-// one Cursor CLI login in (docs/cursor-runtime-contract.md §16.2). `agent login`, run with that
-// directory's xdg-config/ as its XDG_CONFIG_HOME, saves the login as xdg-config/cursor/auth.json (§8.2),
-// and the HOME and CURSOR_CONFIG_DIR it signs in with are the directory's home/ and config/, so a
-// sign-in writes nowhere else. Default is the directory the runner has kept since P3,
+// one Cursor CLI login in (docs/cursor-runtime-contract.md §16.2). `agent login` runs with the directory's
+// home/, config/ and xdg-config/ as its HOME, CURSOR_CONFIG_DIR and XDG_CONFIG_HOME, and its credentials in
+// a file, so a sign-in writes nowhere else. Where in the directory the login lands is the platform's
+// (cursorStoredLoginPath): on Linux under XDG_CONFIG_HOME, xdg-config/cursor/auth.json (§8.2); on macOS
+// always under HOME, home/.cursor/auth.json (§18.3). Default is the directory the runner has kept since P3,
 // <orbit home>/cursor/default; an added account is <orbit home>/cursor-accounts/<id>.
 //
 // No session runs in an account's directory. A session keeps the CLI's state in a directory of its own
@@ -17,9 +18,11 @@ package main
 // Which account a session runs on arrives as ORBIT_CURSOR_ACCOUNT_DIR (cursorAccountDirVar), injected by
 // the control plane as CODEX_HOME is; the runner reads it and no Cursor CLI ever sees it.
 //
-// Accounts beside Default are kept on Linux only, D4's approach A (§8.4): that is where the CLI was
-// measured running on a HOME of its own while its commands get the real one back. A runner on any other
-// platform keeps Default alone (D4's approach D) and declares neither capability, until P0b settles macOS.
+// Accounts beside Default are kept on Linux and macOS, D4's approach A (§8.4, §18.7): that is where the CLI
+// was measured running on a HOME of its own while its commands get the real one back. A runner on any other
+// platform keeps Default alone (D4's approach D) and declares neither capability. Every Cursor CLI process
+// names its credential store, a file for `agent login` and memory for everything else: macOS's default store
+// is the Keychain, shared by every account and stuck behind a dialog under an account's HOME (§18.4).
 
 import (
 	"context"
@@ -28,7 +31,6 @@ import (
 	"io/fs"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"time"
 )
@@ -54,13 +56,9 @@ var cursorAccountKind = accountSlotKind{
 
 func init() { accountSlotKinds = append(accountSlotKinds, cursorAccountKind) }
 
-// cursorAccountsOS is the platform whose rules this runner keeps Cursor CLI accounts by; a test stands
-// another in.
-var cursorAccountsOS = runtime.GOOS
-
-// cursorAccountsSupported is whether this runner keeps Cursor CLI accounts beside Default: on Linux,
-// where approach A of D4 was measured (§8.4).
-func cursorAccountsSupported() bool { return cursorAccountsOS == "linux" }
+// cursorAccountsSupported is whether this runner keeps Cursor CLI accounts beside Default: on Linux and
+// macOS, where approach A of D4 was measured (§8.4, §18.7).
+func cursorAccountsSupported() bool { return cursorOS == "linux" || cursorOS == "darwin" }
 
 // cursorAccountCapabilities is what this runner declares of Cursor CLI accounts: signing them in and
 // removing them, where it keeps them, and nothing elsewhere.
@@ -73,7 +71,7 @@ func cursorAccountCapabilities() []string {
 
 // cursorAccountsUnsupportedMessage is how a runner that keeps Default alone refuses another account.
 func cursorAccountsUnsupportedMessage() string {
-	return "this runner keeps only its Default Cursor CLI account: more accounts work on Linux runners for now"
+	return "this runner keeps only its Default Cursor CLI account: more accounts work on Linux and macOS runners for now"
 }
 
 // cursorSlotLoginStatus asks whether the account at dir is signed in: a login saved there, its token not
@@ -265,8 +263,9 @@ func prepareCursorLoginDir(dir string) error {
 
 // cursorLoginEnv is the environment `agent login` signs the account at dir in with (§8.2, §16.2): the
 // allowlist every Cursor CLI process starts from, the account's own HOME, CURSOR_CONFIG_DIR and
-// XDG_CONFIG_HOME, and the login saved to a file there — the one thing a session borrows from it. No
-// browser: the relay hands the link over instead.
+// XDG_CONFIG_HOME, and the login saved to a file there — the one thing a session borrows from it, found
+// where the platform puts it (cursorStoredLoginPath). The store is named on every platform: left to its
+// default, macOS's would be the Keychain (§18.4, §18.5). No browser: the relay hands the link over instead.
 func cursorLoginEnv(dir string) []string {
 	return cursorOverlay(cursorBaseEnv(), map[string]string{
 		"HOME":                           filepath.Join(dir, "home"),
@@ -280,9 +279,10 @@ func cursorLoginEnv(dir string) []string {
 }
 
 // cursorLoginHintFor is how to sign the account at dir in by hand: the pinned build's own `login`, saving
-// into that account's directory, never the user's ~/.config/cursor.
+// into that account's directory in a file, as cursorLoginEnv does — never the user's ~/.config/cursor or
+// ~/.cursor, nor the Keychain macOS saves into by default (§18.4).
 func cursorLoginHintFor(dir string) string {
-	return "NO_OPEN_BROWSER=1 HOME=" + shellQuote(filepath.Join(dir, "home")) +
+	return "NO_OPEN_BROWSER=1 AGENT_CLI_CREDENTIAL_STORE=file HOME=" + shellQuote(filepath.Join(dir, "home")) +
 		" XDG_CONFIG_HOME=" + shellQuote(filepath.Join(dir, "xdg-config")) +
 		" CURSOR_CONFIG_DIR=" + shellQuote(filepath.Join(dir, "config")) +
 		" " + shellQuote(filepath.Join(cursorVersionDir(), cursorEntryPoint)) + " login"
