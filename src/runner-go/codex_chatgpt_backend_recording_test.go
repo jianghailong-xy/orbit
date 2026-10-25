@@ -541,6 +541,22 @@ func (rec *chatgptRecorder) startup() []chatgptRecordedExchange {
 	return found
 }
 
+// codexRefreshMismatch says how `refresh`, the body codex sent the token endpoint for a 401, differs from
+// the refresh the CLI is known to send, or nil when it does not: client_id, grant_type and refresh_token,
+// as the gateway's own refresh (codex-login-gateway.ts refreshRequestBody) sends them, and from codex 0.164
+// on a refresh_reason beside them, which for a refresh a 401 set off is "unauthorized_recovery". Another
+// reason, or any other field, is a codex whose refresh has changed shape again.
+func codexRefreshMismatch(refresh map[string]interface{}) error {
+	want := map[string]interface{}{"client_id": codexOAuthClientID, "grant_type": "refresh_token", "refresh_token": recordedRefreshToken}
+	if _, named := refresh["refresh_reason"]; named {
+		want["refresh_reason"] = "unauthorized_recovery"
+	}
+	if fmt.Sprint(refresh) != fmt.Sprint(want) {
+		return fmt.Errorf("codex's refresh is %v, want %v", refresh, want)
+	}
+	return nil
+}
+
 func TestRealCodexOnAChatGPTLogin(t *testing.T) {
 	t.Parallel()
 	exe, err := exec.LookPath("codex")
@@ -593,9 +609,9 @@ func TestRealCodexOnAChatGPTLogin(t *testing.T) {
 	if err := json.Unmarshal(sent, &refresh); err != nil {
 		t.Fatalf("codex's refresh is not JSON: %q", sent)
 	}
-	want := map[string]interface{}{"client_id": codexOAuthClientID, "grant_type": "refresh_token", "refresh_token": recordedRefreshToken}
-	if fmt.Sprint(refresh) != fmt.Sprint(want) {
-		t.Fatalf("codex's refresh is %v, want %v", refresh, want)
+	// The three fields 0.161 sent, and from codex 0.164 on refresh_reason "unauthorized_recovery" as well.
+	if err := codexRefreshMismatch(refresh); err != nil {
+		t.Fatal(err)
 	}
 	if got := headerOf(tokens[0].Request.Headers, "content-type"); got != "application/json" {
 		t.Fatalf("codex's refresh is sent as %q", got)
@@ -691,4 +707,36 @@ func TestRealCodexOnAChatGPTLogin(t *testing.T) {
 		t.Fatalf("writing the fixture: %v", err)
 	}
 	t.Logf("recorded %s against a ChatGPT login to %s", fixture.Codex, target)
+}
+
+// The refresh check of TestRealCodexOnAChatGPTLogin on the shapes it has to tell apart, of which the codex
+// on PATH only ever shows it one.
+func TestCodexRefreshShapes(t *testing.T) {
+	const fields = `"client_id":"` + codexOAuthClientID + `","grant_type":"refresh_token","refresh_token":"` + recordedRefreshToken + `"`
+	for _, sample := range []struct {
+		name, body string
+		accepted   bool
+	}{
+		// codex 0.161: the three fields alone.
+		{"accepts-no-reason", `{` + fields + `}`, true},
+		// codex 0.164: the reason a 401 gives, beside them.
+		{"accepts-unauthorized-recovery", `{` + fields + `,"refresh_reason":"unauthorized_recovery"}`, true},
+		// What no codex has sent for a 401: another of its reasons, another field (beside the reason too),
+		// another refresh token, one of the three left out.
+		{"refuses-another-reason", `{` + fields + `,"refresh_reason":"scheduled"}`, false},
+		{"refuses-another-field", `{` + fields + `,"scope":"openid"}`, false},
+		{"refuses-another-field-beside-the-reason", `{` + fields + `,"refresh_reason":"unauthorized_recovery","scope":"openid"}`, false},
+		{"refuses-another-refresh-token", `{"client_id":"` + codexOAuthClientID + `","grant_type":"refresh_token","refresh_token":"rt_OTHER"}`, false},
+		{"refuses-no-client-id", `{"grant_type":"refresh_token","refresh_token":"` + recordedRefreshToken + `"}`, false},
+	} {
+		t.Run(sample.name, func(t *testing.T) {
+			var refresh map[string]interface{}
+			if err := json.Unmarshal([]byte(sample.body), &refresh); err != nil {
+				t.Fatal(err)
+			}
+			if err := codexRefreshMismatch(refresh); (err == nil) != sample.accepted {
+				t.Fatalf("%s: accepted %v, want %v (%v)", sample.body, err == nil, sample.accepted, err)
+			}
+		})
+	}
 }
