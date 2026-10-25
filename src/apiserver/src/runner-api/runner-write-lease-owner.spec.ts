@@ -107,6 +107,7 @@ function harness(options: HarnessOptions = {}) {
   } as never;
   const realtime = {
     publish: () => undefined,
+    publishBatch: () => undefined,
     notifyInbox: () => undefined,
     publishSessionUpdated: () => undefined,
   } as never;

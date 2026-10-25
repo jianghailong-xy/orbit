@@ -118,12 +118,16 @@ function rollingBack(
   };
 }
 
-/** A realtime double that counts, so "published once" is a number and not an impression. */
+/** A realtime double that counts, so "published once" is a number and not an impression. A list argument is written
+ *  as its length, `[2]`. */
 function countingRealtime() {
   const published: string[] = [];
   const realtime = new Proxy(
     {},
-    { get: (_t, name: string) => (...args: unknown[]) => published.push(`${name}(${args.join(',')})`) },
+    {
+      get: (_t, name: string) => (...args: unknown[]) =>
+        published.push(`${name}(${args.map((arg) => (Array.isArray(arg) ? `[${arg.length}]` : arg)).join(',')})`),
+    },
   ) as unknown as RealtimeService;
   return { realtime, published };
 }
@@ -239,9 +243,9 @@ test('a runner event batch that loses two deadlocks persists once and broadcasts
     'and the streaming delta is still filtered out of the durable set',
   );
   // The one thing a retry could double that the database would never notice.
-  assert.equal(
-    published.filter((line) => line.startsWith('publish(')).length,
-    2,
-    'both events reach live subscribers exactly once, after the attempt that committed',
+  assert.deepEqual(
+    published.filter((line) => /^publish(?:Batch)?\(/.test(line)),
+    [`publishBatch(${A},[2])`],
+    'both events reach live subscribers exactly once, in one batch, after the attempt that committed',
   );
 });

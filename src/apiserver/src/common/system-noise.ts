@@ -68,9 +68,16 @@ export const notNoiseSql = Prisma.sql`NOT (
 )`;
 
 /**
+ * The row that holds the seq of an event the runner link refused (runner-api/link-events.ts): stored so the session's
+ * events stay numbered without a hole, and never an event anyone reads.
+ */
+export const TOMBSTONE_EVENT_TYPE = 'tombstone';
+
+/**
  * Event kinds that belong only to a live connection and must never be replayed from `run_event`.
  *
- * Current ingress does not persist these. Keep the read fence anyway: a rolling deployment can
+ * Current ingress does not persist these, except the tombstone, which is stored and never replayed.
+ * Keep the read fence anyway: a rolling deployment can
  * briefly pair a runner that has learned a new live event with an older API that still treats every
  * unknown kind as durable. That happened for `tool_output`: one session accumulated enough stored
  * snapshots that its newest 200-row page contained no durable event, leaving native clients with no
@@ -90,6 +97,7 @@ export const NON_REPLAYABLE_EVENT_TYPES: readonly string[] = [
   RunEventType.BACKGROUND_OUTPUT,
   RunEventType.TASK_PROGRESS,
   RunEventType.RESYNC,
+  TOMBSTONE_EVENT_TYPE,
 ];
 
 /** SQL predicate for a row that may cross a persisted transcript replay/page boundary. */

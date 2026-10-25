@@ -138,8 +138,9 @@ export const AFTER_SEQ_RETRY_AFTER_MS = 250;
  *
  * "Stored through seq" is that the session has an event at or past it. Durable events are stored in
  * the order the runner numbers them, one batch after another, so the first of them at or past `seq`
- * stands for every one before it. A contiguous durable_seq (B5, with tombstones for rejected events)
- * is the stricter reading, and this is the one place that would read it instead.
+ * stands for every one before it. An event the link refused counts too: a tombstone holds its seq
+ * (link-events.ts). A noise ping is stored as nothing, so a call cannot wait for one; over the link a
+ * runner sends none as a durable event.
  */
 export async function assertAfterSeqStored(
   prisma: Pick<PrismaService, '$queryRaw'>,

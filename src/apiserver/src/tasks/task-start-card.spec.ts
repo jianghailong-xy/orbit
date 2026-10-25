@@ -115,6 +115,9 @@ async function ingest(opts: {
     publish: (_sessionId: string, event: { payload: Record<string, unknown> }) => {
       published.push(event.payload);
     },
+    publishBatch: (_sessionId: string, events: Array<{ payload: Record<string, unknown> }>) => {
+      for (const event of events) published.push(event.payload);
+    },
   };
   const controller = new RunnerApiController(
     prisma as never,
