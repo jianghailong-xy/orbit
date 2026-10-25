@@ -24,6 +24,10 @@ import { stripNul } from './strip-nul';
  *
  * A noise ping (common/system-noise.ts) is not refused. It is acknowledged and not stored, as over HTTPS, so
  * durable_seq goes past it.
+ *
+ * A link batch is stored once per seq, with everything derived from it (RunnerApiController.ingestEvents). A batch
+ * sent again, or a copy of it another backend takes at the same time, writes no row twice and is answered as it was
+ * the first time: the same durable_seq, and the same rejected, read back from its tombstones (rejectionOf).
  */
 
 /** Why an event was refused, as EventAck.rejected[].code says it. */
