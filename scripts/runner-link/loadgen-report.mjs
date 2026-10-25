@@ -125,6 +125,31 @@ const host = { cpus: run.hostCpus };
   host.swapInPages = last && first ? last.pswpin - first.pswpin : null;
   host.swapOutPages = last && first ? last.pswpout - first.pswpout : null;
 }
+// The host's memory over the whole run, ramp included: when it started to swap, and with how many runners connected.
+const runFrom = Date.parse(summary.startedAt);
+const connectedAt = (t) => {
+  let n = 0;
+  for (const l of series) if (Date.parse(l.at) <= t + 5000) n = l.connected;
+  return n;
+};
+const memory = [];
+for (let i = 1; i < samples.length; i++) {
+  const a = samples[i - 1];
+  const b = samples[i];
+  const secs = (b.t - a.t) / 1000;
+  if (secs <= 0) continue;
+  memory.push({ t: b.t, elapsedS: round((b.t - runFrom) / 1000, 0), connected: connectedAt(b.t), memAvailMiB: Math.round(b.host.memAvailKb / 1024),
+    swapOutPagesPerS: Math.round((b.host.pswpout - a.host.pswpout) / secs), swapInPagesPerS: Math.round((b.host.pswpin - a.host.pswpin) / secs) });
+}
+// A page is 4 KiB: 256 pages a second is 1 MiB/s, 2,560 is 10 MiB/s.
+const swapOnset = (pages) => {
+  const m = memory.find((x) => x.t >= runFrom && x.swapOutPagesPerS >= pages);
+  return m ? { at: new Date(m.t).toISOString(), elapsedS: m.elapsedS, connected: m.connected, memAvailMiB: m.memAvailMiB, swapOutPagesPerS: m.swapOutPagesPerS } : null;
+};
+host.swapFrom1MiBs = swapOnset(256);
+host.swapFrom10MiBs = swapOnset(2560);
+host.swapOutPeak = memory.reduce((best, m) => (m.swapOutPagesPerS > (best?.swapOutPagesPerS ?? -1) ? m : best), null);
+
 // What else used the host's CPUs, by service and container, from slices.jsonl.
 const others = [];
 {
@@ -382,7 +407,7 @@ const report = {
   run: run.name, sha: run.sha, dirty: run.dirty, verdict, criteria, errorCounts, gatewayErrors, steadyFrom: summary.steadyStartedAt,
   steadyTo: summary.steadyEndedAt, loadgen: { steady, whole: summary.whole, notes: summary.notes, unacknowledgedEvents: summary.unacknowledgedEvents,
     errorSamples: summary.errorSamples, config: summary.config }, components, host, others: others.slice(0, 15), gateway: gw, nginx, logs, db,
-  dbAllocation: allocation, dbPeak10sPct: dbPeakPct, dbPeak60sPct: dbPeak60Pct, backends: run.backends,
+  dbAllocation: allocation, dbPeak10sPct: dbPeakPct, dbPeak60sPct: dbPeak60Pct, backends: run.backends, memory,
 };
 writeFileSync(join(dir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 
@@ -463,6 +488,18 @@ row('load average 1 min (min, mean, max)', `${host.load1.min}, ${host.load1.mean
 row('host CPU pressure (some)', `${host.cpuPressurePct}%`);
 row('memory available, lowest', `${host.memAvailMinMiB} MiB`);
 row('swap in / out (pages)', `${host.swapInPages} / ${host.swapOutPages}`);
+const onset = (o) => (o ? `${o.at} (${o.elapsedS} s into the run), ${o.connected} runners connected, ${o.memAvailMiB} MiB available` : 'never');
+md.push('', `Swapping out at 1 MiB/s or more began: ${onset(host.swapFrom1MiBs)}. At 10 MiB/s or more: ${onset(host.swapFrom10MiBs)}.`);
+if (host.swapOutPeak) {
+  md.push(`Peak swap-out: ${host.swapOutPeak.swapOutPagesPerS} pages/s (${round((host.swapOutPeak.swapOutPagesPerS * 4) / 1024, 0)} MiB/s) at ${host.swapOutPeak.elapsedS} s, ${host.swapOutPeak.connected} runners connected.`);
+}
+md.push('', 'Host memory over the run, every 15 s:', '');
+row('elapsed', 'connected', 'available MiB', 'swap out pages/s', 'swap in pages/s');
+row('---', '---', '---', '---', '---');
+for (let i = 0; i < memory.length; i += 3) {
+  const m = memory[i];
+  row(`${m.elapsedS} s`, m.connected, m.memAvailMiB, m.swapOutPagesPerS, m.swapInPagesPerS);
+}
 md.push('', 'Biggest CPU users on the host over the window (cores):', '');
 for (const o of others.slice(0, 12)) md.push(`- ${o.name}: ${o.meanCores}`);
 md.push('', '## The database (steady window)', '');
