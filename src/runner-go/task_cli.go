@@ -1090,7 +1090,7 @@ func cliTransport() (*Transport, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("no runner config — run `orbit register` first")
 	}
-	return NewTransport(cfg.ServerURL, cfg.RunnerToken), nil
+	return newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI), nil
 }
 
 func newCLIFlagSet(name string) *flag.FlagSet {
