@@ -637,6 +637,10 @@ model Runner {
   minFreeDiskMb     Int?         @map("min_free_disk_mb")
   version           String?
   tokenHash         String       @map("token_hash") // hash of the long-lived runner credential
+  // The runner's own low-frequency record of its heartbeats: written at registration, and by a
+  // heartbeat at most every five minutes (runners/runner-presence.ts RUNNER_DURABLE_BEAT_EVERY_MS).
+  // Every beat lands in `presence`. Never read this column for liveness — runner-presence.ts reads
+  // both and takes the later.
   lastHeartbeatAt   DateTime?    @map("last_heartbeat_at")
   enrolledAt        DateTime     @default(now()) @map("enrolled_at")
   // User-defined display order shared by the sidebar and Runners page. NULL keeps
@@ -850,6 +854,9 @@ model Runner {
   /// codebase authority above: deleting the row would cascade to its workspaces and lose the
   /// mapping's storage record, so compute removal never deletes it.
   managedRunner ManagedRunner?
+  /// When it was last heard from, upserted by every heartbeat (migration 0444). Read it only
+  /// through runners/runner-presence.ts.
+  presence      RunnerPresence?
 
   @@index([ownerId])
   /// The tenancy fence `project_codebase` hangs off: naming BOTH the runner and the owner in one
@@ -857,6 +864,36 @@ model Runner {
   /// The same device `task_id_owner_id_key` already carries for its five child tables.
   @@unique([id, ownerId], map: "runner_id_owner_id_key")
   @@map("runner")
+}
+
+/// A runner's presence: its latest heartbeat, and what carried it (docs/runner-link-design.md §5.7,
+/// §6.5). One row per runner, upserted by every heartbeat — the HTTP heartbeat now, the link
+/// gateway's later — so saying "still here" no longer rewrites the `runner` row.
+///
+/// UNLOGGED (migration 0444): never in the WAL, so a beat is cheap, and EMPTIED by PostgreSQL after a
+/// crash or a failover. Every live runner writes its row again within one heartbeat interval, and
+/// nothing may take an empty table for a dead fleet: readings fall back to `runner.lastHeartbeatAt`
+/// (runners/runner-presence.ts), and the reaper holds off while the evidence is this thin
+/// (realtime/reaper.service.ts).
+model RunnerPresence {
+  runnerId      String   @id @map("runner_id") @db.Uuid
+  runner        Runner   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  /// The process that beat: its lease owner (the heartbeat's `leaseOwner`, one per runner process).
+  /// Null for a runner too old to send one.
+  processId     String?  @map("process_id") @db.Uuid
+  /// The link gateway node holding the runner's connection. Null over HTTP.
+  gatewayId     String?  @map("gateway_id")
+  lastBeatAt    DateTime @map("last_beat_at")
+  /// What carried the beat: 'HTTP' (POST /api/runner/heartbeat) or 'LINK' (the link gateway).
+  linkState     String   @map("link_state")
+  /// The runner's hash of the facts it reports (model catalogue, skills, engine state, repository
+  /// health), against which a link heartbeat can say "unchanged". Null over HTTP, which sends them all.
+  factsHash     String?  @map("facts_hash")
+  /// The hash of what the last full reconciliation compared. Null over HTTP, which reconciles fully
+  /// on every beat.
+  reconcileHash String?  @map("reconcile_hash")
+
+  @@map("runner_presence")
 }
 
 // A long-lived credential for a HEADLESS process on one machine — a launchd/cron bridge that

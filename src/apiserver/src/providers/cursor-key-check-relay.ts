@@ -6,7 +6,7 @@ import {
   type CursorKeyCheckState,
 } from '@orbit/shared';
 import { sanitizeRunnerEngines } from '../common/runner-engines';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from '../sessions/session-state';
+import { runnerIsOnline, runnerLastBeatAt, type RunnerBeats } from '../runners/runner-presence';
 import { keyFingerprint } from './provider-engine-resolution';
 
 /**
@@ -43,11 +43,10 @@ export const CURSOR_KEY_CHECK_WAIT_MS = 25_000;
 /** How many keys one runner is asked to check at once: each is a Cursor CLI process on that machine. */
 export const CURSOR_KEY_CHECKS_PER_RUNNER = 4;
 
-/** What cursorKeyCheckers reads of a runner. */
-export interface CursorKeyCheckerRow {
+/** What cursorKeyCheckers reads of a runner: its liveness as runners/runner-presence.ts reads it, too. */
+export interface CursorKeyCheckerRow extends RunnerBeats {
   id: string;
   status: string;
-  lastHeartbeatAt: Date | null;
   capabilities: string[] | null;
   capabilitiesReportedAt: Date | null;
   engines: unknown;
@@ -63,16 +62,13 @@ export interface CursorKeyCheckerRow {
 export function cursorKeyCheckers<T extends CursorKeyCheckerRow>(runners: readonly T[], now = Date.now()): T[] {
   return runners
     .filter((runner) => {
-      // The runners list's rule (RunnersService isRunnerOnline, not imported: that file pulls in the runner
-      // controller, which reaches this one): not marked offline, and heard from within three heartbeats.
-      const online = runner.status !== 'OFFLINE' && !!runner.lastHeartbeatAt
-        && runner.lastHeartbeatAt.getTime() >= now - SESSION_RUNNER_OFFLINE_AFTER_MS;
-      if (!online) return false;
+      // The runners list's rule: not marked offline, and heard from within three heartbeats.
+      if (!runnerIsOnline(runner, now)) return false;
       if (!runner.capabilitiesReportedAt || !(runner.capabilities ?? []).includes(CURSOR_KEY_CHECK_V1)) return false;
       const cursor = sanitizeRunnerEngines(runner.engines)?.find((engine) => engine.engine === AgentProvider.CURSOR);
       return !!cursor?.installed && !cursor.installationError;
     })
-    .sort((a, b) => (b.lastHeartbeatAt?.getTime() ?? 0) - (a.lastHeartbeatAt?.getTime() ?? 0));
+    .sort((a, b) => (runnerLastBeatAt(b)?.getTime() ?? 0) - (runnerLastBeatAt(a)?.getTime() ?? 0));
 }
 
 interface HeldCheck {

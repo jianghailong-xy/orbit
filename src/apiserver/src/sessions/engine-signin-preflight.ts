@@ -12,7 +12,7 @@ import { isLoginEngine, usedRunnerEngines } from '../common/runner-engines';
 import { accountDir, isAccountEngine } from '@orbit/shared';
 import { ACCOUNT_CHOICE, DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner, type AccountRunner } from '../providers/account';
 import type { WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
+import { runnerIsOnline, type RunnerBeats } from '../runners/runner-presence';
 import { antigravityGoogleLogin } from '../common/antigravity-readiness';
 
 /** Engine names as the user sees them elsewhere in Orbit (matches the web's RunnerSignIn). */
@@ -55,11 +55,10 @@ const CREDENTIAL_ENV_KEYS: Record<LoginEngine, { any: string[] } | { all: string
 
 /** The runner fields this reads — a subset of the Prisma row. Its accounts are judged as Orbit uses them
  *  (AccountRunner): a Default its owner removed from Orbit is never the one judged. */
-export interface EnginePreflightRunner extends AccountRunner {
+export interface EnginePreflightRunner extends AccountRunner, RunnerBeats {
   name?: string | null;
   displayName?: string | null;
   status: string;
-  lastHeartbeatAt: Date | null;
   /** Heartbeat-reported per-engine health, stored as sent (RunnerEngineHealth[]). */
   engines: unknown;
   /** The names its accounts were given in Orbit (Runner.accountNames), which a refusal names them by. */
@@ -224,12 +223,7 @@ export function signedOutEngineRefusal(args: {
   if (bringsOwnEnvCredential(runtime, args.workspaceEnv)) return null;
 
   const now = new Date(args.nowMs ?? Date.now());
-  const heartbeatMs = args.runner.lastHeartbeatAt?.getTime() ?? NaN;
-  const online =
-    args.runner.status !== 'OFFLINE' &&
-    Number.isFinite(heartbeatMs) &&
-    heartbeatMs >= now.getTime() - SESSION_RUNNER_OFFLINE_AFTER_MS;
-  if (!online) return null;
+  if (!runnerIsOnline(args.runner, now.getTime())) return null;
 
   // Named as Infrastructure names them: with what each account was called in Orbit, and as Orbit uses
   // them — without a Default its owner removed from Orbit.

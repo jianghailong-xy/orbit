@@ -57,6 +57,7 @@ import {
   errorPayloadOf,
   isUserScopedType,
 } from './control-events';
+import { RUNNER_BEATS } from '../runners/runner-presence';
 
 const EVENT_CHANNEL = 'orbit_event';
 const INBOX_CHANNEL = 'orbit_inbox';
@@ -975,7 +976,7 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
         runtimeSessionId: true,
         assignedRunnerId: true,
         assignedRunner: {
-          select: { id: true, status: true, lastHeartbeatAt: true },
+          select: { id: true, status: true, ...RUNNER_BEATS },
         },
         workspaceId: true,
         folderId: true,

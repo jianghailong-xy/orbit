@@ -13,9 +13,10 @@ import {
   deriveSessionRunState,
   deriveSessionState,
 } from '@orbit/shared';
+import { RUNNER_OFFLINE_AFTER_MS, runnerIsOnline, type RunnerBeats } from '../runners/runner-presence';
 
 /** Runners heartbeat every 30s; three missed heartbeats makes resume unavailable. */
-export const SESSION_RUNNER_OFFLINE_AFTER_MS = 90_000;
+export const SESSION_RUNNER_OFFLINE_AFTER_MS = RUNNER_OFFLINE_AFTER_MS;
 
 /** The raw fields required to augment a Prisma/API session row. */
 export interface RawSessionStateFields {
@@ -39,12 +40,13 @@ export interface SessionCapabilityFields extends RawSessionStateFields {
   numTurns: number;
   runtimeSessionId: string | null;
   assignedRunnerId?: string | null;
+  /** Its liveness as runners/runner-presence.ts reads it: a row read with RUNNER_BEATS, or a list
+   *  row whose `lastHeartbeatAt` already carries the reading. */
   assignedRunner:
-    | {
+    | ({
         id?: string;
         status: string;
-        lastHeartbeatAt: Date | string | null;
-      }
+      } & RunnerBeats)
     | null;
 }
 
@@ -74,16 +76,8 @@ export function deriveSessionCapabilities(
     resumeBlockedReason = 'MISSING_CONTEXT';
   } else if (!(session.assignedRunnerId ?? session.assignedRunner?.id)) {
     resumeBlockedReason = 'NO_RUNNER';
-  } else {
-    const heartbeat = session.assignedRunner?.lastHeartbeatAt;
-    const heartbeatMs =
-      heartbeat instanceof Date ? heartbeat.getTime() : heartbeat ? Date.parse(heartbeat) : NaN;
-    const runnerOnline =
-      session.assignedRunner != null &&
-      session.assignedRunner.status !== 'OFFLINE' &&
-      Number.isFinite(heartbeatMs) &&
-      heartbeatMs >= nowMs - SESSION_RUNNER_OFFLINE_AFTER_MS;
-    if (!runnerOnline) resumeBlockedReason = 'RUNNER_OFFLINE';
+  } else if (!runnerIsOnline(session.assignedRunner, nowMs)) {
+    resumeBlockedReason = 'RUNNER_OFFLINE';
   }
 
   const canResume = resumeBlockedReason == null;
