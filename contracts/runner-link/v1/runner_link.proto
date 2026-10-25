@@ -1,0 +1,614 @@
+// Runner link protocol, major version 1: the one WebSocket each runner keeps to its cell's link
+// gateway, in place of the daemon's HTTP long polls (docs/runner-link-design.md §5).
+//
+// Every WebSocket binary message carries one Frame. Rules for changing this file:
+//   - CI runs `buf lint` and `buf breaking` against main (contracts/runner-link/buf.yaml).
+//   - Fields are only ever added. A number is never reused: a removed field's number and name go
+//     under `reserved`.
+//   - A receiver ignores fields and frame bodies it does not know, so adding them is safe. A change
+//     an older peer cannot ignore needs a new major version, negotiated in Hello (§5.11).
+//   - Event payloads travel as JSON bytes (payload_json, D12); everything else is typed.
+//   - The generated code (src/runner-go/linkpb, src/shared/src/runner-link) is committed and never
+//     edited by hand; contracts/runner-link/buf.gen.yaml says how to regenerate it.
+//
+// Units: times are Unix milliseconds (`*_unix_ms`), durations are milliseconds (`*_ms`).
+syntax = "proto3";
+
+package orbit.runnerlink.v1;
+
+// One WebSocket binary message (§5.1). The first frame on a connection is the runner's Hello and
+// the gateway's first is Welcome (or Close); after that frames flow both ways in any order. A frame
+// the receiver cannot decode is a protocol error; a frame whose body the receiver does not know, a
+// newer peer's addition, is ignored.
+message Frame {
+  // Names the frame in logs and in `orbit link dump`: unique within one direction of one
+  // connection and increasing in the order the sender created its frames, starting at 1. It carries
+  // no delivery semantics: resends, acknowledgements and idempotency use the identifiers inside the
+  // body (request_id, seq). A Chunk names the frame it is a piece of by this id.
+  uint64 id = 1;
+
+  // What the frame carries. Each peer writes control frames (Close, TokenRefresh, Redirect, Drain,
+  // Heartbeat, HeartbeatAck, EventAck, Credit) ahead of hints and RPC traffic, and those ahead of
+  // live stream batches (§5.1).
+  oneof body {
+    // Runner to gateway, the first frame: who is connecting and where it left off.
+    Hello hello = 2;
+    // Gateway to runner, the answer to Hello: the terms of the connection.
+    Welcome welcome = 3;
+    // Gateway to runner: a fresh link token.
+    TokenRefresh token_refresh = 4;
+    // Gateway to runner: connect to another cell instead.
+    Redirect redirect = 5;
+    // Gateway to runner: reconnect after a delay, because this connection is being shut down.
+    Drain drain = 6;
+    // Gateway to runner: the connection is closing, and why.
+    Close close = 7;
+    // Gateway to runner: something is waiting for the runner.
+    Hint hint = 8;
+    // Runner to gateway: a control request.
+    Rpc rpc = 9;
+    // Gateway to runner: the outcome of an Rpc.
+    RpcResult rpc_result = 10;
+    // Runner to gateway: the periodic report.
+    Heartbeat heartbeat = 11;
+    // Gateway to runner: the answer to a Heartbeat.
+    HeartbeatAck heartbeat_ack = 12;
+    // Runner to gateway: durable events of one session.
+    EventBatch event_batch = 13;
+    // Gateway to runner: how far one session's durable events are stored.
+    EventAck event_ack = 14;
+    // Gateway to runner: how many durable events may be in flight.
+    Credit credit = 15;
+    // Runner to gateway: live stream events of one session.
+    LiveBatch live_batch = 16;
+    // Gateway to runner: a request for what a session's current turn has streamed so far.
+    TurnPrefixRequest turn_prefix_request = 17;
+    // Runner to gateway: the answer to a TurnPrefixRequest.
+    TurnPrefixResponse turn_prefix_response = 18;
+    // Either way: a piece of a frame too large to send whole.
+    Chunk chunk = 19;
+  }
+}
+
+// A piece of a frame too large for one WebSocket message (§5.1: a message carries at most
+// Limits.max_frame_bytes). The sender encodes the whole Frame, cuts the bytes into pieces and sends
+// each piece in a Frame of its own, in order, at the priority of the frame being cut up; other frames
+// may be written between the pieces. The receiver joins the pieces of one frame_id in index order
+// and decodes the result as the original Frame. Pieces left incomplete when the connection closes
+// are discarded.
+message Chunk {
+  // The id of the frame these pieces make up (that Frame's id).
+  uint64 frame_id = 1;
+  // This piece's position among the pieces of frame_id, starting at 0.
+  uint32 index = 2;
+  // True on the last piece of frame_id: the frame is complete once it has arrived.
+  bool last = 3;
+  // This piece of the encoded frame.
+  bytes data = 4;
+}
+
+// The runner's first frame on a connection: who is connecting and where it left off (§5.4). The
+// connection itself was authorized by the link token in the upgrade request's Authorization header.
+// The gateway answers with Welcome, or with Close when it will not serve the runner.
+message Hello {
+  // This process's identity, today's leaseOwner: one per process, new after every exec. Leases
+  // belong to it rather than to the connection, so a reconnect under the same identity keeps every
+  // lease the process holds (D10). Equal to the leaseOwner claim of the link token.
+  string process_id = 1;
+  // The runner binary's version, as today's X-Orbit-CLI-Version header carries it.
+  string runner_version = 2;
+  // The operating system the binary was built for (Go's runtime.GOOS), as today's
+  // X-Orbit-Runner-Os header carries it.
+  string os = 3;
+  // The oldest link protocol major version this runner speaks. A v1 runner sends 1.
+  uint32 min_protocol_version = 4;
+  // The newest link protocol major version this runner speaks. The gateway picks one from
+  // [min_protocol_version, max_protocol_version] for Welcome.protocol_version, or closes with
+  // CLOSE_CODE_UPGRADE_REQUIRED when it speaks none of them.
+  uint32 max_protocol_version = 5;
+  // Every capability token this binary declares, as today's X-Orbit-Runner-Capabilities header
+  // carries them. The server decides what it may send the runner by them (§5.11), and the gateway
+  // adds them to every request it forwards (§6.4).
+  repeated string capabilities = 6;
+  // The engines this runner can run sessions for when it connects, as today's
+  // X-Orbit-Supported-Providers header carries them. Heartbeat.supported_providers carries later
+  // changes.
+  repeated string supported_providers = 7;
+  // The runner write contract this binary implements (contracts/runner-write-protocol.json), as
+  // today's write-protocol request headers carry it.
+  WriteContract write_contract = 8;
+  // The managed instance this runner's credential was issued to. Set only by a managed instance.
+  ManagedInstance managed_instance = 9;
+  // Where each session this process supervises stands, so the gateway can resume them (§5.4).
+  repeated SessionResume sessions = 10;
+}
+
+// The runner write contract a binary implements (contracts/runner-write-protocol.json). The server
+// refuses runner writes made under a contract it does not support, as it does over HTTPS today.
+message WriteContract {
+  // The contract's capability revision, today's X-Orbit-Runner-Capability-Revision header.
+  uint32 capability_revision = 1;
+  // The contract's schema revision, today's X-Orbit-Runner-Schema-Revision header.
+  uint32 schema_revision = 2;
+  // The contract's digest, today's X-Orbit-Runner-Contract-Digest header.
+  string contract_digest = 3;
+}
+
+// The managed instance a managed runner's credential was issued to: the server accepts that
+// credential only from this instance, as it does over HTTPS today.
+message ManagedInstance {
+  // The instance's generation, today's X-Orbit-Managed-Runner-Generation header.
+  string generation = 1;
+  // The instance's pod UID, today's X-Orbit-Managed-Runner-Pod-Uid header.
+  string pod_uid = 2;
+}
+
+// Where one session supervised by the connecting process stands, as the runner sees it.
+message SessionResume {
+  // The session.
+  string session_id = 1;
+  // The highest durable event seq this process has assigned in the session, whether sent or still
+  // buffered; 0 when it has assigned none.
+  uint64 last_seq = 2;
+  // The turn this process is executing in the session right now; empty when none is running.
+  string turn_id = 3;
+}
+
+// The gateway's answer to Hello: the terms of the connection and where each session stands (§5.3).
+// The runner sends its first Heartbeat as soon as it has read Welcome.
+message Welcome {
+  // The link protocol major version this connection speaks, from Hello's range.
+  uint32 protocol_version = 1;
+  // Which transport carries the runner's daemon work (D15).
+  Mode mode = 2;
+  // How often the runner sends Heartbeat, in milliseconds.
+  uint32 heartbeat_interval_ms = 3;
+  // The limits this connection runs under.
+  Limits limits = 4;
+  // The event credit the connection starts with; each Credit frame replaces it.
+  Credit credit = 5;
+  // One entry for each session in Hello.sessions: how far its events are stored and whether the
+  // connecting process still holds it.
+  repeated SessionState sessions = 6;
+  // Work waiting for the runner as the connection opens (§5.3).
+  HintState hints = 7;
+  // The runner release the control plane assigns this runner (§7); unset when it assigns none.
+  AssignedRelease release = 8;
+  // Names this connection in gateway logs. The runner logs it too, so the two sides' logs can be
+  // matched.
+  string connection_id = 9;
+}
+
+// Which transport carries a runner's daemon work: claiming sessions, fetching messages, heartbeats,
+// events and result reports (D15). The server's RUNNER_LINK_REQUIRED switch decides it.
+enum Mode {
+  // Not stated: the runner keeps the transport it is using.
+  MODE_UNSPECIFIED = 0;
+  // The runner works over HTTPS, as before the cutover. Anything it still sends over this
+  // connection (the shadow period's mirrored heartbeats and events, §11.2) is only decoded and
+  // compared, never stored or acted on.
+  MODE_HTTP = 1;
+  // The runner works over this connection.
+  MODE_LINK = 2;
+}
+
+// The limits a connection runs under.
+message Limits {
+  // The largest encoded Frame one WebSocket message may carry, in bytes (256 KiB in v1, §5.1). A
+  // larger frame is sent in Chunks.
+  uint32 max_frame_bytes = 1;
+}
+
+// Where one session stands on the server, as Welcome tells the process that connected.
+message SessionState {
+  // The session.
+  string session_id = 1;
+  // The highest seq up to which the session's events are all stored, rejected ones included as
+  // tombstones (§5.8). The runner resends what it holds after it, and numbers new events from the
+  // larger of this and its own last seq, plus one.
+  uint64 durable_seq = 2;
+  // Whether the connecting process still holds the session's lease. False when the session has
+  // ended or another process took it over; the process then stops working on it, as it does today
+  // when it learns its lease is lost.
+  bool lease_held = 3;
+}
+
+// The runner release the control plane assigns a runner (§7). The binary still comes from /dl and
+// is checked against its published digest, as today.
+message AssignedRelease {
+  // The release version, as /dl/version.json names it.
+  string version = 1;
+  // True when the control plane moved its release pointer back to this version: the runner installs
+  // it even though it is older than its own, as today's release check does for a rollback.
+  bool rollback = 2;
+}
+
+// A fresh link token for this runner (§5.4: tokens are renewed inside the connection). The gateway
+// sends it before the current token expires; a connection whose token expires without a
+// replacement is closed with CLOSE_CODE_UNAUTHENTICATED. The runner opens its next connection with
+// the newest token it holds.
+message TokenRefresh {
+  // The new link token: an Ed25519 compact JWS (aud orbit-runner-link) for the same runner, cell
+  // and process as the token it replaces.
+  string token = 1;
+  // When the new token expires (its exp claim), in Unix milliseconds, so the runner need not decode
+  // the token to know.
+  int64 expires_at_unix_ms = 2;
+}
+
+// Connect to another cell instead (§5.3; the first server version never sends it). The runner
+// closes this connection and dials url.
+message Redirect {
+  // The link URL to dial (wss://...).
+  string url = 1;
+  // A link token for that cell, whose linkUrl claim is url. Empty when the runner is to fetch one
+  // over HTTPS (POST /api/runner/link-token) before dialing.
+  string token = 2;
+}
+
+// This connection is being shut down gracefully: a gateway release or scale-in (§6.1). The
+// connection keeps working until the runner has opened its next one; nothing is lost, since every
+// unacknowledged event and unanswered request is sent again on the new connection.
+message Drain {
+  // How long the runner waits before opening its next connection, in milliseconds. The gateway
+  // draws it at random for each connection, so the runners of a draining node do not all return at
+  // once.
+  uint32 reconnect_after_ms = 1;
+}
+
+// The gateway is closing the connection, and why (§5.3). The WebSocket close follows. A runner
+// reconnects with exponential backoff and full jitter, from 1 s to 60 s (§7), and never sooner than
+// retry_after_ms.
+message Close {
+  // Why the connection is closing.
+  CloseCode code = 1;
+  // Detail for logs, in English; never parsed.
+  string message = 2;
+  // The earliest the runner may reconnect, in milliseconds from now; 0 leaves it to the backoff.
+  uint32 retry_after_ms = 3;
+}
+
+// Why the gateway closed a connection.
+enum CloseCode {
+  // No reason given; the runner reconnects with backoff.
+  CLOSE_CODE_UNSPECIFIED = 0;
+  // A newer connection of the same process now receives its traffic (§5.4: the newest connection
+  // of a process wins). The runner lets this one go without reconnecting it.
+  CLOSE_CODE_SUPERSEDED = 1;
+  // The link token is missing, invalid, expired or revoked. The runner fetches a new one over
+  // HTTPS before it reconnects.
+  CLOSE_CODE_UNAUTHENTICATED = 2;
+  // The gateway speaks no protocol version in Hello's range. The runner updates itself before it
+  // reconnects.
+  CLOSE_CODE_UPGRADE_REQUIRED = 3;
+  // The runner sent something this protocol does not allow: a frame that does not decode, a first
+  // frame other than Hello, a frame over Limits.max_frame_bytes.
+  CLOSE_CODE_PROTOCOL_ERROR = 4;
+  // The runner already holds as many connections as one runner may (§6.1).
+  CLOSE_CODE_TOO_MANY_CONNECTIONS = 5;
+  // The gateway is refusing new connections for now (handshake rate limits, §6.1); retry_after_ms
+  // says when to come back.
+  CLOSE_CODE_RATE_LIMITED = 6;
+  // The runner read too slowly: the gateway's queue of control frames for it filled up (§6.1).
+  CLOSE_CODE_SLOW_CONSUMER = 7;
+  // The gateway failed; the runner reconnects with backoff.
+  CLOSE_CODE_INTERNAL_ERROR = 8;
+}
+
+// Something is waiting for the runner (§5.5). Hints are sent at most once, and only after the
+// database commit they announce. A lost hint costs at most one heartbeat interval: every
+// HeartbeatAck carries the same news whole (HintState), and what a CommandsHint announces comes
+// with the reconcile of the next heartbeat anyway.
+message Hint {
+  // What is waiting.
+  oneof kind {
+    // A message is waiting in a session's inbox: fetch it now.
+    InboxHint inbox = 1;
+    // A session is queued for this runner: claim it now.
+    ClaimHint claim = 2;
+    // Something a heartbeat delivers is waiting: send a Heartbeat now (today's /runner/wake).
+    CommandsHint commands = 3;
+    // An approval the runner is waiting on has a decision: fetch it now.
+    ApprovalHint approval = 4;
+    // How many clients watch a session live changed.
+    WatchersHint watchers = 5;
+  }
+}
+
+// A message is waiting in a session's inbox. The runner fetches the inbox at once, without waiting
+// for one to arrive.
+message InboxHint {
+  // The session whose inbox has a message.
+  string session_id = 1;
+}
+
+// A session is queued for this runner. The runner claims at once, if it has room.
+message ClaimHint {}
+
+// Something a heartbeat delivers is waiting for this runner: a command, a cancellation, a lease
+// change. The runner sends a Heartbeat at once, and the HeartbeatAck carries it (§5.7).
+message CommandsHint {}
+
+// An approval the runner is waiting on has a decision. The runner fetches the decision at once.
+message ApprovalHint {
+  // The session the approval belongs to.
+  string session_id = 1;
+  // The approval that was decided.
+  string approval_id = 2;
+}
+
+// How many clients watch a session live. With none, the runner stops sending the session's live
+// stream (LiveBatch), and with one or more it sends it (§5.9).
+message WatchersHint {
+  // The session watched.
+  string session_id = 1;
+  // How many clients watch it live now.
+  uint32 watchers = 2;
+}
+
+// Everything Hint frames announce that holds right now, sent whole: in Welcome, and in every
+// HeartbeatAck, where it makes good any hint that was lost (§5.5).
+message HintState {
+  // Sessions of this runner with a message waiting in their inbox.
+  repeated string inbox_session_ids = 1;
+  // Whether a session is queued for this runner to claim.
+  bool claim = 2;
+  // Approvals this runner is waiting on that have a decision.
+  repeated ApprovalHint approvals = 3;
+  // Sessions of this runner that clients watch live, with how many watch each. A session that is
+  // not listed has no watchers.
+  repeated WatchersHint watchers = 4;
+}
+
+// A control request from the runner (§5.6): claiming a session, fetching an inbox, reporting a turn
+// or a result. The gateway answers each with exactly one RpcResult carrying the same request_id.
+// Requests never wait for work to appear; hints say when to ask.
+message Rpc {
+  // Identifies the request across resends: the runner reuses it whenever it sends the same request
+  // again, after a reconnect or a retryable failure, and the server answers a repeat with the
+  // outcome of the first. Unique per runner; the runner generates it.
+  string request_id = 1;
+  // The session whose events after_seq refers to; empty when the request does not depend on them.
+  string session_id = 2;
+  // The server handles the request only once session_id's events are stored through this seq
+  // (§5.6): a turn completion, for instance, waits for its delivery receipt. 0 waits for nothing.
+  uint64 after_seq = 3;
+  // The request itself.
+  oneof body {
+    // A request forwarded as it is to the internal runner route it names (D13).
+    TunnelRequest tunnel = 4;
+  }
+}
+
+// An HTTP request the gateway forwards unchanged to the internal runner route it names (D13): the
+// long tail of result reports keeps its routes and their JSON contracts, and moves to typed messages
+// one by one later. The gateway adds the runner's identity and the headers Hello declared.
+message TunnelRequest {
+  // The HTTP method, in upper case: GET, POST, PUT, PATCH or DELETE.
+  string method = 1;
+  // The path of the runner route with its query string, as the runner requests it under /api over
+  // HTTPS today, for example /runner/sessions/<id>/merge-result.
+  string path = 2;
+  // The JSON request body; empty for a request without one.
+  bytes json_body = 3;
+}
+
+// The outcome of an Rpc.
+message RpcResult {
+  // The request_id of the Rpc this answers.
+  string request_id = 1;
+  // How the request ended.
+  oneof outcome {
+    // The route answered: its response, whatever the status.
+    TunnelResponse tunnel = 2;
+    // No answer could be relayed.
+    Failure failure = 3;
+  }
+}
+
+// What the internal route answered to a TunnelRequest, whatever the status. The runner reads it
+// exactly as it reads the HTTPS response today: 2xx bodies as results, refusals by their status and
+// JSON body.
+message TunnelResponse {
+  // The HTTP status the route answered with.
+  uint32 status = 1;
+  // The JSON response body; empty for a response without one.
+  bytes json_body = 2;
+  // The route's Retry-After, in milliseconds; 0 when it sent none.
+  uint32 retry_after_ms = 3;
+}
+
+// Why something was not carried out, or its outcome is unknown, and whether trying again may help
+// (§5.6: errors carry code, retryable and retry_after). An Rpc fails this way when no route answer
+// can be relayed: the gateway reached no backend, the backend call timed out or was cut off, or the
+// request was malformed. An EventBatch fails this way when its events could not be stored.
+message Failure {
+  // A stable machine-readable code, in upper snake case.
+  string code = 1;
+  // Detail for logs, in English; never parsed.
+  string message = 2;
+  // Whether sending the same thing again (an Rpc under the same request_id, events from
+  // durable_seq + 1) may succeed. A database that is failing over or out of resources is retryable
+  // rather than a hard failure (§5.6).
+  bool retryable = 3;
+  // How long to wait before trying again, in milliseconds; 0 leaves it to the runner's backoff.
+  uint32 retry_after_ms = 4;
+}
+
+// The runner's periodic report (§5.7), every Welcome.heartbeat_interval_ms and at once on a
+// CommandsHint. Each one is complete: the server reconciles against it level-triggered, so a lost
+// beat is made good by the next, and only several missed in a row mean the runner is gone.
+message Heartbeat {
+  // This process's identity, Hello.process_id.
+  string process_id = 1;
+  // Whether the process is draining: it keeps beating so the reaper spares its sessions, but it
+  // takes no new sessions and no heartbeat-delivered git work, as today's draining heartbeat says.
+  bool draining = 2;
+  // How many more sessions the process can take now, today's idleCapacity.
+  uint32 idle_capacity = 3;
+  // Every session this process supervises, today's supervisedSessionIds: what the server reconciles
+  // leases and cancellations against.
+  repeated string session_ids = 4;
+  // The engines this runner can run sessions for now, as today's X-Orbit-Supported-Providers header
+  // carries them; it replaces the list from Hello or the previous Heartbeat.
+  repeated string supported_providers = 5;
+  // The rest of today's heartbeat body, part by part, each identified by its digest (§5.7).
+  repeated Fact facts = 6;
+}
+
+// One part of what a runner reports about itself on every beat, such as its model catalog (§5.7:
+// fact hashes). The digest travels on every beat and the content only when needed, so a server
+// that already holds the content does not receive it again.
+message Fact {
+  // Which part: the name of the field it fills in today's heartbeat body (HeartbeatRequest in
+  // src/runner-go/types.go), such as "modelCatalog", "skills", "engines" or "repos".
+  string kind = 1;
+  // The lowercase hex SHA-256 of the part's JSON encoding.
+  string sha256 = 2;
+  // The part, JSON-encoded exactly as that heartbeat field is today. Sent when the previous
+  // HeartbeatAck named the kind in want_facts, and whenever the runner chooses to, for instance
+  // because the part changed since its previous beat; empty otherwise.
+  bytes json = 3;
+}
+
+// The server's answer to a Heartbeat (§5.7).
+message HeartbeatAck {
+  // Which transport carries the runner's daemon work from now on (D15). A runner told MODE_HTTP
+  // returns to HTTPS.
+  Mode mode = 1;
+  // The outcome of a full reconcile: the body POST /runner/heartbeat answers with today
+  // (HeartbeatResponse in src/runner-go/types.go), JSON-encoded. The runner applies it as it applies
+  // that response today, so every command keeps its contract: delivered at least once, deduplicated
+  // by the runner. Empty when this beat ran no full reconcile, and then the runner applies nothing:
+  // an empty value is not an empty response.
+  bytes reconcile_json = 2;
+  // Fact kinds whose digest the server does not recognize. The runner sends these parts in full in
+  // its next Heartbeat, which it sends at once.
+  repeated string want_facts = 3;
+  // Everything Hint frames announce that holds right now (§5.5).
+  HintState hints = 4;
+  // The runner release the control plane assigns this runner (§7); unset when it assigns none.
+  AssignedRelease release = 5;
+}
+
+// Durable events of one session (§5.8). Delivered at least once and stored once per seq: the
+// runner keeps each event until an EventAck covers it, sends again from durable_seq + 1 after a
+// reconnect, and keeps the unacknowledged total within Credit.
+message EventBatch {
+  // The session the events belong to.
+  string session_id = 1;
+  // The events, in increasing seq order without gaps.
+  repeated Event events = 2;
+}
+
+// One transcript event of a session (today's RunEvent).
+message Event {
+  // The event's place in the session's durable sequence: 1 for the session's first event and one
+  // more for each next, never reused (§5.8). Live stream events take no seq.
+  uint64 seq = 1;
+  // The event type, as today's RunEvent.type ("assistant", "tool_result", "turn_end", ...).
+  string type = 2;
+  // When the runner recorded the event, in Unix milliseconds.
+  int64 ts_unix_ms = 3;
+  // The turn the event belongs to; empty for an event outside any turn.
+  string turn_id = 4;
+  // The event payload, JSON-encoded exactly as today's RunEvent.payload (D12).
+  bytes payload_json = 5;
+}
+
+// How far one session's durable events are stored (§5.8).
+message EventAck {
+  // The session acknowledged.
+  string session_id = 1;
+  // Every event of the session up to and including this seq is stored, rejected ones as
+  // tombstones. The runner drops them from its buffer and never sends them again.
+  uint64 durable_seq = 2;
+  // Events covered by durable_seq that the server would not store (a tombstone holds each one's
+  // seq, and the events after it are stored as usual). The runner logs them; it does not send them
+  // again.
+  repeated RejectedEvent rejected = 3;
+  // Set when events after durable_seq could not be stored. Retryable: the runner sends them again,
+  // no sooner than retry_after_ms. Not retryable: the server will store no more of the session's
+  // events (it is no longer open, or this process lost its lease), and the runner stops sending
+  // them.
+  Failure failure = 4;
+}
+
+// An event the server would not store.
+message RejectedEvent {
+  // The refused event's seq.
+  uint64 seq = 1;
+  // Why, as a stable machine-readable code in upper snake case.
+  string code = 2;
+  // Detail for logs, in English; never parsed.
+  string message = 3;
+}
+
+// How many durable events the runner may have in flight on this connection (§5.8). The gateway
+// sets it by the depth of its ingest queue and sends a new Credit whenever it changes; each replaces
+// the last. With no room left the runner holds further EventBatches, still reading its engines and
+// buffering, until an EventAck or a larger Credit makes room.
+message Credit {
+  // The most events the runner may have sent and not yet seen acknowledged, across all sessions.
+  uint32 max_unacked_events = 1;
+  // The same bound in bytes of payload_json.
+  uint64 max_unacked_bytes = 2;
+}
+
+// Live stream events of one session: reply and thinking deltas, tool output snapshots, background
+// output (§5.9). Best effort: never acknowledged, mergeable, droppable, and sent only while the
+// session has watchers (WatchersHint). Their final content also arrives as durable events.
+message LiveBatch {
+  // The session the events belong to.
+  string session_id = 1;
+  // The events, oldest first.
+  repeated LiveEvent events = 2;
+}
+
+// One live stream event (today's RunEvent of a live-only type).
+message LiveEvent {
+  // The event's place in the session's live stream: it increases with every live event the process
+  // sends for the session, and gaps mean nothing. It is separate from the durable seq. It orders
+  // live events and marks where a TurnPrefixResponse joins the stream (through_live_seq).
+  uint64 live_seq = 1;
+  // The event type, as today's RunEvent.type ("text_delta", "thinking_delta", "tool_output",
+  // "background_output", ...).
+  string type = 2;
+  // When the runner recorded the event, in Unix milliseconds.
+  int64 ts_unix_ms = 3;
+  // The turn the event belongs to; empty for an event outside any turn.
+  string turn_id = 4;
+  // The event payload, JSON-encoded exactly as today's RunEvent.payload (D12).
+  bytes payload_json = 5;
+}
+
+// A request for what a session's current turn has streamed so far, for a client that opened the
+// session mid-turn (§5.9). The runner answers with a TurnPrefixResponse carrying the same
+// request_id.
+message TurnPrefixRequest {
+  // Identifies the request; the answer carries it back.
+  string request_id = 1;
+  // The session whose current turn is asked for.
+  string session_id = 2;
+}
+
+// What a session's current turn has streamed so far, which the runner now holds in place of the
+// API's single-replica memory (RealtimeService.turnPrefix).
+message TurnPrefixResponse {
+  // The request_id of the TurnPrefixRequest this answers.
+  string request_id = 1;
+  // The session asked about.
+  string session_id = 2;
+  // The turn the text belongs to; empty when no turn is streaming, and then text and thinking are
+  // empty too.
+  string turn_id = 3;
+  // The reply text the turn has streamed since its last boundary event, by the rules today's
+  // turnPrefix applies (supersededPrefixes in src/apiserver/src/realtime/realtime.service.ts). Empty
+  // when there is none, or when it outgrew the 64,000-character cap and was given up.
+  string text = 4;
+  // The thinking the turn has streamed since its last boundary event, under the same rules.
+  string thinking = 5;
+  // The live_seq of the last live event folded into text and thinking. The server forwards only
+  // live events after it, so the client sees each delta once.
+  uint64 through_live_seq = 6;
+}

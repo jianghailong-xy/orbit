@@ -13,9 +13,15 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
+    "generate:runner-link": "cd ../../contracts/runner-link && buf generate",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.16.0"
+  },
   "devDependencies": {
+    "@bufbuild/buf": "1.75.0",
+    "@bufbuild/protoc-gen-es": "2.16.0",
     "typescript": "^7.0.2",
     "vitest": "^5.0.2"
   }
