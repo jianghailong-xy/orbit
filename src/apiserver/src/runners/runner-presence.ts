@@ -146,6 +146,23 @@ export async function recordRunnerBeat(prisma: PrismaService, beat: RunnerBeat):
   });
 }
 
+/**
+ * Something a heartbeat delivers to these runners changed and has committed: a command queued for one, a cancellation,
+ * its settings, its workspaces (migration 0447). One more on each one's `changes`, so its next link heartbeat
+ * reconciles in full (runner-api/link-heartbeat.ts). One statement on the primary key. A runner with no presence row
+ * has nothing to mark: its next beat finds no row, and a beat that finds none reconciles in full anyway.
+ */
+export async function markRunnersChanged(
+  prisma: Pick<PrismaService, '$executeRaw'>,
+  runnerIds: readonly string[],
+): Promise<number> {
+  const ids = [...new Set(runnerIds)];
+  if (ids.length === 0) return 0;
+  return prisma.$executeRaw`
+    UPDATE "runner_presence" SET "changes" = "changes" + 1 WHERE "runner_id" = ANY(${ids}::uuid[])
+  `;
+}
+
 /** The cell's runners heard from lately (`heard`), and how many of those have since gone quiet (`silent`). */
 export interface FleetSilence {
   heard: number;

@@ -12,7 +12,12 @@ heartbeats and 2,000 durable events a second). Each simulated runner behaves as 
 - it beats every `Welcome` interval (30 s), naming its open sessions, with the parts of a runner's heartbeat
   (engines, model catalog, commands, skills, repos and the rest, about 7 KB of JSON): whole on a connection's first
   beat and when the gateway asks for them, by digest otherwise. Each runner's beats start at a random point of the
-  interval, as a fleet's do, and, as a runner's, the next beat waits for the last one's `HeartbeatAck`;
+  interval, as a fleet's do, and, as a runner's, the next beat waits for the last one's `HeartbeatAck`. With
+  `-volatile` (task O1) the parts that move in production move at the runner's own rates (`volatile.go`): the plan
+  usage every 5 minutes on a machine running a session and every 10 otherwise, the directory probes after each answer
+  that names the workspaces' directories (a full reconcile's), a running session's worktree snapshot on
+  `-volatile-edits` of its beats, and the engines' update check every 30 minutes. A part that moved goes whole on the
+  next beat. Without it, every beat after a connection's first carries the same digests;
 - it replaces its connection make before break 5 minutes before the token expires. With `-spread-renewals` (the
   default) a runner's first renewal comes at a random point of its token's life, so renewals arrive at the steady rate
   of a fleet that has run for a while (about 4.5 a second for 15,000 runners), not all at once an hour in. Before
@@ -48,6 +53,7 @@ loadgen -fleet fleet.jsonl -api http://127.0.0.1:61086 -link-url wss://link-gate
 | `-event-rate` | 2000 | Durable events per second across the fleet. |
 | `-flush-min`, `-flush-max`, `-max-batch` | 1s, 3s, 100 | When a batch is sent, and how many events it carries at most. |
 | `-renew-before`, `-spread-renewals` | 5m, true | When a connection is replaced. |
+| `-volatile`, `-volatile-edits` | false, 0.5 | Move the parts of a heartbeat that move in production, as above; `-volatile-edits` is the share of a running session's beats on which its worktree moved. |
 | `-drain-timeout` | 30s | After the window, how long runners wait for their last acknowledgements. They send no new beat meanwhile, and close each connection with the close handshake, so the gateway sees them leave. |
 | `-interval` | 10s | How often `series.jsonl` gets a line. |
 | `-seed` | 1 | The random seed. |
@@ -57,7 +63,9 @@ It writes to `-out`:
 - `series.jsonl`: one line per interval, with its phase (`ramp`, `settle`, `steady`, `drain`), the runners connected, what was
   sent and acknowledged, the latencies' percentiles and the errors by kind;
 - `summary.json`: the steady window and the whole run, each with its counters, rates, latency summaries and errors,
-  the notes (Drain, Credit changes, renewals whose old connection ended first) and the first details of each error;
+  the notes (Drain, Credit changes, renewals whose old connection ended first) and the first details of each error.
+  `heartbeatsReconciled` counts the beats whose answer was a full reconcile: it names the directories to scan, which
+  an answer from `runner_presence` alone never does;
 - `errors.log`: every error, one line each.
 
 It exits 0 only if the steady window was reached, nothing was counted as an error and every event produced was

@@ -103,8 +103,11 @@ function makeController(
     session: { findUnique: async () => ({ ...session }) },
     $transaction: async (fn: (client: typeof tx) => unknown) => fn(tx),
   } as never;
+  // The runners told something a heartbeat delivers changed (RealtimeService.markRunnerChanged).
+  const marked: string[] = [];
   const realtime = {
     notifyInbox: () => inboxWakes++,
+    markRunnerChanged: (changedRunnerId: string) => void marked.push(changedRunnerId),
     publish: () => undefined,
     publishSessionUpdated: (changedSessionId: string) =>
       void sessionUpdates.push(changedSessionId),
@@ -123,6 +126,7 @@ function makeController(
     retireCalls: () => retireCalls,
     taskChanges,
     sessionUpdates,
+    marked,
   };
 }
 
@@ -276,6 +280,8 @@ test('a failed chat turn finalizes the session FAILED instead of parking it as i
   assert.equal(h.sessionWrites[0].error, 'API Error: Connection closed mid-response.');
   // The engine is still alive after a failed turn; the cancel-drain reclaims its slot.
   assert.ok(h.sessionWrites[0].cancelRequestedAt instanceof Date);
+  // Which the runner's heartbeat hands over: over the runner link, its next one is told so.
+  assert.deepEqual(h.marked, [h.runnerId]);
   assert.equal(h.retireCalls(), 1);
   assert.equal(h.inboxWakes(), 0);
   assert.deepEqual(h.sessionUpdates, [h.sessionId]);
