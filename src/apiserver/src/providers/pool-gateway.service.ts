@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { request as httpRequest, type IncomingHttpHeaders, type IncomingMessage, type OutgoingHttpHeaders } from 'node:http';
 import { Agent as HttpsAgent, request as httpsRequest } from 'node:https';
 import { AgentProvider } from '@orbit/shared';
-import { ACCOUNT_DISABLED } from '../auth/disabled-accounts';
+import { ACCOUNT_DISABLED, DisabledAccounts } from '../auth/disabled-accounts';
 import { sha256 } from '../common/crypto.util';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import { PrismaService } from '../prisma/prisma.service';
@@ -181,6 +181,11 @@ export interface Answer {
  *   a person gone from the pool or a pool deleted — the last two delete the token row itself — is 401. A
  *   good token of an account an administrator disabled is 403 ACCOUNT_DISABLED, as its runner credential
  *   is. The pool may be a shared one or one of somebody's own its owner added the person to (migration 0358).
+ * - DISABLED ACCOUNTS (`forward`, before anything else): a pool whose owner an administrator disabled
+ *   serves nobody, and neither does a key whose contributor is disabled — 403 ACCOUNT_DISABLED, nothing
+ *   sent to OpenAI (docs/google-sign-in-design.md §5.5). Read from DisabledAccounts, the set JwtAuthGuard
+ *   reads: at once on the server whose administrator disabled or enabled the account, within 30 seconds
+ *   on every other.
  * - WHAT: only the ALLOWED paths; anything else is 403 (gatewayAllows, asked by the controller).
  * - WHICH KEY (`forward`): `session.pool_key_id`, as the claim chose it (QueueService.resolveSharedPool,
  *   and resolveLoginPool for an owner's session none of whose pool's accounts can run). The gateway
@@ -209,6 +214,7 @@ export class PoolGatewayService {
     private readonly pools: SharedPoolsService,
     private readonly ledger: PoolUsageLedger,
     @Inject(POOL_GATEWAY_UPSTREAM) private readonly upstream: string,
+    private readonly disabled: DisabledAccounts,
   ) {}
 
   /**
@@ -219,7 +225,17 @@ export class PoolGatewayService {
     const started = Date.now();
     const target = gatewayTarget(req.originalUrl ?? req.url);
     const now = new Date();
+    if (this.disabled.has(caller.poolOwnerId)) {
+      refuse(res, 403, ACCOUNT_DISABLED, poolOwnerDisabled(caller.poolLabel));
+      this.log.log(`session ${caller.sessionId} pool ${caller.poolId}: its owner's account is disabled — refused`);
+      return;
+    }
     const key = caller.keyId ? await this.keyOf(caller.poolId, caller.keyId) : null;
+    if (key && this.disabled.has(key.contributorId)) {
+      refuse(res, 403, ACCOUNT_DISABLED, credentialOwnerDisabled(`${key.label} (${maskedKey(key.keyHint)})`, caller.poolLabel));
+      this.log.log(`session ${caller.sessionId} key ${maskedKey(key.keyHint)}: its contributor's account is disabled — refused`);
+      return;
+    }
     const why = key ? await this.whyNot(key, caller.userId, now) : null;
     if (!key || why) {
       refuse(res, 403, 'orbit_pool_key_unavailable', await this.unavailable(caller, key, why, now));
@@ -588,6 +604,20 @@ export function relayHead(res: Response, response: IncomingMessage): void {
 /** A refusal in the shape OpenAI's own errors take, which is what codex reads a message out of. */
 export function refuse(res: Response, status: number, code: string, message: string): void {
   res.status(status).json({ error: { message, type: 'orbit_gateway', param: null, code } });
+}
+
+/**
+ * Why a pool whose owner an administrator disabled serves nobody (docs/google-sign-in-design.md §5.5): the
+ * refusal's words, under ACCOUNT_DISABLED. They name the owner's account, since the caller's own is not
+ * disabled — that is refused at `caller`, in a disabled account's own words.
+ */
+export function poolOwnerDisabled(poolLabel: string): string {
+  return `The Orbit account that owns "${poolLabel}" is disabled — the pool serves nobody until an administrator enables that account again`;
+}
+
+/** Why `credential` — a key or a ChatGPT account of the pool, as named — serves nobody: its contributor's account is disabled. */
+export function credentialOwnerDisabled(credential: string, poolLabel: string): string {
+  return `${credential} in "${poolLabel}" belongs to an Orbit account that is disabled — it serves nobody until an administrator enables that account again`;
 }
 
 export function readBody(req: Request): Promise<Buffer> {
