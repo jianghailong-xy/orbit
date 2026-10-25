@@ -13,9 +13,9 @@ import (
 
 // The control plane unavailable while a session keeps working (§10: a gateway node down, a backend down, the database
 // failing over), for as long as ORBIT_LINK_OUTAGE says: ten minutes is the acceptance's figure, and without it the
-// outage lasts 20 seconds. Throughout, a session emits as an engine does and its flush hands what it buffered to the
-// stream every 250ms, as session.go's does, and nothing it does waits on the link. When the outage ends, every event
-// is stored once, in seq order, without a gap.
+// outage lasts 20 seconds. Throughout, the session's engine emits, and its flush hands what is buffered to the stream
+// every 250ms, each on a goroutine of its own as in session.go. The engine never waits on the link or the disk. When the
+// outage ends, every event is stored once, in seq order, without a gap.
 //
 //   - gateway down: every connection is refused, and HTTPS answers UPGRADE_REQUIRED (RUNNER_LINK_REQUIRED is on), so
 //     the events wait on the link the whole time, past the session's memory on disk, until a connection is welcomed.
@@ -45,18 +45,19 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 	s, buf := linkSessionBuffer(r, "session-outage")
 	defer s.release()
 
-	// The engine: four events every tick, one of them live, and its flush. Enough bytes to pass the session's memory
-	// during the outage, whatever its length.
+	// The engine: four events every 250ms, one of them live. Enough bytes to pass the session's memory during the
+	// outage, whatever its length.
 	const perTick = 4
 	ticks := int(outage / (250 * time.Millisecond))
 	payload := max(4<<10, (12<<20)/max(ticks*(perTick-1), 1))
 	var mu sync.Mutex
-	var slowest time.Duration
+	var slowestEmit, slowestFlush time.Duration
 	emitted, onDisk := 0, 0
 	stop := make(chan struct{})
-	stopped := make(chan struct{})
-	go func() {
-		defer close(stopped)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { // the engine's stdout reader
+		defer wg.Done()
 		tick := time.NewTicker(250 * time.Millisecond)
 		defer tick.Stop()
 		for n := 0; ; n++ {
@@ -65,15 +66,34 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 				return
 			case <-tick.C:
 			}
-			began := time.Now()
 			for i := 0; i < perTick; i++ {
+				began := time.Now()
 				if i == 0 {
 					buf.add("turn-1", evTextDelta, map[string]interface{}{"text": "x"}, nil)
-					continue
+				} else {
+					buf.add("turn-1", evToolResult, map[string]interface{}{"toolUseId": fmt.Sprintf("toolu_%d_%d", n, i),
+						"content": fmt.Sprintf("%d.%d %s", n, i, strings.Repeat("z", payload))}, nil)
 				}
-				buf.add("turn-1", evToolResult, map[string]interface{}{"toolUseId": fmt.Sprintf("toolu_%d_%d", n, i),
-					"content": fmt.Sprintf("%d.%d %s", n, i, strings.Repeat("z", payload))}, nil)
+				mu.Lock()
+				slowestEmit = max(slowestEmit, time.Since(began))
+				if i > 0 {
+					emitted++
+				}
+				mu.Unlock()
 			}
+		}
+	}()
+	go func() { // the session's flush
+		defer wg.Done()
+		tick := time.NewTicker(250 * time.Millisecond)
+		defer tick.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-tick.C:
+			}
+			began := time.Now()
 			if err := s.submit(buf.take()); err != nil {
 				t.Errorf("handing events over: %v", err)
 				return
@@ -82,8 +102,7 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 			disk := s.disk.count()
 			s.mu.Unlock()
 			mu.Lock()
-			slowest = max(slowest, time.Since(began))
-			emitted += perTick - 1
+			slowestFlush = max(slowestFlush, time.Since(began))
 			onDisk = max(onDisk, disk)
 			mu.Unlock()
 		}
@@ -115,7 +134,7 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 	t.Logf("the outage ended after %s", time.Since(began).Round(time.Second))
 	time.Sleep(2 * time.Second)
 	close(stop)
-	<-stopped
+	wg.Wait()
 	if err := s.submit(buf.take()); err != nil {
 		t.Fatal(err)
 	}
@@ -138,8 +157,8 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 		}
 		n++
 	}
-	if slowest > 200*time.Millisecond {
-		t.Errorf("a tick of the engine took %s: emitting waited on the link", slowest)
+	if slowestEmit > 50*time.Millisecond {
+		t.Errorf("an event took %s to emit: the engine waited on the link or the disk", slowestEmit)
 	}
 	if outage >= 20*time.Second && onDisk == 0 {
 		t.Errorf("the session's events never went to the spool, past %d bytes of memory", linkSessionMemoryBytes)
@@ -147,5 +166,6 @@ func linkOutage(t *testing.T, what string, outage time.Duration) {
 	if line := strings.Join(r.logs.all(), "\n"); strings.Contains(line, "dropping") || strings.Contains(line, "not sent") {
 		t.Errorf("the log says events were dropped:\n%s", line)
 	}
-	t.Logf("%d events, at most %d on disk at once, the slowest tick %s", emitted, onDisk, slowest)
+	t.Logf("%d events, at most %d on disk at once; the slowest emit %s, the slowest hand-over %s", emitted, onDisk,
+		slowestEmit, slowestFlush)
 }

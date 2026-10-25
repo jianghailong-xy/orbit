@@ -643,7 +643,8 @@ func (s *linkEventStream) oneEventFrameSize(ev *linkEvent) int {
 // mergeProgress lets a progress report take the place of the session's newest event, at that event's seq, while the
 // link's credit holds the session's events back (§5.8): when that event is a report of the same kind and turn not sent
 // yet, still in the session's buffer (buf) or handed over to the stream. newest is the seq the session numbered last.
-// It reports whether it did; the report then takes no seq of its own, so no seq is left without its event.
+// It reports whether it did; the report then takes no seq of its own, so no seq is left without its event. It runs on
+// an emitter, which never waits: a stream busy with its spool leaves the report to take a seq of its own.
 func (s *linkEventStream) mergeProgress(buf []RunEvent, newest int, turnID, eventType string, payload map[string]interface{}) bool {
 	kind := linkProgressKind(eventType, payload)
 	if kind == "" || !s.onLink() || !s.e.creditBlocked.Load() {
@@ -657,7 +658,9 @@ func (s *linkEventStream) mergeProgress(buf []RunEvent, newest int, turnID, even
 		last.Payload, last.TS = payload, nowISO()
 		return true
 	}
-	s.mu.Lock()
+	if !s.mu.TryLock() {
+		return false
+	}
 	defer s.mu.Unlock()
 	if len(s.over) > 0 || s.disk.count() > 0 || len(s.mem) <= s.sentN {
 		return false

@@ -345,7 +345,7 @@ func (q *linkSpoolQueue) append(ev *linkEvent) error {
 		return err
 	}
 	if q.w != nil && q.w.seg.bytes+int64(len(line)) > linkSpoolSegmentBytes {
-		if err := q.finish(); err != nil {
+		if err := q.finish(false); err != nil {
 			return err
 		}
 	}
@@ -376,15 +376,17 @@ func (q *linkSpoolQueue) append(ev *linkEvent) error {
 	return nil
 }
 
-// finish closes the open segment and names it for the events it holds.
-func (q *linkSpoolQueue) finish() error {
+// finish closes the open segment and names it for the events it holds. sync waits for the disk to have it: what a
+// stopping runner leaves for the next process does, while a segment rotated or read back in the meantime need not, and
+// a sync there would hold up the session's flush behind a busy disk.
+func (q *linkSpoolQueue) finish(sync bool) error {
 	w := q.w
 	if w == nil {
 		return nil
 	}
 	q.w = nil
 	err := w.buf.Flush()
-	if err == nil {
+	if err == nil && sync {
 		err = w.f.Sync()
 	}
 	if cerr := w.f.Close(); err == nil {
@@ -407,7 +409,7 @@ func (q *linkSpoolQueue) takeFirst(stored uint64) []*linkEvent {
 	}
 	seg := q.segs[0]
 	if q.w != nil && q.w.seg == seg {
-		_ = q.finish()
+		_ = q.finish(false)
 	}
 	events, err := linkSpoolRead(seg.path, stored)
 	if err != nil {
@@ -459,7 +461,7 @@ func (q *linkSpoolQueue) remove() {
 // persist writes what the stream holds in memory to disk, around what is there already: head, the events before
 // everything on disk, and tail, those after it. The segments are finished and synced, for the next process.
 func (q *linkSpoolQueue) persist(head, tail []*linkEvent) error {
-	if err := q.finish(); err != nil {
+	if err := q.finish(true); err != nil {
 		return err
 	}
 	for _, events := range [][]*linkEvent{head, tail} {
