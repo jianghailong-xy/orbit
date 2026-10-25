@@ -211,7 +211,8 @@ for (const family of ['link_handshakes_total', 'link_token_refusals_total', 'lin
   'link_backend_calls_total', 'link_backend_retries_total', 'link_heartbeat_forwards_total', 'link_heartbeat_facts_total',
   'link_event_batches_total', 'link_events_stored_total', 'link_queue_full_total', 'link_credit_changes_total',
   'link_hints_total', 'link_hints_slow_total', 'link_frame_decode_errors_total', 'link_tls_handshake_errors_total',
-  'link_nats_reconnects_total', 'link_revocation_fetches_total', 'link_turn_prefix_requests_total']) {
+  'link_nats_reconnects_total', 'link_revocation_fetches_total', 'link_turn_prefix_requests_total',
+  'link_event_merge_calls_total', 'link_event_merge_flushes_total', 'link_event_merge_alone_total']) {
   gw[family] = counterFamily(family);
 }
 const steadyScrapes = scrapes.filter((s) => inSteady(s.t));
@@ -256,6 +257,12 @@ function histogram(name) {
 gw.eventAck = histogram('link_event_ack_duration_seconds');
 gw.heartbeatForward = histogram('link_heartbeat_forward_duration_seconds');
 gw.backendCall = histogram('link_backend_call_duration_seconds');
+// Merged ingest (src/link-gateway/events_merge.go): how many batches a call carried, how long its transaction held its
+// sessions (the apiserver's heldMs), and the call's own duration. None of them moves when the gateway merges nothing.
+gw.mergeCalls = delta('link_event_merge_batches_count');
+gw.mergeBatchesPerCall = gw.mergeCalls > 0 ? round(delta('link_event_merge_batches_sum') / gw.mergeCalls, 1) : null;
+gw.mergeHeld = histogram('link_event_merge_held_seconds');
+gw.mergeCall = histogram('link_event_merge_call_duration_seconds');
 // The gateway counters that are errors when they move.
 const gatewayErrors = {};
 const flag = (label, n) => {
@@ -415,7 +422,7 @@ writeFileSync(join(dir, 'report.json'), JSON.stringify(report, null, 2) + '\n');
 const md = [];
 const row = (...cells) => md.push(`| ${cells.join(' | ')} |`);
 md.push(`# Load test ${run.name}`, '');
-md.push(`Commit \`${run.sha.slice(0, 12)}\`${run.dirty ? ' (with uncommitted changes)' : ''}, ${run.backends} apiserver backend(s), database CPU allocation ${allocation ?? 'unlimited'}, host ${run.hostCpus} CPUs.`);
+md.push(`Commit \`${run.sha.slice(0, 12)}\`${run.dirty ? ' (with uncommitted changes)' : ''}, ${run.backends} apiserver backend(s), database CPU allocation ${allocation ?? 'unlimited'}, host ${run.hostCpus} CPUs, the gateway's merge window ${run.mergeWindow ?? 'default'}.`);
 md.push(summary.steady
   ? `Steady window ${summary.steadyStartedAt} → ${summary.steadyEndedAt} (${round(steady.seconds / 60, 1)} min), after a ramp of ${summary.rampSeconds} s.`
   : `No steady window: the run ended after ${summary.rampSeconds} s of ramp, before every runner was connected. Every figure is over the whole run (${summary.startedAt} → ${summary.endedAt}).`, '');
@@ -469,7 +476,13 @@ row('connections (min, max)', `${gw.connections.min}, ${gw.connections.max}`);
 row('EventAck duration (gateway)', `${gw.eventAck.count} batches, mean ${gw.eventAck.meanMs} ms, p50 ≈ ${gw.eventAck.p50Ms} ms, p99 ≈ ${gw.eventAck.p99Ms} ms, ${gw.eventAck.withinOneSecondPct}% within 1 s`);
 row('heartbeat forward duration', `mean ${gw.heartbeatForward.meanMs} ms, p99 ≈ ${gw.heartbeatForward.p99Ms} ms`);
 row('ingest queue, most events', gw.ingestQueueEventsMax);
-for (const family of ['link_handshakes_total', 'link_disconnects_total', 'link_backend_calls_total', 'link_heartbeat_forwards_total', 'link_event_batches_total', 'link_hints_total']) {
+if (gw.mergeCalls > 0) {
+  row('merged ingest calls', `${gw.mergeCalls} (${round(gw.mergeCalls / steady.seconds, 1)}/s), ${gw.mergeBatchesPerCall} batches each`);
+  row('merged transaction held its sessions (apiserver)', `mean ${gw.mergeHeld.meanMs} ms, p50 ≈ ${gw.mergeHeld.p50Ms} ms, p99 ≈ ${gw.mergeHeld.p99Ms} ms`);
+  row('merged call duration (gateway)', `mean ${gw.mergeCall.meanMs} ms, p50 ≈ ${gw.mergeCall.p50Ms} ms, p99 ≈ ${gw.mergeCall.p99Ms} ms`);
+}
+for (const family of ['link_handshakes_total', 'link_disconnects_total', 'link_backend_calls_total', 'link_heartbeat_forwards_total', 'link_event_batches_total', 'link_hints_total',
+  'link_event_merge_calls_total', 'link_event_merge_flushes_total', 'link_event_merge_alone_total']) {
   row(family, Object.entries(gw[family]).map(([k, v]) => `${k} ${v}`).join(', ') || '—');
 }
 md.push('', '## CPU and memory (steady window)', '');

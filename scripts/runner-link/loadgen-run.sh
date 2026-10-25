@@ -80,10 +80,11 @@ db_totals() {
 
 # --- The run's configuration. ------------------------------------------------------------------------------------------
 {
-  printf '{"name":"%s","project":"%s","sha":"%s","dirty":%s,"dbCpus":"%s","backends":"%s","hostCpus":%s,"hostMemKb":%s,' \
+  printf '{"name":"%s","project":"%s","sha":"%s","dirty":%s,"dbCpus":"%s","backends":"%s","mergeWindow":"%s","hostCpus":%s,"hostMemKb":%s,' \
     "$name" "$project" "$(git -C "$repo" rev-parse HEAD)" \
     "$([ -n "$(git -C "$repo" status --porcelain -- src scripts)" ] && echo true || echo false)" \
-    "$(setting STAGING_DB_CPUS 0)" "$(setting STAGING_BACKENDS 1)" "$(nproc)" "$(awk '/^MemTotal/{print $2}' /proc/meminfo)"
+    "$(setting STAGING_DB_CPUS 0)" "$(setting STAGING_BACKENDS 1)" "$(setting STAGING_MERGE_WINDOW_SETTING default)" \
+    "$(nproc)" "$(awk '/^MemTotal/{print $2}' /proc/meminfo)"
   if [ ${#args[@]} -gt 0 ]; then printf '"loadgenArgs":%s,' "$(printf '%s\n' "${args[@]}" | jq -R . | jq -cs .)"; else printf '"loadgenArgs":[],'; fi
   printf '"containers":{'
   first=1

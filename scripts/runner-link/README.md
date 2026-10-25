@@ -56,6 +56,7 @@ else the default:
 | `ORBIT_LINK_STAGING_BACKENDS` | `1` | How many apiservers the gateway forwards to: `2` adds `apiserver-b`, the first one's whole definition on the same database, which `staging-check-link.sh` kills and starts again. |
 | `ORBIT_LINK_STAGING_LOADGEN` | `0` | `1` adds `staging.loadgen.compose.yml` for a load test: the gateway logs only Hello, Welcome, Drain and Close, admits any number of connections from one address (the per-address limit; the limit across all clients stays), and the gateway, apiservers and database are capped in memory. |
 | `ORBIT_LINK_STAGING_DB_CPUS` | `0` | With `LOADGEN=1`, the database's CPU allocation (Compose `cpus`), the capacity a load test's database CPU is a share of. `0` is unlimited. |
+| `ORBIT_LINK_STAGING_MERGE_WINDOW` | `default` | The link gateway's `LINK_EVENT_MERGE_WINDOW`: how long an event batch waits for others, from any connection, to go with it in one merged call ([events_merge.go](../../src/link-gateway/events_merge.go)). `default` is the gateway's own (100 ms); `0` forwards every batch alone, as before merging, which is what a load test compares against. Changing it recreates only the gateway. |
 
 Two stacks can run side by side under different projects, state directories and ports. Compose runs with an empty
 environment plus the env file the scripts write, so nothing from the calling shell reaches the stack. That includes an

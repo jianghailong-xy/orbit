@@ -24,6 +24,8 @@
 #   ORBIT_LINK_STAGING_BACKENDS      apiservers the gateway forwards to: 1 or 2   1
 #   ORBIT_LINK_STAGING_LOADGEN       1: the load test's settings (staging.loadgen.compose.yml)   0
 #   ORBIT_LINK_STAGING_DB_CPUS       with LOADGEN=1, the database's CPU allocation; 0 is unlimited   0
+#   ORBIT_LINK_STAGING_MERGE_WINDOW  the link gateway's LINK_EVENT_MERGE_WINDOW: 0 forwards each event
+#                                    batch alone; "default" is the gateway's own                         default
 set -euo pipefail
 # shellcheck source=staging-lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
@@ -34,7 +36,7 @@ for arg in "$@"; do
   case "$arg" in
     --rotate-cert) rotate=1 ;;
     --no-build) build=0 ;;
-    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
     *) die "unknown option $arg (see --help)" ;;
   esac
 done
@@ -56,11 +58,15 @@ mode="${ORBIT_LINK_STAGING_MODE:-$(setting STAGING_MODE http)}"
 backends="${ORBIT_LINK_STAGING_BACKENDS:-$(setting STAGING_BACKENDS 1)}"
 loadgen="${ORBIT_LINK_STAGING_LOADGEN:-$(setting STAGING_LOADGEN 0)}"
 db_cpus="${ORBIT_LINK_STAGING_DB_CPUS:-$(setting STAGING_DB_CPUS 0)}"
+merge_window="${ORBIT_LINK_STAGING_MERGE_WINDOW:-$(setting STAGING_MERGE_WINDOW_SETTING default)}"
 acme_domain="link.orbit-staging.test"
 case "$tls_mode" in files|acme) ;; *) die "ORBIT_LINK_STAGING_TLS must be files or acme, not $tls_mode" ;; esac
 case "$mode" in http|link) ;; *) die "ORBIT_LINK_STAGING_MODE must be http or link, not $mode" ;; esac
 case "$loadgen" in 0|1) ;; *) die "ORBIT_LINK_STAGING_LOADGEN must be 0 or 1, not $loadgen" ;; esac
 [[ "$db_cpus" =~ ^[0-9]+(\.[0-9]+)?$ ]] || die "ORBIT_LINK_STAGING_DB_CPUS must be a number of CPUs, not $db_cpus"
+[[ "$merge_window" =~ ^(default|0|[0-9]+ms)$ ]] || die "ORBIT_LINK_STAGING_MERGE_WINDOW must be default, 0 or a window such as 100ms, not $merge_window"
+gateway_merge_window="$merge_window"
+[ "$merge_window" = default ] && gateway_merge_window=""
 case "$backends" in 1) backend_urls="http://apiserver:3001" ;; 2) backend_urls="http://apiserver:3001,http://apiserver-b:3001" ;;
   *) die "ORBIT_LINK_STAGING_BACKENDS must be 1 or 2, not $backends" ;; esac
 
@@ -187,6 +193,8 @@ STAGING_BACKENDS=$backends
 STAGING_BACKEND_URLS=$backend_urls
 STAGING_LOADGEN=$loadgen
 STAGING_DB_CPUS=$db_cpus
+STAGING_MERGE_WINDOW_SETTING=$merge_window
+STAGING_MERGE_WINDOW=$gateway_merge_window
 RUNNER_LINK_NATS_APISERVER_SEED=$(read_nats apiserver seed || true)
 RUNNER_LINK_NATS_APISERVER_KEY=$(read_nats apiserver key || true)
 RUNNER_LINK_NATS_GATEWAY_SEED=$(read_nats gateway seed || true)
@@ -219,7 +227,7 @@ if [ "$backends" = 1 ]; then
   # A second apiserver left from a run with two is stopped: the gateway no longer names it.
   compose --profile staging-backend-b rm -sf apiserver-b >/dev/null 2>&1 || true
 fi
-log "starting ${services[*]} as project $project, the link gateway in MODE_${mode^^} over $backends backend(s)"
+log "starting ${services[*]} as project $project, the link gateway in MODE_${mode^^} over $backends backend(s), merge window $merge_window"
 compose "${profiles[@]}" up -d --wait --wait-timeout 1500 "${services[@]}"
 
 # --- Seed and check. --------------------------------------------------------------------------------------------------
