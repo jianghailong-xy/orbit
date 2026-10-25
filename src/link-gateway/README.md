@@ -665,6 +665,9 @@ events and credit, the live stream and the turn prefix, an answer in pieces), `c
 `retry` (calls answered while a backend goes away) and `slow` (a runner that stops reading). It signs in as the runner's
 owner (`-owner-email`, `-owner-password-file`) to create, watch and decide for sessions, and reads the live subject as
 the apiserver's NATS user (`-nats-url`, `-nats-seed-file`). `scripts/runner-link/staging-check-link.sh` runs them all.
+Against a gateway that follows the server's switch, `switch` has the owner, as the administrator, flip
+`RUNNER_LINK_REQUIRED` on and then off in the middle of a session's event stream ([The switch](#the-switch));
+`scripts/runner-link/staging-check-switch.sh` runs it.
 
 The staging stack's scripts ([scripts/runner-link](../../scripts/runner-link/README.md)) build and run all of this.
 
