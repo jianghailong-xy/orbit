@@ -242,9 +242,9 @@ export async function authedFetch(input: string, init: RequestInit = {}): Promis
   }
   if (res.status === 401) {
     clearToken();
-    // The privacy policy is read signed out as well: a stored session found dead under it (the
-    // theme's read of the account) is cleared, and the reader stays on the policy.
-    if (location.pathname !== '/login' && location.pathname !== '/privacy') location.href = '/login';
+    // The privacy policy and a shared link (/s/…) are read signed out as well: a stored session found
+    // dead under one (the theme's read of the account) is cleared, and the reader stays on the page.
+    if (location.pathname !== '/login' && location.pathname !== '/privacy' && !location.pathname.startsWith('/s/')) location.href = '/login';
   }
   return res;
 }
