@@ -7,6 +7,7 @@ function fixture() {
   const writes: Record<string, unknown>[] = [];
   let install: Record<string, unknown> | null = null;
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       update: async ({ data }: { data: Record<string, unknown> }) => { writes.push(data); return { maxConcurrent: 2 }; },
       findUnique: async () => install,

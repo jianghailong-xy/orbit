@@ -146,6 +146,15 @@ def sql(query):
     return [line for line in result.stdout.splitlines() if line]
 
 
+def runner_last_beat(alias='runner'):
+    """The SQL for the runner `alias`'s last beat, as the control plane reads it (src/apiserver/src/runners/
+    runner-presence.ts runnerLastBeatSql): the later of its presence row (runner_presence, written by every
+    heartbeat) and the runner row's own last_heartbeat_at, which a heartbeat rewrites at most every five
+    minutes. Every lab reads a runner's beat through this, never the column alone."""
+    return (f'greatest((select p.last_beat_at from runner_presence p where p.runner_id = {alias}.id), '
+            f'{alias}.last_heartbeat_at)')
+
+
 # ---- the test server ----------------------------------------------------------------------
 
 def state(name):
@@ -489,8 +498,8 @@ def mapping_row():
 
 
 def runner_row(runner_id):
-    rows = sql("select row_to_json(r) from (select id, name, status, last_heartbeat_at, version, labels from runner "
-               f"where id = '{runner_id}') r")
+    rows = sql(f"select row_to_json(r) from (select id, name, status, {runner_last_beat()} as last_heartbeat_at, version, labels "
+               f"from runner where id = '{runner_id}') r")
     return json.loads(rows[0]) if rows else None
 
 

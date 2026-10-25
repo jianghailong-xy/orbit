@@ -1,0 +1,56 @@
+# The runner link staging stack (staging-up.sh beside this file): the root docker-compose.yml under a Compose project of
+# its own, with this file on top. It renames every container, moves every host port onto the staging bind address and
+# every data directory into the staging state directory, and tags every image it builds with the project's name, so
+# nothing it runs, writes or builds can be taken for a deployment's. The values come from the env file staging-up.sh
+# writes into the state directory.
+services:
+  postgres:
+    container_name: ${STAGING_PROJECT}-postgres
+    volumes:
+      - ${STAGING_DIR}/postgres:/var/lib/postgresql/data
+      - ${STAGING_DIR}/pg-archive:/archive
+
+  apiserver:
+    image: ${STAGING_PROJECT}-apiserver:local
+    container_name: ${STAGING_PROJECT}-apiserver
+    healthcheck:
+      # A new database applies every migration before the server listens.
+      start_period: 15m
+
+  web:
+    container_name: ${STAGING_PROJECT}-web
+
+  gateway:
+    container_name: ${STAGING_PROJECT}-gateway
+    ports: !override
+      - ${STAGING_BIND}:${STAGING_HTTP_PORT}:80
+
+  link-gateway:
+    image: ${STAGING_PROJECT}-link-gateway:local
+    container_name: ${STAGING_PROJECT}-link-gateway
+    environment:
+      # Every frame is summarized in the log: staging is where frames are read.
+      LINK_FRAME_LOG: all
+    ports: !override
+      - ${STAGING_BIND}:${STAGING_LINK_PORT}:8443
+      - 127.0.0.1:${STAGING_METRICS_PORT}:9464
+
+  # Never started by staging-up.sh; renamed so that a `docker compose up` naming them by mistake cannot take a
+  # deployment's container names or image tag.
+  pgbackup:
+    container_name: ${STAGING_PROJECT}-pgbackup
+  wiki-worker:
+    image: ${STAGING_PROJECT}-apiserver:local
+    container_name: ${STAGING_PROJECT}-wiki-worker
+
+  # NATS (docs/runner-link-design.md §6.3): the place kept for the task that wires the gateway and the apiserver to it.
+  # Core NATS only, no JetStream (D3). staging-up.sh starts it when ORBIT_LINK_STAGING_NATS=1; nothing uses it yet.
+  nats:
+    profiles: [nats]
+    image: nats:2.12-alpine
+    container_name: ${STAGING_PROJECT}-nats
+    restart: unless-stopped
+    command: ["--http_port", "8222"]
+    ports:
+      - ${STAGING_BIND}:${STAGING_NATS_PORT}:4222
+      - 127.0.0.1:${STAGING_NATS_MONITOR_PORT}:8222

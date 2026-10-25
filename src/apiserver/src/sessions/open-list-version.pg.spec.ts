@@ -187,6 +187,12 @@ test('every source the Open list row shows moves its version', { skip }, async (
     db.workspace.update({ where: { id: f.workspaceId }, data: { name: 'renamed workspace' } }));
   await changes(f, 'runner heartbeat', () =>
     db.runner.update({ where: { id: f.runnerId }, data: { lastHeartbeatAt: new Date(Date.now() + 1_000) } }));
+  // A beat lands in the runner's presence row (migration 0444) and leaves its own row alone, so the
+  // row the list shows moves without the runner row's version moving at all.
+  await changes(f, 'runner presence beat, the runner row untouched', () =>
+    db.runnerPresence.create({ data: { runnerId: f.runnerId, lastBeatAt: new Date(Date.now() + 2_000), linkState: 'HTTP' } }));
+  await changes(f, 'the next presence beat', () =>
+    db.runnerPresence.update({ where: { runnerId: f.runnerId }, data: { lastBeatAt: new Date(Date.now() + 3_000) } }));
   const tag = await db.sessionTag.create({ data: { ownerId: f.ownerId, name: 'olv-tag', color: '#ff0000' } });
   await changes(f, 'tag linked', () => db.sessionTagLink.create({ data: { sessionId: f.sessionId, tagId: tag.id } }));
   await changes(f, 'tag renamed', () => db.sessionTag.update({ where: { id: tag.id }, data: { name: 'olv-tag-2' } }));

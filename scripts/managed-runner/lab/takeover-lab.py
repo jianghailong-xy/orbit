@@ -791,7 +791,7 @@ def takeover_cut(ctx, step):
 
 def loss_sample(ctx, image, pv_name, claim, watch):
     m = mapping(OWNER)
-    runner = wl.sql_json(f"select status, last_heartbeat_at from runner where id = {wl.quote(m['runner_id'])}")[0]
+    runner = wl.sql_json(f"select status, {sw.runner_last_beat()} as last_heartbeat_at from runner where id = {wl.quote(m['runner_id'])}")[0]
     status = ml.status_of(OWNER)
     return {'at': now(), 'mapping': {'state': m['management_state'], 'desired': m['desired_state'], 'generation': m['generation'],
                                      'podUid': m['pod_uid'], 'reason': (m['last_error'] or {}).get('code'), 'attempt': m['attempt'],

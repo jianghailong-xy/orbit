@@ -40,6 +40,7 @@ import { selectPoolMember, spentUntil } from './pool-select';
 import { withPreset } from './preset-overlay';
 import { keyCredential, keyRowEngine, usableProviderScope } from './custom-provider';
 import { cursorKeyCheckers, cursorKeyCheckRelay } from './cursor-key-check-relay';
+import { RUNNER_BEATS } from '../runners/runner-presence';
 import { openCodeKeyModel } from '@orbit/shared';
 import { storedCredential } from './engine-provider';
 import { geminiApiModel, isInternalHost } from './held-key';
@@ -842,7 +843,7 @@ export class ProvidersService {
   ): Promise<{ outcome: CursorKeyCheckOutcome; why?: CursorKeyCheckMiss }> {
     const runners = await this.prisma.runner.findMany({
       where: { ownerId },
-      select: { id: true, status: true, lastHeartbeatAt: true, capabilities: true, capabilitiesReportedAt: true, engines: true },
+      select: { id: true, status: true, ...RUNNER_BEATS, capabilities: true, capabilitiesReportedAt: true, engines: true },
     });
     const checkers = cursorKeyCheckers(runners);
     if (checkers.length === 0) return { outcome: 'NO_RUNNER', why: 'none' };

@@ -164,6 +164,56 @@ added:
 
 Decision: accepted, with no override or audit exception.
 
+## Link gateway dependencies (2026-10-25)
+
+The runner link gateway (`src/link-gateway`, designed in `docs/runner-link-design.md` §6.1) is a Go module of its own and
+a server on the public internet. It adds four external modules, reviewed before they were added. The protobuf runtime
+is the version reviewed above, at the same release as the runner's:
+
+| Module | Version | Purpose | License |
+| --- | --- | --- | --- |
+| `github.com/coder/websocket` | v1.8.15 | The WebSocket server, plus the dialer of the `client` test subcommand. | ISC |
+| `golang.org/x/crypto` | v0.58.0 | `acme` and `acme/autocert`, for the ACME TLS mode: certificates obtained and renewed over TLS-ALPN-01. | BSD-3-Clause |
+| `golang.org/x/net` | v0.60.0 | `idna`, which `autocert` imports to normalize host names. | BSD-3-Clause |
+| `golang.org/x/text` | v0.43.0 | `secure/bidirule`, `transform` and `unicode/{bidi,norm}`, imported by `idna`. | BSD-3-Clause |
+| `google.golang.org/protobuf` | v1.36.12 | The runtime of the generated `src/link-gateway/linkpb`. | BSD-3-Clause |
+
+- **Source and integrity.**
+  - `github.com/coder/websocket` is Coder's WebSocket library, the continuation of `nhooyr.io/websocket` since 2024.
+    Its `go.mod` requires nothing, so it brings no further module. Besides Go, it holds the assembly of its frame
+    masking for amd64 and arm64.
+  - The `golang.org/x` modules are the Go project's own.
+  - `go.sum` records every module's hash, which the Go checksum database vouched for when it was downloaded, and
+    `go mod verify` passes. The image build runs `go mod verify` again before it compiles.
+- **Known vulnerabilities.**
+  - OSV lists nothing for `github.com/coder/websocket`, at this version or any earlier one (`nhooyr.io/websocket`
+    included), and nothing for `golang.org/x/net` v0.60.0 or `golang.org/x/text` v0.43.0.
+  - For `golang.org/x/crypto`, OSV lists GO-2026-5932: `golang.org/x/crypto/openpgp` is unmaintained and unsafe by
+    design, and no version fixes it. The gateway imports only `acme` and `acme/autocert`, never `openpgp`.
+  - govulncheck v1.9.0 with the scanning host's go1.27.1 found ten standard-library advisories reachable from the
+    gateway's code (fourteen in its module scan). All are fixed in go1.27.2 and go1.27.3. That is a fact about the
+    toolchain, but the gateway is a public TLS and HTTP server, so its image is built with **Go 1.27.3**
+    (`golang:1.27.3-alpine`). The Dockerfile pins it and says never to lower it.
+  - Run again with go1.27.3 (`GOTOOLCHAIN=go1.27.3`), govulncheck reports no vulnerability in the gateway's code.
+    Its module scan reports only GO-2026-5932, which the gateway does not import.
+- **Reach.**
+  - The WebSocket library parses frames only from connections that have already passed the upgrade checks: the
+    connection token is verified by the gateway's own code before `websocket.Accept` runs. An unauthenticated client
+    reaches only Go's `net/http` and that verifier. Messages are capped at 256 KiB, and compression is off.
+  - `acme` and `autocert` run only in the ACME TLS mode. There they answer TLS-ALPN-01 challenges in the TLS handshake,
+    and `HostWhitelist` refuses any name not in `LINK_ACME_DOMAINS` before anything is asked of the CA. They talk only
+    to the configured ACME directory, Let's Encrypt by default.
+  - `protojson` is compiled in for `link-gateway dump -json`, an operator tool. It is not on the serving path.
+- **Image.** The build stage is `golang:1.27.3-alpine`. The runtime is `scratch`, holding the binary and the build
+  image's CA bundle, which the ACME client trusts: there is no shell or package manager to patch. The container runs
+  read-only, with every capability dropped and `no-new-privileges` (`docker-compose.yml`, pinned by
+  `test/compose-topology.test.mjs` (o)).
+- **Updates.** Dependabot gains a `gomod` entry for `/src/link-gateway`. Keep `google.golang.org/protobuf` at the
+  runner's version: `contracts/runner-link/buf.gen.yaml` builds each module's `protoc-gen-go` from that module's own
+  `go.mod`. When a newer Go fixes an advisory that govulncheck reports for the gateway, raise the image's Go.
+
+Decision: accepted, with no override or audit exception. GO-2026-5932 needs none, since its package is not imported.
+
 ## Verification
 
 Run from a clean checkout:

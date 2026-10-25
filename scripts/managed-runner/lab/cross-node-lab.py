@@ -684,7 +684,7 @@ def loss_round(idents, watch):
     owners = {}
     for name in USERS:
         m = mapping(name)
-        runner = wl.sql_json(f"select status, last_heartbeat_at from runner where id = {wl.quote(m['runner_id'])}")[0]
+        runner = wl.sql_json(f"select status, {sw.runner_last_beat()} as last_heartbeat_at from runner where id = {wl.quote(m['runner_id'])}")[0]
         status = ml.status_of(name)
         owners[name] = {'mapping': {'state': m['management_state'], 'desired': m['desired_state'], 'generation': m['generation'], 'podUid': m['pod_uid'],
                                     'reason': (m['last_error'] or {}).get('code'), 'attempt': m['attempt'], 'proof': (m['fencing_receipt'] or {}).get('kind')},

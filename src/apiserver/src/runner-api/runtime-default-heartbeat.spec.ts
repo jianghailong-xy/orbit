@@ -8,6 +8,7 @@ const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
 function harness() {
   const writes: Array<Record<string, unknown>> = [];
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       update: async ({ data }: { data: Record<string, unknown> }) => {
         writes.push(data);

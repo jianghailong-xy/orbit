@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { CoordinatorJudgmentModule } from '../projects/coordinator-judgment.module';
 import { PushModule } from '../push/push.module';
+import { RunnerPresenceService } from '../runners/runner-presence';
 import { RealtimeService } from './realtime.service';
 import { ReaperService } from './reaper.service';
 
@@ -10,7 +11,9 @@ import { ReaperService } from './reaper.service';
   // afterwards (`ProjectOpenItemService`, contract §4.3 D). Imported rather than reached for through
   // the global scope so the dependency is visible where the module is declared.
   imports: [PushModule, CoordinatorJudgmentModule],
-  providers: [RealtimeService, ReaperService],
-  exports: [RealtimeService],
+  // RunnerPresenceService beside the reaper that asks it whether a runner's silence is evidence, and
+  // exported so the heartbeat that writes presence tells the same instance when a write fails.
+  providers: [RealtimeService, ReaperService, RunnerPresenceService],
+  exports: [RealtimeService, RunnerPresenceService],
 })
 export class RealtimeModule {}

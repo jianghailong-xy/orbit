@@ -358,12 +358,20 @@ the queue until it is started again.
 ## Runner link
 
 Runners reach the control plane over HTTPS. The runner link is the connection that is to replace those requests: one
-WebSocket per runner, to a link gateway that serves the runners of its cell. The gateway is not part of this stack yet.
-What the control plane provides today is the connection token a runner trades its runner token for before it
-connects, and the list of revoked credentials whose tokens the gateway refuses.
+WebSocket per runner, to a link gateway that serves the runners of its cell. The gateway is part of this stack, as the
+`link-gateway` service under the `runner-link` Compose profile, and it runs only where `.env` turns that profile on.
 
-The link is off unless all three of these are set in `.env`. While it is off, its routes answer 404 and runners keep
-working over HTTP. A value that cannot be used leaves it off too, and the apiserver logs why when it starts:
+For now the link runs in shadow. Runners keep working over HTTPS. The gateway authenticates their connections, keeps
+them alive, and compares the heartbeats and event batches runners mirror to it with what the HTTPS side received. It
+forwards nothing to the control plane, so turning it off changes no runner's work.
+[src/link-gateway/README.md](../src/link-gateway/README.md) describes the gateway in full.
+
+### Connection tokens
+
+Before it connects, a runner trades its runner token for a connection token, and the gateway refuses the tokens of
+revoked credentials. Both come from the apiserver, which offers them only when all three of these are set in `.env`.
+While they are not, those routes answer 404 and runners keep working over HTTP. A value that cannot be used leaves the
+link off too, and the apiserver logs why when it starts:
 
 ```dotenv
 RUNNER_LINK_SIGNING_KEY="base64 of an Ed25519 private key in PEM"
@@ -375,9 +383,9 @@ Generate the key and the secret. The gateway is given the public key and the sec
 
 ```bash
 openssl genpkey -algorithm ed25519 -out runner-link.pem
-base64 -w0 runner-link.pem                # RUNNER_LINK_SIGNING_KEY
-openssl pkey -in runner-link.pem -pubout  # the public key, for the gateway
-openssl rand -base64 32                   # RUNNER_LINK_GATEWAY_TOKEN, at least 32 characters
+base64 -w0 runner-link.pem                          # RUNNER_LINK_SIGNING_KEY
+openssl pkey -in runner-link.pem -pubout | base64 -w0  # RUNNER_LINK_PUBLIC_KEY, for the gateway
+openssl rand -base64 32                             # RUNNER_LINK_GATEWAY_TOKEN, at least 32 characters
 ```
 
 Keep `runner-link.pem` with the deployment's other protected secrets, then recreate the apiserver and check its log:
@@ -399,6 +407,83 @@ How the tokens work:
   name revoke every token minted with its old credential. The gateway reads `GET /api/runner/link-token/revocations`
   with `Authorization: Bearer <RUNNER_LINK_GATEWAY_TOKEN>` and refuses those tokens; one it has not yet heard of
   stops working when it expires.
+
+### Deploy the link gateway
+
+Runners connect to the gateway directly, on a host name and a port of its own. A proxying CDN or the web gateway
+never stands between them: a CDN would terminate and inspect the connection, and its outages and limits would become
+the link's. Set it up in this order.
+
+1. **DNS.** Give the link a host name of its own, such as `link.orbit.example.com`, with an A or AAAA record for this
+   host. Make the record **DNS only**: on Cloudflare, a grey cloud, not proxied. The web origin's own record stays as
+   it is.
+2. **Certificates.** Choose one way:
+   - **ACME.** The gateway obtains a Let's Encrypt certificate on its first connection and renews it on its own. Set
+     `RUNNER_LINK_ACME_DOMAINS` to the link's host name and `RUNNER_LINK_ACME_EMAIL` to a contact address. Its
+     TLS-ALPN-01 challenge reaches the gateway on port 443, so set `RUNNER_LINK_PORT=443`. Certificates are kept in
+     `RUNNER_LINK_GATEWAY_DIR/acme`.
+   - **Files.** Put the certificate chain and its key in `RUNNER_LINK_GATEWAY_DIR/tls/fullchain.pem` and
+     `RUNNER_LINK_GATEWAY_DIR/tls/privkey.pem`, from certbot, another ACME client or your own CA. Any port works.
+     When the files change, the gateway loads them within 30 seconds without a restart, and open connections stay
+     up. A certbot deploy hook that copies the renewed files there is enough. To load them at once, run
+     `docker compose kill -s HUP link-gateway`.
+3. **Firewall.**
+   - Open TCP `RUNNER_LINK_PORT` to the internet: runners connect from wherever they are.
+   - Leave the gateway's metrics port closed. Compose binds it to `127.0.0.1:RUNNER_LINK_METRICS_PORT` (9464).
+   - Keep the web origin's rules: where it sits behind Cloudflare, it accepts only Cloudflare's address ranges. The
+     link's port is a separate entrance and does not change them.
+   - In ACME mode, the gateway needs outbound HTTPS to Let's Encrypt.
+4. **Configure.** Add to `.env`, keeping any profiles `COMPOSE_PROFILES` already lists:
+
+   ```dotenv
+   COMPOSE_PROFILES=runner-link
+   RUNNER_LINK_URL="wss://link.orbit.example.com"
+   RUNNER_LINK_PUBLIC_KEY="base64 of the public key in PEM"
+   RUNNER_LINK_GATEWAY_DIR=/srv/orbit/link-gateway
+   RUNNER_LINK_PORT=443
+   RUNNER_LINK_ACME_DOMAINS=link.orbit.example.com
+   RUNNER_LINK_ACME_EMAIL=ops@example.com
+   ```
+
+   `RUNNER_LINK_URL` carries the port when it is not 443, as in `wss://link.orbit.example.com:8443`. Create
+   `RUNNER_LINK_GATEWAY_DIR` before starting, with `tls/` inside it when certificates come from files. The gateway
+   runs as root in its container, with every capability dropped, so root-owned certificate files are readable.
+5. **Start and check.**
+
+   ```bash
+   docker compose up -d --build apiserver link-gateway
+   docker compose ps link-gateway
+   docker compose logs --tail=50 link-gateway
+   curl -s http://127.0.0.1:9464/metrics | grep -E '^link_(connections|handshakes_total|revocation_fetches_total)'
+   curl -sI https://link.orbit.example.com   # 426: the gateway speaks WebSocket only
+   ```
+
+   `link_revocation_fetches_total{result="ok"}` rising every 30 seconds shows that the gateway reads the apiserver
+   with the right secret.
+
+### Operate the link gateway
+
+- **Releases.** An upgrade, or `docker compose up -d --force-recreate link-gateway`, stops the gateway gracefully.
+  It drains first:
+  1. It refuses new connections.
+  2. It tells its runners, in batches, to reconnect after a delay drawn at random within 30 seconds.
+  3. It closes what is left within 80 seconds.
+
+  Compose waits up to 90 seconds before it stops the container. Runners come back to the new gateway once it is up.
+- **Certificate rotation.** In ACME mode it is automatic. With files, replace them. Either way,
+  `link_tls_certificate_not_after_timestamp_seconds` shows the expiry of the certificate in use (files mode).
+- **Replacing the signing key.**
+  1. Give the gateway both public keys, comma-separated (`RUNNER_LINK_PUBLIC_KEY="<old>,<new>"`), and recreate it.
+  2. Switch the apiserver to the new `RUNNER_LINK_SIGNING_KEY`.
+  3. After an hour, when every old token has expired, drop the old public key.
+- **Monitoring.** `/metrics` on the metrics port counts connections, handshakes by result and their duration,
+  disconnects by reason, ping round trips, token refusals by reason, revocation reads and the shadow comparison.
+  [The gateway's README](../src/link-gateway/README.md#metrics) lists them all.
+- **Logs.** `docker compose logs link-gateway` shows one line per connection event. Set `LINK_FRAME_LOG=all` in the
+  service's environment to log a summary of every frame, too. The gateway decodes frames that it or a runner logged:
+  `docker compose logs link-gateway | docker compose exec -T link-gateway /link-gateway dump`.
+- **Turning it off.** Remove `runner-link` from `COMPOSE_PROFILES`, then run
+  `docker compose stop link-gateway && docker compose rm -f link-gateway`. Runners keep working over HTTPS.
 
 ## Managed runners
 
@@ -625,6 +710,8 @@ docker compose up -d --wait --no-deps --force-recreate docker-channel
 - [ ] `JWT_SECRET` and `PROVIDER_SECRET_KEY` are unique, protected, and backed up.
 - [ ] The runner link is off, or `RUNNER_LINK_SIGNING_KEY` and `RUNNER_LINK_GATEWAY_TOKEN` are unique and protected,
       and the gateway holds the public key, not the private one.
+- [ ] Where the link gateway runs, its DNS record is DNS only (not proxied), its port is the only other one open to
+      the internet, and its metrics port stays on loopback.
 - [ ] The public endpoint uses HTTPS and the configured origin matches it.
 - [ ] Only the gateway is publicly reachable.
 - [ ] The first administrator uses a strong password and user access is reviewed.

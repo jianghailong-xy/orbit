@@ -79,6 +79,7 @@ test('heartbeat preserves an exact source marker behind the process-owner fence'
         data: Record<string, unknown>;
       }> = [];
       const prisma = {
+        runnerPresence: { upsert: async () => ({}) },
         runner: {
           update: async () => ({ maxConcurrent: 1 }),
         },

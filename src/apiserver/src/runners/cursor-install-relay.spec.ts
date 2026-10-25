@@ -58,6 +58,7 @@ function harness(initial: Row = {}) {
   /** Run once, right after the heartbeat's drain has read the install slot. */
   let afterDrainRead: (() => void) | undefined;
   const prisma = {
+    runnerPresence: { upsert: async () => ({}) },
     runner: {
       findFirst: async ({ where }: { where: Row }) => (matches(row, where) ? { ...row } : null),
       findUnique: async ({ where, select }: { where: Row; select?: Row }) => {

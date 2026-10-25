@@ -56,7 +56,7 @@ import { RunnerApiController } from '../runner-api/runner-api.controller';
 import { ProviderPlanUsageService } from '../providers/plan-usage.service';
 import { QueueService as RealQueueService } from '../queue/queue.service';
 import { AutoRetryService } from './auto-retry.service';
-import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
+import { RUNNER_OFFLINE_AFTER_MS } from '../runners/runner-presence';
 import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -392,7 +392,7 @@ test('no session runs on a Default its owner removed from Orbit', {
     // The sweep's quota gate judges Work, which has room: it re-sends now rather than waiting for
     // Default's week, and the claim dispatches it on Work.
     const at = new Date(Math.max(after.retry_ms!, Date.now()) + 1_000);
-    await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - SESSION_RUNNER_OFFLINE_AFTER_MS / 2) } });
+    await db.runner.update({ where: { id: m.runnerId }, data: { lastHeartbeatAt: new Date(at.getTime() - RUNNER_OFFLINE_AFTER_MS / 2) } });
     await new AutoRetryService(prisma, sessions, quiet).sweep(at);
     const revived = await db.session.findUniqueOrThrow({ where: { id }, select: { status: true, retryAttempts: true } });
     assert.deepEqual(revived, { status: RunStatus.PENDING, retryAttempts: 1 }, 'held back by the quota of a Default nobody uses');
