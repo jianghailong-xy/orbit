@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { AgentProvider } from '@orbit/shared';
 import type { PrismaService } from '../prisma/prisma.service';
+import type { SessionsService } from '../sessions/sessions.service';
 import { WorkspacesService } from './workspaces.service';
 
 /** Records what reached the database; `$queryRaw` stands in for the derived-provider lookup. */
@@ -117,10 +118,20 @@ test('the repair queue matches a runner that has never been asked', async () => 
 /**
  * The delete path's own stub: a row that can be locked, a membership count, and a record of
  * whether the soft delete actually ran. `$queryRaw` answers the lock, so a service that stopped
- * taking it would read as "already deleted" here rather than quietly working.
+ * taking it would read as "already deleted" here rather than quietly working. `coordinators` are
+ * the projects whose coordinator conversation runs in the workspace; `ended` records which of
+ * those the delete ended, and `failing` names one whose ending fails.
  */
-function deleteStub(coordinating: number, locked = true) {
+function deleteStub(
+  coordinating: number,
+  locked = true,
+  coordinators: Array<{ id: string; coordinatorSessionId: string }> = [],
+  failing?: string,
+) {
   const deleted: Record<string, unknown>[] = [];
+  const counted: unknown[] = [];
+  const asked: unknown[] = [];
+  const ended: string[] = [];
   const prisma = {
     runner: { findMany: async () => [] },
     workspace: {
@@ -130,11 +141,30 @@ function deleteStub(coordinating: number, locked = true) {
         return { id: 'workspace-1' };
       },
     },
-    projectMember: { count: async () => coordinating },
+    projectMember: {
+      count: async (args: { where: unknown }) => {
+        counted.push(args.where);
+        return coordinating;
+      },
+    },
+    project: {
+      findMany: async (args: { where: unknown }) => {
+        asked.push(args.where);
+        return coordinators;
+      },
+    },
     $queryRaw: async () => (locked ? [{ id: 'workspace-1' }] : []),
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(prisma),
   } as unknown as PrismaService;
-  return { prisma, deleted };
+  const sessions = {
+    complete: async (ownerId: string, id: string) => {
+      assert.equal(ownerId, 'owner-1');
+      if (id === failing) throw new Error('the runner went away');
+      ended.push(id);
+      return { ok: true };
+    },
+  } as unknown as SessionsService;
+  return { prisma, sessions, deleted, counted, asked, ended };
 }
 
 test('an agent that coordinates a project is not soft-deleted either', async () => {
@@ -148,6 +178,80 @@ test('an agent that coordinates a project is not soft-deleted either', async () 
     (e: { status?: number }) => e.status === 409,
   );
   assert.deepEqual(deleted, []);
+});
+
+test('only an open project, or one whose owner chose this agent, holds it back', async () => {
+  // A settled project (DONE, CANCELLED) no longer does: a workspace that once coordinated a finished
+  // project could otherwise never be deleted. An owner's explicit choice still does, whatever the
+  // status — migration 0114 refuses to keep a chosen coordinator that is no longer a live agent.
+  const { prisma, counted } = deleteStub(0);
+
+  await new WorkspacesService(prisma).remove('owner-1', 'workspace-1');
+
+  assert.deepEqual(counted, [
+    {
+      agentId: 'workspace-1',
+      project: {
+        OR: [
+          { status: 'OPEN' },
+          { runtime: { is: { coordinatorIdentitySource: 'EXPLICIT' } } },
+        ],
+      },
+    },
+  ]);
+});
+
+test('deleting a workspace ends every coordinator conversation that ran in it', async () => {
+  // From a deleted workspace a coordinator cannot act (the runner refuses it orchestration), so it
+  // is ended, and a project that comes back reads its coordinator as unavailable and is rebound.
+  const { prisma, sessions, deleted, asked, ended } = deleteStub(0, true, [
+    { id: 'project-done', coordinatorSessionId: 'coordinator-done' },
+    { id: 'project-cancelled', coordinatorSessionId: 'coordinator-cancelled' },
+  ]);
+
+  assert.deepEqual(await new WorkspacesService(prisma, sessions).remove('owner-1', 'workspace-1'), {
+    ok: true,
+  });
+
+  assert.equal(deleted.length, 1);
+  assert.deepEqual(asked, [
+    {
+      ownerId: 'owner-1',
+      coordinatorSession: { workspaceId: 'workspace-1', deletedAt: null, completedAt: null },
+    },
+  ]);
+  assert.deepEqual(ended, ['coordinator-done', 'coordinator-cancelled']);
+});
+
+test('a coordinator that will not end leaves the delete standing and the others ended', async () => {
+  const { prisma, sessions, deleted, ended } = deleteStub(
+    0,
+    true,
+    [
+      { id: 'project-a', coordinatorSessionId: 'coordinator-a' },
+      { id: 'project-b', coordinatorSessionId: 'coordinator-b' },
+    ],
+    'coordinator-a',
+  );
+
+  assert.deepEqual(await new WorkspacesService(prisma, sessions).remove('owner-1', 'workspace-1'), {
+    ok: true,
+  });
+  assert.equal(deleted.length, 1);
+  assert.deepEqual(ended, ['coordinator-b']);
+});
+
+test('a refused delete ends no coordinator', async () => {
+  const { prisma, sessions, asked, ended } = deleteStub(1, true, [
+    { id: 'project-open', coordinatorSessionId: 'coordinator-open' },
+  ]);
+
+  await assert.rejects(
+    () => new WorkspacesService(prisma, sessions).remove('owner-1', 'workspace-1'),
+    (e: { status?: number }) => e.status === 409,
+  );
+  assert.deepEqual(asked, []);
+  assert.deepEqual(ended, []);
 });
 
 test('an agent no project coordinates with is deleted as before', async () => {

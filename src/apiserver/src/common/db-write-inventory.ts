@@ -1416,7 +1416,7 @@ export const TRANSACTION_UNITS: readonly TransactionUnit[] = [
     isolation: '',
     attempts: 4,
     replay: 'The row is re-read under its own lock; a delete that already happened is the same answer.',
-    effects: 'None inside.',
+    effects: 'None inside. After the commit, each project coordinator conversation running in the deleted workspace is ended through SessionsService.complete, one at a time; a failure is logged and the delete stands.',
     answer: 'Typed 503 from the global boundary.',
   },
   // ── Managed runners (migration 0399, docs/managed-runner-design.md). Only two units own a

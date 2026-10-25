@@ -6,10 +6,11 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, ProjectIdentitySource, ProjectStatus } from '@prisma/client';
 import type { WorkspacePermissionRuleInfo } from '@orbit/shared';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
 import { PrismaService } from '../prisma/prisma.service';
+import { SessionsService } from '../sessions/sessions.service';
 import { lastProviderByWorkspace, withProviderSeed } from './workspace-provider';
 import { antigravityState, hasGeminiEnvKey } from '../common/antigravity-readiness';
 import { usedRunnerEngines } from '../common/runner-engines';
@@ -31,7 +32,13 @@ function modelRoutingEngines(engines: string[] | undefined): string[] | undefine
 export class WorkspacesService {
   private readonly logger = new Logger(WorkspacesService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    // Only `remove` needs it, to end the coordinator conversations a deleted workspace ran. Defaulted
+    // so the specs that construct this service by hand to exercise another path do not each have to
+    // stub a session service they never reach; Nest injects the real one by type, not by position.
+    private readonly sessions: SessionsService = undefined as unknown as SessionsService,
+  ) {}
 
   /** Resolve each machine on the server so changing the chosen runner never guesses at credentials. */
   private async withAntigravityKeys<T extends { env?: unknown }>(ownerId: string, workspaces: T[]) {
@@ -324,12 +331,22 @@ export class WorkspacesService {
   }
 
   /**
-   * Delete an agent — unless a project is coordinated by it.
+   * Delete an agent — unless an OPEN project is coordinated by it, or a project whose owner chose it
+   * as the coordinator.
    *
    * The refusal is the soft-delete half of the `project_member` foreign key's RESTRICT, which
    * cannot fire here: this is an UPDATE, and the row it points at goes on existing. Without it, an
    * agent a project coordinates with can be deleted and the project keeps naming it — the identity
    * behind its coordinator is a deleted agent, and every later read has to decide what that means.
+   *
+   * A settled project (DONE, CANCELLED) no longer holds its coordinator back, so a workspace that once
+   * coordinated a finished project can be deleted. Such a project can still come back — a reopened
+   * criterion task, an edited criterion, its owner — and then finds its coordinator gone: the
+   * conversation that coordinated it from here is ended below (`endCoordinatorsIn`), so it reads as
+   * unavailable and its owner rebinds it (`COORDINATOR_UNAVAILABLE`), the route a deleted landing
+   * already takes. A DERIVED seat follows the landing it is rebound to (migration 0114). An EXPLICIT
+   * seat does not: 0114 fails closed (ORB01) on a deleted one, so an owner's choice holds the agent
+   * back whatever the project's status, and the owner changes the choice first.
    *
    * The lock is what makes the answer independent of timing. `FOR UPDATE` conflicts with the
    * `FOR SHARE` that `ProjectsService.writeCoordinatorAgent` takes on this same row, so a delete
@@ -355,7 +372,17 @@ export class WorkspacesService {
       // Already deleted, by a request that got here first. Deleting is idempotent — the caller
       // asked for a state this row is already in.
       if (held.length === 0) return;
-      const coordinating = await tx.projectMember.count({ where: { agentId: id } });
+      const coordinating = await tx.projectMember.count({
+        where: {
+          agentId: id,
+          project: {
+            OR: [
+              { status: ProjectStatus.OPEN },
+              { runtime: { is: { coordinatorIdentitySource: ProjectIdentitySource.EXPLICIT } } },
+            ],
+          },
+        },
+      });
       if (coordinating > 0) {
         throw new ConflictException(
           `This agent still coordinates ${coordinating} project(s) and cannot be deleted — ` +
@@ -364,7 +391,37 @@ export class WorkspacesService {
       }
       await tx.workspace.update({ where: { id }, data: { deletedAt: new Date() } });
     }, loggedRetry(this.logger, 'workspaces.remove'));
+    await this.endCoordinatorsIn(ownerId, id);
     return { ok: true };
+  }
+
+  /**
+   * End every project's coordinator conversation that runs in this deleted workspace. From there it
+   * can no longer act — the runner refuses orchestration to a deleted workspace's sessions — so left
+   * open it would go on being woken (a reopen, settled-but-unmerged work) and do nothing. Ended, the
+   * project reads its coordinator as unavailable and its owner rebinds it.
+   *
+   * Every project, not only the settled ones `remove` let through: a project that reopened between
+   * that count and this read is the same case, and an open project's coordinator can run here while
+   * its chosen identity is another workspace. After the commit and one at a time, by the Complete
+   * button's own method; a failure is logged and the delete stands, and that conversation is left for
+   * its Complete button.
+   */
+  private async endCoordinatorsIn(ownerId: string, id: string) {
+    const projects = await this.prisma.project.findMany({
+      where: { ownerId, coordinatorSession: { workspaceId: id, deletedAt: null, completedAt: null } },
+      select: { id: true, coordinatorSessionId: true },
+    });
+    for (const project of projects) {
+      if (!project.coordinatorSessionId) continue;
+      try {
+        await this.sessions.complete(ownerId, project.coordinatorSessionId);
+      } catch (error) {
+        this.logger.warn(
+          `workspace ${id} deleted, but project ${project.id}'s coordinator ${project.coordinatorSessionId} did not end: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
   }
 
   /**
