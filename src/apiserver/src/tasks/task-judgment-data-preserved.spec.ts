@@ -2495,7 +2495,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // no trigger — and no `task`, `project` or `project_acceptance_*` object is named, so the 0177
       // pair and every stored task and criterion row are out of its reach. No function or trigger is
       // created, and no INSERT, UPDATE or DELETE runs: every existing session reads NULL there.
-      '0445_session_claim_request_id'],
+      '0445_session_claim_request_id',
+      // The runner link's cut-over switch, RUNNER_LINK_REQUIRED (0446, docs/runner-link-design.md §11.3,
+      // §11.4): one new table, `runner_link_switch`, of at most one row (`runner_link_switch_one_row_chk`,
+      // `id` = 1) with no foreign key — `updated_by_id` names an administrator by id only. Read against
+      // every claim above: no `task`, `session`, `project` or `project_acceptance_*` object is named, the
+      // 0177 pair and every stored task and criterion row are out of its reach, and no function, trigger
+      // or type is created, replaced or dropped, so it is not another writer of the DONE fence and names
+      // none of the six preserved objects. No INSERT, UPDATE or DELETE: no row means the switch is off,
+      // and the row is written only when an administrator switches it. Every statement can run twice.
+      '0446_runner_link_switch'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
