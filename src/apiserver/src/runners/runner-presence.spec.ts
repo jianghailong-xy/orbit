@@ -136,6 +136,21 @@ test('every heartbeat upserts the runner’s presence row: the process, HTTP, no
   assert.deepEqual(write.create, { runnerId: RUNNER_ID, ...write.update });
 });
 
+test('a beat the link gateway forwarded is recorded as LINK; one over HTTPS stays HTTP', async () => {
+  const w = heartbeatWorld();
+  await w.controller.heartbeat(
+    { id: RUNNER_ID, version: null, lastHeartbeatAt: new Date() },
+    { status: 'ONLINE', idleCapacity: 1, leaseOwner: LEASE_OWNER } as never,
+    undefined, undefined, undefined, undefined,
+    { leaseOwner: LEASE_OWNER, requestId: 'hb-1', afterSeq: null },
+  );
+  await w.controller.heartbeat(
+    { id: RUNNER_ID, version: null, lastHeartbeatAt: new Date() },
+    { status: 'ONLINE', idleCapacity: 1, leaseOwner: LEASE_OWNER } as never,
+  );
+  assert.deepEqual(w.presenceWrites.map((write) => write.update.linkState), ['LINK', 'HTTP']);
+});
+
 test('the runner row’s own record moves only when it is five minutes old — the beat itself always lands in presence', async () => {
   const fresh = heartbeatWorld();
   await fresh.controller.heartbeat(

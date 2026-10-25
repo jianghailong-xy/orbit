@@ -1289,6 +1289,8 @@ export class RunnerApiController {
     @Headers(RUNNER_OS_HEADER) osHeader?: string,
     /** A managed runner's authorized instance: its workload is stored and its sleep is negotiated here. */
     @CurrentManagedRunnerInstance() managedInstance?: ManagedRunnerInstance,
+    /** Set when the link gateway forwarded this beat (runner-link-call.ts): presence records it as LINK. */
+    @CurrentRunnerLink() link?: RunnerLinkContext,
   ): Promise<RunnerHeartbeatResponse> {
     const heartbeatLeaseOwner = parseLeaseGeneration(dto?.leaseOwner);
     // Idle sleep (managed-runners/managed-runner-sleep.ts), only for an authorized managed instance
@@ -1421,13 +1423,14 @@ export class RunnerApiController {
           : {}),
       },
     }).catch(beatLost);
-    // Heard over HTTP: no gateway, and none of the hashes the link's heartbeat carries — this one sent
-    // its facts in full above.
+    // Heard over HTTPS, or forwarded by the link gateway: either way this beat sent its facts in full
+    // above, so none of the hashes a link heartbeat may carry instead. Which gateway node holds the
+    // connection is not something a forwarded call says yet.
     await recordRunnerBeat(this.prisma, {
       runnerId: runner.id,
       processId: heartbeatLeaseOwner,
       gatewayId: null,
-      linkState: 'HTTP',
+      linkState: link ? 'LINK' : 'HTTP',
       at: beatAt,
     }).catch(beatLost);
     // Whether this instance's mapping is draining to sleep, and what it is told about it. Advisory
