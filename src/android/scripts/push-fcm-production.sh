@@ -221,7 +221,10 @@ if [[ "$steps" == *" killed "* ]]; then
 fi
 
 if [[ "$steps" == *" foreground "* ]]; then
-  adbx -s "$serial" shell am start -W -n "$package/io.orbitd.android.MainActivity" > /dev/null
+  # A fresh Activity: a task restored onto an earlier page (the session a tapped entry opened) is not what this step
+  # is about. bgj_3518f02aa20a restored this task's own very long session there, and the release build ran out of
+  # memory before the push arrived.
+  adbx -s "$serial" shell am start -W --activity-clear-task -n "$package/io.orbitd.android.MainActivity" > /dev/null
   sleep 5
   notify foreground 'A10 Android push test 3/3: Orbit on screen. No action needed.'
   if delivered "$output/foreground-notify.json" && await_entry 'test 3/3' 90; then
