@@ -256,10 +256,11 @@ test('both exits map the body: the interceptor for returns, the filter for throw
   );
   // Reached through the conflict boundary, which is registered in front of it: Nest runs exactly
   // one filter per exception, so the id filter is wired as that one's `next` rather than as a
-  // second global. Dropping it out of the chain is the same regression as dropping it entirely.
+  // second global — through the runner link's boundary between them, which hands it every answer.
+  // Dropping it out of the chain is the same regression as dropping it entirely.
   assert.match(
     main,
-    /useGlobalFilters\(\s*new TransientDbConflictFilter\(new PublicIdExceptionFilter\(/,
+    /useGlobalFilters\(\s*new TransientDbConflictFilter\(\s*new RunnerLinkErrorFilter\(new PublicIdExceptionFilter\(/,
     'a refusal body leaves unmapped again — see public-id.filter.ts for what that cost',
   );
 });

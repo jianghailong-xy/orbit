@@ -7,10 +7,12 @@ import { AppModule } from './app.module';
 import { PublicIdExceptionFilter } from './common/public-id.filter';
 import { publicIdHeaders } from './common/public-id-headers';
 import { PublicIdInterceptor } from './common/public-id.interceptor';
+import { RunnerLinkErrorFilter } from './common/runner-link-error.filter';
 import { SlowRequestInterceptor } from './common/slow-request.interceptor';
 import { TransientDbConflictFilter } from './common/transient-db-conflict.filter';
 import { WorkspaceAliasInterceptor } from './common/workspace-alias.interceptor';
 import { outsideThePoolGateway } from './providers/pool-gateway.controller';
+import { listenForRunnerLinkCalls } from './runner-api/runner-link-call';
 
 declare global {
   interface BigInt {
@@ -61,10 +63,15 @@ async function bootstrap() {
   // In front of it, and chained INTO it rather than registered beside it: Nest runs exactly one
   // filter per exception, so two catch-alls would not compose — the second would simply replace
   // the first. The conflict boundary answers a database that rolled a request back and hands
-  // everything else straight through, so the id rule still applies to every refusal.
+  // everything else straight through, so the id rule still applies to every refusal. Between the
+  // two, a runner link call's answer gets the link's error fields and a database resource fault its
+  // retryable 503; every other request passes it untouched (runner-link-error.filter.ts).
   const httpAdapter = app.get(HttpAdapterHost).httpAdapter;
   app.useGlobalFilters(
-    new TransientDbConflictFilter(new PublicIdExceptionFilter(httpAdapter), httpAdapter),
+    new TransientDbConflictFilter(
+      new RunnerLinkErrorFilter(new PublicIdExceptionFilter(httpAdapter), httpAdapter),
+      httpAdapter,
+    ),
   );
 
   const origins = (config.get<string>('CORS_ORIGINS') ?? 'http://localhost:5173')
@@ -76,6 +83,11 @@ async function bootstrap() {
   await app.listen(port);
   // eslint-disable-next-line no-console
   console.log(`orbit control plane listening on :${port}`);
+  // The link gateway's own door to the same routes, when the runner link is on (runner-link-call.ts).
+  await listenForRunnerLinkCalls(app, {
+    port: config.get<string>('RUNNER_LINK_INTERNAL_PORT'),
+    host: config.get<string>('RUNNER_LINK_INTERNAL_HOST'),
+  });
 }
 
 void bootstrap();
