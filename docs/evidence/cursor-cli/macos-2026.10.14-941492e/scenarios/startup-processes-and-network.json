@@ -1,0 +1,839 @@
+{
+ "name": "startup-processes-and-network",
+ "runId": "2026-10-24T23-11-13-703Z",
+ "startedAt": "2026-10-24T23:20:17.470Z",
+ "finishedAt": "2026-10-24T23:24:13.376Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/startup-processes-and-network.ndjson",
+ "protocolLines": 45,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "fresh data dir: the worker starts but exits at once (no worker.log, no LSP), because <data>/projects/<slug>/ is missing",
+   "ok": true
+  },
+  {
+   "name": "with NODE_USE_ENV_PROXY=1 and HTTPS_PROXY, no connection bypasses the proxy",
+   "ok": true,
+   "detail": {
+    "fresh data dir": [],
+    "project data dir exists": [],
+    "--disable-indexing": [],
+    "--disable-codebase-ref": [],
+    "TMPDIR set": []
+   }
+  },
+  {
+   "name": "session/new starts the worker-server child",
+   "ok": true,
+   "detail": {
+    "workerLogWritten": true
+   }
+  },
+  {
+   "name": "once <data>/projects/<slug>/ exists the worker runs `npx -y typescript-language-server --stdio` at startup, unapproved",
+   "ok": true,
+   "detail": "macOS: no npx on the harness PATH, so no LSP and no npm traffic (same as a Linux PATH without npx)"
+  },
+  {
+   "name": "…which downloads from registry.npmjs.org",
+   "ok": true,
+   "skipped": true,
+   "detail": "skipped: no npx on the macOS harness PATH"
+  },
+  {
+   "name": "the worker socket goes to <tmpdir>/.cursor/<slug>-<hash>/worker.sock when the data-dir path is too long",
+   "ok": true,
+   "skipped": true,
+   "detail": "skipped: needs strace (darwin)"
+  },
+  {
+   "name": "with TMPDIR set the worker socket still falls back to /tmp/.cursor/<slug>-<hash>/",
+   "ok": true,
+   "skipped": true,
+   "detail": "skipped: needs strace (darwin)"
+  },
+  {
+   "name": "--disable-indexing keeps the worker and its LSP, and says so in worker.log",
+   "ok": true
+  },
+  {
+   "name": "--disable-codebase-ref keeps the worker from starting",
+   "ok": true,
+   "detail": {
+    "workerLogWritten": false
+   }
+  },
+  {
+   "name": "the worker skips codebase sync for this account's privacy mode (no repo42 traffic)",
+   "ok": true
+  },
+  {
+   "name": "no update check on the ACP path (no GetCliDownloadUrl / download hosts)",
+   "ok": true
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "per variant": {
+   "fresh data dir": {
+    "newOk": true,
+    "newMs": 6517,
+    "hosts": {
+     "api2.cursor.sh:443": {
+      "tunnels": 17,
+      "up": 42311,
+      "down": 541675,
+      "denied": 0,
+      "firstMs": 443
+     }
+    },
+    "directConnects": [],
+    "programs": [],
+    "rpcs": [
+     {
+      "phase": "initialize",
+      "process": "index.js acp"
+     },
+     {
+      "phase": "initialize",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetUserPrivacyMode",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2-connect",
+      "host": "api2.cursor.sh",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.ServerConfigService/GetServerConfig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetManagedSkills"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetTeamAdminSettingsOrEmptyIfNotInTeam"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/AvailableModels",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetUsableModels"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetDefaultModelForCli"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents"
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents"
+     },
+     {
+      "phase": "session/new",
+      "unixSocket": "/getRepositoryInfo",
+      "times": 5
+     },
+     {
+      "phase": "session/new",
+      "process": "index.js worker-server"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetMe"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetUserPrivacyMode"
+     },
+     {
+      "phase": "idle",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents"
+     },
+     {
+      "phase": "idle",
+      "kind": "h2",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetGlobalCommands"
+     }
+    ],
+    "workerLog": null,
+    "unixSockets": [],
+    "attemptedButNotFound": []
+   },
+   "project data dir exists": {
+    "newOk": true,
+    "newMs": 6757,
+    "hosts": {
+     "api2.cursor.sh:443": {
+      "tunnels": 20,
+      "up": 51081,
+      "down": 720023,
+      "denied": 0,
+      "firstMs": 430
+     }
+    },
+    "directConnects": [],
+    "programs": [],
+    "rpcs": [
+     {
+      "phase": "initialize",
+      "process": "index.js acp"
+     },
+     {
+      "phase": "initialize",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetUserPrivacyMode",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2-connect",
+      "host": "api2.cursor.sh",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.ServerConfigService/GetServerConfig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetManagedSkills"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetTeamAdminSettingsOrEmptyIfNotInTeam"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/AvailableModels",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetUsableModels"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetDefaultModelForCli"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "unixSocket": "/getRepositoryInfo",
+      "times": 5
+     },
+     {
+      "phase": "session/new",
+      "process": "index.js worker-server"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetMe"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetGlobalCommands"
+     }
+    ],
+    "workerLog": "[info] runServer socketPath=/tmp/.cursor/Users-long-orbit-cursor-p0-runs-2026-10-24T23-11-13-703Z-startup-proces-7e6f3f3/worker.sock\n[error] npx not found in PATH ERROR: [object Object]\n[info] Skipping codebase telemetry sync\n",
+    "unixSockets": [],
+    "attemptedButNotFound": []
+   },
+   "--disable-indexing": {
+    "newOk": true,
+    "newMs": 6824,
+    "hosts": {
+     "api2.cursor.sh:443": {
+      "tunnels": 18,
+      "up": 46487,
+      "down": 709431,
+      "denied": 0,
+      "firstMs": 464
+     }
+    },
+    "directConnects": [],
+    "programs": [],
+    "rpcs": [
+     {
+      "phase": "initialize",
+      "process": "index.js acp"
+     },
+     {
+      "phase": "initialize",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetUserPrivacyMode",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2-connect",
+      "host": "api2.cursor.sh",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.ServerConfigService/GetServerConfig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetManagedSkills"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetTeamAdminSettingsOrEmptyIfNotInTeam"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/AvailableModels",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetUsableModels"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetDefaultModelForCli"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "unixSocket": "/getRepositoryInfo",
+      "times": 5
+     },
+     {
+      "phase": "session/new",
+      "process": "index.js worker-server"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetMe"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetGlobalCommands"
+     }
+    ],
+    "workerLog": "[info] runServer socketPath=/tmp/.cursor/Users-long-orbit-cursor-p0-runs-2026-10-24T23-11-13-703Z-startup-proces-7e6f3f3/worker.sock\n[error] npx not found in PATH ERROR: [object Object]\n",
+    "unixSockets": [],
+    "attemptedButNotFound": []
+   },
+   "--disable-codebase-ref": {
+    "newOk": true,
+    "newMs": 6472,
+    "hosts": {
+     "api2.cursor.sh:443": {
+      "tunnels": 16,
+      "up": 42287,
+      "down": 541482,
+      "denied": 0,
+      "firstMs": 482
+     }
+    },
+    "directConnects": [],
+    "programs": [],
+    "rpcs": [
+     {
+      "phase": "initialize",
+      "process": "index.js acp"
+     },
+     {
+      "phase": "initialize",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetUserPrivacyMode",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2-connect",
+      "host": "api2.cursor.sh",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.ServerConfigService/GetServerConfig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetManagedSkills"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetTeamAdminSettingsOrEmptyIfNotInTeam"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/AvailableModels",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetUsableModels"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetDefaultModelForCli"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents"
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetMe"
+     },
+     {
+      "phase": "idle",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents"
+     },
+     {
+      "phase": "idle",
+      "kind": "h2",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetUserPrivacyMode"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetGlobalCommands"
+     }
+    ],
+    "workerLog": null,
+    "unixSockets": [],
+    "attemptedButNotFound": []
+   },
+   "TMPDIR set": {
+    "newOk": true,
+    "newMs": 6761,
+    "hosts": {
+     "api2.cursor.sh:443": {
+      "tunnels": 21,
+      "up": 53486,
+      "down": 725035,
+      "denied": 0,
+      "firstMs": 469
+     }
+    },
+    "directConnects": [],
+    "programs": [],
+    "rpcs": [
+     {
+      "phase": "initialize",
+      "process": "index.js acp"
+     },
+     {
+      "phase": "initialize",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetUserPrivacyMode",
+      "times": 4
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2-connect",
+      "host": "api2.cursor.sh",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/BootstrapStatsig",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.ServerConfigService/GetServerConfig",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetManagedSkills"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetTeamAdminSettingsOrEmptyIfNotInTeam"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/AvailableModels",
+      "times": 3
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetUsableModels"
+     },
+     {
+      "phase": "session/new",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AiService/GetDefaultModelForCli"
+     },
+     {
+      "phase": "session/new",
+      "kind": "fetch",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "kind": "h2",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.AnalyticsService/TrackEvents",
+      "times": 2
+     },
+     {
+      "phase": "session/new",
+      "unixSocket": "/getRepositoryInfo",
+      "times": 5
+     },
+     {
+      "phase": "session/new",
+      "process": "index.js worker-server"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetMe"
+     },
+     {
+      "phase": "idle",
+      "kind": "https",
+      "host": "api2.cursor.sh",
+      "method": "POST",
+      "path": "/aiserver.v1.DashboardService/GetGlobalCommands"
+     }
+    ],
+    "workerLog": "[info] runServer socketPath=/tmp/.cursor/Users-long-orbit-cursor-p0-runs-2026-10-24T23-11-13-703Z-startup-proces-7e6f3f3/worker.sock\n[error] npx not found in PATH ERROR: [object Object]\n[info] Skipping codebase telemetry sync\n",
+    "unixSockets": [],
+    "attemptedButNotFound": []
+   }
+  },
+  "programs the CLI tried to run that are not installed here (e.g. direnv for .envrc)": {
+   "fresh data dir": [],
+   "project data dir exists": [],
+   "--disable-indexing": [],
+   "--disable-codebase-ref": [],
+   "TMPDIR set": []
+  }
+ }
+}

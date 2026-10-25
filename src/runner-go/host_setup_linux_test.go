@@ -4,20 +4,12 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
 )
 
 const hostSetupChildEnv = "ORBIT_TEST_HOST_SETUP_CHILD"
-
-// An unprivileged uid to run the child as when the suite itself is root. Nothing is
-// looked up: the point is only that it is not 0.
-const (
-	hostSetupChildUID = 65534
-	hostSetupChildGID = 65534
-)
 
 // TestHostSetupChildRunsMain is the child half of the test below rather than a test of
 // its own: re-executed with a non-root uid, it runs the real CLI so the real exit status
@@ -62,32 +54,4 @@ func TestHostSetupWithoutRootExitsOne(t *testing.T) {
 	if _, err := os.Stat(hostRunnerTemplatePath); !os.IsNotExist(err) {
 		t.Errorf("a refused setup left %s behind (%v)", hostRunnerTemplatePath, err)
 	}
-}
-
-// reachableTestBinary copies this test binary somewhere the unprivileged child can
-// actually execute it: `go test` builds it under a 0700 directory, which the child
-// cannot traverse.
-func reachableTestBinary(t *testing.T) string {
-	t.Helper()
-	self, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	binary, err := os.ReadFile(self)
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir, err := os.MkdirTemp("", "orbit-host-setup")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
-	if err := os.Chmod(dir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(dir, "orbit.test")
-	if err := os.WriteFile(path, binary, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	return path
 }

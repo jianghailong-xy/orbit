@@ -1,0 +1,164 @@
+{
+ "name": "macos-keychain-store",
+ "runId": "2026-10-24T23-36-57-246Z",
+ "startedAt": "2026-10-24T23:36:57.247Z",
+ "finishedAt": "2026-10-24T23:37:50.817Z",
+ "passed": true,
+ "realPromptsDeclared": 0,
+ "realPrompts": [],
+ "protocol": "protocol/macos-keychain-store.ndjson",
+ "protocolLines": 20,
+ "fixtures": [],
+ "checks": [
+  {
+   "name": "no leftover cursor-* entries in the login keychain before the run",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "name": "config-A: session/new succeeds with the default store",
+   "ok": true
+  },
+  {
+   "name": "config-A: the Keychain gets the three token entries (account cursor-user) and nothing else with a cursor-* name",
+   "ok": true,
+   "detail": [
+    {
+     "svce": "cursor-access-token",
+     "acct": "cursor-user"
+    },
+    {
+     "svce": "cursor-refresh-token",
+     "acct": "cursor-user"
+    },
+    {
+     "svce": "cursor-api-key",
+     "acct": "cursor-user"
+    }
+   ]
+  },
+  {
+   "name": "config-A: no auth.json is written (that is the file store)",
+   "ok": true
+  },
+  {
+   "name": "config-A: the status command sees the saved login",
+   "ok": true
+  },
+  {
+   "name": "config-B: session/new succeeds with the default store",
+   "ok": true
+  },
+  {
+   "name": "config-B: the Keychain gets the three token entries (account cursor-user) and nothing else with a cursor-* name",
+   "ok": true,
+   "detail": [
+    {
+     "svce": "cursor-access-token",
+     "acct": "cursor-user"
+    },
+    {
+     "svce": "cursor-refresh-token",
+     "acct": "cursor-user"
+    },
+    {
+     "svce": "cursor-api-key",
+     "acct": "cursor-user"
+    }
+   ]
+  },
+  {
+   "name": "config-B: no auth.json is written (that is the file store)",
+   "ok": true
+  },
+  {
+   "name": "config-B: the status command sees the saved login",
+   "ok": true
+  },
+  {
+   "name": "the entry names do not change with CURSOR_CONFIG_DIR / XDG_CONFIG_HOME (both runs wrote the same set)",
+   "ok": true,
+   "detail": [
+    [
+     "cursor-access-token",
+     "cursor-api-key",
+     "cursor-refresh-token"
+    ],
+    [
+     "cursor-access-token",
+     "cursor-api-key",
+     "cursor-refresh-token"
+    ]
+   ]
+  },
+  {
+   "name": "a keychain write under a foreign HOME hangs (GUI dialog) instead of completing",
+   "ok": true,
+   "detail": {
+    "status": null,
+    "signal": "SIGTERM",
+    "err": "Error: spawnSync /usr/bin/security ETIMEDOUT"
+   }
+  },
+  {
+   "name": "cleanup removed the entries the scenario created",
+   "ok": true,
+   "detail": []
+  },
+  {
+   "name": "the runner user's real ~/.cursor, ~/.config/cursor and ~/.local/share/cursor-agent are untouched",
+   "ok": true
+  }
+ ],
+ "detail": {
+  "config-A session/new ms": 6101,
+  "config-A new keychain entries during the run": [
+   {
+    "svce": "cursor-access-token",
+    "acct": "cursor-user"
+   },
+   {
+    "svce": "cursor-refresh-token",
+    "acct": "cursor-user"
+   },
+   {
+    "svce": "cursor-api-key",
+    "acct": "cursor-user"
+   }
+  ],
+  "config-A slot tree (any other place the key could have landed)": [],
+  "config-B session/new ms": 6245,
+  "config-B new keychain entries during the run": [
+   {
+    "svce": "cursor-access-token",
+    "acct": "cursor-user"
+   },
+   {
+    "svce": "cursor-refresh-token",
+    "acct": "cursor-user"
+   },
+   {
+    "svce": "cursor-api-key",
+    "acct": "cursor-user"
+   }
+  ],
+  "config-B slot tree (any other place the key could have landed)": [],
+  "keychain entries seen": {
+   "before": [],
+   "added": [
+    [
+     "cursor-access-token",
+     "cursor-api-key",
+     "cursor-refresh-token"
+    ],
+    [
+     "cursor-access-token",
+     "cursor-api-key",
+     "cursor-refresh-token"
+    ]
+   ],
+   "after": [],
+   "realCursorDirsRestored": true
+  }
+ }
+}

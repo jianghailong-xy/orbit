@@ -1,0 +1,41 @@
+{
+ "ledger": "p0bm",
+ "task": "P0b 跟进 34hO5vUuVSUNrTdtUxF6b",
+ "cap": 10,
+ "spent": 4,
+ "model": "Auto (default[])",
+ "entries": [
+  {
+   "n": 1,
+   "at": "2026-10-24T23:41:05.776Z",
+   "scenario": "multi-turn-tools-default",
+   "runId": "2026-10-24T23-40-58-845Z",
+   "note": "turn 1: read/ls/write/echo(allow-always)/env/mcp(reject)/fetch",
+   "version": "2026.10.14-941492e"
+  },
+  {
+   "n": 2,
+   "at": "2026-10-24T23:41:47.009Z",
+   "scenario": "multi-turn-tools-default",
+   "runId": "2026-10-24T23-40-58-845Z",
+   "note": "turn 2: echo after allow-always, mcp allow-once, orbit mcp task_get, recall",
+   "version": "2026.10.14-941492e"
+  },
+  {
+   "n": 3,
+   "at": "2026-10-24T23:43:01.180Z",
+   "scenario": "cancel-mid-tool",
+   "runId": "2026-10-24T23-40-58-845Z",
+   "note": "cancel while sleep 47 runs",
+   "version": "2026.10.14-941492e"
+  },
+  {
+   "n": 4,
+   "at": "2026-10-24T23:43:58.155Z",
+   "scenario": "shell-wrapper-env",
+   "runId": "2026-10-24T23-40-58-845Z",
+   "note": "D4 A: P3 orbit-bash as SHELL; HOME, profile and variable names agent commands see",
+   "version": "2026.10.14-941492e"
+  }
+ ]
+}
