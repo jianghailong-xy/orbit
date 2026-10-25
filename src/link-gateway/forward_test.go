@@ -217,6 +217,9 @@ func TestAnIdempotentCallWhoseAnswerIsLostIsSentAgainOnTheNextBackend(t *testing
 	})
 	h := newLinkHarness(t, []*fakeBackend{first, second}, nil)
 	tc, _ := h.connectLink(runnerA, processA)
+	// The Welcome's call left a connection to the first backend open, and net/http itself sends a GET again once when a
+	// reused connection is dropped: these calls start on fresh connections, so only the gateway's own retry is counted.
+	h.g.backends.client.CloseIdleConnections()
 	// Started on the first backend each time, round-robin, so every call meets the lost answer there once.
 	h.g.backends.next.Store(0)
 	res := tc.rpc("inbox-1", "GET", "/runner/sessions/0190a0b0-0000-7000-8000-0000000000c1/inbox?runningTurnId=", nil)
@@ -262,6 +265,8 @@ func TestACallThatReachedNoBackendIsSentAgainOnTheNextWhateverItIs(t *testing.T)
 		c.link.RetryBudget, c.link.BackendDownFor = 2*time.Second, time.Minute
 	})
 	tc, _ := h.connectLink(runnerA, processA)
+	// The Welcome's call met the dead backend first; the call below meets it afresh.
+	h.g.backends.down[0].Store(0)
 	h.g.backends.next.Store(0)
 	res := tc.rpc("complete-1", "POST", "/runner/sessions/0190a0b0-0000-7000-8000-0000000000c1/turn-complete", []byte(`{"turnId":"t-1"}`))
 	if res.GetTunnel().GetStatus() != 200 {

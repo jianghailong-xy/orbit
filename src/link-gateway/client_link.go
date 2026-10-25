@@ -31,8 +31,11 @@ import (
 // saw, in a report the script reads besides the stack's own state. `link-gateway client -drill <name>`:
 //
 //	link     heartbeats and their facts by digest; a session created by its owner, its claim hint and its claim, sent
-//	         again under the same request_id; the inbox hint and HeartbeatAck's hints; route answers relayed whatever
-//	         their status, malformed requests refused, after_seq; durable events stored and acknowledged, in order, a
+//	         again under the same request_id; the inbox hint and HeartbeatAck's hints; an approval the runner asks for
+//	         in the running turn, which the owner allows through the web API: its approval hint, HeartbeatAck's hints
+//	         naming it while the call that asked waits and no longer once that call has returned, and the decision read
+//	         at once; route answers relayed whatever their status, malformed requests refused, after_seq; durable
+//	         events stored and acknowledged, in order, a
 //	         gap refused, and credit exceeded by a burst; the live stream published only while a client watches it, and
 //	         the turn prefix asked of this runner when the client opens the session; an answer large enough to travel in
 //	         pieces, with a control frame written between two of them.
@@ -41,6 +44,10 @@ import (
 //	         it again: every one of them must be answered.
 //	slow     a runner that stops reading: frames of the live tier dropped while the connection stays, then the
 //	         connection closed as a slow consumer.
+//	resume   a session's event stream cut with batches in flight, and the runner back on a new connection resuming
+//	         from the durable_seq its Welcome states (client_resume.go).
+//	switch   against a gateway that follows the server's RUNNER_LINK_REQUIRED switch: an administrator (the owner)
+//	         flips it on, then off in the middle of a session's event stream (client_switch.go).
 
 // drillOptions are the client's flags for drills.
 type drillOptions struct {
@@ -128,14 +135,18 @@ func runDrill(ctx context.Context, cl *client, o drillOptions) int {
 		d.retryDrill(ctx, o)
 	case "slow":
 		d.slowDrill(ctx, o)
+	case "resume":
+		d.resumeDrill(ctx, o)
+	case "switch":
+		d.switchDrill(ctx, o)
 	default:
 		d.record("drill", false, time.Now(), "unknown drill "+o.name)
 	}
 	return finish()
 }
 
-// dialDriver opens a connection saying the Hello a runner says, and starts reading it.
-func dialDriver(ctx context.Context, cl *client, r *drillReport) (*driver, error) {
+// dialDriver opens a connection saying the Hello a runner says, naming the sessions it resumes, and starts reading it.
+func dialDriver(ctx context.Context, cl *client, r *drillReport, resume ...*linkpb.SessionResume) (*driver, error) {
 	d := &driver{
 		cl: cl, log: cl.log, report: r, rpcs: map[string]chan *linkpb.RpcResult{},
 		acks: make(chan *linkpb.HeartbeatAck, 64), eventAck: make(chan *linkpb.EventAck, 1024),
@@ -143,6 +154,7 @@ func dialDriver(ctx context.Context, cl *client, r *drillReport) (*driver, error
 		facts: map[string]*linkpb.Fact{},
 	}
 	cl.hello = drillHello(cl.o.processID)
+	cl.hello.Sessions = resume
 	cl.onRaw = d.noteRaw
 	cc, err := cl.connect(ctx)
 	if err != nil {

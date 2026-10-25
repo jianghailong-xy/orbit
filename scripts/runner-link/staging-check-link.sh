@@ -6,16 +6,21 @@
 #   1. NATS authenticates: a client without a seed cannot connect, and each user can do only what it does
 #      (TestNATSAuthorizationOnARealServer, on this stack's NATS with its seeds); the apiserver and the gateway are in.
 #   2. The link drill: heartbeats reconciled by the heartbeat route, facts by digest; a session's claim hint and claim,
-#      sent again under its request_id; the inbox hint and HeartbeatAck's hints; route answers relayed whatever their
-#      status, malformed paths refused; durable events stored, acknowledged, deduplicated, a gap refused, credit
-#      exceeded and made good; the live stream published only while the owner watches, and the turn prefix asked of the
-#      runner; an answer that travels in pieces. Then the stack's own record of it: presence says LINK through this
-#      gateway, and the database holds every event the gateway acknowledged.
+#      sent again under its request_id; the inbox hint and HeartbeatAck's hints; an approval the owner allows through the
+#      web API, its approval hint and HeartbeatAck's hints naming it while its call waits, then the decision read; route
+#      answers relayed whatever their status, malformed paths refused; durable events stored, acknowledged,
+#      deduplicated, a gap refused, credit exceeded and made good; the live stream published only while the owner
+#      watches, and the turn prefix asked of the runner; an answer that travels in pieces. Then the stack's own record
+#      of it: presence says LINK through this gateway, and the database holds every event the gateway acknowledged.
 #   3. Cancel: a claim waits for the claim lock, held here, and the runner goes away under it: the gateway cancels the
 #      call, and the session stays unclaimed.
 #   4. Retry: heartbeats and reads keep being answered while the second apiserver is killed and started again.
 #   5. Slow consumer: a runner that stops reading loses frames of the live tier and keeps its connection, then is
 #      closed as a slow consumer when what it does not read passes its bound.
+#   6. Resume: a session's event stream cut with batches in flight; the runner back on a new connection, whose Welcome
+#      states how far the session is stored and that the process still holds it, resumes from there with no
+#      EVENT_SEQ_GAP, and the database holds every seq once. Then a Welcome naming the session states its last seq, and
+#      the release GET /api/runner/release assigns is the one Welcome and HeartbeatAck name.
 #
 # Run it with the stack in MODE_LINK with two apiservers (ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_BACKENDS=2
 # staging-up.sh), in the files TLS mode, with no other runner connected; it needs Go for step 1. It exits non-zero at
@@ -91,7 +96,7 @@ snapshot "$out/2-metrics-before.txt"
 client -drill link "${owner[@]}" -nats-url "$nats_url" -nats-seed-file "$secrets/nats_apiserver_seed" \
   -report "$out/2-link.json" -capture "$out/2-link.capture" > "$out/2-link.log" 2>&1 || fail "the link drill"
 snapshot "$out/2-metrics-after.txt"
-check_json "$out/2-link.json" 's.ok && s.steps.length >= 25 && s.steps.every((x) => x.ok)'
+check_json "$out/2-link.json" 's.ok && s.steps.length >= 30 && s.steps.every((x) => x.ok)'
 node -e 'const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   for (const x of s.steps) console.error(`    ok   ${x.name} (${x.ms} ms): ${x.detail}`);' "$out/2-link.json"
 deltas "$out/2-metrics-before.txt" "$out/2-metrics-after.txt" \
@@ -102,7 +107,8 @@ deltas "$out/2-metrics-before.txt" "$out/2-metrics-after.txt" \
   'link_events_stored_total >= 13000' 'link_live_events_total{result="no_watchers"} >= 2' \
   'link_live_events_total{result="published"} >= 2' 'link_turn_prefix_requests_total{result="answered"} >= 1' \
   'link_hints_total{kind="claim",result="sent"} >= 1' 'link_hints_total{kind="inbox",result="sent"} >= 1' \
-  'link_hints_total{kind="watchers",result="sent"} >= 2' 'link_backend_calls_total{kind="rpc",result="cut_off"} == 0'
+  'link_hints_total{kind="approval",result="sent"} >= 1' 'link_hints_total{kind="watchers",result="sent"} >= 2' \
+  'link_backend_calls_total{kind="rpc",result="cut_off"} == 0'
 session_uuid="$(json_field "$out/2-link.json" 'facts.sessionUuid')"
 runner_id="$(json_field "$out/2-link.json" 'facts.runnerId')"
 durable="$(json_field "$out/2-link.json" 'facts.durableSeq')"
@@ -179,5 +185,24 @@ deltas "$out/5-metrics-before.txt" "$out/5-metrics-after.txt" \
   'link_disconnects_total{reason="slow_consumer"} == 1' 'link_queue_full_total{queue="normal",result="closed"} >= 1'
 node -e 'const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); console.error("    " + s.steps.map((x) => x.detail).join("\n    "));' "$out/5-slow.json"
 
+step "6. resume: the event stream cut with batches in flight, resumed on a new connection from Welcome's durable_seq"
+snapshot "$out/6-metrics-before.txt"
+client -drill resume "${owner[@]}" -report "$out/6-resume.json" > "$out/6-resume.log" 2>&1 || fail "the resume drill"
+snapshot "$out/6-metrics-after.txt"
+check_json "$out/6-resume.json" 's.ok && s.steps.length >= 11 && s.steps.every((x) => x.ok)'
+node -e 'const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+  for (const x of s.steps) console.error(`    ok   ${x.name} (${x.ms} ms): ${x.detail}`);' "$out/6-resume.json"
+deltas "$out/6-metrics-before.txt" "$out/6-metrics-after.txt" \
+  'link_event_batches_total{result="gap"} == 0' 'link_welcome_lookups_total{result="answered"} >= 3' \
+  'link_welcome_lookups_total{result="failed"} + link_welcome_lookups_total{result="refused"} + link_welcome_lookups_total{result="malformed"} == 0' \
+  'link_disconnects_total{reason="connection_lost"} >= 1'
+resume_session="$(json_field "$out/6-resume.json" 'facts.sessionUuid')"
+final="$(json_field "$out/6-resume.json" 'facts.finalSeq')"
+rows="$(psql_value "SELECT count(*) || ' ' || count(DISTINCT seq) || ' ' || COALESCE(min(seq), 0) || ' ' || COALESCE(max(seq), 0) FROM run_event WHERE session_id = '$resume_session'")"
+printf 'session %s: acknowledged through %s, sent through %s when cut; Welcome said durable_seq %s; rows, distinct seqs, min, max: %s\n' \
+  "$resume_session" "$(json_field "$out/6-resume.json" 'facts.ackedAtCut')" "$(json_field "$out/6-resume.json" 'facts.sentThrough')" \
+  "$(json_field "$out/6-resume.json" 'facts.welcomeDurableSeq')" "$rows" | tee "$out/6-db.txt" >&2
+[ "$rows" = "$final $final 1 $final" ] || fail "the session's stored seqs are not 1..$final, each once"
+
 snapshot "$out/metrics-final.txt"
-log "all five steps hold; records in $out"
+log "all six steps hold; records in $out"

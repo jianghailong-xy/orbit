@@ -968,7 +968,10 @@ type Welcome struct {
 	// The event credit the connection starts with; each Credit frame replaces it.
 	Credit *Credit `protobuf:"bytes,5,opt,name=credit,proto3" json:"credit,omitempty"`
 	// One entry for each session in Hello.sessions: how far its events are stored and whether the
-	// connecting process still holds it.
+	// connecting process still holds it. Or none, when the gateway could not read them: that says
+	// nothing about the sessions, neither that their events are not stored nor that their leases are
+	// lost. The runner then keeps every event no EventAck has covered and sends it again, and learns
+	// of a lost lease from the next heartbeat's reconcile.
 	Sessions []*SessionState `protobuf:"bytes,6,rep,name=sessions,proto3" json:"sessions,omitempty"`
 	// Work waiting for the runner as the connection opens (§5.3).
 	Hints *HintState `protobuf:"bytes,7,opt,name=hints,proto3" json:"hints,omitempty"`

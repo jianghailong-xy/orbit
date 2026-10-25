@@ -777,6 +777,11 @@ export const RUNNER_ISOLATION_FIELD_CASES: Readonly<Record<string, RunnerFieldCa
     as: RUNNER,
     request: (of) => ({ params: {}, body: heartbeat({ agentDirProbes: [{ agentId: of.workspaceId, exists: true, isGitRepo: false }] }) }),
   },
+  // What the link gateway's Welcome says of a process's sessions: B's own process, asking after A's leased session.
+  'POST /runner/link/welcome body sessionIds[]': {
+    as: RUNNER,
+    request: (of, mine) => ({ params: {}, body: { leaseOwner: mine.runner.leaseOwner, sessionIds: [of.runner.activateSessionId] } }),
+  },
   // B's own claim of an operation of its own, but A's operation named.
   'POST /runner/codex-rate-limit-reset-result body operationId': {
     as: RUNNER,
@@ -1476,4 +1481,9 @@ export const PUBLIC_ROUTES: Readonly<Record<string, string>> = {
     + 'runner-link-token.controller.ts:61, runner-link-token.ts:241; it takes no id, and answers only the '
     + 'fingerprints of the runner credentials revoked within a token\'s lifetime, which name no account and no '
     + 'runner — runner-link-token.controller.ts:122',
+  'GET /runner/link/mode':
+    'the runner link gateway\'s door, behind the same gateway service secret (RunnerLinkGatewayGuard, 404 with the '
+    + 'link off) — runner-link-required.controller.ts:58, runner-link-token.controller.ts:61, runner-link-token.ts:241; '
+    + 'it takes no id, and answers only whether RUNNER_LINK_REQUIRED is on, read from the deployment\'s one switch row, '
+    + 'which names no account and no runner — runner-link-required.controller.ts:64, runner-link-required.ts:129',
 };

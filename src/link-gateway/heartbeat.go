@@ -187,6 +187,9 @@ func (l *linkState) forwardHeartbeat(hb *linkpb.Heartbeat) {
 		if hints != nil {
 			// An answer without them says nothing about what waits, which is not the same as nothing waiting.
 			ack.Hints = c.g.hintState(c.claims.RunnerID, hints)
+			if r := hints.Release; r != nil && r.Version != "" {
+				ack.Release = &linkpb.AssignedRelease{Version: r.Version, Rollback: r.Rollback}
+			}
 		}
 		m.heartbeatForwards.inc("forwarded")
 		m.heartbeatDuration.observe(time.Since(started))
@@ -250,6 +253,11 @@ func heartbeatRequestBody(hb *linkpb.Heartbeat, process string, hello *linkpb.He
 type linkHints struct {
 	InboxSessionIDs []string `json:"inboxSessionIds"`
 	Claim           bool     `json:"claim"`
+	// Approvals are the approvals that have a decision while their reader is still waiting (runner-link-hints.ts).
+	Approvals []struct {
+		SessionID  string `json:"sessionId"`
+		ApprovalID string `json:"approvalId"`
+	} `json:"approvals"`
 	// Watchers are the answering apiserver instance's own counts of the runner's watched sessions (live.go).
 	Watchers *struct {
 		Instance string `json:"instance"`
@@ -258,6 +266,12 @@ type linkHints struct {
 			Watchers  uint32 `json:"watchers"`
 		} `json:"sessions"`
 	} `json:"watchers"`
+	// Release is the release the runner is assigned, as GET /runner/release would answer it
+	// (src/apiserver/src/runner-api/runner-release-feed.ts); absent when the apiserver can state none now.
+	Release *struct {
+		Version  string `json:"version"`
+		Rollback bool   `json:"rollback"`
+	} `json:"release"`
 }
 
 // splitLinkHints parts the route's answer into today's HeartbeatResponse, which goes to the runner as it is, and the
@@ -290,6 +304,9 @@ func (g *gateway) hintState(runnerID string, h *linkHints) *linkpb.HintState {
 	if h != nil {
 		state.InboxSessionIds = h.InboxSessionIDs
 		state.Claim = h.Claim
+		for _, a := range h.Approvals {
+			state.Approvals = append(state.Approvals, &linkpb.ApprovalHint{SessionId: a.SessionID, ApprovalId: a.ApprovalID})
+		}
 		if w := h.Watchers; w != nil {
 			counts := make(map[string]uint32, len(w.Sessions))
 			for _, s := range w.Sessions {

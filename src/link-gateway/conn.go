@@ -31,8 +31,10 @@ type conn struct {
 	// (X-Orbit-Runner-Link-Token): the apiserver checks it on each one.
 	token  string
 	remote string
-	mode   linkpb.Mode
-	log    *slog.Logger
+	// mode is what the gateway told runners when the connection opened, which its Welcome says, and what it has to
+	// forward with. Its HeartbeatAcks say what the gateway tells runners now (mode.go).
+	mode linkpb.Mode
+	log  *slog.Logger
 	// started is when the upgrade request arrived; the handshake's duration ends when Welcome is written.
 	started time.Time
 
@@ -112,7 +114,7 @@ var tierNames = [tierCount]string{"control", "normal", "live"}
 func newConn(g *gateway, ws *websocket.Conn, claims *linkClaims, remote string) *conn {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &conn{
-		g: g, ws: ws, id: newConnectionID(), claims: claims, remote: remote, mode: g.cfg.Mode,
+		g: g, ws: ws, id: newConnectionID(), claims: claims, remote: remote, mode: g.mode(),
 		ctx: ctx, cancel: cancel,
 		queues: [tierCount]chan outItem{
 			tierControl: make(chan outItem, controlQueue),
@@ -197,8 +199,13 @@ func (c *conn) handshake() bool {
 	c.mu.Lock()
 	c.hello = hello
 	c.mu.Unlock()
+	// What Welcome says of the Hello's sessions and of the runner's release, as the welcome route answers it (welcome.go).
+	// Asked before this connection takes over from an older one of the process, which carries the work meanwhile.
+	var sessions []*linkpb.SessionState
+	var release *linkpb.AssignedRelease
 	if c.link != nil {
 		c.link.greeted(hello)
+		sessions, release = c.link.welcome(hello)
 	}
 	if old := c.g.reg.activate(c); old != nil {
 		old.closeWith(linkpb.CloseCode_CLOSE_CODE_SUPERSEDED, "a newer connection of this process took over", 0,
@@ -217,7 +224,9 @@ func (c *conn) handshake() bool {
 		HeartbeatIntervalMs: uint32(c.g.cfg.HeartbeatInterval / time.Millisecond),
 		Limits:              &linkpb.Limits{MaxFrameBytes: maxFrameBytes},
 		Credit:              &linkpb.Credit{MaxUnackedEvents: credit.Events, MaxUnackedBytes: credit.Bytes},
+		Sessions:            sessions,
 		Hints:               &linkpb.HintState{},
+		Release:             release,
 		ConnectionId:        c.id,
 	}}}, true)
 	c.welcomed = true
@@ -296,6 +305,8 @@ func (c *conn) dispatch(f *linkpb.Frame) bool {
 	case *linkpb.Frame_EventBatch:
 		switch {
 		case c.link != nil:
+			// Forwarded even once RUNNER_LINK_REQUIRED is switched off, until the runner leaves the connection: the
+			// ingest stores each seq once, so a batch stored here is not stored again when the runner resends it.
 			c.link.onEvents(body.EventBatch)
 		case c.mode == linkpb.Mode_MODE_HTTP:
 			// No EventAck: in MODE_HTTP nothing is stored, and an ack says the events are (§5.8).
@@ -333,14 +344,20 @@ func (c *conn) dispatch(f *linkpb.Frame) bool {
 // onHeartbeat records the beat and answers it (§5.7). In MODE_LINK the beat is forwarded to the apiserver's heartbeat
 // route and answered with what it says (heartbeat.go). In MODE_HTTP it is the typed half of a mirror: answered at once
 // with MODE_HTTP and nothing to apply, and compared, never forwarded.
+//
+// The answer states the mode the gateway tells runners now, which may not be the connection's (mode.go): a MODE_HTTP
+// connection is told MODE_LINK once RUNNER_LINK_REQUIRED is on, and a MODE_LINK connection MODE_HTTP once it is off.
+// Then the beat is not forwarded either, and the runner, which applies nothing of an answer saying MODE_HTTP, sends it
+// again over HTTPS.
 func (c *conn) onHeartbeat(frameID uint64, hb *linkpb.Heartbeat, size int) {
 	c.g.metrics.heartbeats.inc()
-	if c.link != nil {
+	mode := c.g.mode()
+	if c.link != nil && mode == linkpb.Mode_MODE_LINK {
 		c.link.onHeartbeat(hb)
 		return
 	}
 	c.send(&linkpb.Frame{Body: &linkpb.Frame_HeartbeatAck{HeartbeatAck: &linkpb.HeartbeatAck{
-		Mode: c.mode, Hints: &linkpb.HintState{},
+		Mode: mode, Hints: &linkpb.HintState{},
 	}}}, true)
 	if c.mode == linkpb.Mode_MODE_HTTP {
 		c.shadow.typed(frameID, &shadowEntry{kind: "heartbeat", heartbeat: hb}, size)
@@ -355,20 +372,25 @@ func mayForward(mode linkpb.Mode, rpc *linkpb.Rpc) bool {
 }
 
 // onRpc compares a mirror with its typed frame and answers every Rpc with exactly one RpcResult: forwarded in
-// MODE_LINK (forward.go), refused otherwise.
+// MODE_LINK (forward.go), refused otherwise. A connection opened in MODE_LINK is in MODE_HTTP once RUNNER_LINK_REQUIRED
+// is switched off (mode.go): its calls are refused LINK_MODE_HTTP, and the runner sends them again over HTTPS.
 func (c *conn) onRpc(rpc *linkpb.Rpc, size int) {
 	shadow := strings.HasPrefix(rpc.GetRequestId(), shadowPrefix)
 	if shadow {
 		c.shadow.mirror(rpc, size)
 	}
-	if mayForward(c.mode, rpc) && c.g.forward != nil {
+	mode := c.mode
+	if c.g.mode() != linkpb.Mode_MODE_LINK {
+		mode = linkpb.Mode_MODE_HTTP
+	}
+	if mayForward(mode, rpc) && c.g.forward != nil {
 		c.g.metrics.rpcs.inc("forwarded")
 		c.g.forward(c, rpc)
 		return
 	}
 	code, message := "NOT_FORWARDED", "this gateway has no backend to forward requests to"
 	switch {
-	case c.mode != linkpb.Mode_MODE_LINK:
+	case mode != linkpb.Mode_MODE_LINK:
 		code, message = "LINK_MODE_HTTP", "this connection is in MODE_HTTP: daemon requests go over HTTPS, and a mirror is compared, never forwarded"
 	case shadow:
 		code, message = "SHADOW_MIRROR", "a mirror is compared, never forwarded"

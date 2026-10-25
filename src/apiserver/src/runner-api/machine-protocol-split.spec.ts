@@ -7,6 +7,8 @@ import { MACHINE_PROTOCOL } from '../common/machine-protocol';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { RunnerApiController } from './runner-api.controller';
 import { RunnerAgentsController } from './runner-agents.controller';
+import { RunnerLinkModeController } from './runner-link-required.controller';
+import { RunnerLinkWelcomeController } from './runner-link-welcome.controller';
 import { RunnerProjectsController } from './runner-projects.controller';
 import { RunnerSessionsController } from './runner-sessions.controller';
 import { RunnerServiceTokensController } from './runner-service-tokens.controller';
@@ -35,6 +37,16 @@ test('only the machine protocol keeps UUIDs', () => {
     Reflect.getMetadata(MACHINE_PROTOCOL, RunnerApiController),
     true,
     'claim/reclaim/leases/events/finalize/worktree ops key a runner’s disk',
+  );
+  assert.equal(
+    Reflect.getMetadata(MACHINE_PROTOCOL, RunnerLinkWelcomeController),
+    true,
+    'the link gateway calls it, and the link serves the machine protocol alone',
+  );
+  assert.equal(
+    Reflect.getMetadata(MACHINE_PROTOCOL, RunnerLinkModeController),
+    undefined,
+    'the link gateway reads the cut-over switch over HTTPS with its own secret, not as a runner\'s call, and it names no id',
   );
 
   for (const controller of [

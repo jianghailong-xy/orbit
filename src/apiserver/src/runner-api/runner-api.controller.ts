@@ -356,7 +356,9 @@ import {
 } from '../tasks/task-completion-evidence.service';
 import { RunnerAuthGuard } from './runner-auth.guard';
 import { CurrentRunnerLink, type RunnerLinkContext } from './runner-link-call';
+import { RunnerLinkRequiredInterceptor, StaysOnHttps } from './runner-link-required';
 import { readRunnerLinkHints, type RunnerLinkHints } from './runner-link-hints';
+import { RunnerReleaseFeed } from './runner-release-feed';
 import { ReferenceExpansionService } from '../tasks/reference-expansion';
 import { ListEventsService } from '../task-lists/list-events.service';
 import { RunnerOrchestrationAuthorizer } from './runner-orchestration-authorizer';
@@ -991,7 +993,10 @@ export type RetryPlanTransaction = TransactionSurface<{ session: ['findUnique'] 
 /** A Codex or Kimi usage limit reads the workspace too: whether it leaves the account to Orbit. */
 export type UsageLimitTransaction = TransactionSurface<{ workspace: ['findUnique'] }> & QuotaRetryTransaction;
 
+// The runner daemon's protocol. While RUNNER_LINK_REQUIRED is on, a call to any of these routes that comes over HTTPS is
+// answered 426 UPGRADE_REQUIRED, but for the five marked StaysOnHttps (runner-link-required.ts).
 @MachineProtocol()
+@UseInterceptors(RunnerLinkRequiredInterceptor)
 @Controller('runner')
 export class RunnerApiController {
   private readonly logger = new Logger(RunnerApiController.name);
@@ -1107,9 +1112,16 @@ export class RunnerApiController {
      * reaper of a control plane built without it cannot hear about a failed one.
      */
     @Optional() private readonly presence?: RunnerPresenceService,
+    /**
+     * What /dl publishes, for the release a link heartbeat's answer states (runner-release-feed.ts). `@Optional()` for
+     * the same reason as the rest of this list: without it, a link heartbeat states no release, and the runner asks
+     * GET /runner/release over HTTPS as it always has.
+     */
+    @Optional() private readonly releases?: RunnerReleaseFeed,
   ) {}
 
   /** `orbit register` — exchange a one-time enrollment token for a runner credential. */
+  @StaysOnHttps()
   @Post('register')
   async register(@Body() dto: RunnerRegisterRequest): Promise<RunnerRegisterResponse> {
     if (!dto?.enrollmentToken || !dto?.name) {
@@ -1161,6 +1173,7 @@ export class RunnerApiController {
   }
 
   /** `orbit register` (no token) — open a device-login session for browser approval. */
+  @StaysOnHttps()
   @Post('device/start')
   async deviceStart(@Body() dto: DeviceStartRequest): Promise<DeviceStartResponse> {
     if (!dto?.name) throw new BadRequestException('name is required');
@@ -1175,6 +1188,7 @@ export class RunnerApiController {
   }
 
   /** The CLI polls this until the user approves the session in the browser. */
+  @StaysOnHttps()
   @Post('device/poll')
   @HttpCode(200)
   async devicePoll(@Body() dto: DevicePollRequest): Promise<DevicePollResponse> {
@@ -1803,13 +1817,15 @@ export class RunnerApiController {
       ? cursorKeyCheckRelay.take(runner.id)
       : [];
     // A beat the link gateway forwarded is also answered with what waits for the runner (runner-link-hints.ts), which
-    // the gateway states in HeartbeatAck.hints. Read last, and only for a link call; a read that fails leaves it out,
-    // and the gateway then states nothing rather than that nothing waits.
+    // the gateway states in HeartbeatAck.hints, and with the release the runner is assigned, which it states in
+    // HeartbeatAck.release. Read last, and only for a link call; a read that fails leaves it out, and the gateway then
+    // states nothing rather than that nothing waits.
     const linkHints = link
       ? await readRunnerLinkHints(this.prisma, runner.id).then(
           (waiting): RunnerLinkHints => {
             const watchers = this.realtime.linkWatchersOf(supervisedSessionIds);
-            return { ...waiting, ...(watchers ? { watchers } : {}) };
+            const release = this.releases?.assignedTo(runner.id);
+            return { ...waiting, ...(watchers ? { watchers } : {}), ...(release ? { release } : {}) };
           },
           () => undefined,
         )
@@ -3877,6 +3893,7 @@ export class RunnerApiController {
    * runner owns, so a runner can't read another tenant's blobs.
    */
   @UseGuards(RunnerAuthGuard)
+  @StaysOnHttps()
   @Get('sessions/:id/attachments/:attId')
   async attachment(
     @CurrentRunner() runner: { id: string },
@@ -3903,6 +3920,7 @@ export class RunnerApiController {
    * runner uploads bytes here and rewrites the transcript markdown to `orbit-attachment:<id>`.
    */
   @UseGuards(RunnerAuthGuard)
+  @StaysOnHttps()
   @Post('sessions/:id/attachments')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_UPLOAD_BYTES } }))
   async uploadAttachment(

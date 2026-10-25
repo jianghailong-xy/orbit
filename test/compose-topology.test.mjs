@@ -59,6 +59,13 @@
 // public keys from .env, and refuses to start without them. The gateway gains the internal listener's address and its
 // own seed. Every seed is given to its one service, the public keys to NATS alone. A deployment whose .env does not
 // name the runner-link profile runs exactly what it ran, and its apiserver opens no listener.
+//
+// On 2026-10-25 the runner link's Welcome (project 34bc0CsOzPh9KshG7H3DW, task B4a, of the plan the account owner confirmed:
+// design section 7 has Welcome and HeartbeatAck name the runner's release; its coordinator approved this pin) added one line
+// to the apiserver's environment: the web container's /dl, which the apiserver reads the two published runner releases
+// from, to state the release GET /api/runner/release would assign. No service, mount or port is added. It is read only for
+// the link's answers, at most once a minute; while it cannot be read, the link states no release and runners ask that
+// route as before.
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -303,6 +310,12 @@ const APPROVED_APISERVER_BLOCKS = [
     '      RUNNER_LINK_INTERNAL_PORT: "${RUNNER_LINK_INTERNAL_PORT:-3001}"',
     '      RUNNER_LINK_INTERNAL_HOST: "${RUNNER_LINK_INTERNAL_HOST:-0.0.0.0}"',
     '      RUNNER_LINK_NATS_SEED: "${RUNNER_LINK_NATS_APISERVER_SEED:-}"',
+  ],
+  // The runner link's releases (2026-10-25, the top of this file): where the apiserver reads what /dl publishes, the web
+  // container beside it unless the host's .env names another. It comes after the forwarding's lines in the file, and
+  // before the managed runners'.
+  [
+    '      RUNNER_RELEASE_DL_URL: "${RUNNER_RELEASE_DL_URL:-http://web/dl/}"',
   ],
   // Managed runners on this host's Docker (2026-10-17, the top of this file): the switch, off unless the
   // host's .env says true; the profile's fixed path; and the directory holding the profile and the Docker
