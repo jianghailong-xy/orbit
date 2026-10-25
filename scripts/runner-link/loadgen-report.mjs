@@ -351,6 +351,7 @@ const dbPeakPct = allocation ? round((100 * pgc.peak10sCores) / allocation, 1) :
 const dbPeak60Pct = allocation ? round((100 * pgc.peak60sCores) / allocation, 1) : null;
 const steadyLines = series.filter((l) => l.phase === 'steady');
 const connectedMin = steadyLines.length ? Math.min(...steadyLines.map((l) => l.connected)) : 0;
+const connectedMax = series.length ? Math.max(...series.map((l) => l.connected)) : 0;
 const errorCounts = {
   loadgen: steady.errorTotal,
   gateway: Object.values(gatewayErrors).reduce((n, v) => n + v, 0),
@@ -363,7 +364,9 @@ const errorCounts = {
 };
 const totalErrors = Object.values(errorCounts).reduce((n, v) => n + v, 0);
 const criteria = [
-  { name: 'connections', target: `${summary.config.runners}`, measured: `${connectedMin} (lowest in the window)`, pass: connectedMin >= summary.config.runners },
+  { name: 'connections', target: `${summary.config.runners}`,
+    measured: summary.steady ? `${connectedMin} (lowest in the window)` : `${connectedMax} at most: the fleet never all connected`,
+    pass: summary.steady ? connectedMin >= summary.config.runners : false },
   { name: 'heartbeats per second', target: '≈ 500', measured: `${steady.heartbeatAcksPerSecond}`, pass: steady.heartbeatAcksPerSecond >= 450 },
   { name: 'durable events per second', target: '≈ 2000', measured: `${steady.eventsAckedPerSecond}`, pass: steady.eventsAckedPerSecond >= 1800 },
   { name: 'steady window', target: '1 h', measured: `${round(steady.seconds / 60, 1)} min`, pass: steady.seconds >= 3600 },
@@ -388,7 +391,9 @@ const md = [];
 const row = (...cells) => md.push(`| ${cells.join(' | ')} |`);
 md.push(`# Load test ${run.name}`, '');
 md.push(`Commit \`${run.sha.slice(0, 12)}\`${run.dirty ? ' (with uncommitted changes)' : ''}, ${run.backends} apiserver backend(s), database CPU allocation ${allocation ?? 'unlimited'}, host ${run.hostCpus} CPUs.`);
-md.push(`Steady window ${summary.steadyStartedAt} → ${summary.steadyEndedAt} (${round(steady.seconds / 60, 1)} min), after a ramp of ${summary.rampSeconds} s.`, '');
+md.push(summary.steady
+  ? `Steady window ${summary.steadyStartedAt} → ${summary.steadyEndedAt} (${round(steady.seconds / 60, 1)} min), after a ramp of ${summary.rampSeconds} s.`
+  : `No steady window: the run ended after ${summary.rampSeconds} s of ramp, before every runner was connected. Every figure is over the whole run (${summary.startedAt} → ${summary.endedAt}).`, '');
 if (run.stoppedForMemory) md.push(`**Stopped early at ${run.stoppedForMemory}: the host ran short of memory.**`, '');
 md.push(`**Verdict: ${verdict ? 'PASS' : 'FAIL'}**`, '');
 row('Criterion', 'Target', 'Measured', 'Pass');
