@@ -41,7 +41,7 @@ import {
 } from '../projects/task-checkpoint.service';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { CreatorType, Prisma, RunStatus, TaskStatus } from '@prisma/client';
-import { randomUUID } from 'crypto';
+import { randomUUID, type KeyObject } from 'crypto';
 import { PLAN_USAGE_CAS_ATTEMPTS, storeHeartbeatPlanUsage } from './codex-reset-plan-usage';
 import { accountAfterUsageLimit, accountAfterUsageLimitAt, accountSwitchNotice, runAccount } from '../providers/plan-usage-accounts';
 import {
@@ -165,6 +165,7 @@ import {
 import { OPEN_SESSION_STATUSES, statusAfterTurnCompleted } from '../common/session-scheduling';
 import { assertValidUpload, MAX_UPLOAD_BYTES, toBytes, UploadedFile } from '../attachments/attachments.media';
 import {
+  classifyTransactionFault,
   loggedRetry,
   RUNNER_POLL_TRANSACTION_MAX_WAIT_MS,
   withTransactionRetry,
@@ -184,7 +185,7 @@ import {
 import { modelRoutingEnabled } from '../common/model-routing-switch';
 import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 import { QueueService } from '../queue/queue.service';
-import { RealtimeService } from '../realtime/realtime.service';
+import { RealtimeService, runEventBatchNotice } from '../realtime/realtime.service';
 import { PushService } from '../push/push.service';
 import { CreateTaskBatchItemDto } from '../tasks/dto';
 import { TASK_CRITERION_SHAPE_ADVICE_CODE } from '../tasks/task-criterion-shape-advice';
@@ -274,6 +275,7 @@ import { SessionNotSendable, SessionsService } from '../sessions/sessions.servic
 import {
   assertEngineSession as assertEngineSessionRow,
   assertEngineSessionById as assertEngineSessionRowById,
+  SESSION_KIND_LANDING,
 } from '../sessions/engine-session';
 import { appendSessionMessageContext } from '../sessions/session-message';
 import { SessionRequestService } from '../sessions/session-request.service';
@@ -336,11 +338,18 @@ import { stripNul } from './strip-nul';
 import { SessionNamingDto } from './session-naming';
 import { normalizeToolOutputEvent } from './tool-output';
 import {
+  admitLinkCallConnections,
+  linkCallCutShort,
   readLinkEventBatch,
   refusedValueState,
   rejectionOf,
+  storedLinkCallSeqs,
   tombstoneRow,
   unstorableTombstone,
+  type LinkEventBatch,
+  type LinkEventCall,
+  type LinkEventCallAnswer,
+  type LinkEventCallResult,
   type LinkEventsAnswer,
   type LinkTombstone,
 } from './link-events';
@@ -475,6 +484,86 @@ const REPO_CLEANUP_TIMEOUT_MS = 3 * 60_000;
 // itself. maxWait uses the same value: a batch that already burned its compile should queue for
 // a pool slot instead of failing fast and paying the compile again.
 const EVENTS_INGEST_TRANSACTION_TIMEOUT_MS = 120_000;
+/**
+ * What the events transaction reads of its Session under the row's lock (ingestEvents): read for each batch, or for
+ * every session of a merged link call at once (ingestLinkEventCall).
+ */
+const INGEST_SESSION_SELECT = {
+  // Whose rows a control-plane turn's card may be read from (project-started.ts).
+  ownerId: true,
+  status: true,
+  runtimeSessionId: true,
+  // Read under the row lock so the three conditional writes this transaction used to
+  // issue as separate guarded statements can be decided here instead. Nothing can move
+  // them between this read and the single write ingestEvents makes: the row is held FOR UPDATE.
+  cancelRequestedAt: true,
+  runningBgShells: true,
+  runningBgJobs: true,
+  runningBgJobActivity: true,
+  runningSubagents: true,
+  coordinatorContextEpoch: true,
+  // Same one-shot-per-run reason as runtimeSessionId: the stamp ingestEvents takes is only taken
+  // while this is still null, and the row is held FOR UPDATE across that decision.
+  engineStartedAt: true,
+  enginePhase: true,
+  // Which task this run executes and which door created it — read only when a user turn in
+  // this batch is the one that delivers the task's brief (`readTurnCards`).
+  taskId: true,
+  runSource: true,
+  // The line an account-pool member switch owes the transcript, taken by the first
+  // engine start a batch carries (QueueService.resolvePoolMember writes it).
+  poolSwitchNotice: true,
+} satisfies Prisma.SessionSelect;
+type IngestSessionRow = Prisma.SessionGetPayload<{ select: typeof INGEST_SESSION_SELECT }>;
+/** What one batch's ingest committed, and what is announced of it after the commit (announceIngest). */
+interface IngestOutcome {
+  session: IngestSessionRow;
+  currentWorkAcknowledged: number;
+  abandonedApprovals: string[];
+  accountReload: boolean;
+  events: NormalizedRunEvent[];
+  durable: NormalizedRunEvent[];
+  alreadyStored: number;
+}
+/**
+ * A merged link call's own transaction, as each of its batches' ingest runs inside it (ingestLinkEventCall): the
+ * session's row and stored seqs, read for every session of the call at once under the locks the call took.
+ */
+interface MergedIngest {
+  tx: Prisma.TransactionClient;
+  session: IngestSessionRow;
+  stored: Set<number>;
+}
+// A merged link call's transaction is run again without a batch whose ingest failed, at most this many times: past
+// that, every batch it still holds is sent alone. So a call of many batches the database refuses values of costs three
+// runs of it, never one per batch.
+const LINK_CALL_RERUNS = 2;
+// The merged transaction waits for no session another writer holds (SKIP LOCKED: that batch is sent alone and waits
+// there). Anything else it would wait on, and any statement of it that runs long, is cut short, and every batch it
+// holds is sent alone instead, so no session's other writers wait behind the call for longer than this.
+const LINK_CALL_LOCK_TIMEOUT_MS = 1_000;
+const LINK_CALL_STATEMENT_TIMEOUT_MS = 5_000;
+// Its whole transaction, and its wait for a pool connection: a call is a few hundred milliseconds even at its largest
+// (MAX_LINK_CALL_BATCHES), so a call past this is not going to commit.
+const LINK_CALL_TRANSACTION_TIMEOUT_MS = 15_000;
+/** A batch of a merged link call, read as linkEvents reads one (ingestLinkEventCall). */
+interface LinkCallBatch {
+  /** Where it is in the call, and so where its result goes. */
+  index: number;
+  connection: number;
+  sessionId: string;
+  read: LinkEventBatch;
+}
+/** A batch of a merged link call whose ingest failed: the call's transaction is run again without it. */
+class LinkCallBatchFailed extends Error {
+  constructor(
+    readonly batch: LinkCallBatch,
+    /** The failure, kept apart from `cause` so that no retry reads it as the transaction's. */
+    readonly failure: unknown,
+  ) {
+    super('a batch of a merged link call failed');
+  }
+}
 // A first integration back-fills every other finished code task in the same transaction as the
 // turn that starts the line. That work is proportional to the project's completed tasks, so the
 // interactive 5s default expires before a large project's queue can commit. Keep the atomic
@@ -6652,10 +6741,191 @@ export class RunnerApiController {
   }
 
   /**
+   * POST /runner/link/events (RunnerLinkEventsController): the link gateway's merged call, the event batches it
+   * collected from any of its connections, stored in ONE transaction instead of one each (docs/runner-link-design.md
+   * §6.6, §6.7; link-events.ts). Each batch is taken as `linkEvents` takes it alone, by the same ingest, and answered
+   * alike. What the call shares is everything around that ingest:
+   *
+   *   - the runners: each connection admitted as RunnerAuthGuard admits a link call, every runner the call names read
+   *     in one statement (admitLinkCallConnections);
+   *   - the sessions: all of them locked in one statement, sorted by id, under lockSessionLeaseOwner's fence
+   *     (lockLinkCallSessions), and their rows and stored seqs read in one statement each;
+   *   - the other replicas' notice of each batch, sent by the transaction itself, so they hear of each batch once, at
+   *     its commit (§6.7).
+   *
+   * A batch the call cannot take as the events route would is answered `sendAlone`, and so is one whose ingest fails:
+   * the transaction is run again without it, at most LINK_CALL_RERUNS times, and past that every batch left is sent
+   * alone. So is every batch of a call its transaction's own timeouts cut short. The gateway forwards such a batch to
+   * the events route on its own, which refuses or stores it exactly as it always has, tombstones and EVENT_UNSTORABLE
+   * included. Nothing of a batch answered `sendAlone` was written.
+   */
+  async ingestLinkEventCall(call: LinkEventCall, publicKey: KeyObject): Promise<LinkEventCallAnswer> {
+    const results: LinkEventCallResult[] = call.batches.map(() => ({ sendAlone: true }));
+    // Each batch as linkEvents reads it, before the database is asked anything. One that names no session, or is not a
+    // batch of events, is sent alone, to be refused there; so is every batch of a session after its first, which the
+    // gateway never sends while the first is out, and which must not be stored ahead of it.
+    let candidates: LinkCallBatch[] = [];
+    const named = new Set<string>();
+    call.batches.forEach((batch, index) => {
+      let sessionId: string;
+      try {
+        sessionId = toUuid(batch.sessionId);
+      } catch {
+        return;
+      }
+      if (named.has(sessionId)) return;
+      named.add(sessionId);
+      let read: LinkEventBatch;
+      try {
+        read = readLinkEventBatch(batch);
+      } catch {
+        return;
+      }
+      candidates.push({ index, connection: batch.connection, sessionId, read });
+    });
+    // One run of the call's transaction: what of the call it took, and when it began to hold its sessions.
+    const instance = this.realtime.instance;
+    const ingestCall = async (tx: Prisma.TransactionClient) => {
+      const ingested: Array<{ batch: LinkCallBatch; outcome: IngestOutcome; coordinator: boolean }> = [];
+      // It holds every session of the call, so what it would wait on, and any statement of it that runs long, is cut
+      // short, and the call sends every batch alone instead.
+      await tx.$queryRaw`
+        SELECT set_config('lock_timeout', ${`${LINK_CALL_LOCK_TIMEOUT_MS}ms`}, true),
+               set_config('statement_timeout', ${`${LINK_CALL_STATEMENT_TIMEOUT_MS}ms`}, true)
+      `;
+      // A connection RunnerAuthGuard would refuse sends its batches alone, where it refuses them.
+      const connections = await admitLinkCallConnections(tx, publicKey, call.connections, new Date());
+      const admitted = candidates.flatMap((batch) => {
+        const connection = connections[batch.connection];
+        if (!connection) return [];
+        let leaseOwner: string | null;
+        try {
+          leaseOwner = parseLeaseGeneration(connection.leaseOwner, 'leaseOwner');
+        } catch {
+          return [];
+        }
+        return [{ batch, runnerId: connection.runnerId, leaseOwner }];
+      });
+      if (admitted.length === 0) return { ingested, lockedAt: null };
+      const lockedAt = performance.now();
+      const locked = await this.lockLinkCallSessions(tx, admitted.map(({ batch, runnerId, leaseOwner }) => ({
+        sessionId: batch.sessionId,
+        runnerId,
+        leaseOwner,
+      })));
+      // Sent alone: a session another writer holds (it waits for it there), one that is not this runner's or that
+      // another process leases, and a landing — each refused there as it always was.
+      const fenced = admitted.filter(({ batch }) => {
+        const lock = locked.get(batch.sessionId);
+        return lock !== undefined && lock.leaseOwnerMatches && !lock.landing;
+      });
+      const rows = fenced.length === 0
+        ? []
+        : await tx.session.findMany({
+            where: { id: { in: fenced.map(({ batch }) => batch.sessionId) } },
+            select: { id: true, ...INGEST_SESSION_SELECT },
+          });
+      const sessions = new Map(rows.map(({ id, ...session }) => [id, session as IngestSessionRow]));
+      // A session no longer open is refused there too, before anything is written.
+      const open = fenced
+        .filter(({ batch }) => OPEN.includes(sessions.get(batch.sessionId)!.status))
+        .sort((x, y) => (x.batch.sessionId < y.batch.sessionId ? -1 : x.batch.sessionId > y.batch.sessionId ? 1 : 0));
+      const stored = await storedLinkCallSeqs(tx, open.map(({ batch }) => ({
+        sessionId: batch.sessionId,
+        firstSeq: batch.read.firstSeq,
+        lastSeq: batch.read.lastSeq,
+      })));
+      for (const { batch, runnerId, leaseOwner } of open) {
+        try {
+          const outcome = await this.ingestEvents(
+            { id: runnerId },
+            batch.sessionId,
+            leaseOwner,
+            batch.read.events,
+            { tombstones: batch.read.tombstones },
+            { tx, session: sessions.get(batch.sessionId)!, stored: stored.get(batch.sessionId)! },
+          );
+          ingested.push({ batch, outcome, coordinator: locked.get(batch.sessionId)!.coordinator });
+        } catch (error) {
+          // The database failing, or this transaction cut short, is the call's: every batch goes the same way.
+          // Anything else is this batch's own, a value the database refuses among it: the call is run again without it.
+          const { family } = classifyTransactionFault(error);
+          if (family === 'TRANSIENT' || family === 'RESOURCE' || linkCallCutShort(error)) throw error;
+          throw new LinkCallBatchFailed(batch, error);
+        }
+      }
+      // The other replicas hear of each batch once, at this commit, of what was stored while the session is open: what
+      // publishBatch tells them after an ingest of its own.
+      const notices = ingested.flatMap(({ batch, outcome }) => {
+        if (!OPEN.includes(outcome.session.status)) return [];
+        const notice = runEventBatchNotice(instance, batch.sessionId, outcome.events.filter((e) => !isNoiseSystemEvent(e)));
+        return notice ? [notice] : [];
+      });
+      if (notices.length > 0) {
+        await tx.$executeRaw`
+          SELECT pg_notify(n.channel, n.payload)
+            FROM unnest(${notices.map((n) => n.channel)}::text[], ${notices.map((n) => n.payload)}::text[]) AS n(channel, payload)
+        `;
+      }
+      return { ingested, lockedAt };
+    };
+    let heldMs = 0;
+    for (let run = 0; candidates.length > 0 && run <= LINK_CALL_RERUNS; run += 1) {
+      try {
+        const committed = await withTransactionRetry(this.prisma, ingestCall, loggedRetry(this.logger, 'runnerApi.linkEvents', {
+          transaction: { timeout: LINK_CALL_TRANSACTION_TIMEOUT_MS, maxWait: LINK_CALL_TRANSACTION_TIMEOUT_MS },
+        }));
+        heldMs = committed.lockedAt === null ? 0 : Math.round(performance.now() - committed.lockedAt);
+        for (const { batch, outcome, coordinator } of committed.ingested) {
+          await this.announceIngest(batch.sessionId, outcome, { coordinator });
+          results[batch.index] = await this.linkCallAnswer(batch, outcome);
+        }
+        break;
+      } catch (error) {
+        if (error instanceof LinkCallBatchFailed) {
+          const { evidence } = classifyTransactionFault(error.failure);
+          this.logger.warn(`session ${error.batch.sessionId}: its batch failed inside a merged runner link call `
+            + `(${refusedValueState(error.failure) ?? evidence ?? 'no SQLSTATE'}); sent alone, the other `
+            + `${candidates.length - 1} run again without it`);
+          candidates = candidates.filter((batch) => batch !== error.batch);
+          continue;
+        }
+        if (!linkCallCutShort(error)) throw error;
+        this.logger.warn(`a merged runner link call of ${candidates.length} batches was cut short by its own lock or `
+          + 'statement timeout: every batch sent alone');
+        break;
+      }
+    }
+    return { results, heldMs };
+  }
+
+  /** What a batch a merged link call stored is answered with: what linkEvents answers it with alone. */
+  private async linkCallAnswer(batch: LinkCallBatch, outcome: IngestOutcome): Promise<LinkEventsAnswer> {
+    const { firstSeq, lastSeq, tombstones } = batch.read;
+    if (outcome.alreadyStored === 0 && tombstones.length === 0) return { ok: true, durableSeq: lastSeq, rejected: [] };
+    // What the session's tombstones say of the batch's seqs, whichever delivery wrote them.
+    const rejected = (await this.prisma.runEvent.findMany({
+      where: { sessionId: batch.sessionId, seq: { gte: firstSeq, lte: lastSeq }, type: TOMBSTONE_EVENT_TYPE },
+      orderBy: { seq: 'asc' },
+      select: { seq: true, payload: true },
+    })).map(rejectionOf);
+    if (outcome.alreadyStored === 0) {
+      this.logger.warn(`session ${batch.sessionId}: ${rejected.length} event(s) refused over the runner link and held by tombstones: `
+        + rejected.slice(0, 10).map((r) => `seq ${r.seq} ${r.code}`).join(', ')
+        + (rejected.length > 10 ? ', …' : ''));
+    }
+    return { ok: true, durableSeq: lastSeq, rejected };
+  }
+
+  /**
    * Stores one batch of a session's events and derives the session's state from them: the one ingest of both doors,
    * HTTPS (`events`) and the runner link (`linkEvents`). A link batch also carries the tombstones of the events it
    * refused, and is stored once per seq with everything derived from it (`link`). Says how many of the batch's seqs
    * were already stored.
+   *
+   * Inside a merged link call (`merged`, ingestLinkEventCall) it is the same ingest in the call's transaction: the
+   * call has locked the session under the same fence and read its row and stored seqs, and it announces the batch
+   * once it has committed.
    */
   private async ingestEvents(
     runner: { id: string },
@@ -6663,7 +6933,8 @@ export class RunnerApiController {
     leaseOwner: string | null,
     batch: NormalizedRunEvent[],
     link?: { tombstones: readonly LinkTombstone[] },
-  ): Promise<{ alreadyStored: number }> {
+    merged?: MergedIngest,
+  ): Promise<IngestOutcome> {
     // Retried whole. This is the durable event batch, and it is the clearest case for a retry there
     // is: every write in it is already idempotent (`run_event` by `(sessionId, seq)` with
     // skipDuplicates, the tool_call outcome by tool_use id, the running sets by set semantics),
@@ -6671,17 +6942,18 @@ export class RunnerApiController {
     // Session write is accumulated from a row re-read under its lock on every attempt. The live
     // broadcast below is outside the loop, so a retried batch is published once, after the attempt
     // that committed.
-    const eventOutcome = await withTransactionRetry(this.prisma, async (tx) => {
+    const ingest = async (tx: Prisma.TransactionClient): Promise<IngestOutcome> => {
       // Take the Session lock before any event-side write. Besides fencing stale runner
       // processes, a consistent lock order prevents event writes from racing a takeover
-      // outside the transaction and later deadlocking when they touch Session.
-      await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
+      // outside the transaction and later deadlocking when they touch Session. A merged call
+      // took it, with every other session of the call, before any of them was written.
+      if (!merged) await this.lockSessionLeaseOwner(tx, sessionId, runner.id, leaseOwner);
       // A link batch is stored once per seq, and so is everything derived from it: an event whose seq the session
       // already holds is left out before anything is written, tool calls and session state included. That covers a
       // batch sent again after its answer was lost, and a copy of it another backend took while this one waited for
       // the lock above. Read after the lock, so such a copy sees the rows the first committed. Over HTTPS a batch is
       // taken whole, as it always was.
-      const stored = link ? await this.storedSeqs(tx, sessionId, batch, link.tombstones) : new Set<number>();
+      const stored = merged ? merged.stored : link ? await this.storedSeqs(tx, sessionId, batch, link.tombstones) : new Set<number>();
       const events = stored.size > 0 ? batch.filter((e) => !stored.has(e.seq)) : batch;
       const tombstones = link ? link.tombstones.filter((t) => !stored.has(t.seq)) : [];
       // Persist idempotently — RunEvent has @@unique([sessionId, seq]) + skipDuplicates.
@@ -6695,35 +6967,9 @@ export class RunnerApiController {
       // as approvals/resync if a newer or misbehaving runner ever sends one through this generic
       // event ingress; the read paths use the same list for rolling-deployment history compatibility.
       const durable = events.filter((e) => !NON_REPLAYABLE_EVENT_TYPES.includes(e.type));
-      const session = await tx.session.findUniqueOrThrow({
-        where: { id: sessionId },
-        select: {
-          // Whose rows a control-plane turn's card may be read from (project-started.ts).
-          ownerId: true,
-          status: true,
-          runtimeSessionId: true,
-          // Read under the row lock so the three conditional writes this transaction used to
-          // issue as separate guarded statements can be decided here instead. Nothing can move
-          // them between this read and the single write below: the row is held FOR UPDATE.
-          cancelRequestedAt: true,
-          runningBgShells: true,
-          runningBgJobs: true,
-          runningBgJobActivity: true,
-          runningSubagents: true,
-          coordinatorContextEpoch: true,
-          // Same one-shot-per-run reason as runtimeSessionId: the stamp below is only taken
-          // while this is still null, and the row is held FOR UPDATE across that decision.
-          engineStartedAt: true,
-          enginePhase: true,
-          // Which task this run executes and which door created it — read only when a user turn in
-          // this batch is the one that delivers the task's brief (`readTurnCards` below).
-          taskId: true,
-          runSource: true,
-          // The line an account-pool member switch owes the transcript, taken below by the first
-          // engine start this batch carries (QueueService.resolvePoolMember writes it).
-          poolSwitchNotice: true,
-        },
-      });
+      const session = merged
+        ? merged.session
+        : await tx.session.findUniqueOrThrow({ where: { id: sessionId }, select: INGEST_SESSION_SELECT });
       // The owner fence alone is insufficient when the same runner process
       // survives a control-plane terminal transition. Reject before every event-
       // derived write, including empty and streaming-only batches. The runner drains
@@ -7351,7 +7597,24 @@ export class RunnerApiController {
         });
       }
       return { session, currentWorkAcknowledged, abandonedApprovals, accountReload, events, durable, alreadyStored: stored.size };
-    }, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
+    };
+    if (merged) return ingest(merged.tx);
+    const eventOutcome = await withTransactionRetry(this.prisma, ingest, loggedRetry(this.logger, 'runnerApi.events', { transaction: { timeout: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS, maxWait: EVENTS_INGEST_TRANSACTION_TIMEOUT_MS } }));
+    await this.announceIngest(sessionId, eventOutcome);
+    return eventOutcome;
+  }
+
+  /**
+   * What is announced of a batch once its ingest has committed (ingestEvents). For a batch of a merged link call
+   * (`merged`, ingestLinkEventCall) the other replicas have already heard of it, in the call's transaction, so its
+   * events go to this replica's streams alone; and the spend fuse is asked only for a session the call found
+   * coordinating a project.
+   */
+  private async announceIngest(
+    sessionId: string,
+    eventOutcome: IngestOutcome,
+    merged?: { coordinator: boolean },
+  ): Promise<void> {
     // What the attempt that committed stored: the whole batch, or for a link batch what was not already stored.
     const { events, durable } = eventOutcome;
 
@@ -7383,23 +7646,28 @@ export class RunnerApiController {
       // Persisted above either way — but a `system` progress ping renders as nothing on every
       // client, so spending a frame on it only costs the reader bandwidth. The replay paths
       // drop the same events (notNoiseSql), so live and replayed transcripts agree. Published
-      // as one batch: the other replicas hear of it once, not once per event (publishBatch).
-      this.realtime.publishBatch(sessionId, events.filter((e) => !isNoiseSystemEvent(e)));
+      // as one batch: the other replicas hear of it once, not once per event (publishBatch). A merged
+      // call's notice went with its transaction (ingestLinkEventCall), so only this replica is left.
+      const published = events.filter((e) => !isNoiseSystemEvent(e));
+      if (merged) this.realtime.publishBatchHere(sessionId, published);
+      else this.realtime.publishBatch(sessionId, published);
     }
     // Two of the three facts the spend fuse is read on (contract §6.1 F5): this batch committed a
     // turn nobody delivered, or a call that opened a session. Decided from the batch already in
     // hand rather than by asking the fuse on every ingest — this is the hottest path there is, and
-    // a batch carrying neither is the overwhelming majority.
+    // a batch carrying neither is the overwhelming majority. A merged call asked, for all of its
+    // sessions at once, which ones coordinate a project with the coordinator on, which is the first
+    // thing the fuse asks, and the only sessions it goes on for.
+    const fused = !merged || merged.coordinator;
     if (durable.some((e) => e.type === RunEventType.TURN_END && !e.turnId)) {
       // A turn nobody delivered is one the engine started itself (a background task reporting in,
       // a scheduled wake-up). It never reaches /turn-complete, so this is where its recap is asked
       // for; without it the list kept the recap from before the turn that wrote the conclusion.
       void this.recapAfterTurn(sessionId);
-      await this.fuse?.afterCoordinatorSpend(sessionId, 'run_event');
+      if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'run_event');
     } else if (events.some((e) => e.type === RunEventType.TOOL_USE)) {
-      await this.fuse?.afterCoordinatorSpend(sessionId, 'tool_call');
+      if (fused) await this.fuse?.afterCoordinatorSpend(sessionId, 'tool_call');
     }
-    return { alreadyStored: eventOutcome.alreadyStored };
   }
 
   /**
@@ -8420,6 +8688,45 @@ export class RunnerApiController {
     if (!locked[0].leaseOwnerMatches) {
       throw new ConflictException('runner process no longer owns this session');
     }
+  }
+
+  /**
+   * lockSessionLeaseOwner's fence for every session of a merged link call at once (ingestLinkEventCall): ONE statement,
+   * sorted by id, so no two transactions take the same pair of sessions in opposite orders (common/lock-order.ts: rows of
+   * one relation are taken in one statement, in id order), and SKIP LOCKED, so the call waits for no session another
+   * writer holds: that batch is sent alone, and waits for its session there, as a batch always has. For each session
+   * it locked that is assigned to the batch's runner: whether the batch's process holds its inbox lease, whether it is
+   * a landing (assertEngineSessionById's question, which the events route asks first), and whether it coordinates a
+   * project with the coordinator on (the spend fuse's first question, announceIngest). The projects are read, not
+   * locked.
+   */
+  private async lockLinkCallSessions(
+    tx: Prisma.TransactionClient,
+    fences: ReadonlyArray<{ sessionId: string; runnerId: string; leaseOwner: string | null }>,
+  ): Promise<Map<string, { leaseOwnerMatches: boolean; landing: boolean; coordinator: boolean }>> {
+    if (fences.length === 0) return new Map();
+    const rows = await tx.$queryRaw<Array<{ id: string; leaseOwnerMatches: boolean; kind: string; coordinator: boolean }>>`
+      SELECT s."id"::text AS "id",
+             (s."inbox_lease_owner" IS NOT DISTINCT FROM f.lease_owner) AS "leaseOwnerMatches",
+             s."kind" AS "kind",
+             EXISTS (
+               SELECT 1 FROM "project" p WHERE p."coordinator_session_id" = s."id" AND p."coordinator_enabled"
+             ) AS "coordinator"
+        FROM "session" s
+        JOIN unnest(
+               ${fences.map((f) => f.sessionId)}::uuid[],
+               ${fences.map((f) => f.runnerId)}::uuid[],
+               ${fences.map((f) => f.leaseOwner)}::uuid[]
+             ) AS f(session_id, runner_id, lease_owner)
+          ON s."id" = f.session_id AND s."assigned_runner_id" = f.runner_id
+       ORDER BY s."id"
+         FOR UPDATE OF s SKIP LOCKED
+    `;
+    return new Map(rows.map((row) => [row.id, {
+      leaseOwnerMatches: row.leaseOwnerMatches,
+      landing: row.kind === SESSION_KIND_LANDING,
+      coordinator: row.coordinator,
+    }]));
   }
 
   /**
