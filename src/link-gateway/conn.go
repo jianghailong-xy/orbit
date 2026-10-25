@@ -171,6 +171,10 @@ func (c *conn) handshake() bool {
 	c.mu.Unlock()
 	m.connections.add(1)
 	m.handshakes.inc("ok")
+	// Subscribed once Welcome is queued, so no hint can be written ahead of it.
+	if c.g.hints != nil {
+		c.g.hints.hold(c.claims.RunnerID)
+	}
 
 	// The token's lifetime is the connection's: version 0 cannot renew it in the connection (TokenRefresh), so the
 	// runner opens its next connection with a fresh token before this one expires.
@@ -324,6 +328,30 @@ func (c *conn) send(f *linkpb.Frame, control bool) {
 	default:
 		c.closeWith(linkpb.CloseCode_CLOSE_CODE_SLOW_CONSUMER, "the runner reads too slowly", 0,
 			websocket.StatusPolicyViolation, "slow_consumer")
+	}
+}
+
+// offer queues a hint, which is sent at most once (§5.2). Unlike send, a full queue drops it instead of closing the
+// connection: a burst of hints must not cost a runner that is slow to read its connection. Nothing is offered before
+// Welcome.
+func (c *conn) offer(f *linkpb.Frame) bool {
+	c.mu.Lock()
+	welcomed := c.welcomed
+	c.mu.Unlock()
+	if !welcomed {
+		return false
+	}
+	select {
+	case <-c.closing:
+		return false
+	default:
+	}
+	f.Id = c.outID.Add(1)
+	select {
+	case c.normal <- outItem{frame: f}:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -481,6 +509,9 @@ func (c *conn) finish() {
 		return
 	}
 	c.g.reg.remove(c)
+	if c.g.hints != nil {
+		c.g.hints.release(c.claims.RunnerID)
+	}
 	reason := "connection_lost"
 	if r := c.reason.Load(); r != nil {
 		reason = *r

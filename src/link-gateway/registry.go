@@ -97,6 +97,17 @@ func (r *registry) remove(c *conn) {
 	}
 }
 
+// connsOf is the runner's open connections.
+func (r *registry) connsOf(runner string) []*conn {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]*conn, 0, len(r.byRunner[runner]))
+	for c := range r.byRunner[runner] {
+		out = append(out, c)
+	}
+	return out
+}
+
 // snapshot is every open connection.
 func (r *registry) snapshot() []*conn {
 	r.mu.Lock()

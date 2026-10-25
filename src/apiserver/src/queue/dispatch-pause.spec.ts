@@ -29,6 +29,8 @@ const RUNNER = '22222222-2222-4222-8222-222222222222';
 const GENERATION = '33333333-3333-4333-8333-333333333333';
 const OWNER = '44444444-4444-4444-8444-444444444444';
 const ADMIN = '55555555-5555-4555-8555-555555555555';
+/** A runner with a session queued on it, which a resumed dispatch hints to claim. */
+const QUEUED_RUNNER = '66666666-6666-4666-8666-666666666666';
 
 /** The pause as every statement embeds it, rendered the way the doubles render a statement. */
 const PAUSED = renderRawQuery([DISPATCH_PAUSED]).text;
@@ -52,7 +54,7 @@ test('the body says on or off with a boolean, and nothing else is read as one', 
 function switchHarness(stored: boolean | null) {
   let row = stored === null ? null : { id: 1, paused: stored, updatedAt: new Date(0), updatedById: OWNER };
   const statements: string[] = [];
-  const woken = { claims: 0, inboxes: [] as string[], runners: [] as string[] };
+  const woken = { claims: 0, hinted: [] as string[], inboxes: [] as string[], runners: [] as string[] };
   const tx = {
     $executeRawUnsafe: async (sql: string) => {
       statements.push(sql);
@@ -79,10 +81,18 @@ function switchHarness(stored: boolean | null) {
       const { text } = renderRawQuery(args);
       if (/t\."status" = 'PENDING'/.test(text) && /'reload'/.test(text)) return [{ id: SESSION }];
       if (/j\."state" = 'QUEUED'/.test(text)) return [{ runnerId: RUNNER }];
+      if (/s\."status" = 'PENDING'/.test(text) && /SELECT DISTINCT s\."assigned_runner_id"/.test(text)) {
+        return [{ runnerId: QUEUED_RUNNER }];
+      }
       return [];
     },
   };
-  const queue = { notifySessionQueued: () => { woken.claims += 1; } };
+  const queue = {
+    notifySessionQueued: (runners: string | readonly string[] | null) => {
+      woken.claims += 1;
+      woken.hinted.push(...(typeof runners === 'string' ? [runners] : runners ?? []));
+    },
+  };
   const realtime = {
     notifyInbox: (id: string) => woken.inboxes.push(id),
     notifyRunnerWake: (id: string) => woken.runners.push(id),
@@ -98,7 +108,7 @@ test('switching it on writes the row under the claim lock every claim takes, and
   assert.ok(h.statements.some((sql) => /INSERT INTO "dispatch_pause"/.test(sql)));
   assert.deepEqual([h.row()?.paused, h.row()?.updatedById], [true, ADMIN]);
   assert.deepEqual([view.paused, view.updatedById], [true, ADMIN]);
-  assert.deepEqual(h.woken, { claims: 0, inboxes: [], runners: [] });
+  assert.deepEqual(h.woken, { claims: 0, hinted: [], inboxes: [], runners: [] });
 });
 
 test('asking for the state it is already in writes nothing and wakes nothing', async () => {
@@ -109,7 +119,7 @@ test('asking for the state it is already in writes nothing and wakes nothing', a
     assert.equal(h.statements.some((sql) => /INSERT INTO "dispatch_pause"/.test(sql)), false, `${stored} → ${asked} wrote`);
     assert.equal(h.row(), before);
     assert.equal(view.paused, asked);
-    assert.deepEqual(h.woken, { claims: 0, inboxes: [], runners: [] });
+    assert.deepEqual(h.woken, { claims: 0, hinted: [], inboxes: [], runners: [] });
   }
 });
 
@@ -118,7 +128,9 @@ test('switching it off wakes the claims, every inbox holding a turn and every ru
   const view = await h.service.set(ADMIN, false);
   assert.equal(view.paused, false);
   assert.equal(h.row()?.paused, false);
-  assert.deepEqual(h.woken, { claims: 1, inboxes: [SESSION], runners: [RUNNER] });
+  // The claim polls are woken once, as before, and over the runner link only the runners a session is queued for are
+  // hinted to claim (realtime/runner-hints.ts).
+  assert.deepEqual(h.woken, { claims: 1, hinted: [QUEUED_RUNNER], inboxes: [SESSION], runners: [RUNNER] });
 });
 
 test('every claim takes the same lock as the switch, and reads the pause where it picks the session', async () => {

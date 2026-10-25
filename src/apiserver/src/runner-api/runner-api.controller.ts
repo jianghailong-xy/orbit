@@ -4547,7 +4547,7 @@ export class RunnerApiController {
     }));
     if (pauseRequeued) {
       this.realtime.publishSessionUpdated(sessionId);
-      this.queue.notifySessionQueued();
+      this.queue.notifySessionQueued(runnerId);
       // Outside the transaction: throwing before commit would roll back the pause and its fence.
       throw new ConflictException(dispatchRequeued
         ? 'runner dispatch is paused; inbox lease ownership was released'
@@ -6405,8 +6405,10 @@ export class RunnerApiController {
     this.realtime.notifyInbox(sessionId);
     if (finalized.applied && finalized.status === RunStatus.AWAITING_INPUT) {
       // A runner slot just became available; wake claim long-polls immediately instead
-      // of leaving unrelated PENDING sessions to the periodic retry fallback.
-      this.queue.notifySessionQueued();
+      // of leaving unrelated PENDING sessions to the periodic retry fallback. Over the link only
+      // this runner is hinted: a session elsewhere in a batch or tree this slot also counted
+      // against learns of it at its own runner's next heartbeat.
+      this.queue.notifySessionQueued(runner.id);
     }
     return { ok: true, status: finalized.status };
   }
@@ -7892,7 +7894,7 @@ export class RunnerApiController {
     // parked PENDING behind the claim fence (see trySessionClaim); re-drive the queue so it
     // gets a slot now instead of on the next ≤5s poll. Not on `released`: the operation is
     // still pending and a successor process re-runs it.
-    if (!released) this.queue.notifySessionQueued();
+    if (!released) this.queue.notifySessionQueued(runner.id);
     return { ok: true };
   }
 
@@ -8002,7 +8004,7 @@ export class RunnerApiController {
     }, loggedRetry(this.logger, 'runnerApi.commitResult'));
     // Mirror mergeResult: release a message queued behind this commit now that the
     // checkout is free, rather than waiting for the queue's periodic poll.
-    if (!released) this.queue.notifySessionQueued();
+    if (!released) this.queue.notifySessionQueued(runner.id);
     return { ok: true };
   }
 

@@ -10,6 +10,9 @@
 #   4. A certificate rotation under a live connection, which stays up.
 #   5. A revocation: the probe runner's token is rotated, the gateway closes its live connection and refuses its old
 #      link token, and the runner works again with its new token.
+#   6. Hints over NATS: the gateway subscribes to the hint subject of the runner it holds a connection of and no other;
+#      a wake for another runner is published on that runner's subject and never reaches the gateway, and a wake for
+#      the probe runner is relayed (counted, not sent: the connection is in MODE_HTTP).
 #
 # It assumes no other runner is connected to the stack, and exits non-zero at the first step that does not hold.
 set -euo pipefail
@@ -188,5 +191,69 @@ client -duration 8s -summary "$out/5-client-new-token.json" > "$out/5-client-new
 check_json "$out/5-client-new-token.json" 's.connects === 1 && s.heartbeatAcks >= 1'
 grep -q 'CLOSE_CODE_UNAUTHENTICATED' "$out/5-client.json" || fail "the revoked runner was not told why"
 
+step "6. hints: published on each runner's own subject; the gateway subscribes for the runner it holds, and relays that"
+nats_monitor="http://127.0.0.1:$(setting STAGING_NATS_MONITOR_PORT 18222)"
+# nats_msgs in|out: the messages NATS has taken in, or handed out to subscribers, since it started.
+nats_msgs() { curl -fsS "$nats_monitor/varz" | node -pe "JSON.parse(require('fs').readFileSync(0, 'utf8')).${1}_msgs"; }
+hints_relayed() { curl -fsS "$metrics" | awk '$1 ~ /^link_hints_total\{/ { n += $2 } END { print n + 0 }'; }
+json_field() { node -pe "JSON.parse(require('fs').readFileSync(0, 'utf8')).$1"; }
+owner_call() { curl -fsS -X "$1" "$origin/api$2" -H "Authorization: Bearer $access" -H 'content-type: application/json' ${3:+-d "$3"}; }
+# A second runner of the account, online over HTTPS and never connected to the link: the runner whose hints this
+# gateway must never see. Registered once and kept, as staging-seed.mjs keeps the probe runner.
+peer_token="$(cat "$state/secrets/hint_peer_token" 2>/dev/null || true)"
+peer_id="$(cat "$state/secrets/hint_peer_id" 2>/dev/null || true)"
+peer_mints() {
+  [ -n "$peer_token" ] && [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$origin/api/runner/link-token" \
+    -H "Authorization: Bearer $peer_token" -H 'content-type: application/json' \
+    -d "{\"leaseOwner\":\"$(cat /proc/sys/kernel/random/uuid)\"}")" = 200 ]
+}
+if ! peer_mints; then
+  enrollment="$(owner_call POST /runners/enrollment-tokens '{"label":"link staging hint peer"}' | json_field token)"
+  curl -fsS -X POST "$origin/api/runner/register" -H 'content-type: application/json' \
+    -d "{\"enrollmentToken\":\"$enrollment\",\"name\":\"link-staging-hint-peer\",\"hostname\":\"link-staging\",\"version\":\"link-gateway-client\"}" \
+    > "$out/6-peer.json" || fail "registering the hint peer failed"
+  peer_token="$(json_field runnerToken < "$out/6-peer.json")"
+  peer_id="$(json_field runnerId < "$out/6-peer.json")"
+  (umask 077; printf '%s\n' "$peer_token" > "$state/secrets/hint_peer_token"; printf '%s\n' "$peer_id" > "$state/secrets/hint_peer_id")
+  rm -f "$out/6-peer.json"
+fi
+# One heartbeat puts it online, which a sign-in asks for.
+curl -fsS -X POST "$origin/api/runner/heartbeat" -H "Authorization: Bearer $peer_token" -H 'content-type: application/json' \
+  -d "{\"leaseOwner\":\"$(cat /proc/sys/kernel/random/uuid)\",\"status\":\"ONLINE\"}" > /dev/null || fail "the hint peer's heartbeat failed"
+
+client -duration 40s -summary "$out/6-client.json" > "$out/6-client.log" 2>&1 &
+runner=$!
+wait_until 30 "the runner connected" connections_are 1
+subscribed() { [ "$(metric link_hint_subscriptions)" = 1 ] && [ "$(metric link_nats_connected)" = 1 ]; }
+wait_until 15 "the gateway subscribed to the probe runner's hints" subscribed
+curl -fsS "$nats_monitor/subsz?subs=1" > "$out/6-subsz.json" || fail "NATS's monitoring does not answer at $nats_monitor"
+check_json "$out/6-subsz.json" "JSON.stringify((s.subscriptions_list || []).map((x) => x.subject).filter((x) => x.startsWith('rnr.')))
+  === JSON.stringify(['rnr.$runner_id'])"
+
+# A wake for the peer is published on its subject, and nobody here subscribes to it.
+in_before="$(nats_msgs in)"; out_before="$(nats_msgs out)"; relayed_before="$(hints_relayed)"
+owner_call POST "/runners/$peer_id/login" '{}' > "$out/6-peer-login.json" || fail "starting a sign-in on the peer failed"
+published() { [ "$(nats_msgs in)" -gt "$in_before" ]; }
+wait_until 10 "the peer's hint published" published
+sleep 2
+[ "$(nats_msgs out)" = "$out_before" ] || fail "the peer's hint was handed to a subscriber"
+[ "$(hints_relayed)" = "$relayed_before" ] || fail "the gateway received a hint for a runner it holds no connection of"
+owner_call DELETE "/runners/$peer_id/login" > /dev/null || fail "cancelling the peer's sign-in failed"
+
+# A wake for the probe runner is published on its subject and relayed: counted, not sent, as the connection is MODE_HTTP.
+in_before="$(nats_msgs in)"; out_before="$(nats_msgs out)"
+commands_before="$(metric 'link_hints_total{kind="commands",result="mode_http"}')"
+owner_call POST "/runners/$runner_id/login" '{}' > "$out/6-probe-login.json" || fail "starting a sign-in on the probe runner failed"
+commands_relayed() { [ "$(metric 'link_hints_total{kind="commands",result="mode_http"}')" -gt "$commands_before" ]; }
+wait_until 10 "the probe runner's hint relayed" commands_relayed
+owner_call DELETE "/runners/$runner_id/login" > /dev/null || fail "cancelling the probe runner's sign-in failed"
+printf 'NATS in %s -> %s, out %s -> %s\n' "$in_before" "$(nats_msgs in)" "$out_before" "$(nats_msgs out)" | tee "$out/6-nats.txt" >&2
+[ "$(nats_msgs out)" -gt "$out_before" ] || fail "NATS handed the probe runner's hint to nobody"
+kill "$runner" 2>/dev/null || true
+wait "$runner" 2>/dev/null || true
+docker logs "$gateway" 2>&1 | grep 'msg=hint ' > "$out/6-gateway-hints.txt" || fail "the gateway logged no hint"
+grep -q "runner=$runner_id kind=commands result=mode_http" "$out/6-gateway-hints.txt" || fail "the gateway's hint log does not name the probe runner"
+grep -q "runner=$peer_id" "$out/6-gateway-hints.txt" && fail "the gateway logged a hint for the peer"
+
 curl -fsS "$metrics" > "$out/metrics-final.txt"
-log "all five steps hold; records in $out"
+log "all six steps hold; records in $out"

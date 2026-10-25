@@ -221,6 +221,11 @@ type gatewayMetrics struct {
 	shadowUnpaired        *counter
 	shadowEvents          *counter
 	shadowPendingBytes    *gauge
+	hints                 *counter
+	hintsSlow             *counter
+	hintSubscriptions     *gauge
+	natsConnected         *gauge
+	natsReconnects        *counter
 }
 
 // Every label value a counter can take that a dashboard or a report reads, so their series exist from the start.
@@ -257,6 +262,11 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		shadowUnpaired:        newCounter("link_shadow_unpaired_total", "Halves of a mirror that never met their other half, by side and reason.", "side", "reason"),
 		shadowEvents:          newCounter("link_shadow_events_compared_total", "Events compared in mirrored event batches."),
 		shadowPendingBytes:    newGaugeFunc("link_shadow_pending_bytes", "Bytes of mirror halves waiting for their other half.", pendingBytes),
+		hints:                 newCounter("link_hints_total", "Hints received from NATS, by kind and by what became of them.", "kind", "result"),
+		hintsSlow:             newCounter("link_hints_slow_total", "Hints NATS dropped because the relay was not keeping up."),
+		hintSubscriptions:     newGauge("link_hint_subscriptions", "Runners whose hint subject this gateway subscribes to."),
+		natsConnected:         newGauge("link_nats_connected", "1 while the gateway is connected to NATS."),
+		natsReconnects:        newCounter("link_nats_reconnects_total", "Times the NATS connection was established again after it was lost."),
 	}
 	for _, r := range handshakeResults {
 		m.handshakes.preset(r)
@@ -279,6 +289,12 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 	for _, r := range []string{"ok", "error", "unauthorized", "not_configured"} {
 		m.revocationFetches.preset(r)
 	}
+	for _, kind := range []string{"inbox", "claim", "commands"} {
+		for _, result := range []string{"sent", "mode_http", "no_connection", "dropped"} {
+			m.hints.preset(kind, result)
+		}
+	}
+	m.hints.preset("unknown", "malformed")
 	m.all = []collector{
 		&infoGauge{name: "link_gateway_build_info", help: "The gateway's version.", labels: []string{"version"}, values: []string{version}},
 		&gauge{name: "link_gateway_start_time_seconds", help: "When this process started, in Unix seconds.", v: float64(time.Now().Unix())},
@@ -286,6 +302,7 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		m.framesReceived, m.framesSent, m.frameDecodeErrors, m.heartbeats, m.draining, m.drainsSent,
 		m.revocations, m.revocationFetches, m.revocationLastSuccess, m.tlsNotAfter, m.tlsReloads, m.tlsHandshakeErrors,
 		m.rpcs, m.shadowPairs, m.shadowMismatches, m.shadowUnpaired, m.shadowEvents, m.shadowPendingBytes,
+		m.hints, m.hintsSlow, m.hintSubscriptions, m.natsConnected, m.natsReconnects,
 	}
 	return m
 }

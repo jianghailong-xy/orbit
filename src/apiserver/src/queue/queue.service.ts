@@ -96,6 +96,7 @@ import {
   withTransactionRetry,
 } from '../common/transaction-retry';
 import { RealtimeService } from '../realtime/realtime.service';
+import { RunnerHints } from '../realtime/runner-hints';
 import { sessionSourceSnapshot } from '../projects/session-source';
 import { currentWatchRollout, watchClaimFields } from '../watches/watch-rollout';
 import { currentWikiRollout, wikiClaimFields } from '../wiki/wiki-rollout';
@@ -142,13 +143,20 @@ export class QueueService {
     private readonly planUsage?: ProviderPlanUsageService,
     /** The managed runner switch: while it is off a managed runner's drain does not hold its claims back. */
     @Optional() @Inject(MANAGED_RUNNER_GATE) private readonly managedGate?: ManagedRunnerGate,
+    /** The runner link's hints (realtime/runner-hints.ts); absent in the specs that build this service by hand. */
+    @Optional() private readonly hints?: RunnerHints,
   ) {
     this.signal.setMaxListeners(0);
   }
 
-  /** Wake long-poll waiters after a session transitions to PENDING. */
-  notifySessionQueued(): void {
+  /**
+   * After a session transitions to PENDING, or a slot it waits for frees up: wake this process's claim long polls, every
+   * one of them as before, and hint the runner the session is queued for over the runner link (one claim hint per
+   * runner named; null names none). Called after the commit, like every wake.
+   */
+  notifySessionQueued(runners: string | readonly string[] | null): void {
     this.signal.emit('queued');
+    for (const runnerId of typeof runners === 'string' ? [runners] : runners ?? []) this.hints?.claim(runnerId);
   }
 
   private waitForSignal(timeoutMs: number, hungUp?: AbortSignal): Promise<void> {

@@ -1,5 +1,5 @@
 import { readMergeRecovery, type MergeRecoveryAction } from '@orbit/shared';
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy, OnModuleInit, Optional } from '@nestjs/common';
 import { EventEmitter } from 'events';
 import { randomUUID } from 'crypto';
 import { Client } from 'pg';
@@ -44,6 +44,7 @@ import { readConfirmationsUnderReview } from '../tasks/owner-confirmation-read';
 import { WORKTREE_OPERATION_STALE_MS } from '../common/session-inbox-fence';
 import { latestAcceptedCheckpoint } from '../projects/task-checkpoint.service';
 import { RUNNER_WAKE_CHANNEL } from './runner-wake';
+import { RunnerHints } from './runner-hints';
 import {
   ownerItemsForRow,
   readOwnerDecisionsBySession,
@@ -233,6 +234,9 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly push: PushService,
+    /** The runner link's hints, published beside the wakes below (runner-hints.ts); absent in the specs that build
+     *  this service by hand. */
+    @Optional() private readonly hints?: RunnerHints,
   ) {
     this.inbox.setMaxListeners(0);
     this.runnerWake.setMaxListeners(0);
@@ -316,6 +320,10 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     }
     if (channel === RUNNER_WAKE_CHANNEL) {
       this.wakeRunnerLocally(m.r);
+      // A wake written inside a transaction (notifyRunnerWakeOnCommit) arrives here, at its commit, on every
+      // replica, and none has hinted it yet, so each one does: the spare ones cost one extra heartbeat, as the held
+      // wake above does. Any other wake was hinted by the replica that emitted it.
+      if (m.c) this.hints?.commands(m.r);
       return;
     }
     if (channel === EVENT_CHANNEL) {
@@ -356,10 +364,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   // ── inbox (interactive turn delivery) ───────────────────────────────────
 
-  /** Wake a runner parked in GET /runner/runs/:id/inbox after a turn is enqueued. */
+  /** Wake a runner parked in GET /runner/runs/:id/inbox after a turn is enqueued, and hint the runner the session is
+   *  assigned to over the runner link. */
   notifyInbox(runId: string): void {
     this.inbox.emit(runId); // same replica
     this.notifyRaw(INBOX_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId })); // others
+    this.hints?.inbox(runId);
   }
 
   /** Park until a turn is enqueued for this run, or the timeout elapses. */
@@ -383,11 +393,13 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
    * spinner. The runner parks in GET /runner/wake (waitForRunnerWake) and beats when it returns.
    *
    * Only a nudge: the work itself stays in the row and is delivered by the heartbeat, so a wake that
-   * is lost costs the old half-minute and nothing else.
+   * is lost costs the old half-minute and nothing else. Over the runner link the same wake is also a
+   * hint (runner-hints.ts), which has the runner send its heartbeat at once.
    */
   notifyRunnerWake(runnerId: string): void {
     this.wakeRunnerLocally(runnerId);
     this.notifyRaw(RUNNER_WAKE_CHANNEL, JSON.stringify({ i: this.instanceId, r: runnerId }));
+    this.hints?.commands(runnerId);
   }
 
   /** A wake with nobody parked is held for the next poll, so one asked for in the moment between
@@ -652,9 +664,11 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
 
   /** Drop the cached owner + workspace of a session that moved to another workspace
    *  (SessionsService.move). The cached workspaceId is otherwise only evicted when the session
-   *  ends, and it is what every later control event names as the envelope's `agentId`. */
+   *  ends, and it is what every later control event names as the envelope's `agentId`. The runner
+   *  its inbox hints go to is forgotten with them: a move to another workspace can change it. */
   forgetSessionOwner(sessionId: string): void {
     this.ownerCache.delete(sessionId);
+    this.hints?.forgetSession(sessionId);
   }
 
   /** A still-PENDING user turn was added or withdrawn. Queued turns have no durable transcript

@@ -168,7 +168,7 @@ test('a claim long poll whose runner hung up claims nothing', {
     await prisma.conversationTurn.create({
       data: { id: randomUUID(), sessionId, seq: 1, clientTurnId: randomUUID(), kind: 'message', content: title, status: 'PENDING' },
     });
-    queue.notifySessionQueued();
+    queue.notifySessionQueued(machineId);
     return sessionId;
   }
 
