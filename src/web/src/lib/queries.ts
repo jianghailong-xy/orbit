@@ -311,6 +311,32 @@ export const sessionsQuery = (
 export const PROJECT_SESSION_REFRESH_MS = 60_000;
 
 /**
+ * At most this many project reads are out at once, per tab. A workspace list reads every project it
+ * shows (useSessionProjectData), each on an interval of its own, and the intervals all start in the
+ * same render, so the reads fall due together: forty-odd at once on a large account, on a page load,
+ * every PROJECT_SESSION_REFRESH_MS after it, and every 4 s while the stream is down (which is also
+ * what meets a restarting server). Each read is cheap. Forty at once are a queue on the server's
+ * connection pool that every other request then waits in: when one tab was reloaded on 2026-10-25 at
+ * 01:01Z, 52 of the 59 project reads it made that minute took 0.5 s or more.
+ */
+const PROJECT_READS_AT_ONCE = 4;
+let projectReadsOut = 0;
+const projectReadsWaiting: Array<() => void> = [];
+async function projectRead<T>(read: () => Promise<T>): Promise<T> {
+  // A finished read hands its place straight to the next one waiting, so the count never dips
+  // between them and lets a newcomer in ahead of the queue.
+  if (projectReadsOut < PROJECT_READS_AT_ONCE) projectReadsOut += 1;
+  else await new Promise<void>((start) => projectReadsWaiting.push(start));
+  try {
+    return await read();
+  } finally {
+    const next = projectReadsWaiting.shift();
+    if (next) next();
+    else projectReadsOut -= 1;
+  }
+}
+
+/**
  * A project's members across workspaces.
  *
  * `includeLanding` asks the server for the project's LANDING sessions beside the conversations
@@ -328,7 +354,7 @@ export const projectSessionsQuery = (opts: {
     queryFn: () => {
       const qs = new URLSearchParams({ projectId: opts.projectId, view: opts.view });
       if (opts.includeLanding) qs.set('includeLanding', '1');
-      return api<SessionListItem[]>(`/sessions?${qs}`);
+      return projectRead(() => api<SessionListItem[]>(`/sessions?${qs}`));
     },
     staleTime: 15_000,
   });
