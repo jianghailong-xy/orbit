@@ -75,6 +75,16 @@ func TestAnEventBatchIsStoredAsItsMirrorWouldBeAndAcknowledged(t *testing.T) {
 	if got := h.g.metrics.eventsStored.get(); got != 3 {
 		t.Fatalf("link_events_stored_total %v", got)
 	}
+	// Named by its public id, as a runner holds the ids it is handed: stored under the session's UUID, the same queue,
+	// and acknowledged under the name it came with.
+	public := batch("2x5PpI0zRtLFFWeu0anPl", 4, 5)
+	tc.send(eventsFrame(public))
+	if ack := tc.eventAck(5 * time.Second); ack.GetSessionId() != "2x5PpI0zRtLFFWeu0anPl" || ack.GetDurableSeq() != 5 {
+		t.Fatalf("ack %v", ack)
+	}
+	if n := len(backend.requestsTo(eventsPath(eventSession))); n != 2 {
+		t.Fatalf("%d calls to the session's UUID route", n)
+	}
 	eventually(t, 5*time.Second, "the ingest queue empty again", func() bool { return h.g.credit.depth() == creditLevel{} })
 }
 
@@ -283,4 +293,39 @@ func TestAClosedConnectionsEventsLeaveTheIngestQueue(t *testing.T) {
 	eventually(t, 5*time.Second, "eight events queued", func() bool { return h.g.credit.depth().Events == 8 })
 	_ = tc.ws.CloseNow()
 	eventually(t, 5*time.Second, "the ingest queue empty", func() bool { return h.g.credit.depth() == creditLevel{} })
+}
+
+// A batch sent again over what is stored, refused or failed, never moves where the next batch may start below what is
+// acknowledged: the runner sends from durable_seq + 1, and that must be taken.
+func TestARefusedResendDoesNotStrandTheSession(t *testing.T) {
+	fail := make(chan bool, 1)
+	backend := newFakeBackend(t, func(w http.ResponseWriter, r *http.Request, body []byte) {
+		select {
+		case <-fail:
+			writeJSON(w, 503, map[string]any{"code": "DATABASE_UNAVAILABLE", "retryable": true})
+		default:
+			stored(w, r, body)
+		}
+	})
+	h := newLinkHarness(t, []*fakeBackend{backend}, func(c *config) { c.link.Credit = creditLevel{Events: 20, Bytes: 1 << 20} })
+	tc, _ := h.connectLink(runnerA, processA)
+	tc.send(eventsFrame(batch(eventSession, 1, 10)))
+	if ack := tc.eventAck(5 * time.Second); ack.GetDurableSeq() != 10 {
+		t.Fatalf("ack %v", ack)
+	}
+	// A stale resend that fails at the route…
+	fail <- true
+	tc.send(eventsFrame(batch(eventSession, 3, 5)))
+	if ack := tc.eventAck(5 * time.Second); ack.GetFailure() == nil || ack.GetDurableSeq() != 10 {
+		t.Fatalf("ack %v", ack)
+	}
+	// …and one past the credit: neither keeps the runner from going on from durable_seq + 1.
+	tc.send(eventsFrame(batch(eventSession, 1, 25)))
+	if ack := tc.eventAck(5 * time.Second); ack.GetFailure().GetCode() != "CREDIT_EXCEEDED" {
+		t.Fatalf("ack %v", ack)
+	}
+	tc.send(eventsFrame(batch(eventSession, 11, 12)))
+	if ack := tc.eventAck(5 * time.Second); ack.GetFailure() != nil || ack.GetDurableSeq() != 12 {
+		t.Fatalf("the batch from durable_seq + 1: %v", ack)
+	}
 }

@@ -167,6 +167,48 @@ func TestAFullLiveQueueDropsWithoutClosingTheConnection(t *testing.T) {
 	}
 }
 
+// The queues are bounded in bytes too: a few answers of megabytes each, never read, are enough to close the connection,
+// long before their count fills a queue, while what may be dropped is dropped.
+func TestQueuedFramesAreBoundedInBytes(t *testing.T) {
+	c, w := writerConn(t)
+	answer := func() *linkpb.Frame {
+		return &linkpb.Frame{Body: &linkpb.Frame_RpcResult{RpcResult: &linkpb.RpcResult{RequestId: "r",
+			Outcome: &linkpb.RpcResult_Tunnel{Tunnel: &linkpb.TunnelResponse{Status: 200, JsonBody: bytes.Repeat([]byte("x"), 4<<20)}}}}}
+	}
+	c.send(answer(), false)
+	select {
+	case <-w.written: // the writer is stuck on the first piece of the first answer, as on a socket nobody reads
+	case <-time.After(5 * time.Second):
+		t.Fatal("nothing written")
+	}
+	for i := 0; i < 6; i++ {
+		c.send(answer(), false)
+	}
+	select {
+	case <-c.closing:
+		t.Fatal("closed before its queues held their bound")
+	default:
+	}
+	// A hint that would pass the bound is dropped; the connection stays.
+	big := &linkpb.Frame{Body: &linkpb.Frame_Hint{Hint: &linkpb.Hint{Kind: &linkpb.Hint_Inbox{Inbox: &linkpb.InboxHint{
+		SessionId: strings.Repeat("s", 5<<20)}}}}}
+	if c.offer(big) {
+		t.Fatal("a hint past the bound was queued")
+	}
+	c.send(answer(), false)
+	select {
+	case <-c.closing:
+	case <-time.After(5 * time.Second):
+		t.Fatal("not closed past the bound")
+	}
+	if r := c.reason.Load(); r == nil || *r != "slow_consumer" {
+		t.Fatalf("reason %v", r)
+	}
+	if c.g.metrics.queueFull.get("normal", "closed") != 1 || c.g.metrics.queueFull.get("normal", "dropped") != 1 {
+		t.Fatal("not counted")
+	}
+}
+
 // A runner that stops reading: its acknowledgements fill the socket and then the control queue, and the connection is
 // closed as a slow consumer rather than allowed to hold memory.
 func TestARunnerThatStopsReadingIsClosedAsASlowConsumer(t *testing.T) {

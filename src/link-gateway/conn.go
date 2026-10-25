@@ -41,6 +41,8 @@ type conn struct {
 
 	queues [tierCount]chan outItem
 	outID  atomic.Uint64
+	// queued is the encoded size of the frames queued and not yet written, bounded by maxQueuedBytes.
+	queued atomic.Int64
 	// writeWS writes one WebSocket message: the connection's, or a test's stand-in.
 	writeWS func(ctx context.Context, b []byte) error
 
@@ -68,6 +70,8 @@ type conn struct {
 type outItem struct {
 	frame *linkpb.Frame
 	close *closeRequest
+	// size is the frame's encoded size, which counts against maxQueuedBytes until it is written.
+	size int64
 }
 
 // closeRequest is the last thing the writer does: the Close frame, when there is one, then the WebSocket close.
@@ -97,7 +101,10 @@ const (
 	controlQueue = 64
 	normalQueue  = 256
 	liveQueue    = 64
-	writeTimeout = 10 * time.Second
+	// maxQueuedBytes bounds what one connection's queues hold, whatever their count: answers can be megabytes each, and
+	// a runner that stops reading must not make the gateway hold them all.
+	maxQueuedBytes = 32 << 20
+	writeTimeout   = 10 * time.Second
 )
 
 var tierNames = [tierCount]string{"control", "normal", "live"}
@@ -117,7 +124,9 @@ func newConn(g *gateway, ws *websocket.Conn, claims *linkClaims, remote string) 
 	c.log = g.log.With("conn", c.id, "runner", claims.RunnerID, "process", claims.LeaseOwner, "remote", remote)
 	c.writeWS = func(ctx context.Context, b []byte) error { return ws.Write(ctx, websocket.MessageBinary, b) }
 	c.shadow = newShadowState(c)
-	if c.mode == linkpb.Mode_MODE_LINK {
+	// Forwarding needs somewhere to forward to: configuration requires backends in MODE_LINK, and a gateway built
+	// without them (as some tests build it) forwards nothing.
+	if c.mode == linkpb.Mode_MODE_LINK && g.backends != nil {
 		c.link = newLinkState(c)
 	}
 	return c
@@ -392,13 +401,23 @@ func (c *conn) sendTier(f *linkpb.Frame, t tier) {
 		return
 	default:
 	}
-	select {
-	case c.queues[t] <- outItem{frame: f}:
-	default:
-		c.g.metrics.queueFull.inc(tierNames[t], "closed")
-		c.closeWith(linkpb.CloseCode_CLOSE_CODE_SLOW_CONSUMER, "the runner reads too slowly", 0,
-			websocket.StatusPolicyViolation, "slow_consumer")
+	size := int64(proto.Size(f))
+	if c.queued.Add(size) > maxQueuedBytes {
+		c.queued.Add(-size)
+		c.slowConsumer(t, "the runner reads too slowly: its queued frames passed their bound in bytes")
+		return
 	}
+	select {
+	case c.queues[t] <- outItem{frame: f, size: size}:
+	default:
+		c.queued.Add(-size)
+		c.slowConsumer(t, "the runner reads too slowly")
+	}
+}
+
+func (c *conn) slowConsumer(t tier, message string) {
+	c.g.metrics.queueFull.inc(tierNames[t], "closed")
+	c.closeWith(linkpb.CloseCode_CLOSE_CODE_SLOW_CONSUMER, message, 0, websocket.StatusPolicyViolation, "slow_consumer")
 }
 
 // offer queues a hint, which is sent at most once (§5.2). Unlike send, a full queue drops it instead of closing the
@@ -427,10 +446,17 @@ func (c *conn) offerTier(f *linkpb.Frame, t tier) bool {
 	default:
 	}
 	f.Id = c.outID.Add(1)
+	size := int64(proto.Size(f))
+	if c.queued.Add(size) > maxQueuedBytes {
+		c.queued.Add(-size)
+		c.g.metrics.queueFull.inc(tierNames[t], "dropped")
+		return false
+	}
 	select {
-	case c.queues[t] <- outItem{frame: f}:
+	case c.queues[t] <- outItem{frame: f, size: size}:
 		return true
 	default:
+		c.queued.Add(-size)
 		c.g.metrics.queueFull.inc(tierNames[t], "dropped")
 		return false
 	}
@@ -443,7 +469,7 @@ func (c *conn) writeLoop() {
 	defer close(c.writerDone)
 	// The pieces still to write of the frame each tier is in the middle of, and that frame.
 	var rest [tierCount][][]byte
-	var current [tierCount]*linkpb.Frame
+	var current [tierCount]outItem
 	for {
 		t, it, ok := c.nextToWrite(&rest)
 		if !ok {
@@ -459,20 +485,26 @@ func (c *conn) writeLoop() {
 			}
 			msgs, err := encodeFrame(it.frame, maxFrameBytes, func() uint64 { return c.outID.Add(1) })
 			if err != nil {
+				c.queued.Add(-it.size)
 				c.log.Error("a frame does not encode; not sent", "frame", summarize(it.frame), "err", err)
 				continue
 			}
-			rest[t], current[t] = msgs, it.frame
+			rest[t], current[t] = msgs, it
 		}
 		if err := c.writeMessage(rest[t][0]); err != nil {
-			c.setReason("connection_lost")
-			_ = c.ws.CloseNow()
+			// A write cut short because the connection is ending is finish's to close; any other failure is the
+			// connection lost.
+			if c.ctx.Err() == nil {
+				c.setReason("connection_lost")
+				_ = c.ws.CloseNow()
+			}
 			return
 		}
 		rest[t] = rest[t][1:]
 		if len(rest[t]) == 0 {
-			c.wrote(current[t])
-			current[t] = nil
+			c.queued.Add(-current[t].size)
+			c.wrote(current[t].frame)
+			current[t] = outItem{}
 		}
 	}
 }

@@ -199,7 +199,9 @@ func (l *linkState) forwardHeartbeat(hb *linkpb.Heartbeat) {
 func (l *linkState) noteHeartbeat(hb *linkpb.Heartbeat) {
 	sessions := make(map[string]bool, len(hb.GetSessionIds()))
 	for _, id := range hb.GetSessionIds() {
-		sessions[strings.ToLower(id)] = true
+		if uuid, ok := sessionUUID(id); ok {
+			sessions[uuid] = true
+		}
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -226,7 +228,16 @@ func heartbeatRequestBody(hb *linkpb.Heartbeat, process string, hello *linkpb.He
 		body["version"] = v
 	}
 	if ids := hb.GetSessionIds(); len(ids) > 0 {
-		body["supervisedSessionIds"] = ids
+		// In the spelling the route reads them in: a session's UUID. An id that is neither UUID nor public id is passed
+		// as it came, for the route to refuse.
+		supervised := make([]string, len(ids))
+		for i, id := range ids {
+			supervised[i] = id
+			if uuid, ok := sessionUUID(id); ok {
+				supervised[i] = uuid
+			}
+		}
+		body["supervisedSessionIds"] = supervised
 	}
 	if hb.GetDraining() {
 		body["draining"] = true
@@ -282,7 +293,7 @@ func (g *gateway) hintState(runnerID string, h *linkHints) *linkpb.HintState {
 		if w := h.Watchers; w != nil {
 			counts := make(map[string]uint32, len(w.Sessions))
 			for _, s := range w.Sessions {
-				counts[strings.ToLower(s.SessionID)] = s.Watchers
+				counts[s.SessionID] = s.Watchers
 			}
 			g.watchersFromSnapshot(runnerID, w.Instance, counts)
 		}

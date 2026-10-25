@@ -13,13 +13,17 @@ be taken for a deployment's.
 | `staging-up.sh` | Build from this checkout, start, seed and smoke-check. Run it again to converge: images are rebuilt, changed containers recreated, and the database, secrets, certificates and seeded account kept. `--rotate-cert` gives the link gateway a new certificate in place. `--no-build` reuses the last images. |
 | `staging-down.sh` | Stop and remove the containers and the project's network, keeping the state directory. `--purge` also deletes the state directory and the project's volume. `--rmi` also deletes the images. |
 | `staging-client.sh` | Run the gateway's test client as the seeded probe runner. Arguments go to `link-gateway client`. |
-| `staging-check.sh` | Check the running stack's link gateway end to end, in six steps: refusals and TLS; a mirroring runner with heartbeats and pings; a gateway release that drains the runner, which then reconnects; a certificate rotation under a live connection; a revocation that closes a live connection; and hints over NATS, published on each runner's own subject and relayed only for the runner the gateway holds. Each step's records go to `<state>/client/check/`. Run it on a quiet stack, in the files TLS mode. Step 5 leaves the probe runner with a new token, and step 6 registers a second runner the first time it runs (its token is kept in `secrets/hint_peer_token`). |
+| `staging-check.sh` | The shadow period's check, with the stack in MODE_HTTP. It checks the running stack's link gateway end to end, in six steps: refusals and TLS; a mirroring runner with heartbeats and pings; a gateway release that drains the runner, which then reconnects; a certificate rotation under a live connection; a revocation that closes a live connection; and hints over NATS, published on each runner's own subject and relayed only for the runner the gateway holds. Each step's records go to `<state>/client/check/`. Run it on a quiet stack, in the files TLS mode. Step 5 leaves the probe runner with a new token, and step 6 registers a second runner the first time it runs (its token is kept in `secrets/hint_peer_token`). |
+| `staging-check-link.sh` | The forwarding check, with the stack in MODE_LINK over two apiservers. Five steps, with the test runner's drills (`link-gateway client -drill`) and the stack's own state: NATS's authorization on the stack's NATS; the link drill (requests and their answers, heartbeats and facts, hints, durable events, gaps and credit, the live stream while the owner watches, the turn prefix, an answer in pieces), then presence and the database's own record of it; a claim cancelled while it waits for the claim lock, held from `psql`; calls answered while the second apiserver is killed and started again; and a runner that stops reading, closed as a slow consumer. Each step's records go to `<state>/client/check-link/`. |
+| `nats-auth-check.sh` | Check `src/link-gateway/nats.conf` on a throwaway nats-server with fresh keys: it refuses to start without both public keys, and admits each user to what it does alone. |
 | `gen-hint-fixtures.mjs` | Regenerate `src/link-gateway/testdata/b1-hints.json` from the apiserver's hint encoder. |
 | `gen-token-fixtures.mjs` | Regenerate `src/link-gateway/testdata/a3-tokens.json` from the apiserver's token code. |
 
 ```bash
 scripts/runner-link/staging-up.sh
 scripts/runner-link/staging-check.sh
+ORBIT_LINK_STAGING_MODE=link ORBIT_LINK_STAGING_BACKENDS=2 scripts/runner-link/staging-up.sh --no-build
+scripts/runner-link/staging-check-link.sh
 scripts/runner-link/staging-client.sh -duration 60s
 scripts/runner-link/staging-down.sh
 ```
@@ -41,6 +45,8 @@ else the default:
 | `ORBIT_LINK_STAGING_TLS` | `files` | `files`: a staging CA and a certificate from it. `acme`: Pebble issues the certificate over ACME. |
 | `ORBIT_LINK_STAGING_NATS_PORT` | `14222` | NATS's client port, on the bind address. |
 | `ORBIT_LINK_STAGING_NATS_MONITOR_PORT` | `18222` | NATS's monitoring, on 127.0.0.1. |
+| `ORBIT_LINK_STAGING_MODE` | `http` | The link gateway's `LINK_MODE`: `http`, the shadow period that `staging-check.sh` checks, or `link`, forwarding, that `staging-check-link.sh` checks. Switching recreates only the gateway. |
+| `ORBIT_LINK_STAGING_BACKENDS` | `1` | How many apiservers the gateway forwards to: `2` adds `apiserver-b`, the first one's whole definition on the same database, which `staging-check-link.sh` kills and starts again. |
 
 Two stacks can run side by side under different projects, state directories and ports. Compose runs with an empty
 environment plus the env file the scripts write, so nothing from the calling shell reaches the stack. That includes an
@@ -52,7 +58,7 @@ agent session's `ORBIT_*` variables, which Compose would otherwise prefer to the
 | --- | --- |
 | `staging.json` | Where everything is: the origin and API, the link URL, the metrics URL, the probe runner's id, and the paths below. |
 | `compose.env` | The env file Compose reads, with the secrets in it. |
-| `secrets/` | The JWT and provider secrets, the link signing key, the gateway token, the owner's password (`owner@orbit-staging.test`), the probe runner's token, and a fresh enrollment token for one more runner. |
+| `secrets/` | The JWT and provider secrets, the link signing key, the gateway token, the owner's password (`owner@orbit-staging.test`), the probe runner's token, a fresh enrollment token for one more runner, and NATS's two nkey users (`nats_apiserver_seed`/`_key`, `nats_gateway_seed`/`_key`), made once with the gateway image's `nkey`. |
 | `tls/ca.pem`, `tls/ca-bundle.pem` | The staging CA, and the system's roots with the CA added (for `SSL_CERT_FILE`). |
 | `gateway/` | Mounted into the link gateway: `tls/fullchain.pem` and `tls/privkey.pem`, and `acme/` in the ACME mode. |
 | `postgres/`, `pg-archive/` | The database and its WAL archive. |
@@ -71,7 +77,9 @@ agent session's `ORBIT_*` variables, which Compose would otherwise prefer to the
   closes the runner's open connections at its next revocation read and refuses the old token from then on.
   `staging-up.sh` registers a new probe runner when it finds the old token dead.
 - **Hints.** Every hint the apiserver publishes can be watched as it goes by, with NATS's own CLI inside the project's
-  network: `docker run --rm --network <project>_default natsio/nats-box nats sub -s nats://nats:4222 'rnr.>'`.
+  network, signed in as the gateway's user: `docker run --rm --network <project>_default -v <state>/secrets:/s:ro
+  natsio/nats-box nats sub -s nats://nats:4222 --nkey /s/nats_gateway_seed 'rnr.>'`. Without a seed NATS refuses the
+  connection.
   `curl -s 'http://127.0.0.1:18222/subsz?subs=1'` lists the subjects the gateway subscribes to, one per connected
   runner, and `link_hints_total` counts what the gateway did with each hint.
 - **Metrics.** `curl -s http://127.0.0.1:19464/metrics | grep ^link_`.

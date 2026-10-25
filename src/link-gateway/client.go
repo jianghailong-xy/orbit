@@ -15,6 +15,7 @@ import (
 	"io"
 	"log/slog"
 	mrand "math/rand/v2"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -56,6 +58,17 @@ func clientMain(args []string) int {
 	fs.DurationVar(&o.refreshBefore, "refresh-before", 5*time.Minute, "open the next connection with a fresh token this long before the token expires")
 	fs.StringVar(&o.summaryFile, "summary", "", "write the JSON summary here as well as to standard output")
 	fs.StringVar(&o.captureFile, "capture", "", "append every frame sent and received to this file, length-delimited, for link-gateway dump")
+	var d drillOptions
+	fs.StringVar(&d.name, "drill", "", "run a drill against a gateway in MODE_LINK instead: link, cancel, retry or slow (client_link.go)")
+	fs.StringVar(&d.ownerEmail, "owner-email", "", "drills: the account that owns the runner, which creates and watches sessions")
+	fs.StringVar(&d.ownerPasswordFile, "owner-password-file", "", "drills: a file holding that account's password")
+	fs.StringVar(&d.natsURL, "nats-url", "", "drills: NATS, to read a session's live subject as the apiserver does")
+	fs.StringVar(&d.natsSeedFile, "nats-seed-file", "", "drills: a file holding the apiserver's NATS nkey seed")
+	fs.StringVar(&d.reportFile, "report", "", "drills: write the JSON report here as well as to standard output")
+	fs.DurationVar(&d.runFor, "for", 40*time.Second, "the retry drill: how long to keep calling")
+	fs.DurationVar(&d.cancelAfter, "cancel-after", 2*time.Second, "the cancel drill: how long a claim is left waiting before the connection drops")
+	fs.StringVar(&d.workDir, "work-dir", "/srv/link-drill", "drills: the working directory of the workspace sessions are created in")
+	fs.StringVar(&d.session, "session", "", "the retry and slow drills: a session this runner holds, as the link drill reports it")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -65,6 +78,11 @@ func clientMain(args []string) int {
 	}
 	if o.processID == "" {
 		o.processID = newUUID()
+	}
+	if d.name == "slow" {
+		// The slow drill's own socket stays small; what it leaves unread fills the sockets on the way, then waits at
+		// the gateway.
+		o.readBuffer = 64 << 10
 	}
 	cl, err := newClient(o, slog.New(slog.NewTextHandler(os.Stderr, nil)).With("process", o.processID))
 	if err != nil {
@@ -78,6 +96,9 @@ func clientMain(args []string) int {
 		ctx, cancel = context.WithTimeout(ctx, o.duration)
 		defer cancel()
 	}
+	if d.name != "" {
+		return runDrill(ctx, cl, d)
+	}
 	cl.run(ctx)
 	return cl.finish()
 }
@@ -88,6 +109,8 @@ type clientOptions struct {
 	untilDrains, events, corruptEvery            int
 	mirror, httpBeats                            bool
 	summaryFile, captureFile                     string
+	// readBuffer is the link connection's socket receive buffer (SO_RCVBUF); 0 leaves it to the kernel.
+	readBuffer int
 }
 
 // clientSummary is what the client reports when it stops.
@@ -119,6 +142,12 @@ type client struct {
 	dial    *http.Client
 	capture io.Writer
 	capMu   sync.Mutex
+	// hello replaces the Hello the client says, and onRaw sees every frame it receives before pieces are joined: both
+	// for drills (client_link.go).
+	hello *linkpb.Hello
+	onRaw func(*linkpb.Frame)
+	// readPaused stops the client reading its connection at all, as a runner that is stuck does (the slow drill).
+	readPaused atomic.Bool
 
 	token       string
 	tokenExpiry time.Time
@@ -148,9 +177,13 @@ func newClient(o clientOptions, log *slog.Logger) (*client, error) {
 		Proxy:           http.ProxyFromEnvironment,
 		TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12},
 	}
+	api := transport.Clone()
+	if o.readBuffer > 0 {
+		transport.DialContext = (&net.Dialer{Control: setReadBuffer(o.readBuffer)}).DialContext
+	}
 	cl := &client{
 		o: o, log: log,
-		api:     &http.Client{Timeout: 30 * time.Second, Transport: transport.Clone()},
+		api:     &http.Client{Timeout: 30 * time.Second, Transport: api},
 		dial:    &http.Client{Transport: transport},
 		session: newUUID(),
 		sum: clientSummary{
@@ -397,6 +430,20 @@ func (cl *client) mintToken(ctx context.Context) error {
 	return nil
 }
 
+// setReadBuffer sets a socket's receive buffer before it connects, so the window the connection opens with is that
+// small, and the kernel does not grow it.
+func setReadBuffer(n int) func(network, address string, rc syscall.RawConn) error {
+	return func(_, _ string, rc syscall.RawConn) error {
+		var err error
+		if cerr := rc.Control(func(fd uintptr) {
+			err = syscall.SetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_RCVBUF, n)
+		}); cerr != nil {
+			return cerr
+		}
+		return err
+	}
+}
+
 // connect opens one connection and waits for Welcome.
 func (cl *client) connect(ctx context.Context) (*clientConn, error) {
 	if cl.token == "" || time.Until(cl.tokenExpiry) < time.Minute {
@@ -435,10 +482,14 @@ func (cl *client) connect(ctx context.Context) (*clientConn, error) {
 	ws.SetReadLimit(maxChunkedFrameBytes)
 	cctx, ccancel := context.WithCancel(context.Background())
 	cc := &clientConn{ws: ws, frames: make(chan *linkpb.Frame, 64), done: make(chan struct{}), cancel: ccancel}
-	if err := cl.send(cc, &linkpb.Frame{Body: &linkpb.Frame_Hello{Hello: &linkpb.Hello{
-		ProcessId: cl.o.processID, RunnerVersion: "link-gateway-client/" + version, Os: runtime.GOOS,
-		MinProtocolVersion: 1, MaxProtocolVersion: 1,
-	}}}); err != nil {
+	hello := cl.hello
+	if hello == nil {
+		hello = &linkpb.Hello{
+			ProcessId: cl.o.processID, RunnerVersion: "link-gateway-client/" + version, Os: runtime.GOOS,
+			MinProtocolVersion: 1, MaxProtocolVersion: 1,
+		}
+	}
+	if err := cl.send(cc, &linkpb.Frame{Body: &linkpb.Frame_Hello{Hello: hello}}); err != nil {
 		ccancel()
 		_ = ws.CloseNow()
 		return nil, err
@@ -479,6 +530,9 @@ func (cl *client) readLoop(ctx context.Context, cc *clientConn) {
 	var chunks reassembler
 	defer chunks.close()
 	for {
+		for cl.readPaused.Load() && ctx.Err() == nil {
+			time.Sleep(10 * time.Millisecond)
+		}
 		_, data, err := cc.ws.Read(ctx)
 		if err != nil {
 			cc.err = err
@@ -490,6 +544,9 @@ func (cl *client) readLoop(ctx context.Context, cc *clientConn) {
 			return
 		}
 		cl.record(f)
+		if cl.onRaw != nil {
+			cl.onRaw(f)
+		}
 		if c := f.GetChunk(); c != nil {
 			joined, err := chunks.add(c)
 			if err != nil {

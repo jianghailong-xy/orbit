@@ -1,9 +1,7 @@
 package main
 
 import (
-	"regexp"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,10 +36,8 @@ const (
 	maxWatchedPerRunner = 10_000
 )
 
-// liveSessionID is how a session is named in a live subject: a UUID, in lower case. Anything else could break the
-// subject's shape (a dot, a wildcard), so it is refused.
-var liveSessionID = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
-
+// liveSubject is where a session's live stream is published. sessionID is its UUID (sessionUUID): anything else could
+// break the subject's shape (a dot, a wildcard), and two spellings of one session would be two subjects.
 func liveSubject(sessionID string) string { return liveSubjectPrefix + sessionID + liveSubjectSuffix }
 
 // watcherBook is every runner's watched sessions, by apiserver instance.
@@ -256,8 +252,8 @@ func (b *watcherBook) watched() int {
 
 // watchersFromHint takes an instance's WatchersHint from NATS and tells the runner the new sum.
 func (g *gateway) watchersFromHint(runner, instance string, w *linkpb.WatchersHint) string {
-	session := strings.ToLower(w.GetSessionId())
-	if !liveSessionID.MatchString(session) {
+	session, ok := sessionUUID(w.GetSessionId())
+	if !ok {
 		return "malformed"
 	}
 	return g.tellWatchers(runner, g.watchers.set(runner, session, instance, w.GetWatchers()))
@@ -265,12 +261,13 @@ func (g *gateway) watchersFromHint(runner, instance string, w *linkpb.WatchersHi
 
 // watchersFromSnapshot takes the counts a heartbeat answer carried for one instance.
 func (g *gateway) watchersFromSnapshot(runner, instance string, counts map[string]uint32) {
-	for session := range counts {
-		if !liveSessionID.MatchString(session) {
-			delete(counts, session)
+	canonical := make(map[string]uint32, len(counts))
+	for session, n := range counts {
+		if id, ok := sessionUUID(session); ok {
+			canonical[id] += n
 		}
 	}
-	g.tellWatchers(runner, g.watchers.snapshot(runner, instance, counts))
+	g.tellWatchers(runner, g.watchers.snapshot(runner, instance, canonical))
 }
 
 // tellWatchers sends the runner's MODE_LINK connections each new sum, and says what became of the last one.
@@ -326,8 +323,8 @@ func (l *linkState) onLive(lb *linkpb.LiveBatch) {
 	if n == 0 {
 		return
 	}
-	session := strings.ToLower(lb.GetSessionId())
-	if !liveSessionID.MatchString(session) {
+	session, ok := sessionUUID(lb.GetSessionId())
+	if !ok {
 		m.liveEvents.add(n, "bad_session")
 		return
 	}
@@ -393,8 +390,9 @@ func (p *pendingPrefix) answerEmpty(g *gateway, result string) { p.answer(g, nil
 // relayPrefixRequest hands a turn prefix request from NATS to the runner: to the connection whose process supervises
 // the session, else the newest in MODE_LINK. With none, it is answered at once with nothing.
 func (g *gateway) relayPrefixRequest(runner string, req *linkpb.TurnPrefixRequest, reply string) {
-	p := &pendingPrefix{requestID: req.GetRequestId(), sessionID: strings.ToLower(req.GetSessionId()), reply: reply}
-	if reply == "" || !requestIDPattern.MatchString(p.requestID) || !liveSessionID.MatchString(p.sessionID) {
+	session, ok := sessionUUID(req.GetSessionId())
+	p := &pendingPrefix{requestID: req.GetRequestId(), sessionID: session, reply: reply}
+	if reply == "" || !requestIDPattern.MatchString(p.requestID) || !ok {
 		g.metrics.prefixRequests.inc("malformed")
 		return
 	}

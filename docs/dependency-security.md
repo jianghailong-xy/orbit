@@ -293,6 +293,17 @@ is the official image.
     on the serving path for messages the apiserver published, never for anything a runner sends. GO-2024-2611, the
     `protojson` loop, predates v1.36.12. Nothing a runner sends reaches NATS's code.
   - The gateway binary (linux/amd64, stripped) grows from 10,690,720 to 11,460,768 bytes.
+- **Since task B4 (2026-10-25), the same versions reach further.** No package was added or upgraded; `nkeys` became a
+  direct dependency of the gateway (`go mod tidy` moved it, `go.sum` is unchanged).
+  - Both clients authenticate: NATS admits two nkey users (`src/link-gateway/nats.conf`), so `nkeys`, and `tweetnacl` in
+    the apiserver, now sign the server's nonce at every connect. The seeds come from the environment and are logged
+    nowhere.
+  - The apiserver now also subscribes, to `ses.<sessionId>.live` while a client watches the session, and makes turn
+    prefix requests on `rnr.<runnerId>`. It reads what the gateway published there with `JSON.parse`, base64-decodes
+    each payload and keeps only live event types (`decodeLiveBatch`, `decodeTurnPrefixResponse` in `runner-hints.ts`).
+  - The gateway now publishes runners' live batches and answers turn prefix requests. A runner's live payload reaches
+    NATS only as bytes inside a field of a frame the gateway encoded with `protojson`; NATS's code relays it, and the
+    apiserver's JSON parser, not a NATS library, reads it.
 - **The server.** The official image on its 2.15 line, run from flags alone. The image's configuration file opens a
   cluster port with the route password it publishes, and it is never read. JetStream is off, and nothing is stored.
   The container runs read-only, with every capability dropped and `no-new-privileges`. Its client port is exposed only

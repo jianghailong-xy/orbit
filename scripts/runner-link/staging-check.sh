@@ -21,6 +21,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/staging-lib.sh"
 
 [ -f "$env_file" ] || die "no staging stack in $state: run staging-up.sh first"
 [ "$(setting STAGING_TLS files)" = files ] || die "the check runs in the files TLS mode"
+[ "$(setting STAGING_MODE http)" = http ] ||
+  die "this is the shadow period's check: run it with the stack in MODE_HTTP (ORBIT_LINK_STAGING_MODE=http staging-up.sh --no-build); staging-check-link.sh checks MODE_LINK"
 out="$state/client/check"
 rm -rf "$out"
 mkdir -p "$out"

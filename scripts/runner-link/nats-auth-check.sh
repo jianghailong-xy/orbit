@@ -48,7 +48,7 @@ cid="$("${run[@]}" -d -p 127.0.0.1::4222 -e "RUNNER_LINK_NATS_APISERVER_KEY=$api
   "$image" --config /etc/orbit-nats/nats.conf)"
 port="$(docker port "$cid" 4222/tcp | head -n 1 | sed 's/.*://')"
 for _ in $(seq 1 50); do
-  docker logs "$cid" 2>&1 | grep -q 'Server is ready' && break
+  grep -q 'Server is ready' <(docker logs "$cid" 2>&1) && break
   sleep 0.2
 done
 (cd "$gw" && LINK_TEST_NATS_AUTH_URL="nats://127.0.0.1:$port" LINK_TEST_NATS_APISERVER_SEED="$api_seed" \

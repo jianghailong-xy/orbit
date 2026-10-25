@@ -45,16 +45,24 @@ type queuedBatch struct {
 // onEvents takes a batch from the runner.
 func (l *linkState) onEvents(eb *linkpb.EventBatch) {
 	c, m := l.c, l.c.g.metrics
-	sessionID := strings.ToLower(eb.GetSessionId())
+	// Acknowledged under the id the runner sent, and queued and stored under its UUID, so both spellings of one
+	// session are one queue.
+	named := eb.GetSessionId()
 	events := eb.GetEvents()
-	if sessionID == "" || len(events) == 0 {
+	if named == "" || len(events) == 0 {
 		m.eventBatches.inc("empty")
+		return
+	}
+	sessionID, ok := sessionUUID(named)
+	if !ok {
+		m.eventBatches.inc("malformed")
+		l.ack(named, 0, failure("EVENT_BATCH_MALFORMED", "the session id is neither a UUID nor a public id", false, 0))
 		return
 	}
 	if gap := batchGap(events); gap != "" {
 		m.eventBatches.inc("malformed")
 		l.logFailure("an event batch is not in increasing seq order without gaps; refused", "session", sessionID, "detail", gap)
-		l.ack(sessionID, 0, failure("EVENT_BATCH_MALFORMED", "the batch's events are not in increasing seq order without gaps: "+gap, true, time.Second))
+		l.ack(named, 0, failure("EVENT_BATCH_MALFORMED", "the batch's events are not in increasing seq order without gaps: "+gap, true, time.Second))
 		return
 	}
 	amount := creditLevel{Events: uint32(len(events))}
@@ -84,12 +92,12 @@ func (l *linkState) onEvents(eb *linkpb.EventBatch) {
 	}
 	if refusal != nil {
 		acked := q.acked
-		if q.next == 0 || first < q.next {
-			// What the runner sends next has to start here, or earlier.
+		if q.next == 0 {
+			// The session's first batch on this connection: what the runner sends after it may not pass it.
 			q.next = first
 		}
 		l.mu.Unlock()
-		l.ack(sessionID, acked, refusal)
+		l.ack(named, acked, refusal)
 		return
 	}
 	l.unacked.Events += amount.Events
@@ -157,19 +165,24 @@ func (l *linkState) ingestLoop(sessionID string, q *sessionIngest) {
 			q.acked = max(q.acked, durable)
 		} else {
 			// What is queued behind it would be stored after a gap: it fails the same way, and the runner sends
-			// everything again from durable_seq + 1.
+			// everything again from durable_seq + 1, which is where the next batch may start. With nothing
+			// acknowledged here yet, that is where the failed batch started.
 			rest = q.queue
 			q.queue = nil
-			q.next = b.eb.GetEvents()[0].GetSeq()
+			if q.acked > 0 {
+				q.next = q.acked + 1
+			} else {
+				q.next = b.eb.GetEvents()[0].GetSeq()
+			}
 		}
 		acked := q.acked
 		l.mu.Unlock()
 		l.release(append([]*queuedBatch{b}, rest...)...)
 		c.g.metrics.eventAckDuration.observe(time.Since(b.accepted))
-		l.ack(sessionID, acked, fail)
-		for range rest {
+		l.ack(b.eb.GetSessionId(), acked, fail)
+		for _, r := range rest {
 			c.g.metrics.eventBatches.inc("failed_behind")
-			l.ack(sessionID, acked, fail)
+			l.ack(r.eb.GetSessionId(), acked, fail)
 		}
 	}
 }

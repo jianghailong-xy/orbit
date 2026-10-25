@@ -115,19 +115,26 @@ func TestALiveBatchIsPublishedOnlyWhileSomeoneWatches(t *testing.T) {
 	if got := h.g.metrics.liveEvents.get("published"); got != 2 {
 		t.Fatalf("published %v", got)
 	}
+	// Named by its public id, as a runner may hold it, the session is the same one: the same subject, watched.
+	tc.send(liveFrame("2x5PpI0zRtLFFWeu0anPV", 6))
+	eventually(t, 5*time.Second, "the batch named by the public id published", func() bool { return len(nats.publishedOn(subject)) == 2 })
+	_ = protojson.Unmarshal(nats.publishedOn(subject)[1], &f)
+	if f.GetLiveBatch().GetSessionId() != watchedSession {
+		t.Fatalf("published under %q", f.GetLiveBatch().GetSessionId())
+	}
 
 	// The client leaves: told again, and the next batch is dropped.
 	nats.deliverMsg("rnr."+runnerA, "", map[string]string{"Orbit-Instance": "i-1"}, watchersMessage(watchedSession, 0))
 	if w := tc.watchersHint(5 * time.Second); w.GetWatchers() != 0 {
 		t.Fatalf("hint %v", w)
 	}
-	tc.send(liveFrame(watchedSession, 6))
+	tc.send(liveFrame(watchedSession, 7))
 	tc.quiet(300 * time.Millisecond)
-	if n := len(nats.publishedOn(subject)); n != 1 {
+	if n := len(nats.publishedOn(subject)); n != 2 {
 		t.Fatalf("%d published", n)
 	}
 	// Only a session named by its UUID becomes a subject.
-	tc.send(liveFrame("not.a.session", 7))
+	tc.send(liveFrame("not.a.session", 8))
 	eventually(t, 5*time.Second, "the bad session counted", func() bool { return h.g.metrics.liveEvents.get("bad_session") == 1 })
 	if got := nats.publishedUnder("ses."); len(got) != 1 {
 		t.Fatalf("subjects published on: %v", got)

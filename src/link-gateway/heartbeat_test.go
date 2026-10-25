@@ -195,6 +195,22 @@ func TestABeatWaitingForItsTurnIsReplacedByTheNewest(t *testing.T) {
 	}
 }
 
+// A session a heartbeat names by its public id is written in the spelling the heartbeat route reads, its UUID.
+func TestSupervisedSessionsAreForwardedByTheirUUID(t *testing.T) {
+	backend := newFakeBackend(t, heartbeatAnswer)
+	h := newLinkHarness(t, []*fakeBackend{backend}, nil)
+	tc, _ := h.connectLink(runnerA, processA)
+	tc.send(heartbeatFrame(&linkpb.Heartbeat{ProcessId: processA, SessionIds: []string{"2x5PpI0zRtLFFWeu0anPl", eventSession, "not-an-id"}}))
+	tc.await("heartbeat_ack", 5*time.Second, nil)
+	var body struct {
+		Supervised []string `json:"supervisedSessionIds"`
+	}
+	_ = json.Unmarshal(backend.requestsTo("/api/runner/heartbeat")[0].Body, &body)
+	if strings.Join(body.Supervised, ",") != eventSession+","+eventSession+",not-an-id" {
+		t.Fatalf("supervisedSessionIds %v", body.Supervised)
+	}
+}
+
 func TestAHeartbeatIsForwardedForItsConnectionsProcess(t *testing.T) {
 	backend := newFakeBackend(t, heartbeatAnswer)
 	h := newLinkHarness(t, []*fakeBackend{backend}, nil)
