@@ -2670,12 +2670,13 @@ export class RunnerApiController {
    * it (providerDispatchWhereOn): those whose recorded engine it is, and — for a row without one — the
    * built-in slug and the configured rows that borrowed the runtime. The conditional update repeats
    * the scheduling predicates, so a capable claim/cancel racing this check can never have its
-   * now-live/ended row stamped with a stale upgrade error.
+   * now-live/ended row stamped with a stale upgrade error. A notice that has to be read (Cursor CLI's,
+   * persistedCursorRefusal) is read only once there is a row to mark, not on every long poll.
    */
   private async markProviderUpgradeRequired(
     runnerId: string,
     providerWhere: Prisma.SessionWhereInput,
-    upgradeError: string,
+    notice: string | (() => Promise<string>),
     candidates?: Array<{ id: string; error: string | null }>,
   ): Promise<boolean> {
     const pending =
@@ -2691,6 +2692,7 @@ export class RunnerApiController {
         select: { id: true, error: true },
       }));
     if (pending.length === 0) return false;
+    const upgradeError = typeof notice === 'string' ? notice : await notice();
     const unmarked = pending
       .filter((session) => session.error !== upgradeError)
       .map((session) => session.id);
@@ -2816,7 +2818,7 @@ export class RunnerApiController {
       // migration 0080's and 0367's triggers, 0372's for the borrowed slugs) already keeps them away
       // from a legacy runner, so failing the request would only strand this runner's other work.
       const providerWhere = await providerDispatchWhereOn(this.prisma, runner.ownerId, provider);
-      const notice = provider === AgentProvider.CURSOR ? await persistedCursorRefusal(this.prisma, runner.id) : upgradeError;
+      const notice = provider === AgentProvider.CURSOR ? () => persistedCursorRefusal(this.prisma, runner.id) : upgradeError;
       await this.markProviderUpgradeRequired(runner.id, providerWhere, notice);
     }
     if (!supportsSourcePin) {
@@ -2963,7 +2965,7 @@ export class RunnerApiController {
       await this.markProviderUpgradeRequired(
         runner.id,
         await providerDispatchWhereOn(this.prisma, runner.ownerId, provider),
-        provider === AgentProvider.CURSOR ? await persistedCursorRefusal(this.prisma, runner.id) : upgradeError,
+        provider === AgentProvider.CURSOR ? () => persistedCursorRefusal(this.prisma, runner.id) : upgradeError,
         onProvider
           .filter(
             (session) =>
