@@ -27,7 +27,12 @@ const WATCH_SETTLE_MS = 3_000;
 // went half-dead without firing onerror. EventSource has no read timeout, so we watch for it.
 const WATCHDOG_SILENCE_MS = 45_000;
 const WATCHDOG_TICK_MS = 15_000;
-const MAX_FAILS = 20;
+// Twenty quick retries (about three minutes of backoff) ride out a restart; past them the stream is
+// asked for once a minute rather than given up on. A tab that gave up stayed on the gated polls
+// until it was reloaded — one such tab, polling 42 projects every 4 s, was most of production's
+// database time on 2026-10-20 — and a request a minute costs nothing beside them.
+const QUICK_RETRIES = 20;
+const SLOW_RETRY_MS = 60_000;
 
 const ControlPlaneLiveContext = createContext(false);
 
@@ -256,8 +261,9 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       dropped = true;
       es?.close();
       setLive(false); // the gated interval polls take back over meanwhile
-      if (stopped || ++fails > MAX_FAILS) return;
-      reconnectTimer = setTimeout(connect, Math.min(1000 * fails, 15000) + Math.random() * 500);
+      if (stopped) return;
+      const backoff = ++fails > QUICK_RETRIES ? SLOW_RETRY_MS : Math.min(1000 * fails, 15000);
+      reconnectTimer = setTimeout(connect, backoff + Math.random() * 500);
     };
     function connect(): void {
       dropped = false;
@@ -329,11 +335,22 @@ export function ControlPlaneProvider({ children }: { children: ReactNode }) {
       es.onerror = () => drop();
     }
     connect();
+    // A tab coming back into view, or a browser back online, need not wait out the backoff: ask for
+    // the stream at once. Nothing to do while one is open or opening.
+    const retryNow = (): void => {
+      if (stopped || !dropped || document.visibilityState === 'hidden') return;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      connect();
+    };
+    document.addEventListener('visibilitychange', retryNow);
+    window.addEventListener('online', retryNow);
     const watchdog = setInterval(() => {
       if (!stopped && Date.now() - lastMsgAt > WATCHDOG_SILENCE_MS) drop();
     }, WATCHDOG_TICK_MS);
     return () => {
       stopped = true;
+      document.removeEventListener('visibilitychange', retryNow);
+      window.removeEventListener('online', retryNow);
       clearInterval(watchdog);
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (refreshTimer) clearTimeout(refreshTimer);
