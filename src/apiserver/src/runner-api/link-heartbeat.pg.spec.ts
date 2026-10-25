@@ -26,15 +26,16 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { CreatorType, type PrismaClient, RunStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
+import { CreatorType, PrismaClient, RunStatus, SessionDispatchOrigin, TaskStatus } from '@prisma/client';
 import type { HttpException } from '@nestjs/common';
 import type { PlanUsageRateLimitReset, RunnerHeartbeatRequest, RunnerHeartbeatResponse } from '@orbit/shared';
-import { Client } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Client, Pool } from 'pg';
 
 import { sha256 } from '../common/crypto.util';
 import { OPEN_SESSION_STATUSES } from '../common/session-scheduling';
 import type { PrismaService } from '../prisma/prisma.service';
-import { prismaClientFor } from '../prisma/prisma-client';
+import { PG_ADAPTER_OPTIONS, PREPARED_STATEMENT, prismaClientFor } from '../prisma/prisma-client';
 import { assertCoordinatorPgUrlIsIsolated, verifyCoordinatorPgIdentity } from '../projects/coordinator-pg-test-safety';
 import { establishProjectContractForPgTest } from '../projects/project-contract-test-helper';
 import { cursorKeyCheckRelay } from '../providers/cursor-key-check-relay';
@@ -50,7 +51,7 @@ import { enqueueWikiJob } from '../wiki-worker/wiki-jobs';
 import { WikiRepoOps } from '../wiki-worker/wiki-repo-ops';
 import { WorkspacesService } from '../workspaces/workspaces.service';
 import { IntegrationJobRelay } from './integration-job-relay';
-import { LINK_RECONCILE_EVERY_MS } from './link-heartbeat';
+import { LINK_RECONCILE_EVERY_MS, readLinkBeat } from './link-heartbeat';
 import { RunnerApiController } from './runner-api.controller';
 import type { RunnerLinkContext } from './runner-link-call';
 import { runnerLinkCredential } from './runner-link-token';
@@ -234,7 +235,7 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
     const quiet = await beat();
     assert.equal(isFull(quiet.answer), false);
     assert.deepEqual(quiet.statements.length, 1, quiet.statements.join('\n---\n'));
-    assert.match(quiet.statements[0], /^\s*WITH caller AS/);
+    assert.match(quiet.statements[0], /^\/\* prepared \*\/\s+WITH caller AS/, 'the beat statement, sent as a prepared statement');
     assert.equal(quiet.statements.some((s) => /^\s*(BEGIN|COMMIT)/i.test(s)), false, 'one autocommit statement: one commit');
     assert.deepEqual(
       { ...quiet.answer, linkHints: undefined },
@@ -732,6 +733,31 @@ test('a link heartbeat answered from runner_presence', { skip: !URL_, concurrenc
       'x-orbit-managed-runner-pod-uid': podUid,
     };
     for (let i = 0; i < 3; i += 1) assert.ok(isFull(await managedBeat(instance)), 'every beat of a managed runner reconciles in full');
+  });
+
+  // ── 11 ─────────────────────────────────────────────────────────────────────────────────────────────────
+  await t.test('11. the beat statement is parsed once per connection and, after five beats, planned no more', async () => {
+    // The API server's adapter options on a pool of one connection, so the connection's prepared statements can be read.
+    const one = new PrismaClient({ adapter: new PrismaPg(new Pool({ connectionString: url, max: 1 }), PG_ADAPTER_OPTIONS) });
+    try {
+      const input = {
+        runnerId, ownerId, credential: runnerLinkCredential(sha256(token)), processId: process_, gatewayId: 'orbit-link-gateway-1',
+        namedSessionIds: [busy, idle], supervisedSessionIds: [busy, idle], planUsageDigest: null,
+      };
+      for (let i = 0; i < 8; i += 1) {
+        assert.equal((await readLinkBeat(one as never, input))?.credentialHeld, true);
+      }
+      const prepared = await one.$queryRawUnsafe<Array<{ statement: string; custom: number; generic: number }>>(
+        `SELECT statement, custom_plans::int AS custom, generic_plans::int AS generic FROM pg_prepared_statements`,
+      );
+      const beats = prepared.filter((p) => p.statement.startsWith(PREPARED_STATEMENT));
+      assert.equal(beats.length, 1, 'one prepared statement for eight beats');
+      assert.equal(beats[0].custom + beats[0].generic, 8, 'and each beat ran it');
+      assert.ok(beats[0].generic > 0, `PostgreSQL's generic plan serves it once five custom ones were planned: ${JSON.stringify(beats[0])}`);
+      assert.equal(prepared.length, beats.length, 'and nothing else is prepared: every other statement still goes unnamed');
+    } finally {
+      await one.$disconnect().catch(() => undefined);
+    }
   });
 
   // The open statuses the lease check reads are the leaseLostSessionIds rule's (common/session-scheduling.ts).

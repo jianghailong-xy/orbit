@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
 import type { RunnerHeartbeatRequest, RunnerHeartbeatResponse } from '@orbit/shared';
+import { preparedStatementName } from '../prisma/prisma-client';
+import { renderRawQuery } from '../test-support/prisma-transaction-double';
 import {
   changedReports,
   factsHashOf,
@@ -16,6 +18,7 @@ import {
   periodicReconcileDue,
   quietHeartbeatAnswer,
   readFactsHash,
+  readLinkBeat,
   reconcileHashOf,
   reconcilePhaseMs,
   RUNNER_ROW_FACTS,
@@ -292,6 +295,30 @@ test('the quiet answer hands out nothing and states the runner\'s settings, with
 test('the quiet answer is, to the byte, what the runner\'s own test applies (src/runner-go/testdata/o1-quiet-answer.json)', () => {
   const fixture = readFileSync(path.resolve(__dirname, '../../../runner-go/testdata/o1-quiet-answer.json'), 'utf8').trim();
   assert.equal(JSON.stringify(quietHeartbeatAnswer({ maxConcurrent: 4, minFreeDiskMb: 2048 }, {})), fixture);
+});
+
+test('the beat statement is a prepared one: it opens with the mark, and its text is one of two whatever the beat says', async () => {
+  const texts = new Set<string>();
+  const prisma = {
+    $queryRaw: (...args: unknown[]) => {
+      texts.add(renderRawQuery(args).text);
+      return Promise.resolve([]);
+    },
+  };
+  const beats = [
+    { runnerId: RUNNER, processId: PROCESS, gatewayId: 'gateway-1', sessions: [SESSION_A, SESSION_B], planUsageDigest: 'AAAAAAAAAAAAAAAA' },
+    { runnerId: '0190a0b0-0000-7000-8000-00000000000b', processId: null, gatewayId: null, sessions: [], planUsageDigest: null },
+    { runnerId: RUNNER, processId: PROCESS, gatewayId: 'gateway-2', sessions: [SESSION_B], planUsageDigest: null },
+    { runnerId: RUNNER, processId: null, gatewayId: null, sessions: [SESSION_A], planUsageDigest: 'BBBBBBBBBBBBBBBB' },
+  ];
+  for (const b of beats) {
+    await readLinkBeat(prisma as never, {
+      runnerId: b.runnerId, ownerId: '0190a0b0-0000-7000-8000-0000000000ff', credential: 'c'.repeat(32), processId: b.processId,
+      gatewayId: b.gatewayId, namedSessionIds: b.sessions, supervisedSessionIds: b.sessions, planUsageDigest: b.planUsageDigest,
+    });
+  }
+  assert.equal(texts.size, 2, 'with and without a plan usage to compare: two statements, each prepared once per connection');
+  for (const text of texts) assert.ok(preparedStatementName({ sql: text }), `not prepared: ${text.slice(0, 80)}`);
 });
 
 test('an answer that carries any command, cancellation or lost lease hands something out', () => {
