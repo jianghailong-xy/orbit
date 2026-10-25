@@ -2,13 +2,21 @@
 # Compose is run for it (README.md beside this file).
 #
 # The stack is the root docker-compose.yml under its own Compose project, with staging.compose.yml on top (and
-# staging.acme.compose.yml in the ACME TLS mode, staging.loadgen.compose.yml for a load test). Compose runs with an empty environment plus the env file
-# staging-up.sh writes, so nothing from the calling shell, an agent session's ORBIT_* variables included, reaches the
-# stack: Compose prefers the shell's environment to an env file.
+# staging.acme.compose.yml in the ACME TLS mode, staging.loadgen.compose.yml for a load test). Compose runs with an
+# empty environment plus the env file staging-up.sh writes, so nothing from the calling shell, an agent session's
+# ORBIT_* variables included, reaches the stack: Compose prefers the shell's environment to an env file.
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 repo="$(cd "$here/../.." && pwd)"
 project="${ORBIT_LINK_STAGING_PROJECT:-orbit-link-staging}"
+# Every container, image and database these scripts act on is named after the project. A deployment's are orbit-*
+# (docker-compose.yml's orbit-postgres, orbit-apiserver, …), so a project outside orbit-link-* could name them, and a
+# script would stop, rebuild or write into a deployment. Refused before anything else runs (staging-name-check.sh).
+if ! [[ "$project" =~ ^orbit-link-[a-z0-9][a-z0-9_-]*$ ]]; then
+  echo "staging: ORBIT_LINK_STAGING_PROJECT=$project does not start with orbit-link- followed by lowercase letters," \
+    "digits, - or _: a staging stack's project is orbit-link-<name>, which no deployment's containers are named after" >&2
+  exit 2
+fi
 state="${ORBIT_LINK_STAGING_DIR:-/var/tmp/$project}"
 env_file="$state/compose.env"
 
