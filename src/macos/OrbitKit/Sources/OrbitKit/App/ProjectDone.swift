@@ -899,12 +899,10 @@ public enum ProjectDone {
     /// `SessionProjectSettlementCard`, read off the same reads.
     public enum Slot: Equatable, Sendable {
         /// Nothing: not this project's coordinator, a read that has not answered, a server whose
-        /// projection carries no counts — or a project nobody has asked about and nothing has
-        /// recorded.
+        /// projection carries no counts, a project nobody has asked about and nothing has
+        /// recorded — or a DONE Orbit recorded itself, whose ending is the project page's card
+        /// and not this conversation's (the owner's ruling of 2026-10-25).
         case none
-        /// The old question's TERMINAL state, "This project is done · recorded by Orbit" — drawn
-        /// once Orbit has recorded the project DONE itself, and in no other state.
-        case notDone
         /// "Is this project done?" — asked by the request named (nil when the owner is reminded
         /// without one) — or, once it is recorded, its receipt.
         case done(requestID: String?)
@@ -922,8 +920,14 @@ public enum ProjectDone {
     /// The browser draws nothing in the same state, and draws nothing for a read without counts
     /// either — what this guard has always answered for both.
     ///
+    /// Until 2026-10-25 one state of that card stayed here: a DONE Orbit recorded itself was drawn
+    /// as its TERMINAL state, "This project is done · recorded by Orbit". The owner's ruling of
+    /// that day took it out of the conversation too — the project's ending is drawn once, on its
+    /// sessions page where the progress card was (`SessionProjectPage`) — so the slot has no such
+    /// case, and the browser's `SessionProjectSettlementCard` returns nothing for it as well.
+    ///
     /// `ProjectNotDoneCard` keeps the card's whole body, as the browser keeps
-    /// `ProjectWhyNotDoneCard`'s: only its settled branch (the terminal state above) is drawn.
+    /// `ProjectWhyNotDoneCard`'s: only its settled branch is drawn, and only on the project page.
     public static func slot(subject: ProjectDoneSubject?, request: ProjectOpenItemRow?,
                             waitingKind: SessionWaitingKind?, record: ProjectDoneRecord?) -> Slot {
         guard let subject, subject.counts != nil else { return .none }
@@ -932,11 +936,8 @@ public enum ProjectDone {
             return .done(requestID: request?.itemId)
         }
         // DONE, read off the document so that it survives a reload: the owner's record keeps its
-        // receipt; a DONE Orbit recorded itself is the old question's terminal state — "This
-        // project is done", recorded by Orbit (the browser's SessionProjectSettlementCard).
-        if subject.status == "DONE" {
-            return subject.doneBy == .owner ? .done(requestID: nil) : .notDone
-        }
+        // receipt. A DONE Orbit recorded itself draws nothing here.
+        if subject.status == "DONE", subject.doneBy == .owner { return .done(requestID: nil) }
         return .none
     }
 

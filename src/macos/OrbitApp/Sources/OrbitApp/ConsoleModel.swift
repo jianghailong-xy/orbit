@@ -4473,7 +4473,9 @@ final class ConsoleModel {
     /// this project done?" while the coordinator's request stands (or the row says Record as done…),
     /// its receipt once the project is recorded done, and otherwise nothing. Nothing asks "Why is
     /// this project not done?" in a conversation any more (the owner's ruling of 2026-10-07
-    /// 04:20Z); Orbit's own DONE is the terminal state of that old card, drawn as it always was.
+    /// 04:20Z), and since the owner's ruling of 2026-10-25 Orbit's own DONE — that old card's
+    /// terminal state — is not drawn here either: the project's ending is its page's card
+    /// (`SessionProjectPage`).
     ///
     /// Each card is re-derived from the reads on every render, so a request the coordinator filed
     /// again is the same card with the new request in it. A read that has not answered changes
@@ -4488,9 +4490,6 @@ final class ConsoleModel {
             if projectDone != nil {
                 decisionCards.removeAll { $0.kind == .projectDone || $0.kind == .projectNotDone }
             }
-        case .notDone:
-            decisionCards.removeAll { $0.kind == .projectDone }
-            deliver(.projectNotDone)
         case .done:
             decisionCards.removeAll { $0.kind == .projectNotDone }
             deliver(.projectDone, placement: donePlacement(live))

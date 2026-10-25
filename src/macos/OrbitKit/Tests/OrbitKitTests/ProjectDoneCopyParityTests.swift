@@ -429,15 +429,15 @@ final class ProjectDoneCopyParityTests: XCTestCase {
 
     /// Which card the conversation draws, state by state, is the browser's: the owner's card while
     /// the coordinator's request stands (or the row says Record as done…, or this conversation has
-    /// just recorded it — `adoptDoneSlot` on this client); the owner's DONE as its receipt; a DONE
-    /// Orbit recorded itself as the old card's terminal state; and NOTHING for an OPEN project
-    /// nobody has asked about, however finished it looks. At what the old question was asked of, the
-    /// browser and this client now agree by both drawing nothing — the owner's ruling of 2026-10-07
-    /// 04:20Z, which took "Why is this project not done?" out of the conversation.
+    /// just recorded it — `adoptDoneSlot` on this client); the owner's DONE as its receipt; and
+    /// NOTHING for an OPEN project nobody has asked about, however finished it looks, or for a DONE
+    /// Orbit recorded itself. At what the old question was asked of, the browser and this client
+    /// agree by both drawing nothing — the owner's ruling of 2026-10-07 04:20Z, which took "Why is
+    /// this project not done?" out of the conversation — and so they do at its terminal state,
+    /// which the owner's ruling of 2026-10-25 left to the project page.
     func testTheConversationDrawsTheWebsCardForEachState() throws {
         let card = try flat(Self.card)
         for part in [
-            "&& document?.status === 'DONE'\n    && document.doneBy !== 'OWNER'",
             "const ownerRecordedDone = document?.status === 'DONE' && document.doneBy === 'OWNER';",
             "const ownerRecorded = receipt != null || (project.status === 'DONE' && project.doneBy === 'OWNER');",
             "const recorded = receipt != null || project.status === 'DONE';",
@@ -446,10 +446,10 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         ] {
             XCTAssertTrue(card.contains(part), "the conversation's card rule drifted: no \(part.debugDescription)")
         }
-        // The old question's card is rendered in the conversation exactly ONCE — its terminal
-        // state — and nothing asks it any more: not the gate, not the older projection.
-        XCTAssertEqual(card.components(separatedBy:
-            "return <ProjectWhyNotDoneCard project={document as unknown as ProjectDoneDocument} />;").count - 1, 1,
+        // The old question's card is not rendered in the conversation at all — its terminal state
+        // included, since 2026-10-25 — and nothing asks it any more: not the gate, not the older
+        // projection.
+        XCTAssertFalse(card.contains("<ProjectWhyNotDoneCard project={document"),
                        "the Why-not-done card is rendered in the conversation again")
         // The prose may still name the condition the question was asked by; the declaration itself
         // is gone, which is what this reads.
@@ -482,7 +482,7 @@ final class ProjectDoneCopyParityTests: XCTestCase {
         XCTAssertEqual(slot(subject("OPEN", criteria: [])), .none, "no criteria: nothing to explain")
         XCTAssertEqual(slot(subject("OPEN", done: true)), .none, "the projection already says done")
         XCTAssertEqual(slot(subject("DONE", doneBy: .owner)), .done(requestID: nil), "the owner's receipt")
-        XCTAssertEqual(slot(subject("DONE", doneBy: .derived, done: true)), .notDone, "Orbit's DONE: the terminal state")
+        XCTAssertEqual(slot(subject("DONE", doneBy: .derived, done: true)), .none, "Orbit's DONE: nothing, since 2026-10-25")
         let terminal = subject("DONE", doneBy: .derived, done: true)
         XCTAssertTrue(ProjectDone.WhyNotDone(subject: terminal, withCoordinator: 0, requested: false).settled(terminal))
         XCTAssertEqual(ProjectDone.settledBadge(terminal.doneBy), ProjectDone.recordedByOrbit)

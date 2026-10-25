@@ -3323,8 +3323,9 @@ export function WorkspaceView({
   // The project's ending where the page's progress card was (owner, 2026-10-10): a DONE project's
   // first card is its record — "This project is done · recorded by Orbit · 6 criteria · 5 on main
   // · 1 no code to land" — and never a progress card with nothing in it but the word Done. The
-  // same card, off the same read, as the conversation's settled branch; a read that carries no
-  // projection, or one without the unified counts (an older server), keeps the progress card.
+  // one place the card is drawn, since the owner's ruling of 2026-10-25 took it out of the
+  // coordinator conversation; a read that carries no projection, or one without the unified
+  // counts (an older server), keeps the progress card.
   const pageDetails = pageProjectDetailsQ.data as unknown as ProjectDoneDocument | undefined;
   const pageSettledDoc = pageDetails && pageStatus === 'DONE' && pageDetails.derivedDone != null
       && 'counts' in pageDetails.derivedDone
@@ -11149,7 +11150,9 @@ export function WorkspaceView({
                   the conversation: "Is this project done?" while the coordinator has asked (or the
                   row says Record as done…), and the receipt in its place once it is recorded. A
                   project nobody has asked about draws nothing here — its gaps and the entries that
-                  act on them are the project page's Open items row and the Needs you hint. Keyed
+                  act on them are the project page's Open items row and the Needs you hint — and
+                  nor does a DONE Orbit recorded itself (owner, 2026-10-25): the project page draws
+                  its ending. Keyed
                   by the session, because whether it was delivered belongs to this conversation,
                   and by a key none of its siblings carries, for the reason the evidence card's
                   note above gives. */}
