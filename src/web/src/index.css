@@ -25276,9 +25276,14 @@ button.agent-progress-agent:hover {
 
 /* ---- Login: the Mac/iOS login page on the web — icon in faint orbits, standing-label fields,
    one full-width capsule that fades rather than greys while it can't be pressed. ---- */
+/* Three rows: the form in the middle one, centred between two equal rows as it was alone, and the
+   footer at the bottom of the last. The small viewport (--app-vh) keeps that bottom above Safari's
+   toolbar on an iPhone, where 100vh is the height with the toolbars collapsed. */
 .login-page {
-  min-height: 100vh;
+  min-height: var(--app-vh);
   display: grid;
+  grid-template-rows: 1fr auto 1fr;
+  gap: 24px;
   place-items: center;
   padding: 40px 24px;
   background: radial-gradient(circle at 50% 0, color-mix(in srgb, var(--brand) 10%, transparent), transparent 520px),
@@ -25287,6 +25292,7 @@ button.agent-progress-agent:hover {
 }
 
 .login-form {
+  grid-row: 2;
   width: 100%;
   max-width: 360px;
   display: flex;
@@ -25536,4 +25542,82 @@ button.agent-progress-agent:hover {
   color: var(--text-2);
   text-align: center;
   text-wrap: balance;
+}
+
+/* The privacy policy's link, at the page's foot, where a signed-out visitor finds it. */
+.login-footer {
+  grid-row: 3;
+  align-self: end;
+  font-size: 13px;
+}
+
+.login-footer a {
+  color: var(--text-3);
+}
+
+.login-footer a:hover {
+  color: var(--text-1);
+}
+
+/* ---- Privacy policy (/privacy): public, the same page signed out or in, outside the app shell — the
+   policy alone, in one reading column on the page background. It owns its scroll, as every
+   full-height view does. ---- */
+.privacy-page {
+  height: var(--app-vh);
+  overflow-y: auto;
+  background: var(--bg-base);
+}
+
+.privacy-doc {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 56px 24px 80px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--text-1);
+}
+
+.privacy-doc h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-1);
+}
+
+.privacy-doc .privacy-updated {
+  margin: 8px 0 28px;
+  font-size: 14px;
+  color: var(--text-3);
+}
+
+.privacy-doc h2 {
+  margin: 32px 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--text-1);
+}
+
+.privacy-doc p {
+  margin: 0 0 12px;
+}
+
+.privacy-doc ul {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+
+.privacy-doc li + li {
+  margin-top: 6px;
+}
+
+@media (max-width: 600px) {
+  .privacy-doc {
+    padding: 32px 20px 56px;
+  }
+
+  .privacy-doc h1 {
+    font-size: 26px;
+  }
 }

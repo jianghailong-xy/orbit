@@ -220,6 +220,9 @@ export function LoginPage() {
           )}
         </div>
       </form>
+      <footer className="login-footer">
+        <a href="/privacy">Privacy</a>
+      </footer>
     </div>
   );
 }

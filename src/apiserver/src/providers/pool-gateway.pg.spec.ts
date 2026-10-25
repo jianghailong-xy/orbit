@@ -45,6 +45,7 @@ import { RunEventType, type ClaimedSession, type TurnCompleteRequest } from '@or
 import { json, urlencoded } from 'express';
 import { Client } from 'pg';
 
+import { DisabledAccounts } from '../auth/disabled-accounts';
 import { PublicIdExceptionFilter } from '../common/public-id.filter';
 import { PublicIdInterceptor } from '../common/public-id.interceptor';
 import { TransientDbConflictFilter } from '../common/transient-db-conflict.filter';
@@ -236,7 +237,7 @@ suite("the shared pools' gateway, end to end on real PostgreSQL", { timeout: 600
   });
   await new Promise<void>((resolve) => openai.listen(0, '127.0.0.1', resolve));
   const openaiBase = `http://127.0.0.1:${(openai.address() as AddressInfo).port}/v1`;
-  const gateway = new PoolGatewayService(prisma, pools, ledger, openaiBase);
+  const gateway = new PoolGatewayService(prisma, pools, ledger, openaiBase, new DisabledAccounts(prisma));
 
   @Module({
     controllers: [PoolGatewayController],
