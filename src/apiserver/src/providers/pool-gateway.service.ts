@@ -83,10 +83,20 @@ export function throttledUntil(headers: IncomingHttpHeaders, body: Buffer | unde
 const UPSTREAM_IDLE_MS = 5 * 60_000;
 
 /**
- * Headers not passed on: hop-by-hop ones, which describe a connection and not the request, and the ones
- * this deployment's own edge (Cloudflare, then nginx) adds on the way in — a runner's address, the
- * gateway's loop guard, the edge's accept-encoding. What reaches OpenAI is what codex sent, with one
- * header replaced.
+ * The headers that choose the organization and project a request is made in and billed to (OpenAI's API
+ * reference, "Organizations and projects"). A pool's key brings its own, and codex on Orbit's provider
+ * sends neither (runner-go codex.go). Passed on, either could name an organization or project the key is
+ * not in, which OpenAI answers with a 401 for the KEY — and a 401 marks a key INVALID: a person of the pool
+ * could switch off, one by one, keys other people put in. Never forwarded; and a 401 on a request that
+ * came with one is not held against the key (`forward`).
+ */
+const ORGANIZATION_HEADERS = new Set(['openai-organization', 'openai-project']);
+
+/**
+ * Headers not passed on: hop-by-hop ones, which describe a connection and not the request, the ones this
+ * deployment's own edge (Cloudflare, then nginx) adds on the way in — a runner's address, the gateway's
+ * loop guard, the edge's accept-encoding — and ORGANIZATION_HEADERS. What reaches OpenAI is what codex
+ * sent, with one header replaced.
  */
 const NOT_FORWARDED = new Set([
   'connection', 'keep-alive', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer', 'trailers',
@@ -94,6 +104,7 @@ const NOT_FORWARDED = new Set([
   'x-forwarded-for', 'x-forwarded-proto', 'x-forwarded-host', 'x-forwarded-port', 'x-real-ip', 'forwarded',
   'via', 'x-orbit-gateway', 'cdn-loop', 'true-client-ip', 'accept-encoding',
   'cf-connecting-ip', 'cf-connecting-ipv6', 'cf-ipcountry', 'cf-ray', 'cf-visitor', 'cf-worker', 'cf-warp-tag-id',
+  ...ORGANIZATION_HEADERS,
 ]);
 
 /** Headers of OpenAI's answer not passed back: hop-by-hop ones, and its cookies, which are api.openai.com's. */
@@ -177,9 +188,11 @@ export interface Answer {
  *   — none chosen, switched off, refused or disabled by OpenAI, or its share cap spent by the others — is
  *   refused here with the reason, and the session's next claim moves it.
  * - WHAT OPENAI SAID: `insufficient_quota` marks the key out of budget until it resets; a 401 marks it
- *   INVALID. Either way the turn ends, as any quota ends one, and the next claim moves the session. A rate
- *   limit is waited out on the same key; one that outlasts that wait is recorded as a short
- *   `throttled_until` on the key before its 429 goes back, so no claim picks it until then.
+ *   INVALID. Either way the turn ends, as any quota ends one, and the next claim moves the session. A 401
+ *   on a request that named an organization or project of its own (ORGANIZATION_HEADERS) ends it too but
+ *   marks nothing: those are the key's contributor's to choose, and a request that tried is no proof
+ *   against the key. A rate limit is waited out on the same key; one that outlasts that wait is recorded
+ *   as a short `throttled_until` on the key before its 429 goes back, so no claim picks it until then.
  * - WHAT IT COST: the usage the response ends with, per person and per key, into PoolUsageLedger.
  *
  * No database connection is held while a response streams: every read is made before the request goes
@@ -241,6 +254,16 @@ export class PoolGatewayService {
       const outcome: ResponsesOutcome = {};
       readResponsesEvent(parseJson(answer.body), outcome);
       if (status === 401) {
+        if (choosesOrganization(req.headers)) {
+          // Sent by somebody choosing the key's organization or project, which are its contributor's. Those
+          // headers did not go on, but a 401 on such a request is no proof against the key: it stays as it is.
+          // If OpenAI refuses the key itself, the next request without them — every one codex sends — marks it.
+          refuse(res, 403, 'orbit_pool_key_rejected',
+            `${key.label} (${maskedKey(key.keyHint)}) was rejected by OpenAI on a request that named its own organization or project — ` +
+            `the Orbit pool gateway does not forward OpenAI-Organization or OpenAI-Project, and the key stays in "${caller.poolLabel}"`);
+          this.log.log(`session ${caller.sessionId} key ${maskedKey(key.keyHint)}: 401 from OpenAI on a request naming its own organization or project — not marked`);
+          return;
+        }
         // The key is wrong or revoked. Marked before the answer, so the claim that follows cannot choose it.
         await this.pools.markKeyInvalid(key.id);
         refuse(res, 403, 'orbit_pool_key_rejected',
@@ -416,6 +439,11 @@ export function gatewayTarget(url: string): { path: string; query: string } {
   const path = at >= 0 ? url.slice(0, at) : url;
   const rest = path.startsWith(POOL_GATEWAY_PATH) ? path.slice(POOL_GATEWAY_PATH.length) : path;
   return { path: rest === '' ? '/' : rest, query: at >= 0 ? url.slice(at) : '' };
+}
+
+/** Whether a request came with an organization or project of its own (ORGANIZATION_HEADERS), which is not forwarded. */
+function choosesOrganization(incoming: IncomingHttpHeaders): boolean {
+  return Object.entries(incoming).some(([name, value]) => value !== undefined && ORGANIZATION_HEADERS.has(name.toLowerCase()));
 }
 
 /** What codex sent, minus NOT_FORWARDED, with the pool's key as its credential. */
