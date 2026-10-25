@@ -21,6 +21,7 @@ be taken for a deployment's.
 | `loadgen-seed.sh` | The load test's fleet in the stack's database: `seed` (owners, runners, a workspace each, idle sessions), `arm` before each run (fresh running sessions, presence, the fleet file `<state>/loadgen/fleet.jsonl`), `disarm` after it, `remove`. See [Load test](#load-test). |
 | `loadgen-run.sh` | One load test run: `src/link-gateway/cmd/loadgen` against the stack, with the stack's CPU, memory, metrics, database and logs collected beside it, then the report. |
 | `loadgen-report.mjs` | A run's report: each criterion with the figure it rests on (`report.md`, `report.json`). |
+| `loadgen-baseline.mjs` | What one heartbeat and one event batch cost, from a heartbeats-only run and a run with events: see [Per-operation baseline](#per-operation-baseline). |
 
 ```bash
 scripts/runner-link/staging-up.sh
@@ -127,4 +128,61 @@ scripts/runner-link/loadgen-run.sh --name full-1h -- -duration 1h -event-rate 20
 - **On a shared host**, the loadgen runs in a scope of its own (`systemd-run`), and the run stops itself when the
   host's available memory stays under `LOADGEN_MIN_AVAILABLE_MB` (800) for 15 s. The report's host section says what
   else used the CPUs and how long the stack's containers waited for one (CPU pressure).
+
+### Knobs
+
+| Where | Knob | Default |
+| --- | --- | --- |
+| `loadgen-seed.sh` | `LOADGEN_OWNERS`, `LOADGEN_RUNNERS`, `LOADGEN_SESSIONS`, `LOADGEN_ACTIVE`: owners, runners, open sessions, running sessions | 10000, 15000, 40000, 5000 |
+| `loadgen-run.sh -- …` | `-duration` (steady window), `-event-rate` (events/s across the fleet), `-ramp-rate` (first connections/s), `-flush-min`/`-flush-max`/`-max-batch` (batching), `-runners` (play the first N), `-spread-renewals`; all of them in [src/link-gateway/cmd/loadgen](../../src/link-gateway/cmd/loadgen/README.md) | 1h, 2000, 150, 1s/3s/100, all, true |
+| `loadgen-run.sh` | `LOADGEN_MIN_AVAILABLE_MB`: the host memory floor that stops a run | 800 |
+| `staging-up.sh` | `ORBIT_LINK_STAGING_BACKENDS` (apiservers behind the gateway), `ORBIT_LINK_STAGING_DB_CPUS` (the database's CPU allocation) | 1, unlimited |
+
+`node scripts/runner-link/loadgen-report.mjs <run>` writes a run's report again from what it collected.
+
+### Host sizing
+
+Measured on 2026-10-25 (commit ada118b91):
+
+| Part | Memory | CPU |
+| --- | --- | --- |
+| link gateway | about 190 KB a connection: 2.3 GB at 12,000 connections | 0.47 cores at 12,000 connections, with the apiserver overloaded behind it |
+| loadgen | 1.2 GB at 12,000 runners | 0.25 cores |
+| apiserver (one Node process) | up to 1.9 GB when overloaded | saturates at 100 beats/s and 260 batches/s: its main thread at 99% |
+| postgres | 0.2 to 1.6 GB | see the baseline below |
+
+A 15,000-runner run needs 6–7 GB beside whatever else the host runs. On HPC (14 GB of memory, about 9 of 24 cores
+used by other work) it swapped 3.5 GB out within 2.4 minutes. A stack scaled out to carry the target (6 or more
+apiservers, an 18–20 core database) needs a machine of its own: 32 or more cores and 32 GB or more.
+
+### Per-operation baseline
+
+What one heartbeat and one event batch cost, for the optimisation tasks to measure against. On a fleet of 3,000 runners
+with 1,000 running sessions, run heartbeats alone, then with events, and compare:
+
+```bash
+export LOADGEN_OWNERS=2000 LOADGEN_RUNNERS=3000 LOADGEN_SESSIONS=8000 LOADGEN_ACTIVE=1000
+scripts/runner-link/loadgen-seed.sh seed
+scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh --name cost-hb -- -duration 2m -event-rate 0
+scripts/runner-link/loadgen-seed.sh arm && scripts/runner-link/loadgen-run.sh --name cost-ev150 -- -duration 2m -event-rate 150
+node scripts/runner-link/loadgen-baseline.mjs <state>/loadgen/runs/cost-hb <state>/loadgen/runs/cost-ev150
+```
+
+It prints the table below and the statements each operation runs, most database time first. Measured on 2026-10-25 at
+commit ada118b91, one apiserver, the stack's idle use under 0.02 cores:
+
+| Per operation | apiserver CPU | database CPU | gateway CPU | SQL statements | commits |
+| --- | --- | --- | --- | --- | --- |
+| heartbeat | 3.29 ms | 7.67 ms | 0.60 ms | 27.9 | 27.9 |
+| event batch (1.22 events) | 2.20 ms | 2.69 ms | 0.16 ms | 13.6 | 6.3 |
+
+- A heartbeat is the full reconcile on every beat: every statement is its own transaction. It rewrites the runner row
+  with all its facts, upserts presence, and runs about 20 reads and conditional updates for the commands it may
+  deliver. Design §5.7 has a beat write presence only and reconcile when flagged or every 5 minutes.
+- An event batch is one ingest transaction: BEGIN, about 8 statements, the NOTIFY and COMMIT. Before it come about
+  5 reads, each its own transaction: the guard's runner, owner and managed-instance reads, and the engine-session
+  check. Design §6.6 batches several sessions' events into one write.
+- At the cell's target (500 beats/s and 2,000 events/s, which the B8 cadence sends as about 1,290 batches/s of 1.55
+  events), these costs come to about 4.5 apiserver cores (6 or more Node processes at 75%) and about 7.3 database
+  cores on average, 11 at 10-second peaks.
 
