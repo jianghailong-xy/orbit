@@ -191,7 +191,7 @@ func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		if eb := fr.GetEventBatch(); eb != nil && n == f.cutConn {
 			if batches++; batches == 3 {
-				f.store(eb)
+				f.storeWhole(eb)
 				_ = ws.CloseNow() // stored, and gone without a word: the next Welcome says so
 				return
 			}
@@ -204,12 +204,27 @@ func (f *fakeGateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			_ = write(&linkpb.Frame{Body: &linkpb.Frame_HeartbeatAck{HeartbeatAck: &linkpb.HeartbeatAck{Mode: linkpb.Mode_MODE_LINK,
 				ReconcileJson: []byte(`{"cancelSessionIds":[],"leaseLostSessionIds":[]}`)}}})
 		case *linkpb.Frame_EventBatch:
-			_ = write(&linkpb.Frame{Body: &linkpb.Frame_EventAck{EventAck: f.store(body.EventBatch)}})
+			// The cut connection's batches are stored without failures, so the one it stores before it is cut follows
+			// what is stored: what the next Welcome says.
+			_ = write(&linkpb.Frame{Body: &linkpb.Frame_EventAck{EventAck: f.store(body.EventBatch, n != f.cutConn)}})
 		}
 	}
 }
 
-func (f *fakeGateway) store(eb *linkpb.EventBatch) *linkpb.EventAck {
+// storeWhole stores a batch with no failure injected, as the ingest does when its answer is what goes missing.
+func (f *fakeGateway) storeWhole(eb *linkpb.EventBatch) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	seqs := f.stored[eb.GetSessionId()]
+	for _, e := range eb.GetEvents() {
+		if len(seqs) == 0 && e.GetSeq() == 1 || len(seqs) > 0 && e.GetSeq() == seqs[len(seqs)-1]+1 {
+			seqs = append(seqs, e.GetSeq())
+		}
+	}
+	f.stored[eb.GetSessionId()] = seqs
+}
+
+func (f *fakeGateway) store(eb *linkpb.EventBatch, inject bool) *linkpb.EventAck {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.batches++
@@ -224,7 +239,7 @@ func (f *fakeGateway) store(eb *linkpb.EventBatch) *linkpb.EventAck {
 		ack.Failure = &linkpb.Failure{Code: "EVENT_SEQ_GAP", Retryable: true}
 		return ack
 	}
-	if f.failEvery > 0 && f.batches%f.failEvery == 0 {
+	if inject && f.failEvery > 0 && f.batches%f.failEvery == 0 {
 		f.failed++
 		ack.Failure = &linkpb.Failure{Code: "TEST_FAILURE", Retryable: true, RetryAfterMs: 20}
 		return ack

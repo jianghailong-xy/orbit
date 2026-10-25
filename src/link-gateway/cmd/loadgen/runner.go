@@ -701,7 +701,9 @@ func (r *runner) beat(now time.Time) {
 		r.nextBeat = now.Add(time.Duration(r.rng.Float64() * float64(r.beatInterval)))
 	}
 	if err := r.cur.send(&linkpb.Frame{Body: &linkpb.Frame_Heartbeat{Heartbeat: hb}}); err != nil {
-		g.stats.fail("heartbeat_send_failed", fmt.Sprintf("runner %s conn %s: %v", r.id, r.cur.id, err))
+		// A write fails only on a connection that is ending, whose end is what counts (onEnd): the next connection
+		// beats at once.
+		g.note("heartbeat_send_failed")
 		return
 	}
 	r.beatWhole = false
@@ -746,7 +748,8 @@ func (r *runner) flush(s *session, now time.Time) {
 				p.sent = time.Time{}
 			}
 		}
-		r.g.stats.fail("event_send_failed", fmt.Sprintf("runner %s conn %s session %s: %v", r.id, r.cur.id, s.id, err))
+		// As for a beat: the connection is ending, and its end is what counts. The batch goes on the next one.
+		r.g.note("event_send_failed")
 		s.flushAt = now.Add(time.Second)
 		return
 	}
