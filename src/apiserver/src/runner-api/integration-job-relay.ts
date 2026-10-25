@@ -111,6 +111,7 @@ import {
 import { MergeReceiptService } from '../sessions/merge-receipt.service';
 import { orderedIds } from '../common/lock-order';
 import { loggedRetry, withTransactionRetry } from '../common/transaction-retry';
+import { DISPATCH_PAUSED } from '../queue/dispatch-pause';
 
 /**
  * The heartbeat's half of the integration queue: what a runner is handed, and what it reports back
@@ -536,8 +537,11 @@ async function claimOne(
          AND (
            -- A queued job whose repository and target ref nobody holds. A QUEUED row somebody asked
            -- to stop is never claimed: J-T8 ends those in the transaction that asks, so one that is
-           -- still here is a row written before that rule existed (the migration backfills it).
-           (c."state" = 'QUEUED' AND c."cancel_requested_at" IS NULL AND NOT EXISTS (
+           -- still here is a row written before that rule existed (the migration backfills it). Nor is
+           -- one while the runner dispatch pause is on (queue/dispatch-pause.ts): it waits for the pause
+           -- to end. The takeover below is not held — that job is already running, and taking it over
+           -- is how it finishes.
+           (c."state" = 'QUEUED' AND c."cancel_requested_at" IS NULL AND NOT ${DISPATCH_PAUSED} AND NOT EXISTS (
               SELECT 1 FROM "project_integration_job" r
                WHERE r."serial_key" = c."serial_key" AND r."state" = 'RUNNING'))
            -- Or one this process may take over: claimed, and silent for longer than the lease.

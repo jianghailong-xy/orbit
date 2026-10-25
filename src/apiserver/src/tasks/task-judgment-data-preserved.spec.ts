@@ -2458,7 +2458,16 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // `project_acceptance_*` object is named. None of the six preserved triggers/functions is named
       // or replaced and the DONE writer fence is untouched, so it is not another writer of it. Its one
       // INSERT seeds the new table from a read of `task` and `task_dependency`.
-      '0441_project_rollup_candidate'],
+      '0441_project_rollup_candidate',
+      // The runner dispatch pause (0442, docs/runner-link-design.md §11.1, §11.3): one new table,
+      // `dispatch_pause`, of at most one row (`dispatch_pause_one_row_chk`, `id` = 1) with no foreign
+      // key — `updated_by_id` names an administrator by id only. Read against every claim above: no
+      // `task`, `session`, `project` or `project_acceptance_*` object is named, the 0177 pair and every
+      // stored task and criterion row are out of its reach, and no function, trigger or type is
+      // created, replaced or dropped, so it is not another writer of the DONE fence and names none of
+      // the six preserved objects. No INSERT, UPDATE or DELETE: no row means the pause is off, and the
+      // row is written only when an administrator switches it. Every statement can run twice.
+      '0442_dispatch_pause'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(
