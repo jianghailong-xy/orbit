@@ -212,6 +212,8 @@ type gatewayMetrics struct {
 	revocations           *gauge
 	revocationFetches     *counter
 	revocationLastSuccess *gauge
+	mode                  *gauge
+	modeFetches           *counter
 	tlsNotAfter           *gauge
 	tlsReloads            *counter
 	tlsHandshakeErrors    *counter
@@ -275,6 +277,8 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 			func() float64 { return float64(deny.size()) }),
 		revocationFetches:     newCounter("link_revocation_fetches_total", "Reads of the apiserver's revocation list, by outcome.", "result"),
 		revocationLastSuccess: newGauge("link_revocation_last_success_timestamp_seconds", "When the revocation list was last read, in Unix seconds."),
+		mode:                  newGauge("link_mode_link", "1 while runners are told MODE_LINK (LINK_MODE=link, or the server's RUNNER_LINK_REQUIRED on), 0 while MODE_HTTP."),
+		modeFetches:           newCounter("link_mode_fetches_total", "Reads of the server's RUNNER_LINK_REQUIRED switch, by outcome.", "result"),
 		tlsNotAfter:           newGauge("link_tls_certificate_not_after_timestamp_seconds", "When the certificate in use expires, in Unix seconds (files TLS mode)."),
 		tlsReloads:            newCounter("link_tls_reloads_total", "Certificate reloads after its files changed, by outcome.", "result"),
 		tlsHandshakeErrors:    newCounter("link_tls_handshake_errors_total", "TLS handshakes that failed."),
@@ -331,6 +335,7 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 	}
 	for _, r := range []string{"ok", "error", "unauthorized", "not_configured"} {
 		m.revocationFetches.preset(r)
+		m.modeFetches.preset(r)
 	}
 	for _, kind := range []string{"inbox", "claim", "commands"} {
 		for _, result := range []string{"sent", "mode_http", "no_connection", "dropped"} {
@@ -370,7 +375,8 @@ func newGatewayMetrics(version string, deny *denyList, pendingBytes func() float
 		&gauge{name: "link_gateway_start_time_seconds", help: "When this process started, in Unix seconds.", v: float64(time.Now().Unix())},
 		m.connections, m.handshakes, m.handshakeDuration, m.tokenRefusals, m.disconnects, m.rtt,
 		m.framesReceived, m.framesSent, m.frameDecodeErrors, m.heartbeats, m.draining, m.drainsSent,
-		m.revocations, m.revocationFetches, m.revocationLastSuccess, m.tlsNotAfter, m.tlsReloads, m.tlsHandshakeErrors,
+		m.revocations, m.revocationFetches, m.revocationLastSuccess, m.mode, m.modeFetches,
+		m.tlsNotAfter, m.tlsReloads, m.tlsHandshakeErrors,
 		m.rpcs, m.shadowPairs, m.shadowMismatches, m.shadowUnpaired, m.shadowEvents, m.shadowPendingBytes,
 		m.hints, m.hintsSlow, m.hintSubscriptions, m.natsConnected, m.natsReconnects,
 		m.backendCalls, m.backendRetries, m.backendDuration, m.rpcResults, m.rpcDuration,

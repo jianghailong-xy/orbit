@@ -17,8 +17,9 @@ every Welcome and HeartbeatAck states (D15):
   relays the apiserver's turn prefix requests to them ([Forwarding](#forwarding-mode_link)). It makes no decision of the
   control plane's: every rule stays in the route a call is forwarded to.
 
-`LINK_MODE` chooses the mode until the server's `RUNNER_LINK_REQUIRED` switch does (task D0). A deployment leaves it
-unset, so its gateway stays in `MODE_HTTP` until the cutover.
+Which mode runners are told is the server's cut-over switch, `RUNNER_LINK_REQUIRED` (§11.3, §11.4, task D0):
+`MODE_HTTP` while it is off, `MODE_LINK` while it is on ([The switch](#the-switch)). `LINK_MODE=link` pins `MODE_LINK`
+whatever the switch says, which the staging drills use. A deployment leaves `LINK_MODE` unset.
 
 It is one static binary with these subcommands:
 
@@ -51,8 +52,8 @@ It is one static binary with these subcommands:
 | `LINK_REVOCATION_INTERVAL` | `30s` | How often the revocation list is read. |
 | `LINK_NATS_URL` | — | The NATS server the apiserver publishes [hints](#hints) to, as a `nats://` address without credentials. Unset, the gateway relays no hints, publishes no live stream and says so when it starts. |
 | `LINK_NATS_SEED` | — | The gateway's NATS nkey seed (`SU…`), its credential on the [NATS](#nats) server. Never logged. Unset, it connects without credentials, which the deployment's NATS refuses. |
-| `LINK_MODE` | `http` | `http` (the shadow period: compare, forward nothing) or `link` (forward). See above. |
-| `LINK_INTERNAL_API_URLS` | required with `LINK_MODE=link` | The apiserver's internal listener for runner link calls (`RUNNER_LINK_INTERNAL_PORT`), one `http://` address per apiserver instance, comma-separated, for example `http://apiserver:3001`. |
+| `LINK_MODE` | `http` | `http`: runners are told what the server's `RUNNER_LINK_REQUIRED` switch says, `MODE_HTTP` (the shadow period: compare, forward nothing) while it is off and `MODE_LINK` (forward) while it is on. `link`: `MODE_LINK`, whatever the switch says. See [The switch](#the-switch). |
+| `LINK_INTERNAL_API_URLS` | required with `LINK_MODE=link` | The apiserver's internal listener for runner link calls (`RUNNER_LINK_INTERNAL_PORT`), one `http://` address per apiserver instance, comma-separated, for example `http://apiserver:3001`. Without it there is nowhere to forward to: the gateway does not read the switch, and runners are told `MODE_HTTP`. |
 | `LINK_RPC_TIMEOUT` | `60s` | How long one forwarded call may take, retries on other backends included. |
 | `LINK_HELLO_TIMEOUT` | `10s` | How long after the upgrade a Hello may take. |
 | `LINK_HANDSHAKE_TIMEOUT` | `5s` | How long the TLS handshake and the upgrade request may take, together. |
@@ -127,7 +128,8 @@ that beat's HeartbeatAck carries the `HintState`. A runner in `MODE_HTTP` ignore
 
 - **Heartbeats** are counted and logged. In `MODE_HTTP` each is answered at once with a `HeartbeatAck` saying
   `MODE_HTTP` that reconciles nothing: `reconcile_json` is empty and `want_facts` names nothing. In `MODE_LINK` each is
-  [forwarded](#heartbeats) and answered with what the heartbeat route says.
+  [forwarded](#heartbeats) and answered with what the heartbeat route says. A `HeartbeatAck` states the mode runners
+  are told now, which may not be the one the connection opened in ([The switch](#the-switch)).
 - **Pings.** The gateway pings every 20s and measures the round trip (`link_rtt_seconds`). A ping unanswered for 60s
   closes the connection. Whether the runner process is alive is judged by its heartbeats (§6.1), which version 0
   only records.
@@ -210,13 +212,49 @@ asks.
 | `Chunk` | Joined, then handled as the frame it makes up. | The same. |
 | Anything else | Ignored, as the protocol asks of a body the receiver does not take. | The same. |
 
+The columns are the mode a connection opened in, which its Welcome stated. What changes once the switch has changed
+since then is in [The switch](#the-switch).
+
 ### Forwarding invariants
 
 `mayForward` (`conn.go`) is the only check an Rpc passes before it may reach a backend. Two things hold, and
 `TestRpcForwardingInvariants` pins both:
 
-1. On a connection in `MODE_HTTP`, no Rpc is forwarded.
+1. On a connection in `MODE_HTTP`, no Rpc is forwarded. A connection opened in `MODE_LINK` is in `MODE_HTTP` once the
+   switch is off ([The switch](#the-switch)).
 2. An Rpc whose `request_id` starts with `shadow:` is never forwarded, in any mode.
+
+## The switch
+
+The cut-over to the link and its first rollback are one switch on the server, `RUNNER_LINK_REQUIRED` (§11.3, §11.4). An
+administrator reads and flips it at runtime, and nothing is rebuilt or restarted:
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" https://<host>/api/admin/runner-link-required
+curl -X PUT -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+  -d '{"required":true}' https://<host>/api/admin/runner-link-required
+```
+
+While it is on, the apiserver answers an HTTPS call to a runner daemon route `426` with `code: "UPGRADE_REQUIRED"`
+(`src/apiserver/src/runner-api/runner-link-required.ts`), and this gateway tells runners `MODE_LINK`. A runner that speaks
+the link moves its work here on either signal, and goes back to HTTPS once it is told `MODE_HTTP`.
+
+- **Reading it.** `GET {LINK_API_URL}/api/runner/link/mode`, with the gateway token, is read once before serving and then
+  every second. What it answers, `{"required": true}` or `false`, is what runners are told from then on.
+- **A read that fails changes nothing.** An error status, a refusal, an answer that does not say, or an apiserver that
+  cannot be reached leaves runners told the mode last read, so a blip does not move every runner between the link and
+  HTTPS. A failure is logged when it starts or changes, and the recovery once. Until a read succeeds, runners are told
+  `MODE_HTTP`, what `LINK_MODE` says.
+- **Not read at all** with `LINK_MODE=link`, which pins `MODE_LINK`, or without `LINK_INTERNAL_API_URLS`, when runners are
+  told `MODE_HTTP`. The gateway says which when it starts.
+- **Welcome** states the mode as the connection opens, and that stays the connection's: one opened in `MODE_LINK` has what
+  forwarding needs, one opened in `MODE_HTTP` never forwards.
+- **HeartbeatAck** states the mode now. A runner told `MODE_LINK` on a connection opened in `MODE_HTTP` (its shadow's)
+  opens a new connection for its work. Once the switch is off, on a connection opened in `MODE_LINK`, a heartbeat is
+  answered at once with `MODE_HTTP` and nothing to apply, and a request is refused `LINK_MODE_HTTP`, both without reaching
+  a backend: the runner sends them again over HTTPS. Its `EventBatch`es are still stored and acknowledged until the runner
+  leaves the connection; the ingest stores each seq once, so nothing is lost or stored twice whichever way it comes.
+- `link_mode_link` is 1 while runners are told `MODE_LINK`, and `link_mode_fetches_total` counts the reads by outcome.
 
 ## Forwarding (MODE_LINK)
 
@@ -551,6 +589,7 @@ Every metric is served at `/metrics` on `LINK_METRICS_ADDR`, in Prometheus text 
 | `link_heartbeats_total` | counter | — |
 | `link_draining`, `link_drains_sent_total` | gauge, counter | — |
 | `link_revocations`, `link_revocation_fetches_total`, `link_revocation_last_success_timestamp_seconds` | gauge, counter, gauge | `result`: ok, error, unauthorized, not_configured |
+| `link_mode_link`, `link_mode_fetches_total` | gauge, counter | `result`: ok, error, unauthorized, not_configured (see [The switch](#the-switch)) |
 | `link_tls_certificate_not_after_timestamp_seconds`, `link_tls_reloads_total`, `link_tls_handshake_errors_total` | gauge, counter, counter | `result`: ok, error |
 | `link_rpcs_total` | counter | `result`: shadow, not_forwarded, forwarded |
 | `link_rpc_results_total` | counter | `result`: the route's status class (2xx, 4xx, 5xx), or the Failure code when there was no answer (`BACKEND_*`, `RPC_*`, `CANCELLED`) |
@@ -626,6 +665,9 @@ events and credit, the live stream and the turn prefix, an answer in pieces), `c
 `retry` (calls answered while a backend goes away) and `slow` (a runner that stops reading). It signs in as the runner's
 owner (`-owner-email`, `-owner-password-file`) to create, watch and decide for sessions, and reads the live subject as
 the apiserver's NATS user (`-nats-url`, `-nats-seed-file`). `scripts/runner-link/staging-check-link.sh` runs them all.
+Against a gateway that follows the server's switch, `switch` has the owner, as the administrator, flip
+`RUNNER_LINK_REQUIRED` on and then off in the middle of a session's event stream ([The switch](#the-switch));
+`scripts/runner-link/staging-check-switch.sh` runs it.
 
 The staging stack's scripts ([scripts/runner-link](../../scripts/runner-link/README.md)) build and run all of this.
 
