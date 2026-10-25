@@ -1,0 +1,108 @@
+<!doctype html><html lang="zh"><meta charset="utf-8">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .grid { display: grid; grid-template-columns: repeat(3, 440px); gap: 22px 40px; }
+  .k { font-size: 13.5px; color: #4f4f58; margin: 0 0 7px; line-height: 1.5; }
+  .k b { color: #16161a; }
+  .k code { font-size: 12px; }
+  .spec-row { display: flex; flex-direction: column; gap: 18px; align-items: flex-start; }
+  .spec-row table { max-width: 1400px; }
+  .lede, .foot { max-width: 1400px; }
+  .sd { position: absolute; font: 600 12px/1 "Inter"; color: #7FB2FF; white-space: nowrap; }
+  .sl { position: absolute; border: 0 solid #7FB2FF; }
+</style>
+<body>
+<h1>方案 A 细节 · 每种内容一枚、暗 / 亮、会话页 / 列表页</h1>
+<p class="lede">同一枚胶囊装今天这条会说的每一句话。<b>第一行的词都是今天的词</b>（<code>kindWord</code>、<code>N sessions need you</code>、<code>1 open question below</code>、<code>2 waiting above</code>），没有新文案；第二行和右边的时间、件数都取会话行上已有的字段。示意数据：项目名取自 10-21 的真实项目，其余为示意。</p>
+
+<h2>暗色 · 会话页</h2>
+<div class="grid" id="dark"></div>
+
+<h2>亮色 · 会话页</h2>
+<div class="grid" id="light"></div>
+
+<h2>整屏</h2>
+<div class="row" id="full"></div>
+
+<h2>规格</h2>
+<div class="spec-row" id="spec"></div>
+
+<p class="foot" id="foot"></p>
+<script>
+const strip = (mode, o) => phone(mode, `${statusBar()}${navCircles()}${edge(mode, 150, 174)}${capA(o)}${tx(162)}`, { h: 108, off: 54, cls: 'strip' });
+const CASES = [
+  [{ glyph: 'qbub', title: 'Question from coordinator', sub: PROJ, age: '2h' },
+   '<b>Question from coordinator</b> · 第二行 = 项目名（<code>projectTitle</code>），右边 = 等了多久（<code>since</code>）'],
+  [{ glyph: 'merge', title: 'Approve merge to main', sub: PROJ_WIKI, age: '12m' },
+   '<b>Approve merge to main</b> · 分支名照旧取 <code>mainBranch</code>；按下仍去项目 sessions 页的合入卡'],
+  [{ glyph: 'warn', title: 'Escalated to you', sub: PROJ_AND, age: '5m' },
+   '<b>Escalated to you</b> · 第二行同样是项目名（行上那句 <code>need</code> 留在会话行里）'],
+  [{ glyph: 'pause', title: 'Paused', sub: PROJ, age: '1h' },
+   '<b>Paused</b> · 熔断暂停，只有你能解'],
+  [{ glyph: 'hand', title: 'orbit-develop needs you', sub: 'Rebuild the wiki articles report', age: '3m' },
+   '<b>普通的工具审批</b> · 词照旧「工作区 needs you」；第二行 = 要去的那个会话的标题'],
+  [{ glyph: 'qbub', title: 'Question from coordinator', sub: PROJ, age: '2h', more: '+2' },
+   '<b>不止一件</b> · <code>+2</code> = 这件之后还有两件（<code>count − 1</code>）；按下去最久那件，解掉一件就轮到下一件'],
+  [{ glyph: 'hand', title: '3 sessions need you', sub: 'Oldest: Rebuild the wiki articles report', age: '9m' },
+   '<b>几个普通审批</b> · 词照旧；第二行说按下去的是哪一个（这里多一个词 <code>Oldest:</code>，待定）'],
+  [{ glyph: 'qbub', title: '1 open question below', chev: 'd' },
+   '<b>会话内</b> · 这个会话自己有待答的卡：一行，↓ 指向它；按下滚到卡并打开审阅'],
+  [{ glyph: 'warn', title: '2 waiting above', chev: 'u' },
+   '<b>会话内 · 在上面</b> · 掺了异常就说 waiting；图形取最久那张卡的种类'],
+];
+document.getElementById('dark').innerHTML = CASES.map(([o, k]) => `<div><p class="k">${k}</p>${strip('dark', o)}</div>`).join('');
+document.getElementById('light').innerHTML = [CASES[0], CASES[1], CASES[7]].map(([o, k]) => `<div><p class="k">${k}</p>${strip('light', o)}</div>`).join('');
+
+// 整屏：会话页（暗）+ 列表页（亮 / 暗）
+const session = phone('dark', `${statusBar()}${navCircles()}${edge('dark', 150, 174)}${capA({ glyph: 'qbub', title: 'Question from coordinator', sub: PROJ, age: '2h' })}${tx(162)}${bottom()}`, { cls: 'full' });
+const listNav = `<div class="nav"><div class="gc l">${ic('ham', 21, 'var(--l1)', 2)}</div>
+<div class="gc" style="right:20px;width:92px;border-radius:22px;justify-content:space-around;padding:0 10px">${ic('filter', 21, 'var(--l1)', 2)}${ic('pen', 20, 'var(--l1)', 2)}</div></div>`;
+const ROWS = [
+  { t: PROJ, s: '<span class="dt"></span><span>Question from coordinator</span>', tm: '2h' },
+  { t: 'Landing lease reminder skips locked rows', s: 'Running · editing project-open-item.ts', tm: 'now' },
+  { t: 'Rebuild the wiki articles report', s: '<span class="dt"></span><span>Waiting for approval</span>', tm: '9m' },
+  { t: 'Android 客户端：会话页与项目页', s: 'Running · gradle testDebugUnitTest', tm: '6m' },
+  { t: 'Wiki 服务端执行与 System model', s: '<span class="dt"></span><span>Approve merge to main</span>', tm: '12m' },
+  { t: 'Ship the 0.1.217 release', s: 'Completed · tagged v0.1.217', tm: '1h' },
+];
+const list = (mode) => phone(mode, `${statusBar('4:32')}${listNav}<div class="ltitle">orbit-develop</div>
+<div class="search">${ic('search', 18, 'var(--l2)', 2.2)}<span>Search sessions</span></div>
+${capA({ glyph: 'qbub', title: 'Question from coordinator', sub: PROJ, age: '2h', more: '+2', top: 220, style: 'left:16px;right:16px' })}
+<div class="sec" style="top:284px">Today</div>
+${ROWS.map((r, i) => `<div class="srow${i < ROWS.length - 1 ? ' sep' : ''}" style="top:${314 + i * 70}px"><div class="a"><b>${r.t}</b><span class="tm">${r.tm}</span></div><div class="s">${r.s}</div></div>`).join('')}
+<div class="home"></div>`, { h: 760, cls: 'crop' });
+document.getElementById('full').innerHTML = `
+<div class="col"><span class="tag rec">会话页 · 暗</span>${session}<p class="cap">整屏看：顶上只剩三样玻璃——返回、⋯、胶囊——和底部的后台托盘、输入框是同一套圆角语言。今天这一屏顶上 154pt 是两截实色。</p></div>
+<div class="col"><span class="tag rec">列表页 · 亮</span>${list('light')}<p class="cap">列表页（<code>AgentsView</code>）挂在搜索框下面，左右对齐搜索框（16pt）。列表里那三行自己的琥珀点和词不变；胶囊只说最久的那件，加 <code>+2</code>。</p></div>
+<div class="col"><span class="tag rec">列表页 · 暗</span>${list('dark')}</div>`;
+
+// 规格
+const hl = (x, y, w) => `<div class="sl" style="left:${x}px;top:${y}px;width:${w}px;border-top-width:1px"></div><div class="sl" style="left:${x}px;top:${y - 4}px;height:9px;border-left-width:1px"></div><div class="sl" style="left:${x + w}px;top:${y - 4}px;height:9px;border-left-width:1px"></div>`;
+const big = `<div style="position:relative;width:880px;height:192px">
+  <div style="zoom:2;position:absolute;left:0;top:0"><div class="ph dark strip" style="height:96px;box-shadow:none">${capA({ glyph: 'qbub', title: 'Question from coordinator', sub: PROJ, age: '2h', top: 22 })}</div></div>
+  <div class="sl" style="left:852px;top:44px;height:88px;border-left-width:1px"></div><div class="sl" style="left:847px;top:44px;width:11px;border-top-width:1px"></div><div class="sl" style="left:847px;top:132px;width:11px;border-top-width:1px"></div>
+  <div class="sd" style="left:857px;top:82px">44</div>
+  ${hl(0, 156, 40)}<div class="sd" style="left:13px;top:166px">20</div>
+  ${hl(40, 156, 14)}<div class="sd" style="left:44px;top:166px">7</div>
+  ${hl(54, 156, 60)}<div class="sd" style="left:63px;top:166px">30 同心</div>
+  ${hl(114, 156, 20)}<div class="sd" style="left:117px;top:166px">10</div>
+  ${hl(808, 156, 32)}<div class="sd" style="left:817px;top:166px">16</div>
+  <div class="sd" style="left:140px;top:14px;color:#9aa0aa">×2 放大 · pt</div>
+</div>`;
+document.getElementById('spec').innerHTML = `<div>${big}</div>
+<table class="tok">
+<tr><td>位置</td><td>会话页：导航键下 6pt，左右 20pt（对齐返回键 / ⋯ 的外沿），转录从胶囊下 6pt 起；列表页：搜索框下 10pt，左右 16pt。<br>只在 compact 宽度；打字收导航时一起收（<code>foldsChrome</code> 照旧）。</td></tr>
+<tr><td>形</td><td>44pt 高、胶囊形；iOS 26 <code>.glassEffect(.regular.interactive(), in: .capsule)</code>，挂 <code>.safeAreaBar(edge: .top)</code>；更早系统 <code>.bar</code> 料胶囊 + 0.5pt 描边。</td></tr>
+<tr><td>圆片</td><td>30pt，与胶囊同心（内缩 7）；底 <span class="swatch" style="background:rgba(255,159,10,.15)"></span>orange 15%、图形 <span class="swatch" style="background:#FF9F0A"></span>orange、<code>.orbitGlyph</code>——Landing 头那颗圆（<code>ProjectLandingRow.mark</code>）原样。</td></tr>
+<tr><td>图形</td><td>SF Symbols，有 .fill 的用 .fill（同 Landing 头）：合入 <code>arrow.triangle.merge</code> · 提问 <code>questionmark.bubble.fill</code> · 升级 <code>exclamationmark.triangle.fill</code> · 暂停 <code>pause.fill</code> · 普通审批 <code>hand.raised.fill</code>（图上是近似画法）</td></tr>
+<tr><td>字</td><td>第一行 subheadline 15 半粗、label；第二行 footnote 13、secondaryLabel，单行尾截；时间 footnote 13 tabular、secondaryLabel；<code>+2</code> caption 12 粗、灰色小胶囊。</td></tr>
+<tr><td>chevron</td><td>跨会话的不画；会话内的 ↓ / ↑ 14pt、secondaryLabel。</td></tr>
+<tr><td>动</td><td>出现 / 消失跟今天一样直接进出布局；无脉冲、无闪烁。按下：玻璃自带的 interactive 高光 + 现有的 tap 触感。</td></tr>
+<tr><td>读屏</td><td>标签 = 两行连读 + 时间（「Question from coordinator, 落地会话…, 2 hours」），hint 照旧。</td></tr>
+</table>`;
+
+document.getElementById('foot').innerHTML = `<b>待你定的小事</b>：① 普通审批有几件时，第二行要不要写 <code>Oldest: …</code>（多一个词）还是只写那个会话的标题；② 升级那件第二行写项目名（现在这样）还是写它的 <code>need</code>（如「the check on the combined tree failed」）。<br>
+<b>Android</b> 的 <code>NeedsYouBar</code> 跟着换成同一枚（Material 3 没有玻璃，用 <code>surfaceContainerHigh</code> 胶囊 + 同样的琥珀圆片）。web 没有跨会话的这条（会话内那种是 <code>DecisionRail</code>，另一套），这次不动。`;
+</script>
+</body></html>

@@ -1,0 +1,110 @@
+{
+ "startedAt": "2026-10-19T13:08:35.221+00:00",
+ "claim": "t02-gitfsync-20261019t130835z",
+ "pv": "pvc-a81bf38e-5768-4690-a894-85850e478a0c",
+ "image": "orbit-mr-rbd/csi-vol-cb1573fa-a3ea-4a8e-aae9-b69047b26dc4",
+ "writerNode": "orbit-mr-lab-2",
+ "writtenAt": "2026-10-19T13:08:57.083+00:00",
+ "written": [
+  "default 1984e6b0c0c0143779239e1aa7b08bf995047022 default",
+  "fsync 83b5d4bbf035213d97262513eb00111d11166f66 committed,index",
+  ""
+ ],
+ "stopSh": [
+  "unit orbit-mr-lab-2: memory.current 774 MiB, memory.peak 1097 MiB, swap 419 MiB, memory.max 3758096384",
+  "host: MemAvailable 5653 MiB",
+  "13:08:58Z orbit-mr-lab-2: qemu (pid 627864) killed with SIGKILL at 2026-10-19T13:08:58.618Z; the guest got no shutdown"
+ ],
+ "power": {
+  "at": "2026-10-19T13:08:59.659+00:00",
+  "unit": "orbit-mr-lab-2.service",
+  "activeState": "inactive",
+  "subState": "dead",
+  "mainPid": "0",
+  "qemuProcesses": [],
+  "sshRefused": true,
+  "qmpRefused": true,
+  "linkConnections": []
+ },
+ "taintAt": "2026-10-19T13:08:59.697+00:00",
+ "writerGoneAt": "2026-10-19T13:09:57.821+00:00",
+ "detachedAt": "2026-10-19T13:09:57.863+00:00",
+ "readerNode": "orbit-mr-lab",
+ "read": {
+  "default": {
+   "exists": true,
+   "head": null,
+   "headError": "fatal: not a git repository (or any parent up to mount point /)\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).",
+   "fsckExit": 128,
+   "fsck": "fatal: not a git repository (or any parent up to mount point /)\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).",
+   "sizes": {
+    "note.txt": 0,
+    ".git/HEAD": 0,
+    ".git/refs/heads/master": 0,
+    ".git/index": 137,
+    ".git/config": 92
+   },
+   "looseObjects": [
+    [
+     ".git/objects/01/f0ff23850b2b6270ddf2de41100163fa512e38",
+     0
+    ],
+    [
+     ".git/objects/02/3ce695229e04763f00b2367721015fa65d5748",
+     0
+    ],
+    [
+     ".git/objects/19/84e6b0c0c0143779239e1aa7b08bf995047022",
+     0
+    ]
+   ]
+  },
+  "fsync": {
+   "exists": true,
+   "head": null,
+   "headError": "fatal: not a git repository (or any parent up to mount point /)\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).",
+   "fsckExit": 128,
+   "fsck": "fatal: not a git repository (or any parent up to mount point /)\nStopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).",
+   "sizes": {
+    "note.txt": 0,
+    ".git/HEAD": 0,
+    ".git/refs/heads/master": null,
+    ".git/index": 137,
+    ".git/config": 92
+   },
+   "looseObjects": [
+    [
+     ".git/objects/1d/e289fbf4867d0d899cb4207a5d7df158f861c0",
+     48
+    ],
+    [
+     ".git/objects/83/b5d4bbf035213d97262513eb00111d11166f66",
+     136
+    ],
+    [
+     ".git/objects/9a/b32fac08efbfa2246e90532e8b925c56d2fdc5",
+     53
+    ]
+   ]
+  }
+ },
+ "readAt": "2026-10-19T13:10:07.965+00:00",
+ "startSh": {
+  "exit": 0,
+  "tail": [
+   "13:10:17Z host MemAvailable 1787 MiB (floor 1536 MiB): booting orbit-mr-lab-2 (3072 MiB)",
+   "13:10:19Z started orbit-mr-lab-2.service (cgroup /system.slice/orbit-mr-lab-2.service)",
+   "13:10:40Z SSH to VM 2 is up: 7.0.0-34-generic"
+  ]
+ },
+ "node2ReadyAt": "2026-10-19T13:10:47.167+00:00",
+ "node2Rbd": {
+  "bootId": "dd65b323-2bcf-456f-9b31-86e3385e04d7",
+  "uptimeSeconds": 24.73,
+  "devices": [],
+  "mounts": []
+ },
+ "nodePluginBackAt": "2026-10-19T13:10:51.663+00:00",
+ "removed": true,
+ "endedAt": "2026-10-19T13:10:59.479+00:00"
+}

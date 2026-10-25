@@ -1,0 +1,47 @@
+{
+ "checks": [
+  {
+   "check": "SQLite integrity_check ok after WAL recovery, still in WAL mode",
+   "ok": true,
+   "value": [
+    [
+     "ok"
+    ],
+    "wal"
+   ]
+  },
+  {
+   "check": "every row acknowledged before the cut is there (the last read and the one on disk)",
+   "ok": true,
+   "value": {
+    "acknowledgedOnDisk": 441,
+    "committed": 441,
+    "lastRead": 441
+   }
+  },
+  {
+   "check": "the rows read before the cut hash the same",
+   "ok": true,
+   "value": {
+    "after": "370a5bb538c1d7dd",
+    "before": "370a5bb538c1d7dd",
+    "rows": 439
+   }
+  },
+  {
+   "check": "the writer's ordinary file, Git commit and random file as before",
+   "ok": true,
+   "value": {
+    "gitFsck": ""
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T13:00:34.202+00:00",
+ "error": "Failed: cmd_probe: 1 \"gitHead\": false,\n    \"randomSha256\": true,\n    \"rows\": true,\n    \"rowsSha256\": true\n  },\n  \"sameRunnerId\": true,\n  \"volume\": {\n    \"managedInstance\": {\n      \"generation\": 3,\n      \"podUid\": \"cdb1107e-94d9-4d8b-b3a4-74c003a0dc37\",\n      \"runnerId\": \"01a15431-f1f1-773e-b7cd-c25915447151\"\n    },\n    \"repos\": [\n      \"default\"\n    ],\n    \"runnerId\": \"01a15431-f1f1-773e-b7cd-c25915447151\",\n    \"worktrees\": [\n      \"01a15432-9fa1-7638-883b-36cfecefa314\"\n    ]\n  },\n  \"writtenAt\": \"2026-10-19T12:52:30.644+00:00\",\n  \"writtenByGeneration\": 2,\n  \"writtenByPod\": \"457b55b5-f9e8-454d-827c-dd0fbb909163\"\n}\n",
+ "ok": false,
+ "phase": "takeover",
+ "result": null,
+ "seconds": 3.4,
+ "startedAt": "2026-10-19T13:00:30.791+00:00",
+ "step": "data"
+}

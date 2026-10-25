@@ -1,0 +1,40 @@
+402	4032.440	10.031	149.787	20.756	SELECT pg_advisory_xact_lock($1, $2)
+314	116.734	0.372	3.749	0.288	UPDATE "public"."session" SET "title" = $1, "title_managed_by_project" = $2, "updated_at" = $3 WHERE ("public"."session"."id" = $4 AND $5=$6
+314	83.532	0.266	1.042	0.110	WITH owned AS MATERIALIZED ( SELECT s.id, s.ctid::text || $46 || s.xmin::text AS v, s.status::text AS status, s.task_id, 
+266	61.257	0.230	2.123	0.187	SELECT "public"."runner"."id", "public"."runner"."name", "public"."runner"."display_name", "public"."runner"."hostname", "public"."runner"."
+314	49.389	0.157	2.080	0.138	SELECT s.id, s.status, s.title, s.created_at AS "createdAt", s.last_turn_at AS "lastTurnAt", -- When
+737	46.339	0.063	2.266	0.089	SELECT count(*) FROM (SELECT id FROM probe ORDER BY id DESC LIMIT $1) recent
+6	43.546	7.258	14.204	5.370	SELECT id, provider, "provider_builtin" AS "providerBuiltin", engine, "owner_id" AS "ownerId", "inbox_lease_generation" AS "inboxLeaseGenera
+634	41.628	0.066	1.720	0.072	SELECT "public"."session"."id", "public"."session"."title", "public"."session"."title_managed_by_project", "public"."session"."title_before_
+786	35.970	0.046	0.233	0.024	INSERT INTO probe (at, pad) VALUES (clock_timestamp(), repeat($1, $2))
+314	31.432	0.100	0.585	0.061	SELECT "public"."runner"."id", "public"."runner"."name", "public"."runner"."display_name", "public"."runner"."version", "public"."runner"."e
+240	29.467	0.123	1.525	0.110	UPDATE "public"."managed_runner" SET "lease_holder" = $1, "lease_expires_at" = $2, "updated_at" = $3 WHERE ("public"."managed_runner"."id" =
+487	28.458	0.058	1.469	0.069	select seq, status, extract($1 from created_at), coalesce(extract($2 from answered_at)::text, $3) from conversation_turn where session_id = 
+402	28.410	0.071	1.940	0.183	UPDATE "session" SET status = $30, -- A stall this claim just disproved. Both markers are written by a preflight that sa
+316	27.819	0.088	0.337	0.057	SELECT "public"."runner"."id", "public"."runner"."status"::text, "public"."runner"."last_heartbeat_at", "public"."runner"."engines", "public
+240	25.095	0.105	0.301	0.046	UPDATE "public"."managed_runner" SET "lease_holder" = $1, "lease_expires_at" = $2, "updated_at" = $3 WHERE ("public"."managed_runner"."id" =
+6	21.099	3.516	20.682	7.677	INSERT INTO "public"."session_diff" ("session_id","patches","updated_at") VALUES ($1,$2,$3) ON CONFLICT ("session_id") DO UPDATE SET "patche
+402	19.614	0.049	2.962	0.147	SELECT id::text AS id, generation, pod_uid AS "podUid", management_state::text AS "managementState" FROM managed_runner WHERE id = $
+316	18.323	0.058	0.543	0.040	SELECT "public"."managed_runner"."id", "public"."managed_runner"."owner_id", "public"."managed_runner"."runner_id", "public"."managed_runner
+36	15.364	0.427	1.365	0.311	INSERT INTO "public"."run_event" ("id","session_id","seq","type","payload","turn_id","created_at","ingested_at","ingested_by_runner_id","ing
+314	12.887	0.041	0.105	0.014	SELECT COALESCE( ( SELECT jsonb_build_object( $2, p.id, $3, p.title, $4, p.status, $5, candidate.role ) FROM ( 
+49	12.524	0.256	0.525	0.098	UPDATE "public"."runner" SET "status" = CAST($1::text AS "public"."runner_status"), "version" = $2, "last_heartbeat_at" = $3, "available_com
+240	11.503	0.048	0.144	0.022	SELECT "public"."managed_runner"."id", "public"."managed_runner"."owner_id", "public"."managed_runner"."runner_id", "public"."managed_runner
+65	11.300	0.174	0.607	0.060	UPDATE "public"."session" SET "last_turn_at" = $1, "last_tool_use" = $2, "engine_turn_active" = $3, "engine_phase" = $4, "updated_at" = $5 W
+35	10.950	0.313	1.731	0.340	INSERT INTO "public"."run_event" ("id","session_id","seq","type","payload","turn_id","created_at","ingested_at","ingested_by_runner_id","ing
+556	10.025	0.018	0.152	0.011	SELECT "public"."user"."id", "public"."user"."disabled_at" FROM "public"."user" WHERE ("public"."user"."id" = $1 AND $4=$5) LIMIT $2 OFFSET 
+5	9.602	1.920	2.683	0.824	UPDATE "public"."session" SET "status" = CAST($1::text AS "public"."run_status"), "engine_turn_active" = $2, "isolation_status" = $3, "base_
+50	9.162	0.183	0.744	0.129	INSERT INTO "public"."tool_call" ("id","session_id","name","tool_use_id","input","is_error","started_at") VALUES ($1,$2,$3,$4,$5,$6,$7)
+326	8.590	0.026	0.826	0.045	SELECT "public"."session"."id", "public"."session"."owner_id" FROM "public"."session" WHERE "public"."session"."id" = $1 LIMIT $2 OFFSET $3
+314	8.272	0.026	0.072	0.011	SELECT "public"."session"."id", "public"."session"."title", "public"."session"."status"::text, "public"."session"."end_reason", "public"."se
+633	8.139	0.013	0.224	0.011	SELECT "public"."project_codebase"."id", "public"."project_codebase"."integration_ref", "public"."project_codebase"."project_id", "public"."
+30	7.465	0.249	2.011	0.332	SELECT m."runner_id"::text AS "runnerId" FROM "managed_runner" m JOIN "user" u ON u."id" = m."owner_id" AND u."disabled_at" IS NULL 
+326	6.835	0.021	0.346	0.020	SELECT "public"."wiki_space"."id" FROM "public"."wiki_space" WHERE ("public"."wiki_space"."owner_id" = $1 AND ("public"."wiki_space"."settin
+314	6.767	0.022	1.074	0.060	SELECT "public"."share_link"."id", "public"."share_link"."token", "public"."share_link"."created_at", "public"."share_link"."session_id" FRO
+314	6.682	0.021	0.198	0.017	SELECT "public"."project"."id", "public"."project"."title", "public"."project"."coordinator_session_id", "public"."project"."owner_id" FROM 
+203	6.568	0.032	0.104	0.009	select coalesce(commit_status, $1), coalesce(left(commit_result_message, $2), $3), coalesce(left(commit_error, $4), $5) from session where i
+319	6.150	0.019	0.174	0.012	SELECT "public"."workspace"."id", "public"."workspace"."name", "public"."workspace"."description", "public"."workspace"."model", "public"."w
+402	6.064	0.015	0.076	0.009	SELECT "public"."session"."id", "public"."session"."owner_id", "public"."session"."provider", "public"."session"."provider_builtin", "public
+266	5.767	0.022	0.232	0.017	SELECT "public"."managed_runner"."id", "public"."managed_runner"."generation", "public"."managed_runner"."pod_uid", "public"."managed_runner
+628	5.247	0.008	0.108	0.005	SELECT "public"."task_owner_confirmation_request"."id", "public"."task_owner_confirmation_request"."task_id", "public"."task_owner_confirmat
+4	4.517	1.129	1.857	0.717	UPDATE "public"."session" SET "status" = CAST($1::text AS "public"."run_status"), "last_turn_at" = $2, "last_user_text" = $3, "retry_at" = $

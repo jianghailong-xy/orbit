@@ -1,0 +1,1551 @@
+{
+ "checks": [
+  {
+   "check": "kubectl drain without flags refuses the runners' Pods: they have local storage (an emptyDir)",
+   "ok": true,
+   "value": "node/orbit-mr-lab cordoned\nerror: unable to drain node \"orbit-mr-lab\" due to error: cannot delete Pods with local storage (use --delete-emptydir-data to override): orbit-mr-test/mr-01a1548e-0f66-719f-aa98-e3ed285e4e91, orbit-mr-test/mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9, continuing command...\nThere are pending nodes to be drained:\n orbit-mr-lab\ncannot delete Pods with local storage (use --delete-emptydir-data to override): orbit-mr-test/mr-01a1548e-0f66-719f-aa98-e3ed285e4e91, orbit-mr-test/mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9"
+  },
+  {
+   "check": "and it cordoned orbit-mr-lab",
+   "ok": true
+  },
+  {
+   "check": "with --delete-emptydir-data alone it still refuses them: bare Pods declare no controller",
+   "ok": true,
+   "value": "node/orbit-mr-lab already cordoned\nerror: unable to drain node \"orbit-mr-lab\" due to error: cannot delete Pods that declare no controller (use --force to override): orbit-mr-test/mr-01a1548e-0f66-719f-aa98-e3ed285e4e91, orbit-mr-test/mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9, continuing command...\nThere are pending nodes to be drained:\n orbit-mr-lab\ncannot delete Pods that declare no controller (use --force to override): orbit-mr-test/mr-01a1548e-0f66-719f-aa98-e3ed285e4e91, orbit-mr-test/mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9"
+  },
+  {
+   "check": "nothing was evicted by the refused drains",
+   "ok": true
+  },
+  {
+   "check": "kubectl drain with --force and --delete-emptydir-data evicted both runners' Pods and finished",
+   "ok": false,
+   "value": "occurred: error when waiting for pod \"mr-01a14db1-e2b6-7199-8613-d95d4616d6a7\" in namespace \"orbit-mr-test\" to terminate: context deadline exceeded\npod/mr-01a14db1-e2b6-7199-8613-d95d4616d6a7\nerror: unable to drain node \"orbit-mr-lab\" due to error: error when waiting for pod \"mr-01a14db1-e2b6-7199-8613-d95d4616d6a7\" in namespace \"orbit-mr-test\" to terminate: context deadline exceeded, continuing command...\nThere are pending nodes to be drained:\n orbit-mr-lab\nerror when waiting for pod \"mr-01a14db1-e2b6-7199-8613-d95d4616d6a7\" in namespace \"orbit-mr-test\" to terminate: context deadline exceeded"
+  },
+  {
+   "check": "ann: the same runner, PVC, PV, volume handle, RBD image and workspace after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": "csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+  },
+  {
+   "check": "ann: a new Pod of a later generation after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": {
+    "after": [
+     4,
+     "40fd1b6e-d408-48ec-a697-bc298ec1671d"
+    ],
+    "before": [
+     3,
+     "de97e3f3-e934-4609-881f-f38c82423e99"
+    ]
+   }
+  },
+  {
+   "check": "ann, generation 4: the runner's Pod runs on orbit-mr-lab-2",
+   "ok": true,
+   "value": {
+    "node": "orbit-mr-lab-2",
+    "phase": "Running",
+    "uid": "40fd1b6e-d408-48ec-a697-bc298ec1671d"
+   }
+  },
+  {
+   "check": "ann, generation 4: one Pod on the claim",
+   "ok": true,
+   "value": [
+    {
+     "deleting": false,
+     "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+     "node": "orbit-mr-lab-2",
+     "phase": "Running",
+     "uid": "40fd1b6e-d408-48ec-a697-bc298ec1671d"
+    }
+   ]
+  },
+  {
+   "check": "ann, generation 4: one VolumeAttachment, to orbit-mr-lab-2",
+   "ok": true,
+   "value": [
+    {
+     "attached": true,
+     "deleting": false,
+     "detachError": null,
+     "name": "csi-55d2fb91583f2dfb3dd9b4d6f4575a569f3bca7a566acf78b083992fc7b0cac4",
+     "node": "orbit-mr-lab-2"
+    }
+   ]
+  },
+  {
+   "check": "ann, generation 4: the image is mapped by orbit-mr-lab-2's kernel",
+   "ok": true,
+   "value": [
+    {
+     "address": "10.77.0.2:0/2118068317",
+     "client": "clientclient294295",
+     "device": "rbd0",
+     "image": "orbit-mr-rbd/csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+    }
+   ]
+  },
+  {
+   "check": "ann, generation 4: and not by orbit-mr-lab's",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "ann, generation 4: one RBD watcher, orbit-mr-lab-2's kernel client (10.77.0.2)",
+   "ok": true,
+   "value": [
+    "10.77.0.2:0/2118068317"
+   ]
+  },
+  {
+   "check": "ann: the evicted generation retired on its kubelet's report (OBSERVED_STOP)",
+   "ok": true,
+   "value": {
+    "kind": "OBSERVED_STOP",
+    "recordedAt": "2026-10-19T14:48:36.759Z",
+    "retiredAt": "2026-10-19T14:48:52.131Z"
+   }
+  },
+  {
+   "check": "ann: the message was answered by ann's runner on orbit-mr-lab-2 after the drain",
+   "ok": true,
+   "value": {
+    "created_at": "2026-10-19T14:53:55.048",
+    "ingested_at": "2026-10-19T14:53:55.110294+00:00",
+    "ingested_by_runner_id": "01a1548e-0f66-719f-aa98-e3ed285e4e91",
+    "seq": 49,
+    "session_id": "01a1548e-ccbb-7578-98d5-3e00fbd897c6",
+    "type": "assistant"
+   }
+  },
+  {
+   "check": "ann: the engine resumed the session on orbit-mr-lab-2 after the drain: its request carried the earlier conversation",
+   "ok": true,
+   "value": {
+    "messages": 17,
+    "secrets": [
+     "annfirst",
+     "annlast"
+    ]
+   }
+  },
+  {
+   "check": "ann: probe p1 the same (random bytes, SQLite rows, Git commit), integrity_check ok after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   }
+  },
+  {
+   "check": "ann: uploads, worktrees, the engine's transcripts and the runner ID as before after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": {
+    "transcripts": 1,
+    "uploads": 1,
+    "worktrees": 1
+   }
+  },
+  {
+   "check": "ann: every SQLite database on the volume passes integrity_check after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": [
+    "storage-verification/t08x-writer/state.sqlite",
+    "t08x-probe/p1/rows.sqlite",
+    "t08x-probe/p2/rows.sqlite"
+   ]
+  },
+  {
+   "check": "ann: the session's worktree is there after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": [
+    "01a1548e-ccbb-7578-98d5-3e00fbd897c6"
+   ]
+  },
+  {
+   "check": "ann: /var/lib/orbit is an RBD device, ext4 after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd0"
+    }
+   ]
+  },
+  {
+   "check": "ann: probe p2 the same after the drain",
+   "ok": true,
+   "value": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   }
+  },
+  {
+   "check": "ann: the quiesced writer's rows as they were, integrity_check ok",
+   "ok": true,
+   "value": [
+    434,
+    434
+   ]
+  },
+  {
+   "check": "bob: the same runner, PVC, PV, volume handle, RBD image and workspace after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": "csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+  },
+  {
+   "check": "bob: a new Pod of a later generation after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": {
+    "after": [
+     4,
+     "bae122b8-d211-490a-815c-cdea75d83c88"
+    ],
+    "before": [
+     3,
+     "f18bf6bd-9d69-46d5-912f-bb65032f0903"
+    ]
+   }
+  },
+  {
+   "check": "bob, generation 4: the runner's Pod runs on orbit-mr-lab-2",
+   "ok": true,
+   "value": {
+    "node": "orbit-mr-lab-2",
+    "phase": "Running",
+    "uid": "bae122b8-d211-490a-815c-cdea75d83c88"
+   }
+  },
+  {
+   "check": "bob, generation 4: one Pod on the claim",
+   "ok": true,
+   "value": [
+    {
+     "deleting": false,
+     "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+     "node": "orbit-mr-lab-2",
+     "phase": "Running",
+     "uid": "bae122b8-d211-490a-815c-cdea75d83c88"
+    }
+   ]
+  },
+  {
+   "check": "bob, generation 4: one VolumeAttachment, to orbit-mr-lab-2",
+   "ok": true,
+   "value": [
+    {
+     "attached": true,
+     "deleting": false,
+     "detachError": null,
+     "name": "csi-7e13271af0161992f564c1f4288cfcccbf11f61864b0dfa972c709702916ad34",
+     "node": "orbit-mr-lab-2"
+    }
+   ]
+  },
+  {
+   "check": "bob, generation 4: the image is mapped by orbit-mr-lab-2's kernel",
+   "ok": true,
+   "value": [
+    {
+     "address": "10.77.0.2:0/2118068317",
+     "client": "clientclient294295",
+     "device": "rbd1",
+     "image": "orbit-mr-rbd/csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+    }
+   ]
+  },
+  {
+   "check": "bob, generation 4: and not by orbit-mr-lab's",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "bob, generation 4: one RBD watcher, orbit-mr-lab-2's kernel client (10.77.0.2)",
+   "ok": true,
+   "value": [
+    "10.77.0.2:0/2118068317"
+   ]
+  },
+  {
+   "check": "bob: the evicted generation retired on its kubelet's report (OBSERVED_STOP)",
+   "ok": true,
+   "value": {
+    "kind": "OBSERVED_STOP",
+    "recordedAt": "2026-10-19T14:48:36.844Z",
+    "retiredAt": "2026-10-19T14:48:52.399Z"
+   }
+  },
+  {
+   "check": "bob: the message was answered by bob's runner on orbit-mr-lab-2 after the drain",
+   "ok": true,
+   "value": {
+    "created_at": "2026-10-19T14:54:09.662",
+    "ingested_at": "2026-10-19T14:54:09.695916+00:00",
+    "ingested_by_runner_id": "01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+    "seq": 49,
+    "session_id": "01a1548e-d1e1-7716-94ca-8b2770f29b8a",
+    "type": "assistant"
+   }
+  },
+  {
+   "check": "bob: the engine resumed the session on orbit-mr-lab-2 after the drain: its request carried the earlier conversation",
+   "ok": true,
+   "value": {
+    "messages": 14,
+    "secrets": [
+     "bobfirst"
+    ]
+   }
+  },
+  {
+   "check": "bob: probe p1 the same (random bytes, SQLite rows, Git commit), integrity_check ok after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   }
+  },
+  {
+   "check": "bob: uploads, worktrees, the engine's transcripts and the runner ID as before after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": {
+    "transcripts": 2,
+    "uploads": 1,
+    "worktrees": 2
+   }
+  },
+  {
+   "check": "bob: every SQLite database on the volume passes integrity_check after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": [
+    "storage-verification/t08x-writer/state.sqlite",
+    "t08x-probe/p1/rows.sqlite",
+    "t08x-probe/p2/rows.sqlite"
+   ]
+  },
+  {
+   "check": "bob: the session's worktree is there after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": [
+    "01a1548e-d1e1-7716-94ca-8b2770f29b8a",
+    "b2c53285-8438-541c-b14b-232d3b04c323"
+   ]
+  },
+  {
+   "check": "bob: /var/lib/orbit is an RBD device, ext4 after the drain of orbit-mr-lab",
+   "ok": true,
+   "value": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd1"
+    }
+   ]
+  },
+  {
+   "check": "bob: probe p2 the same after the drain",
+   "ok": true,
+   "value": {
+    "gitHead": true,
+    "randomSha256": true,
+    "rows": true,
+    "rowsSha256": true
+   }
+  },
+  {
+   "check": "bob: the quiesced writer's rows as they were, integrity_check ok",
+   "ok": true,
+   "value": [
+    441,
+    441
+   ]
+  }
+ ],
+ "endedAt": "2026-10-19T14:54:25.294+00:00",
+ "error": null,
+ "ok": false,
+ "phase": "drain",
+ "result": {
+  "ann": {
+   "drainToReadySeconds": 300.1,
+   "identityAfter": {
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "generation": 4,
+    "podUid": "40fd1b6e-d408-48ec-a697-bc298ec1671d",
+    "pool": "orbit-mr-rbd",
+    "pvName": "pvc-22b25daa-3fa0-4432-a081-8ec8ed247208",
+    "pvUid": "5b9395ef-b79d-49c5-bd9a-c26b0c278883",
+    "pvcName": "mr-data-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+    "pvcUid": "22b25daa-3fa0-4432-a081-8ec8ed247208",
+    "rbdImage": "csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568",
+    "runnerId": "01a1548e-0f66-719f-aa98-e3ed285e4e91",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568",
+    "workspaceId": "01a1548e-0f68-72e3-89db-49dad07f2acb"
+   },
+   "identityBefore": {
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "generation": 3,
+    "podUid": "de97e3f3-e934-4609-881f-f38c82423e99",
+    "pool": "orbit-mr-rbd",
+    "pvName": "pvc-22b25daa-3fa0-4432-a081-8ec8ed247208",
+    "pvUid": "5b9395ef-b79d-49c5-bd9a-c26b0c278883",
+    "pvcName": "mr-data-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+    "pvcUid": "22b25daa-3fa0-4432-a081-8ec8ed247208",
+    "rbdImage": "csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568",
+    "runnerId": "01a1548e-0f66-719f-aa98-e3ed285e4e91",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568",
+    "workspaceId": "01a1548e-0f68-72e3-89db-49dad07f2acb"
+   },
+   "placement": {
+    "at": "2026-10-19T14:53:35.066+00:00",
+    "generation": 4,
+    "guests": {
+     "orbit-mr-lab": {
+      "bootId": "393dbae1-9c15-449f-bc00-9816ed2072c5",
+      "devices": [
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd0",
+        "image": "orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd"
+       }
+      ],
+      "mounts": [
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/pods/bbc3ff55-2aee-47da-9c43-57f708e36bef/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount"
+       }
+      ],
+      "uptimeSeconds": 1980.82
+     },
+     "orbit-mr-lab-2": {
+      "bootId": "53b68dde-f1e6-4ffc-9e2a-a042d0f93d7a",
+      "devices": [
+       {
+        "address": "10.77.0.2:0/2118068317",
+        "client": "clientclient294295",
+        "device": "rbd0",
+        "image": "orbit-mr-rbd/csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+       },
+       {
+        "address": "10.77.0.2:0/2118068317",
+        "client": "clientclient294295",
+        "device": "rbd1",
+        "image": "orbit-mr-rbd/csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+       }
+      ],
+      "mounts": [
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/f2e771687bdf0ba0e2a24a831d4338738031ce21971f9d3cd49f65615db35767/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd1",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/e8dcc238b46fc2c525e59c00a1183d2e93d754a7d3ab864b75709fd2970c9548/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/pods/40fd1b6e-d408-48ec-a697-bc298ec1671d/volumes/kubernetes.io~csi/pvc-22b25daa-3fa0-4432-a081-8ec8ed247208/mount"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd1",
+        "target": "/var/lib/kubelet/pods/bae122b8-d211-490a-815c-cdea75d83c88/volumes/kubernetes.io~csi/pvc-89d67b8d-c292-4f99-a619-0d964d1df9e5/mount"
+       }
+      ],
+      "uptimeSeconds": 526.25
+     }
+    },
+    "image": "orbit-mr-rbd/csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568",
+    "nodeName": "orbit-mr-lab-2",
+    "pod": {
+     "containers": [
+      {
+       "exitCode": 0,
+       "name": "private-volume-directories",
+       "reason": "Completed",
+       "state": "terminated"
+      },
+      {
+       "exitCode": null,
+       "name": "runner",
+       "reason": null,
+       "state": "running"
+      }
+     ],
+     "deletionTimestamp": null,
+     "disruptionTarget": null,
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "generation": "4",
+     "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+     "node": "orbit-mr-lab-2",
+     "phase": "Running",
+     "ready": "True",
+     "uid": "40fd1b6e-d408-48ec-a697-bc298ec1671d"
+    },
+    "podUid": "40fd1b6e-d408-48ec-a697-bc298ec1671d",
+    "podsOnTheClaim": [
+     {
+      "deleting": false,
+      "name": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+      "node": "orbit-mr-lab-2",
+      "phase": "Running",
+      "uid": "40fd1b6e-d408-48ec-a697-bc298ec1671d"
+     }
+    ],
+    "state": "READY",
+    "volumeAttachments": [
+     {
+      "attached": true,
+      "deleting": false,
+      "detachError": null,
+      "name": "csi-55d2fb91583f2dfb3dd9b4d6f4575a569f3bca7a566acf78b083992fc7b0cac4",
+      "node": "orbit-mr-lab-2"
+     }
+    ],
+    "watchers": [
+     {
+      "address": "10.77.0.2:0/2118068317",
+      "client": 294295,
+      "cookie": 18446462598732840961
+     }
+    ]
+   },
+   "probe": {
+    "action": "check",
+    "allSame": true,
+    "at": "2026-10-19T14:53:58.802+00:00",
+    "data": {
+     "gitFsckExit": 0,
+     "gitHead": "18e173cd39248bcca15878639e150dd71b15312c",
+     "integrityCheck": "ok",
+     "maxRow": 150,
+     "mount": [
+      [
+       "/dev/rbd0",
+       "/var/lib/orbit",
+       "ext4"
+      ]
+     ],
+     "randomSha256": "d15a952eb26c25de97651a56feb57f3984904b7b180b49e0aafe428922b3d5ec",
+     "rows": 150,
+     "rowsSha256": "69d5bdeaea23e55b868bc3a0433c4200b862e434ec4ecdb5ed6a1e14d281d772"
+    },
+    "generation": 4,
+    "owner": "ann",
+    "pod": "40fd1b6e-d408-48ec-a697-bc298ec1671d",
+    "run": "p1",
+    "same": {
+     "gitHead": true,
+     "randomSha256": true,
+     "rows": true,
+     "rowsSha256": true
+    },
+    "sameRunnerId": true,
+    "volume": {
+     "managedInstance": {
+      "generation": 4,
+      "podUid": "40fd1b6e-d408-48ec-a697-bc298ec1671d",
+      "runnerId": "01a1548e-0f66-719f-aa98-e3ed285e4e91"
+     },
+     "repos": [
+      "default"
+     ],
+     "runnerId": "01a1548e-0f66-719f-aa98-e3ed285e4e91",
+     "worktrees": [
+      "01a1548e-ccbb-7578-98d5-3e00fbd897c6"
+     ]
+    },
+    "writtenAt": "2026-10-19T14:26:58.618+00:00",
+    "writtenByGeneration": 1,
+    "writtenByPod": "d28ff9ae-4dae-40be-b041-7cee809dfdc3"
+   },
+   "probeP2": {
+    "checkedByGeneration": 4,
+    "data": {
+     "gitFsckExit": 0,
+     "gitHead": "9c8de78a4d363bab1b81545544b408a00b404288",
+     "integrityCheck": "ok",
+     "maxRow": 150,
+     "mount": [
+      [
+       "/dev/rbd0",
+       "/var/lib/orbit",
+       "ext4"
+      ]
+     ],
+     "randomSha256": "c195f442e86057cce67d98be70777a143bbb79e410f48e568cdcb6f987c897dd",
+     "rows": 150,
+     "rowsSha256": "a0e8d1e97b5253eef868224c496d371e4d6faba05998acd822b2f1c12ba0ffaf"
+    },
+    "run": "p2",
+    "same": {
+     "gitHead": true,
+     "randomSha256": true,
+     "rows": true,
+     "rowsSha256": true
+    },
+    "written": {
+     "gitFsckExit": 0,
+     "gitHead": "9c8de78a4d363bab1b81545544b408a00b404288",
+     "integrityCheck": "ok",
+     "maxRow": 150,
+     "mount": [
+      [
+       "/dev/rbd0",
+       "/var/lib/orbit",
+       "ext4"
+      ]
+     ],
+     "randomSha256": "c195f442e86057cce67d98be70777a143bbb79e410f48e568cdcb6f987c897dd",
+     "rows": 150,
+     "rowsSha256": "a0e8d1e97b5253eef868224c496d371e4d6faba05998acd822b2f1c12ba0ffaf"
+    },
+    "writtenAt": "2026-10-19T14:32:12.672+00:00",
+    "writtenByGeneration": 2,
+    "writtenByPod": "ce76c2ac-ea02-4634-b184-eb801d09b751"
+   },
+   "proof": {
+    "kind": "OBSERVED_STOP",
+    "observation": {
+     "containers": [
+      {
+       "exitCode": 0,
+       "finishedAt": "2026-10-19T14:44:27Z",
+       "name": "private-volume-directories",
+       "state": "terminated"
+      },
+      {
+       "exitCode": 0,
+       "finishedAt": "2026-10-19T14:48:34Z",
+       "name": "runner",
+       "state": "terminated"
+      }
+     ],
+     "phase": "Succeeded"
+    },
+    "predecessor": {
+     "generation": 3,
+     "nodeName": "orbit-mr-lab",
+     "podName": "mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+     "podUid": "de97e3f3-e934-4609-881f-f38c82423e99",
+     "pvcUid": "22b25daa-3fa0-4432-a081-8ec8ed247208",
+     "runnerId": "01a1548e-0f66-719f-aa98-e3ed285e4e91",
+     "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+    },
+    "recordedAt": "2026-10-19T14:48:36.759Z",
+    "retiredAt": "2026-10-19T14:48:52.131Z"
+   },
+   "snapshot": {
+    "managedInstance": {
+     "generation": 4,
+     "podUid": "40fd1b6e-d408-48ec-a697-bc298ec1671d",
+     "runnerId": "01a1548e-0f66-719f-aa98-e3ed285e4e91"
+    },
+    "mount": [
+     {
+      "fstype": "ext4",
+      "source": "/dev/rbd0"
+     }
+    ],
+    "podUid": "40fd1b6e-d408-48ec-a697-bc298ec1671d",
+    "prefix": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-ccbb-7578-98d5-3e00fbd897c6/d4a254d7-c4a8-4fa2-87e2-246533d210f5.jsonl": "4940c6c3bd9a643adecb0355ea684f2317d75d61d9d12cdb5aa6bffb588fc1b3"
+    },
+    "runnerId": "01a1548e-0f66-719f-aa98-e3ed285e4e91",
+    "runs": {
+     "01a1548e-ccbb-7578-98d5-3e00fbd897c6": {
+      "provider": "claude",
+      "runtimeSessionId": "d4a254d7-c4a8-4fa2-87e2-246533d210f5",
+      "sessionUuid": "d4a254d7-c4a8-4fa2-87e2-246533d210f5",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a1548e-ccbb-7578-98d5-3e00fbd897c6"
+     }
+    },
+    "sqlite": {
+     "storage-verification/t08x-writer/state.sqlite": "ok",
+     "t08x-probe/p1/rows.sqlite": "ok",
+     "t08x-probe/p2/rows.sqlite": "ok"
+    },
+    "takenAt": "2026-10-19T14:54:02.194+00:00",
+    "transcripts": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-ccbb-7578-98d5-3e00fbd897c6/d4a254d7-c4a8-4fa2-87e2-246533d210f5.jsonl": {
+      "lines": 54,
+      "sha256": "6bd55a15f562bbd4ef01a7f8c4fb5e75c513a642cc273a17a4d836cdb7d0e019"
+     }
+    },
+    "uid": 10001,
+    "uploads": {
+     "01a1548e-ccbb-7578-98d5-3e00fbd897c6/t08-ann-note.txt": "b108e713e063093efea337896a6eaf05a27e54e691a30e50cb67ad65d35f9059"
+    },
+    "workspace": {
+     "fsckExit": 0,
+     "head": "ae4cb5dc2da91ecfb985f6c931a76489afe04053",
+     "worktrees": [
+      "worktree /var/lib/orbit/home/orbit-repos/default",
+      "HEAD ae4cb5dc2da91ecfb985f6c931a76489afe04053",
+      "branch refs/heads/master",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a1548e-ccbb-7578-98d5-3e00fbd897c6",
+      "HEAD 666553868e7e88a007565449fe69d5f8bbc961ac",
+      "branch refs/heads/orbit/t08-ann-first-session-fe25e9"
+     ]
+    },
+    "worktrees": {
+     "01a1548e-ccbb-7578-98d5-3e00fbd897c6": {
+      "branch": "orbit/t08-ann-first-session-fe25e9",
+      "files": {
+       ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+       "t08-ann1.txt": "dd4a213dc6ebc5bc9ec1e1fc8014cc9e231298a70d955f818ca4cf29b3e9ce5d"
+      },
+      "head": "666553868e7e88a007565449fe69d5f8bbc961ac",
+      "status": []
+     }
+    }
+   },
+   "snapshotBefore": {
+    "managedInstance": {
+     "generation": 3,
+     "podUid": "de97e3f3-e934-4609-881f-f38c82423e99",
+     "runnerId": "01a1548e-0f66-719f-aa98-e3ed285e4e91"
+    },
+    "mount": [
+     {
+      "fstype": "ext4",
+      "source": "/dev/rbd1"
+     }
+    ],
+    "podUid": "de97e3f3-e934-4609-881f-f38c82423e99",
+    "prefix": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-ccbb-7578-98d5-3e00fbd897c6/d4a254d7-c4a8-4fa2-87e2-246533d210f5.jsonl": "4940c6c3bd9a643adecb0355ea684f2317d75d61d9d12cdb5aa6bffb588fc1b3"
+    },
+    "runnerId": "01a1548e-0f66-719f-aa98-e3ed285e4e91",
+    "runs": {
+     "01a1548e-ccbb-7578-98d5-3e00fbd897c6": {
+      "provider": "claude",
+      "runtimeSessionId": "d4a254d7-c4a8-4fa2-87e2-246533d210f5",
+      "sessionUuid": "d4a254d7-c4a8-4fa2-87e2-246533d210f5",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a1548e-ccbb-7578-98d5-3e00fbd897c6"
+     }
+    },
+    "sqlite": {
+     "storage-verification/t08x-writer/state.sqlite": "ok",
+     "t08x-probe/p1/rows.sqlite": "ok",
+     "t08x-probe/p2/rows.sqlite": "ok"
+    },
+    "takenAt": "2026-10-19T14:48:33.756+00:00",
+    "transcripts": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-ccbb-7578-98d5-3e00fbd897c6/d4a254d7-c4a8-4fa2-87e2-246533d210f5.jsonl": {
+      "lines": 48,
+      "sha256": "4940c6c3bd9a643adecb0355ea684f2317d75d61d9d12cdb5aa6bffb588fc1b3"
+     }
+    },
+    "uid": 10001,
+    "uploads": {
+     "01a1548e-ccbb-7578-98d5-3e00fbd897c6/t08-ann-note.txt": "b108e713e063093efea337896a6eaf05a27e54e691a30e50cb67ad65d35f9059"
+    },
+    "workspace": {
+     "fsckExit": 0,
+     "head": "ae4cb5dc2da91ecfb985f6c931a76489afe04053",
+     "worktrees": [
+      "worktree /var/lib/orbit/home/orbit-repos/default",
+      "HEAD ae4cb5dc2da91ecfb985f6c931a76489afe04053",
+      "branch refs/heads/master",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a1548e-ccbb-7578-98d5-3e00fbd897c6",
+      "HEAD 666553868e7e88a007565449fe69d5f8bbc961ac",
+      "branch refs/heads/orbit/t08-ann-first-session-fe25e9"
+     ]
+    },
+    "worktrees": {
+     "01a1548e-ccbb-7578-98d5-3e00fbd897c6": {
+      "branch": "orbit/t08-ann-first-session-fe25e9",
+      "files": {
+       ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+       "t08-ann1.txt": "dd4a213dc6ebc5bc9ec1e1fc8014cc9e231298a70d955f818ca4cf29b3e9ce5d"
+      },
+      "head": "666553868e7e88a007565449fe69d5f8bbc961ac",
+      "status": []
+     }
+    }
+   },
+   "talk": {
+    "answered": {
+     "event": {
+      "created_at": "2026-10-19T14:53:55.048",
+      "ingested_at": "2026-10-19T14:53:55.110294+00:00",
+      "ingested_by_runner_id": "01a1548e-0f66-719f-aa98-e3ed285e4e91",
+      "seq": 49,
+      "session_id": "01a1548e-ccbb-7578-98d5-3e00fbd897c6",
+      "type": "assistant"
+     },
+     "modelRequests": [
+      {
+       "at": "2026-10-19T14:53:55Z",
+       "kind": "text",
+       "messages": 17,
+       "n": 12,
+       "secrets": [
+        "annfirst",
+        "annlast"
+       ],
+       "tool": null
+      }
+     ],
+     "session": {
+      "assigned_runner_id": "01a1548e-0f66-719f-aa98-e3ed285e4e91",
+      "created_at": "2026-10-19T14:26:47.1",
+      "engine": "claude",
+      "id": "01a1548e-ccbb-7578-98d5-3e00fbd897c6",
+      "provider": "deepseek",
+      "runtime_session_id": "d4a254d7-c4a8-4fa2-87e2-246533d210f5",
+      "status": "AWAITING_INPUT",
+      "task_id": null
+     }
+    },
+    "answeredAfterSeconds": 6.9,
+    "turn": {
+     "answer": {
+      "code": null,
+      "id": null,
+      "message": null,
+      "seq": 5,
+      "status": null
+     },
+     "at": "2026-10-19T14:53:48.217+00:00",
+     "kind": "turn",
+     "session": "34ifX1UizebwFShwLfstK",
+     "status": 201
+    }
+   },
+   "times": {
+    "generation": 4,
+    "initialProvider": "deepseek",
+    "mappingCreatedAt": "2026-10-19T14:25:58.634+00:00",
+    "node": "orbit-mr-lab-2",
+    "podCreatedAt": "2026-10-19T14:48:52Z",
+    "pvcCreatedAt": "2026-10-19T14:25:58Z",
+    "readyAt": "2026-10-19T14:49:19.377+00:00",
+    "runner": {
+     "capabilities_reported_at": "2026-10-19T14:54:01.429+00:00",
+     "enrolled_at": "2026-10-19T14:25:58.63",
+     "last_heartbeat_at": "2026-10-19T14:54:01.428",
+     "status": "ONLINE",
+     "version": "managed-8055bb5686ba981c7a518557190aebfb8dedc46b"
+    },
+    "runnerContainerStartedAt": "2026-10-19T14:48:59Z",
+    "secretCreatedAt": "2026-10-19T14:48:52Z"
+   },
+   "writer": {
+    "acknowledgedRows": 434,
+    "acknowledgedSHA256": "cd87309c954fe3f1b0b2d7c1779fb57be435d35464ffe99c104a08c86a64170e",
+    "committedRows": 434,
+    "gitCommit": "e620e660124e32eb98e330d72ff4ecd759e6376e",
+    "gitFsck": "",
+    "gitStatus": "",
+    "kernel": "7.0.0-34-generic",
+    "mountInfo": [
+     "690 675 251:0 / /var/lib/orbit rw,relatime - ext4 /dev/rbd0 rw,stripe=1024"
+    ],
+    "ordinarySHA256": "ce2f2be20803dbf87c2962de029a3df704c25762cc612e535376dfe30ada6252",
+    "prefixRows": 0,
+    "prefixSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "quiesced": true,
+    "randomSHA256": "3b4298651ccd1440688d948c750fa588f3623cce6ff46afdae5043d4df6f9af6",
+    "rowSHA256": "cd87309c954fe3f1b0b2d7c1779fb57be435d35464ffe99c104a08c86a64170e",
+    "runID": "t08x-writer",
+    "sqliteIntegrity": [
+     "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "walBytes": 0,
+    "walExists": true
+   }
+  },
+  "bob": {
+   "drainToReadySeconds": 300.1,
+   "identityAfter": {
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "generation": 4,
+    "podUid": "bae122b8-d211-490a-815c-cdea75d83c88",
+    "pool": "orbit-mr-rbd",
+    "pvName": "pvc-89d67b8d-c292-4f99-a619-0d964d1df9e5",
+    "pvUid": "f2dc08d4-fe64-4e22-a47b-1ee2cf30bf56",
+    "pvcName": "mr-data-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+    "pvcUid": "89d67b8d-c292-4f99-a619-0d964d1df9e5",
+    "rbdImage": "csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14",
+    "runnerId": "01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14",
+    "workspaceId": "01a1548e-0fc5-746d-a245-0286d8193f9c"
+   },
+   "identityBefore": {
+    "clusterID": "12b3f1b2-c9ec-11f1-80c0-525400123456",
+    "generation": 3,
+    "podUid": "f18bf6bd-9d69-46d5-912f-bb65032f0903",
+    "pool": "orbit-mr-rbd",
+    "pvName": "pvc-89d67b8d-c292-4f99-a619-0d964d1df9e5",
+    "pvUid": "f2dc08d4-fe64-4e22-a47b-1ee2cf30bf56",
+    "pvcName": "mr-data-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+    "pvcUid": "89d67b8d-c292-4f99-a619-0d964d1df9e5",
+    "rbdImage": "csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14",
+    "runnerId": "01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+    "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14",
+    "workspaceId": "01a1548e-0fc5-746d-a245-0286d8193f9c"
+   },
+   "placement": {
+    "at": "2026-10-19T14:54:05.334+00:00",
+    "generation": 4,
+    "guests": {
+     "orbit-mr-lab": {
+      "bootId": "393dbae1-9c15-449f-bc00-9816ed2072c5",
+      "devices": [
+       {
+        "address": "10.77.0.1:0/3639404582",
+        "client": "clientclient294137",
+        "device": "rbd0",
+        "image": "orbit-mr-rbd/csi-vol-f32314f7-85e7-42b6-b616-6f19d37539bd"
+       }
+      ],
+      "mounts": [
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/0c8e4346ecef0afe22b06ecdd674157ec7ff63259eec85eb64c3625992d6f324/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-f32314f7-85e7-42b6-b616-6f19d37539bd"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/pods/bbc3ff55-2aee-47da-9c43-57f708e36bef/volumes/kubernetes.io~csi/pvc-c869968e-0f44-4365-800c-0448f74f8892/mount"
+       }
+      ],
+      "uptimeSeconds": 2007.93
+     },
+     "orbit-mr-lab-2": {
+      "bootId": "53b68dde-f1e6-4ffc-9e2a-a042d0f93d7a",
+      "devices": [
+       {
+        "address": "10.77.0.2:0/2118068317",
+        "client": "clientclient294295",
+        "device": "rbd0",
+        "image": "orbit-mr-rbd/csi-vol-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+       },
+       {
+        "address": "10.77.0.2:0/2118068317",
+        "client": "clientclient294295",
+        "device": "rbd1",
+        "image": "orbit-mr-rbd/csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+       }
+      ],
+      "mounts": [
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/f2e771687bdf0ba0e2a24a831d4338738031ce21971f9d3cd49f65615db35767/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-1ba6c477-9ddf-44ff-b3d8-d2e2f9dc3568"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd1",
+        "target": "/var/lib/kubelet/plugins/kubernetes.io/csi/rbd.csi.ceph.com/e8dcc238b46fc2c525e59c00a1183d2e93d754a7d3ab864b75709fd2970c9548/globalmount/0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd0",
+        "target": "/var/lib/kubelet/pods/40fd1b6e-d408-48ec-a697-bc298ec1671d/volumes/kubernetes.io~csi/pvc-22b25daa-3fa0-4432-a081-8ec8ed247208/mount"
+       },
+       {
+        "fstype": "ext4",
+        "source": "/dev/rbd1",
+        "target": "/var/lib/kubelet/pods/bae122b8-d211-490a-815c-cdea75d83c88/volumes/kubernetes.io~csi/pvc-89d67b8d-c292-4f99-a619-0d964d1df9e5/mount"
+       }
+      ],
+      "uptimeSeconds": 547.22
+     }
+    },
+    "image": "orbit-mr-rbd/csi-vol-d8f26c68-4384-451c-9ad9-cb493d72ac14",
+    "nodeName": "orbit-mr-lab-2",
+    "pod": {
+     "containers": [
+      {
+       "exitCode": 0,
+       "name": "private-volume-directories",
+       "reason": "Completed",
+       "state": "terminated"
+      },
+      {
+       "exitCode": null,
+       "name": "runner",
+       "reason": null,
+       "state": "running"
+      }
+     ],
+     "deletionTimestamp": null,
+     "disruptionTarget": null,
+     "finalizers": [
+      "orbit.dev/managed-runner-stop-report"
+     ],
+     "generation": "4",
+     "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+     "node": "orbit-mr-lab-2",
+     "phase": "Running",
+     "ready": "True",
+     "uid": "bae122b8-d211-490a-815c-cdea75d83c88"
+    },
+    "podUid": "bae122b8-d211-490a-815c-cdea75d83c88",
+    "podsOnTheClaim": [
+     {
+      "deleting": false,
+      "name": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+      "node": "orbit-mr-lab-2",
+      "phase": "Running",
+      "uid": "bae122b8-d211-490a-815c-cdea75d83c88"
+     }
+    ],
+    "state": "READY",
+    "volumeAttachments": [
+     {
+      "attached": true,
+      "deleting": false,
+      "detachError": null,
+      "name": "csi-7e13271af0161992f564c1f4288cfcccbf11f61864b0dfa972c709702916ad34",
+      "node": "orbit-mr-lab-2"
+     }
+    ],
+    "watchers": [
+     {
+      "address": "10.77.0.2:0/2118068317",
+      "client": 294295,
+      "cookie": 18446462598732840962
+     }
+    ]
+   },
+   "probe": {
+    "action": "check",
+    "allSame": true,
+    "at": "2026-10-19T14:54:12.139+00:00",
+    "data": {
+     "gitFsckExit": 0,
+     "gitHead": "819316ff2a23c1aa90353c01bdb8da479d6ecd53",
+     "integrityCheck": "ok",
+     "maxRow": 150,
+     "mount": [
+      [
+       "/dev/rbd1",
+       "/var/lib/orbit",
+       "ext4"
+      ]
+     ],
+     "randomSha256": "21ec78ccd06f1fb1a00106f6882980a864965b8b69c7ccf1ffa0483eabc0571f",
+     "rows": 150,
+     "rowsSha256": "3338fdf24d27e8971fb99f73dd9baa1670900354332d22f4e3552fb23bb07ff5"
+    },
+    "generation": 4,
+    "owner": "bob",
+    "pod": "bae122b8-d211-490a-815c-cdea75d83c88",
+    "run": "p1",
+    "same": {
+     "gitHead": true,
+     "randomSha256": true,
+     "rows": true,
+     "rowsSha256": true
+    },
+    "sameRunnerId": true,
+    "volume": {
+     "managedInstance": {
+      "generation": 4,
+      "podUid": "bae122b8-d211-490a-815c-cdea75d83c88",
+      "runnerId": "01a1548e-0fc4-702f-a800-04fd55cdd1b9"
+     },
+     "repos": [
+      "default"
+     ],
+     "runnerId": "01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+     "worktrees": [
+      "01a1548e-d1e1-7716-94ca-8b2770f29b8a",
+      "b2c53285-8438-541c-b14b-232d3b04c323"
+     ]
+    },
+    "writtenAt": "2026-10-19T14:27:11.574+00:00",
+    "writtenByGeneration": 1,
+    "writtenByPod": "40dde75c-fb6f-452c-88eb-3c1a802f1291"
+   },
+   "probeP2": {
+    "checkedByGeneration": 4,
+    "data": {
+     "gitFsckExit": 0,
+     "gitHead": "9d7aea1cee41b1b08d1f7a6698054377c5d89e83",
+     "integrityCheck": "ok",
+     "maxRow": 150,
+     "mount": [
+      [
+       "/dev/rbd1",
+       "/var/lib/orbit",
+       "ext4"
+      ]
+     ],
+     "randomSha256": "55b351122f540539d62346bc39e37ab2339ad962f28b1e215da8b6d864575d85",
+     "rows": 150,
+     "rowsSha256": "2a5a72118d5fe68b662f189abd18a48a0a71313c244efe68e7c4843189c35796"
+    },
+    "run": "p2",
+    "same": {
+     "gitHead": true,
+     "randomSha256": true,
+     "rows": true,
+     "rowsSha256": true
+    },
+    "written": {
+     "gitFsckExit": 0,
+     "gitHead": "9d7aea1cee41b1b08d1f7a6698054377c5d89e83",
+     "integrityCheck": "ok",
+     "maxRow": 150,
+     "mount": [
+      [
+       "/dev/rbd1",
+       "/var/lib/orbit",
+       "ext4"
+      ]
+     ],
+     "randomSha256": "55b351122f540539d62346bc39e37ab2339ad962f28b1e215da8b6d864575d85",
+     "rows": 150,
+     "rowsSha256": "2a5a72118d5fe68b662f189abd18a48a0a71313c244efe68e7c4843189c35796"
+    },
+    "writtenAt": "2026-10-19T14:35:08.358+00:00",
+    "writtenByGeneration": 2,
+    "writtenByPod": "c575d98b-33a5-4895-88b5-87f2832ea889"
+   },
+   "proof": {
+    "kind": "OBSERVED_STOP",
+    "observation": {
+     "containers": [
+      {
+       "exitCode": 0,
+       "finishedAt": "2026-10-19T14:44:25Z",
+       "name": "private-volume-directories",
+       "state": "terminated"
+      },
+      {
+       "exitCode": 0,
+       "finishedAt": "2026-10-19T14:48:34Z",
+       "name": "runner",
+       "state": "terminated"
+      }
+     ],
+     "phase": "Succeeded"
+    },
+    "predecessor": {
+     "generation": 3,
+     "nodeName": "orbit-mr-lab",
+     "podName": "mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+     "podUid": "f18bf6bd-9d69-46d5-912f-bb65032f0903",
+     "pvcUid": "89d67b8d-c292-4f99-a619-0d964d1df9e5",
+     "runnerId": "01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+     "volumeHandle": "0001-0024-12b3f1b2-c9ec-11f1-80c0-525400123456-0000000000000002-d8f26c68-4384-451c-9ad9-cb493d72ac14"
+    },
+    "recordedAt": "2026-10-19T14:48:36.844Z",
+    "retiredAt": "2026-10-19T14:48:52.399Z"
+   },
+   "snapshot": {
+    "managedInstance": {
+     "generation": 4,
+     "podUid": "bae122b8-d211-490a-815c-cdea75d83c88",
+     "runnerId": "01a1548e-0fc4-702f-a800-04fd55cdd1b9"
+    },
+    "mount": [
+     {
+      "fstype": "ext4",
+      "source": "/dev/rbd1"
+     }
+    ],
+    "podUid": "bae122b8-d211-490a-815c-cdea75d83c88",
+    "prefix": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-d1e1-7716-94ca-8b2770f29b8a/6001df67-0d8b-4d9b-81c1-425d9c747037.jsonl": "7731654517b5858168712e5b0bbff819bf3c131adc3d5c892b073209f9955c6e",
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-b2c53285-8438-541c-b14b-232d3b04c323/4436b81d-d3a5-4077-961f-774d4f0d5801.jsonl": "31f7f22cf5e6ad869113c77c9e1220117a07b0117582fc1bd9002eed994cb2bf"
+    },
+    "runnerId": "01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+    "runs": {
+     "01a1548e-d1e1-7716-94ca-8b2770f29b8a": {
+      "provider": "claude",
+      "runtimeSessionId": "6001df67-0d8b-4d9b-81c1-425d9c747037",
+      "sessionUuid": "6001df67-0d8b-4d9b-81c1-425d9c747037",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a1548e-d1e1-7716-94ca-8b2770f29b8a"
+     },
+     "b2c53285-8438-541c-b14b-232d3b04c323": {
+      "provider": "claude",
+      "runtimeSessionId": "4436b81d-d3a5-4077-961f-774d4f0d5801",
+      "sessionUuid": "4436b81d-d3a5-4077-961f-774d4f0d5801",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/b2c53285-8438-541c-b14b-232d3b04c323"
+     }
+    },
+    "sqlite": {
+     "storage-verification/t08x-writer/state.sqlite": "ok",
+     "t08x-probe/p1/rows.sqlite": "ok",
+     "t08x-probe/p2/rows.sqlite": "ok"
+    },
+    "takenAt": "2026-10-19T14:54:20.629+00:00",
+    "transcripts": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-d1e1-7716-94ca-8b2770f29b8a/6001df67-0d8b-4d9b-81c1-425d9c747037.jsonl": {
+      "lines": 49,
+      "sha256": "c5c94ff895b6cc01caddf287079f4fae45891cdc1719c9246819d310dabb8190"
+     },
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-b2c53285-8438-541c-b14b-232d3b04c323/4436b81d-d3a5-4077-961f-774d4f0d5801.jsonl": {
+      "lines": 23,
+      "sha256": "31f7f22cf5e6ad869113c77c9e1220117a07b0117582fc1bd9002eed994cb2bf"
+     }
+    },
+    "uid": 10001,
+    "uploads": {
+     "01a1548e-d1e1-7716-94ca-8b2770f29b8a/t08-bob-note.txt": "375ce87b1dba4ccf9b8101d0a006d725d7f9494220f2f62605cf1cf79cefb215"
+    },
+    "workspace": {
+     "fsckExit": 0,
+     "head": "6c9606625bcd33b6adcba200898c394309cafb02",
+     "worktrees": [
+      "worktree /var/lib/orbit/home/orbit-repos/default",
+      "HEAD 6c9606625bcd33b6adcba200898c394309cafb02",
+      "branch refs/heads/master",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a1548e-d1e1-7716-94ca-8b2770f29b8a",
+      "HEAD 0e5305d84ce91eae007eedd2c113d9bda74f5dab",
+      "branch refs/heads/orbit/t08-bob-first-session-4d117f",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/b2c53285-8438-541c-b14b-232d3b04c323",
+      "HEAD 6c9606625bcd33b6adcba200898c394309cafb02",
+      "branch refs/heads/orbit/task-t08x-bob-move-a-task-run-now-that-w-dff3f8"
+     ]
+    },
+    "worktrees": {
+     "01a1548e-d1e1-7716-94ca-8b2770f29b8a": {
+      "branch": "orbit/t08-bob-first-session-4d117f",
+      "files": {
+       ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+       "t08-bob1.txt": "60477fcb9906a12d70ea8b641cb966255bc822703a5308963a1e2e3060742019"
+      },
+      "head": "0e5305d84ce91eae007eedd2c113d9bda74f5dab",
+      "status": []
+     },
+     "b2c53285-8438-541c-b14b-232d3b04c323": {
+      "branch": "orbit/task-t08x-bob-move-a-task-run-now-that-w-dff3f8",
+      "files": {
+       ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697"
+      },
+      "head": "6c9606625bcd33b6adcba200898c394309cafb02",
+      "status": []
+     }
+    }
+   },
+   "snapshotBefore": {
+    "managedInstance": {
+     "generation": 3,
+     "podUid": "f18bf6bd-9d69-46d5-912f-bb65032f0903",
+     "runnerId": "01a1548e-0fc4-702f-a800-04fd55cdd1b9"
+    },
+    "mount": [
+     {
+      "fstype": "ext4",
+      "source": "/dev/rbd2"
+     }
+    ],
+    "podUid": "f18bf6bd-9d69-46d5-912f-bb65032f0903",
+    "prefix": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-d1e1-7716-94ca-8b2770f29b8a/6001df67-0d8b-4d9b-81c1-425d9c747037.jsonl": "7731654517b5858168712e5b0bbff819bf3c131adc3d5c892b073209f9955c6e",
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-b2c53285-8438-541c-b14b-232d3b04c323/4436b81d-d3a5-4077-961f-774d4f0d5801.jsonl": "31f7f22cf5e6ad869113c77c9e1220117a07b0117582fc1bd9002eed994cb2bf"
+    },
+    "runnerId": "01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+    "runs": {
+     "01a1548e-d1e1-7716-94ca-8b2770f29b8a": {
+      "provider": "claude",
+      "runtimeSessionId": "6001df67-0d8b-4d9b-81c1-425d9c747037",
+      "sessionUuid": "6001df67-0d8b-4d9b-81c1-425d9c747037",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a1548e-d1e1-7716-94ca-8b2770f29b8a"
+     },
+     "b2c53285-8438-541c-b14b-232d3b04c323": {
+      "provider": "claude",
+      "runtimeSessionId": "4436b81d-d3a5-4077-961f-774d4f0d5801",
+      "sessionUuid": "4436b81d-d3a5-4077-961f-774d4f0d5801",
+      "workDir": "/var/lib/orbit/home/.orbit/worktrees/b2c53285-8438-541c-b14b-232d3b04c323"
+     }
+    },
+    "sqlite": {
+     "storage-verification/t08x-writer/state.sqlite": "ok",
+     "t08x-probe/p1/rows.sqlite": "ok",
+     "t08x-probe/p2/rows.sqlite": "ok"
+    },
+    "takenAt": "2026-10-19T14:48:34.297+00:00",
+    "transcripts": {
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a1548e-d1e1-7716-94ca-8b2770f29b8a/6001df67-0d8b-4d9b-81c1-425d9c747037.jsonl": {
+      "lines": 43,
+      "sha256": "7731654517b5858168712e5b0bbff819bf3c131adc3d5c892b073209f9955c6e"
+     },
+     ".claude/projects/-var-lib-orbit-home--orbit-worktrees-b2c53285-8438-541c-b14b-232d3b04c323/4436b81d-d3a5-4077-961f-774d4f0d5801.jsonl": {
+      "lines": 23,
+      "sha256": "31f7f22cf5e6ad869113c77c9e1220117a07b0117582fc1bd9002eed994cb2bf"
+     }
+    },
+    "uid": 10001,
+    "uploads": {
+     "01a1548e-d1e1-7716-94ca-8b2770f29b8a/t08-bob-note.txt": "375ce87b1dba4ccf9b8101d0a006d725d7f9494220f2f62605cf1cf79cefb215"
+    },
+    "workspace": {
+     "fsckExit": 0,
+     "head": "6c9606625bcd33b6adcba200898c394309cafb02",
+     "worktrees": [
+      "worktree /var/lib/orbit/home/orbit-repos/default",
+      "HEAD 6c9606625bcd33b6adcba200898c394309cafb02",
+      "branch refs/heads/master",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/01a1548e-d1e1-7716-94ca-8b2770f29b8a",
+      "HEAD 0e5305d84ce91eae007eedd2c113d9bda74f5dab",
+      "branch refs/heads/orbit/t08-bob-first-session-4d117f",
+      "",
+      "worktree /var/lib/orbit/home/.orbit/worktrees/b2c53285-8438-541c-b14b-232d3b04c323",
+      "HEAD 6c9606625bcd33b6adcba200898c394309cafb02",
+      "branch refs/heads/orbit/task-t08x-bob-move-a-task-run-now-that-w-dff3f8"
+     ]
+    },
+    "worktrees": {
+     "01a1548e-d1e1-7716-94ca-8b2770f29b8a": {
+      "branch": "orbit/t08-bob-first-session-4d117f",
+      "files": {
+       ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+       "t08-bob1.txt": "60477fcb9906a12d70ea8b641cb966255bc822703a5308963a1e2e3060742019"
+      },
+      "head": "0e5305d84ce91eae007eedd2c113d9bda74f5dab",
+      "status": []
+     },
+     "b2c53285-8438-541c-b14b-232d3b04c323": {
+      "branch": "orbit/task-t08x-bob-move-a-task-run-now-that-w-dff3f8",
+      "files": {
+       ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697"
+      },
+      "head": "6c9606625bcd33b6adcba200898c394309cafb02",
+      "status": []
+     }
+    }
+   },
+   "talk": {
+    "answered": {
+     "event": {
+      "created_at": "2026-10-19T14:54:09.662",
+      "ingested_at": "2026-10-19T14:54:09.695916+00:00",
+      "ingested_by_runner_id": "01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+      "seq": 49,
+      "session_id": "01a1548e-d1e1-7716-94ca-8b2770f29b8a",
+      "type": "assistant"
+     },
+     "modelRequests": [
+      {
+       "at": "2026-10-19T14:54:09Z",
+       "kind": "text",
+       "messages": 14,
+       "n": 13,
+       "secrets": [
+        "bobfirst"
+       ],
+       "tool": null
+      }
+     ],
+     "session": {
+      "assigned_runner_id": "01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+      "created_at": "2026-10-19T14:26:48.417",
+      "engine": "claude",
+      "id": "01a1548e-d1e1-7716-94ca-8b2770f29b8a",
+      "provider": "deepseek-2",
+      "runtime_session_id": "6001df67-0d8b-4d9b-81c1-425d9c747037",
+      "status": "RUNNING",
+      "task_id": null
+     }
+    },
+    "answeredAfterSeconds": 2.8,
+    "turn": {
+     "answer": {
+      "code": null,
+      "id": null,
+      "message": null,
+      "seq": 5,
+      "status": null
+     },
+     "at": "2026-10-19T14:54:06.882+00:00",
+     "kind": "turn",
+     "session": "34ifX3ZCiSUsMligh4Ixe",
+     "status": 201
+    }
+   },
+   "times": {
+    "generation": 4,
+    "initialProvider": "deepseek-2",
+    "mappingCreatedAt": "2026-10-19T14:25:58.726+00:00",
+    "node": "orbit-mr-lab-2",
+    "podCreatedAt": "2026-10-19T14:48:52Z",
+    "pvcCreatedAt": "2026-10-19T14:25:59Z",
+    "readyAt": "2026-10-19T14:49:19.402+00:00",
+    "runner": {
+     "capabilities_reported_at": "2026-10-19T14:54:01.469+00:00",
+     "enrolled_at": "2026-10-19T14:25:58.724",
+     "last_heartbeat_at": "2026-10-19T14:54:01.469",
+     "status": "ONLINE",
+     "version": "managed-8055bb5686ba981c7a518557190aebfb8dedc46b"
+    },
+    "runnerContainerStartedAt": "2026-10-19T14:48:59Z",
+    "secretCreatedAt": "2026-10-19T14:48:52Z"
+   },
+   "writer": {
+    "acknowledgedRows": 441,
+    "acknowledgedSHA256": "6ddd713b59faf5871b89177ebd63eca8d13da2f1fbdd4d771a7975130aef9bd3",
+    "committedRows": 441,
+    "gitCommit": "e620e660124e32eb98e330d72ff4ecd759e6376e",
+    "gitFsck": "",
+    "gitStatus": "",
+    "kernel": "7.0.0-34-generic",
+    "mountInfo": [
+     "754 735 251:16 / /var/lib/orbit rw,relatime - ext4 /dev/rbd1 rw,stripe=1024"
+    ],
+    "ordinarySHA256": "ce2f2be20803dbf87c2962de029a3df704c25762cc612e535376dfe30ada6252",
+    "prefixRows": 0,
+    "prefixSHA256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "quiesced": true,
+    "randomSHA256": "41082845612180325da8763f2f0e6a3f3f4d8d397fa9b8f761b0bb865bdbec69",
+    "rowSHA256": "6ddd713b59faf5871b89177ebd63eca8d13da2f1fbdd4d771a7975130aef9bd3",
+    "runID": "t08x-writer",
+    "sqliteIntegrity": [
+     "ok"
+    ],
+    "sqliteJournalMode": "wal",
+    "walBytes": 0,
+    "walExists": true
+   }
+  },
+  "drain": {
+   "exit": 1,
+   "output": [
+    "node/orbit-mr-lab already cordoned",
+    "evicting pod orbit-mr-test/mr-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+    "evicting pod orbit-mr-test/mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+    "evicting pod orbit-mr-test/mr-01a1548e-0f66-719f-aa98-e3ed285e4e91",
+    "pod/mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9 evicted",
+    "pod/mr-01a1548e-0f66-719f-aa98-e3ed285e4e91 evicted",
+    "Warning: deleting Pods that declare no controller: orbit-mr-test/mr-01a1548e-0f66-719f-aa98-e3ed285e4e91, orbit-mr-test/mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9",
+    "There are pending pods in node \"orbit-mr-lab\" when an error occurred: error when waiting for pod \"mr-01a14db1-e2b6-7199-8613-d95d4616d6a7\" in namespace \"orbit-mr-test\" to terminate: context deadline exceeded",
+    "pod/mr-01a14db1-e2b6-7199-8613-d95d4616d6a7",
+    "error: unable to drain node \"orbit-mr-lab\" due to error: error when waiting for pod \"mr-01a14db1-e2b6-7199-8613-d95d4616d6a7\" in namespace \"orbit-mr-test\" to terminate: context deadline exceeded, continuing command...",
+    "There are pending nodes to be drained:",
+    " orbit-mr-lab",
+    "error when waiting for pod \"mr-01a14db1-e2b6-7199-8613-d95d4616d6a7\" in namespace \"orbit-mr-test\" to terminate: context deadline exceeded"
+   ]
+  },
+  "drainEndedAt": "2026-10-19T14:53:34.672+00:00",
+  "drainStartedAt": "2026-10-19T14:48:34.627+00:00",
+  "emptyDirOnly": {
+   "exit": 1,
+   "output": [
+    "node/orbit-mr-lab already cordoned",
+    "error: unable to drain node \"orbit-mr-lab\" due to error: cannot delete Pods that declare no controller (use --force to override): orbit-mr-test/mr-01a1548e-0f66-719f-aa98-e3ed285e4e91, orbit-mr-test/mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9, continuing command...",
+    "There are pending nodes to be drained:",
+    " orbit-mr-lab",
+    "cannot delete Pods that declare no controller (use --force to override): orbit-mr-test/mr-01a1548e-0f66-719f-aa98-e3ed285e4e91, orbit-mr-test/mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9"
+   ]
+  },
+  "gate": {
+   "at": "2026-10-19T14:54:25.293+00:00",
+   "byKind": {
+    "Pod create": 2,
+    "Secret create": 2,
+    "admission probe": 2,
+    "other (reads, patches, deletes)": 412
+   },
+   "connections": 418,
+   "largestRecordSizes": {
+    "1111": 8,
+    "1136": 130,
+    "1147": 128,
+    "1155": 10,
+    "1170": 130,
+    "1287": 2,
+    "1295": 2,
+    "1457": 2,
+    "1669": 2,
+    "4084": 2,
+    "4111": 2
+   },
+   "since": "2026-10-19T14:48:34.627+00:00",
+   "until": "2026-10-19T14:53:34.672+00:00"
+  },
+  "plain": {
+   "exit": 1,
+   "output": [
+    "node/orbit-mr-lab cordoned",
+    "error: unable to drain node \"orbit-mr-lab\" due to error: cannot delete Pods with local storage (use --delete-emptydir-data to override): orbit-mr-test/mr-01a1548e-0f66-719f-aa98-e3ed285e4e91, orbit-mr-test/mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9, continuing command...",
+    "There are pending nodes to be drained:",
+    " orbit-mr-lab",
+    "cannot delete Pods with local storage (use --delete-emptydir-data to override): orbit-mr-test/mr-01a1548e-0f66-719f-aa98-e3ed285e4e91, orbit-mr-test/mr-01a1548e-0fc4-702f-a800-04fd55cdd1b9"
+   ]
+  },
+  "ready": {
+   "ann": {
+    "at": "2026-10-19T14:53:34.715+00:00",
+    "changes": [
+     {
+      "at": "2026-10-19T14:53:34.715+00:00",
+      "line": {
+       "attempt": 1,
+       "drain": null,
+       "generation": 4,
+       "management_state": "READY",
+       "pod": "40fd1b6e",
+       "reason": null,
+       "revision": 58
+      }
+     }
+    ],
+    "reached": "READY",
+    "seconds": 0.0
+   },
+   "bob": {
+    "at": "2026-10-19T14:53:34.758+00:00",
+    "changes": [
+     {
+      "at": "2026-10-19T14:53:34.758+00:00",
+      "line": {
+       "attempt": 1,
+       "drain": null,
+       "generation": 4,
+       "management_state": "READY",
+       "pod": "bae122b8",
+       "reason": null,
+       "revision": 58
+      }
+     }
+    ],
+    "reached": "READY",
+    "seconds": 0.0
+   }
+  },
+  "uncordon": {
+   "action": "uncordon",
+   "at": "2026-10-19T14:54:25.252+00:00",
+   "node": "orbit-mr-lab",
+   "unschedulable": false
+  }
+ },
+ "seconds": 352.4,
+ "startedAt": "2026-10-19T14:48:32.908+00:00",
+ "step": "move"
+}

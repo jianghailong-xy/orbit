@@ -1,0 +1,1 @@
+theme=light light=252862 dark=9437 bounds=Rect.fromLTRB(96.0, 775.0, 776.0, 1165.0)

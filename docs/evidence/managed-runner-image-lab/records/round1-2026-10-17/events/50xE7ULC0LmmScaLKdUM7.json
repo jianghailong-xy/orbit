@@ -1,0 +1,137 @@
+[
+ {
+  "seq": 1,
+  "type": "user",
+  "payload": {
+   "text": "Start the task \u201cT03 landing probe: add LANDED.txt\u201d.\n\nTask description:\nT03 landing probe: add LANDED.txt\n\nFollow these steps:\n1. First use task_get to read the task in full with its comment history.\n2. Do the task.\n3. When you are done, first declare with task_request_confirmation (MCP; the CLI is `orbit task request-confirmation`) that this run has finished the work, then say in a sentence or two in this session what you did, and end the turn. Only that declaration puts a confirmation card in front of the account owner; without it there is no card at all \u2014 the task stays OPEN, and only the owner can confirm it, from the task panel. The card reaches the owner only when the turn in which this run has really stopped ends (an empty queue, no background job in flight, no wake you scheduled yourself). This task's completion criterion is OWNER_CONFIRMED: the account owner confirms it in the Orbit app (Confirm done) or sends it back (Send back\u2026), and no agent session (the coordinator included) can confirm it for them; the reason for a send-back arrives in this session as the next message \u2014 when it does, carry on as it says, and declare again once you are done again. Do not call task_evidence_submit, and do not write status.\n4. If the work failed or could not be finished, first explain why with task_comment, then use task_update to set the status to FAILED. Do not set it to DONE, and do not set it to IN_PROGRESS \u2014 downstream treats IN_PROGRESS as an ordinary wait and keeps waiting forever, while only FAILED marks downstream as needing a person to step in.",
+   "delivery": "enqueued",
+   "taskStart": {
+    "auto": false,
+    "title": "T03 landing probe: add LANDED.txt",
+    "taskId": "34hN5fXRWKMWho7vIvdAZ",
+    "project": {
+     "id": "34hN5f2XmUTCDFMGa5mTR",
+     "title": "t03 landing probe",
+     "publicId": "34hN5f2XmUTCDFMGa5mTR"
+    },
+    "description": "T03 landing probe: add LANDED.txt",
+    "listInstructions": null,
+    "acceptanceCommand": null,
+    "acceptanceCriteria": null,
+    "completionCriterion": "OWNER_CONFIRMED",
+    "acceptanceExpectedExitCode": null,
+    "taskPublicId": "34hN5fXRWKMWho7vIvdAZ"
+   }
+  },
+  "turnId": "34hN5gIEcEmN7Kw2MZ770",
+  "ts": "2026-10-17T07:48:58.231Z",
+  "turnPublicId": "34hN5gIEcEmN7Kw2MZ770"
+ },
+ {
+  "seq": 2,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hN5gIEcEmN7Kw2MZ770",
+   "delivery": "written",
+   "turnPublicId": "34hN5gIEcEmN7Kw2MZ770"
+  },
+  "turnId": "34hN5gIEcEmN7Kw2MZ770",
+  "ts": "2026-10-17T07:48:58.231Z",
+  "turnPublicId": "34hN5gIEcEmN7Kw2MZ770"
+ },
+ {
+  "seq": 3,
+  "type": "system",
+  "payload": {
+   "model": "deepseek-v4-flash",
+   "subtype": "init",
+   "sessionId": "3cK4VbCO5APQY46U4CtuY1",
+   "sessionPublicId": "3cK4VbCO5APQY46U4CtuY1"
+  },
+  "turnId": "34hN5gIEcEmN7Kw2MZ770",
+  "ts": "2026-10-17T07:48:58.404Z",
+  "turnPublicId": "34hN5gIEcEmN7Kw2MZ770"
+ },
+ {
+  "seq": 5,
+  "type": "system",
+  "payload": {
+   "stderr": "[claude-code:unrecognized_model] {\"model\":\"deepseek-v4-flash\",\"query_source\":\"sdk\"}\n"
+  },
+  "turnId": "34hN5gIEcEmN7Kw2MZ770",
+  "ts": "2026-10-17T07:48:58.418Z",
+  "turnPublicId": "34hN5gIEcEmN7Kw2MZ770"
+ },
+ {
+  "seq": 6,
+  "type": "user_delivery",
+  "payload": {
+   "turnId": "34hN5gIEcEmN7Kw2MZ770",
+   "delivery": "acknowledged",
+   "turnPublicId": "34hN5gIEcEmN7Kw2MZ770"
+  },
+  "turnId": "34hN5gIEcEmN7Kw2MZ770",
+  "ts": "2026-10-17T07:48:58.452Z",
+  "turnPublicId": "34hN5gIEcEmN7Kw2MZ770"
+ },
+ {
+  "seq": 8,
+  "type": "assistant",
+  "payload": {
+   "text": "FAKE MODEL reply #9: this conversation has 2 message(s); secrets seen: none."
+  },
+  "turnId": "34hN5gIEcEmN7Kw2MZ770",
+  "ts": "2026-10-17T07:48:58.454Z",
+  "turnPublicId": "34hN5gIEcEmN7Kw2MZ770"
+ },
+ {
+  "seq": 9,
+  "type": "system",
+  "payload": {
+   "subtype": "context",
+   "contextTokens": 30
+  },
+  "turnId": "34hN5gIEcEmN7Kw2MZ770",
+  "ts": "2026-10-17T07:48:58.454Z",
+  "turnPublicId": "34hN5gIEcEmN7Kw2MZ770"
+ },
+ {
+  "seq": 11,
+  "type": "turn_end",
+  "payload": {
+   "costUsd": 0.00044,
+   "subtype": "success",
+   "numTurns": 1,
+   "contextTokens": 30
+  },
+  "turnId": "34hN5gIEcEmN7Kw2MZ770",
+  "ts": "2026-10-17T07:48:58.583Z",
+  "turnPublicId": "34hN5gIEcEmN7Kw2MZ770"
+ },
+ {
+  "seq": 12,
+  "type": "tool_use",
+  "payload": {
+   "id": "shell-01a148d5-f0ae-774f-ae08-4f7f7947c35f",
+   "name": "Bash",
+   "input": {
+    "command": "printf \"landed through the project line by the lab runner\\n\" > LANDED.txt && git add LANDED.txt && git commit -q -m \"T03: add LANDED.txt\" && git log --format=\"%h %an <%ae> %s\" -2"
+   }
+  },
+  "turnId": "34hN5o4N9hlmfeFUEc3F1",
+  "ts": "2026-10-17T07:49:02.866Z",
+  "turnPublicId": "34hN5o4N9hlmfeFUEc3F1"
+ },
+ {
+  "seq": 14,
+  "type": "tool_result",
+  "payload": {
+   "content": "ff06725 Orbit Runner <runner@orbit.invalid> T03: add LANDED.txt\nf75c2d0 Orbit lab runner <lab-runner@lab.invalid> orbit: baseline\n",
+   "isError": false,
+   "toolUseId": "shell-01a148d5-f0ae-774f-ae08-4f7f7947c35f"
+  },
+  "turnId": "34hN5o4N9hlmfeFUEc3F1",
+  "ts": "2026-10-17T07:49:02.884Z",
+  "turnPublicId": "34hN5o4N9hlmfeFUEc3F1"
+ }
+]

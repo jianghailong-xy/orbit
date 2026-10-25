@@ -295,12 +295,28 @@ UID, advance generation, issue its credential, and create the replacement on ano
 Deletion of a Kubernetes API object, disappearance of a `VolumeAttachment`, or a manager lock alone
 is insufficient evidence that a partitioned machine stopped using the disk.
 
-For an unreachable node, persist `FENCING` and block replacement. The first supported fault path is
-operator-confirmed fencing in the authorized test environment:
+For an unreachable node, block replacement and leave the takeover to the operator. A lost heartbeat
+proves nothing about the node's writers, so the mapping stays `READY` with its generation and Pod
+recorded. The owner's status says the runner is not usable once its heartbeat is older than
+`heartbeatFreshSeconds`; demand waits, the owner's retry is refused, and no Pod is created. The
+manager goes `FENCING` only when the recorded Pod disappears, is replaced, or turns terminal without
+its kubelet's report. In practice that happens when the operator's `node.kubernetes.io/out-of-service` taint
+lets PodGC make the Pod `Failed` (step 4). From then on the predecessor's credential is refused, and
+the next generation starts on the operator's fencing receipt.
+
+This behavior was kept by the coordinator's decision of 2026-10-19, after T02 found it, instead of
+fencing as soon as the control plane marks the Pod for eviction:
+
+- A takeover needs the operator's receipt either way, so fencing earlier would not be safer.
+- It would cut a draining runner's credential whenever a healthy node is given a `NoExecute` taint.
+- It would make every loss of contact longer than the taint toleration an event for an operator.
+
+The first supported fault path is operator-confirmed fencing in the authorized test environment:
 
 1. Identify the predecessor by Pod UID, node UID, generation, PVC UID, volume handle, and RBD image.
-   Stop new claims and reject the predecessor's managed API generation. Preserve the mapping and
-   pending demand. No timeout or user retry may authorize disk access by a successor.
+   Preserve the mapping and pending demand. The predecessor's managed API generation is rejected
+   from the moment the mapping is `FENCING`. No timeout or user retry may authorize disk access by a
+   successor.
 2. A privileged infrastructure operator powers off the old node through its hypervisor/BMC and
    verifies that state, then quarantines it from scheduling/restart until stale Pods/mounts are
    removed. Record the control action and independent observed power/cessation result. No such
@@ -504,6 +520,8 @@ The restored runtime stays unable to execute as the live runner until the origin
 and the manager explicitly switches the mapping to the verified new PVC UID/volume handle.
 Do not duplicate live runner credentials to run a restore test beside the original. Record the
 mapping change and observed recovery point/time; these are measurements, not promised values here.
+On Kubernetes that switch is an administrator's request the manager verifies and records
+("Implementation record: a restored volume back under its runner").
 
 ## Server and three client interfaces
 
@@ -980,7 +998,9 @@ Left to later work, or not shown here:
 - A real engine session, and its continuation across a sleep and a wake, in a Docker container (D4).
   The owner's DeepSeek key file was not there, and the test network reaches no model; the turns the
   woken runners claimed could not be answered. A deployment's network must also let the runner reach
-  its model's endpoint; this run's network reached only the apiserver.
+  its model's endpoint; this run's network reached only the apiserver. (Shown since D4, on 2026-10-21 on this host's own
+  Docker: a new account's first session answered through the owner's DeepSeek key, and the same engine session
+  answering again after two sleeps and wakes; [evidence](evidence/managed-runner-docker-e2e/2026-10-21/README.md).)
 - The deployment's wiring (D3): the channel as a service, its network and token, the Docker profile.
   No default deployment entry changed here.
 - Backup, restore and the failure handbook for local volumes (D5).
@@ -1038,7 +1058,8 @@ working image from the branch's own `deploy/managed-runner/image`
 Left to later work, or not shown here:
 
 - A real engine session on a managed runner (D4); the channel's refusals, the containers' limits, backups and
-  failure handling (D5).
+  failure handling (D5). (D4's end-to-end run on this host's own Docker:
+  [evidence](evidence/managed-runner-docker-e2e/2026-10-21/README.md).)
 - An upgrade does not rebuild the managed runner image, whose runner does not update itself: a deployment's
   runners keep the image `channel.json` and `profile.json` name until an administrator builds another and names
   its ID in both. (Since D6 it does: "Implementation record: image upgrades".)
@@ -1094,7 +1115,9 @@ Left to later work (in the task's comment for the coordinator):
   `data/managed-runners`, not on Docker's data root. Taken up by D8 (Implementation record: channel and template
   hardening).
 - **The host's own services are reachable.** Runners reach every service the host listens to on another address,
-  and the LAN; the default deployment adds no firewall rule.
+  and the LAN; the default deployment adds no firewall rule. (Since D9 a fresh install firewalls the managed runners'
+  network on the host, and the Docker channel starts no runner without it: Implementation record: the managed
+  runners' host firewall.)
 - **Two defence-in-depth gaps in the channel.** It caps each container but not their number, and it offers volume
   deletion to the token's holder although the manager never asks for it. Taken up by D8 (same record).
 
@@ -1245,7 +1268,8 @@ Left to later work, or not shown here:
 - Docker older than 27 keeps `/tmp` `noexec` (logged); only 29.8.2 was run.
 - After the channel has been recreated, `docker compose down -v` leaves the empty probe volume behind; the runbook
   says so.
-- What a runner may reach on the host and its LAN (D5's finding 6) waits for the owner.
+- What a runner may reach on the host and its LAN (D5's finding 6) waits for the owner. (The owner decided on
+  2026-10-19; D9 implements it: Implementation record: the managed runners' host firewall.)
 
 ## Implementation record: Kubernetes reconciliation in the lab
 
@@ -1429,6 +1453,435 @@ by `scripts/managed-runner/lab/acceptance-lab.py` in one pass on the project lin
 | Busy and idle | A long turn and a background job each kept their runner READY past the idle interval, and the owner's sleep was refused `409 MANAGED_RUNNER_BUSY`; once the work ended each slept by itself. |
 | The controller | Both apiservers SIGKILLed while one runner was being woken and the other ran a turn: the turn finished, the waking runner came up without a second Pod create, and the database and Kubernetes agreed. |
 | Backup and restore | The RBD image of a disabled, asleep account exported out of the VM to the host, checked there with no cluster (`debugfs`, SQLite, Git, checksums), and written into a new claim's image, which read back byte for byte as the backup; a Pod found the data there. The original was untouched and its runner woke on it. A static PV naming an imported image cannot be used with this Ceph-CSI (its ControllerPublish refuses the handle and its ControllerUnpublish panics), so the runbook restores into a claim the driver provisions. |
-| Not established | Everything across nodes: a planned move to another node, takeover after a node stops or is fenced (an accepted fencing receipt, the out-of-service taint), and refusing a duplicate Pod on another node. A real model: the sessions ran on fake-model.py. A way to put a restored claim back under an account's runner: the manager accepts only its recorded claim, PV and handle, and switching a mapping to a verified new claim, which this design's retention section calls for, is not implemented. Encryption at rest of the backup. Rolling the apiserver back past the managed-runner feature. |
+| Not established | Everything across nodes: a planned move to another node, takeover after a node stops or is fenced (an accepted fencing receipt, the out-of-service taint), and refusing a duplicate Pod on another node (since T02 on the two-node lab: "Implementation record: one runner across two nodes"). A real model: the sessions ran on fake-model.py. A way to put a restored claim back under an account's runner: the manager accepts only its recorded claim, PV and handle, and switching a mapping to a verified new claim, which this design's retention section calls for, is not implemented (since T08b an administrator's switch does it: "Implementation record: a restored volume back under its runner"). Encryption at rest of the backup. Rolling the apiserver back past the managed-runner feature. |
 
 Verified on 2026-10-18 ([evidence](evidence/managed-runner-acceptance/2026-10-18/README.md), [the lab page](managed-runner-lab.md#end-to-end-acceptance-t08)).
+
+## Implementation record: a restored volume back under its runner
+
+Recorded 2026-10-18 for task T08b, which closes the gap T08 left (its record above, "Not established"): a restored volume
+had no way back under an account's runner. The manager accepts a runner's data volume only as recorded, and a Kubernetes
+claim's UID cannot be recreated, so a runner whose volume was lost or damaged stayed `FAILED` `PVC_MISSING` for good. The
+retention section above calls for the manager to switch the mapping explicitly to a verified new claim; this is that
+switch. The operator's side is [the runbook](managed-runner-kubernetes-operations.md#put-a-restored-volume-back-under-its-runner).
+
+| Area | As implemented, and why |
+| --- | --- |
+| Who asks | An Orbit administrator: `POST /api/admin/managed-runners/:id/volume-switch`, `:id` the runner's (`managed-runner-admin.controller.ts`), behind JwtAuthGuard, the managed switch and AdminRoleGuard in that order, and refused to a personal access token. Off, it answers `404 MANAGED_RUNNER_DISABLED` before the role or the body is read, as the owner's writes do. The body names the restored claim by the UID the administrator verified, the mapping's `revision`, a `reason` for the audit row and an `idempotencyKey`, and `confirmReplacement` unless the manager found the old volume missing itself. The other ways the task allowed were weighed. An owner can neither make nor check a claim. An operator's ConfigMap or annotation would carry no identity Orbit could put in the audit row, and its refusal would have to be read back from somewhere; the call answers at once with the check that failed. |
+| Which volume | Only the claim under the runner's own fixed name, `mr-data-<runner uuid>`, in the managed namespace. The names, the Pod template, the mapping's CHECK on its names and the admission guard stay as they are. A claim under a managed name is one no Pod but the runner's own may use from the moment it exists, so nothing can have mounted the restore before the switch, and nothing but the reserved generation can after it. A claim of another name could have been used by any Pod until the switch, and the manager, which may not list Pods, could not have shown none did. This design calls a claim found under the name with a different UID a conflict for review: the switch is that review's outcome, made explicit. |
+| The checks | Under the mapping's lease, with a holder of its own (`switchVolume` in `managed-runner-manager.ts`; the Kubernetes reads are `readReplacement` and `recordedVolumeHolders` in `kubernetes-backend.ts`). Each refuses the switch, nothing switched or recorded, with a code, a sentence and the operator's detail. The mapping is `SLEEPING` or `FAILED`, not deleted, with no resource operation in flight and a volume recorded, and either `FAILED` `PVC_MISSING` or confirmed (`managed-runner-volume-switch.ts`). An instance still recorded needs the gate's own stop proof (`stopProofFor`) and its object gone. The claim is the one named and not the recorded one, not being deleted, and bound. It carries the marks every pass checks (`pvcIdentityProblem`: owner and runner annotations, no owner reference, the storage class, `ReadWriteOnce`, `Filesystem`), and its PV is bound to it (`pvIdentityProblem`). No other mapping records its UID, its PV's UID or the handle, and its PV was not made before it, as a retained PV rebound by hand would be. Nothing attaches it, and no Pod is under the runner's name. No attachment holds the recorded PV, found by its recorded UID or handle (one whose PV cannot be read counts). The admission guard refuses a probe of the runner's template on it. |
+| The switch | One transaction (`commitSwitch`). The mapping is written by a compare-and-set on the revision, the switch's lease, the state, the generation and the recorded Pod: the new claim UID, PV UID and handle, `SLEEPING`, its reason, attempts and drain fields cleared. The desired state is kept, so demand that waited wakes the runner at once. An instance still recorded is retired there on its proof, as a sleep retires one: generation + 1, the credential nobody may hold any more replaced, the proof marked retired, its compute given back. The storage share stays, for a volume of the same size. |
+| Audit | One `activity` row in the same transaction, type `managed_runner.volume_switched`: the administrator (`actor_id`), the time, the mapping, owner, runner, backend, cluster and namespace, the generation, the state, desire and reason before, `from` and `to` (claim UID, PV UID, handle, and the new PV's name), the instance retired if any, the confirmation, the reason given and the idempotency key. The same key again is answered from the mapping, with nothing written. No migration: the activity feed is append-only with no foreign key, and is where the other administrator actions are recorded (`user.disabled`, `user.impersonated`). |
+| What stays as it was | The single-writer gate, its stop proofs and fencing, the admission guard's rules and the capacity rules. After a switch they read the new claim as they read the old one. The next wake is the reserved generation's Pod, admitted for the new claim's UID. Its next sleep's stop proof names the new claim and handle, and a Pod gone without a report fences. The old PV and RBD image, where they still exist, are no longer Orbit's: a storage operator purges them under the retention policy. |
+| Docker | No switch (`NOT_APPLICABLE`). The Docker runbook's restore (`volume-backup.sh`) gives the volume back its recorded identity, and a `PVC_MISSING` runner is retried once it is back (`PVC_RESTORED`, D7). |
+| Clients and census | No client changed: after a switch the runner is `SLEEPING`, a state every client shows, and no owner reason or fixture state was added. The route has a path parameter, so the tenant isolation census lists it, by hand (`TENANT_ISOLATION_BY_HAND`): the census server runs with managed runners off, where every caller is answered 404. The reading cites the guard, the lookups and the pg spec that sends the route. |
+
+Verified on 2026-10-18 ([evidence](evidence/managed-runner-volume-switch/2026-10-18/README.md), [the lab page](managed-runner-lab.md#a-restored-volume-back-under-its-runner-t08b)):
+
+- `managed-runner-volume-switch.pg.spec.ts`, on the fake cluster with the admission guard and a real PostgreSQL, the route
+  sent over HTTP:
+  - (1) A volume lost while asleep fails its wake, `PVC_MISSING`. Thirteen switches that cannot be verified are refused,
+    each with its check, and nothing is switched or recorded in the database or the cluster: no volume; another account's
+    marks; storage another mapping records; a PV made before its claim; one not bound; one attached; one a Pod admitted
+    before the guard uses; a Pod under the runner's name; the recorded PV attached; another UID; a moved revision; no
+    guard; another manager's lease. So are a stranger (401), a member (403), an unknown runner (404) and malformed
+    requests (400). The restored claim is switched to with one audit row. The waiting wake starts the reserved generation
+    on it, its Pod admitted for the new claim's UID, no claim created. A replay, even while a pass holds the lease,
+    writes nothing.
+  - (2) After the switch, the guard refuses another Pod on the new claim, and the next sleep's stop proof names it. A Pod
+    gone without a report fences, and the switch then refuses the runner.
+  - (3) A disabled account's sleeping runner whose volume is replaced: refused while the recorded claim is under the name
+    and without the confirmation; switched with it; asleep while work waits; woken on the new claim once enabled.
+  - (4) A runner that failed `PVC_MISSING` with its stopped Pod recorded is switched on the recorded proof (the generation
+    retired, the credential replaced, the compute given back), and starts its next generation on the new claim. One that
+    failed with its Pod still running is refused.
+  - (5) READY is refused, and a server on Docker answers `NOT_APPLICABLE`.
+- Unit specs: `managed-runner-volume-switch.spec.ts` (the state rule, and the Kubernetes reads of the claim and of the
+  recorded PV's attachments on the in-memory cluster), `managed-runner-disabled.spec.ts` (off, the route reads nothing),
+  `managed-runner-boot.pg.spec.ts` (the production server, off and unavailable) and the census.
+- The lab's real k3s, `switch-lab.py` in one run at `eccae61cd` (22 steps, 78 checks, 8 minutes). An account was
+  provisioned, wrote data and was backed up off the cluster. Then its claim, PV and RBD image were deleted, and its wake
+  failed `PVC_MISSING`. The runbook's restore went into a new claim under the runner's name, which read back byte for byte
+  as the backup. A member's switch, another UID and a stale revision were refused; the administrator's switch wrote one
+  audit row. The waiting message then woke the runner on the restored claim: the same runner ID, generation 2, a Pod
+  admitted for the new claim's UID. The data, `integrity_check`, uploads, worktree, transcripts and the engine's session
+  were as backed up, and there was never more than one Pod on the volume.
+- Found in the lab and fixed (`eccae61cd`): the same switch sent again right after it was refused `MAPPING_BUSY`. The
+  switch kicks the manager, whose wake pass then holds the lease. A replay is now answered from a read.
+
+Left to later work, or not shown here:
+
+- Across nodes: a switch on a cluster of several nodes, with the restored claim attached on another node than the lost one.
+- Ceph clients: the manager cannot see them, so that nothing maps the old RBD image is the operator's check
+  (`rbd status`), not the switch's. In the lab the old image had been deleted.
+- A runner that failed `PVC_MISSING` while fencing, its predecessor's stop unproven, is refused. The manager reads an
+  operator's fencing receipt only in `FENCING`, which a failed mapping does not go back to. This was not reached in the lab
+  or the specs, and no way out is built for it.
+- No client offers the switch: it is the runbook's API call, and the admin pages have no button for it.
+- No model: fake-model.py stood in for the owner's DeepSeek key.
+
+## Implementation record: the managed runners' host firewall
+
+Recorded 2026-10-19 for the second phase's task D9. D5 measured that a managed runner reaches every service its host
+listens to on an address other than loopback (sshd and rpcbind on the HPC host, through the network's gateway, docker0
+and the LAN address), and through the host the LAN behind it. Since every account of a new deployment gets a runner,
+open sign-up included, anyone who signs up could probe the deployer's host and network from their runner. The account
+owner decided on 2026-10-19 (ask_owner 34hXDEryfBDt3Dq5b95wD) that a fresh install adds host firewall rules by default:
+the managed runners' network reaches the Orbit service port and the internet, and every other port of the host and
+the private ranges are refused; Docker and host restarts apply them again; the deployer can turn them off; upgrading an
+existing deployment changes nothing. The owner accepted the cost: the install changes the deployer's host firewall,
+and hosts with nftables only, rootless Docker or a cloud firewall may need manual work. The operator's side is in
+[the operations runbook](managed-runner-docker-operations.md#the-managed-runners-firewall) and
+[self-hosting](self-hosting.md#isolation-and-its-limits); the program is
+[deploy/managed-runner/firewall](../deploy/managed-runner/firewall/README.md).
+
+| Area | As implemented, and why |
+| --- | --- |
+| How the rules are kept: a Compose service | `managed-runner-firewall`, built from `deploy/managed-runner/firewall` (Python's standard library and the iptables binaries), run with the host's network, `NET_ADMIN` and `NET_RAW`, every other capability dropped, a read-only root, `no-new-privileges` and no Docker socket. It writes the rules, checks them every 10 seconds and writes again what changed, and Docker restarts it with the stack (`restart: unless-stopped`) after its own restart and after a host's. A systemd unit was weighed and not taken: the install needs only Docker access today, never root on the host or systemd, and a unit would need both, would live outside the checkout or name its path, and would not come and go with the stack. The service's costs are one more resident container with the host's network, and the seconds after a host restart before it has written the rules, which the channel's gate below closes. |
+| Its own profile | `managed-runner-firewall`, beside `managed-runners-docker` in `COMPOSE_PROFILES`. Under the Docker backend's profile, `--no-managed-runner-firewall` could not leave it off, and `/upgrade --pull-base`, whose full recreate starts every service of every active profile, would have started it on every deployment installed before it. |
+| The rules | Two chains, `ORBIT-MR-INPUT` and `ORBIT-MR-FORWARD`, reached from the first rule of `INPUT` and of `DOCKER-USER`, by jumps that match the network's bridge (`-i <bridge>`): nothing else on the host is touched. To the host: the replies of connections made, the gateway's published port at the network's gateway address, DNS to `dnsServers`, the operator's `allow`; everything else is rejected on every address. Through the host: replies, the published port as Docker DNATs it (`--ctstate DNAT --ctorigdst <gateway> --ctorigdstport <port>`: the DNAT target is the gateway's container on the stack's network, a private address), `dnsServers`, `allow`, then IANA's special-purpose IPv4 blocks that are not globally reachable are rejected (10/8, 172.16/12, 192.168/16, 100.64/10, 169.254/16 with the metadata address, 127/8, 0/8, 192.0.0/24, 192.0.2/24, 198.18/15, 198.51.100/24, 203.0.113/24, 224/4, 240/4). Allowed packets `RETURN` to the host's own rules and rejected ones get `icmp-admin-prohibited`, so the rules only ever take reachability away, and a refused connection fails at once (`EHOSTUNREACH`) instead of hanging. Each write is one `iptables-restore --noflush` transaction: declaring a chain empties it, the old jumps go and the new ones go first, all or nothing in both backends. |
+| Userland proxy on and off | On Docker 29 a runner's connection to the gateway address and port 2086 is DNATed in both cases (the nat `DOCKER` chain has no exception for other bridges), so it is `FORWARD` traffic either way. Docker before 28 skips the DNAT for traffic from a bridge when the proxy is on, and `docker-proxy` answers through `INPUT`: the `INPUT` rule for the gateway address and port covers that. |
+| IPv6 | The network is created IPv4-only (`--ipv6=false`, whatever Docker's `default-network-opts` say), and the install refuses one with IPv6 on. Docker 29 also turns IPv6 off on a container's interface on an IPv4-only network (measured: `disable_ipv6` 1 on `eth0`). As defence in depth, everything IPv6 from the bridge is rejected too (`ip6tables`, the same two chains, through `DOCKER-USER` where Docker manages ip6tables and `FORWARD` where it does not). A kernel without IPv6 gets IPv4 rules alone. |
+| DNS | Docker's embedded resolver forwards a runner's queries to the host's own resolvers from the host's namespace (`# ExtServers: [host(192.168.1.254)]`), which no rule here sees: DNS works with the private ranges refused. Servers that Docker's `dns` setting or `--dns` names are reached from the container's own namespace instead (measured on Docker 29.8.2: the query left from the container's address), and the HPC host's resolver, 192.168.1.254, is private. So the install reads those servers from a container on the network (`docker-dns`), writes them into `dnsServers`, and checks that a name resolves after the rules if it did before. |
+| The gate in the Docker channel | Where `firewall/config.json` is beside `channel.json`, the channel creates or starts a runner container only while `firewall/status.json` says the rules are in force: `"enforced"`, within `validUntil` (three check intervals), with this boot's ID, and for the bridge and gateway the configured network has now (Docker's view, so a network made again with another bridge is caught). Otherwise `503 FIREWALL_NOT_ENFORCED` with the reason, before anything is made. The manager first took that as a transient failure, and on the isolated host four refusals and the next stop failed a runner (`POD_TERMINATED`, five of five): it now waits on it as on `CONTAINER_LIMIT` (`ManagedFirewallNotEnforced`, `waitForRoom`): nothing made or spent, asked again every `capacityRetrySeconds`, said once, and the runner starts by itself once the firewall is back. The service writes `"starting"` before anything else, so a status a killed run left is not believed, and `"stopped"` when it stops. The channel is the place for it because it is the one process that starts runner containers and the one that can see the network's bridge; the apiserver only learns to wait on its refusal. Without the gate, a runner started in the seconds before the service writes the rules at boot, or while it cannot write them, would run unprotected. |
+| iptables backends | The service uses the backend whose filter table holds Docker's `DOCKER-USER`, jumped to from `FORWARD`. It reads the legacy backend only where legacy tables exist, because reading it would make them, and it refuses when both or neither hold Docker's chains: Docker's nftables backend, `"iptables": false` or rootless Docker. The legacy backend replaces a whole table at a time and must share the host's `/run/xtables.lock` with Docker's own calls: the install names it in `.env` (`ORBIT_MANAGED_RUNNER_FIREWALL_XTABLES_LOCK`) on such a host, and Compose binds it with `create_host_path: false`, since a directory made in its place would break the host's iptables. The nft backend takes no lock and gets `/dev/null`. |
+| A safe failure at install | Before anything is written: rootless Docker and Docker's nftables backend are refused from `docker info`, and the program's preflight tries every match and target the rules use in a scratch chain no packet reaches, then removes it. Once the network exists, its IPv6 is checked and the rules are applied once from `config.json.new`. From a container on the network, the gateway on a closed port, the metadata address and a 10/8 address must be refused by a firewall (`EHOSTUNREACH`, not a timeout or `ECONNREFUSED`), and DNS must still resolve if it did before. Only then does `config.json` take its place, which is what arms the channel's gate. Once the stack is up, the gateway's port must be reached from the network. Each failure stops the install with the reason and the way out: fix it, or `--no-managed-runner-firewall`. |
+| Turning it off | `--no-managed-runner-firewall` (with a fresh install or `--enable-managed-runners`) leaves the host's firewall alone. `COMPOSE_PROFILES` then names the Docker backend's profile alone, `.env` carries a note that the firewall is off, and the install warns as it starts and as it ends. Later, the runbook turns it off: the service removed, `config.json` moved aside (the channel stops waiting) and the profile taken out of `.env`. `remove` takes the rules off; until then they stay. `--enable-managed-runner-firewall` adds it to a deployment that has managed runners without it. |
+| Existing deployments | `/upgrade` never builds, starts or recreates the service. The `.claude` copy's `--pull-base` recreate leaves it out by name, and the `.agents` copy names its services already. So a deployment without the firewall gets no rule, and one with it keeps its rules and its service's image as they are. `--enable-managed-runners` firewalls the managed runners it switches on, unless told not to. |
+| Untouched | `deploy/managed-runner/image` (T03's) and the Kubernetes templates. The apiserver changes only to wait on `FIREWALL_NOT_ENFORCED` (above); the clients show its message as they show every reason's. |
+
+Verified on 2026-10-19 in an isolated Docker host on the HPC machine (`docker:29.8.2-dind`, its own network namespace and
+iptables, capped, outside the runner's cgroup; Docker 29.8.2, kernel 6.12.107, iptables 1.8.13), every result read
+from inside a managed runner container ([evidence](evidence/managed-runner-docker-firewall/2026-10-19/README.md)). The
+HPC host's own firewall, network and Docker were not touched.
+
+- **Before** (the project line at 20eaa14b7, a fresh install): a runner reached the test host's services on every
+  address, the HPC host's sshd at its LAN address and at docker0, and a model endpoint on a private network behind the
+  host, as D5 found.
+- **`/upgrade` to this change**: no rule, no service, no file appeared, and `.env` was unchanged. The same held for a
+  deployment installed without managed runners.
+- **`--enable-managed-runner-firewall`** (the deployment with managed runners) and **`--enable-managed-runners`** (the
+  one without): the rules appeared. The same runner container was refused every port of the host and every private and
+  link-local address, the metadata address among them, and kept the gateway's port, DNS and public HTTPS.
+  - A session on a model endpoint behind the host failed with `EHOSTUNREACH`. Allowed by one `allow` entry, it was
+    answered.
+- **A fresh install**: the same, with its preflight before anything was written and its checks from the network.
+  - **dockerd restarted:** the rules never left the host.
+  - **The host restarted:** a new network namespace with no rule; the service wrote them again, and the runner's next
+    generation was created 19 s after that. In no sample did a runner container run without the rules.
+  - **The userland proxy off and on:** the same results. On Docker 29 the gateway is reached through Docker's DNAT
+    either way: the `FORWARD` rule counted it, the `INPUT` rule did not.
+  - **`/upgrade` of the firewalled deployment:** the same firewall container, byte-identical rules and configuration.
+- **The gate**: with the firewall service stopped (its rules left in place), a woken runner got no container until it
+  was back. At first the refusals spent the runner's attempts, and the next stop failed it (`POD_TERMINATED`); since
+  74f2c0ec5 it waits (`FIREWALL_NOT_ENFORCED`, attempt 0, asked every 60 s) and starts by itself.
+- **`--no-managed-runner-firewall`**: warnings at both ends of the install, the note in `.env`, no rule, and the runner
+  reaches what D5 measured.
+- **The legacy iptables backend**: detected, `.env` names `/run/xtables.lock`, the service mounts it, the rules go into
+  the legacy tables of both families, and the runner is refused as on nft.
+
+Left to later work, or not shown here:
+
+- Docker before 28 (the userland proxy through `INPUT`), firewalld and ufw hosts, SELinux, rootless Docker and Docker's
+  nftables backend were not run live; the install's refusal of the last two is unit-tested.
+- The kernel's boot ID did not change on the test host's restarts, so the gate's boot check was not exercised live.
+- IPv6 rules were checked present, not exercised with traffic: Docker 29 turns IPv6 off on a runner's interface.
+- A connection a runner had open before `--enable-managed-runner-firewall` is not cut; new ones are filtered at once.
+- The firewall's image is built at install and never rebuilt by `/upgrade`; a newer firewall program reaches an existing
+  deployment only by turning the firewall off and on again (the runbook).
+
+## Implementation record: one runner across two nodes
+
+Recorded 2026-10-19 for task T02, the cross-node part of criterion 2, on the lab's two nodes (task L1: two VMs on one
+physical machine, one failure domain, Ceph a single-host cluster in the first). No product code changed: the record is of
+what the delivered manager, admission guard and fencing gate did. It was run by `scripts/managed-runner/lab/takeover-lab.py`
+through the test server's manager, with its findings
+([evidence](evidence/managed-runner-cross-node/2026-10-19/README.md), [the lab page](managed-runner-lab.md#cross-node-migration-and-takeover-t02)).
+
+| Area | What the run established |
+| --- | --- |
+| Normal move | A runner put to sleep on one node (its kubelet's report recorded as the stop proof, the volume detached, no RBD client left) and woken with that node cordoned started its next generation on the other node. The runner, PVC, PV, volume handle, RBD image and workspace were the same; probe data, uploads, the worktree, transcripts and the engine's session carried over. The manager places nothing: the scheduler does, among the schedulable nodes. |
+| A second Pod on another node | While the runner ran on one node, Pods on its claim pinned to the other node were refused by the admission guard, whoever created them and in whatever shape. The refusals were `NOT_THE_MANAGER`, `NOT_THE_FIXED_NAME`, `NOT_RESERVED`, `NOT_THE_RESERVED_GENERATION`, and a Job's Pod refused at its controller's create. The guard decides from the database and never looks at the node. Without it, RWO alone left a second node's Pod `Pending` (the attach/detach controller), a refusal the out-of-service taint deliberately overrides; on one node RWO admits a second Pod outright. RBD alone (`layering`, no `exclusive-lock`) let a second client open and read the image. |
+| A node that stops | The node's power cut while its runner wrote. For 420 s the mapping stayed `READY` at its generation with its Pod recorded, and the owner's status said not usable once the heartbeat was stale. No Pod, admission probe or Secret was created, demand waited and the owner's retry was refused. The VolumeAttachment stayed on the dead node, and the taint manager's eviction (`DeletionByTaintManager`) left the Pod `Running`, held by the stop-report finalizer. |
+| Failover | The runbook's steps: a `NODE_POWER_OFF` receipt bound to the predecessor, the out-of-service taint, the finalizer taken off. PodGC made the Pod `Failed` and the attachment was force-deleted. The manager went `FENCING` on a Pod terminal by the control plane's word, replacing the predecessor's credential, then accepted the receipt as the stop proof and started the next generation on the other node. Every SQLite row acknowledged before the cut was there after WAL recovery, `integrity_check` ok, fsynced files as before. |
+| The old node's return | Under the taint it mapped and mounted nothing of the volume and ran nothing of the old Pod. Its kubelet could not reach the CSI driver, whose node plugin the taint evicts. The old generation's credential was refused 401, and an instance naming it 403 `MANAGED_RUNNER_INSTANCE_SUPERSEDED`. With the taint removed the node rejoined, and the volume stayed with the new generation. |
+
+Found, and left to later work (reported to the coordinator):
+
+- **For an unreachable node, the manager does not persist `FENCING`** until the operator's out-of-service taint lets
+  PodGC make the Pod terminal: the mapping stays `READY`, and the predecessor's credential valid, until then. The
+  coordinator decided on 2026-10-19 to keep this behavior. "Single Pod and single writer protection" above now
+  describes it, with the reasons. T08x saw it again with two runners on the stopped node
+  ([its record](#implementation-record-two-accounts-across-two-nodes)).
+- **Work a node had not made durable when it lost power can be lost**, and a repository with it.
+  - Git fsyncs neither loose objects nor refs by default. ext4 allocates delayed blocks at writeback, and a rename is
+    durable only at the next journal commit.
+  - A commit 14 s before the cut came back as zero-length files.
+  - With `core.fsync=committed,index`, a commit 1.5 s before a cut kept its objects but lost `HEAD` and its branch ref.
+  - The runner's workspace and worktrees are such repositories. Making the Git work that must survive durable (for
+    example syncing the volume after it), or repairing a repository at the next start, is the image's and the runner's.
+  - **Handled by T02c** (2026-10-19): a managed runner syncs its volume before it reports work and behind every tool an
+    engine runs, and looks at its repositories when it starts. The approach, what it covers and what it costs:
+    [Git work and engine sessions through a power cut](#implementation-record-git-work-and-engine-sessions-through-a-power-cut).
+- Not established: a partition that keeps the old node running, a storage fence as the receipt's method, two managers,
+  failover across physical machines, a real model.
+
+## Implementation record: two accounts across two nodes
+
+Recorded 2026-10-19 for task T08x, the cross-node part of criterion 8, on the lab's two nodes (task L1: two VMs on one
+physical machine, one failure domain, Ceph a single-host cluster in the first). No product code changed: the record is of
+what the delivered manager, admission guard and fencing gate did for two accounts at once, and of the runbook as it was
+followed. It was run by `scripts/managed-runner/lab/cross-node-lab.py` through the test server's manager
+([evidence](evidence/managed-runner-cross-node-accounts/2026-10-19/README.md), [the lab page](managed-runner-lab.md#two-accounts-across-two-nodes-t08x)).
+
+| Area | What the run established |
+| --- | --- |
+| Normal move, two accounts | Both runners put to sleep on one node and woken on the other, one by a message and one by a task run now: each the same runner, PVC, PV, volume handle, RBD image and workspace, with its probe data, uploads, worktree, transcripts and engine session. Both again by `kubectl drain` of either node: the next generations on the other node, with their data and sessions. |
+| Second Pods on another node | For each account the shapes T02 tried, and Pods mixing the two accounts' runners and claims (`NOT_THE_FIXED_NAME`, `NOT_THE_OWNER`, `MULTIPLE_MANAGED_CLAIMS`), were refused while the runners ran. So were Pods made while the node was lost and the volumes still attached to it, the next generation's under the fixed name among them (`NOT_THE_RESERVED_GENERATION`): the guard reserves nothing a receipt has not opened. |
+| A node that stops with two runners | Both mappings stayed `READY` at their generation for 420 s: no Pod, admission probe or Secret was created, demand waited and retries were refused. This is the behavior "Single Pod and single writer protection" now describes. |
+| Failover | The runbook's query and commands, two receipts, one out-of-service taint, two finalizer patches. One Pod's finalizer came off right after the taint and the other's once its mapping was `FENCING`. The manager fenced on the Pod object's removal (`gone without a stop proof`) for the one and on PodGC's `Failed` (`not by its kubelet's report`) for the other, accepted each receipt as its stop proof and started both next generations on the other node. Every SQLite row each writer acknowledged was there, `integrity_check` ok, Git commits made more than a minute before the cut intact. |
+| The old node's return | Under the taint it mapped nothing of either volume and ran nothing of either old Pod; both old generations' credentials were refused. |
+
+Found (reported to the coordinator):
+
+- **The engine's transcript loses what was not written back.** Claude Code does not fsync its transcript on the volume.
+  - A turn answered 20 s before the power cut was missing after the takeover, and the session went on without it.
+    Orbit's server kept its events.
+  - A volume synced in the runner container just before the cut kept its last turn.
+  - Like Git work (T02's finding), this is data the image or the runner would have to make durable. It belongs with T02c.
+  - **Handled by T02c** (2026-10-19): the volume is synced before the runner reports a turn's end, so a turn the control
+    plane has heard is over is in the transcript the next generation resumes
+    ([the record](#implementation-record-git-work-and-engine-sessions-through-a-power-cut)).
+- **The planned move needs `kubectl drain --delete-emptydir-data --force`**, for a bare Pod with an emptyDir. A drain
+  ends only when a manager records each evicted runner's stop. A managed Pod no running manager records holds the drain
+  until its timeout: here, an earlier task's Pod, which the drain marked for deletion. The runbook now says so.
+- Not established: a real model, a partition, a storage fence, the failure of the node that runs the control plane, two
+  managers, failover across physical machines.
+
+## Implementation record: Git work and engine sessions through a power cut
+
+Recorded 2026-10-19 for task T02c, part of criterion 2. It handles T02's finding 2 and T08x's finding about the engine's
+transcript ([above](#implementation-record-one-runner-across-two-nodes)). The lab runs were on the lab's two nodes
+(task L1: two VMs on one physical machine, one failure domain, Ceph a single-host cluster in the first)
+([evidence](evidence/managed-runner-power-cut-durability/2026-10-19/README.md),
+[the lab page](managed-runner-lab.md#git-work-and-engine-sessions-through-a-power-cut-t02c)).
+
+**What a managed runner does.** The code is in `src/runner-go/volume_durability.go` and `managed_repo_recovery.go`.
+
+| Where | What |
+| --- | --- |
+| Before a report | The runner syncs the volume (`syncfs`, its filesystem only) before it reports work that lives on it. That covers a turn's end (a failed turn's too), a session's end (after its finalize commit), the session's checkout (before its engine starts), a commit, a merge, a checkout cleanup and an integration job's result (after its spooled copy). A report waits at most 30 s for the sync, then goes on and logs it. |
+| Behind every tool | After every tool result an engine reports, a sync runs in the background, one at a time; a result during one runs one more after it. The engine is not held up. Claude Code, Codex, Kimi, OpenCode, Antigravity, Cursor and DeepSeek Harness all report tool results through the session's one emitter. |
+| At start | Before anything runs Git, the runner looks at the checkouts under `reposRoot` and the sessions' worktrees. Lock files no process holds are removed, and a branch left empty or missing is restored from its own reflog. Anything else that cannot be read is logged, and every session that would work there is refused: `REPOSITORY_DAMAGED` with the reason, its session `FAILED`. setupWorktree's fallbacks used to run such a session in the workDir without a checkout, or start a new repository over the broken one. |
+| Who | A managed instance only: `ORBIT_MANAGED_RUNNER_GENERATION` and `ORBIT_MANAGED_RUNNER_POD_UID` set. A self-managed runner does none of this. |
+
+**Which Git writes are covered.** A `syncfs` writes back everything dirty on the volume and commits its journal. At
+each point above, that covers all of these:
+
+- loose objects, packs and their indexes;
+- refs and `packed-refs`, `HEAD` (as `git init`, `git worktree add` and a checkout write it) and the index;
+- reflogs, config and worktree metadata (`gitdir`, `commondir`, the worktree's `.git` file);
+- the checked-out files, the engine's transcripts and session files, and the runner's own records.
+
+Git's own setting covers much less. Traced with strace for Git 2.47.3, the image's
+([kit/git-fsync-coverage.py](evidence/managed-runner-power-cut-durability/2026-10-19/kit/git-fsync-coverage.py)):
+
+- `core.fsync=all` fsyncs loose objects, refs, `packed-refs` and the index before they are put in place.
+- It never fsyncs `HEAD`, a worktree's `HEAD` or metadata, reflogs, config or checked-out files.
+- It leaves a command's last rename (its ref, often its index) to the next journal commit. In the trace, 10 of 15 ref
+  writes and 4 of 11 index writes were not durable when the command returned.
+- `git init` made no fsync at all.
+
+**Why not Git's own fsyncs.** On top of those gaps, they cost one device round trip per file. These are medians of
+`git add` and `git commit` in a fresh repository
+([kit/git-commit-timing.py](evidence/managed-runner-power-cut-durability/2026-10-19/kit/git-commit-timing.py)):
+
+| Storage | Commit | Git's defaults | defaults, then `syncfs` | `core.fsync=all` | `core.fsync=all`, `fsyncMethod=batch` |
+| --- | --- | --- | --- | --- | --- |
+| Lab: the runner class's ext4 on RBD, second node | 1 file | 49 ms | 299 ms | 893 ms | 1103 ms |
+| | 200 files | 162 ms | 1.04 s | 59.2 s | 19.1 s |
+| HPC host: ext4 on HDD | 1 file | 7 ms | 71 ms | 109 ms | 228 ms |
+| | 200 files | 22 ms | 129 ms | 4.71 s | 192 ms |
+| HPC host: ext4 on NVMe | 1 file | 4 ms | 15 ms | 25 ms | 26 ms |
+| | 200 files | 19 ms | 26 ms | 560 ms | 45 ms |
+
+- On the lab's volume (`data=ordered`, `commit=5`, three OSDs on one HDD), Git's fsyncs made a one-file commit 18 times
+  slower and a 200-file commit 365 times slower. The same commit followed by one `syncfs` took a third of that time for
+  one file and a fiftieth for 200, and also covers what Git leaves out.
+- `batch` writes each object through and waits for it, so on high-latency storage it gains little. Git does not document
+  it as safe on Linux.
+- A `syncfs` with nothing dirty took 0.1 ms on the lab's volume. After 1 MiB written it took 0.78 s, after 64 MiB 5.3 s.
+
+**Commit time before and after.**
+
+| What | Before (project line) | After |
+| --- | --- | --- |
+| An engine's own `git commit` | 49 ms / 162 ms (1 / 200 files, lab) | Unchanged: nothing is added to the engine's commands. A sync runs beside the engine after the tool's result, about 0.25 s / 0.9 s of background writeback on the lab's volume, 0.1 ms when the tool wrote nothing. |
+| The runner's own commit, merge, checkout | The commit alone | The commit, then one `syncfs` before the report: 299 ms / 1.04 s on the lab's volume (lab kit). End to end in the lab runs, from asking to the report: commit 0.78 → 2.03 s, merge 1.51 → 2.26 s, a new session's first engine commit 1.47 → 2.27 s (one sample each). |
+| A turn's end | No sync | One `syncfs` before `/turn-complete`: mostly already written by the syncs behind the tools. In the lab runs, a FAKE-WRITE turn from send to answered took 1.51 → 2.26 s. |
+
+**Self-managed runners.** They are unchanged. Their filesystem is their owner's, shared with everything else they run,
+where a `syncfs` writes back all of it. The HDD host above took 350 ms for one after 64 MiB written, and a build's output
+can be much more. Whether to pay that is the owner's call, not the runner's.
+
+**What the lab showed** ([evidence](evidence/managed-runner-power-cut-durability/2026-10-19/README.md)). The setup:
+
+- One account's runner on the second node, with three sessions.
+- In the last seconds, each run made five Git writes:
+  - a new session's checkout and an engine commit in a turn still running (s3, `FAKE-HOLD`);
+  - a runner commit and a runner merge into the workspace's `master` (s2);
+  - an engine commit (`FAKE-WRITE`) in a last turn that then ended (s1).
+- Then the second node's power was cut, and a copy of the volume's snapshot was read before anything mounted the volume
+  again. The runbook's failover followed, and the session was resumed.
+
+| | Before: the project line's runner (`8055bb568`, amy) | After: this change (`0e894464e`, bob) |
+| --- | --- | --- |
+| Seconds before the cut | Runner merge and last answer 0.0; engine commit 0.4; runner commit 1.5; s3's engine commit 2.3 | 0.0; 0.9; 2.3; 4.3 |
+| The repositories | All four unreadable. `master` and both session branches point at commits whose object files are empty (9 empty loose objects); s3's new worktree has an empty `HEAD`, `gitdir` and `commondir`; `git fsck` exit 11 | All four read; `git fsck` clean; no empty file, no lock |
+| Commits that had returned | The engine's last commit, the runner's commit and its merge: unreadable | All on their branches; s3's mid-turn commit too |
+| The engine's transcript | The last turn gone (0 of its lines); s3's transcript 0 bytes | The last turn there, its message and its final answer |
+| The resumed session | Resumed without the last turn (8 messages, the first turn's secret only), in repositories that still failed `fsck` | Resumed with it (14 messages, both secrets) |
+| The next start | (no check) | `volume check: 4 checkouts in 1 repositories after start; 0 stale lock files removed, 0 branches restored, 0 checkouts damaged` |
+
+The before run's damaged volume was then woken on this change's final build (`5928c0e0a`):
+
+- The runner's start logged each of the four repositories with its reason.
+- It refused the reclaimed sessions. The next message's session ended `FAILED` with
+  `REPOSITORY_DAMAGED: the Git repository at …/orbit-repos/default cannot be read: commit 22957bc…, where its branch
+  master points, cannot be read. The runner does not work in a damaged repository or start a new one over it: …`.
+- No engine was asked about that message, and nothing was started over the broken repository.
+
+The first wake, on `0e894464e`, refused the reclaimed session and then answered its next message anyway: the claim's
+payload dropped the refusal. `5928c0e0a` carries it over (`sessionPool.activatePrepared`), and a unit test covers it.
+
+**Limits.**
+
+- Work a tool did is durable a sync's time after the tool returns: 0.3–1 s on the lab's volume. A cut inside that
+  window can still leave what T02 found, and the next start then restores a broken branch or refuses the repository with
+  its reason. Here s3's commit, 4.3 s before the cut, was kept.
+- The Docker backend's volume is a directory of the host's filesystem, so a `syncfs` there writes back everything dirty
+  on that filesystem, other runners' data included. This was measured on the host's own disks above, not on a busy
+  Docker host.
+- No real model, one physical machine, the lab's slow storage. A real cluster's latencies differ, and so do the costs
+  above.
+
+## Implementation record: volume syncs on a shared Docker host
+
+Recorded 2026-10-20 for the second phase's task D10, part of criterion 12. T02c ([above](#implementation-record-git-work-and-engine-sessions-through-a-power-cut))
+has a managed runner `syncfs` its volume before every report and, in the background, behind every tool an engine runs.
+A Kubernetes volume on RBD is an ext4 of its own, so there the sync writes back the runner's own data. A Docker local
+volume is a directory of the Docker host's filesystem: the sync writes back everything dirty on it, the other runners'
+volumes and the deployment's Postgres (`./data/postgres`) among it. New deployments run the Docker backend and give
+every account a runner, so the cost was measured with up to eight runners at work on one Docker host
+([evidence](evidence/managed-runner-docker-volume-sync/2026-10-20/README.md)). The operator's side is in
+[the Docker runbook](managed-runner-docker-operations.md#volume-syncs-and-the-hosts-disk).
+
+**How it was measured.**
+
+- **Host.** An isolated Docker host on the HPC machine (`docker:29.8.2-dind`, capped, outside the runner's cgroup). Its
+  Docker data root and its deployment's checkout share one spinning disk, as on a default host whose `/var/lib/docker`
+  and checkout share its disk. A default install (`scripts/install-server.sh`), with runners of 1 CPU and 1 GiB so that
+  eight fit.
+- **Load.** 1, 4 and 8 runners, each running fake-model.py's tool loop turn after turn: three cycles of an edit, a
+  `git commit` and a build that writes 400 files (about 4 MB), then one more edit, which the runner itself commits once
+  the turn is answered. Each round's 120 s window had:
+  - every `syncfs` traced (an ftrace instance on the HPC host);
+  - the disk, IO pressure and the containers' cgroups sampled every second;
+  - the API probed as an account (8 requests a second through the gateway: three reads and a rename);
+  - Postgres probed by pgbench (one-row commits and reads).
+- **Control.** The same load on the runner from just before T02c (`326f43dc0`): an image that differs from T02c's only in
+  the runner binary.
+- **Patterns.** First with every runner in step: all start at once and every model step takes 2 s, so their syncs come
+  in bursts. Then staggered: random starts and steps of 1 to 3 s, as different people's sessions are. The staggered
+  rounds are the comparison; the rounds in step are the worst case of bursts. The rounds of a kind are pooled.
+
+**The bound.** For the Docker backend, against the same load without volume syncs, at each runner count measured:
+
+| What | At most | Why |
+| --- | --- | --- |
+| The API's p99 as an account sees it (its runner's status, a session, the session list, a rename) | 25% over, or 10 ms | Every account's clients and runners share the apiserver, while a runner's syncs make only that runner's work durable. What one account's durability costs the others has to stay small. |
+| Postgres's commit p99 (a one-row `INSERT`) | 50% over, or 10 ms | Every API write waits for a commit, and a commit waits for the WAL's flush on the shared disk: the first thing a sync on that disk slows. A request's own work dilutes it, so it may move more than the API's p99. |
+| Postgres's IO pressure (the share of time its tasks wait on IO) | 5 points over | The database's own stall, whatever the probes happen to ask. |
+| The runner's own commit, from asking to done (p50) | 1 s over | Its owner pays this for the durability of what the runner reports to them. |
+
+The bound was set after the first comparison of T02c with the control and before the change below was measured. It is
+relative to the control: a spinning disk's absolute latencies say little of an SSD host's.
+
+**The conclusion.** Pooled over the rounds of a kind. The rounds ran beside other sessions' work on the HPC host, and in
+a third of them outside memory pressure made the test host read back more than 100 MB of evicted page cache from the
+disk, which slowed every build alike; "undisturbed" leaves those rounds out. Both views are in the evidence.
+
+- **T02c's syncs exceed the bound at 8 runners in every view.**
+  - Staggered: Postgres's commit p99 759 ms against 400 with all rounds, 224 against 59 undisturbed; the API's p99 225
+    against 137, and 127 against 52.
+  - In step: 676 against 172 and 273 against 107, and the runner's own commit took 4.0 s at the median against 0.86.
+  - At 4 runners they exceed it with all rounds (341 against 115 ms in step, 431 against 156 staggered), though not in
+    the one staggered round without outside pressure. With one runner they stay within it.
+- **So on the Docker backend the runner now syncs before its reports only** (below).
+- **With that change, 1 and 4 runners are within the bound in every view.** At 4 runners staggered: the API's p99 54 ms
+  against 49, Postgres's commit p99 93 against 156, its IO pressure 2.5% against 2.7%, the runner's commit 773 ms
+  against 679.
+- **At 8 runners at work at once on one spinning disk, the syncs before reports still exceed it in every view but
+  one.**
+  - Staggered and undisturbed: Postgres's commit p99 184 ms against 59, the API's p99 95 against 52.
+  - Without the runner's commits, one sync per turn: 237 against 55, and 129 against 46.
+  - With all rounds the change looks within (314 against 400). That is the control's own round under memory pressure,
+    with 904 MiB left on the HPC host, lifting the control's tail.
+  - Every Postgres commit over 100 ms in the undisturbed rounds ran while one of those syncs did (51 of 51, and 64 of 68
+    without runner commits). In the control's undisturbed rounds one commit in all took that long.
+  - That is the guarantee's own cost. Each sync before a report writes back every runner's unwritten data on the disk,
+    and it is what keeps a reported commit and an answered turn through a power cut.
+- **The Docker backend's syncs are acceptable where at most four runners at work share a spinning disk with
+  Postgres.**
+  - The default profile (2 CPUs and 4 GiB a runner, a quarter of the host kept back) admits four runners on a host of
+    about 11 CPUs and 22 GiB, eight on one of about 22 CPUs and 43 GiB.
+  - A host that admits more runners than that, on spinning disks, wants Postgres on another disk than Docker's data
+    root, an SSD, or a lower `limits.maxContainers` ([the runbook](managed-runner-docker-operations.md#volume-syncs-and-the-hosts-disk)).
+
+**What changed, on the Docker backend only** (`src/runner-go/volume_durability.go`, `volume_shared_linux.go`):
+
+| Where | What |
+| --- | --- |
+| Which volume | At start the runner reads, from `/proc/self/mountinfo`, the mount that holds `ORBIT_HOME`. Its fourth field, the mount's root inside its filesystem, is `/` for a volume that is a filesystem of its own (an RBD volume's ext4), and the volume's directory for a Docker local volume (`/var/lib/docker/volumes/mr-data-…/_data`). A volume whose mount cannot be read counts as one of its own, so T02c's syncs stay. The start logs which: `volume syncs: before reports only; the volume is a directory of /dev/sdb (ext4), which it shares, …` or `… before reports and behind every tool; the volume is /dev/rbd0 (ext4), a filesystem of its own`. |
+| Before a report | Unchanged on both backends: a turn's end, a session's end, a checkout, a commit, a merge, a landing, a cleanup and the volume check each wait for a `syncfs` first. |
+| Behind every tool | Only on a volume that is a filesystem of its own. On a shared one the nudge does nothing. |
+| Kubernetes | Unchanged: an RBD volume is the root of its own ext4, so the runner keeps every one of T02c's syncs. T02c's power cut after-run, done again on the lab's two nodes with this change ([evidence](evidence/managed-runner-docker-volume-sync/2026-10-20/README.md#kubernetes-unchanged-t02cs-power-cut-after-the-fix-on-this-change)): the runner logged `volume syncs: before reports and behind every tool; the volume is /dev/rbd0 (ext4), a filesystem of its own`. After the cut, every repository read and passed `fsck`, every returned commit and the mid-turn one (3.4 s before the cut) were on their branches, and the session resumed with its last turn: 15 steps, 90 checks, as T02c's after-run did. |
+| Self-managed runners | Unchanged: they sync nothing. |
+
+Why these syncs: the ones behind tools were four in five of T02c's (186 a minute at 8 runners in step, the reports'
+32), and every report already waits for a sync of its own. Dropping them is what brings 4 runners within the bound. At
+8, the syncs before reports exceed it on their own, so no rate limit on the others could have brought 8 within it. A
+sync merged across the host's runners would need a channel from every runner container to something on the host,
+which the Docker backend's isolation does not give them.
+
+**What it does to durability.**
+
+- **Unchanged:** a commit, merge or checkout the runner has reported and a turn that has been answered are on the disk
+  before the control plane hears of them, as T02c made them.
+- **Wider:** what a tool writes in the middle of a turn reaches the disk at the next sync on that filesystem, whichever
+  runner makes it: this turn's end, a report, or another runner's report. Failing those, the kernel's own writeback
+  takes it, data dirty for 30 s (`vm.dirty_expire_centisecs`) at the flusher's next pass and its metadata at ext4's next
+  journal commit. Measured from each tool result to the end of the first sync that started after it (staggered):
+
+  | Runners | T02c | This change |
+  | --- | --- | --- |
+  | 1 | p50 0.04 s, p99 0.14–0.15 s | p50 9.6–11.5 s, p99 26–30 s |
+  | 4 | p50 0.04–0.07 s, p99 0.2–0.8 s | p50 3.2–5.4 s, p99 13–22 s |
+  | 8 | p50 0.09–0.11 s, p99 0.4–0.8 s | p50 1.5–1.8 s, p99 8–15 s |
+
+- **What a power cut in that window leaves:** a turn still running at the cut can lose its mid-turn work, as T02 found
+  before T02c (a commit's files empty). The turn had not been answered. The runner's next start finds it with T02c's
+  check: stale locks removed, a broken branch restored from its reflog, anything else refused with its reason. Its
+  session is not run in a broken repository.
+
+**Left to later work, or not shown here.**
+
+- Per-runner filesystems on Docker (a volume driver that gives each volume a filesystem of its own) would make a sync
+  the runner's own again. The runner would see it from its mount and keep T02c's syncs behind tools by itself.
+- Postgres on another disk than Docker's data root, an SSD Docker host, and the kernel's writeback settings were not
+  measured.
+- No power was cut on Docker: a test host inside the HPC host shares its kernel, and so its page cache. The window above
+  is computed from the traced syncs, not observed through a cut.
+- fake-model.py stands in for a model: its steps are regular and fast. The rounds ran beside other sessions' work on the
+  HPC host, whose memory pressure made some rounds re-read their page cache from the disk; each round records that, and
+  the comparison pools the rounds of a kind.

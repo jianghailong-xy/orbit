@@ -85,6 +85,7 @@ func init() {
 		sessionSourcePinV1,
 		codexRateLimitResetCapabilityV1,
 		integrationJobCapabilityV1,
+		integrationProgressV2Capability,
 		promotionAutomaticLandCapabilityV1,
 		codexAccountLoginCapabilityV1,
 		antigravityGoogleLoginCapabilityV1,
@@ -675,11 +676,24 @@ func (t *Transport) mergeResult(sessionID string, b MergeResultRequest) error {
 	return t.do(nil, "POST", "/runner/sessions/"+sessionID+"/merge-result", b, nil, 15*time.Second)
 }
 
-// integrationJobProgress renews a claimed job's lease and records the step it reached. Short
-// timeout and a plain error: a progress report that does not arrive costs nothing but the lease,
-// and the job's own work carries on regardless (docs/project-integration-line-contract.md §2.3).
-func (t *Transport) integrationJobProgress(jobID string, b IntegrationJobProgressRequest) error {
-	return t.do(nil, "POST", "/runner/integration-jobs/"+jobID+"/progress", b, nil, 15*time.Second)
+// integrationJobProgress renews a claimed job's lease and records the step it reached, and answers
+// what the control plane said (§2.2 J-T4). The answer is the stop signal in the other direction:
+// cancelRequested is a stop request, and a 409 or 404 is a claim that is no longer this process's.
+// A legacy claim's calls are best effort and ignore both, as they always have.
+func (t *Transport) integrationJobProgress(ctx context.Context, jobID string, b IntegrationJobProgressRequest) (*IntegrationJobProgressResponse, error) {
+	var out IntegrationJobProgressResponse
+	if err := t.do(ctx, "POST", "/runner/integration-jobs/"+jobID+"/progress", b, &out, 15*time.Second); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// integrationJobOutput uploads one chunk of a running check's output (contract §2.2 J-T4's output
+// route, §2.9 LS2). The answer matters only when it is a refusal: a 409 STALE_CLAIM / ALREADY_FINAL
+// or a 404 says the claim can never be written into again, and the uploader stops sending.
+func (t *Transport) integrationJobOutput(ctx context.Context, jobID string, b IntegrationJobOutputRequest) error {
+	var out IntegrationJobOutputResponse
+	return t.do(ctx, "POST", "/runner/integration-jobs/"+jobID+"/output", b, &out, 15*time.Second)
 }
 
 // integrationJobRelease hands a claimed job back (contract §2.2 J-T11): released, it is queued for the
@@ -1314,6 +1328,45 @@ func (t *Transport) getProject(id string) (json.RawMessage, error) {
 	return out, err
 }
 
+// getProjectIntegration reads a project's integration line as a session in the project (contract
+// §2.2 J-T4, §2.9 LS6): the queue, the three job kinds, why each waits, each task's newest landing
+// and each merge candidate's newest check and merge. READ ONLY.
+//
+// The session header is the authority the server checks against project membership; jobId names one
+// attempt and serves its check output under `log` (continued by cursor) and its timeline (continued
+// by timelineCursor), narrowed by claim, round and check (§2.9 LS2). This is the door that replaces
+// a coordinator querying the production database: the alternative to calling it is not a smaller
+// answer, it is an ungoverned one.
+func (t *Transport) getProjectIntegration(sessionID, id, jobID, claim, round, check, cursor, timelineCursor string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if sessionID == "" {
+		return nil, fmt.Errorf("reading a project's integration line needs a session: it is read as a session in the project")
+	}
+	if jobID != "" {
+		if err := validatePathSegmentID(jobID); err != nil {
+			return nil, err
+		}
+	}
+	query := url.Values{}
+	for name, value := range map[string]string{
+		"jobId": jobID, "claim": claim, "round": round, "check": check,
+		"cursor": cursor, "timelineCursor": timelineCursor,
+	} {
+		if value != "" {
+			query.Set(name, value)
+		}
+	}
+	path := "/runner/projects/" + url.PathEscape(id) + "/integration"
+	if encoded := query.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "GET", path, nil, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
 // getTaskAttribution reads unit L7's attribution boundary for one task: the project the work
 // counts towards (title, Base62 id, status), where it was NOTICED (evidence, and labelled as
 // evidence — §3 SC7 is explicit that finding work somewhere grants no authority to write there),
@@ -1639,6 +1692,25 @@ func (t *Transport) retryIntegration(sessionID, id, taskID, reason string) (json
 	var out json.RawMessage
 	err := t.doHeaders(nil, "POST",
 		"/runner/projects/"+url.PathEscape(id)+"/tasks/"+url.PathEscape(taskID)+"/integration/retry",
+		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
+	return out, err
+}
+
+// abandonIntegrationJob ends a running job whose runner has stopped reporting (contract §2.2
+// J-T10), as the project's coordinating session. The session header is the authority the server
+// checks against the project's own coordinator pointer; the reason travels as the body and stays on
+// the job's error_detail. The server's gate is the claim's lease expiry — a job still inside it is
+// refused — and a refusal travels as the server raised it.
+func (t *Transport) abandonIntegrationJob(sessionID, id, jobID, reason string) (json.RawMessage, error) {
+	if err := validatePathSegmentID(id); err != nil {
+		return nil, err
+	}
+	if err := validatePathSegmentID(jobID); err != nil {
+		return nil, err
+	}
+	var out json.RawMessage
+	err := t.doHeaders(nil, "POST",
+		"/runner/projects/"+url.PathEscape(id)+"/integration/jobs/"+url.PathEscape(jobID)+"/abandon",
 		map[string]interface{}{"reason": reason}, &out, taskOpTimeout, sessionHeader(sessionID))
 	return out, err
 }

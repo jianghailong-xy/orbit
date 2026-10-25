@@ -57,6 +57,14 @@ public enum SessionProjectCopy {
         minutes.map { "no report for \($0)m" } ?? "no report yet"
     }
 
+    /// §7.2 V6 in the row's own scale: the server judged the claim timed out — "timed out · no
+    /// report for 23m", amber words and no needs-you dot, because a stopped landing is a fact
+    /// rather than a question. Web: `SESSION_PROJECT_TIMED_OUT`.
+    public static let landingTimedOut = "timed out"
+    /// The server's SILENT claim in the row's scale: "no word from runner · 4m" — inside the
+    /// lease, so not a timeout. Web: `SESSION_PROJECT_NO_WORD`.
+    public static let landingNoWordFromRunner = "no word from runner"
+
     /// The project page's landing line, shortened for a row that is not redrawn every second:
     /// "Merge to main · queued · 13m", "Landing · checking · 4m · <task>". Nil when nothing is in
     /// flight; a server that sends only the count gets "Landing · N jobs". Web: `sessionProjectLandingLine`.
@@ -74,13 +82,38 @@ public enum SessionProjectCopy {
             return count > 0 ? SessionLine(text: "Landing · \(count) \(count == 1 ? "job" : "jobs")", tone: .queued) : nil
         }
         let heartbeat = job.heartbeatAt.flatMap(RelativeTime.parse)
+        let word = ProjectPage.integrationJobWords(main)[job.kind ?? ""] ?? "Integration"
+        let head = count > 1 ? "\(word) \(count) jobs" : word
+        let since = heartbeat ?? RelativeTime.parse(job.startedAt)
+        let minutes = since.map { Int(max(0, now.timeIntervalSince($0)) / 60) } ?? 0
+        // §7.2 V6: a server that derives the claim's liveness hands this row the fact, so it no
+        // longer reads the heartbeat against the claim lease by itself. A timeout is the server's
+        // verdict and is said in amber words — not the needs-you ink, and not its dot.
+        if let liveness = job.liveness, job.state == "RUNNING" {
+            if liveness == "LEASE_EXPIRED" {
+                return SessionLine(text: [head, landingTimedOut, landingSilentWord(minutes: minutes)]
+                    .joined(separator: " · "), tone: .warning)
+            }
+            if liveness == "SILENT" {
+                return SessionLine(text: [head, "\(landingNoWordFromRunner) · \(minutes)m"]
+                    .joined(separator: " · "), tone: .queued)
+            }
+            // LIVE, QUIET and LEGACY: the runner is reporting (or reports only between steps, so
+            // its quiet is not silence). A healthy long check stays "checking".
+            let state = ProjectPage.integrationPhaseWords(main)[job.phase ?? ""] ?? "running"
+            let text = [head, state, ProjectAttention.elapsedLabel(job.startedAt, now: now),
+                        count > 1 ? nil : job.taskTitle]
+                .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+            return SessionLine(text: text, tone: .running)
+        }
+        // An older server: the runner has gone quiet — the same claim lease the project page's
+        // landing row reads the same fact with.
         let silent = job.state == "RUNNING" && (heartbeat.map { now.timeIntervalSince($0) > 600 } ?? true)
         let running = job.state == "RUNNING" && !silent
-        let word = ProjectPage.integrationJobWords(main)[job.kind ?? ""] ?? "Integration"
         let state = job.state != "RUNNING" ? "queued"
             : silent ? landingSilentWord(minutes: heartbeat.map { Int(max(0, now.timeIntervalSince($0)) / 60) })
                 : (ProjectPage.integrationPhaseWords(main)[job.phase ?? ""] ?? "running")
-        let text = [count > 1 ? "\(word) \(count) jobs" : word, state,
+        let text = [head, state,
                     ProjectAttention.elapsedLabel(job.startedAt, now: now), count > 1 ? nil : job.taskTitle]
             .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         return SessionLine(text: text, tone: running ? .running : .queued)

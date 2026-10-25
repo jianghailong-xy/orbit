@@ -2332,7 +2332,121 @@ test('the ledger stays append-only, and every later migration is accounted for',
       // nor any of the six preserved triggers/functions, and no index, function, trigger or type is
       // created, replaced or dropped, so it is not another writer of the DONE fence. No INSERT, UPDATE or
       // DELETE: every stored mapping reads 'kubernetes'.
-      '0430_managed_runner_backend'],
+      '0430_managed_runner_backend',
+      // The recovery check a repair session's turn is owed (0431, S1 of the merge-recovery repair loop):
+      // one nullable TIMESTAMP(3) with no default and no constraint on `session`
+      // (`merge_repair_turn_ended_at`) — catalog-only. Only that table is altered: no `task`, `project`
+      // or `project_acceptance_*` object nor any of the six preserved triggers/functions is named, and no
+      // function, trigger, type, index or constraint is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored session reads NULL.
+      '0431_session_merge_repair_turn_ended_at',
+      // The owner's Done on a recovery whose check found the session already on origin (0432, S3 of the
+      // merge-recovery repair loop): `session_merge_receipt_result_check` dropped and re-added with one more
+      // value, `MATCHED_BY_CONTENT`, which every stored receipt (one of 0128's four) satisfies — inside a DO
+      // block that replaces it only while it does not read that value yet. Only `session_merge_receipt` is
+      // named: no `task`, `session`, `project` or `project_acceptance_*` object nor any of the six preserved
+      // triggers/functions, and no function, trigger, type or index is created, replaced or dropped, so it is
+      // not another writer of the DONE fence. No INSERT, UPDATE or DELETE.
+      '0432_session_merge_receipt_matched_by_content',
+      // A QUEUED integration job never carries a stop request (0433, docs/project-integration-line-contract.md
+      // §2.2 J-T8): the stored QUEUED rows with `cancel_requested_at` are backfilled to CANCELLED with
+      // `finished_at` set, the CONFIRMED / RECHECKING promotions they were landing are settled the way
+      // M-T10 settles them (CANCELLED, their OPEN INTEGRATION_* items RESOLVED PROMOTION_MOVED_ON), and
+      // `project_integration_job_queued_cancel_chk` is added NOT VALID then VALIDATEd. Only
+      // `project_integration_job`, `project_promotion` and `project_open_item` are named (all rank 60):
+      // no `task`, `session`, `project` or `project_acceptance_*` object and none of the six preserved
+      // triggers/functions, and no function, trigger or type is created, replaced or dropped, so it is
+      // not another writer of the DONE fence. The two UPDATEs only move rows out of QUEUED / out of the
+      // live promotion states, and every statement can run twice.
+      '0433_integration_job_queued_cancel',
+      // The v2 progress protocol's facts (0434, docs/project-integration-line-contract.md §2.1 revision
+      // 12's column list, §2.2 J-T4): seven nullable columns on `project_integration_job` — two text
+      // (`progress_protocol`, `step`), one bigint (`push_reported_generation`), one integer (`round`),
+      // two TIMESTAMPTZ(3) (`step_started_at`, `output_moved_at`) and one jsonb (`current_check`) — none
+      // with a default, and three CHECKs every stored row satisfies (the two closed sets and round ≥ 1),
+      // added NOT VALID then VALIDATEd. Only `project_integration_job` is named (rank 60): no `task`,
+      // `session`, `project` or `project_acceptance_*` object and none of the six preserved
+      // triggers/functions, and no function, trigger or type is created, replaced or dropped, so it is
+      // not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored row reads NULL
+      // in the new columns, which is exactly "a legacy claim".
+      '0434_integration_job_progress_protocol',
+      // The commits that moved the upstream under a LAND_PROMOTION (0435, docs/project-integration-line-contract.md
+      // §2.1's `upstream_moved_commits`, J-T4's UpstreamMovedCommits interface, J-T13 / M-T12): one
+      // nullable jsonb column on `project_integration_job`, no default — catalog-only — and one
+      // partial index over the rows J12's next landing asks for (`state = 'ERROR' AND
+      // error_code = 'PUSH_OUTCOME_UNKNOWN'`, keyed by owner, serial key and tested sha), which
+      // builds over whatever stored rows already have that rare shape and nothing else. Only
+      // `project_integration_job` is named (rank 60): no `task`,
+      // `session`, `project` or `project_acceptance_*` object and none of the six preserved
+      // triggers/functions, and no function, trigger or type is created, replaced or dropped, so it
+      // is not another writer of the DONE fence. No INSERT, UPDATE or DELETE: every stored row reads
+      // NULL in the new column, which is "this job did not move the upstream" — the ordinary case.
+      '0435_integration_job_upstream_moved_commits',
+      // Landing sessions (0436, docs/project-integration-line-contract.md §2.9 LS1–LS3, revision 12,
+      // design docs/landing-session-design.md §0.1): the `session.kind` discriminator
+      // (CONVERSATION | LANDING, added with a constant default and its CHECK added NOT VALID then
+      // VALIDATEd), the `project_landing` subject table with its partial unique indexes, and
+      // `project_integration_job.landing_id` plus two indexes. It also reserves the `orbit` provider
+      // slug exactly as 0426 reserved `cursor`: whatever held it moves to `orbit-N`, every stored
+      // dispatch reference follows (session/task `provider`, an OpenCode `model`, task_route_decision,
+      // BOUND task_run_request targets, workspace/agent fallback chains and routing lists, user
+      // defaultModels, wiki_space maintenance provider), then a built-in `model_provider` guard row
+      // with its own CHECK and delete/rename triggers holds the name. The `session` UPDATEs write
+      // `provider` and `model` only, which no row trigger of `session` lists, and `task` writes the
+      // same two columns, which the DONE writer fence does not list; the statement-level AFTER
+      // triggers act on `status`, `run_at`, `project_id` or `list_id`, which neither changes. Tables
+      // named: `session`, `task`, `model_provider`, `provider_pool`, `provider_slug_alias`,
+      // `task_route_decision`, `task_run_request`, `workspace`, `agent`, `user`, `wiki_space`,
+      // `project_landing` and `project_integration_job` (the last two rank 60 children). No
+      // `project_acceptance_*` object and none of the six preserved triggers/functions is named or
+      // replaced, and neither half of the 0177 pair is touched, so it is not another writer of the
+      // DONE fence. `session.kind` is backfilled by its constant default; the provider move rewrites
+      // only rows that held the name `orbit`, and every statement can run twice against the result.
+      '0436_landing_sessions',
+      // Check output, one chunk per row (0437, docs/project-integration-line-contract.md §2.2 J-T4's
+      // output route, §2.9 LS2; design docs/landing-session-design.md §8 phase 3): one new table,
+      // `project_integration_job_log`, with its unique idempotency key, its page index, its CHECKs
+      // (the two check names, positive claim/round/index bounds, a non-negative seq and truncated
+      // count, and a 64 KiB chunk ceiling) and a foreign key to `project_integration_job` that
+      // cascades. Only `project_integration_job` is named (rank 60): no `task`, `session`,
+      // `project` or `project_acceptance_*` object and none of the six preserved triggers/functions,
+      // and no function, trigger or type is created, replaced or dropped, so it is not another
+      // writer of the DONE fence. No INSERT, UPDATE or DELETE: the table is new and every stored row
+      // is one a runner uploads after this lands.
+      '0437_integration_job_log',
+      // The landing timeline's ledger (0438, docs/project-integration-line-contract.md §2.9
+      // LS2/LS4): one new table, `project_integration_job_event`, append-only — its UPDATE/DELETE
+      // guard trigger, its unique (job_id, key) identity, its (job_id, claim_generation, round, at,
+      // seq) page index, its closed-set CHECKs and a foreign key to `project_integration_job` that
+      // cascades (the guard admits exactly that cascade). Only `project_integration_job` is named
+      // (rank 60): no `task`, `session`, `project` or `project_acceptance_*` object and none of the
+      // six preserved triggers/functions, and no function is created that writes another relation —
+      // the one function here raises and writes nothing — so it is not another writer of the DONE
+      // fence. No INSERT, UPDATE or DELETE: the table is new and every stored row is one a landing
+      // door appends after this lands.
+      '0438_project_integration_job_event',
+      // The owner's item about a landing whose runner stopped reporting (0439,
+      // docs/project-integration-line-contract.md §4.6 X-E5): three CHECKs on `project_open_item`
+      // rewired — `project_open_item_kind_chk` admits `LANDING_LEASE_EXPIRED`,
+      // `project_open_item_resolution_chk` admits `JOB_MOVED_ON`, and
+      // `project_open_item_owner_only_chk` lists the new kind among the owner-only ones. Only
+      // `project_open_item` is named (rank 60): no `task`, `session`, `project` or
+      // `project_acceptance_*` object and none of the six preserved triggers/functions, and no
+      // function, trigger or type is created, replaced or dropped, so it is not another writer of
+      // the DONE fence. No INSERT, UPDATE or DELETE: the constraints are catalog-only, re-checked
+      // against rows every one of which already satisfies the widened sets, and the one partial
+      // index (`project_open_item_lease_job_open_idx`) is built over the OPEN lease items that
+      // exist — the kind is new and each claim has one. Every statement can run twice.
+      '0439_landing_lease_expired',
+      // The engines whose Default a runner's owner removed from Orbit (0440): one `ADD COLUMN` on
+      // `runner`, `default_removed` TEXT[] NOT NULL with a constant default, catalog-only. Read
+      // against every claim above: `runner` is none of the preserved relations, so no `task`,
+      // `session`, `project` or `project_acceptance_*` object is named and the 0177 pair and every
+      // stored task and criterion row are out of its reach. No function, trigger, type or constraint
+      // is created, replaced or dropped, so it is not another writer of the DONE fence and names none
+      // of the six preserved objects. No INSERT, UPDATE or DELETE: every stored runner reads as one
+      // whose every Default is listed and used, and a removal is written only when somebody asks.
+      '0440_runner_default_removed'],
     'a later migration exists; re-read it before trusting the assertions above');
   // Stated rather than described: 0230's fence differs from 0228's by exactly one added lane.
   const later = readFileSync(

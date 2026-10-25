@@ -31,7 +31,7 @@ import io.orbitd.android.auth.loginBackground
 import io.orbitd.android.auth.openInSignInBrowser
 import io.orbitd.android.core.BuildIdentity
 import io.orbitd.android.core.auth.AuthState
-import io.orbitd.android.reader.SessionReader
+import io.orbitd.android.reader.SessionDestination
 import io.orbitd.android.reader.WorktreeModel
 import io.orbitd.android.toast.OrbitToasts
 import io.orbitd.android.toast.ToastHost
@@ -181,7 +181,10 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
         // A page sending the reader to a destination: its root, whatever was showing.
         fun land(key: String, root: OrbitRoute) { keyboard?.hide(); focus.clearFocus(); navigation = navigation.land(key, root) }
         LaunchedEffect(route, signedIn.handle, live.first) {
-            if (live.first === signedIn.handle) app.realtime.selectSession(if (route.destination == Destination.SESSION) route.id else null)
+            // A landing session is the platform's, not a conversation's: it opens no `sessions/:id/events` stream (LS6), and
+            // SessionDestination never mounts the reader for one. The reader selects the conversation it shows, and clears
+            // the selection when it leaves; leaving a session for any other page clears it here.
+            if (live.first === signedIn.handle && route.destination != Destination.SESSION) app.realtime.selectSession(null)
         }
         // iOS `NavigationDrawer(live: progress > 0)`: the drawer's animated marks move only while any of it is on screen. The closed
         // drawer stays composed, one sheet's width off screen (Material's closed anchor), where a spinner would redraw every frame.
@@ -280,7 +283,7 @@ private fun OrbitShell(auth: AuthViewModel, app: OrbitApplication, incoming: Pai
                                     revision, watches.summaries)
                                 Destination.PROJECT_SESSIONS -> SessionProjectPage(app, signedIn.handle, route, data, api, revision, ::open)
                                 Destination.SEARCH -> SearchScreen(api, ::open)
-                                Destination.SESSION -> SessionReader(app, signedIn.handle, route, api, data, ::open) {
+                                Destination.SESSION -> SessionDestination(app, signedIn.handle, route, api, data, ::open) {
                                     navigation = navigation.dropSession(route.id!!)
                                 }
                                 Destination.DRAFT -> NewSessionComposer(app, signedIn.handle, route, data, ::open)

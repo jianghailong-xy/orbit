@@ -200,6 +200,225 @@ func TestMCPTaskRequestConfirmationRefusesOutsideASession(t *testing.T) {
 	}
 }
 
+func TestMCPIntegrationAbandonPostsTheJobUnderTheCoordinatingSession(t *testing.T) {
+	if !hasMCPTool(toolDescriptors(false, false), "integration_abandon") {
+		t.Fatalf("integration_abandon missing from the base tools")
+	}
+	var gotMethod, gotPath, gotSession string
+	var gotBody map[string]interface{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotSession = r.Header.Get("X-Orbit-Session-Id")
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Write([]byte(`{"jobId":"j1","kind":"LAND_TASK","state":"ERROR","errorCode":"PUSH_OUTCOME_UNKNOWN"}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("integration_abandon", map[string]interface{}{
+		"projectId": "p1", "jobId": "j1", "reason": "its runner is gone",
+	})
+	if res["isError"] == true {
+		t.Fatalf("integration_abandon returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodPost || gotPath != "/api/runner/projects/p1/integration/jobs/j1/abandon" {
+		t.Fatalf("integration_abandon hit %s %s", gotMethod, gotPath)
+	}
+	// The acting session is the whole authority: the server checks it against the project's own
+	// coordinator pointer.
+	if gotSession != "coordinator" {
+		t.Fatalf("the session header = %q", gotSession)
+	}
+	if gotBody["reason"] != "its runner is gone" {
+		t.Fatalf("the reason sent = %#v", gotBody["reason"])
+	}
+}
+
+func TestMCPIntegrationAbandonRequiresTheJobAndAReason(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	for name, args := range map[string]map[string]interface{}{
+		"no reason": {"projectId": "p1", "jobId": "j1", "reason": "   "},
+		"no job":    {"projectId": "p1", "reason": "its runner is gone"},
+	} {
+		res := mcp.callTool("integration_abandon", args)
+		if res["isError"] != true {
+			t.Errorf("%s was accepted: %#v", name, res)
+		}
+	}
+	if called {
+		t.Fatal("the door was reached without the job and the reason it needs")
+	}
+}
+
+func TestMCPProjectIntegrationGetReadsTheLineUnderTheActingSession(t *testing.T) {
+	if !hasMCPTool(toolDescriptors(false, false), "project_integration_get") {
+		t.Fatalf("project_integration_get missing from the base tools")
+	}
+	var gotMethod, gotPath, gotJob, gotClaim, gotRound, gotCheck, gotCursor, gotTimeline, gotSession string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod, gotPath = r.Method, r.URL.Path
+		gotJob = r.URL.Query().Get("jobId")
+		gotClaim = r.URL.Query().Get("claim")
+		gotRound = r.URL.Query().Get("round")
+		gotCheck = r.URL.Query().Get("check")
+		gotCursor = r.URL.Query().Get("cursor")
+		gotTimeline = r.URL.Query().Get("timelineCursor")
+		gotSession = r.Header.Get("X-Orbit-Session-Id")
+		w.Write([]byte(`{"projectId":"p1","queue":[],"generations":[]}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	res := mcp.callTool("project_integration_get", map[string]interface{}{
+		"projectId": "p1", "jobId": "j1", "claim": "2", "round": "3", "check": "1",
+		"cursor": "c1", "timelineCursor": "t1c",
+	})
+	if res["isError"] == true {
+		t.Fatalf("project_integration_get returned an error: %#v", res["content"])
+	}
+	if gotMethod != http.MethodGet || gotPath != "/api/runner/projects/p1/integration" {
+		t.Fatalf("project_integration_get hit %s %s", gotMethod, gotPath)
+	}
+	// Every page selector travels as the query the server reserved it under — the timeline's own
+	// cursor included, so an agent can page both reads of one attempt.
+	if gotJob != "j1" || gotClaim != "2" || gotRound != "3" || gotCheck != "1" ||
+		gotCursor != "c1" || gotTimeline != "t1c" {
+		t.Fatalf("the page selectors sent = jobId %q, claim %q, round %q, check %q, cursor %q, timelineCursor %q",
+			gotJob, gotClaim, gotRound, gotCheck, gotCursor, gotTimeline)
+	}
+	// The acting session is the second half of the gate: the line is read as a session in the
+	// project, and the server checks it against the project's own membership.
+	if gotSession != "coordinator" {
+		t.Fatalf("the session header = %q", gotSession)
+	}
+}
+
+func TestMCPProjectIntegrationGetRequiresAProjectAndASession(t *testing.T) {
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	for name, mcp := range map[string]*mcpServer{
+		"no project": {taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")},
+		"no session": {taskID: "t1", agentID: "a1", t: NewTransport(srv.URL, "tok")},
+	} {
+		args := map[string]interface{}{}
+		if name != "no project" {
+			args["projectId"] = "p1"
+		}
+		if res := mcp.callTool("project_integration_get", args); res["isError"] != true {
+			t.Errorf("%s was accepted: %#v", name, res)
+		}
+	}
+	if called {
+		t.Fatal("the read was sent without the project and the session it needs")
+	}
+}
+
+// The page selectors are numbers, and an agent passes them as JSON numbers as often as quoted:
+// both spellings must build the very same request. A number read as a string alone was dropped
+// without a word, and the read came back unnarrowed.
+func TestMCPProjectIntegrationGetSendsNumericSelectorsAsTheirDigits(t *testing.T) {
+	var gotQueries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQueries = append(gotQueries, r.URL.RequestURI())
+		w.Write([]byte(`{"projectId":"p1","queue":[],"generations":[]}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	read := func(args map[string]interface{}) string {
+		t.Helper()
+		gotQueries = nil
+		args["projectId"] = "p1"
+		if res := mcp.callTool("project_integration_get", args); res["isError"] == true {
+			t.Fatalf("project_integration_get(%v) returned an error: %#v", args, res["content"])
+		}
+		if len(gotQueries) != 1 {
+			t.Fatalf("project_integration_get(%v) sent %d requests", args, len(gotQueries))
+		}
+		return gotQueries[0]
+	}
+
+	asNumbers := read(map[string]interface{}{"jobId": "j1", "claim": float64(3), "round": float64(2), "check": float64(1)})
+	asStrings := read(map[string]interface{}{"jobId": "j1", "claim": "3", "round": "2", "check": "1"})
+	if asNumbers != asStrings {
+		t.Fatalf("numbers built %q, strings built %q", asNumbers, asStrings)
+	}
+	if want := "/api/runner/projects/p1/integration?check=1&claim=3&jobId=j1&round=2"; asNumbers != want {
+		t.Fatalf("the request = %q, want %q", asNumbers, want)
+	}
+	// Zero is a page, not an absent selector: claim 0 is the enqueue and round 0 the facts from
+	// before the first round.
+	if got := read(map[string]interface{}{"claim": float64(0), "round": float64(0)}); got != "/api/runner/projects/p1/integration?claim=0&round=0" {
+		t.Fatalf("claim 0, round 0 sent %q", got)
+	}
+}
+
+// A claim generation is a bigint on the server. A JSON number decodes to float64, whose default
+// spelling turns a large integer into an exponent the server's digits-only check refuses, so an
+// integral float64 is written out in full (every digit only up to 2^53: past it the decode has
+// already rounded, and a quoted value is the exact form). A negative or fractional number is
+// spelled as it is and left to that same check, exactly as a bad string is.
+func TestMCPProjectIntegrationGetSpellsLargeAndInvalidNumbersOut(t *testing.T) {
+	var gotClaim string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotClaim = r.URL.Query().Get("claim")
+		w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+
+	mcp := &mcpServer{taskID: "t1", agentID: "a1", sessionID: "coordinator", t: NewTransport(srv.URL, "tok")}
+	for _, c := range []struct {
+		claim interface{}
+		want  string
+	}{
+		{float64(9007199254740991), "9007199254740991"},
+		{float64(1e21), "1000000000000000000000"},
+		{float64(12345678), "12345678"},
+		{"9007199254740993", "9007199254740993"},
+		{float64(-1), "-1"},
+		{float64(2.5), "2.5"},
+	} {
+		gotClaim = ""
+		res := mcp.callTool("project_integration_get", map[string]interface{}{"projectId": "p1", "claim": c.claim})
+		if res["isError"] == true {
+			t.Fatalf("claim %v returned an error: %#v", c.claim, res["content"])
+		}
+		if gotClaim != c.want {
+			t.Errorf("claim %v sent %q, want %q", c.claim, gotClaim, c.want)
+		}
+	}
+}
+
+// The schema says what the handler reads: the three page selectors are declared integers, as
+// every other numeric argument in the tool list is, so an agent is told to send the number.
+func TestMCPProjectIntegrationGetDeclaresTheSelectorsAsIntegers(t *testing.T) {
+	for _, descriptor := range toolDescriptors(false, false) {
+		if descriptor["name"] != "project_integration_get" {
+			continue
+		}
+		props := descriptor["inputSchema"].(map[string]interface{})["properties"].(map[string]interface{})
+		for _, key := range []string{"claim", "round", "check"} {
+			if got := props[key].(map[string]interface{})["type"]; got != "integer" {
+				t.Errorf("%s is declared %v", key, got)
+			}
+		}
+		return
+	}
+	t.Fatal("project_integration_get missing from the base tools")
+}
+
 func TestMCPConfirmationReviewToolsPostTheInputUnderTheReviewingSession(t *testing.T) {
 	for _, tool := range []string{"task_confirmation_review", "task_confirmation_return"} {
 		if !hasMCPTool(toolDescriptors(false, false), tool) {
@@ -1658,6 +1877,20 @@ func TestMCPProviderAndAgentDescriptionsFollowTheDecoupledModel(t *testing.T) {
 	for _, tool := range []string{"agent_create", "agent_update"} {
 		if !strings.Contains(description(tool), "no engine or provider") {
 			t.Fatalf("%s does not say an agent has no engine or provider: %q", tool, description(tool))
+		}
+	}
+}
+
+// §2.9 LS6: the reads that carry a landing's address say so, so a coordinator opens the LANDING
+// session with session_get instead of going to the integration tables itself.
+func TestMCPReadsNameTheLandingSession(t *testing.T) {
+	tools := toolDescriptors(false, false)
+	for _, tool := range []string{"task_get", "project_get"} {
+		desc := mcpToolDescription(tools, tool)
+		for _, want := range []string{"landingSessionId", "session_get"} {
+			if !strings.Contains(desc, want) {
+				t.Fatalf("%s's description does not mention %q: %q", tool, want, desc)
+			}
 		}
 	}
 }

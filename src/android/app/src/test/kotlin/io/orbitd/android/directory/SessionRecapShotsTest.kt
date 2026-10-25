@@ -22,10 +22,7 @@ import io.orbitd.android.navigation.OrbitRoute
 import io.orbitd.android.ui.OrbitTheme
 import java.io.File
 import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
-import java.util.Locale
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Rule
@@ -59,10 +56,6 @@ class SessionRecapShotsTest {
     private val olderRecap = "Shipped the drawer fix and re-ran the web suite."
     private val reply = "Committed the row change."
     private val olderReply = "Pushed the drawer fix."
-
-    /** The clock and date the row's own `recapLabel` reads a time with, so the expectations hold in any time zone. */
-    private fun clock(at: Instant) = DateTimeFormatter.ofPattern("h:mm a", Locale.US).withZone(ZoneId.systemDefault()).format(at)
-    private fun day(at: Instant) = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.US).withZone(ZoneId.systemDefault()).format(at)
 
     /** The account is signed in once per test; `users/me` and an empty list answer every read the two screens make. */
     private fun signedIn(): SessionHandle {
@@ -110,7 +103,7 @@ class SessionRecapShotsTest {
         // with a recap of the turn before it — the three states the row has to get right, in the web's order.
         val rows = listOf(
             DirectorySession("a", title = "Recap on the session list row", workspaceId = workspace, status = "AWAITING_INPUT",
-                lastAssistantText = reply, recapText = recap, recapAt = writtenAt.toString()),
+                lastAssistantText = reply, recapText = recap, recapAt = writtenAt.toString(), tags = listOf(Tag("t1", "Performance", "#AF52DE"))),
             DirectorySession("b", title = "Drawer shadow fix", workspaceId = workspace, status = "AWAITING_INPUT",
                 lastAssistantText = olderReply, recapText = olderRecap, recapAt = longAgo.toString()),
             DirectorySession("c", title = "Rebasing the fixtures", workspaceId = workspace, status = "AWAITING_INPUT",
@@ -126,19 +119,19 @@ class SessionRecapShotsTest {
             }
         } } }
 
-        // The recap under its muted "Recap · <time>" label, and not the reply it replaced.
-        val label = "Recap · ${clock(writtenAt)}"
+        // The recap alone (the owner, 2026-10-22): not the reply it replaced, nothing in front of it, and no tag on the row.
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("Recap on the session list row"))
-        compose.onNodeWithText("$label $recap", substring = true).assertIsDisplayed()
+        compose.onNodeWithText(recap, substring = true).assertIsDisplayed()
         compose.onAllNodesWithText(reply, substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Recap ·", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Performance", substring = true).assertCountEquals(0)
         shot("list-with-recap")
 
-        // Another day's recap wears the date too: a bare clock time on an older row would mislead.
-        val olderLabel = "Recap · ${day(longAgo)}, ${clock(longAgo)}"
+        // Another day's recap reads the same: when it was written is the Recap card's to say, at the conversation's end.
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("Drawer shadow fix"))
-        compose.onNodeWithText("$olderLabel $olderRecap", substring = true).assertIsDisplayed()
+        compose.onNodeWithText(olderRecap, substring = true).assertIsDisplayed()
 
-        // A session no pass has recapped: the reply preview it always had, with no label in front of it.
+        // A session no pass has recapped: the reply preview it always had.
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("Rebasing the fixtures"))
         compose.onNodeWithText("Rebased the fixtures; the suite is green.", substring = true).assertIsDisplayed()
 
@@ -146,19 +139,17 @@ class SessionRecapShotsTest {
         // the second line, not the only one), so a live session reads "Running" here. The web rule that
         // live state outranks the recap is `SessionLine`'s, which is what a project row draws and what
         // the whole macOS/iOS list draws; on this row the recap takes the preview slot either way.
-        // Asked of the ROW, not the screen: the recapped rows above keep their labels either way.
+        // Asked of the ROW, not the screen: the recapped rows above keep their recaps either way.
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("Rebuilding the transcript page"))
         compose.onNode(hasText("Rebuilding the transcript page") and hasText("Running")).assertExists()
         compose.onAllNodes(hasText("Rebuilding the transcript page") and hasText(recap, substring = true))
             .assertCountEquals(0)
 
-        // The account's Session recaps switch, off: every recap row falls back to the raw last reply — no label, and
-        // not the recap under one.
+        // The account's Session recaps switch, off: every recap row falls back to the raw last reply.
         recaps = false
         compose.onNodeWithTag("directory-list").performScrollToNode(hasText("Recap on the session list row"))
         compose.onNodeWithText(reply, substring = true).assertIsDisplayed()
         compose.onAllNodesWithText(recap, substring = true).assertCountEquals(0)
-        compose.onAllNodesWithText(label, substring = true).assertCountEquals(0)
         shot("list-with-recaps-off")
     }
 
@@ -175,7 +166,8 @@ class SessionRecapShotsTest {
         val row = hasText("Session recaps") and isToggleable()
         compose.onNode(row).performScrollTo().assertIsOn()
         compose.onNodeWithText("Session lists show the one-line summary the server writes for each conversation, " +
-            "in place of its raw last reply. Off: the raw last reply.", useUnmergedTree = true).assertExists()
+            "in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the " +
+            "conversation.", useUnmergedTree = true).assertExists()
         shot("settings-session-recaps")
     }
 }

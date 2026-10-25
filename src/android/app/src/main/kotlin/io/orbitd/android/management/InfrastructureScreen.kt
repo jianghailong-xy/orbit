@@ -21,7 +21,6 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import io.orbitd.android.composer.CursorRuntime
 import io.orbitd.android.navigation.Destination
 import io.orbitd.android.navigation.ObjectId
 import io.orbitd.android.navigation.OrbitRoute
@@ -333,8 +332,9 @@ private fun KeysSection(model: InfrastructureModel, page: (String) -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(Modifier.weight(1f)) {
                     Text(key.str("label") ?: key.text("slug"), maxLines = 1)
-                    // A Cursor key has no model list of its own: its sessions start on Cursor CLI's Auto.
-                    (if (cursor != null) CursorRuntime.AUTO else Infrastructure.defaultModel(key))?.let {
+                    // A Cursor key has no model list of its own: its sessions start on Cursor CLI's default, Auto unless a runner names another.
+                    (if (cursor != null) Infrastructure.cursorModel(model.machines.runners.filter { it.bool("online") == true })
+                        else Infrastructure.defaultModel(key))?.let {
                         Text(it, style = MaterialTheme.typography.bodySmall, color = Ink.muted)
                     }
                     // Every engine it runs on: one key, under each engine that can spend it.

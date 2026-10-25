@@ -80,11 +80,17 @@ func prepareDshLaunch(ctx context.Context, input DshLaunchInput, agent *DshAgent
 	if msg := ensureEngine(ctx, providerDsh, func(string) {}); msg != "" {
 		return DshLaunchSpec{}, errors.New(msg)
 	}
-	executable, err := dshExecutablePath()
+	node, executable, err := dshRuntime()
 	if err != nil {
 		return DshLaunchSpec{}, err
 	}
-	return prepareDshAgentConfig(input, agent, executable)
+	spec, err := prepareDshAgentConfig(input, agent, executable)
+	if err != nil {
+		return DshLaunchSpec{}, err
+	}
+	// Orbit's copy of Node runs the entry point itself, and stays off the PATH the agent's commands see.
+	spec.Executable, spec.Args = dshCommand(node, spec.Executable, spec.Args...)
+	return spec, nil
 }
 
 func prepareDshConfig(input DshLaunchInput, executable string) (DshLaunchSpec, error) {

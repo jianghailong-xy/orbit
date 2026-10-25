@@ -5,17 +5,18 @@ import {
   ENGINE_SIGNED_OUT,
   type EngineSignedOutRefusal,
   type LoginEngine,
+  type RunnerEngineAccount,
   type RunnerEngineHealth,
 } from '@orbit/shared';
-import { isLoginEngine, namedRunnerEngines } from '../common/runner-engines';
+import { isLoginEngine, usedRunnerEngines } from '../common/runner-engines';
 import { accountDir, isAccountEngine } from '@orbit/shared';
-import { ACCOUNT_CHOICE, DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner } from '../providers/account';
+import { ACCOUNT_CHOICE, DEFAULT_ACCOUNT, accountEnvVar, accountOnRunner, type AccountRunner } from '../providers/account';
 import type { WorkspaceAccountChoices } from '../providers/plan-usage-accounts';
 import { SESSION_RUNNER_OFFLINE_AFTER_MS } from './session-state';
 import { antigravityGoogleLogin } from '../common/antigravity-readiness';
 
 /** Engine names as the user sees them elsewhere in Orbit (matches the web's RunnerSignIn). */
-const ENGINE_LABELS: Record<LoginEngine, string> = {
+export const ENGINE_LABELS: Record<LoginEngine, string> = {
   claude: 'Claude Code',
   codex: 'Codex',
   kimi: 'Kimi Code',
@@ -52,8 +53,9 @@ const CREDENTIAL_ENV_KEYS: Record<LoginEngine, { any: string[] } | { all: string
   cursor: { any: ['CURSOR_API_KEY', 'CURSOR_AUTH_TOKEN'] },
 };
 
-/** The runner fields this reads — a subset of the Prisma row. */
-export interface EnginePreflightRunner {
+/** The runner fields this reads — a subset of the Prisma row. Its accounts are judged as Orbit uses them
+ *  (AccountRunner): a Default its owner removed from Orbit is never the one judged. */
+export interface EnginePreflightRunner extends AccountRunner {
   name?: string | null;
   displayName?: string | null;
   status: string;
@@ -93,7 +95,8 @@ interface SessionLogin {
  * this runner reports runs the session in that account's own directory, and is found with the same
  * lookup (accountOnRunner); anything else runs in the session's own environment. That is Default,
  * whose sign-in is the engine's own answer: the runner probes the engine in its own environment,
- * which is what selects Default.
+ * which is what selects Default. While the owner has removed Default from Orbit, dispatch runs the
+ * session on Automatic's pick among the accounts that remain instead, and that pick is what is judged.
  *
  * Not judged:
  *   - a picked account this runner does not report (the workspace moved machines, the slot was
@@ -108,21 +111,28 @@ function sessionAccountLogin(
   health: RunnerEngineHealth,
   account: string | null | undefined,
   workspaceEnv: unknown,
+  runner: EnginePreflightRunner,
   runnerEngines: RunnerEngineHealth[],
+  now: Date,
 ): SessionLogin | null {
+  const slot = accountOnRunner(engine, account, runner, workspaceEnv, now);
+  // Named the way Infrastructure names its row, which is never who the account is: its
+  // email and id stay on the machine, and the runner reports neither.
+  if (slot) return { auth: slot.auth, name: accountName(engine, slot, runnerEngines), dir: accountDir(slot) };
   const pick = account?.trim();
-  if (pick && pick !== DEFAULT_ACCOUNT) {
-    const slot = accountOnRunner(engine, pick, runnerEngines);
-    if (!slot) return null;
-    // Named the way Infrastructure names its row, which is never who the account is: its
-    // email and id stay on the machine, and the runner reports neither.
-    return { auth: slot.auth, name: slot.name ? `"${slot.name}"` : slot.id, dir: accountDir(slot) };
-  }
+  if (pick && pick !== DEFAULT_ACCOUNT) return null;
   const env = (workspaceEnv && typeof workspaceEnv === 'object' ? workspaceEnv : {}) as Record<string, unknown>;
   const varName = accountEnvVar(engine);
   if (varName && typeof env[varName] === 'string' && (env[varName] as string).trim() !== '') return null;
   const own = health.accounts?.find((entry) => entry.id === DEFAULT_ACCOUNT)?.name || 'Default';
   return { auth: health.auth, ...((health.accounts?.length ?? 0) > 1 ? { name: `"${own}"` } : {}) };
+}
+
+/** How a refusal names one of the runner's accounts: what it was called in Orbit, quoted, else its id. */
+function accountName(engine: LoginEngine, slot: RunnerEngineAccount, runnerEngines: RunnerEngineHealth[]): string {
+  const name = runnerEngines.find((entry) => entry.engine === engine)?.accounts?.find((entry) => entry.id === slot.id)?.name
+    ?? slot.name;
+  return name ? `"${name}"` : slot.id;
 }
 
 /**
@@ -201,7 +211,8 @@ export function signedOutEngineRefusal(args: {
   workspaceEnv?: unknown;
   /** The accounts this session's workspace pins it to, one per engine that keeps accounts
    *  (Workspace.codexAccount / claudeAccount / antigravityAccount / kimiAccount / cursorAccount).
-   *  Absent or null is Default. */
+   *  Absent or null is Default — or, while its owner removed Default from Orbit, Automatic's pick
+   *  among the accounts that remain, which dispatch runs the session on (accountOnRunner). */
   accounts?: WorkspaceAccountChoices | null;
   runner: EnginePreflightRunner;
   nowMs?: number;
@@ -212,27 +223,31 @@ export function signedOutEngineRefusal(args: {
   if (!isLoginEngine(runtime) || runtime === 'cursor') return null;
   if (bringsOwnEnvCredential(runtime, args.workspaceEnv)) return null;
 
+  const now = new Date(args.nowMs ?? Date.now());
   const heartbeatMs = args.runner.lastHeartbeatAt?.getTime() ?? NaN;
   const online =
     args.runner.status !== 'OFFLINE' &&
     Number.isFinite(heartbeatMs) &&
-    heartbeatMs >= (args.nowMs ?? Date.now()) - SESSION_RUNNER_OFFLINE_AFTER_MS;
+    heartbeatMs >= now.getTime() - SESSION_RUNNER_OFFLINE_AFTER_MS;
   if (!online) return null;
 
-  // Named as Infrastructure names them: with what each account was called in Orbit.
-  const engines = namedRunnerEngines({ engines: args.runner.engines, accountNames: args.runner.accountNames });
+  // Named as Infrastructure names them: with what each account was called in Orbit, and as Orbit uses
+  // them — without a Default its owner removed from Orbit.
+  const engines = usedRunnerEngines({
+    engines: args.runner.engines, accountNames: args.runner.accountNames, defaultRemoved: args.runner.defaultRemoved,
+  });
   const health = engines?.find((e) => e.engine === runtime);
   if (!engines || !health) return null;
   const machine = args.runner.displayName || args.runner.name || 'this runner';
   if (runtime === 'antigravity') {
     // A session on an added Google account runs on that account's sign-in or not at all (the runner
     // never falls back to a key for it). Default is judged as the engine always was: its own sign-in,
-    // else the runner's GEMINI_API_KEY.
-    const pick = args.accounts?.antigravityAccount?.trim();
-    const slot = pick && pick !== DEFAULT_ACCOUNT ? accountOnRunner(runtime, pick, engines) : null;
+    // else the runner's GEMINI_API_KEY. A session on a Default its owner removed from Orbit runs on the
+    // account Automatic picks among those that remain, and is judged on that.
+    const slot = accountOnRunner(runtime, args.accounts?.antigravityAccount, args.runner, args.workspaceEnv, now);
     if (slot) {
       return slot.auth === 'no'
-        ? `Antigravity account ${slot.name ? `"${slot.name}"` : slot.id} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
+        ? `Antigravity account ${accountName(runtime, slot, engines)} is signed out on runner "${machine}" — every session run on that account fails immediately. ` +
           'Sign it in from Infrastructure, then start this session again.'
         : null;
     }
@@ -243,7 +258,7 @@ export function signedOutEngineRefusal(args: {
   // one that keeps a single login is judged on that.
   const account = isAccountEngine(runtime) ? args.accounts?.[ACCOUNT_CHOICE[runtime]] : undefined;
   const login: SessionLogin | null = accountEnvVar(runtime)
-    ? sessionAccountLogin(runtime, health, account, args.workspaceEnv, engines)
+    ? sessionAccountLogin(runtime, health, account, args.workspaceEnv, args.runner, engines, now)
     : { auth: health.auth };
   if (login?.auth !== 'no') return null;
 

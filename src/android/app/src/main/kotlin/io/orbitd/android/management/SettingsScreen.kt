@@ -94,7 +94,7 @@ internal fun smartModelSelection(preferences: JsonObject?): Boolean =
 
 /** SettingsCopy's session recaps switch (SettingsHome.sessionRecaps): what a session list shows instead of the raw last reply. */
 internal const val SESSION_RECAPS = "Session recaps"
-internal const val SESSION_RECAPS_HINT = "Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply. Off: the raw last reply."
+internal const val SESSION_RECAPS_HINT = "Session lists show the one-line summary the server writes for each conversation, in place of its raw last reply, and the conversation ends with it. Off: the raw last reply, and no summary in the conversation."
 
 /** UserPreferences.showRecaps: on unless the account turned it off; absent — or a value this build cannot read — means on, so
  * only opting out is ever written. */

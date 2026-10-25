@@ -44,6 +44,9 @@ export interface Tenant {
   agentRuleId: string;
   workspaceRuleId: string;
   sessionId: string;
+  /** A LANDING session of the account's project, with its landing subject: the address a landing
+   *  page and its check log are read through (`GET /sessions/:id/landing/log`). */
+  landingSessionId: string;
   /** A session of the account working on `evidenceTaskId`, which its evidence names as its source. */
   evidenceSessionId: string;
   approvalId: string;
@@ -352,6 +355,18 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
     request: (of) => ({ params: { id: of.projectId, jobId: of.integrationJobId } }),
     nested: ['jobId'],
   },
+  // The owner's abandon (J-T10) and stop (J-T8) doors. Another account's project is a 404; on the
+  // owner's own project the abandon names a QUEUED job (answered "not running") and the stop names
+  // the task whose queued landing that job is (answered by the stop itself), so neither is refused
+  // as an id that names nothing.
+  'POST /projects/:id/integration/jobs/:jobId/abandon': {
+    request: (of) => ({ params: { id: of.projectId, jobId: of.integrationJobId } }),
+    nested: ['jobId'],
+  },
+  'POST /projects/:id/tasks/:taskId/integration/stop': {
+    request: (of) => ({ params: { id: of.projectId, taskId: of.projectTaskId } }),
+    nested: ['taskId'],
+  },
   'POST /projects/:id/promotions/:promotionId/integration/retry': {
     request: (of) => ({ params: { id: of.projectId, promotionId: of.promotionId }, body: { reason: 'the census' } }),
     nested: ['promotionId'],
@@ -442,6 +457,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   'DELETE /runners/:id/accounts/:engine/:account': {
     request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount } }),
   },
+  'POST /runners/:id/accounts/:engine/default/restore': {
+    request: (of) => ({ params: { id: of.runnerId, engine: of.runnerAccount.engine } }),
+  },
   'PATCH /runners/:id/accounts/:engine/:account': {
     request: (of) => ({ params: { id: of.runnerId, ...of.runnerAccount }, body: { name: 'renamed by the census' } }),
   },
@@ -481,6 +499,9 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
   // ── sessions ─────────────────────────────────────────────────────────────────────────────────
   'GET /sessions/:id': { request: (of) => ({ params: { id: of.sessionId } }) },
   'GET /sessions/:id/compact': { request: (of) => ({ params: { id: of.sessionId } }) },
+  // A landing session's check output (contract §2.9 LS2): the subject the session belongs to is the
+  // account's, and another account's session is the same 404 as one that does not exist.
+  'GET /sessions/:id/landing/log': { request: (of) => ({ params: { id: of.landingSessionId } }) },
   'PATCH /sessions/:id': { request: (of) => ({ params: { id: of.sessionId }, body: { title: 'renamed by the census' } }) },
   'DELETE /sessions/:id': { request: (of) => ({ params: { id: of.spare.sessionId } }) },
   'DELETE /sessions/:id/purge': { request: (of) => ({ params: { id: of.spare.purgedSessionId } }) },
@@ -694,7 +715,17 @@ export const TENANT_ISOLATION_CASES: Readonly<Record<string, TenantCase>> = {
  * Routes the census cannot stand up against the production apiserver, each with why, and the reading
  * that shows the route finds its object only under the caller's own account. Kept as short as it can be.
  */
-export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {};
+export const TENANT_ISOLATION_BY_HAND: Readonly<Record<string, string>> = {
+  'POST /admin/managed-runners/:id/volume-switch':
+    'an administrator acts on another account\'s runner by design, and anybody else is refused 403 by AdminRoleGuard '
+    + 'before anything is read (users/admin-role.guard.ts:21). The census server runs with managed runners off, where every '
+    + 'caller, an administrator too, is answered 404 MANAGED_RUNNER_DISABLED before the role is asked (managed-runners/'
+    + 'managed-runner-gate.ts:76), so no case of it can be answered there. On, the runner id finds that runner\'s mapping '
+    + 'alone (managed-runners/managed-runner.service.ts:294), its volume is read only under that runner\'s own fixed name in '
+    + 'the managed namespace (managed-runners/kubernetes-backend.ts:228), and a volume another mapping records is refused '
+    + '(managed-runners/managed-runner-manager.ts:1460) — all of it, and a member\'s 403 with nothing written, sent over HTTP '
+    + 'in managed-runners/managed-runner-volume-switch.pg.spec.ts',
+};
 
 // ── Ids a request carries in its body or query ────────────────────────────────────────────────────
 //
@@ -912,6 +943,11 @@ export const TENANT_ISOLATION_FIELD_CASES: Readonly<Record<string, TenantFieldCa
   'GET /sessions query agentId': { request: (of) => ({ params: {}, query: { agentId: of.workspaceId } }) },
   'GET /sessions query workspaceId': { request: (of) => ({ params: {}, query: { workspaceId: of.workspaceId } }) },
   'GET /sessions query runnerId': { request: (of) => ({ params: {}, query: { runnerId: of.runnerId } }) },
+  // The attempt a landing page names: B reads its own landing with A's job in the query, and is
+  // answered as if it named nothing — the job is resolved within that landing and nowhere else.
+  'GET /sessions/:id/landing/log query jobId': {
+    request: (of, mine) => ({ params: { id: mine.landingSessionId }, query: { jobId: of.integrationJobId } }),
+  },
   'GET /sessions/:id/events/page query around': {
     request: (of, mine) => ({ params: { id: mine.sessionId }, query: { around: of.eventId } }),
   },

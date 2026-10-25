@@ -1,0 +1,74 @@
+# TEMPORARY evidence probe (never merged as a workflow). The iPhone app's own shared sources and shell,
+# with this probe's entry point in place of OrbitiOSApp, photographing the needs-you capsule (owner
+# board 2026-10-21, docs/mocks/needs-you-capsule, A). Copied from
+# docs/evidence/landing-session-followup/probe-harness; the Mac targets are dropped — the bar is
+# iPhone-only, and the workflow's `macos` job compiles the Mac app.
+name: NeedsYouProbe
+options:
+  bundleIdPrefix: io.orbitd
+  deploymentTarget:
+    iOS: "17.0"
+packages:
+  OrbitKit:
+    path: ../src/macos/OrbitKit
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  NeedsYouProbe:
+    type: application
+    platform: iOS
+    sources:
+      - path: ios
+      - path: ProbeArgs.swift
+      - path: ../src/ios/Support/Assets.xcassets
+      - path: ../src/ios/Sources
+        name: Shell
+        excludes:
+          - "OrbitiOSApp.swift"
+      - path: ../src/macos/OrbitApp/Sources/OrbitApp
+        name: Shared
+        excludes:
+          - "OrbitApp.swift"
+          - "HotKeyManager.swift"
+          - "UpdaterModel.swift"
+          - "RunnerControl.swift"
+          - "Views/RunnerControlPane.swift"
+          - "Views/MenuBarContent.swift"
+    dependencies:
+      - package: OrbitKit
+        product: OrbitKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.needsyouprobe
+        PRODUCT_NAME: NeedsYouProbe
+        INFOPLIST_FILE: Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait"
+  NeedsYouProbeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: NeedsYouProbe
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.orbitd.needsyouprobe.uitests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  NeedsYouProbe:
+    build:
+      targets:
+        NeedsYouProbe: all
+        NeedsYouProbeUITests: [test]
+    test:
+      targets:
+        - NeedsYouProbeUITests

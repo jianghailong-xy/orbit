@@ -1,0 +1,153 @@
+{
+ "checks": [
+  {
+   "check": "the gate runs",
+   "ok": true,
+   "value": "active"
+  },
+  {
+   "check": "the after image's runner and image sources are this checkout's",
+   "ok": true,
+   "value": "(no difference)"
+  },
+  {
+   "check": "the after image is in both VMs' containerd under one ID",
+   "ok": true,
+   "value": {
+    "orbit-mr-lab": {
+     "alreadyThere": false,
+     "id": "sha256:0f899822c45fd88b3244eb061b87d2861c72f562c60dc7f11e340a55760f6019",
+     "importSeconds": 38.2,
+     "size": "499731845"
+    },
+    "orbit-mr-lab-2": {
+     "alreadyThere": false,
+     "id": "sha256:0f899822c45fd88b3244eb061b87d2861c72f562c60dc7f11e340a55760f6019",
+     "importSeconds": 33.6,
+     "size": "499731845"
+    }
+   }
+  },
+  {
+   "check": "the profile pins the after image",
+   "ok": true,
+   "value": "docker.io/library/orbit-managed-runner-lab@sha256:61c8f43391761835816685427e07099534298861053a3a81602aaf46d8548b4c"
+  },
+  {
+   "check": "the switch is on with the lab profile",
+   "ok": true,
+   "value": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t02c/managed-runner-profile.json"
+   ]
+  },
+  {
+   "check": "the admission webhook is installed",
+   "ok": true
+  }
+ ],
+ "endedAt": "2026-10-19T23:09:15.982+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "again",
+ "result": {
+  "admission": {
+   "dryRunUnmanagedPod": "pod/t02a-admission-check",
+   "dryRunUnownedManagedClaim": "Error from server (Forbidden): error when creating \"STDIN\": admission webhook \"pods.managed-runner.orbit.dev\" denied the request: orbit-managed-runner-admission"
+  },
+  "gate": {
+   "at": "2026-10-19T23:07:19.508+00:00",
+   "connections": 2165,
+   "control": {
+    "mode": "pass"
+   },
+   "listen": "127.0.0.1:16444",
+   "log": null,
+   "lost": [],
+   "refused": [],
+   "unit": "active"
+  },
+  "image": {
+   "archive": "/mnt/data/tmp/34ilx9dqVOKBeYZObuIjI/lab-image/lab.oci.tar",
+   "archiveSha256": "827d71f4c816c5845b52598f53f6138b1af8a2a408c414c115755e9a41f594b2",
+   "labManifest": "sha256:5a1bd2d652468e81f8056f73fb89d2b1291b567b70cbb158411c64c919bc0845",
+   "nodes": {
+    "orbit-mr-lab": {
+     "alreadyThere": false,
+     "id": "sha256:0f899822c45fd88b3244eb061b87d2861c72f562c60dc7f11e340a55760f6019",
+     "importSeconds": 38.2,
+     "size": "499731845"
+    },
+    "orbit-mr-lab-2": {
+     "alreadyThere": false,
+     "id": "sha256:0f899822c45fd88b3244eb061b87d2861c72f562c60dc7f11e340a55760f6019",
+     "importSeconds": 33.6,
+     "size": "499731845"
+    }
+   },
+   "pushed": false,
+   "reference": "docker.io/library/orbit-managed-runner-lab@sha256:61c8f43391761835816685427e07099534298861053a3a81602aaf46d8548b4c",
+   "source": "4aa01a1bedead5afd05d23b12a4f272ba499eb47"
+  },
+  "recorder": {
+   "at": "2026-10-19T23:09:15.845+00:00",
+   "lines": 261,
+   "log": "/mnt/data/managed-runner-lab/test-server-t02c/timeline.jsonl",
+   "unit": "active"
+  },
+  "restarted": {
+   "apiEnvironmentNames": [
+    "CORS_ORIGINS",
+    "DATABASE_URL",
+    "HOME",
+    "INVOCATION_ID",
+    "JWT_SECRET",
+    "LANG",
+    "MEMORY_PRESSURE_WATCH",
+    "MEMORY_PRESSURE_WRITE",
+    "MODEL_CATALOG_URL",
+    "NODE_ENV",
+    "ORBIT_MANAGED_RUNNERS_ENABLED",
+    "ORBIT_MANAGED_RUNNERS_PROFILE",
+    "ORBIT_RECAP_ENABLED",
+    "PATH",
+    "PORT",
+    "PROVIDER_SECRET_KEY",
+    "PUBLIC_ORIGIN",
+    "SYSTEMD_EXEC_PID",
+    "USER"
+   ],
+   "clusterSettingsInTheEnvironment": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED",
+    "ORBIT_MANAGED_RUNNERS_PROFILE"
+   ],
+   "kubeconfigInTheServerHome": false,
+   "mode": "on",
+   "replica": {
+    "managedSwitch": [
+     "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+     "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t02c/managed-runner-profile.json"
+    ],
+    "port": 13720,
+    "unit": "active"
+   },
+   "seconds": 9.6,
+   "switch": [
+    "ORBIT_MANAGED_RUNNERS_ENABLED=true",
+    "ORBIT_MANAGED_RUNNERS_PROFILE=/mnt/data/managed-runner-lab/test-server-t02c/managed-runner-profile.json"
+   ],
+   "testServer": [
+    "TLS front (orbit-mr-lab-tls): active",
+    "fake model (orbit-mr-lab-fake-model): active",
+    "PostgreSQL (orbit-mr-lab-pg): running",
+    "listening: 127.0.0.1:13710 127.0.0.1:13711 127.0.0.1:13712 127.0.0.1:15433",
+    "Pods use: https://10.0.2.2:13711 (CA /mnt/data/managed-runner-lab/test-server-t02c/tls/ca.crt); host API http://127.0.0.1:13710/api",
+    "state: /mnt/data/managed-runner-lab/test-server-t02c; managed runners: true",
+    "23:08:56Z applying migrations"
+   ]
+  }
+ },
+ "seconds": 117.6,
+ "startedAt": "2026-10-19T23:07:18.371+00:00",
+ "step": "start"
+}

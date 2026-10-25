@@ -1,0 +1,191 @@
+{
+ "checks": [
+  {
+   "check": "the session ran on ann's managed runner",
+   "ok": true,
+   "value": "01a15431-f1f1-773e-b7cd-c25915447151"
+  },
+  {
+   "check": "the engine committed a file in the session's Git worktree",
+   "ok": true,
+   "value": {
+    "commit": "48a50404282d070ff6bf2d9aa5f0287884260524",
+    "file": "t08-ann1.txt",
+    "fileSha256Prefix": "dd4a213dc6ebc5bc"
+   }
+  },
+  {
+   "check": "probe p1 written on orbit-mr-lab (8 MiB random, 150 SQLite rows in WAL mode with synchronous=FULL, a Git commit), integrity_check ok",
+   "ok": true,
+   "value": 150
+  },
+  {
+   "check": "/var/lib/orbit is an RBD device, ext4",
+   "ok": true,
+   "value": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd1"
+    }
+   ]
+  }
+ ],
+ "endedAt": "2026-10-19T12:46:32.789+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "account",
+ "result": {
+  "probe": {
+   "action": "write",
+   "at": "2026-10-19T12:46:32.479+00:00",
+   "data": {
+    "gitFsckExit": 0,
+    "gitHead": "641340cd307387795fe4b4e60686623c56d72013",
+    "integrityCheck": "ok",
+    "maxRow": 150,
+    "mount": [
+     [
+      "/dev/rbd1",
+      "/var/lib/orbit",
+      "ext4"
+     ]
+    ],
+    "randomSha256": "d4a1e6d0eb6f7c27560a94427172d13e10f0287b8d53a8d304945a193cbac5cc",
+    "rows": 150,
+    "rowsSha256": "63dea591d47f0f6bb3bf8e89b2a7985fd6ecf55303c6606ec20afd691da6ebdc"
+   },
+   "generation": 1,
+   "owner": "ann",
+   "pod": "cc460c50-622d-4c7b-a473-a986490f386d",
+   "run": "p1",
+   "volume": {
+    "managedInstance": {
+     "generation": 1,
+     "podUid": "cc460c50-622d-4c7b-a473-a986490f386d",
+     "runnerId": "01a15431-f1f1-773e-b7cd-c25915447151"
+    },
+    "repos": [
+     "default"
+    ],
+    "runnerId": "01a15431-f1f1-773e-b7cd-c25915447151",
+    "worktrees": [
+     "01a15432-9fa1-7638-883b-36cfecefa314"
+    ]
+   }
+  },
+  "session": {
+   "attachment": {
+    "bytes": 49175,
+    "fileName": "t08-ann-note.txt",
+    "id": "34id3peVPGGYkOSuBjV1P",
+    "sha256": "441452e669aec5523cc4caad490a968fae8826542a078195aed74acb50da630b"
+   },
+   "createdAt": "2026-10-19T12:46:06.228+00:00",
+   "event": {
+    "event": {
+     "created_at": "2026-10-19T12:46:07.269",
+     "ingested_at": "2026-10-19T12:46:07.378986+00:00",
+     "ingested_by_runner_id": "01a15431-f1f1-773e-b7cd-c25915447151",
+     "seq": 9,
+     "session_id": "01a15432-9fa1-7638-883b-36cfecefa314",
+     "type": "tool_result"
+    },
+    "modelRequests": [
+     {
+      "at": "2026-10-19T12:46:07Z",
+      "kind": "tool_result_reply",
+      "messages": 5,
+      "n": 2,
+      "secrets": [
+       "annfirst"
+      ],
+      "tool": null
+     }
+    ],
+    "session": {
+     "assigned_runner_id": "01a15431-f1f1-773e-b7cd-c25915447151",
+     "created_at": "2026-10-19T12:46:06.241",
+     "engine": "claude",
+     "id": "01a15432-9fa1-7638-883b-36cfecefa314",
+     "provider": "deepseek",
+     "runtime_session_id": "438944e9-3583-408a-b74f-29323209a2f1",
+     "status": "AWAITING_INPUT",
+     "task_id": null
+    }
+   },
+   "secret": "annfirst",
+   "session": "34id3phEkD3Fva5iqMbg4",
+   "sessionUuid": "01a15432-9fa1-7638-883b-36cfecefa314",
+   "wrote": {
+    "commit": "48a50404282d070ff6bf2d9aa5f0287884260524",
+    "file": "t08-ann1.txt",
+    "fileSha256Prefix": "dd4a213dc6ebc5bc"
+   }
+  },
+  "snapshot": {
+   "managedInstance": {
+    "generation": 1,
+    "podUid": "cc460c50-622d-4c7b-a473-a986490f386d",
+    "runnerId": "01a15431-f1f1-773e-b7cd-c25915447151"
+   },
+   "mount": [
+    {
+     "fstype": "ext4",
+     "source": "/dev/rbd1"
+    }
+   ],
+   "podUid": "cc460c50-622d-4c7b-a473-a986490f386d",
+   "prefix": {},
+   "runnerId": "01a15431-f1f1-773e-b7cd-c25915447151",
+   "runs": {
+    "01a15432-9fa1-7638-883b-36cfecefa314": {
+     "provider": "claude",
+     "runtimeSessionId": "438944e9-3583-408a-b74f-29323209a2f1",
+     "sessionUuid": "438944e9-3583-408a-b74f-29323209a2f1",
+     "workDir": "/var/lib/orbit/home/.orbit/worktrees/01a15432-9fa1-7638-883b-36cfecefa314"
+    }
+   },
+   "sqlite": {
+    "t02-probe/p1/rows.sqlite": "ok"
+   },
+   "takenAt": "2026-10-19T12:46:32.789+00:00",
+   "transcripts": {
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15432-9fa1-7638-883b-36cfecefa314/438944e9-3583-408a-b74f-29323209a2f1.jsonl": {
+     "lines": 29,
+     "sha256": "292d19241cb3d52994450e7d2c4734c7eeef098f0797b4bd46e37cea07cbc20b"
+    }
+   },
+   "uid": 10001,
+   "uploads": {
+    "01a15432-9fa1-7638-883b-36cfecefa314/t08-ann-note.txt": "441452e669aec5523cc4caad490a968fae8826542a078195aed74acb50da630b"
+   },
+   "workspace": {
+    "fsckExit": 0,
+    "head": "78abb906d1e33f210a403a53ebabafb7cebb4871",
+    "worktrees": [
+     "worktree /var/lib/orbit/home/orbit-repos/default",
+     "HEAD 78abb906d1e33f210a403a53ebabafb7cebb4871",
+     "branch refs/heads/master",
+     "",
+     "worktree /var/lib/orbit/home/.orbit/worktrees/01a15432-9fa1-7638-883b-36cfecefa314",
+     "HEAD 48a50404282d070ff6bf2d9aa5f0287884260524",
+     "branch refs/heads/orbit/t08-ann-first-session-49af3a"
+    ]
+   },
+   "worktrees": {
+    "01a15432-9fa1-7638-883b-36cfecefa314": {
+     "branch": "orbit/t08-ann-first-session-49af3a",
+     "files": {
+      ".gitignore": "251c3a8ce9268cc7387250d5cf0fdac953843c7560219957565e68eaeaed2697",
+      "t08-ann1.txt": "dd4a213dc6ebc5bc9ec1e1fc8014cc9e231298a70d955f818ca4cf29b3e9ce5d"
+     },
+     "head": "48a50404282d070ff6bf2d9aa5f0287884260524",
+     "status": []
+    }
+   }
+  }
+ },
+ "seconds": 26.6,
+ "startedAt": "2026-10-19T12:46:06.203+00:00",
+ "step": "data"
+}

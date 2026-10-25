@@ -1,0 +1,71 @@
+=== RUN   TestAntigravityContractApprovalAllowed
+[orbit-runner 2026-10-20T12:43:07.909Z] antigravity: contract-approval-allow: starting agy, auth source session_key
+--- PASS: TestAntigravityContractApprovalAllowed (1.02s)
+=== RUN   TestAntigravityContractApprovalDenied
+[orbit-runner 2026-10-20T12:43:08.931Z] antigravity: contract-approval-deny: starting agy, auth source session_key
+--- PASS: TestAntigravityContractApprovalDenied (1.02s)
+=== RUN   TestAntigravityContractApprovalTimesOut
+[orbit-runner 2026-10-20T12:43:09.945Z] antigravity: contract-approval-timeout: starting agy, auth source session_key
+--- PASS: TestAntigravityContractApprovalTimesOut (6.04s)
+=== RUN   TestAntigravityContractApprovalFileTools
+[orbit-runner 2026-10-20T12:43:15.981Z] antigravity: contract-approval-files: starting agy, auth source session_key
+--- PASS: TestAntigravityContractApprovalFileTools (0.74s)
+=== RUN   TestAntigravityContractApprovalHookNotLoaded
+=== RUN   TestAntigravityContractApprovalHookNotLoaded/listing
+[orbit-runner 2026-10-20T12:43:16.721Z] antigravity: contract-approval-unlisted: starting agy, auth source session_key
+=== RUN   TestAntigravityContractApprovalHookNotLoaded/heartbeat
+[orbit-runner 2026-10-20T12:43:17.178Z] antigravity: contract-approval-no-heartbeat: starting agy, auth source session_key
+[orbit-runner 2026-10-20T12:43:17.523Z] antigravity: contract-approval-no-heartbeat: Orbit stopped Antigravity because its approval hook is no longer in force: agy answered 1 model call(s) and Orbit's hook saw 0. Without it nothing would ask before agy acts, so this session cannot go on.
+[orbit-runner 2026-10-20T12:43:17.549Z] antigravity: error: interrupted
+=== RUN   TestAntigravityContractApprovalHookNotLoaded/rewritten
+[orbit-runner 2026-10-20T12:43:17.861Z] antigravity: contract-approval-rewritten: starting agy, auth source session_key
+[orbit-runner 2026-10-20T12:43:18.239Z] antigravity: contract-approval-rewritten: Orbit stopped Antigravity because its approval hook is no longer in force: its hooks.json was changed while agy was running. Without it nothing would ask before agy acts, so this session cannot go on.
+[orbit-runner 2026-10-20T12:43:18.264Z] antigravity: error: interrupted
+=== RUN   TestAntigravityContractApprovalHookNotLoaded/checkout_hook
+[orbit-runner 2026-10-20T12:43:21.067Z] antigravity: contract-approval-checkout-hook: starting agy, auth source session_key
+[orbit-runner 2026-10-20T12:43:21.439Z] antigravity: contract-approval-checkout-hook: Orbit stopped Antigravity because its approval hook is no longer in force: the checkout now brings its own agy configuration (refusing to start Antigravity: the checkout's /tmp/TestAntigravityContractApprovalHookNotLoadedcheckout_hook58346922/001/work/.agents/hooks.json may run commands outside Orbit's permission policy (agy runs it in every mode). Remove it, or run this session in Auto or Bypass permissions). Without it nothing would ask before agy acts, so this session cannot go on.
+[orbit-runner 2026-10-20T12:43:21.465Z] antigravity: error: interrupted
+--- PASS: TestAntigravityContractApprovalHookNotLoaded (7.54s)
+    --- PASS: TestAntigravityContractApprovalHookNotLoaded/listing (0.45s)
+    --- PASS: TestAntigravityContractApprovalHookNotLoaded/heartbeat (0.69s)
+    --- PASS: TestAntigravityContractApprovalHookNotLoaded/rewritten (3.20s)
+    --- PASS: TestAntigravityContractApprovalHookNotLoaded/checkout_hook (3.20s)
+=== RUN   TestAntigravityContractMultiTurn
+[orbit-runner 2026-10-20T12:43:24.261Z] antigravity: contract-multi: starting agy, auth source session_key
+--- PASS: TestAntigravityContractMultiTurn (0.74s)
+=== RUN   TestAntigravityContractResumesConversation
+[orbit-runner 2026-10-20T12:43:25.010Z] antigravity: contract-resume: starting agy, auth source session_key
+[orbit-runner 2026-10-20T12:43:25.496Z] antigravity: contract-resume: starting agy, auth source session_key
+[orbit-runner 2026-10-20T12:43:25.948Z] antigravity: contract-resume: starting agy, auth source session_key
+[orbit-runner 2026-10-20T12:43:26.144Z] antigravity: warning: conversation "00000000-1111-2222-3333-444444444444" not found
+--- PASS: TestAntigravityContractResumesConversation (1.57s)
+=== RUN   TestAntigravityContractInterruptCleansProcessGroup
+=== RUN   TestAntigravityContractInterruptCleansProcessGroup/hook
+[orbit-runner 2026-10-20T12:43:26.579Z] antigravity: contract-interrupt-hook: starting agy, auth source session_key
+[orbit-runner 2026-10-20T12:43:26.813Z] antigravity: error: interrupted
+[orbit-runner 2026-10-20T12:43:26.881Z] antigravity: contract-interrupt-hook: starting agy, auth source session_key
+=== RUN   TestAntigravityContractInterruptCleansProcessGroup/command
+[orbit-runner 2026-10-20T12:43:27.368Z] antigravity: contract-interrupt-command: starting agy, auth source session_key
+[orbit-runner 2026-10-20T12:43:27.600Z] antigravity: error: interrupted
+--- PASS: TestAntigravityContractInterruptCleansProcessGroup (1.36s)
+    --- PASS: TestAntigravityContractInterruptCleansProcessGroup/hook (0.79s)
+    --- PASS: TestAntigravityContractInterruptCleansProcessGroup/command (0.57s)
+=== RUN   TestAntigravityContractInterruptedToolGetsResult
+[orbit-runner 2026-10-20T12:43:27.936Z] antigravity: contract-interrupted-tool: starting agy, auth source session_key
+[orbit-runner 2026-10-20T12:43:28.100Z] antigravity: error: interrupted
+--- PASS: TestAntigravityContractInterruptedToolGetsResult (0.51s)
+=== RUN   TestAntigravityContractInjectsOrbitMCP
+[orbit-runner 2026-10-20T12:43:28.455Z] antigravity: contract-mcp: starting agy, auth source session_key
+--- PASS: TestAntigravityContractInjectsOrbitMCP (0.70s)
+=== RUN   TestAntigravityContractDefaultModeRefusesUnapproved
+=== RUN   TestAntigravityContractDefaultModeRefusesUnapproved/refused
+[orbit-runner 2026-10-20T12:43:29.153Z] antigravity: contract-deny: starting agy, auth source session_key
+[orbit-runner 2026-10-20T12:43:29.337Z] antigravity: jetski: no output produced — a tool required the "command" permission that headless mode cannot prompt for, so it was auto-denied. Add an allow-rule under permissions.allow in settings.json (e.g. command(<target>)). Alternatively, re-run with --dangerously-skip-permissions to auto-approve all tools.
+=== RUN   TestAntigravityContractDefaultModeRefusesUnapproved/allowed_by_rule
+[orbit-runner 2026-10-20T12:43:29.686Z] antigravity: contract-allow: starting agy, auth source session_key
+--- PASS: TestAntigravityContractDefaultModeRefusesUnapproved (1.07s)
+    --- PASS: TestAntigravityContractDefaultModeRefusesUnapproved/refused (0.53s)
+    --- PASS: TestAntigravityContractDefaultModeRefusesUnapproved/allowed_by_rule (0.54s)
+PASS
+ok  	orbit	22.320s
+exit=0

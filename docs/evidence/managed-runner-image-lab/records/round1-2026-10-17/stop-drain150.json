@@ -1,0 +1,29 @@
+{
+  "deleteRequestedAt": "2026-10-17T07:26:29.608+00:00",
+  "grace": 240,
+  "log": "/mnt/data/managed-runner-lab/test-server/state/logs/t03-runner-2a4c5d8b-7898-46dd-9205-a19fa7d34eb2.log",
+  "logMarks": {
+    "detached": "2026-10-17T07:28:09.749432173Z",
+    "drainTimeout": "2026-10-17T07:28:09.664572401Z",
+    "stopping": "2026-10-17T07:26:29.665211094Z"
+  },
+  "logTail": [
+    "2026-10-17T07:24:17.302867130Z [orbit-runner 2026-10-17T07:24:17.302Z] runner \"t03\" online -> https://10.0.2.2:13711 (max 2 concurrent)",
+    "2026-10-17T07:24:20.325481091Z [orbit-runner 2026-10-17T07:24:20.325Z] reclaiming session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 T03 fake-model persistence session 2",
+    "2026-10-17T07:24:21.458605918Z [orbit-runner 2026-10-17T07:24:21.458Z] session 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 re-attached worktree /var/lib/orbit/home/.orbit/worktrees/01a148ba-a3da-7330-94bc-3ba0bd62959a (branch orbit/t03-fake-model-persistence-session-2-244d43)",
+    "2026-10-17T07:26:15.324376904Z [orbit-runner 2026-10-17T07:26:15.324Z] > interactive run 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 T03 fake-model persistence session 2",
+    "2026-10-17T07:26:17.303479191Z [orbit-runner 2026-10-17T07:26:17.303Z] claude plan-usage unavailable: open /var/lib/orbit/home/.claude/.credentials.json: no such file or directory",
+    "2026-10-17T07:26:29.665211094Z [orbit-runner 2026-10-17T07:26:29.664Z] runner stopping; draining session supervisors...",
+    "2026-10-17T07:28:09.664572401Z [orbit-runner 2026-10-17T07:28:09.664Z] drain timeout for 01a148ba-a3da-7330-94bc-3ba0bd62959a; tearing down mid-turn",
+    "2026-10-17T07:28:09.749432173Z [orbit-runner 2026-10-17T07:28:09.749Z] \u23f8 interactive run 01a148ba-a3da-7330-94bc-3ba0bd62959a \u2014 detached for shutdown (resumable)"
+  ],
+  "podGoneAt": "2026-10-17T07:28:11.125+00:00",
+  "podUid": "2a4c5d8b-7898-46dd-9205-a19fa7d34eb2",
+  "runnerTerminated": {
+    "containerID": "containerd://4a02b8306859d3770590a351ad4a0aca1ed56227af932ea4a1253cf2a34655bd",
+    "exitCode": 0,
+    "finishedAt": "2026-10-17T07:28:09Z",
+    "reason": "Completed",
+    "startedAt": "2026-10-17T07:24:17Z"
+  }
+}

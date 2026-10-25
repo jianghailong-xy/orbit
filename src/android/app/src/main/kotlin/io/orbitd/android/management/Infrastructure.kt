@@ -217,8 +217,9 @@ internal object Infrastructure {
 
     /** The model a Cursor CLI session on a Cursor key starts on (web's cursorModelOf): Auto, Cursor's own default, by the name the
      * catalogue of the first machine online that can run it gives it — the models are Cursor CLI's on each machine, whichever key it runs
-     * on (docs/cursor-runtime-contract.md §10). Auto it is with none. */
-    private fun cursorModel(online: List<JsonObject>): String {
+     * on (docs/cursor-runtime-contract.md §10). Auto it is with none. A key's row and its page say it too (OrbitKit
+     * `Infrastructure.cursorModel`). */
+    fun cursorModel(online: List<JsonObject>): String {
         for (runner in online) {
             if (CursorRuntime.state(runner) != CursorRuntime.RunnerState.READY) continue
             val catalog = runner.obj("modelCatalog")?.list(ProviderEngines.CURSOR).orEmpty().takeIf { it.isNotEmpty() } ?: continue

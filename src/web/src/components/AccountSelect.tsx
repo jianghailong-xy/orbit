@@ -1,6 +1,7 @@
 import { withEnginePlanUsage, type LoginEngine, type RunnerEngineAccount } from '@orbit/shared';
 import { accountDir, accountNameOf, accountPlanUsage, runsOnEnvKey } from '../lib/engineAccounts';
 import { bindingPlanUsageRow, currentPlanUsageRows, cursorUsageLimit } from '../lib/planUsage';
+import { ACCOUNT_SELECT_DEFAULT_REMOVED, ACCOUNT_SELECT_GONE_AUTOMATIC } from '../lib/runnerAccountCopy';
 import { tildePath } from './RunnerEngines';
 import type { Runner } from './TasksSidePanel';
 import { Select } from './ui/Select';
@@ -91,6 +92,10 @@ const ENGINE_COPY: Record<string, { label: string; envVar: string; sessions: str
  * (automaticAccount on the server), so Default is saved as `default` there, a choice of its own. With
  * one account `null` is Default.
  *
+ * While Default is removed from Orbit (`removedDefault`) it is no choice: its sessions, and those on an
+ * account the runner no longer reports, run on Automatic's pick among the accounts that remain, however
+ * many there are, so `null` is Automatic. A workspace already set to Default says so.
+ *
  * `envDir` is the engine's own config-directory variable typed into the same form's environment:
  * until an account is picked here that is where the sessions run, and a picked account replaces it.
  * Either way the field says so, rather than naming an account the sessions are not on.
@@ -111,7 +116,8 @@ export function AccountSelect({
   const copy = ENGINE_COPY[engine] ?? { label: 'Account', envVar: '', sessions: engine };
   const health = runner.engines?.find((entry) => entry.engine === engine);
   const accounts = accountsOf(runner, engine);
-  const automatic = accounts.length >= 2;
+  const removed = health?.removedDefault;
+  const automatic = accounts.length >= 2 || !!removed;
   // Default renamed in Orbit goes by its name, with what it is — the machine's own login — under it.
   const options: AccountOption[] = accounts.map((account) => ({
     value: account.id,
@@ -125,7 +131,7 @@ export function AccountSelect({
         : accountStatus(runner, engine, account),
   }));
   // A runner that lists no accounts still has Default: the engine's own sign-in is its.
-  if (!accounts.some((account) => account.id === DEFAULT)) {
+  if (!removed && !accounts.some((account) => account.id === DEFAULT)) {
     const auth = health?.installed ? health.auth : 'unknown';
     options.unshift({
       value: DEFAULT,
@@ -133,12 +139,16 @@ export function AccountSelect({
       status: accountStatus(runner, engine, { id: DEFAULT, auth }),
     });
   }
-  if (value !== null && value !== DEFAULT && !accounts.some((account) => account.id === value)) {
-    options.push({
-      value,
-      label: `Account ${value}`,
-      status: 'not on this runner — sessions run on Default',
-    });
+  if (value !== null && !accounts.some((account) => account.id === value) && (value !== DEFAULT || removed)) {
+    options.push(
+      value === DEFAULT
+        ? { value, label: accountNameOf({ id: DEFAULT, name: removed?.name }), status: ACCOUNT_SELECT_DEFAULT_REMOVED }
+        : {
+            value,
+            label: `Account ${value}`,
+            status: removed ? ACCOUNT_SELECT_GONE_AUTOMATIC : 'not on this runner — sessions run on Default',
+          },
+    );
   }
   if (automatic) {
     options.unshift({

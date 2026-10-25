@@ -1,0 +1,10 @@
+Test Case '-[NeedsYouProbeUITests.NeedsYouShotTests testIPhoneCapsuleInsideTheConversation]' started.
+Test Case '-[NeedsYouProbeUITests.NeedsYouShotTests testIPhoneCapsuleInsideTheConversation]' passed (110.910 seconds).
+Test Case '-[NeedsYouProbeUITests.NeedsYouShotTests testIPhoneCapsuleOnTheSessionList]' started.
+Test Case '-[NeedsYouProbeUITests.NeedsYouShotTests testIPhoneCapsuleOnTheSessionList]' passed (30.661 seconds).
+Test Case '-[NeedsYouProbeUITests.NeedsYouShotTests testIPhoneCapsuleOverAConversation]' started.
+Test Case '-[NeedsYouProbeUITests.NeedsYouShotTests testIPhoneCapsuleOverAConversation]' passed (34.543 seconds).
+	 Executed 3 tests, with 0 failures (0 unexpected) in 176.114 (176.126) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 176.114 (176.127) seconds
+	 Executed 3 tests, with 0 failures (0 unexpected) in 176.114 (176.130) seconds
+** TEST SUCCEEDED **

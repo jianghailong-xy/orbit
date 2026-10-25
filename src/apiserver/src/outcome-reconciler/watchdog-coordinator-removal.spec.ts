@@ -314,8 +314,12 @@ test('(i) this is subtraction: no new service, no new resident process', () => {
   // docker-channel is the managed runners' restricted Docker channel, which the account owner allowed on
   // 2026-10-17 under a Compose profile a fresh install switches on (docs/managed-runner-design.md,
   // "Implementation record: new deployments"), not this removal; test/compose-topology.test.mjs (m) pins it.
+  // managed-runner-firewall is the managed runners' host firewall, which the account owner decided on
+  // 2026-10-19 under a Compose profile of its own (docs/managed-runner-design.md, "Implementation record: the
+  // managed runners' host firewall"), not this removal; test/compose-topology.test.mjs (n) pins it.
   assert.deepEqual(services.sort(),
-    ['apiserver', 'docker-channel', 'gateway', 'pg-socket', 'pgbackup', 'postgres', 'web', 'wiki-worker']);
+    ['apiserver', 'docker-channel', 'gateway', 'managed-runner-firewall', 'pg-socket', 'pgbackup', 'postgres', 'web',
+      'wiki-worker']);
   assert.equal(/restart:\s*unless-stopped/.test(REMOVAL_SQL), false);
   const apiserver = JSON.parse(read('src/apiserver/package.json')) as {
     scripts: Record<string, string>;

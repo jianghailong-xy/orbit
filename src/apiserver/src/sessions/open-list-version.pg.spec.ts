@@ -97,12 +97,19 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }): Promise
 }
 
 /** The Open list as the clients receive it. */
-async function openList(f: Fixture): Promise<string> {
-  return JSON.stringify(await f.sessions.list(f.ownerId, { view: 'open' }));
+async function openList(
+  f: Fixture,
+  filters: { projectId?: string; includeLanding?: boolean } = {},
+): Promise<string> {
+  return JSON.stringify(await f.sessions.list(f.ownerId, { view: 'open', ...filters }));
 }
 
 /** One GET of the Open list through the controller, as the clients poll it. */
-async function poll(f: Fixture, ifNoneMatch?: string) {
+async function poll(
+  f: Fixture,
+  ifNoneMatch?: string,
+  filters: { projectId?: string; includeLanding?: boolean } = {},
+) {
   let listed = 0;
   const service = new Proxy(f.sessions, {
     get(target, key, receiver) {
@@ -125,7 +132,8 @@ async function poll(f: Fixture, ifNoneMatch?: string) {
   };
   const body = await controller.list(
     { userId: f.ownerId } as never,
-    undefined, undefined, undefined, undefined, 'open', undefined, undefined, undefined, ifNoneMatch, res as never,
+    undefined, undefined, undefined, undefined, 'open', undefined,
+    filters.projectId, filters.includeLanding ? '1' : undefined, undefined, ifNoneMatch, res as never,
   );
   return { etag: headers.etag, body, listed, status };
 }
@@ -259,4 +267,75 @@ test("another account's writes leave this account's version alone", { skip }, as
   const before = await readOpenListVersion(mine.db as never, mine.ownerId);
   await theirs.db.session.update({ where: { id: theirs.sessionId }, data: { title: 'theirs' } });
   assert.equal(await readOpenListVersion(mine.db as never, mine.ownerId), before);
+});
+
+/**
+ * A LANDING row is in no flat list (contract §2.9 LS6), so only the project grouping's
+ * `includeLanding=1` read can show it: the subject and its container moving must invalidate that
+ * read's ETag and leave the plain list's exactly where it was.
+ */
+test('a landing insert and its settlement move only the landing-aware ETag', { skip }, async (t) => {
+  const f = await fixture(t);
+  const { db } = f;
+  const project = await db.project.create({ data: { ownerId: f.ownerId, title: 'olv landing project' } });
+  const codebase = await db.projectCodebase.create({
+    data: {
+      ownerId: f.ownerId, projectId: project.id,
+      canonicalRepoUrl: `https://github.com/example/olv-landing-${project.id}`,
+      upstreamRef: 'refs/heads/main', integrationRef: 'refs/heads/main', refAuthority: 'REMOTE',
+    },
+  });
+  const task = await db.task.create({
+    data: {
+      ownerId: f.ownerId, creatorType: 'USER', creatorId: f.ownerId, title: 'olv landing task',
+      projectId: project.id, completionCriterion: 'OWNER_CONFIRMED',
+    },
+  });
+  const scope = { projectId: project.id, includeLanding: true };
+  const plain = await poll(f);
+  const landing = await poll(f, undefined, scope);
+  // A different list, a different ETag, whatever the version is.
+  assert.notEqual(landing.etag, plain.etag);
+  assert.deepEqual(landing.body, []);
+  const landingListBefore = await openList(f, scope);
+
+  // The subject opens and its container row is inserted: a row the landing-aware list shows.
+  const sessionId = randomUUID();
+  await db.session.create({
+    data: {
+      id: sessionId, ownerId: f.ownerId, creatorId: f.ownerId, title: 'Land the task',
+      prompt: 'Orbit runs this landing.', status: RunStatus.AWAITING_INPUT,
+      sessionKind: 'LANDING', provider: 'orbit', providerBuiltin: true, startsTaskWork: false,
+      dispatchOrigin: SessionDispatchOrigin.USER,
+    },
+  });
+  await db.projectLanding.create({
+    data: {
+      id: randomUUID(), projectId: project.id, ownerId: f.ownerId, codebaseId: codebase.id,
+      subject: 'TASK', taskId: task.id, episode: 1, sessionId,
+    },
+  });
+  assert.notEqual(await openList(f, scope), landingListBefore, 'the insert did not reach the landing-aware list');
+  assert.ok((await openList(f, scope)).includes(sessionId), 'the landing row is not in its list');
+  const inserted = await poll(f, landing.etag, scope);
+  assert.equal(inserted.status, 200, 'a landing insert left the landing-aware ETag alone');
+  assert.notEqual(inserted.etag, landing.etag);
+  const plainAfterInsert = await poll(f, plain.etag);
+  assert.equal(plainAfterInsert.status, 304, 'a landing insert moved the plain list');
+  assert.equal(plainAfterInsert.etag, plain.etag);
+  // Without a project the flag names no list of its own: the plain read is the answer.
+  assert.equal((await poll(f, plain.etag, { includeLanding: true })).status, 304);
+
+  // Settlement writes the subject and the container's terminal state.
+  await db.projectLanding.update({
+    where: { sessionId }, data: { settledAt: new Date(), settledAs: 'LANDED' },
+  });
+  await db.session.update({ where: { id: sessionId }, data: { status: RunStatus.SUCCEEDED, completedAt: new Date() } });
+  const settled = await poll(f, inserted.etag, scope);
+  assert.equal(settled.status, 200, 'a settlement left the landing-aware ETag alone');
+  assert.notEqual(settled.etag, inserted.etag);
+  const plainAfterSettlement = await poll(f, plain.etag);
+  assert.equal(plainAfterSettlement.status, 304, 'a settlement moved the plain list');
+  assert.equal(plainAfterSettlement.etag, plain.etag);
+  assert.equal((await poll(f, settled.etag, scope)).status, 304);
 });

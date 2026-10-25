@@ -1,0 +1,15 @@
+# 8 runners, staggered, more rounds of the mitigated build (d10) and the build before T02c (before): with the runner's
+# commit after every turn (as plan 4) and without runner commits, which leaves one pre-report sync per turn (its end)
+# instead of two; d10-before-d10-before. The deployment is on t02c after plan 4.
+switch d10
+p01-d-n8 d10 8 120 3 400 2000 1 25
+p02-d-n8c0 d10 8 120 3 400 2000 0 25
+switch before
+p03-b-n8 before 8 120 3 400 2000 1 25
+p04-b-n8c0 before 8 120 3 400 2000 0 25
+switch d10
+p05-d-n8c0 d10 8 120 3 400 2000 0 25
+p06-d-n8 d10 8 120 3 400 2000 1 25
+switch before
+p07-b-n8c0 before 8 120 3 400 2000 0 25
+p08-b-n8 before 8 120 3 400 2000 1 25

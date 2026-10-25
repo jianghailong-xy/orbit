@@ -985,9 +985,13 @@ struct ProjectDetailView: View {
     private func landingRow(_ store: ProjectDetailModel) -> some View {
         if let integration = store.integration, integration.inFlight != nil {
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                if let card = ProjectMergeCard.taskLandingCard(integration, now: context.date,
-                                                               updatedAt: store.integrationReadAt,
-                                                               refreshFailed: store.integrationReadFailed) {
+                // The Work overview draws every job in flight, a merge job included: the merge
+                // card lives on the project's sessions page, which this page does not have, and
+                // hiding the job here showed a project "stopped" through its own merge (owner
+                // 2026-10-19: iOS draws it as web and Android do).
+                if let card = ProjectPage.landingCard(integration, now: context.date,
+                                                      updatedAt: store.integrationReadAt,
+                                                      refreshFailed: store.integrationReadFailed) {
                     ProjectLandingCardView(
                         card: card,
                         onOpenJobs: integration.inFlightJobs == nil ? nil : { pageSheet = .landingJobs },

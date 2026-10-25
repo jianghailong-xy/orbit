@@ -1,4 +1,7 @@
-import { SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryPrompt, mergeRecoveryReady, type MergeRecoveryAction } from '@orbit/shared';
+import {
+  SESSION_MERGE_RECOVERY_V1, readMergeRecovery, mergeRecoveryConfirmable, mergeRecoveryContinuePrompt, mergeRecoveryPrompt,
+  mergeRecoveryReady, type MergeRecovery, type MergeRecoveryAction,
+} from '@orbit/shared';
 import {
   BadRequestException,
   ConflictException,
@@ -72,6 +75,7 @@ import {
   MAX_PROMPT_CHARS,
   PermissionMode,
   type PermissionRule,
+  type ProjectIntegrationLogPage,
   ROOT_FALLBACK_PERMISSION_MODE,
   ROOT_REFUSED_PERMISSION_MODES,
   RunEventType,
@@ -87,6 +91,7 @@ import {
   SessionRunState,
   SessionState,
   type SessionProjectMembership,
+  type SessionLandingView,
   type SessionSearchHit,
   type SessionSourceRefusalDetail,
   type SourceRefusalCode,
@@ -144,9 +149,14 @@ import {
 } from '../projects/owner-decision-signal';
 import { decideSessionSource, type SessionSourceTaskRow } from '../projects/session-source';
 import { branchName } from '../projects/project-criterion-landing';
+import { INTEGRATION_ITEM_KINDS, openItemOwed } from '../projects/project-open-item';
+import { readSourceLanding } from '../projects/landing-session';
+import { readLandingIntegrationLog, type IntegrationLogSelectors } from '../projects/project-integration-log';
 import {
+  MATCHED_BY_CONTENT,
   MERGE_RECEIPT_RESULTS,
   MergeReceiptRow,
+  mergeReceiptIdempotencyKey,
   mergeReceiptRow,
   mergeStatusForResult,
 } from './merge-receipt';
@@ -159,6 +169,7 @@ import {
   SessionConfigDto,
   AUTOMATIC_ACCOUNT,
   SessionInterruptDto,
+  SessionLandingSummary,
   SessionResumeDto,
   SessionTurnDto,
 } from './dto';
@@ -246,12 +257,19 @@ import {
   accountSwitchNotice,
   accountBeforeDispatch,
   automaticAccount,
-  runAccount,
+  reportedRunAccount,
   workspaceLeavesAccountToOrbit,
   type WorkspaceAccountChoices,
 } from '../providers/plan-usage-accounts';
-import { ACCOUNT_CHOICE, ACCOUNT_PINNED } from '../providers/account';
-import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
+import {
+  ACCOUNT_CHOICE,
+  ACCOUNT_PINNED,
+  DEFAULT_ACCOUNT,
+  defaultRemovedOn,
+  remainingAccount,
+  type AccountRunner,
+} from '../providers/account';
+import { sanitizeRunnerEngines, usedRunnerEngines } from '../common/runner-engines';
 import { runnerAccountPausedUntil } from '../common/account-pause';
 import { ACCOUNT_MOVE_CAPABILITY, cursorMoveRefusal } from '../providers/account-move-capability';
 import { sessionPoolCodexLogin } from '../providers/codex-login';
@@ -266,6 +284,12 @@ import { deadLetterQueuedWatchWakes } from '../watches/watch-wake-drain';
 import { returnQueuedTurns } from '../projects/project-open-item';
 import { OpenListDeltaStore } from './open-list-delta';
 import { readOpenListVersion } from './open-list-version';
+import {
+  SESSION_KIND_CONVERSATION,
+  SESSION_KIND_LANDING,
+  assertEngineSession as assertEngineSessionRow,
+} from './engine-session';
+import { readLandingView } from '../projects/landing-view';
 import {
   SESSION_RUNNER_OFFLINE_AFTER_MS,
   deriveSessionCapabilities,
@@ -648,6 +672,24 @@ interface ResolvedProviderSwitch extends SessionSwitch {
  */
 export class SessionNotSendable extends ConflictException {}
 
+/** What SessionsService.checkAfterRepairTurn did about a merge recovery after a repair session's turn. */
+export type RepairTurnCheck =
+  /** A preview is queued, as the owner's Check again queues one. */
+  | 'QUEUED'
+  /** The session runs a turn of its own; the check waits for its end. */
+  | 'DEFERRED'
+  /** Its own turn ended and no repair turn's check was waiting for it. */
+  | 'NOTHING_OWED'
+  | 'NO_RECOVERY'
+  /** LOCAL_SYNC_PENDING, PUSH_FAILED or REMOTE_NOT_VERIFIED: a landing being finished. */
+  | 'LANDING_UNFINISHED'
+  /** The recovery was checked after the turn ended. */
+  | 'ALREADY_CHECKED'
+  /** A merge or commit of the session is in flight. */
+  | 'OPERATION_IN_FLIGHT'
+  /** Its runner does not declare SESSION_MERGE_RECOVERY_V1. */
+  | 'RUNNER_CANNOT_CHECK';
+
 /**
  * The account Automatic starts a session moved onto the built-in `engine` on (accountOnProviderSwitch):
  * automaticAccount, when its workspace leaves the account to Orbit. Null leaves the session's own
@@ -661,7 +703,7 @@ function automaticAccountOnSwitch(
   session: {
     numTurns: number;
     workspace: ({ env: unknown } & WorkspaceAccountChoices) | null;
-    assignedRunner: { engines: unknown; accountPauses?: unknown; planUsage: unknown; capabilities: string[] } | null;
+    assignedRunner: (AccountRunner & { capabilities: string[] }) | null;
   },
   engine: AccountEngine,
   now: Date,
@@ -669,12 +711,20 @@ function automaticAccountOnSwitch(
   const runner = session.assignedRunner;
   if (!runner) return null;
   if (session.numTurns > 0 && !runnerCarriesAccounts(runner, engine)) return null;
-  return automaticAccount(engine, session.workspace, runner.engines, runner.planUsage, now, runner.accountPauses);
+  return automaticAccount(engine, session.workspace, runner, now);
 }
 
 /** Whether `runner` carries a conversation from one of its `engine` accounts to another. */
 function runnerCarriesAccounts(runner: { capabilities: string[] }, engine: AccountEngine): boolean {
   return (runner.capabilities ?? []).includes(ACCOUNT_MOVE_CAPABILITY[engine]);
+}
+
+/** A session's runner as its detail serves it: the engines as the runner list serves them — named,
+ *  paused, without a Default removed from Orbit (usedRunnerEngines) — and none of the columns they
+ *  are read from. */
+function servedRunner<R extends { engines: unknown; accountNames: unknown; accountPauses: unknown; defaultRemoved: unknown }>(row: R) {
+  const { accountNames: _accountNames, accountPauses: _accountPauses, defaultRemoved: _defaultRemoved, ...runner } = row;
+  return { ...runner, engines: usedRunnerEngines(row) };
 }
 
 /** The account columns a provider switch writes (accountOnProviderSwitch); empty writes none. */
@@ -1157,7 +1207,10 @@ export class SessionsService {
     // everything this deliberately lets through.
     const targetRunner = await this.prisma.runner.findFirst({
       where: { id: assignedRunnerId, ownerId },
-      select: { name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true },
+      select: {
+        name: true, displayName: true, status: true, lastHeartbeatAt: true, engines: true, accountNames: true,
+        accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true,
+      },
     });
     if (runtime === AgentProvider.DSH) {
       if (!targetRunner?.capabilitiesReportedAt || !targetRunner.capabilities?.includes('provider:dsh')) {
@@ -1188,7 +1241,9 @@ export class SessionsService {
     // for it — which pins it there — else, when its workspace leaves the account to Orbit, the runner's
     // account whose quota resets soonest (automaticAccount), which Orbit may move it off when that
     // account's usage limit stops it. Cursor CLI reports no quota yet, so Automatic starts it on Default,
-    // or on the first account signed in when Default is not (accountToStartOn). Stored here; a Codex,
+    // or on the first account signed in when Default is not (accountToStartOn). While the owner has
+    // removed Default from Orbit, Automatic picks among the accounts that remain, the only one too, and a
+    // workspace set to Default is on Automatic (automaticAccount). Stored here; a Codex,
     // Claude or Kimi conversation lives in that account's directory. Null runs on the workspace's. An
     // engine's account is the runner's sign-in to it, so it is read only for a session that runs on that
     // sign-in: a key or a pool brings its own credential, and an account named beside one is not kept
@@ -1197,14 +1252,7 @@ export class SessionsService {
       resolved.credential.kind === 'login' && resolved.credential.engine === engine;
     const automatic = (engine: AccountEngine) =>
       signedInOn(engine) && targetRunner
-        ? automaticAccount(
-            engine,
-            { env: workspaceEnv, ...accountChoices },
-            targetRunner.engines,
-            targetRunner.planUsage,
-            new Date(),
-            targetRunner.accountPauses,
-          )
+        ? automaticAccount(engine, { env: workspaceEnv, ...accountChoices }, targetRunner, new Date())
         : null;
     const picked = (engine: AccountEngine, account: string | undefined) =>
       signedInOn(engine) ? account : undefined;
@@ -2132,6 +2180,10 @@ export class SessionsService {
       where: {
         ownerId,
         deletedAt: null,
+        // LS6: a flat list (MCP `session_list`, `orbit session list`, the runners' own list) is
+        // conversations. Landing containers are reached by their link, or through the project
+        // grouping's `includeLanding` (a later task), never here.
+        sessionKind: SESSION_KIND_CONVERSATION,
         ...(filters.status ? { status: filters.status } : {}),
         ...(filters.parentSessionId ? { parentSessionId: filters.parentSessionId } : {}),
         ...runnerScopeWhere(filters.scope),
@@ -2186,6 +2238,7 @@ export class SessionsService {
         completedAt: true,
         archivedAt: true,
         deletedAt: true,
+        sessionKind: true,
         engine: true,
         provider: true,
         providerBuiltin: true,
@@ -2233,10 +2286,28 @@ export class SessionsService {
         assignedRunner: { select: { id: true, name: true } },
       },
     });
-    if (!session) throw new NotFoundException('session not found');
+    if (!session) {
+      // LS1: the landing row is inserted only after the first claim commits, so a link opened
+      // before that reaches the subject's pre-generated id. Render the same view from it.
+      // A runner-scoped caller is not offered the fallback: a landing is on no runner, so it is
+      // outside that scope exactly as a session of another machine is.
+      const landing = scope ? null : await readLandingView(this.prisma, ownerId, id);
+      if (landing) return SessionsService.landingOnlyDetail(id, landing);
+      throw new NotFoundException('session not found');
+    }
     const { providerBuiltin: _providerBuiltin, ...compact } = session;
     // The engine it runs on: recorded, else derived, null when nobody can tell (§6.1).
-    return withSessionState({ ...compact, engine: await sessionEngine(this.prisma, { ...session, ownerId }) });
+    const engine = await sessionEngine(this.prisma, { ...session, ownerId });
+    // A LANDING row has no engine, no runner and no turns: its detail is the landing view (§2.9
+    // LS6). The rest of this shape rides along unchanged so every client reads one payload.
+    const landing = session.sessionKind === SESSION_KIND_LANDING
+      ? await readLandingView(this.prisma, ownerId, id)
+      : undefined;
+    return withSessionState({
+      ...compact,
+      engine,
+      ...(landing ? { landing } : {}),
+    });
   }
 
   /**
@@ -2372,6 +2443,7 @@ export class SessionsService {
               LEFT JOIN conversation_turn ct
                 ON ct.id = e.turn_id AND ct.session_id = e.session_id
               WHERE s.owner_id = ${ownerId}::uuid
+                AND s.kind = 'CONVERSATION'
                 AND e.type IN ('user', 'assistant')
                 -- Keep the exact indexed expression as the cheap candidate filter. On an ordinary
                 -- delivery it contains the authored user text. A reclaimed continuation can
@@ -2484,6 +2556,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
+              AND s.kind = 'CONVERSATION'
               AND s.id = ${norm.sessionId}::uuid
             UNION
             -- Workspaces and logs commonly shorten a UUID to its first 8–12 hex characters. At this
@@ -2492,6 +2565,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
+              AND s.kind = 'CONVERSATION'
               AND replace(s.id::text, '-', '') LIKE ${
                 norm.sessionIdPrefix ? `${norm.sessionIdPrefix}%` : null
               }
@@ -2504,6 +2578,7 @@ export class SessionsService {
             SELECT s.id
             FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
+              AND s.kind = 'CONVERSATION'
               AND ${sessionPredicate}
             UNION
             -- Joined names resolve against their own tiny tables first (~10 workspaces, ~500 tasks),
@@ -2511,12 +2586,14 @@ export class SessionsService {
             -- index instead would mean reindexing every session whenever a workspace is renamed.
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
+              AND s.kind = 'CONVERSATION'
               AND s.workspace_id IN (
                 SELECT id FROM workspace WHERE ${matches(stripMarks(Prisma.sql`name`))}
               )
             UNION
             SELECT s.id FROM session s
             WHERE s.owner_id = ${ownerId}::uuid
+              AND s.kind = 'CONVERSATION'
               AND s.task_id IN (
                 SELECT id FROM task WHERE ${matches(stripMarks(Prisma.sql`title`))}
               )
@@ -2682,6 +2759,7 @@ export class SessionsService {
           LEFT JOIN workspace a ON a.id = s.workspace_id
           LEFT JOIN task  t ON t.id = s.task_id
           WHERE s.owner_id = ${ownerId}::uuid
+            AND s.kind = 'CONVERSATION'
             AND s.deleted_at IS NULL
           ORDER BY s.last_turn_at DESC NULLS LAST, s.created_at DESC
           LIMIT ${take}::int
@@ -2738,6 +2816,9 @@ export class SessionsService {
       archivedAt: null,
       deletedAt: null,
       workspaceId: { not: null },
+      // LS6: a landing in flight is not a conversation waiting on anybody, and its AWAITING_INPUT
+      // means only that its subject is open. It counts in no workspace tally.
+      sessionKind: SESSION_KIND_CONVERSATION,
     } as const;
     const [active, running, jobs, blocked, jobCards] = await Promise.all([
       this.prisma.session.groupBy({
@@ -2872,9 +2953,10 @@ export class SessionsService {
     return [...counts.values()];
   }
 
-  /** The Open list's data version; see open-list-version.ts. */
-  openListVersion(ownerId: string): Promise<string> {
-    return readOpenListVersion(this.prisma, ownerId);
+  /** The Open list's data version; see open-list-version.ts. `includeLanding` widens it to the
+   *  landing source, which only a project-scoped read that asks for landings can see. */
+  openListVersion(ownerId: string, includeLanding = false): Promise<string> {
+    return readOpenListVersion(this.prisma, ownerId, Date.now(), includeLanding);
   }
 
   async list(
@@ -2884,6 +2966,9 @@ export class SessionsService {
       workspaceId?: string;
       tagId?: string;
       projectId?: string;
+      /** Return the project's LANDING sessions too (contract §2.9 LS6). Only the `projectId`
+       *  read honours it; every flat list stays conversations. */
+      includeLanding?: boolean;
       /** The workspaces a token confined to them may see (`workspaceConfinement`). */
       confinedTo?: readonly string[];
       view?: 'open' | 'completed' | 'trash' | 'active' | 'archived' | 'deleted' | 'system';
@@ -2902,14 +2987,22 @@ export class SessionsService {
           : filters.view === 'deleted'
             ? 'trash'
             : (filters.view ?? 'open');
+    // LS6: a landing container is in no flat list. It is listed only by the project grouping's
+    // read — the one that names a project and asks for it — so the page can draw its Landings
+    // group without every other list (and every older client) growing a row it cannot place.
+    // Trash never takes one: a LANDING row cannot be trashed.
+    const includeLanding = filters.includeLanding === true && filters.projectId !== undefined;
+    const kindAllowed = includeLanding && view !== 'trash' && view !== 'system'
+      ? Prisma.sql`(s.kind = 'CONVERSATION' OR s.kind = 'LANDING')`
+      : Prisma.sql`s.kind = 'CONVERSATION'`;
     const visibility: Prisma.Sql =
       view === 'trash'
-        ? Prisma.sql`s.deleted_at IS NOT NULL`
+        ? Prisma.sql`s.deleted_at IS NOT NULL AND s.kind = 'CONVERSATION'`
         : view === 'system'
           ? Prisma.sql`FALSE`
           : view === 'completed'
-            ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NOT NULL AND s.deleted_at IS NULL`
-            : Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NULL AND s.deleted_at IS NULL`;
+            ? Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NOT NULL AND s.deleted_at IS NULL AND ${kindAllowed}`
+            : Prisma.sql`COALESCE(s.completed_at, s.archived_at) IS NULL AND s.deleted_at IS NULL AND ${kindAllowed}`;
     const runnerFilter = filters.runnerId
       ? Prisma.sql`AND s.assigned_runner_id = ${filters.runnerId}::uuid`
       : Prisma.empty;
@@ -2977,14 +3070,17 @@ export class SessionsService {
       workspaceId?: string;
       tagId?: string;
       projectId?: string;
+      includeLanding?: boolean;
       confinedTo?: readonly string[];
     },
     since: string | undefined,
   ) {
     const rows = await this.list(ownerId, { ...filters, view: 'open' });
+    // A cursor is only valid for the list that produced it: the same filters with and without
+    // landings are two different lists, and one's cursor must not be read as the other's.
     const scope = JSON.stringify([
       filters.runnerId ?? null, filters.workspaceId ?? null, filters.tagId ?? null, filters.projectId ?? null,
-      filters.confinedTo ?? null,
+      filters.includeLanding === true, filters.confinedTo ?? null,
     ]);
     // A runner's heartbeat restamps every row it hosts every 30 seconds; with a few runners that
     // alone would resend most of the list on most polls. The clients that read this delta draw
@@ -3057,6 +3153,7 @@ export class SessionsService {
       completedAt: Date | null;
       archivedAt: Date | null;
       deletedAt: Date | null;
+      sessionKind: string;
       source: string;
       engine: string | null;
       provider: string;
@@ -3105,6 +3202,8 @@ export class SessionsService {
       projectId: string | null;
       projectTitle: string | null;
       projectMembership: SessionProjectMembership | null;
+      /** The subject summary of a LANDING row; null on every conversation. */
+      landing: SessionLandingSummary | null;
       cancelRequestedAt: Date | null;
       runtimeSessionId: string | null;
       retryAt: Date | null;
@@ -3115,6 +3214,10 @@ export class SessionsService {
     const rows = await this.prisma.$queryRaw<Row[]>(Prisma.sql`
       SELECT
         s.id, s.status, s.title,
+        -- What drives the session (LS6): a LANDING row is never in the flat list, but a reader that
+        -- names sessions by id (link previews) gets the discriminator rather than a card that
+        -- claims the platform's container is an ordinary conversation.
+        s.kind            AS "sessionKind",
         s.created_at      AS "createdAt",
         s.last_turn_at    AS "lastTurnAt",
         -- When the turn now in flight was handed to the runner. last_turn_at cannot answer this:
@@ -3221,6 +3324,49 @@ export class SessionsService {
         cp.id     AS "projectId",
         cp.title  AS "projectTitle",
         ${sessionProjectMembershipSql('s')} AS "projectMembership",
+        -- What a LANDING row says about its subject (contract §2.9 LS6): the kind of landing work
+        -- and where it stands, so the project sessions page can keep an in-flight one out of the
+        -- ordinary rows, list an awaiting one, and fold a settled one into "Earlier · n landed".
+        -- AWAITING_DECISION is an OPEN integration item about this segment or a BLOCKED candidate.
+        -- An item counts only while it is still OWED (openItemOwed — the one definition every
+        -- reader asks, where a closed edge or a candidate that left the live states is not owed)
+        -- and only inside the segment's project, so an item about the same task filed under
+        -- another project cannot mark this row. The segment's candidates are not only the first
+        -- one l.promotion_id names: every later candidate of the round joins through a job whose
+        -- landing_id is this row (openPromotionRound). Only a LANDING row runs the subquery;
+        -- every conversation answers NULL without reading anything.
+        CASE WHEN s.kind = 'LANDING' THEN (
+          SELECT jsonb_build_object(
+            'subject', l.subject,
+            'state', CASE
+              WHEN l.settled_at IS NOT NULL THEN 'SETTLED'
+              WHEN EXISTS (
+                SELECT 1 FROM project_open_item oi
+                 WHERE oi.state = 'OPEN'
+                   AND oi.project_id = l.project_id
+                   AND oi.kind IN (${Prisma.join(INTEGRATION_ITEM_KINDS)})
+                   AND ${openItemOwed('oi')}
+                   AND (oi.task_id = l.task_id
+                        OR oi.promotion_id = l.promotion_id
+                        OR EXISTS (
+                          SELECT 1 FROM project_integration_job j
+                           WHERE j.id = oi.integration_job_id AND j.landing_id = l.id))
+              ) OR EXISTS (
+                SELECT 1 FROM project_promotion pr
+                 WHERE pr.state = 'BLOCKED'
+                   AND (pr.id = l.promotion_id
+                        OR pr.id IN (
+                          SELECT j.promotion_id FROM project_integration_job j
+                           WHERE j.landing_id = l.id AND j.promotion_id IS NOT NULL))
+              ) THEN 'AWAITING_DECISION'
+              ELSE 'IN_FLIGHT'
+            END,
+            'settledAs', l.settled_as,
+            'settledAt', l.settled_at
+          )
+          FROM project_landing l
+          WHERE l.session_id = s.id
+        ) END AS "landing",
         q.reason  AS "queuedReason",
         q.active  AS "queuedActive",
         q."limit" AS "queuedLimit"
@@ -3315,6 +3461,7 @@ export class SessionsService {
         completedAt: r.completedAt,
         archivedAt: r.archivedAt,
         deletedAt: r.deletedAt,
+        sessionKind: r.sessionKind,
         source: r.source,
         engine: engines.get(r.id) ?? null,
         provider: r.provider,
@@ -3366,6 +3513,9 @@ export class SessionsService {
         projectId: r.projectId,
         projectTitle: r.projectTitle,
         projectMembership: r.projectMembership,
+        // Present only on a LANDING row: a client folding a summary into a row it holds reads an
+        // absent key as "nothing to clear", and no conversation ever had one.
+        ...(r.landing ? { landing: r.landing } : {}),
         // Null unless the row is queued behind a cap — "waiting its turn" is not a gate.
         queuedReason: r.queuedReason,
         queuedActive: r.queuedActive == null ? null : Number(r.queuedActive),
@@ -3444,13 +3594,41 @@ export class SessionsService {
     });
   }
 
+  /**
+   * One page of a landing session's check output (`GET /sessions/:id/landing/log`, contract §2.9
+   * LS2): what a check printed while the landing ran, kept as a bounded head and tail per check.
+   *
+   * The user gate is the session's owner, and another account's session is the same 404 as a
+   * session that does not exist — the page is only ever addressed through a session the reader
+   * owns. A session that is not a landing session has no landing subject and is answered the same
+   * way. Which attempt is read is the selectors': a `jobId` from the landing view's generations, or
+   * the newest attempt when the request names none; `claim`, `round` and `check` narrow within it,
+   * and `cursor` continues a page.
+   */
+  async landingLog(
+    ownerId: string,
+    id: string,
+    selectors: IntegrationLogSelectors,
+  ): Promise<ProjectIntegrationLogPage<Date>> {
+    const session = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { id: true },
+    });
+    if (!session) throw new NotFoundException('session not found');
+    return readLandingIntegrationLog(this.prisma, { ownerId, sessionId: id, selectors });
+  }
+
   async get(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
       include: {
         workspace: true,
         assignedRunner: {
-          select: { id: true, name: true, displayName: true, version: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true },
+          select: {
+            id: true, name: true, displayName: true, version: true, engines: true, status: true, lastHeartbeatAt: true, capabilities: true,
+            // What its engines are served with (servedRunner), and served without.
+            accountNames: true, accountPauses: true, defaultRemoved: true,
+          },
         },
         tagLinks: {
           include: {
@@ -3513,11 +3691,17 @@ export class SessionsService {
             startedAt: true,
             finishedAt: true,
             lastTurnAt: true,
+            lastAssistantText: true,
           },
         },
       },
     });
-    if (!session) throw new NotFoundException('session not found');
+    if (!session) {
+      // LS1: before the first claim inserts the row, the link still reaches its subject.
+      const landing = await readLandingView(this.prisma, ownerId, id);
+      if (landing) return SessionsService.landingOnlyDetail(id, landing);
+      throw new NotFoundException('session not found');
+    }
     // A Claude row with turns but no runtime session id has no conversation to resume (it predates
     // the column, or its id was minted by a different runtime), so the capabilities payload would
     // say MISSING_CONTEXT and the UI would block resume.
@@ -3588,6 +3772,20 @@ export class SessionsService {
     const route = session.taskId
       ? (await readTaskRouteSummaries(this.prisma, ownerId, [session.id])).get(session.id) ?? null
       : null;
+    // §2.9 LS1: a CONVERSATION may be the source work session of landing work, and the detail is
+    // where a client draws its "Landing · checking ›" / "On project/<id> ✓ ›" label. One probe of
+    // `project_integration_job_session_created_idx` for the newest generation, then the subject it
+    // names. A LANDING row has no derived label about itself, and no other kind exists.
+    const sourceLanding = session.sessionKind === 'LANDING'
+      ? null
+      : await readSourceLanding(this.prisma, session.id);
+    // §2.9 LS6: a LANDING row's detail carries the subject's view — its attempt, phase, checks,
+    // liveness, blocking reason, todos and generations. Rendered from `project_landing` so the row
+    // being there or not never changes the answer.
+    const landing = session.sessionKind === SESSION_KIND_LANDING
+      ? await readLandingView(this.prisma, ownerId, session.id)
+      : undefined;
+    const assignedRunner = session.assignedRunner && servedRunner(session.assignedRunner);
     return withSessionCapabilities({
       ...rest,
       // The engine it runs on: its recorded one, else what the old rules derive, null when nobody can
@@ -3595,18 +3793,24 @@ export class SessionsService {
       engine: await sessionEngine(this.prisma, session),
       workspace: session.workspace ? {
         ...session.workspace,
-        antigravityKeyAvailableByRunner: session.assignedRunner ? {
-          [session.assignedRunner.id]: hasGeminiEnvKey(session.workspace.env) || antigravityState(session.assignedRunner).envKeyAvailable,
+        antigravityKeyAvailableByRunner: assignedRunner ? {
+          [assignedRunner.id]: hasGeminiEnvKey(session.workspace.env) || antigravityState(assignedRunner).envKeyAvailable,
         } : {},
       } : null,
-      assignedRunner: session.assignedRunner ? {
-        ...session.assignedRunner,
-        antigravity: antigravityState(session.assignedRunner),
+      assignedRunner: assignedRunner ? {
+        ...assignedRunner,
+        antigravity: antigravityState(assignedRunner),
       } : null,
       route,
       poolCodexLogin,
       mergeTarget,
-      mergeRepairSession: children[0] ? withSessionState(children[0]) : null,
+      // When its turn last ended or it finished, and what it last said — what a repair waiting for the
+      // owner asked — clipped to the session list's preview length, in code points as `left()` counts.
+      mergeRepairSession: children[0] ? withSessionState({
+        ...children[0],
+        lastAssistantText: children[0].lastAssistantText == null ? null
+          : [...children[0].lastAssistantText].slice(0, SessionsService.PREVIEW_LEN).join(''),
+      }) : null,
       mergeRecoverySupported: session.assignedRunner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ?? false,
       tags,
       // Both shapes of the same fact, because the two faces of the API have always differed here:
@@ -3622,16 +3826,56 @@ export class SessionsService {
       projectTitle: coordinatorForProject?.title ?? null,
       projectIntegrationRef: integrationRef ? branchName(integrationRef) : null,
       projectMembership: await readSessionProjectMembership(this.prisma, session.id),
+      sourceLanding,
+      ...(landing ? { landing } : {}),
       shareToken: shareLinks?.[0]?.token ?? null,
       sharedAt: shareLinks?.[0]?.createdAt ?? null,
     });
   }
 
   /**
-   * Start the repair conversation owned by a merge recovery. The parent link is written by the
-   * server so the original session can show the child's live/terminal state after navigation or a
-   * reload. A live child is reused, which makes repeated taps idempotent; a terminal child remains
-   * visible as the last result and a later explicit tap may start a fresh attempt.
+   * The detail a LANDING link answers with before its session row exists (LS1): the subject's view
+   * under the same keys a session detail carries, so a client that opened the link draws the page
+   * instead of a 404. `status` is the container lifecycle the row would have — AWAITING_INPUT
+   * while the subject is open, SUCCEEDED / CANCELLED once it settled.
+   */
+  private static landingOnlyDetail(id: string, landing: SessionLandingView<Date>): any {
+    const settledAs = landing.settledAs;
+    const status = landing.settledAt
+      ? (settledAs === 'LANDED' || settledAs === 'ALREADY_LANDED' || settledAs === 'NOTHING_TO_LAND'
+          || settledAs === 'MERGED'
+          ? RunStatus.SUCCEEDED
+          : RunStatus.CANCELLED)
+      : RunStatus.AWAITING_INPUT;
+    return {
+      id,
+      title: null,
+      prompt: null,
+      status,
+      completedAt: landing.settledAt,
+      archivedAt: landing.settledAt,
+      deletedAt: null,
+      sessionKind: SESSION_KIND_LANDING,
+      workspace: null,
+      assignedRunner: null,
+      tags: [],
+      createdAt: landing.openedAt,
+      landing,
+    };
+  }
+
+  /**
+   * Hand a merge recovery to its repair conversation. The parent link is written by the server so
+   * the original session can show the child's live/terminal state after navigation or a reload.
+   *
+   * Continue repair, Reply in repair session and Prepare PR candidate all reach the repair the
+   * parent's detail shows (`mergeRepairSession`: its newest child not in Trash), so a repair keeps
+   * the context of its earlier rounds (S2 of project 34hIv3wbdtsxpc5RzDlOk):
+   *   - PENDING or RUNNING: answered as it is, with no message;
+   *   - waiting for input, or ended in a way that can be resumed: handed where the recovery stands
+   *     now (mergeRecoveryContinuePrompt) — see continueMergeRepair;
+   *   - FAILED, refused that message, or none at all: a new repair session, opened as it always was.
+   * The answer is the repair session in the shape it always had.
    */
   async startMergeRepair(ownerId: string, id: string, preparePR = false) {
     const parent = await this.prisma.session.findFirst({
@@ -3645,25 +3889,29 @@ export class SessionsService {
         providerBuiltin: true,
         ownerId: true,
         mergeRecovery: true,
+        sessionKind: true,
       },
     });
     if (!parent) throw new NotFoundException('session not found');
+    // A merge repair is a child conversation an engine runs; a LANDING parent has no engine door to
+    // repair (§2.9 LS6).
+    assertEngineSessionRow(parent);
     const recovery = readMergeRecovery(parent.mergeRecovery);
     if (!recovery || !parent.workspaceId) {
       throw new ConflictException('no merge recovery is available for this session');
     }
 
-    const existing = await this.prisma.session.findFirst({
-      where: {
-        ownerId,
-        parentSessionId: parent.id,
-        source: 'merge-repair',
-        deletedAt: null,
-        status: { in: [RunStatus.PENDING, RunStatus.RUNNING] },
-      },
+    const latest = await this.prisma.session.findFirst({
+      where: { ownerId, parentSessionId: parent.id, source: 'merge-repair', deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
-    if (existing) return withSessionState(existing);
+    if (latest && (latest.status === RunStatus.PENDING || latest.status === RunStatus.RUNNING)) {
+      return withSessionState(latest);
+    }
+    if (latest && latest.status !== RunStatus.FAILED) {
+      const continued = await this.continueMergeRepair(ownerId, latest, mergeRecoveryContinuePrompt(recovery, preparePR));
+      if (continued) return withSessionState(continued);
+    }
 
     const created = await this.create(
       ownerId,
@@ -3681,6 +3929,41 @@ export class SessionsService {
   }
 
   /**
+   * Send `repair` the next step of its recovery through the doors the owner's own message takes:
+   * createTurn for a session waiting for input, resume for one that ended, each with every refusal it
+   * has. Answers the repair session as that leaves it, or null when it refused the message — a new
+   * repair session then takes its place.
+   *
+   * Another tap's message makes this one send none. Under the session's lock, a message that has got it
+   * moving since it was read is joined instead of followed (`coalesce`); a refused resume is read again
+   * once the request holding the row has finished, and a revive that request committed is this
+   * tap's answer too.
+   */
+  private async continueMergeRepair(ownerId: string, repair: Session, content: string): Promise<Session | null> {
+    const message = { clientTurnId: randomUUID(), content, kind: 'message' as const };
+    try {
+      if (SessionsService.TERMINAL.includes(repair.status)) {
+        await this.resume(ownerId, repair.id, message);
+      } else {
+        await this.createTurn(ownerId, repair.id, { ...message, intent: 'NEXT_TURN' }, {
+          coalesce: async (tx, session) =>
+            session.status === RunStatus.AWAITING_INPUT || session.status === RunStatus.INTERRUPTED
+              ? null
+              : tx.conversationTurn.findFirst({ where: { sessionId: session.id }, orderBy: { seq: 'desc' } }),
+        });
+      }
+    } catch (error) {
+      // A refusal is a 4xx answer; anything else is not the session's to decide, and is thrown on.
+      if (!(error instanceof HttpException) || error.getStatus() >= 500) throw error;
+      // FOR SHARE waits for a revive still holding the row, so what it committed is read below.
+      await this.prisma.$queryRaw`SELECT 1 FROM "session" WHERE id = ${repair.id}::uuid FOR SHARE`;
+      const now = await this.prisma.session.findFirst({ where: { id: repair.id, ownerId, deletedAt: null } });
+      return now && (now.status === RunStatus.PENDING || now.status === RunStatus.RUNNING) ? now : null;
+    }
+    return this.prisma.session.findUniqueOrThrow({ where: { id: repair.id } });
+  }
+
+  /**
    * Stop the pending auto-retry on this session. The user is saying they will decide when
    * (or whether) to send this message again — the transcript card keeps its manual Retry.
    * Idempotent: a retry that already fired, or was never armed, is a no-op.
@@ -3688,9 +3971,10 @@ export class SessionsService {
   async cancelAutoRetry(ownerId: string, id: string): Promise<{ ok: true }> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true },
+      select: { id: true, sessionKind: true },
     });
     if (!session) throw new NotFoundException('session not found');
+    assertEngineSessionRow(session);
     await this.prisma.session.update({
       where: { id },
       // The claim too (migration 0354): the retry is over, so the session is not on its way to the
@@ -3714,6 +3998,7 @@ export class SessionsService {
    * arming one that has since been resumed would drop a re-send into a live conversation.
    */
   async armAutoRetry(ownerId: string, id: string, retryAt: string): Promise<{ retryAt: Date }> {
+    await this.assertEngineSession(ownerId, id);
     const at = new Date(retryAt);
     const now = Date.now();
     if (Number.isNaN(at.getTime()) || at.getTime() <= now)
@@ -4632,9 +4917,11 @@ export class SessionsService {
   async requestDiffRefresh(ownerId: string, id: string): Promise<void> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, sessionKind: true },
     });
     if (!session) throw new NotFoundException('session not found');
+    // It queues a diff turn for the runner: an engine door like any other (§2.9 LS6).
+    assertEngineSessionRow(session);
     if (!SessionsService.LIVE.includes(session.status)) return;
     const pending = await this.prisma.conversationTurn.findFirst({
       where: { sessionId: id, kind: 'diff', status: 'PENDING' },
@@ -4656,9 +4943,17 @@ export class SessionsService {
    * waits for it: this door is a request somebody is looking at, not a settle path.
    */
   async refreshRecap(ownerId: string, id: string): Promise<RecapOutcome> {
-    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true } });
+    const session = await this.prisma.session.findFirst({ where: { id, ownerId }, select: { id: true, sessionKind: true } });
     if (!session) throw new NotFoundException('session not found');
-    return enqueueRecap({ db: this.prisma, sessionId: id, force: true });
+    // A landing writes no run_event, so every one of recap.ts's four gates would refuse it anyway;
+    // the door says so as the structural refusal rather than as "too little to recap" (§2.9 LS6).
+    assertEngineSessionRow(session);
+    return enqueueRecap({
+      db: this.prisma,
+      sessionId: id,
+      force: true,
+      onWritten: () => this.realtime.publishSessionUpdated(id),
+    });
   }
 
   // The session list shows the last reply as a single ellipsised line, so it only
@@ -4698,6 +4993,26 @@ export class SessionsService {
     }
   }
 
+  /**
+   * The engine-path guard, for a door that has only the caller's id and no row in hand (§2.9 LS6).
+   *
+   * A missing or foreign session is left to the door's own 404/403: this answers only a row the
+   * caller may see, so it cannot become an existence oracle.
+   */
+  private async assertEngineSession(ownerId: string, id: string): Promise<void> {
+    // A unit double that does not model the session table cannot answer this; production's
+    // PrismaService always does.
+    const delegate = (this.prisma as unknown as {
+      session?: { findFirst?: (args: unknown) => Promise<{ sessionKind?: string | null } | null> };
+    }).session;
+    if (typeof delegate?.findFirst !== 'function') return;
+    const row = await this.prisma.session.findFirst({
+      where: { id, ownerId },
+      select: { sessionKind: true },
+    });
+    if (row) assertEngineSessionRow(row);
+  }
+
   /** Load an owner's session and assert it's still live (not ended/cancelled). */
   private async getLive(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
@@ -4718,6 +5033,9 @@ export class SessionsService {
   private async getSendable(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
+    // A LANDING row is never sendable: the composer, End and the queued-turn doors all reach this
+    // one loader, and none of them may drive the platform's container (§2.9 LS6).
+    assertEngineSessionRow(session);
     if (session.deletedAt) {
       throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
     }
@@ -5080,6 +5398,11 @@ export class SessionsService {
    *
    * Only an idle session (AWAITING_INPUT): a turn in flight finishes or fails where it is, and a
    * failure there makes the move itself.
+   *
+   * A session on a Default its owner removed from Orbit moves too, to the account Automatic picks among
+   * those that remain, and is unpinned there: whether or not it was pinned, and whether or not its
+   * runner carries the conversation — nothing runs on that Default any more. (A turn in flight finishes
+   * where it is, and the inbox hands its resident engine nothing more there: dequeueTurn.)
    */
   private async accountMoveBeforeTurn(
     tx: Prisma.TransactionClient,
@@ -5090,9 +5413,9 @@ export class SessionsService {
     if (!engine || !isBuiltinProvider(session.provider, session.providerBuiltin)) return null;
     const runner = await tx.runner.findUnique({
       where: { id: session.assignedRunnerId },
-      select: { engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true },
+      select: { engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true },
     });
-    if (!runner || !runnerCarriesAccounts(runner, engine)) return null;
+    if (!runner || (!runnerCarriesAccounts(runner, engine) && !defaultRemovedOn(engine, runner))) return null;
     const workspace = session.workspaceId
       ? await tx.workspace.findUnique({
           where: { id: session.workspaceId },
@@ -5105,12 +5428,10 @@ export class SessionsService {
       engine,
       { account: session[ACCOUNT_CHOICE[engine]], pinned: session[ACCOUNT_PINNED[engine]] },
       workspace,
-      runner.engines,
-      runner.planUsage,
+      runner,
       new Date(),
-      runner.accountPauses,
     );
-    if (!move) return null;
+    if (!move || (!move.defaultRemoved && !runnerCarriesAccounts(runner, engine))) return null;
     await this.insertTurnLocked(tx, session.id, {
       kind: 'reload',
       content: JSON.stringify({ provider: engine }),
@@ -5118,6 +5439,7 @@ export class SessionsService {
     });
     return {
       [ACCOUNT_CHOICE[engine]]: move.to,
+      ...(move.defaultRemoved ? { [ACCOUNT_PINNED[engine]]: false } : {}),
       // Said on the `resumed` that reload earns, unless another line is already owed.
       ...(session.poolSwitchNotice ? {} : { poolSwitchNotice: accountSwitchNotice(engine, move, runner) }),
     };
@@ -5223,6 +5545,8 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      // No engine turn can be queued onto the platform's landing container (§2.9 LS6).
+      assertEngineSessionRow(session);
       turnRunnerId = session.assignedRunnerId;
       // A committed operation owns its key even after its Session later ends or moves to Trash.
       // Check the durable receipt while holding the Session lock before any lifecycle, attachment
@@ -5607,6 +5931,8 @@ export class SessionsService {
       senderSessionId?: string;
     },
   ) {
+    // Stopping a turn — or stopping one and replacing it — is an engine door (§2.9 LS6).
+    await this.assertEngineSession(ownerId, id);
     const content = dto?.content ?? '';
     const followUp = content.trim().length > 0 || (dto?.attachmentIds?.length ?? 0) > 0;
     // The runner's copy of the request, and the only thing it reads off an interrupt turn: the
@@ -6262,6 +6588,7 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      assertEngineSessionRow(session);
       if (session.deletedAt) {
         throw new SessionNotSendable('the session is in Trash; restore it before sending a message');
       }
@@ -6377,7 +6704,8 @@ export class SessionsService {
     waitSeconds?: number,
     options: { rememberTarget?: boolean; recoveryAction?: MergeRecoveryAction; previewId?: string } = {},
   ) {
-    if (options.recoveryAction && !['preview', 'apply', 'sync-local'].includes(options.recoveryAction)) {
+    await this.assertEngineSession(ownerId, id);
+    if (options.recoveryAction && !['preview', 'apply', 'sync-local', 'confirm-landed'].includes(options.recoveryAction)) {
       throw new BadRequestException('invalid merge recovery action');
     }
     const wait = SessionsService.mergeWaitSeconds(waitSeconds);
@@ -6391,119 +6719,10 @@ export class SessionsService {
     // closure, so a re-run competes for it from the state that exists. The runner is only told
     // about the operation after this returns.
     const workspaceId = await withTransactionRetry(this.prisma, async (tx) => {
-      queuedOn = null;
-      // Queueing, heartbeat claim, new-turn enqueue, Adopt, and terminal Resume
-      // all linearize on this row. An old click therefore cannot create a fresh
-      // operation after the session has already entered a new turn epoch.
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM "session"
-        WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
-        FOR UPDATE`;
-      if (locked.length === 0) throw new NotFoundException('session not found');
-      const session = await tx.session.findUniqueOrThrow({ where: { id } });
-      if (session.isolationStatus !== 'worktree' || !session.branch) {
-        throw new BadRequestException('session has no worktree branch to merge');
-      }
-      if (!session.assignedRunnerId) {
-        throw new ConflictException('no runner is associated with this session');
-      }
-      if (target && target === session.branch) {
-        throw new BadRequestException("can't merge a branch into itself");
-      }
-      if (session.mergeStatus === 'pending') {
-        // Idempotent, and that is what a waiting caller waits on: the operation already in flight
-        // IS this call's operation. Minting a second one here would merge the same branch twice
-        // because somebody asked twice.
-        operationId = session.mergeOperationId;
-        return null;
-      }
-
-      if (session.commitStatus === 'pending') {
-        throw new ConflictException('wait for the pending worktree commit to finish');
-      }
-      if (
-        !SessionsService.TERMINAL.includes(session.status) &&
-        (session.status !== RunStatus.AWAITING_INPUT || !!session.cancelRequestedAt)
-      ) {
-        throw new ConflictException('wait for the current turn to finish before merging');
-      }
-      if (options.recoveryAction) {
-        const runner = await tx.runner.findUnique({
-          where: { id: session.assignedRunnerId }, select: { capabilities: true },
-        });
-        if (!runner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1)) {
-          throw new ConflictException('upgrade this runner to check and repair target branches');
-        }
-        const recovery = readMergeRecovery(session.mergeRecovery);
-        if (options.recoveryAction !== 'preview') {
-          if (!recovery || !options.previewId || recovery.previewId !== options.previewId ||
-              (target && recovery.targetBranch !== target)) {
-            throw new ConflictException('the recovery preview is no longer current; check again');
-          }
-          const retry = session.mergeRecoveryAction === 'apply' &&
-            ['PUSH_FAILED', 'REMOTE_NOT_VERIFIED'].includes(recovery.code);
-          if (options.recoveryAction === 'apply' && !mergeRecoveryReady(recovery) && !retry) {
-            throw new ConflictException('review a ready candidate before applying it');
-          }
-          if (options.recoveryAction === 'sync-local' && recovery.code !== 'LOCAL_SYNC_PENDING') {
-            throw new ConflictException('no landed candidate is waiting for local sync');
-          }
-        }
-      }
-      // `[K6]` §7, the dispatch gate: everything that can be decided before a repository is
-      // touched. Two questions, and the ORDER is the point.
-      //
-      // "Is it already there" comes first, because a source the target already contains needs no
-      // checkpoint, no evidence and no scope comparison — there is nothing to merge, so every
-      // refusal below would be answering a question nobody is asking. That order is exactly what
-      // was missing when a session whose branch and `main` pointed at the SAME commit was asked to
-      // merge again: the one guard in the path compared the two branch NAMES, which differed, and
-      // twenty-two commits were replayed from a base recorded days earlier onto a target that
-      // already contained every one of them.
-      //
-      // The refusals are `[K1]`'s frozen §7 codes and are terminal: no queue, no backoff, no
-      // operation. What this deliberately does NOT judge is the branch tip and the evidence digest
-      // — the API server has no repository, and a gate that guessed there would be refusing on a
-      // value it invented. Those two are decided by the runner against `requiredSourceSha`, and by
-      // the receipt writer when a caller claims a landing and names the commit it landed.
-      const gate = await mergeDispatchGate(tx, {
-        ownerId,
-        sessionId: id,
-        taskId: session.taskId,
-        targetBranch: target ?? session.mergeTarget ?? '',
-      });
-      if (gate.decision === 'ALREADY_LANDED' && !options.recoveryAction) return { alreadyLanded: gate };
-      if (gate.decision !== 'ALLOWED' && gate.decision !== 'ALREADY_LANDED' && options.recoveryAction !== 'sync-local') {
-        throw new ConflictException(`${gate.decision}: ${gate.detail}`);
-      }
-
-      operationId = randomUUID();
-      await tx.session.update({
-        where: { id },
-        data: {
-          mergeStatus: 'pending',
-          mergeTarget: target ?? (options.recoveryAction ? readMergeRecovery(session.mergeRecovery)?.targetBranch ?? null : null),
-          mergeRecoveryAction: options.recoveryAction ?? null,
-          ...(!options.recoveryAction ? { mergeRecovery: Prisma.DbNull } : {}),
-          mergeRequestedAt: new Date(),
-          mergeOperationId: operationId,
-          // `[K6]` §7: which checkpoint THIS operation was authorised for, persisted with the
-          // operation id it is part of. When the result comes back the server checks the reported
-          // commit against this rather than against anything the runner sent — a gate that only
-          // holds when the client cooperates is not a gate. Null for unmanaged work, which is
-          // almost every merge, and which is then unaffected by all of this.
-          mergeCheckpointId: options.recoveryAction === 'apply' || options.recoveryAction === 'sync-local' || gate.decision !== 'ALLOWED' ? session.mergeCheckpointId : gate.checkpointId,
-          mergeOperationOwner: null,
-          mergeError: null,
-          ...(!['preview', 'sync-local'].includes(options.recoveryAction ?? '') ? {
-            mergedAt: null,
-            mergedSourceSha: null,
-            branchMerged: null,
-          } : {}),
-        },
-      });
-      queuedOn = session.assignedRunnerId;
-      return session.workspaceId;
+      const queued = await this.queueMerge(tx, ownerId, id, target, options);
+      operationId = queued.operationId;
+      queuedOn = queued.queuedOn;
+      return queued.outcome;
     }, loggedRetry(this.logger, 'sessions.mergeToMain'));
     // Have that runner heartbeat now instead of at its next 30s tick: whoever pressed Merge is
     // watching a spinner. Only a nudge; a lost wake leaves the merge to that tick.
@@ -6547,6 +6766,313 @@ export class SessionsService {
     }
     if (wait !== null) return this.awaitMergeConclusion(ownerId, id, operationId, wait);
     return { ok: true };
+  }
+
+  /**
+   * The half of {@link mergeToMain} that runs inside its transaction: the Session row lock, every
+   * refusal, the `[K6]` §7 gate and the one write that queues the operation. Shared with
+   * {@link checkAfterRepairTurn}, so the check the server queues after a repair session's turn takes
+   * the very path the owner's Check again takes. `also` rides in that same write, which keeps the row
+   * written once (common/lock-order.ts, I3). Answers what the transaction answers — null when a merge
+   * is already pending, the gate when the work already landed, else the session's workspace — with
+   * the operation it is about and the runner to wake.
+   */
+  private async queueMerge(
+    tx: Prisma.TransactionClient,
+    ownerId: string,
+    id: string,
+    target: string | null,
+    options: { recoveryAction?: MergeRecoveryAction; previewId?: string },
+    also: Pick<Prisma.SessionUncheckedUpdateInput, 'mergeRepairTurnEndedAt'> = {},
+  ) {
+    // Queueing, heartbeat claim, new-turn enqueue, Adopt, and terminal Resume
+    // all linearize on this row. An old click therefore cannot create a fresh
+    // operation after the session has already entered a new turn epoch.
+    const locked = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "session"
+      WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
+      FOR UPDATE`;
+    if (locked.length === 0) throw new NotFoundException('session not found');
+    const session = await tx.session.findUniqueOrThrow({ where: { id } });
+    if (session.isolationStatus !== 'worktree' || !session.branch) {
+      throw new BadRequestException('session has no worktree branch to merge');
+    }
+    if (!session.assignedRunnerId) {
+      throw new ConflictException('no runner is associated with this session');
+    }
+    if (target && target === session.branch) {
+      throw new BadRequestException("can't merge a branch into itself");
+    }
+    if (session.mergeStatus === 'pending') {
+      // Done answers the recovery as it stands, and the operation in flight is about to replace it.
+      if (options.recoveryAction === 'confirm-landed') {
+        throw new ConflictException('wait for the merge or check in flight to finish');
+      }
+      // Idempotent, and that is what a waiting caller waits on: the operation already in flight
+      // IS this call's operation. Minting a second one here would merge the same branch twice
+      // because somebody asked twice.
+      return { outcome: null, operationId: session.mergeOperationId, queuedOn: null };
+    }
+
+    if (session.commitStatus === 'pending') {
+      throw new ConflictException('wait for the pending worktree commit to finish');
+    }
+    if (SessionsService.mergeWaitsForTurn(session)) {
+      throw new ConflictException('wait for the current turn to finish before merging');
+    }
+    const recovery = readMergeRecovery(session.mergeRecovery);
+    if (options.recoveryAction) {
+      // Done asks nothing of the runner: the server records it alone.
+      if (options.recoveryAction !== 'confirm-landed') {
+        const runner = await tx.runner.findUnique({
+          where: { id: session.assignedRunnerId }, select: { capabilities: true },
+        });
+        if (!runner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1)) {
+          throw new ConflictException('upgrade this runner to check and repair target branches');
+        }
+      }
+      if (options.recoveryAction !== 'preview') {
+        if (!recovery || !options.previewId || recovery.previewId !== options.previewId ||
+            (target && recovery.targetBranch !== target)) {
+          throw new ConflictException('the recovery preview is no longer current; check again');
+        }
+        const retry = session.mergeRecoveryAction === 'apply' &&
+          ['PUSH_FAILED', 'REMOTE_NOT_VERIFIED'].includes(recovery.code);
+        if (options.recoveryAction === 'apply' && !mergeRecoveryReady(recovery) && !retry) {
+          throw new ConflictException('review a ready candidate before applying it');
+        }
+        if (options.recoveryAction === 'sync-local' && recovery.code !== 'LOCAL_SYNC_PENDING') {
+          throw new ConflictException('no landed candidate is waiting for local sync');
+        }
+        if (options.recoveryAction === 'confirm-landed' && !mergeRecoveryConfirmable(recovery)) {
+          throw new ConflictException(
+            `the last check did not find this session already on origin/${recovery.targetBranch}; there is nothing to confirm`);
+        }
+      }
+    }
+    // `[K6]` §7, the dispatch gate: everything that can be decided before a repository is
+    // touched. Two questions, and the ORDER is the point.
+    //
+    // "Is it already there" comes first, because a source the target already contains needs no
+    // checkpoint, no evidence and no scope comparison — there is nothing to merge, so every
+    // refusal below would be answering a question nobody is asking. That order is exactly what
+    // was missing when a session whose branch and `main` pointed at the SAME commit was asked to
+    // merge again: the one guard in the path compared the two branch NAMES, which differed, and
+    // twenty-two commits were replayed from a base recorded days earlier onto a target that
+    // already contained every one of them.
+    //
+    // The refusals are `[K1]`'s frozen §7 codes and are terminal: no queue, no backoff, no
+    // operation. What this deliberately does NOT judge is the branch tip and the evidence digest
+    // — the API server has no repository, and a gate that guessed there would be refusing on a
+    // value it invented. Those two are decided by the runner against `requiredSourceSha`, and by
+    // the receipt writer when a caller claims a landing and names the commit it landed.
+    const gate = await mergeDispatchGate(tx, {
+      ownerId,
+      sessionId: id,
+      taskId: session.taskId,
+      targetBranch: target ?? session.mergeTarget ?? '',
+    });
+    if (gate.decision === 'ALREADY_LANDED' && !options.recoveryAction) {
+      return { outcome: { alreadyLanded: gate }, operationId: null, queuedOn: null };
+    }
+    if (gate.decision !== 'ALLOWED' && gate.decision !== 'ALREADY_LANDED' && options.recoveryAction !== 'sync-local') {
+      throw new ConflictException(`${gate.decision}: ${gate.detail}`);
+    }
+    if (options.recoveryAction === 'confirm-landed') {
+      return { outcome: { alreadyLanded: await this.confirmLanded(tx, session, recovery!) }, operationId: null, queuedOn: null };
+    }
+
+    const operationId = randomUUID();
+    await tx.session.update({
+      where: { id },
+      data: {
+        mergeStatus: 'pending',
+        mergeTarget: target ?? (options.recoveryAction ? readMergeRecovery(session.mergeRecovery)?.targetBranch ?? null : null),
+        mergeRecoveryAction: options.recoveryAction ?? null,
+        ...(!options.recoveryAction ? { mergeRecovery: Prisma.DbNull } : {}),
+        mergeRequestedAt: new Date(),
+        mergeOperationId: operationId,
+        // `[K6]` §7: which checkpoint THIS operation was authorised for, persisted with the
+        // operation id it is part of. When the result comes back the server checks the reported
+        // commit against this rather than against anything the runner sent — a gate that only
+        // holds when the client cooperates is not a gate. Null for unmanaged work, which is
+        // almost every merge, and which is then unaffected by all of this.
+        mergeCheckpointId: options.recoveryAction === 'apply' || options.recoveryAction === 'sync-local' || gate.decision !== 'ALLOWED' ? session.mergeCheckpointId : gate.checkpointId,
+        mergeOperationOwner: null,
+        mergeError: null,
+        ...(!['preview', 'sync-local'].includes(options.recoveryAction ?? '') ? {
+          mergedAt: null,
+          mergedSourceSha: null,
+          branchMerged: null,
+        } : {}),
+        ...also,
+      },
+    });
+    return { outcome: session.workspaceId, operationId, queuedOn: session.assignedRunnerId };
+  }
+
+  /**
+   * Done on a check that found the session already on origin — `confirm-landed`, S3 of the merge-recovery repair
+   * loop — inside {@link queueMerge}'s transaction, after every refusal it makes: the recovery is current (its
+   * previewId) and is an ALREADY_LANDED check naming its source (mergeRecoveryConfirmable), no operation is in
+   * flight, and the §7 gate allows it. Nothing is sent to a runner. The session is recorded merged at the source
+   * the check found on origin, in one write of its row (I3), and the MATCHED_BY_CONTENT receipt beside it is what
+   * mergeDispatchGate answers a later merge of that source into that target with. Answers as that gate does.
+   *
+   * The receipt is written here rather than by MergeReceiptService because that service reaches TasksService,
+   * which nothing this file imports may reach.
+   */
+  private async confirmLanded(
+    tx: Prisma.TransactionClient,
+    session: { id: string; ownerId: string; taskId: string | null; branch: string | null },
+    recovery: MergeRecovery,
+  ) {
+    const sourceSha = recovery.sourceSha!;
+    const tip = /^[0-9a-f]{40}$/.test(recovery.remoteSha ?? '') ? recovery.remoteSha! : null;
+    await tx.session.update({
+      where: { id: session.id },
+      data: {
+        mergeStatus: 'merged',
+        mergeTarget: recovery.targetBranch,
+        mergeError: null,
+        mergeRecovery: Prisma.DbNull,
+        mergeRecoveryAction: null,
+        mergedAt: new Date(),
+        mergedSourceSha: sourceSha,
+        branchMerged: true,
+      },
+    });
+    const task = session.taskId
+      ? await tx.task.findUnique({ where: { id: session.taskId }, select: { projectId: true } })
+      : null;
+    const idempotencyKey = mergeReceiptIdempotencyKey({
+      sessionId: session.id, sourceSha, targetBranch: recovery.targetBranch, result: MATCHED_BY_CONTENT,
+    });
+    // What the check found and the owner confirmed: origin/<target>, at the tip the check read, carries every one
+    // of the session's commits as the commits `landedCommits` names. Nothing moved, so the tip is named before
+    // and after, as the runner's own already-merged answer names it. A second Done of the same source keeps the
+    // first receipt.
+    await tx.sessionMergeReceipt.createMany({
+      data: [{
+        ownerId: session.ownerId,
+        sessionId: session.id,
+        taskId: session.taskId,
+        projectId: task?.projectId ?? null,
+        result: MATCHED_BY_CONTENT,
+        sourceBranch: session.branch!,
+        sourceSha,
+        targetBranch: recovery.targetBranch,
+        targetShaBefore: tip,
+        targetShaAfter: tip,
+        rebaseBaseSha: null,
+        conflicts: [],
+        recordedBy: 'USER',
+        detail: {
+          source: 'confirm-landed',
+          previewId: recovery.previewId,
+          ...(recovery.checkedAt ? { checkedAt: recovery.checkedAt } : {}),
+          // The origin commit that carries each of the session's: what keeps this row checkable later.
+          landedCommits: (recovery.landedCommits ?? []).map((c) => ({ sha: c.sha, sourceSha: c.sourceSha })),
+        },
+        idempotencyKey,
+      }],
+      skipDuplicates: true,
+    });
+    const receipt = await tx.sessionMergeReceipt.findFirstOrThrow({
+      where: { sessionId: session.id, idempotencyKey },
+      select: { id: true },
+    });
+    return { decision: 'ALREADY_LANDED' as const, receiptId: receipt.id, sourceSha, targetSha: tip };
+  }
+
+  /** {@link mergeToMain}'s "wait for the current turn to finish": the session is open and not parked
+   *  idle, or it is being ended. */
+  private static mergeWaitsForTurn(session: { status: RunStatus; cancelRequestedAt: Date | null }): boolean {
+    return !SessionsService.TERMINAL.includes(session.status) &&
+      (session.status !== RunStatus.AWAITING_INPUT || !!session.cancelRequestedAt);
+  }
+
+  /** Recoveries a preview may not replace: each is a landing being finished, by its own retry or sync. */
+  private static readonly LANDING_UNFINISHED = ['LOCAL_SYNC_PENDING', 'PUSH_FAILED', 'REMOTE_NOT_VERIFIED'];
+
+  /**
+   * Check a merge recovery again because a repair session's turn ended — S1 of the merge-recovery
+   * repair loop (project 34hIv3wbdtsxpc5RzDlOk). `id` is the session that owns the recovery, the repair
+   * session's parent, and `turnEndedAt` when that repair turn ended; null takes up only the check this
+   * session already owes, which the end of its own turn is the moment for.
+   *
+   * The check is a preview queued through {@link queueMerge}, the path the owner's Check again takes,
+   * and it is queued when every one of these holds: the recovery is not a landing still being finished
+   * (LANDING_UNFINISHED); the turn ended after the recovery was last checked (`checkedAt` — a recovery
+   * without one reads as checked before it); no merge or commit is in flight on this session; and its
+   * runner can check (SESSION_MERGE_RECOVERY_V1). While this session runs a turn of its own, when
+   * mergeToMain refuses a merge, the turn's end is kept in `mergeRepairTurnEndedAt` instead, and all of
+   * it is judged again when that turn ends.
+   *
+   * Once per repair turn. Each turn's end reaches here once — only the completion that answers a turn
+   * applies, and a finalize only for a turn that was still running — and what is owed is taken up under
+   * this row's lock and cleared in the one write that queues the check or finds it unneeded. A check
+   * that fails is that turn's answer: nothing queues it again. No client asks for any of it.
+   */
+  async checkAfterRepairTurn(id: string, turnEndedAt: Date | null): Promise<RepairTurnCheck> {
+    // What the committed attempt did, for the wake and the announcement after it; reset by each run.
+    let queuedOn: string | null = null;
+    let wrote = false;
+    const outcome = await withTransactionRetry(this.prisma, async (tx): Promise<RepairTurnCheck> => {
+      queuedOn = null;
+      wrote = false;
+      // The row mergeToMain locks: this decision, a merge being queued and a turn starting or ending
+      // on this session are serial, so a turn cannot start between the judgment and the write.
+      const locked = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "session" WHERE id = ${id}::uuid FOR UPDATE`;
+      if (locked.length === 0) return 'NOTHING_OWED';
+      const session = await tx.session.findUniqueOrThrow({
+        where: { id },
+        select: {
+          ownerId: true, status: true, cancelRequestedAt: true, assignedRunnerId: true, mergeStatus: true,
+          commitStatus: true, mergeRecovery: true, mergeRepairTurnEndedAt: true,
+        },
+      });
+      const owed = session.mergeRepairTurnEndedAt;
+      const endedAt = owed && (!turnEndedAt || owed > turnEndedAt) ? owed : turnEndedAt;
+      if (!endedAt) return 'NOTHING_OWED';
+      // Whatever is decided below, a check owed until now is taken up by it.
+      const settle = owed ? { mergeRepairTurnEndedAt: null } : {};
+      const recovery = readMergeRecovery(session.mergeRecovery);
+      let verdict: RepairTurnCheck;
+      if (!recovery) verdict = 'NO_RECOVERY';
+      else if (SessionsService.LANDING_UNFINISHED.includes(recovery.code)) verdict = 'LANDING_UNFINISHED';
+      // NaN — no checkedAt, or one that does not parse — is never >=, so it reads as earlier.
+      else if (Date.parse(recovery.checkedAt ?? '') >= endedAt.getTime()) verdict = 'ALREADY_CHECKED';
+      else if (SessionsService.mergeWaitsForTurn(session)) verdict = 'DEFERRED';
+      else if (session.mergeStatus === 'pending' || session.commitStatus === 'pending') verdict = 'OPERATION_IN_FLIGHT';
+      else {
+        const runner = session.assignedRunnerId
+          ? await tx.runner.findUnique({ where: { id: session.assignedRunnerId }, select: { capabilities: true } })
+          : null;
+        verdict = runner?.capabilities.includes(SESSION_MERGE_RECOVERY_V1) ? 'QUEUED' : 'RUNNER_CANNOT_CHECK';
+      }
+      if (verdict === 'QUEUED') {
+        const queued = await this.queueMerge(tx, session.ownerId, id, recovery!.targetBranch,
+          { recoveryAction: 'preview' }, settle);
+        queuedOn = queued.queuedOn;
+        wrote = true;
+      } else if (verdict === 'DEFERRED') {
+        if (owed?.getTime() !== endedAt.getTime()) {
+          await tx.session.update({ where: { id }, data: { mergeRepairTurnEndedAt: endedAt } });
+          wrote = true;
+        }
+      } else if (owed) {
+        await tx.session.update({ where: { id }, data: settle });
+        wrote = true;
+      }
+      return verdict;
+    }, loggedRetry(this.logger, 'sessions.checkAfterRepairTurn'));
+    // As mergeToMain does: the runner heartbeats now rather than at its next tick.
+    if (queuedOn) this.realtime.notifyRunnerWake(queuedOn);
+    // No client asked, so none is waiting on a response: the detail it shows has to be told it moved.
+    if (wrote) this.realtime.publishSessionUpdated(id);
+    return outcome;
   }
 
   /**
@@ -6705,6 +7231,7 @@ export class SessionsService {
   async commitWorktree(ownerId: string, id: string) {
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
+    assertEngineSessionRow(session);
     if (session.isolationStatus !== 'worktree' || !session.branch) {
       throw new BadRequestException('session has no worktree to commit');
     }
@@ -6807,6 +7334,7 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id } });
+      assertEngineSessionRow(session);
       if (session.isolationStatus !== 'worktree') {
         throw new BadRequestException('session has no worktree to adopt a branch from');
       }
@@ -6922,6 +7450,9 @@ export class SessionsService {
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
       const session = await tx.session.findUniqueOrThrow({ where: { id: sessionId } });
+      // End and Trash both land here; the platform's landing container is not a person's to close or
+      // throw away (§2.9 LS6).
+      assertEngineSessionRow(session);
       if (requireNoProjectBinding) {
         // Every Project binding path takes this same Session lock first. A non-locking lookup made
         // after acquiring it therefore decides a stable fact: an existing adopter is preserved,
@@ -7198,9 +7729,11 @@ export class SessionsService {
   ): Promise<ApprovalInfo> {
     const session = await this.prisma.session.findFirst({
       where: { id, ownerId },
-      select: { id: true, workspaceId: true },
+      select: { id: true, workspaceId: true, sessionKind: true },
     });
     if (!session) throw new NotFoundException('session not found');
+    // Answering a tool-permission card is an engine door (§2.9 LS6).
+    assertEngineSessionRow(session);
     if (dto.behavior !== 'allow' && dto.behavior !== 'deny') {
       throw new BadRequestException('behavior must be "allow" or "deny"');
     }
@@ -7599,6 +8132,16 @@ export class SessionsService {
       },
     });
     if (!session) throw new NotFoundException('session not found');
+    // Reviving is an engine door: the platform's landing container has nothing to revive (§2.9 LS6).
+    assertEngineSessionRow(session);
+    // The run this request may stop is an engine door too, named in the body rather than the path.
+    if (dto.stopSessionId) {
+      const stop = await this.prisma.session.findFirst({
+        where: { id: dto.stopSessionId, ownerId },
+        select: { sessionKind: true },
+      });
+      if (stop) assertEngineSessionRow(stop);
+    }
     // A session's engine never changes (docs/provider-engine-contract.md §3.5): naming another one is
     // refused on the live path too, where the turn joins the process already running.
     await this.assertSameEngine(this.prisma, session, dto.engine);
@@ -8319,14 +8862,14 @@ export class SessionsService {
             env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
           },
         },
-        assignedRunner: { select: { engines: true, accountPauses: true, planUsage: true, capabilities: true } },
+        assignedRunner: { select: { engines: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true } },
       },
     });
     const write = (to: string, pinned: boolean): AccountSwitchWrite =>
       ({ [ACCOUNT_CHOICE[engine]]: to, [ACCOUNT_PINNED[engine]]: pinned });
     const runner = session.assignedRunner;
     if (account === undefined || account === AUTOMATIC_ACCOUNT) {
-      if (account === AUTOMATIC_ACCOUNT && !workspaceLeavesAccountToOrbit(engine, session.workspace, runner?.engines)) {
+      if (account === AUTOMATIC_ACCOUNT && !workspaceLeavesAccountToOrbit(engine, session.workspace, runner)) {
         throw new BadRequestException("this session's workspace decides its account");
       }
       const pinned = session[ACCOUNT_PINNED[engine]];
@@ -8337,7 +8880,8 @@ export class SessionsService {
       if (account === AUTOMATIC_ACCOUNT) return { [ACCOUNT_PINNED[engine]]: false };
       return {};
     }
-    const row = sanitizeRunnerEngines(runner?.engines)
+    // As Orbit uses them: a Default its owner removed from Orbit is no account to switch to.
+    const row = (runner ? usedRunnerEngines({ ...runner, accountNames: null }) : null)
       ?.find((entry) => entry.engine === engine)
       ?.accounts?.find((entry) => entry.id === account);
     if (!runner || !row) throw new BadRequestException("that account is not one this session's runner reports");
@@ -8411,6 +8955,8 @@ export class SessionsService {
    * answer — out of the session's way (docs/personal-access-token-design.md §5). The rest is a token's.
    */
   async updateConfig(ownerId: string, id: string, dto: SessionConfigDto, credential?: AuthCredential) {
+    // Model, permission mode, effort, provider and account are all engine-path settings (§2.9 LS6).
+    await this.assertEngineSession(ownerId, id);
     refuseOwnerFieldsToToken(credential, { permissionMode: dto.permissionMode });
     if (
       dto.model === undefined &&
@@ -8448,7 +8994,10 @@ export class SessionsService {
         include: {
           workspace: true,
           assignedRunner: {
-            select: { runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true, capabilities: true, capabilitiesReportedAt: true },
+            select: {
+              runtimeDefaultModels: true, modelCatalog: true, runsAsRoot: true, engines: true, defaultRemoved: true,
+              accountPauses: true, planUsage: true, capabilities: true, capabilitiesReportedAt: true,
+            },
           },
           // The account-level permission default, which replaced the per-workspace one.
           owner: { select: { preferences: true } },
@@ -8493,7 +9042,7 @@ export class SessionsService {
           accounts.antigravityAccount ?? session.antigravityAccount ?? session.workspace?.antigravityAccount,
         kimiAccount: accounts.kimiAccount ?? session.kimiAccount ?? session.workspace?.kimiAccount,
         cursorAccount: accounts.cursorAccount ?? session.cursorAccount ?? session.workspace?.cursorAccount,
-        runnerEngines: session.assignedRunner?.engines,
+        runner: session.assignedRunner,
       });
       if (exec.provider === AgentProvider.DSH && (!session.assignedRunner?.capabilitiesReportedAt ||
         !session.assignedRunner.capabilities?.includes('provider:dsh'))) {
@@ -8697,6 +9246,8 @@ export class SessionsService {
    * transcript.
    */
   async switchAccount(ownerId: string, id: string, account: unknown) {
+    // Switching the runner account a session runs on is an engine door (§2.9 LS6).
+    await this.assertEngineSession(ownerId, id);
     if (typeof account !== 'string' || (account !== AUTOMATIC_ACCOUNT && !ACCOUNT_ID_PATTERN.test(account))) {
       throw new BadRequestException('account must be "automatic", "default" or the id of one of the runner\'s accounts');
     }
@@ -8733,7 +9284,9 @@ export class SessionsService {
               env: true, codexAccount: true, claudeAccount: true, antigravityAccount: true, kimiAccount: true, cursorAccount: true,
             },
           },
-          assignedRunner: { select: { engines: true, accountNames: true, accountPauses: true, planUsage: true, capabilities: true } },
+          assignedRunner: {
+            select: { engines: true, accountNames: true, accountPauses: true, defaultRemoved: true, planUsage: true, capabilities: true },
+          },
         },
       });
       // An engine's accounts are its sign-ins on the runner: only a session whose credential IS that
@@ -8752,9 +9305,12 @@ export class SessionsService {
       const runner = session.assignedRunner;
       const column = ACCOUNT_CHOICE[engine];
       const choice = { [column]: session[column] ?? session.workspace?.[column] };
-      const current = runAccount(engine, session.workspace?.env, choice, runner.engines);
+      // Where it is by the runner's report alone, so a session still on a Default its owner removed from
+      // Orbit is seen to leave it.
+      const current = reportedRunAccount(engine, session.workspace?.env, choice, runner.engines);
       if (!current) throw new BadRequestException("this session spends a key of its own, not one of its runner's accounts");
-      const accounts = namedRunnerEngines(runner)?.find((entry) => entry.engine === engine)?.accounts;
+      // As Orbit uses them: a Default its owner removed is no account to pick or to move to.
+      const accounts = usedRunnerEngines(runner)?.find((entry) => entry.engine === engine)?.accounts;
       // Antigravity's quota travels with its engine health, and is weighed with the rest here.
       const usage = withEnginePlanUsage(runner.planUsage as PlanUsage | null, sanitizeRunnerEngines(runner.engines));
       const now = new Date();
@@ -8762,14 +9318,19 @@ export class SessionsService {
       let pinned = true;
       let notice: string | null = null;
       if (account === AUTOMATIC_ACCOUNT) {
-        if (!workspaceLeavesAccountToOrbit(engine, session.workspace, runner.engines)) {
+        if (!workspaceLeavesAccountToOrbit(engine, session.workspace, runner)) {
           throw new BadRequestException("this session's workspace decides its account");
         }
         pinned = false;
+        // Off a Default its owner removed from Orbit, to the account Automatic picks among those left.
+        const offDefault = current === DEFAULT_ACCOUNT ? remainingAccount(engine, runner, now) : null;
         const paused = runnerAccountPausedUntil(runner.accountPauses, engine, current, now) !== null;
         const spent = paused || planUsageBlockedUntil(usage, engine, now, current) != null;
-        const roomier = spent ? accountToMoveTo(engine, accounts, usage, now, current) : null;
-        if (roomier) {
+        const roomier = !offDefault && spent ? accountToMoveTo(engine, accounts, usage, now, current) : null;
+        if (offDefault) {
+          to = offDefault.id;
+          notice = accountSwitchNotice(engine, { from: current, to, defaultRemoved: true }, runner);
+        } else if (roomier) {
           to = roomier;
           notice = accountSwitchNotice(engine, { from: current, to, ...(paused ? { paused: true } : {}) }, runner);
         }
@@ -8827,6 +9388,9 @@ export class SessionsService {
     if (title.length > 200) throw new BadRequestException('title is too long (max 200 chars)');
     const session = await this.prisma.session.findFirst({ where: { id, ownerId } });
     if (!session) throw new NotFoundException('session not found');
+    // A landing's title is written by the server (titleManagedByProject); renaming it is an engine
+    // door's act (§2.9 LS6).
+    assertEngineSessionRow(session);
     // One statement is the ownership boundary: a manual rename and opting out of project-driven
     // synchronization either both land or neither does. Always clear the bit, even when the text
     // happens to equal the project title — equality is not intent and would introduce an ABA bug.
@@ -8921,11 +9485,12 @@ export class SessionsService {
     await withTransactionRetry(this.prisma, async (tx) => {
       // Serialize with purge: if restore wins, purge re-reads an Open row and refuses;
       // if purge wins, this lock query sees no row and restore returns 404.
-      const locked = await tx.$queryRaw<Array<{ id: string }>>`
-        SELECT id FROM "session"
+      const locked = await tx.$queryRaw<Array<{ id: string; sessionKind: string }>>`
+        SELECT id, "kind" AS "sessionKind" FROM "session"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
         FOR UPDATE`;
       if (locked.length === 0) throw new NotFoundException('session not found');
+      assertEngineSessionRow(locked[0]);
       await tx.session.update({
         where: { id },
         data: { completedAt: null, archivedAt: null, deletedAt: null },
@@ -8939,14 +9504,14 @@ export class SessionsService {
 
   /** Pin a session to the top of the list (personal ordering; never touches the runner). */
   async pin(ownerId: string, id: string) {
-    await this.get(ownerId, id); // ownership check (404s otherwise)
+    assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise)
     await this.prisma.session.update({ where: { id }, data: { pinnedAt: new Date() } });
     return { ok: true };
   }
 
   /** Remove a session's pin, dropping it back into time order. */
   async unpin(ownerId: string, id: string) {
-    await this.get(ownerId, id); // ownership check (404s otherwise)
+    assertEngineSessionRow(await this.get(ownerId, id)); // ownership check (404s otherwise)
     await this.prisma.session.update({ where: { id }, data: { pinnedAt: null } });
     return { ok: true };
   }
@@ -8989,13 +9554,15 @@ export class SessionsService {
                FOR KEY SHARE`
         : [];
       const [session] = await tx.$queryRaw<
-        Array<{ workspaceId: string | null; folderId: string | null; deletedAt: Date | null }>
+        Array<{ workspaceId: string | null; folderId: string | null; deletedAt: Date | null; sessionKind: string }>
       >`
-        SELECT "workspace_id" AS "workspaceId", "folder_id" AS "folderId", "deleted_at" AS "deletedAt"
+        SELECT "workspace_id" AS "workspaceId", "folder_id" AS "folderId", "deleted_at" AS "deletedAt",
+               "kind" AS "sessionKind"
           FROM "session"
          WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
            FOR NO KEY UPDATE`;
       if (!session) throw new NotFoundException('session not found');
+      assertEngineSessionRow(session);
       if (workspaceId && workspaceId !== session.workspaceId) {
         await this.moveToWorkspaceLocked(tx, ownerId, id, { workspaceId, held: !!workspace }, folder, folderId);
         return { from: session.workspaceId, workspaceId, changed: true };
@@ -9323,12 +9890,13 @@ export class SessionsService {
     await withTransactionRetry(this.prisma, async (tx) => {
       // The Trash guard and irreversible delete must share the same row lock as restore.
       // A pre-lock deletedAt read could otherwise delete a session restored in between.
-      const locked = await tx.$queryRaw<Array<{ id: string; deletedAt: Date | null }>>`
-        SELECT id, "deleted_at" AS "deletedAt" FROM "session"
+      const locked = await tx.$queryRaw<Array<{ id: string; deletedAt: Date | null; sessionKind: string }>>`
+        SELECT id, "deleted_at" AS "deletedAt", "kind" AS "sessionKind" FROM "session"
         WHERE id = ${id}::uuid AND "owner_id" = ${ownerId}::uuid
         FOR UPDATE`;
       const session = locked[0];
       if (!session) throw new NotFoundException('session not found');
+      assertEngineSessionRow(session);
       if (!session.deletedAt) {
         throw new BadRequestException('session must be in Trash before it can be permanently deleted');
       }

@@ -1,0 +1,6 @@
+app_sha=dd53a1f9271bc4d0e1e40c133159c0f94f409233
+app_dirty=true
+test_sha=dd53a1f9271bc4d0e1e40c133159c0f94f409233
+test_dirty=true
+theme=light
+scope=controlled HTTP fixture (MockWebServer in this test); not a deployed account

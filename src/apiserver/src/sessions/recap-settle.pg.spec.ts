@@ -5,9 +5,11 @@
  * is asked to, which is the half a wrong hook makes wrong in production and a right one makes
  * invisible:
  *
- *   * A completed turn asks for a pass — through `recapDue`, so a settle inside the two-minute
- *     window reaches no provider at all, and through the real /turn-complete door, so the envelope
- *     is what would run in production rather than a call to the hook by name.
+ *   * A completed turn asks for a pass — through `recapAfterSettle`, so a settle inside the
+ *     two-minute window reaches no provider then and asks once more when the window closes, and
+ *     through the real /turn-complete door, so the envelope is what would run in production rather
+ *     than a call to the hook by name. A turn the engine started itself never reaches that door:
+ *     its TURN_END, the one filed under no delivered turn, asks from the event ingest instead.
  *   * The session's LAST settle asks unconditionally: `RealtimeService.publish`'s `final` STATUS
  *     is the one event every finalization emits (the runner's /finalize, /turn-complete's failure,
  *     the reaper's forceFinalize, a spent retry), so a session that ends inside the window still
@@ -45,6 +47,7 @@ import {
   verifyCoordinatorPgIdentity,
 } from '../projects/coordinator-pg-test-safety';
 import { RunnerApiController } from '../runner-api/runner-api.controller';
+import { RECAP_MIN_INTERVAL_MS } from './recap';
 import { SessionsService } from './sessions.service';
 
 const URL = process.env.COORDINATOR_PG_URL;
@@ -61,10 +64,19 @@ function connect(url: string) {
   // The real one, not a proxy: the last settle's recap is enqueued from inside `publish`, so the
   // `/finalize` case exercises that branch exactly as production does — NOTIFY and all.
   const realtime = new RealtimeService(prisma, push);
+  // Every `session.updated` the doors publish, and when: a pass that writes after its settle has
+  // answered must publish one of its own, or a list already on screen keeps the old recap.
+  const published: Array<{ sessionId: string; at: number }> = [];
+  const publishSessionUpdated = realtime.publishSessionUpdated.bind(realtime);
+  realtime.publishSessionUpdated = (sessionId: string) => {
+    published.push({ sessionId, at: Date.now() });
+    publishSessionUpdated(sessionId);
+  };
   const queue = { notifySessionQueued: () => undefined } as unknown as QueueService;
   return {
     db,
     realtime,
+    published,
     sessions: new SessionsService(prisma, queue, realtime),
     api: new RunnerApiController(
       prisma,
@@ -88,11 +100,15 @@ interface Fixture {
   turnId: string;
 }
 
-/** One owner, one runner, and a session RUNNING with a turn out on delivery. */
+/**
+ * One owner, one runner, and a session RUNNING with a turn out on delivery — or, `parked`, a
+ * session at AWAITING_INPUT whose engine is generating a turn nobody delivered.
+ */
 async function fixture(
   db: PrismaClient,
   label: string,
   recap: { recapText?: string; recapAt?: Date; recapEventSeq?: number } = {},
+  opts: { parked?: boolean } = {},
 ): Promise<Fixture> {
   const ownerId = randomUUID();
   const runnerId = randomUUID();
@@ -131,7 +147,7 @@ async function fixture(
       title: `${label}`,
       prompt: 'fix the login flow',
       provider: 'claude',
-      status: RunStatus.RUNNING,
+      status: opts.parked ? RunStatus.AWAITING_INPUT : RunStatus.RUNNING,
       engineTurnActive: true,
       dispatchOrigin: SessionDispatchOrigin.USER,
       startedAt: new Date(),
@@ -168,6 +184,19 @@ function say(
 ) {
   return api.events({ id: f.runnerId }, f.sessionId, {
     events: [{ seq, type, ts: new Date().toISOString(), turnId: f.turnId, payload }],
+  });
+}
+
+/** An event of a turn nobody delivered: one the engine started itself is filed under no turn. */
+function sayUndelivered(
+  api: RunnerApiController,
+  f: Fixture,
+  seq: number,
+  type: RunEventType,
+  payload: Record<string, unknown>,
+) {
+  return api.events({ id: f.runnerId }, f.sessionId, {
+    events: [{ seq, type, ts: new Date().toISOString(), payload }],
   });
 }
 
@@ -274,6 +303,11 @@ async function until<T>(check: () => Promise<T | null>, ms = 20_000): Promise<T 
   }
 }
 
+/** A `session.updated` for this session published at or after `since`, once one is. */
+function publishedSince(published: Array<{ sessionId: string; at: number }>, sessionId: string, since: number) {
+  return until(async () => (published.some((p) => p.sessionId === sessionId && p.at >= since) ? true : null), 5_000);
+}
+
 /** The session's recap, once its cursor has reached `seq` — i.e. once the released pass wrote. */
 function recapped(sql: Client, sessionId: string, seq: number) {
   return until(async () => {
@@ -290,7 +324,7 @@ test('the settle hooks write the recap, and only on the terms they promise', {
   const sql = new Client({ connectionString: url, connectionTimeoutMillis: 5_000 });
   await sql.connect();
   await verifyCoordinatorPgIdentity(sql);
-  const { db, api, sessions } = connect(url);
+  const { db, api, sessions, published } = connect(url);
 
   // Every pass spends the server's own key, which is what the settle hooks resolve to on a
   // deployment that has one; the provider behind it is answered by this file, never by the network.
@@ -315,6 +349,9 @@ test('the settle hooks write the recap, and only on the terms they promise', {
     // A settled stream carries events a recap never reads. The cursor must name the last event the
     // RECAP covers, not the last row the settle happened to leave behind.
     await say(api, f, 5, RunEventType.STATUS, { status: 'AWAITING_INPUT' });
+    // A delivered turn's own TURN_END is filed under its turn, and asks for nothing: the turn's
+    // recap is /turn-complete's to ask for, and asking twice would spend a second pass.
+    await say(api, f, 6, RunEventType.TURN_END, {});
 
     await api.turnComplete({ id: f.runnerId }, f.sessionId, { turnId: f.turnId, ...TURN_SUCCEEDED });
 
@@ -332,13 +369,15 @@ test('the settle hooks write the recap, and only on the terms they promise', {
     assert.equal(row.recap_text, 'Fixed the login flow; tests pass. Next: ship it.');
     assert.ok(row.recap_at instanceof Date, 'and it is stamped when it was written');
     assert.equal(row.recap_event_seq, 4, 'the cursor is the seq of the last event the recap covers');
+    assert.equal(provider.calls, 1, 'one pass for the turn: its TURN_END did not ask a second time');
   });
 
-  await t.test('(2) a second settle inside the two-minute window asks nobody', async () => {
-    // As a session recapped a minute ago reads: a fresh recap and the cursor it left.
+  await t.test('(2) a settle inside the two-minute window asks nobody then, and once when it closes', async () => {
+    // As a session recapped just under two minutes ago reads: a fresh recap and the cursor it left,
+    // with the window two seconds from closing.
     const f = await fixture(db, 'throttled', {
       recapText: 'Earlier: the redirect lost its cookie.',
-      recapAt: new Date(Date.now() - 60_000),
+      recapAt: new Date(Date.now() - (RECAP_MIN_INTERVAL_MS - 2_000)),
       recapEventSeq: 2,
     });
     const provider = parkedProvider();
@@ -356,9 +395,23 @@ test('the settle hooks write the recap, and only on the terms they promise', {
     // enough for a pass that WAS queued to have reached the parked provider.
     await new Promise((resolve) => setTimeout(resolve, 500));
     assert.equal(provider.calls, 0, 'a throttled settle reaches no provider');
-    const row = await recapRow(sql, f.sessionId);
-    assert.equal(row.recap_text, 'Earlier: the redirect lost its cookie.', 'and rewrites nothing');
-    assert.equal(row.recap_event_seq, 2);
+    const held = await recapRow(sql, f.sessionId);
+    assert.equal(held.recap_text, 'Earlier: the redirect lost its cookie.', 'and rewrites nothing');
+    assert.equal(held.recap_event_seq, 2);
+
+    // Before this, the recap stayed a turn behind until the session's next settle, which a parked
+    // session may never have. The window closing is now enough.
+    assert.equal(await passedThrough(provider), 1, 'the window closing asked for the pass the settle could not');
+    const releasedAt = Date.now();
+    provider.release('Fixed the login flow; tests are green.');
+    const row = await recapped(sql, f.sessionId, 4);
+    assert.ok(row, 'and the recap catches up with the turn the window held back');
+    assert.equal(row.recap_text, 'Fixed the login flow; tests are green.');
+    assert.equal(
+      await publishedSince(published, f.sessionId, releasedAt),
+      true,
+      'and the late pass publishes the session, since no settle is left to carry its recap',
+    );
   });
 
   await t.test('(3) a provider that fails delays nothing and is never written', async () => {
@@ -460,5 +513,29 @@ test('the settle hooks write the recap, and only on the terms they promise', {
     const row = await recapRow(sql, f.sessionId);
     assert.equal(row.recap_text, 'Refreshed by hand: tests pass.');
     assert.equal(row.recap_event_seq, 4, 'and the cursor moves to what this pass covered');
+  });
+
+  await t.test('(6) a turn the engine started itself asks for its pass when its TURN_END lands', async () => {
+    // Parked between turns, as a session reads while a background task reports in: AWAITING_INPUT,
+    // with the engine generating a turn the control plane never delivered.
+    const f = await fixture(db, 'self-started', {}, { parked: true });
+    const provider = parkedProvider();
+    await say(api, f, 1, RunEventType.USER, { text: 'research the other coding agents' });
+    await say(api, f, 2, RunEventType.ASSISTANT, { text: 'Started four background searches.' });
+    await sayUndelivered(api, f, 3, RunEventType.ASSISTANT, { text: 'The searches are back.' });
+    await sayUndelivered(api, f, 4, RunEventType.ASSISTANT, { text: 'Conclusion: integrate Copilot CLI first.' });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    assert.equal(provider.calls, 0, 'nothing asks while that turn is still running');
+
+    // Such a turn never reaches /turn-complete. Its end is the TURN_END filed under no turn.
+    await sayUndelivered(api, f, 5, RunEventType.TURN_END, {});
+    assert.equal(await passedThrough(provider), 1, 'its TURN_END asked for a pass');
+    assert.equal(provider.answered, false, 'and the ingest answered while that pass was unanswered');
+    const releasedAt = Date.now();
+    provider.release('Research done: integrate Copilot CLI first.');
+    const row = await recapped(sql, f.sessionId, 4);
+    assert.ok(row, 'the recap catches the conclusion that turn wrote');
+    assert.equal(row.recap_text, 'Research done: integrate Copilot CLI first.');
+    assert.equal(await publishedSince(published, f.sessionId, releasedAt), true, 'and the clients hear about it');
   });
 });

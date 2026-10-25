@@ -35,8 +35,8 @@ test('workspace reads resolve the selected runner rather than only the bound mac
   assert.equal(read.runnerId, null, 'an unbound workspace still resolves every owned runner');
   assert.deepEqual((await h.service.list('owner-1'))[0].antigravityKeyAvailableByRunner, expected);
   assert.deepEqual(h.runnerReads, [
-    { where: { ownerId: 'owner-1' }, select: { id: true, engines: true } },
-    { where: { ownerId: 'owner-1' }, select: { id: true, engines: true } },
+    { where: { ownerId: 'owner-1' }, select: { id: true, engines: true, defaultRemoved: true } },
+    { where: { ownerId: 'owner-1' }, select: { id: true, engines: true, defaultRemoved: true } },
   ]);
   h.setEnv({ GEMINI_API_KEY: '  ' });
   assert.deepEqual((await h.service.get('owner-1', 'workspace-1')).antigravityKeyAvailableByRunner, expected);
@@ -76,5 +76,38 @@ test('a runner signed in with Google offers built-in Antigravity to every worksp
     'runner-google-unread': true,
     'runner-google-lapsed': false,
     'runner-env-key': true,
+  });
+});
+
+test('a Default removed from Orbit is no credential a workspace runs built-in Antigravity on', async () => {
+  const stored = { id: 'workspace-1', runnerId: null, env: null };
+  // Default signed in with Google, or running on the machine's Gemini key, beside one added Google account.
+  const report = (authSource: 'google' | 'env_key', added: 'yes' | 'no') => [{
+    engine: 'antigravity', installed: true, auth: 'yes', authSource,
+    accounts: [
+      { id: 'default', home: '/root/.orbit/antigravity/google', auth: authSource === 'google' ? 'yes' : 'no' },
+      { id: '9c8b7a6d', home: '/root/.orbit/antigravity-accounts/9c8b7a6d', auth: added },
+    ],
+  }];
+  const prisma = {
+    runner: {
+      findMany: async () => [
+        { id: 'google-removed', engines: report('google', 'no'), defaultRemoved: ['antigravity'] },
+        { id: 'key-removed', engines: report('env_key', 'no'), defaultRemoved: ['antigravity'] },
+        { id: 'removed-added-signed-in', engines: report('env_key', 'yes'), defaultRemoved: ['antigravity'] },
+        { id: 'google', engines: report('google', 'no'), defaultRemoved: [] },
+        { id: 'key', engines: report('env_key', 'no'), defaultRemoved: [] },
+      ],
+    },
+    workspace: { findFirst: async () => stored },
+    $queryRaw: async () => [],
+  };
+  const read = await new WorkspacesService(prisma as never).get('owner-1', 'workspace-1');
+  assert.deepEqual(read.antigravityKeyAvailableByRunner, {
+    'google-removed': false,
+    'key-removed': false,
+    'removed-added-signed-in': true,
+    google: true,
+    key: true,
   });
 });

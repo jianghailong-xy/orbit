@@ -198,9 +198,9 @@ class RunnerEnginePageTest {
         click(hasText("Resume Now"))
         compose.waitUntil(60_000) { fixture.pauseBodies.isNotEmpty() }
         assertEquals("runners/${fixture.RUNNER}/accounts/claude/1fda3f43/pause {\"durationMinutes\":null}", fixture.pauseBodies.single())
+        // Default comes off Orbit's list alone, while another account stays (RemoveDefaultPageTest).
         menu("Default")
-        for (item in listOf("Rename…", "Sign In Again", "Pause…")) compose.onNodeWithText(item).assertExists()
-        assertEquals("Default is never removed", 0, shown("Remove…"))
+        for (item in listOf("Rename…", "Sign In Again", "Pause…", "Remove…")) compose.onNodeWithText(item).assertExists()
     }
 
     @Test fun anOnlyAccountSignedOutSaysTheEngineCannotRunThere() {

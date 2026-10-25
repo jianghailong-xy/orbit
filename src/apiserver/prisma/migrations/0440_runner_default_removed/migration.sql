@@ -1,0 +1,21 @@
+-- ══════════════════════════════════════════════════════════════════════════════════════════════
+-- `runner.default_removed`: the engines whose Default the owner removed from Orbit on this runner.
+--
+-- Every engine that keeps accounts (codex, claude, antigravity, kimi, cursor) has Default on a
+-- runner: the directory the machine's own environment selects (~/.codex for Codex), the one that
+-- engine's CLI typed in a terminal there shares. Default can't be deleted the way an added account's
+-- slot is without taking that login with it, so removing it is Orbit's alone. The machine keeps its
+-- sign-in and directory, and an engine named here is one whose Default Orbit stops listing and using
+-- while the runner reports another account of that engine. RunnersService.removeAccount writes it
+-- (account `default`), and POST /runners/:id/accounts/:engine/default/restore takes the engine back
+-- out (RunnersService.restoreDefault). Neither asks anything of the runner.
+--
+--   default_removed   engine names, each at most once: `{codex}` once Codex's Default is removed.
+--
+-- NOT NULL DEFAULT '{}', like every scalar list in this schema: Prisma types it `String[]` and never
+-- returns null for it. The empty list is the old behaviour, every Default listed and used.
+--
+-- ADD COLUMN only. The default is a constant, so the ALTER is catalog-only and no stored row is
+-- rewritten. No trigger on "runner" names it.
+
+ALTER TABLE "runner" ADD COLUMN "default_removed" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

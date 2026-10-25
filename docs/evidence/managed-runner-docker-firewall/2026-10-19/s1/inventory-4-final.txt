@@ -1,0 +1,22 @@
+== inventory 4-final at 2026-10-19T07:18:11Z, checkout a6d24199a676b771d458409ce46d3e797840185b
+-- managed runner containers
+mr-01a152f3-b7f5-70ec-82e0-3313aded82f5	running	Up 20 minutes	generation=1	orbit-managed-runners
+-- the stack
+orbit-managed-runner-firewall	running	Up 37 seconds (healthy)	orbit-managed-runner-firewall:local
+orbit-docker-channel	running	Up 5 minutes (healthy)	orbit-docker-channel:local
+orbit-wiki-worker	running	Up 5 minutes	orbit-apiserver:local
+orbit-web	running	Up 5 minutes (healthy)	s1-web
+orbit-apiserver	running	Up 5 minutes (healthy)	orbit-apiserver:local
+orbit-gateway	running	Up 20 minutes (healthy)	nginx:alpine
+orbit-pgbackup	running	Up 20 minutes	postgres:16-alpine
+orbit-postgres	running	Up 22 minutes (healthy)	postgres:16-alpine
+-- managed_runner rows
+admin-s1@d9-firewall.test | READY | RUNNING | 1 | mr-01a152f3-b7f5-70ec-82e0-3313aded82f5 | 
+-- .env lines about managed runners
+65:# installed without them keeps managed runners off. ORBIT_MANAGED_RUNNERS_ENABLED=false switches them off: no
+67:# ORBIT_MANAGED_RUNNERS_ENABLED=true
+68:# ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+69:# COMPOSE_PROFILES=managed-runners-docker
+86:ORBIT_MANAGED_RUNNERS_ENABLED=true
+87:ORBIT_MANAGED_RUNNERS_DIR=./data/managed-runners
+88:COMPOSE_PROFILES=managed-runners-docker,managed-runner-firewall

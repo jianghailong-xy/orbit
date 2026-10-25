@@ -21,10 +21,11 @@ import {
 import { Prisma } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 import { accountDir, isAccountEngine } from '@orbit/shared';
-import { ACCOUNT_CHOICE, accountEnvVar, accountOnRunner } from './account';
+import { ACCOUNT_CHOICE, accountEnvVar, accountOnRunner, type AccountRunner } from './account';
 import { catalogModels } from './model-catalog';
 import { ANTHROPIC_HOST } from './plan-usage';
 import { decryptSecret } from './provider-crypto';
+import { LANDING_PROVIDER_SLUG } from './provider-slug';
 import { followsRuntimeCatalog, presetDefaultModel } from './preset-overlay';
 import {
   firstRuntimeCatalogModel,
@@ -43,6 +44,10 @@ import {
 export function isBuiltinProvider(slug?: string | null, providerBuiltin = true): boolean {
   if (!slug || slug === AgentProvider.CLAUDE || slug === AgentProvider.CODEX) return true;
   if (slug === AgentProvider.OPENCODE || slug === AgentProvider.ANTIGRAVITY || slug === AgentProvider.CURSOR) return true;
+  // The LANDING session's provider (0436) is the platform's own value, not a configured key: like a
+  // built-in engine's slug it is never looked up as one. It has no engine (builtinSessionEngine
+  // returns null), but "built-in" is what says no configured row answers to it.
+  if (slug === LANDING_PROVIDER_SLUG) return true;
   if (slug === AgentProvider.KIMI || slug === AgentProvider.DSH) return providerBuiltin;
   return false;
 }
@@ -217,6 +222,9 @@ export async function adminOnlyProviderRefusal(
   ownerId: string,
   slug: string,
 ): Promise<string | null> {
+  // The LANDING provider's shared row is the migration's compatibility fence, not a provider any
+  // account may be told about (0436).
+  if (slug === LANDING_PROVIDER_SLUG) return null;
   const shared = await db.modelProvider.findFirst({ where: { slug, ownerId: null }, select: { id: true } });
   if (!shared || (await isAdmin(db, ownerId))) return null;
   return `provider "${slug}" is available to admins only; ask an admin to add you to a shared pool`;
@@ -600,8 +608,9 @@ export function resolveProviderExec(args: {
   modelCatalog?: unknown;
   workspaceEnv?: Record<string, string> | null;
   /** The Codex account slot this session runs on (Session.codexAccount ?? Workspace.codexAccount). Only a built-in
-   *  Codex session reads it: it is resolved against `runnerEngines` into the CODEX_HOME injected
-   *  below, and a slot that runner does not report runs on Default (accountOnRunner). */
+   *  Codex session reads it: it is resolved against `runner`'s report into the CODEX_HOME injected
+   *  below, and a slot that runner does not report runs on Default — or, while the owner has removed
+   *  Default from Orbit, on Automatic's pick among the accounts that remain (accountOnRunner). */
   codexAccount?: string | null;
   /** The Claude account slot this session runs on (Workspace.claudeAccount today), the sibling of
    *  codexAccount and read the same way: resolved into the CLAUDE_CONFIG_DIR injected below. */
@@ -618,8 +627,10 @@ export function resolveProviderExec(args: {
    *  read the same way: resolved into the ORBIT_CURSOR_ACCOUNT_DIR injected below, which the runner
    *  reads to pick the account the session's CLI signs in with (docs/cursor-runtime-contract.md §16.2). */
   cursorAccount?: string | null;
-  /** Runner.engines of the assigned runner: where each account's directory is reported. */
-  runnerEngines?: unknown;
+  /** The assigned runner: its report (Runner.engines), where each account's directory is reported, and
+   *  what decides where a session on a Default its owner removed from Orbit runs instead — that record,
+   *  the runner's pauses and its quota (AccountRunner). */
+  runner?: AccountRunner | null;
   /** The owner's configured keys (openCodeKeyRows), for an OpenCode session whose model names one
    *  (`orbit-<slug>/<model>`): that key is written into the run's OPENCODE_CONFIG_CONTENT. */
   openCodeKeys?: OpenCodeKeyRow[];
@@ -716,9 +727,11 @@ export function resolveProviderExec(args: {
   // CODEX_HOME, a Claude Code CLAUDE_CONFIG_DIR, an Antigravity Google sign-in's Gemini directory, a
   // Kimi Code KIMI_CODE_HOME, a Cursor CLI account's directory.
   // Built-in only: a configured provider brings its own key, so no sign-in on the machine is spent.
-  // The chosen account replaces any such variable typed into the workspace's env.
+  // The chosen account replaces any such variable typed into the workspace's env. A session that would
+  // run on a Default its owner removed from Orbit is handed the directory of the account Automatic
+  // picks among those that remain instead (accountOnRunner): never one without it.
   const accountId = isAccountEngine(provider) ? args[ACCOUNT_CHOICE[provider]] : undefined;
-  const account = accountOnRunner(provider, accountId, args.runnerEngines);
+  const account = accountOnRunner(provider, accountId, args.runner, workspaceEnv);
   const dirVar = accountEnvVar(provider);
   let env =
     account && dirVar

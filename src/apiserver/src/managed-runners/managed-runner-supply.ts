@@ -1,7 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import { AgentProvider, ENGINE_CLI_NAMES, MODEL_UNAVAILABLE, defaultEngineOf, type LoginEngine } from '@orbit/shared';
 
-import { sanitizeRunnerEngines } from '../common/runner-engines';
+import { usedRunnerEngines } from '../common/runner-engines';
 import type { PrismaService } from '../prisma/prisma.service';
 import { isBuiltinProvider, keyCredential } from '../providers/custom-provider';
 import { ADVERTISED_RUNTIMES } from '../runner-api/runner-provider-support';
@@ -27,6 +27,10 @@ export const MANAGED_SUPPLY_RUNTIMES: readonly LoginEngine[] = ['claude', 'codex
 export interface ManagedSupplyRunner {
   /** Heartbeat-reported per-engine health, stored as sent (RunnerEngineHealth[]). */
   engines: unknown;
+  /** The engines whose Default its owner removed from Orbit (`runner.default_removed`): such an engine is
+   *  signed in as the accounts that remain are (usedRunnerEngines). Required, so a select that forgets
+   *  it does not compile. */
+  defaultRemoved: unknown;
   /** What its last heartbeat declared: a runtime the claim needs advertised has to be in it. */
   capabilities?: readonly string[] | null;
 }
@@ -50,7 +54,8 @@ export function managedRuntimeReady(
   options: { bringsOwnCredentials?: boolean } = {},
 ): boolean {
   if (!(MANAGED_SUPPLY_RUNTIMES as readonly string[]).includes(runtime)) return false;
-  const health = sanitizeRunnerEngines(runner.engines)?.find((engine) => engine.engine === runtime);
+  const health = usedRunnerEngines({ engines: runner.engines, accountNames: null, defaultRemoved: runner.defaultRemoved })
+    ?.find((engine) => engine.engine === runtime);
   if (!health?.installed || health.installationError) return false;
   if (health.auth !== 'yes' && !options.bringsOwnCredentials) return false;
   const advertised = ADVERTISED_RUNTIMES.some(({ provider }) => provider === runtime);
@@ -172,7 +177,9 @@ export async function assertManagedFirstSessionRuntime(
   // runtime's own sign-in has none to wait for on a runner nobody could sign in to yet.
   if (ownCredentials && args.runner.engines == null && (MANAGED_SUPPLY_RUNTIMES as readonly string[]).includes(args.runtime)) return;
   const ran = await prisma.session.findFirst({
-    where: { workspaceId: args.workspaceId, taskId: null, parentSessionId: null },
+    // `kind` is the seed's own measure (workspace-provider.ts): a LANDING row is not a session a
+    // person started, and its provider is the reserved `orbit` slug no engine runs.
+    where: { workspaceId: args.workspaceId, taskId: null, parentSessionId: null, sessionKind: 'CONVERSATION' },
     select: { id: true },
   });
   if (ran) return;

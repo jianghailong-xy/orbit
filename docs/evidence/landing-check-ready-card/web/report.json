@@ -1,0 +1,226 @@
+[
+  {
+    "theme": "light",
+    "frame": "ready",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #9",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Merge checkReady",
+    "detail": "Passed the check · waiting for the owner",
+    "card": "Merge checkReadyPassed the check · waiting for the owner",
+    "cardLines": [],
+    "sections": [
+      "Merge check · 1"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. Merging is decided on the merge card · Review Card ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "marks": [
+      {
+        "job": "job-c1",
+        "lines": [
+          "≡ is-queued · Merge check queued · project/34bmzOkov3xN2yLPrnsCk → main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "↻ is-running · Round 1",
+          "✓ is-ok · Fetched · synced main",
+          "↻ is-running · Merge check started · claim 1 · workstation-gpu",
+          "✓ is-ok · Merge check passed · 17m 02s",
+          "✓ is-ok · Ready to merge into main",
+          "↻ is-running · Asked the owner to merge into main"
+        ]
+      }
+    ],
+    "unhandled": []
+  },
+  {
+    "theme": "light",
+    "frame": "cancelled",
+    "title": "Land · Ledger migration order",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "LandingNot landed",
+    "detail": "Stopped · not landed",
+    "card": "LandingNot landedStopped · not landedStopped · not landed",
+    "cardLines": [
+      "Stopped · not landed"
+    ],
+    "sections": [
+      "Generation 2stopped"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. Decisions: the coordinator · Open coordinator ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "marks": [
+      {
+        "job": "job-landing",
+        "lines": [
+          "≡ is-queued · Task marked done · queued to land on project/34bmzOkov3xN2yLPrnsCk",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "✓ is-ok · Fetched · synced main",
+          "↻ is-running · Task acceptance started · claim 1 · workstation-gpu",
+          "✗ is-failed · Stop requested · claim 1",
+          "✗ is-failed · Stopped · not landed"
+        ]
+      }
+    ],
+    "unhandled": []
+  },
+  {
+    "theme": "light",
+    "frame": "land-ready",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #9",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Merge to mainReady",
+    "detail": "Passed the check · waiting for the owner",
+    "card": "Merge to mainReadyPassed the check · waiting for the ownerStopped · not landed",
+    "cardLines": [
+      "Stopped · not landed"
+    ],
+    "sections": [
+      "Merge check · 1",
+      "Merge to main · 1"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. Merging is decided on the merge card · Review Card ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "marks": [
+      {
+        "job": "job-c1",
+        "lines": [
+          "≡ is-queued · Merge check queued · project/34bmzOkov3xN2yLPrnsCk → main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "↻ is-running · Round 1",
+          "✓ is-ok · Fetched · synced main",
+          "↻ is-running · Merge check started · claim 1 · workstation-gpu",
+          "✓ is-ok · Merge check passed · 17m 02s",
+          "✓ is-ok · Ready to merge into main"
+        ]
+      },
+      {
+        "job": "job-l1",
+        "lines": [
+          "↻ is-running · Merge to main confirmed by the owner",
+          "≡ is-queued · Queued to merge into main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "✗ is-failed · Push refused · main moved 1 commit, 1 from outside the queue (fix(web): a table that scrolls)",
+          "✗ is-failed · Ready to merge into main",
+          "↻ is-running · main moved 1 commit since the check — checking again on the new main"
+        ]
+      }
+    ],
+    "unhandled": []
+  },
+  {
+    "theme": "dark",
+    "frame": "ready",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #9",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Merge checkReady",
+    "detail": "Passed the check · waiting for the owner",
+    "card": "Merge checkReadyPassed the check · waiting for the owner",
+    "cardLines": [],
+    "sections": [
+      "Merge check · 1"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. Merging is decided on the merge card · Review Card ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "marks": [
+      {
+        "job": "job-c1",
+        "lines": [
+          "≡ is-queued · Merge check queued · project/34bmzOkov3xN2yLPrnsCk → main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "↻ is-running · Round 1",
+          "✓ is-ok · Fetched · synced main",
+          "↻ is-running · Merge check started · claim 1 · workstation-gpu",
+          "✓ is-ok · Merge check passed · 17m 02s",
+          "✓ is-ok · Ready to merge into main",
+          "↻ is-running · Asked the owner to merge into main"
+        ]
+      }
+    ],
+    "unhandled": []
+  },
+  {
+    "theme": "dark",
+    "frame": "cancelled",
+    "title": "Land · Ledger migration order",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "LandingNot landed",
+    "detail": "Stopped · not landed",
+    "card": "LandingNot landedStopped · not landedStopped · not landed",
+    "cardLines": [
+      "Stopped · not landed"
+    ],
+    "sections": [
+      "Generation 2stopped"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. Decisions: the coordinator · Open coordinator ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "marks": [
+      {
+        "job": "job-landing",
+        "lines": [
+          "≡ is-queued · Task marked done · queued to land on project/34bmzOkov3xN2yLPrnsCk",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "✓ is-ok · Fetched · synced main",
+          "↻ is-running · Task acceptance started · claim 1 · workstation-gpu",
+          "✗ is-failed · Stop requested · claim 1",
+          "✗ is-failed · Stopped · not landed"
+        ]
+      }
+    ],
+    "unhandled": []
+  },
+  {
+    "theme": "dark",
+    "frame": "land-ready",
+    "title": "Merge project/34bmzOkov3xN2yLPrnsCk → main · #9",
+    "sub": "Run by Orbit · runner workstation-gpu",
+    "head": "Merge to mainReady",
+    "detail": "Passed the check · waiting for the owner",
+    "card": "Merge to mainReadyPassed the check · waiting for the ownerStopped · not landed",
+    "cardLines": [
+      "Stopped · not landed"
+    ],
+    "sections": [
+      "Merge check · 1",
+      "Merge to main · 1"
+    ],
+    "footer": "Orbit runs this landing — nothing to type here. Merging is decided on the merge card · Review Card ›",
+    "menu": [],
+    "menuHtml": [],
+    "composer": false,
+    "marks": [
+      {
+        "job": "job-c1",
+        "lines": [
+          "≡ is-queued · Merge check queued · project/34bmzOkov3xN2yLPrnsCk → main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "↻ is-running · Round 1",
+          "✓ is-ok · Fetched · synced main",
+          "↻ is-running · Merge check started · claim 1 · workstation-gpu",
+          "✓ is-ok · Merge check passed · 17m 02s",
+          "✓ is-ok · Ready to merge into main"
+        ]
+      },
+      {
+        "job": "job-l1",
+        "lines": [
+          "↻ is-running · Merge to main confirmed by the owner",
+          "≡ is-queued · Queued to merge into main",
+          "↻ is-running · Claimed by runner workstation-gpu · claim 1",
+          "✗ is-failed · Push refused · main moved 1 commit, 1 from outside the queue (fix(web): a table that scrolls)",
+          "✗ is-failed · Ready to merge into main",
+          "↻ is-running · main moved 1 commit since the check — checking again on the new main"
+        ]
+      }
+    ],
+    "unhandled": []
+  }
+]

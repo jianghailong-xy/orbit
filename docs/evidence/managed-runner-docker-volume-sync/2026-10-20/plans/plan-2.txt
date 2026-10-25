@@ -1,0 +1,14 @@
+# The mitigated build (d10, c0cb7e255: syncs before reports only on a shared volume) against the build before T02c
+# (before), 1, 4 and 8 runners, in blocks d10-before-d10
+switch d10
+r13-d-n8 d10 8 120 3 400 2000
+r14-d-n4 d10 4 120 3 400 2000
+r15-d-n1 d10 1 120 3 400 2000
+switch before
+r16-b-n1 before 1 120 3 400 2000
+r17-b-n4 before 4 120 3 400 2000
+r18-b-n8 before 8 120 3 400 2000
+switch d10
+r19-d-n1 d10 1 120 3 400 2000
+r20-d-n4 d10 4 120 3 400 2000
+r21-d-n8 d10 8 120 3 400 2000

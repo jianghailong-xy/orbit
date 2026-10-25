@@ -44,6 +44,19 @@ func codexTurnError(result codexTurnResult) string {
 	return result.Error
 }
 
+// codexCapacityRetryDelays is the wait before each replay of a turn OpenAI refused with "Selected
+// model is at capacity" — one entry per retry. That refusal is an admission-side transient that
+// clears in minutes and spans models, so the turn is replayed in place rather than failed; once
+// these are spent the turn fails with the error it last hit.
+var codexCapacityRetryDelays = []time.Duration{60 * time.Second, 90 * time.Second, 120 * time.Second}
+
+// isCodexCapacityError reports a turn error as that refusal. The match is deliberately loose about
+// the wording and nothing else. Keep it identical to MODEL_AT_CAPACITY_ERROR_MARKER in
+// src/apiserver/src/tasks/model-routing.ts.
+func isCodexCapacityError(msg string) bool {
+	return strings.Contains(strings.ToLower(msg), "at capacity")
+}
+
 func codexTurnEndPayload(result codexTurnResult, numTurns int, costUsd float64, job *ClaimedSession) map[string]interface{} {
 	contextTokens := result.ContextTokens
 	if contextTokens <= 0 {

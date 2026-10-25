@@ -466,7 +466,12 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // arrives inside the two-minute window needs: the pass ignores the window, and the write is
       // what the session list draws next. Fire and forget, like the push above it: the pass is
       // queued and this call returns, and nothing the pass can meet may fail a settlement.
-      void enqueueRecap({ db: this.prisma, sessionId: runId, finalize: true }).catch(() => undefined);
+      void enqueueRecap({
+        db: this.prisma,
+        sessionId: runId,
+        finalize: true,
+        onWritten: () => this.publishSessionUpdated(runId),
+      }).catch(() => undefined);
     }
   }
 
@@ -1185,6 +1190,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const sessions = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId,
+        // A LANDING row has no branch and no runner, and must never be handed one (§2.9 LS6).
+        sessionKind: 'CONVERSATION',
         mergeStatus: 'pending',
         ...(!supportsRecovery ? { mergeRecoveryAction: null } : {}),
         mergeOperationId: { not: null },
@@ -1304,6 +1311,8 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
     const sessions = await this.prisma.session.findMany({
       where: {
         assignedRunnerId: runnerId,
+        // A LANDING row has no worktree to commit (§2.9 LS6).
+        sessionKind: 'CONVERSATION',
         commitStatus: 'pending',
         commitOperationId: { not: null },
         branch: { not: null },

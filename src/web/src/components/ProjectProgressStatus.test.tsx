@@ -25,6 +25,7 @@ import {
   exceptionCardRows,
   isOwnerExceptionCard,
 } from './ProjectProgressStatus';
+import { encodeId } from '../lib/idCodec';
 import { projectIntegrationQuery, projectOpenItemsQuery } from '../lib/queries';
 import {
   START_PROJECT_TITLE,
@@ -1606,5 +1607,178 @@ describe('an owner marking an exception handled', () => {
     await settle();
 
     expect(document.getElementById(`open-item-${ESCALATED.itemId}`)).toBeNull();
+  });
+});
+
+/**
+ * §4.6 X-E5 at the owner's card (board v4 06 c): the heading says how long the claim has been
+ * silent, Abandon is the lead press, Open landing is the way to read the attempt, and each door
+ * says its consequence — J12's push fact among them.
+ */
+describe('the X-E5 card — a landing whose runner stopped reporting', () => {
+  const LANDING = '0195c0de-0000-7000-8000-00000000b001';
+  const landingHref = `/sessions/${encodeId(LANDING)}`;
+  // The item opened two minutes ago, on a claim that last reported 29 minutes ago: 27 minutes of
+  // silence, which is the number the heading is about.
+  const lease = (over: Partial<NonNullable<ProjectOpenItemRow['lease']>> = {}) => ({
+    lastReportAt: at(29 * MINUTE), leaseExpiredAt: at(19 * MINUTE), jobKind: 'LAND_TASK',
+    generation: 2, phase: 'REBASE', step: null, claimGeneration: 1, round: null, checkCount: null,
+    runner: 'workstation-gpu', progressProtocol: 'v2', pushReported: false,
+    ...over,
+  });
+  const XE5 = item({
+    itemId: '6LeAsEExpIrEd00000001',
+    kind: 'LANDING_LEASE_EXPIRED',
+    title: 'No word from the runner: 维护每日轮数上限在服务端路径上没生效',
+    detailLine: 'No report from runner workstation-gpu since 2026-10-19 14:35 UTC.',
+    assignee: 'OWNER',
+    assigneeReason: 'ESCALATED',
+    waitingSince: at(2 * MINUTE),
+    escalateAt: null,
+    escalatedAt: at(2 * MINUTE),
+    sessionId: null,
+    landingSessionId: LANDING,
+    integrationJobId: 'job-xe5',
+    delivery: { state: 'NOT_REQUIRED', sessionId: null, at: null },
+    actions: ['ABANDON', 'OPEN_LANDING'],
+    primaryAction: 'ABANDON',
+    requiredAction: 'The runner stopped reporting; abandon this landing, or wait for the runner to come back.',
+    facts: facts({ task: { id: 'task-xe5', title: '维护每日轮数上限在服务端路径上没生效' } }),
+    lease: lease(),
+  });
+  const draw = (row: ProjectOpenItemRow): string => paint(
+    { needsYou: [row], withCoordinator: [] },
+    () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+  );
+
+  it('says how long the claim has been silent, and leads with Abandon', () => {
+    const html = draw(XE5);
+    // Not ESCALATED's "no one acted on this for 2m": X-E5 is escalated at birth, and the fact it
+    // is about is the silence, counted from the last report.
+    expect(html).toContain('Now yours — no report from the runner for 27m');
+    expect(html).not.toContain('no one acted on this');
+    expect(html).toContain('The runner stopped reporting; abandon this landing, or wait for the runner to come back.');
+    const row = actionRow(html);
+    expect(row[0]).toEqual({ label: 'Abandon', weight: 'primary' });
+    // Then the way in, and — the owner's own ending — Mark as handled.
+    expect(row.slice(1).map((door) => door.label)).toEqual(['Open landing', 'Mark as handled']);
+    expect(row[1]!.weight).toBe('link');
+  });
+
+  it('writes the push half of Abandon’s sentence by J12, from the claim’s own facts', () => {
+    expect(draw(XE5))
+      .toContain('Ends this attempt. Nothing was pushed, and nothing is queued again.');
+    // A check never pushes, whatever its protocol says.
+    expect(draw({ ...XE5, lease: lease({ jobKind: 'CHECK_PROMOTION', progressProtocol: null }) }))
+      .toContain('Ends this attempt. Nothing was pushed, and nothing is queued again.');
+    // A legacy claim reports only between steps: it may have been pushed.
+    expect(draw({ ...XE5, lease: lease({ progressProtocol: null }) }))
+      .toContain('Ends this attempt. It may have been pushed, and nothing is queued again.');
+    // And a v2 claim that recorded a push proves nothing either way — say the cautious thing.
+    expect(draw({ ...XE5, lease: lease({ pushReported: true }) }))
+      .toContain('Ends this attempt. It may have been pushed, and nothing is queued again.');
+  });
+
+  it('draws the claim it is about in three rows, on the reader’s own clock', () => {
+    const html = draw(XE5);
+    // The landing that stopped, and which generation of its work.
+    expect(html).toContain('>Landing</span><span class="criteria-decision-v">');
+    expect(html).toContain('维护每日轮数上限在服务端路径上没生效 · generation 2');
+    // The runner, its last report and the lease's expiry — local wall clock, the card's own.
+    const row = html.slice(html.indexOf('>Runner</span>'));
+    expect(row.slice(0, 260)).toContain('workstation-gpu · last report');
+    expect(row.slice(0, 260)).toContain('lease expired');
+    expect(row.slice(0, 260)).not.toContain('UTC');
+    // The step, the claim and the round it was on.
+    expect(html).toContain('rebasing · claim 1');
+    // Which round of how many: the M is the job kind's most rounds per claim (§7.2 V6), never the
+    // check's count — a task's landing is "of 3" with two checks, and with no check at all.
+    expect(draw({ ...XE5, lease: lease({ phase: 'CHECK', round: 2, checkCount: 2 }) }))
+      .toContain('checking · claim 1 · round 2 of 3');
+    expect(draw({ ...XE5, lease: lease({ round: 1 }) })).toContain('rebasing · claim 1 · round 1 of 3<');
+    // A merge check and a merge into main have one round per claim, and an unknown kind names no M.
+    expect(draw({ ...XE5, lease: lease({ jobKind: 'CHECK_PROMOTION', phase: 'CHECK', round: 2, checkCount: 3 }) }))
+      .toContain('checking · claim 1 · round 2<');
+    expect(draw({ ...XE5, lease: lease({ jobKind: 'LAND_PROMOTION', phase: 'PUSH', round: 1, checkCount: 1 }) }))
+      .toContain('pushing · claim 1 · round 1<');
+    expect(draw({ ...XE5, lease: lease({ jobKind: null, round: 1, checkCount: 3 }) }))
+      .toContain('rebasing · claim 1 · round 1<');
+  });
+
+  it('is closed by hand as well — the owner’s own ending, with its reason', () => {
+    const row = actionRow(draw(XE5));
+    expect(row.map((door) => door.label)).toContain('Mark as handled');
+    expect(draw(XE5)).toContain('Only if you dealt with it yourself. Your reason goes on the record.');
+  });
+
+  it('says the wait alone in the footer — the item never waited for anybody', () => {
+    expect(draw(XE5)).toContain('Owner: you · waiting 2m<');
+    expect(draw(XE5)).not.toContain('came to the owner at');
+  });
+
+  it('keeps the older item’s sentence and no invented rows', () => {
+    const old = { ...XE5, lease: null, facts: null } as ProjectOpenItemRow;
+    const html = draw(old);
+    // A row an older build opened: the sentence it always had, and none of the new rows.
+    expect(html).toContain('No report from runner workstation-gpu since 2026-10-19 14:35 UTC.');
+    expect(html).not.toContain('>Step</span>');
+  });
+
+  it('points Open landing at the landing session, and says so in the consequence line', () => {
+    const html = draw(XE5);
+    expect(html).toContain('Open the landing: every attempt, step by step.');
+    expect(html).toContain(`href="${landingHref}"`);
+  });
+
+  it('posts Abandon to the job’s own door', async () => {
+    apiMock.mockImplementation(async (path: string) =>
+      String(path).endsWith('/open-items') ? { needsYou: [XE5], withCoordinator: [] } : {});
+    const qc = client({ needsYou: [XE5], withCoordinator: [] });
+    await mount(
+      <MemoryRouter>
+        <QueryClientProvider client={qc}>
+          <ExceptionCards projectId={PROJECT_ID} now={NOW} />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    await settle();
+    const abandon = button('Abandon');
+    expect(abandon).toBeTruthy();
+    await act(async () => abandon!.click());
+    await settle();
+    expect(apiMock).toHaveBeenCalledWith(
+      `/projects/${PROJECT_ID}/integration/jobs/job-xe5/abandon`,
+      { method: 'POST' },
+    );
+  });
+});
+
+/** §4.7/§2.9 LS6: an integration card gains Open landing at the END of its doors, and its lead is
+ *  untouched — what the coordinator is handling is not re-weighed by a way to look. */
+describe('an integration card’s Open landing', () => {
+  const LANDING = '0195c0de-0000-7000-8000-00000000b002';
+
+  it('appends the way in without changing the lead press', () => {
+    const withLanding = {
+      ...CHECK_FAILED,
+      landingSessionId: LANDING,
+      actions: [...CHECK_FAILED.actions, 'OPEN_LANDING'],
+    } as ProjectOpenItemRow;
+    const row = actionRow(paint(
+      { needsYou: [], withCoordinator: [withLanding] },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    ));
+    // A failed check leads with the way onto its branch, exactly as before.
+    expect(row[0]!.label).toBe('Open task session');
+    expect(row.at(-1)!.label).toBe('Open landing');
+    expect(row.at(-1)!.weight).toBe('link');
+  });
+
+  it('draws no such door on a row that names no landing session', () => {
+    const row = actionRow(paint(
+      { needsYou: [], withCoordinator: [CHECK_FAILED] },
+      () => <ExceptionCards projectId={PROJECT_ID} now={NOW} />,
+    ));
+    expect(row.map((door) => door.label)).not.toContain('Open landing');
   });
 });

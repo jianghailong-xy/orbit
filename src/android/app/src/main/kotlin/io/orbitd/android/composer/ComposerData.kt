@@ -16,6 +16,7 @@ import io.orbitd.android.management.usageRows
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import io.orbitd.android.navigation.ObjectId
+import io.orbitd.android.reader.WorktreeBarLogic
 
 internal fun JsonObject.text(key: String) = (get(key) as? JsonPrimitive)?.contentOrNull
 internal fun JsonObject.flag(key: String) = (get(key) as? JsonPrimitive)?.booleanOrNull
@@ -291,9 +292,9 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         val judge = if (engine == ProviderEngines.DSH) engine else row?.let { ProviderEngines.nativeEngine(it.text("runtime")) } ?: engine
         val offered = catalogRows(judge).orEmpty()
         if (offered.isEmpty() || (runner["runtimeDefaultModels"] as? JsonObject)?.text(judge) == model) return model
-        // A Cursor CLI model is offered by its name, whatever parameters it carries.
-        val name = if (judge == ProviderEngines.CURSOR) CursorRuntime.modelBase(model) else model
-        return model.takeIf { offered.any { it.text("value") == name } }
+        // A Cursor CLI variant (`claude-opus-5-5[context=1m]`) is live while its model is.
+        val name = if (judge == ProviderEngines.CURSOR) CursorRuntime.decodeModel(model).model else model
+        return model.takeIf { offered.any { it.text("value") == model || it.text("value") == name } }
     }
 
     /** The model a new session on [engine] with [provider] starts on (A07-19 (e); OrbitKit `AgentDefaults.newSessionModel`, web
@@ -313,20 +314,35 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
      * session's next turn, a session's own `<engine>AccountPinned`; else on the account it names — that pick, the session's own, the
      * workspace's — and on Default where the runner lists no such account. [detail] is the session's read, or the draft's workspace,
      * with what is held over it.
+     *
+     * While Default is removed from Orbit nothing runs on it (the server's accountOnRunner): a workspace set to it leaves the account to
+     * Orbit, and Default — or an account the runner no longer reports — is Automatic's pick among the accounts that remain, a pin to it
+     * included, wherever the workspace's env leaves the account to Orbit.
      */
     fun accountOn(engine: String, detail: JsonObject, held: JsonObject, draft: Boolean): AccountOn {
         val accounts = accounts(engine)
         val workspace = if (draft) detail else detail["workspace"] as? JsonObject
+        val env = workspace?.get("env") as? JsonObject
         val pick = held.text("account")
-        val offered = EngineAccounts.automaticOffered(engine, workspace?.text("${engine}Account"), workspace?.get("env") as? JsonObject, accounts.size)
+        val remaining = removedDefaultPick(engine)?.takeIf { EngineAccounts.envLeavesAccount(engine, env) }
+        val offered = EngineAccounts.automaticOffered(engine,
+            workspace?.text("${engine}Account")?.takeUnless { remaining != null && it == EngineAccounts.DEFAULT }, env, accounts.size)
+        val named = pick?.takeIf { it != EngineAccounts.AUTOMATIC } ?: detail.text("${engine}Account") ?: workspace?.text("${engine}Account")
+        val reported = named?.takeIf { id -> accounts.any { it.text("id") == id } }
         val automatic = offered && when {
+            remaining != null && reported == null -> true
             pick != null -> pick == EngineAccounts.AUTOMATIC
             // A draft with nothing picked, and an ended session's switch onto the sign-in naming no account, start on Automatic's.
             draft || held.text("provider") == engine -> true
             else -> detail.flag("${engine}AccountPinned") != true
         }
-        val named = pick?.takeIf { it != EngineAccounts.AUTOMATIC } ?: detail.text("${engine}Account") ?: workspace?.text("${engine}Account")
-        return AccountOn(automatic, named?.takeIf { id -> accounts.any { it.text("id") == id } } ?: EngineAccounts.DEFAULT)
+        return AccountOn(automatic, reported ?: remaining ?: EngineAccounts.DEFAULT)
+    }
+
+    /** While [engine]'s Default is removed from Orbit (`removedDefault`), Automatic's pick among the accounts that remain (shared
+     * accountToStartOn's `defaultRemoved`); null while Default is in use. */
+    private fun removedDefaultPick(engine: String): String? = health(engine)?.takeIf { RunnerPage.removedDefault(it) != null }?.let {
+        EngineAccounts.toStartOn(accounts(engine), EngineAccounts.usage(engine, runner), System.currentTimeMillis(), defaultRemoved = true)
     }
 
     /** What the Provider row says the session (or draft) is on (A07-19 (d); OrbitKit `SessionProviderChoices.providerValue`, web
@@ -347,10 +363,14 @@ data class ComposerCatalog(val runner: JsonObject, val providers: List<JsonObjec
         else -> option.label
     }
 
-    /** [model]'s row among the pair's models: a Cursor CLI model's by its name, whatever parameters the value carries beside it. */
+    /** [model]'s row among the pair's models: the value's own, else — a Cursor CLI variant the catalogue doesn't list as it stands
+     * (`claude-opus-5-5[context=1m]`) — its model's (shared `runnerCatalogRow`). Another engine's brackets are its own ids. */
     fun modelRow(engine: String, provider: String, model: String?): JsonObject? {
-        val value = if (engine == ProviderEngines.CURSOR) model?.let(CursorRuntime::modelBase) else model
-        return models(engine, provider).firstOrNull { it.text("value") == value }
+        val rows = models(engine, provider)
+        rows.firstOrNull { it.text("value") == model }?.let { return it }
+        if (engine != ProviderEngines.CURSOR) return null
+        val name = CursorRuntime.decodeModel(model).model
+        return rows.firstOrNull { it.text("value") == name }
     }
 
     /** A model as its row names it, or the id itself; an empty one is the runtime's own pick. */
@@ -634,6 +654,21 @@ internal fun effortLabel(effort: String?) = when {
 }
 
 private val PARKED_STATES = setOf("AWAITING_INPUT", "INTERRUPTED", "SUCCEEDED", "ENDED", "CANCELLED")
+
+/**
+ * Whether the composer's Stop has something to stop (A07-20; OrbitKit `ComposerLogic.hasSomethingToStop`, iOS 593920cea; web
+ * `showStop`'s first clause): a turn is running — the dispatched one, or one the engine started for itself while parked
+ * (AWAITING_INPUT with `engineTurnActive`) — or work the session started is still running under a parked turn: a sub-agent, or a
+ * background process (web `outlivingSessionWork`). Read off the session's detail, where those are `runningSubagents` and
+ * `runningBgShells` (a list row's `runningSubagentCount` and `runningBgCount`); an older server's missing ones count as none.
+ */
+internal fun hasSomethingToStop(detail: JsonObject): Boolean {
+    if (detail.text("runState") == "RUNNING" || detail.text("status") == "RUNNING") return true
+    val state = detail.text("runState") ?: detail.text("runStatus") ?: detail.text("status")
+    if (state == "AWAITING_INPUT" && detail.flag("engineTurnActive") == true) return true
+    val background = (detail["runningBgShells"] as? JsonArray)?.size ?: (detail["runningBgCount"] as? JsonPrimitive)?.intOrNull
+    return (WorktreeBarLogic.runningSubagents(detail) ?: 0) > 0 || (background ?: 0) > 0
+}
 
 /** The engine's guess at the next message, if the empty box offers it (docs/prompt-suggestions-design.md
  * §4.4; web `offeredPromptSuggestion`, OrbitKit `ComposerLogic.offeredPromptSuggestion`): nothing typed,

@@ -461,6 +461,26 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 		}
 		return toolResult(prettyJSON(raw), false)
 
+	case "project_integration_get":
+		id := getString(args, "projectId")
+		if id == "" {
+			return toolResult("projectId is required", true)
+		}
+		// The acting session is the read's second gate: the line is a project's own work, and the
+		// server refuses a session that is not one of the project's. A missing one is refused here
+		// rather than sent, so the answer names the reason instead of a bare 403.
+		if strings.TrimSpace(s.sessionID) == "" {
+			return toolResult("project_integration_get requires an Orbit Session: the line is read as "+
+				"a session in the project", true)
+		}
+		raw, err := s.t.getProjectIntegration(s.sessionID, id,
+			getString(args, "jobId"), getNumberAsString(args, "claim"), getNumberAsString(args, "round"),
+			getNumberAsString(args, "check"), getString(args, "cursor"), getString(args, "timelineCursor"))
+		if err != nil {
+			return toolResult("read project integration failed: "+err.Error(), true)
+		}
+		return toolResult(prettyJSON(raw), false)
+
 	case "project_crossings":
 		id := getString(args, "projectId")
 		if id == "" {
@@ -849,6 +869,30 @@ func (s *mcpServer) callTool(name string, args map[string]interface{}) map[strin
 			"reports. If it lands they are marked handled in your name and it goes on to the merge check "+
 			"like any landing; if it fails, a new item reaches you on its own and these are marked "+
 			"superseded.\n"+prettyJSON(raw), false)
+
+	case "integration_abandon":
+		id := getString(args, "projectId")
+		jobID := getString(args, "jobId")
+		if id == "" || jobID == "" {
+			return toolResult("projectId and jobId are required: the job to abandon is one the project's "+
+				"runner has stopped reporting on", true)
+		}
+		reason := strings.TrimSpace(getString(args, "reason"))
+		if reason == "" {
+			return toolResult("reason is required: say why this job's runner is not coming back. It stays "+
+				"on the job as the record of why the work was given up", true)
+		}
+		// The acting session IS the authority, as it is for integration_retry: the server checks it
+		// against the project's own coordinator pointer, and refuses a job that is still reporting
+		// (its lease has not expired) or one that is not running at all.
+		raw, err := s.t.abandonIntegrationJob(s.sessionID, id, jobID, reason)
+		if err != nil {
+			return toolResult("integration abandon failed: "+err.Error(), true)
+		}
+		return toolResult("The job is ended as an error with your reason on it, and nothing is queued "+
+			"in its place. If its runner may have pushed, the record says so and the merge may already "+
+			"have happened; the next job on this repository and branch can be claimed now.\n"+
+			prettyJSON(raw), false)
 
 	case "integration_skip_merge_check":
 		id := getString(args, "projectId")
@@ -3093,7 +3137,7 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 		},
 		{
 			"name":        "task_get",
-			"description": "Get one task with its comments and linked sessions. To wait for a task to finish, call task_await instead of polling this. The top-level lastProgressAt, progressState and convergenceCounters belong to the project's convergence accounting, not to reported progress: what the task's run reported with task_progress_report is in `progress` (phase, current, total, message, revision, lastProgressAt), the same read task_progress_report gives when called with none of its fields; a task that never reported shows revision 0 with nothing in it.",
+			"description": "Get one task with its comments and linked sessions. To wait for a task to finish, call task_await instead of polling this. The top-level lastProgressAt, progressState and convergenceCounters belong to the project's convergence accounting, not to reported progress: what the task's run reported with task_progress_report is in `progress` (phase, current, total, message, revision, lastProgressAt), the same read task_progress_report gives when called with none of its fields; a task that never reported shows revision 0 with nothing in it. `integration.landTask` says what the platform is doing with the task's newest landing, and its `landingSessionId` addresses the LANDING session that records that attempt — read it with session_get, which serves the landing view by that id (the id is settled when the landing opens, so the link resolves before the job's first claim).",
 			"inputSchema": obj(map[string]interface{}{"taskId": taskIDProp}),
 		},
 		{
@@ -3156,7 +3200,11 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"carries `blockers`: every structured reason this project did not move, each with " +
 				"the one sentence it is asking for (`requiredAction`) — read `blockers.open` when " +
 				"the work is stopped and you cannot see why, and end one with " +
-				"project_blocker_resolve when you can say what changed. Returns the " +
+				"project_blocker_resolve when you can say what changed. Landing work it reports " +
+				"in flight carries `landingSessionId`, and a criterion waiting on a landing says so " +
+				"through its landing reason; that id is the LANDING session recording the attempt — " +
+				"open it with session_get rather than reading the integration tables yourself. " +
+				"Returns the " +
 				"shape of the project, not its tasks: use task_list for those. Reads the projects " +
 				"of the account this runner belongs to; write these same fields with " +
 				"project_create and project_update.",
@@ -3164,6 +3212,54 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"projectId": map[string]interface{}{
 					"type":        "string",
 					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+			}, "projectId"),
+		},
+		{
+			"name": "project_integration_get",
+			"description": "Read one project's integration line — where its finished work lands and what " +
+				"is happening to it right now. Returns the queue (every QUEUED and RUNNING job across " +
+				"all three kinds: a task landing, a merge candidate's check, and a merge into main), why " +
+				"each waits or where it stopped (blockingReason), every current generation with its " +
+				"jobId, generation, state, phase, errorCode, round and the check it is running, each " +
+				"task's newest landing through the same read model the task page uses, and each live or " +
+				"last-merged candidate's newest check and merge. READ THIS TOOL for the integration line; " +
+				"do NOT query the production database directly — these are the same facts, served by the " +
+				"interface that is allowed to serve them. Read only. The acting session must belong to " +
+				"the project (its coordinator, a session of one of its tasks, or a child of one); another " +
+				"project's session is refused, and another account's project answers 404. jobId names " +
+				"one attempt and serves what its checks printed under `log` and its timeline under " +
+				"`timeline`; claim, round and check narrow either page, cursor continues the log " +
+				"page and timelineCursor continues the timeline page. Without jobId the line is " +
+				"served as it always was.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project to read, as shown in its web UI URL (/projects/<id>).",
+				},
+				"jobId": map[string]interface{}{
+					"type":        "string",
+					"description": "Narrow the page to one job, as the queue or a task's landing names it.",
+				},
+				"claim": map[string]interface{}{
+					"type":        "integer",
+					"description": "Narrow the page to one claim generation, from 0 (the enqueue).",
+				},
+				"round": map[string]interface{}{
+					"type":        "integer",
+					"description": "Narrow the page to one round inside the claim, from 0 (the facts from before its first round).",
+				},
+				"check": map[string]interface{}{
+					"type":        "integer",
+					"description": "Narrow the check log to one check's position in the run, from 1.",
+				},
+				"cursor": map[string]interface{}{
+					"type":        "string",
+					"description": "Continue the check log page from this cursor.",
+				},
+				"timelineCursor": map[string]interface{}{
+					"type":        "string",
+					"description": "Continue the attempt timeline page from this cursor.",
 				},
 			}, "projectId"),
 		},
@@ -3768,7 +3864,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"the project line first, by having the task's run put a merge commit of the project branch " +
 				"tip and the upstream tip, conflicts resolved, into its source branch and do nothing else " +
 				"(task_reopen) — with both tips in it, its next landing lands by MERGE. Queues exactly " +
-				"one new job, which carries your reason and the failure class it reruns; your open items " +
+				"one new job, which carries your reason and the failure class it reruns, and answers with " +
+				"`landingSessionId` — the LANDING session that records the new attempt, readable with " +
+				"session_get; your open items " +
 				"about the failure stay open and " +
 				"read as being handled until that job reports — if it lands or passes they are marked " +
 				"handled in your name with your reason, and if it fails again they are marked superseded " +
@@ -3777,7 +3875,9 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 				"another owner-only choice is required, use ask_owner with options. This tool never hands " +
 				"an item to the owner and never answers that choice. Refused with the reason when the task's landing or the " +
 				"candidate is already queued or running (a task's landing whose runner stopped reporting " +
-				"past its limit is the exception: it is ended as ERROR RUNNER_LOST and run again), when " +
+				"past its limit is the exception: it is ended as ERROR first — RUNNER_LOST, or " +
+				"PUSH_OUTCOME_UNKNOWN for a landing whose legacy claim cannot prove nothing was pushed — " +
+				"and run again), when " +
 				"the failure's item is the account owner's " +
 				"(escalated, or a project that is not Automatic), when the owner has an open blocker on " +
 				"the task, or when the task or candidate is not this project's. Only the conversation the " +
@@ -3802,6 +3902,43 @@ func toolDescriptors(includePermissionPrompt, includeOrchestration bool) []map[s
 						"one. Up to 2000 characters; it stays on the new job and on every item it handles.",
 				},
 			}, "projectId", "reason"),
+		},
+		{
+			"name": "integration_abandon",
+			"description": "End a running integration job whose runner has stopped reporting, as the " +
+				"conversation that coordinates this project. This is the door for a job no result will " +
+				"ever reach: a runner that crashed, was fenced, or belongs to a disabled account never " +
+				"takes its claim over, and the job holds its repository-and-branch slot for ever. The " +
+				"server's gate is the claim's lease: it must have expired (ten minutes without a report, " +
+				"or — for a legacy claim in a check — the check's budget plus the lease), and the job must " +
+				"still be RUNNING; no item ownership, Automatic switch or owner blocker is consulted. The " +
+				"job ends as ERROR, and the record says whether it is known that nothing was pushed " +
+				"(RUNNER_LOST: a merge-check job, which never pushes, or a landing whose current claim " +
+				"is v2 and recorded no PUSH) or that it may have been pushed (PUSH_OUTCOME_UNKNOWN: every " +
+				"legacy landing claim). Nothing is queued in its place, and the project branch or main " +
+				"is left exactly as it was; a candidate the job was merging is blocked. An abandoned " +
+				"generation opens the same INTEGRATION_ERROR item a runner-reported error would — it is " +
+				"the item through which you reach integration_retry — except when it had already been " +
+				"asked to stop (cancel_requested_at set): a stopped generation opens no card, because " +
+				"stop and abandon both mean it is not wanted. Refused when the job is not running (INTEGRATION_ABANDON_NOT_RUNNING), " +
+				"when its runner is still reporting (INTEGRATION_ABANDON_LEASE_LIVE), and for a job or " +
+				"project of another account; only the project's current coordinator conversation may call " +
+				"it.",
+			"inputSchema": obj(map[string]interface{}{
+				"projectId": map[string]interface{}{
+					"type":        "string",
+					"description": "The project you coordinate, as shown in its web UI URL (/projects/<id>).",
+				},
+				"jobId": map[string]interface{}{
+					"type":        "string",
+					"description": "The running job to abandon, as the integration view or the job list names it.",
+				},
+				"reason": map[string]interface{}{
+					"type": "string",
+					"description": "Why this job's runner is not coming back. Required, up to 2000 " +
+						"characters, and kept on the job as the record of why the work was given up.",
+				},
+			}, "projectId", "jobId", "reason"),
 		},
 		{
 			"name": "integration_skip_merge_check",
@@ -4718,6 +4855,25 @@ func getOptionalPriority(args map[string]interface{}, key string) (*int, error) 
 		return nil, bad
 	}
 	return &n, nil
+}
+
+// getNumberAsString reads a numeric argument that travels on as a query value. An agent sends a
+// claim generation or a round as a number as often as a quoted one, so both reach the server as
+// plain digits: 3 and "3" are "3", and an integral number is written out in full rather than as
+// the exponent the server's digits-only check would refuse. A JSON number has already been decoded
+// to a float64 by the time it gets here, so above 2^53 only a quoted value keeps every digit. Nothing
+// is judged here — a negative or fractional number is spelled out ("-1", "2.5") exactly as a bad
+// string is passed on, and the server refuses both with the one message it gives for that field.
+func getNumberAsString(args map[string]interface{}, key string) string {
+	switch v := args[key].(type) {
+	case string:
+		return v
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case int:
+		return strconv.Itoa(v)
+	}
+	return ""
 }
 
 func getString(args map[string]interface{}, key string) string {

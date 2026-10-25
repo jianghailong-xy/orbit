@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	dshInstallDescription = "npm ci --prefix <Orbit-managed staging directory> --no-audit --no-fund (@deepseek-ai/dsh@" + dshSupportedVersion + ")"
+	dshInstallDescription = "npm ci --prefix <Orbit-managed staging directory> --no-audit --no-fund (@deepseek-ai/dsh@" + dshSupportedVersion + "), " +
+		"after fetching Node " + dshNodeVersion + " from nodejs.org when the runner's service PATH has no Node 26"
 )
 
 // The P0 lock includes native optional dependencies and package integrity. Installing
@@ -53,30 +54,19 @@ func dshPlatformAdmission(goos, arch, nodeVersion string) error {
 
 // Probes never inherit a user's Harness configuration, credentials or project .env.
 // HOME stays the user's real HOME; only DSH_HOME selects our disposable probe state.
-func dshProbeEnv(home string) []string {
-	return []string{"PATH=" + dshServicePath(), "HOME=" + userHome(), "DSH_HOME=" + home, "DSH_TELEMETRY_DISABLED=1"}
+func dshProbeEnv(path, home string) []string {
+	return []string{"PATH=" + path, "HOME=" + userHome(), "DSH_HOME=" + home, "DSH_TELEMETRY_DISABLED=1"}
 }
 
-func dshPlatformError() error {
+// dshPlatform admits this runner, Linux x64, and names the Node its dsh runs on (dshNode).
+func dshPlatform() (string, error) {
 	if runtime.GOOS != "linux" || runtime.GOARCH != "amd64" {
-		return dshPlatformAdmission(runtime.GOOS, runtime.GOARCH, "")
+		return "", dshPlatformAdmission(runtime.GOOS, runtime.GOARCH, "")
 	}
-	path, ok := lookPathIn("node", dshServicePath())
-	if !ok {
-		return errors.New("DSH_NODE_UNSUPPORTED: DeepSeek Harness requires Node 26 on the runner's service PATH")
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, path, "--version")
-	cmd.Env = []string{"PATH=" + dshServicePath(), "HOME=" + userHome()}
-	out, err := cmd.Output()
-	if err != nil {
-		return errors.New("DSH_NODE_UNSUPPORTED: DeepSeek Harness could not start the required Node 26 runtime")
-	}
-	return dshPlatformAdmission(runtime.GOOS, runtime.GOARCH, strings.TrimSpace(string(out)))
+	return dshNode()
 }
 
-func dshProbeVersion(path string) (string, error) {
+func dshProbeVersion(node, path string) (string, error) {
 	home, err := os.MkdirTemp("", "orbit-dsh-version-")
 	if err != nil {
 		return "", fmt.Errorf("DSH_INSTALL_FAILED: DeepSeek Harness could not create isolated version probe: %w", err)
@@ -84,9 +74,10 @@ func dshProbeVersion(path string) (string, error) {
 	defer os.RemoveAll(home)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, path, "--version")
+	name, args := dshCommand(node, path, "--version")
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = home
-	cmd.Env = dshProbeEnv(home)
+	cmd.Env = dshProbeEnv(dshServicePath(), home)
 	configureEngineCommandTree(cmd)
 	out, err := cmd.Output()
 	if err != nil {
@@ -137,21 +128,29 @@ func dshExecutableIn(dir string) (string, error) {
 // Return an absolute, version-local entry point, never a user's global dsh or a
 // mutable current link. Existing sessions keep this path for their whole lifetime.
 func dshExecutablePath() (string, error) {
-	if err := dshPlatformError(); err != nil {
-		return "", err
-	}
-	path, err := dshExecutableIn(dshVersionDir())
+	_, path, err := dshRuntime()
+	return path, err
+}
+
+// dshRuntime is dshExecutablePath's entry point together with the Node it runs on (dshNode),
+// which whatever starts dsh passes to dshCommand.
+func dshRuntime() (node, path string, err error) {
+	node, err = dshPlatform()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	version, err := dshProbeVersion(path)
+	path, err = dshExecutableIn(dshVersionDir())
 	if err != nil {
-		return "", err
+		return "", "", err
+	}
+	version, err := dshProbeVersion(node, path)
+	if err != nil {
+		return "", "", err
 	}
 	if !dshVersionCompatible(version) {
-		return "", fmt.Errorf("DSH_VERSION_INCOMPATIBLE: DeepSeek Harness version incompatible: supported version is exactly %s; repair Orbit's version directory", dshSupportedVersion)
+		return "", "", fmt.Errorf("DSH_VERSION_INCOMPATIBLE: DeepSeek Harness version incompatible: supported version is exactly %s; repair Orbit's version directory", dshSupportedVersion)
 	}
-	return path, nil
+	return node, path, nil
 }
 
 // Caller holds engineInstall.mu, shared with every existing install/update path.
@@ -162,7 +161,14 @@ func installDsh(ctx context.Context, proxyVars []envVar) (err error) {
 			err = fmt.Errorf("DSH_INSTALL_FAILED: DeepSeek Harness fixed-version install failed: %w", err)
 		}
 	}()
-	if err := dshPlatformError(); err != nil {
+	node, err := dshPlatform()
+	if errors.Is(err, errDshNodeMissing) {
+		// Node 26 is this install's to provide (dsh_node.go).
+		if err = installDshNode(ctx, proxyVars); err == nil {
+			node, err = dshManagedNode()
+		}
+	}
+	if err != nil {
 		return err
 	}
 	target := dshVersionDir()
@@ -186,7 +192,12 @@ func installDsh(ctx context.Context, proxyVars []envVar) (err error) {
 			return err
 		}
 	}
-	npm, ok := lookPathIn("npm", dshServicePath())
+	searchPath := dshServicePath()
+	if node != "" {
+		// npm, and every install script it runs, starts `node` by name: Orbit's copy comes first.
+		searchPath = filepath.Dir(node) + string(os.PathListSeparator) + searchPath
+	}
+	npm, ok := lookPathIn("npm", searchPath)
 	if !ok {
 		return errors.New("DSH_INSTALL_FAILED: DeepSeek Harness install requires npm on the runner's service PATH")
 	}
@@ -196,7 +207,7 @@ func installDsh(ctx context.Context, proxyVars []envVar) (err error) {
 	}
 	cmd := exec.CommandContext(ctx, npm, "ci", "--prefix", stage, "--cache", filepath.Join(parent, "npm-cache"), "--no-audit", "--no-fund")
 	cmd.Dir = stage
-	cmd.Env = dshProbeEnv(probeHome)
+	cmd.Env = dshProbeEnv(searchPath, probeHome)
 	for _, v := range proxyVars {
 		cmd.Env = append(cmd.Env, v.K+"="+v.V)
 	}
@@ -209,7 +220,7 @@ func installDsh(ctx context.Context, proxyVars []envVar) (err error) {
 	if err != nil {
 		return err
 	}
-	version, err := dshProbeVersion(path)
+	version, err := dshProbeVersion(node, path)
 	if err != nil {
 		return err
 	}
@@ -246,13 +257,21 @@ func ensureDsh(ctx context.Context, notify func(string)) string {
 	if probeErr == nil {
 		return ""
 	}
-	if _, err := os.Stat(dshVersionDir()); err == nil {
-		return probeErr.Error()
-	}
-	if err := dshPlatformError(); err != nil {
-		return err.Error()
+	// No Node 26 is the install's to fix too, with or without the CLI already in place.
+	nodeMissing := errors.Is(probeErr, errDshNodeMissing)
+	_, statErr := os.Stat(dshVersionDir())
+	if !nodeMissing {
+		if statErr == nil {
+			return probeErr.Error()
+		}
+		if _, err := dshPlatform(); err != nil {
+			return err.Error()
+		}
 	}
 	if !engineInstall.allowed {
+		if statErr == nil {
+			return probeErr.Error()
+		}
 		return "DSH_NOT_INSTALLED: DeepSeek Harness " + dshSupportedVersion + " is not installed in Orbit's version directory; automatic engine installation is not authorized — install it from Orbit or run `orbit doctor` on this runner"
 	}
 	if notify != nil {

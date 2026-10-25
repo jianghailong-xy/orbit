@@ -41,6 +41,15 @@ import type { ManagedRunnerSignIn } from './managed-runner-sign-in';
 import { managedRunnerWork, recordManagedDemand } from './managed-runner-work';
 import { DEFAULT_HEARTBEAT_FRESH_MS, managedRunnerStatus, managedRunnerUnavailableReason } from './managed-runner-status';
 import { ownerManagedKeys } from './managed-runner-supply';
+import {
+  MANAGED_RUNNER_VOLUME_SWITCH_REFUSED,
+  ManagedVolumeSwitchRefused,
+  ManagedVolumeSwitchRevisionMoved,
+  VOLUME_SWITCH_CHECKS,
+  type ManagedRunnerVolumeSwitchAnswer,
+  type ManagedVolumeSwitchOutcome,
+} from './managed-runner-volume-switch';
+import type { ManagedRunnerVolumeSwitchDto } from './dto';
 
 export const MANAGED_RUNNER_NOT_FOUND = 'MANAGED_RUNNER_NOT_FOUND';
 
@@ -53,7 +62,9 @@ type AvailableRuntime = Extract<ManagedRunnerRuntime, { available: true }>;
  * Every read and write is keyed by the authenticated owner and nothing a request names: a caller
  * reaches its own mapping or none, so another account's runner, instance and volume are not even
  * addressable here. Requests record desired state and nothing else; the manager performs every
- * resource operation, outside these transactions.
+ * resource operation, outside these transactions. The one exception is an administrator's: a switch of
+ * a runner's data volume to a restored one (`switchVolume`), addressed by runner id behind
+ * AdminRoleGuard, which the manager verifies and performs at once.
  *
  * With the feature off this is the inert status facade the design allows: `status` reads, the
  * writes are refused by ManagedRunnerEnabledGuard before they get here (and again here, should
@@ -96,7 +107,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     const runner = mapping
       ? await this.prisma.runner.findUnique({
           where: { id: mapping.runnerId },
-          select: { status: true, lastHeartbeatAt: true, engines: true, capabilities: true },
+          select: { status: true, lastHeartbeatAt: true, engines: true, defaultRemoved: true, capabilities: true },
         })
       : null;
     const available = !!this.runtime?.available;
@@ -270,6 +281,53 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     return this.status(ownerId);
   }
 
+  /**
+   * An administrator's switch of a runner's data volume to the restored one under its name
+   * (managed-runner-volume-switch.ts): the manager verifies it, and that the recorded one is no longer in use, and
+   * records it in the recorded one's place with an audit row naming `actorId`. Found by the runner id the
+   * administrator names, whoever owns it: an administrator acts on other accounts by design, and AdminRoleGuard
+   * refuses everybody else before this is reached. A refused check is answered 409 (503 while the cluster cannot be
+   * asked) with the check, its sentence and the operator's detail, and nothing is written.
+   */
+  async switchVolume(actorId: string, runnerId: string, dto: ManagedRunnerVolumeSwitchDto): Promise<ManagedRunnerVolumeSwitchAnswer> {
+    const runtime = this.operable();
+    const mapping = await this.prisma.managedRunner.findUnique({ where: { runnerId } });
+    if (!mapping) throw new NotFoundException({ code: MANAGED_RUNNER_NOT_FOUND, message: 'No managed runner has this runner id.' });
+    let outcome: ManagedVolumeSwitchOutcome;
+    try {
+      outcome = await runtime.manager.switchVolume({
+        mappingId: mapping.id,
+        actorId,
+        revision: dto.revision,
+        volumeUid: dto.volumeUid.toLowerCase(),
+        confirmReplacement: dto.confirmReplacement === true,
+        reason: dto.reason,
+        idempotencyKey: dto.idempotencyKey,
+      });
+    } catch (error) {
+      if (error instanceof ManagedVolumeSwitchRevisionMoved) throw this.revisionConflict({ revision: error.revision });
+      if (error instanceof ManagedVolumeSwitchRefused) {
+        const body = { code: MANAGED_RUNNER_VOLUME_SWITCH_REFUSED, check: error.check, message: VOLUME_SWITCH_CHECKS[error.check], detail: error.detail };
+        throw error.check === 'BACKEND_UNAVAILABLE' ? new ServiceUnavailableException(body) : new ConflictException(body);
+      }
+      throw error;
+    }
+    // Asleep on the new volume: demand already waiting wakes it now.
+    if (!outcome.replayed) runtime.worker.kick();
+    const switched = outcome.mapping;
+    return {
+      runnerId: switched.runnerId,
+      replayed: outcome.replayed,
+      managementState: switched.managementState,
+      desiredState: switched.desiredState,
+      revision: switched.revision,
+      generation: switched.generation,
+      from: outcome.from,
+      to: outcome.to,
+      switchedAt: outcome.at?.toISOString() ?? null,
+    };
+  }
+
   /** Delete: authenticated and enabled, but performed by a later version of the manager. */
   async refuseUnsupported(ownerId: string, action: 'delete'): Promise<never> {
     this.operable();
@@ -310,7 +368,7 @@ export class ManagedRunnerService implements OnModuleInit, OnModuleDestroy, Mana
     return this.createMapping(ownerId, idempotencyKey, runtime);
   }
 
-  private revisionConflict(mapping: ManagedRunner): ConflictException {
+  private revisionConflict(mapping: Pick<ManagedRunner, 'revision'>): ConflictException {
     return new ConflictException({
       code: MANAGED_RUNNER_REVISION_CONFLICT,
       message: 'The managed runner changed since it was read; read it again and decide again.',

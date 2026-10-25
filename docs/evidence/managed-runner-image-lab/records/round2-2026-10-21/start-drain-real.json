@@ -1,0 +1,38 @@
+{
+  "firstStart": false,
+  "log": "/mnt/data/managed-runner-lab/test-server/state/logs/t03-runner-afc08368-4a00-49ab-9f51-0b389206cd06.log",
+  "onlineAt": "2026-10-20T22:24:48.089+00:00",
+  "pod": {
+    "image": "docker.io/library/orbit-managed-runner:r5-6d597ec38",
+    "imageID": "docker.io/library/import-2026-10-20@sha256:4d44fb987813990da3a438c080064dda30a098c442123e2184266ce12fd2c3b9",
+    "name": "t03-runner",
+    "node": "orbit-mr-lab",
+    "uid": "afc08368-4a00-49ab-9f51-0b389206cd06"
+  },
+  "pvc": {
+    "accessModes": [
+      "ReadWriteOnce"
+    ],
+    "name": "t03-data",
+    "uid": "b4ed170c-e8ee-40bb-96a4-83f5156bcd6f",
+    "volumeName": "pvc-b4ed170c-e8ee-40bb-96a4-83f5156bcd6f"
+  },
+  "rbdImage": "csi-vol-38019945-c3ad-47b0-87e2-7fdfa16e82fc",
+  "requestedAt": "2026-10-20T22:24:13.714+00:00",
+  "runner": {
+    "enrolledAt": "2026-10-17T07:12:01.639Z",
+    "id": "34hMBTsfnJUIoqeYEOM73",
+    "lastHeartbeatAt": "2026-10-20T22:24:47.738Z",
+    "name": "t03",
+    "online": true,
+    "version": "managed-6d597ec38119793168825df0f028e871d333dca6"
+  },
+  "runnersNamedSo": 1,
+  "runningAt": "2026-10-20T22:24:17.853+00:00",
+  "volumeIdentity": {
+    "layoutVersion": 1,
+    "runnerId": "01a148b4-0c67-7688-b666-fdea8b9a55ed",
+    "serverUrl": "https://10.0.2.2:13711",
+    "workDir": "/var/lib/orbit/home/orbit-repos/default"
+  }
+}

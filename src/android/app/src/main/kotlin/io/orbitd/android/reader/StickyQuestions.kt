@@ -5,11 +5,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.*
@@ -27,7 +28,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
  * showing it moves the list by its own height, so a reading taken with it shown and one taken with it
  * hidden can disagree, and a single threshold between them flips it on every frame. Each way out of a
  * state gets its own threshold, far enough apart that the header's own move cannot carry a reading
- * across both.
+ * across both. On Android the question now sits in the bar (iOS d87e5fa67) and moves nothing; the hold
+ * stays, as OrbitKit keeps it, and still keeps a question straddling the top line named.
  */
 internal object StickyQuestionHold {
     /** With no row claiming the top line, how far (dp) a hidden header's list must have scrolled before it shows… */
@@ -47,6 +49,13 @@ internal object StickyQuestionHold {
 internal object StickySummary {
     const val ARROW = "↑ "
     const val YOUR_QUESTION = "${ARROW}Your question"
+
+    /**
+     * The label as the bar's capsule draws it (OrbitKit `StickySummary.compactLabel`, iOS d87e5fa67): the arrow alone over the
+     * reader's own words — the capsule has no room to say whose they are, and needs none — and a card's label as it stands over
+     * anything else, so the capsule can't pass a card off as something the reader typed.
+     */
+    fun compactLabel(label: String): String = if (label == YOUR_QUESTION) ARROW.trim() else label
 
     private fun RunEvent.card(cards: List<InteractionCard>, field: String) = cards.firstOrNull { it.key == "record:$seq:$field" }?.source
 
@@ -140,22 +149,21 @@ internal const val TOP_LINE = "top"
 internal fun topLineItem(items: List<LazyListItemInfo>, top: Int): String? =
     if (items.isEmpty()) null else items.lastOrNull { it.offset <= top }?.key?.toString() ?: TOP_LINE
 
-/** Scroll state the header derives from, mutated per frame without recomposing; only the named question redraws. */
+/** Scroll state the question derives from, mutated per frame without recomposing; only what reads the named question redraws. */
 private class QuestionRuler { var anchor: String? = null }
 
-/** Whether the header was last shown, whether it has shown yet, and its last measured height: what the list is scrolled by when it comes or goes. */
-private class HeaderShift { var shown = false; var seen = false; var height = 0f }
-
 /**
- * The sticky "↑ Your question" header (iOS `ConsoleView.stickyQuestion`, web's `.chat-sticky-question`):
- * the newest question above the fold, in flow above the transcript, stepping back through earlier
- * questions as the reader scrolls up and hidden only where none is above. A tap goes back to it.
+ * The turn the sticky question names for where the reader is (iOS `TranscriptView.stuckBubble`, web's `.chat-sticky-question`):
+ * the newest question above the fold, stepping back through earlier questions as the reader scrolls up, and none where no
+ * question is above. Read off the list's scroll as it moves; the page reading it does not recompose with it — only what reads
+ * the returned state does, the bar's capsule ([QuestionCapsule]). One state for the list's life, whatever the rows become:
+ * the bar keeps the content it was first handed, so what changes has to be read through it.
  */
 @Composable
-internal fun StickyQuestion(rows: List<TranscriptRow>, list: LazyListState, hidden: Boolean, jump: (TranscriptRow) -> Unit) {
+internal fun rememberStuckQuestion(rows: List<TranscriptRow>, list: LazyListState): State<TranscriptRow?> {
     val questions = remember(rows) { StickyQuestions(rows) }
     val ruler = remember(list) { QuestionRuler() }
-    var stuck by remember(list) { mutableStateOf<String?>(null) }
+    val stuck = remember(list) { mutableStateOf<TranscriptRow?>(null) }
     val density = LocalDensity.current.density
     LaunchedEffect(list, questions, density) {
         snapshotFlow {
@@ -163,36 +171,29 @@ internal fun StickyQuestion(rows: List<TranscriptRow>, list: LazyListState, hidd
             topLineItem(layout.visibleItemsInfo, layout.viewportStartOffset)?.let { ruler.anchor = it }
             // Only the first item's own scroll counts as distance before any row has claimed the line.
             val offset = if (list.firstVisibleItemIndex > 0) Double.MAX_VALUE else list.firstVisibleItemScrollOffset / density.toDouble()
-            questions.name(ruler.anchor, offset, stuck)
-        }.distinctUntilChanged().collect { stuck = it }
+            questions.name(ruler.anchor, offset, stuck.value?.key)
+        }.distinctUntilChanged().collect { stuck.value = questions.row(it) }
     }
-    val row = questions.row(stuck)
-    // In the list's flow, as on iOS, so a jump lands below the header rather than under it. Its coming and going
-    // moves the list's top by its height, though, so the list is scrolled by as much before the frame is laid out:
-    // the line being read stays where it was (A06's prepend guarantee) instead of jumping by a header. An effect
-    // rather than a SideEffect: a scroll while the frame's compositions are still being applied measures list
-    // items that are not applied yet, and the composition breaks.
-    val shift = remember(list) { HeaderShift() }
-    val shown = !hidden && row != null
-    LaunchedEffect(shift, shown) {
-        if (shown == shift.shown) return@LaunchedEffect
-        shift.shown = shown
-        // Its first showing is the reader settling where it opened: a place it restores was saved with the header up.
-        if (shown && !shift.seen) { shift.seen = true; return@LaunchedEffect }
-        if (shift.height > 0f) list.dispatchRawDelta(if (shown) shift.height else -shift.height)
-    }
-    if (hidden || row == null) return
+    return stuck
+}
+
+/**
+ * The sticky question in the bar's middle (iOS `TranscriptView.questionCapsule`, d87e5fa67): the turn's words in a capsule
+ * between back and the page's buttons, one line — its label, served first (the arrow alone over the reader's own words,
+ * [StickySummary.compactLabel]), and its first line, which gives way. At most 260 dp wide, as on iOS, so a wide bar keeps a
+ * capsule rather than a second content row. Up there it moves nothing in the transcript, so the band's in-flow shift is gone
+ * with it. A tap goes back to the turn.
+ */
+@Composable
+internal fun QuestionCapsule(row: TranscriptRow, jump: (TranscriptRow) -> Unit) {
     val (label, text) = remember(row) { StickySummary.of(row.event) }
-    Column(Modifier.fillMaxWidth().onSizeChanged { shift.height = it.height.toFloat() }.testTag("sticky-question")) {
-        Row(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceContainer)
-            .clickable(role = Role.Button) { jump(row) }.semantics { contentDescription = "Jump to your last question" }
-            .padding(horizontal = 16.dp, vertical = 7.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelLarge,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(text.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty(), Modifier.weight(1f, fill = false),
-                style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        HorizontalDivider()
+    Row(Modifier.widthIn(max = 260.dp).heightIn(min = 40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceVariant)
+        .clickable(role = Role.Button) { jump(row) }.semantics { contentDescription = "Jump to your last question" }
+        .padding(horizontal = 12.dp, vertical = 4.dp).testTag("question-capsule"),
+        horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(StickySummary.compactLabel(label), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium,
+            maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(text.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty(), Modifier.weight(1f, fill = false),
+            style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

@@ -8,6 +8,7 @@ import type {
   OwnerAnswerCard,
   ProjectStartedCard,
   SessionCapabilities,
+  SessionLandingView,
   SessionMessageCard,
   SessionReplyCard,
   SessionMoveTargets,
@@ -1681,6 +1682,11 @@ export interface MergeRepairSession {
   sessionState?: string | null;
   error?: string | null;
   completedAt?: string | null;
+  /** When its turn last ended (it moves with activity during a turn) and when it finished. Absent from older servers. */
+  lastTurnAt?: string | null;
+  finishedAt?: string | null;
+  /** What it last said — for a repair waiting on the owner, what it asked — clipped to 200 characters. */
+  lastAssistantText?: string | null;
 }
 
 /** The tiers a task can be suggested at (`task.modelHint`, docs/model-routing-design.md §3.1). */
@@ -1719,6 +1725,12 @@ export interface TaskRunRoute {
  *  per-session git worktree result (null until the runner reports completion). */
 export interface SessionDetail {
   id: string;
+  /** What drives the session (contract §2.9 LS6): `LANDING` is platform work with no engine.
+   *  Optional, because a server that predates the column does not send it. */
+  sessionKind?: 'CONVERSATION' | 'LANDING';
+  /** A LANDING session's subject view (§2.9 LS1/LS6): its attempt, phase, checks, liveness,
+   *  timeline and todos. Present on a landing and on the pre-generated id before its row exists. */
+  landing?: SessionLandingView | null;
   /** Latest run outcome and sidebar lifecycle location are independent product dimensions. */
   runState?: string;
   lifecycleState?: string;
@@ -1832,6 +1844,8 @@ export interface SessionDetail {
   mergeRecovery?: MergeRecovery | null;
   mergeRepairSession?: MergeRepairSession | null;
   mergeRecoveryAction?: MergeRecoveryAction | null;
+  /** Non-null while a check a repair turn left owed waits for this session's own turn to end; the server then runs it. */
+  mergeRepairTurnEndedAt?: string | null;
   mergeRecoverySupported?: boolean;
   mergedAt?: string | null;
   // The server-resolved merge target: an explicit choice, a project integration line, or the
@@ -1916,6 +1930,17 @@ export const getSessionDiff = (idOrPublicId: string) =>
  *  diff lands asynchronously via the runner, so the caller refetches getSessionDiff after. */
 export const refreshSessionDiff = (idOrPublicId: string) =>
   api<void>(`/sessions/${idOrPublicId}/diff/refresh`, { method: 'POST' });
+
+/** What one recap pass did (apiserver sessions/recap.ts `RecapOutcome`): the line it wrote, or why
+ *  it wrote none. */
+export type RecapOutcome =
+  | { written: true; recapText: string; recapEventSeq: number }
+  | { written: false; reason: string };
+
+/** Rewrite this session's recap now, past the settle hooks' two-minute window (POST
+ *  /sessions/:id/recap). Answers once the pass has finished, with what it did. */
+export const refreshSessionRecap = (idOrPublicId: string) =>
+  api<RecapOutcome>(`/sessions/${idOrPublicId}/recap`, { method: 'POST' });
 
 /** Enable per-session worktree isolation for a workspace whose workDir isn't a git repo:
  *  flips `autoInitGit` so the runner `git init`s the dir (default .gitignore + baseline

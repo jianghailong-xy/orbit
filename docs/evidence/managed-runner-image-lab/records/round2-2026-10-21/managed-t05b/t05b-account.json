@@ -1,0 +1,18 @@
+{
+  "created": true,
+  "owner": "deepkey",
+  "signIn": {
+    "at": "2026-10-20T22:37:35.305+00:00",
+    "ms": 114.1,
+    "port": 13710,
+    "status": 201
+  },
+  "user": {
+    "email": "t05-deepkey@lab.invalid",
+    "id": "34jQuoxpVG0kTUiagj6GM"
+  },
+  "usersMe": {
+    "id": "34jQuoxpVG0kTUiagj6GM",
+    "status": 200
+  }
+}

@@ -2359,6 +2359,23 @@ final class AppModel {
         }
     }
 
+    /// Write a session's recap again now (`POST /sessions/:id/recap`, the conversation's Recap
+    /// card), then read the lists again so the card and the row show the line it wrote — the server
+    /// publishes the session too, but a list on a stream gap would otherwise wait for its next
+    /// snapshot. Answers with what to tell the reader when the pass wrote nothing
+    /// (`RecapCard.notice`); nil when it wrote, or when another pass wrote first.
+    func refreshRecap(_ sessionID: String) async -> RecapCard.Notice? {
+        guard let api else { return RecapCard.notice(for: "error") }
+        do {
+            let outcome = try await api.refreshRecap(sessionID: sessionID)
+            let notice = outcome.written ? nil : RecapCard.notice(for: outcome.reason ?? "error")
+            if notice == nil { await reloadSessionLists() }
+            return notice
+        } catch {
+            return RecapCard.notice(for: "error")
+        }
+    }
+
     // MARK: session tags
 
     /// Load the owner's tag library (best-effort — an older server without the endpoint leaves it
@@ -2417,6 +2434,30 @@ final class AppModel {
         guard let toast = toasts.item(id), toast.canUndo, let sessionID = toast.sessionID else { return }
         moveSessionToOpen(sessionID)
         toasts.dismiss(id)
+    }
+
+    /// Each landing session's job, as the last integration read described it — what a landing page
+    /// opened while the server cannot be reached draws its frozen placeholder from instead of a
+    /// blank page. Filled by every successful integration read, on both shells.
+    private(set) var landingInFlightCache: [String: ProjectIntegrationInFlight] = [:]
+
+    /// Keep each landing job's last description from an integration read, so a landing page opened
+    /// with no server to read draws it, frozen, rather than an empty page. The project page's own
+    /// poll calls it on both shells; a landing page's own read calls it too, so a Mac has the
+    /// snapshot after the first answer.
+    func rememberLandingJobs(_ integration: ProjectIntegrationView) {
+        for job in integration.inFlightJobs ?? [] {
+            guard let landingSessionId = job.landingSessionId, !landingSessionId.isEmpty else { continue }
+            landingInFlightCache[landingSessionId] = ProjectIntegrationInFlight(
+                taskTitle: job.taskTitle, state: job.state, startedAt: job.startedAt,
+                kind: job.kind, phase: job.phase, heartbeatAt: job.heartbeatAt,
+                jobId: job.jobId, landingSessionId: landingSessionId,
+                taskId: job.taskId, promotionId: job.promotionId, runner: job.runnerName,
+                claim: job.claim, round: job.round, check: job.check,
+                stepStartedAt: job.stepStartedAt, outputMovedAt: job.outputMovedAt,
+                typicalMs: job.typicalMs, liveness: job.liveness,
+                blockingReason: job.blockingReason)
+        }
     }
 
     // MARK: session folders (iOS — docs/session-folders-move-design.md §3–4)
@@ -2533,8 +2574,16 @@ final class AppModel {
         projectSessionsLoading = true
         defer { if projectSessionsAddress == address { projectSessionsLoading = false } }
         do {
-            let openRead = Task { try await api.listSessions(view: .open, projectId: address.projectID) }
-            let completedRead = Task { try await api.listSessions(view: .completed, projectId: address.projectID) }
+            // `includeLanding=1` is the page's own widening (§2.9 LS6): its Landings group is
+            // folded from the landing rows the same read carries, and no other list sees them.
+            let openRead = Task {
+                try await api.listSessions(view: .open, projectId: address.projectID,
+                                           includeLanding: true)
+            }
+            let completedRead = Task {
+                try await api.listSessions(view: .completed, projectId: address.projectID,
+                                           includeLanding: true)
+            }
             defer {
                 openRead.cancel()
                 completedRead.cancel()
@@ -2544,8 +2593,13 @@ final class AppModel {
             // An older server may ignore projectId. It must never put unrelated sessions here, nor a
             // row on its way to Trash (`trashingSessions`).
             let kept = SessionFilter.removing(trashingSessions, from: rows)
-            projectSessions = SessionProjectMembers.members(of: address.projectID, in: kept)
-            projectCompletedSessions[key] = projectSessions.filter { $0.effectiveLifecycleState != .open }
+            // The page holds its members AND the landing rows its Landings group folds from
+            // (§2.9 LS6). A landing has a membership too, so it is kept out of the member list —
+            // otherwise every landing row would be drawn both as a member and as a landing.
+            let members = SessionProjectMembers.members(of: address.projectID, in: kept)
+                .filter { !$0.isLanding }
+            projectSessions = members + landedRows(of: address.projectID, in: kept)
+            projectCompletedSessions[key] = members.filter { $0.effectiveLifecycleState != .open }
             projectSessionsReadAt = Date()
             projectSessionsError = nil
             for row in projectSessions { sessionDetails.store(row) }
@@ -2567,24 +2621,49 @@ final class AppModel {
             return await loadProjectSessions(address)
         }
         let key = PublicID.storageKey(address.projectID)
-        let poll = SessionProjectMembers.poll(shown: projectSessions, projectID: address.projectID,
-                                              openList: sessions, completed: projectCompletedSessions[key] ?? [])
-        if poll.members != projectSessions { projectSessions = poll.members }
+        // The landing rows are not members: they are held as they were last read, and the poll of
+        // the member lists neither counts them nor drops them.
+        let held = landedRows(of: address.projectID, in: projectSessions)
+        let poll = SessionProjectMembers.poll(
+            shown: projectSessions.filter { !$0.isLanding },
+            projectID: address.projectID, openList: sessions,
+            completed: projectCompletedSessions[key] ?? [])
+        let polled = poll.members + held
+        if polled != projectSessions { projectSessions = polled }
         guard poll.moved || Date().timeIntervalSince(readAt) >= SessionProjectMembers.completedRefresh else { return }
         do {
-            let rows = try await api.listSessions(view: .completed, projectId: address.projectID)
+            let rows = try await api.listSessions(view: .completed, projectId: address.projectID,
+                                                  includeLanding: true)
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
             let kept = SessionFilter.removing(trashingSessions, from: rows)
             let completed = SessionProjectMembers.members(of: address.projectID, in: kept)
+                .filter { !$0.isLanding }
+            // The refresh is also what keeps a settled landing's summary current.
+            let landings = landedRows(of: address.projectID, in: kept)
+                + landedRows(of: address.projectID, in: projectSessions)
             projectCompletedSessions[key] = completed
             projectSessionsReadAt = Date()
             let members = SessionProjectMembers.members(of: address.projectID, in: sessions + completed)
-            if members != projectSessions { projectSessions = members }
+            let next = members + Self.uniqueLandings(landings)
+            if next != projectSessions { projectSessions = next }
             for row in completed { sessionDetails.store(row) }
         } catch {
             guard projectSessionsAddress == address, !Task.isCancelled else { return }
             projectSessionsError = APIClient.failureReason(error)
         }
+    }
+
+    /// The LANDING rows a project list carries (`includeLanding=1`), by id, first copy winning.
+    private func landedRows(of projectID: String, in rows: [Session]) -> [Session] {
+        Self.uniqueLandings(rows.filter {
+            $0.isLanding && $0.effectiveLifecycleState != .trash
+                && $0.projectMembership.map { PublicID.storageKey($0.projectId) == PublicID.storageKey(projectID) } != false
+        })
+    }
+
+    private static func uniqueLandings(_ rows: [Session]) -> [Session] {
+        var seen = Set<String>()
+        return rows.filter { seen.insert($0.id).inserted }
     }
 
     /// One poll of the landing line's read, beside the members' reads rather than behind them: it
@@ -2598,6 +2677,9 @@ final class AppModel {
             projectSessionsIntegration = integration
             projectSessionsIntegrationReadAt = Date()
             projectSessionsIntegrationReadFailed = false
+            // Keep each landing job's last description: a landing page opened with no server to
+            // read draws it, frozen, rather than an empty page (§2.9 LS6's read-failure rule).
+            rememberLandingJobs(integration)
         } else {
             projectSessionsIntegrationReadFailed = true
         }
@@ -2609,6 +2691,20 @@ final class AppModel {
     func retryIntegrationJob(_ projectID: String, jobID: String) async throws {
         guard let api else { throw APIError.notConfigured }
         _ = try await api.retryIntegrationJob(projectID, jobID: jobID)
+    }
+
+    /// End a running job whose runner stopped reporting (J-T10), from the merge card's timed-out
+    /// doors and the landing page. The page re-reads what it drew from afterwards.
+    func abandonIntegrationJob(_ projectID: String, jobID: String) async throws {
+        guard let api else { throw APIError.notConfigured }
+        try await api.abandonIntegrationJob(projectID: projectID, jobID: jobID)
+    }
+
+    /// Re-run a timed-out merge check on the same candidate (revision 16), from the merge card's
+    /// timed-out doors. The caller names the reason the door records.
+    func rerunPromotionCheck(_ projectID: String, promotionID: String, reason: String) async throws {
+        guard let api else { throw APIError.notConfigured }
+        try await api.rerunPromotionCheck(projectID: projectID, promotionID: promotionID, reason: reason)
     }
 
     /// One poll of the page's merge into main. Kept apart from `loadProjectSessions` so the
@@ -2630,7 +2726,13 @@ final class AppModel {
         guard let api else { return }
         let key = PublicID.storageKey(address.projectID)
         let row = projects?.sidebarProjects.first { PublicID.storageKey($0.id) == key }
-        guard row?.status == .open, row?.started == false else {
+        // The start row needs the items only on a project nobody has started; the Landings group
+        // needs them on any project with a landing waiting on a decision (§2.9 LS6) — its rows say
+        // what stopped the landing and which side holds it. One read serves both.
+        let landingWaits = (projectSessionsAddress == address ? projectSessions : []).contains {
+            $0.isLanding && $0.landing?.state == "AWAITING_DECISION"
+        }
+        guard row?.status == .open, row?.started == false || landingWaits else {
             projectSessionsOpenItems = nil
             return
         }

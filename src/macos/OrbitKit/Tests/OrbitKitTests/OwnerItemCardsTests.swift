@@ -558,7 +558,7 @@ final class OwnerItemCardsTests: XCTestCase {
         let onMaster = SessionOwnerItem(itemId: "i1", kind: .promotionApproval, title: "Merge 3 tasks",
                                         since: "2026-09-13T10:00:00Z", mainBranch: "master")
         XCTAssertEqual(NeedsYouLogic.oldestItemWord([onMaster]), "Approve merge to master")
-        XCTAssertEqual(NeedsYouLogic.ownerItemText(onMaster, project: "Payments"), "Approve merge to master · Payments")
+        XCTAssertEqual(NeedsYouLogic.ownerItemWord(onMaster), "Approve merge to master")
         let unnamed = SessionOwnerItem(itemId: "i1", kind: .promotionApproval, title: "Merge 3 tasks",
                                        since: "2026-09-13T10:00:00Z")
         XCTAssertEqual(NeedsYouLogic.oldestItemWord([unnamed]), "Approve merge to main")

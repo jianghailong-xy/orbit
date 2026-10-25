@@ -1,0 +1,30 @@
+Test Case '-[RdrProbeUITests.RdrShotTests test10bOfflineAnAddedAccountsRemoveIsGreyed]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test10bOfflineAnAddedAccountsRemoveIsGreyed]' passed (42.901 seconds).
+Test Case '-[RdrProbeUITests.RdrShotTests test10OfflineDefaultsRemoveStaysEnabled]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test10OfflineDefaultsRemoveStaysEnabled]' passed (59.638 seconds).
+Test Case '-[RdrProbeUITests.RdrShotTests test11OfflineUseAgainWorks]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test11OfflineUseAgainWorks]' passed (30.338 seconds).
+Test Case '-[RdrProbeUITests.RdrShotTests test12RemovedTwoAccountsDark]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test12RemovedTwoAccountsDark]' passed (25.112 seconds).
+Test Case '-[RdrProbeUITests.RdrShotTests test1DefaultsMenuOffersRemove]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test1DefaultsMenuOffersRemove]' passed (31.848 seconds).
+Test Case '-[RdrProbeUITests.RdrShotTests test2RemovingDefaultAsksThenListsTheAccountsThatRemain]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test2RemovingDefaultAsksThenListsTheAccountsThatRemain]' passed (44.159 seconds).
+Test Case '-[RdrProbeUITests.RdrShotTests test3OneRemainingAccountIsARowOfItsOwn]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test3OneRemainingAccountIsARowOfItsOwn]' passed (30.320 seconds).
+Test Case '-[RdrProbeUITests.RdrShotTests test4TheRunnersCodexRowSpeaksForTheAccountThatRemains]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test4TheRunnersCodexRowSpeaksForTheAccountThatRemains]' passed (27.811 seconds).
+Test Case '-[RdrProbeUITests.RdrShotTests test5UseAgainBringsDefaultBack]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test5UseAgainBringsDefaultBack]' passed (17.830 seconds).
+Test Case '-[RdrProbeUITests.RdrShotTests test6AnAddedAccountsQuestionSaysAutomatic]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test6AnAddedAccountsQuestionSaysAutomatic]' passed (34.928 seconds).
+Test Case '-[RdrProbeUITests.RdrShotTests test7TheLastAccountsQuestionSaysOrbitUsesDefaultAgain]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test7TheLastAccountsQuestionSaysOrbitUsesDefaultAgain]' passed (26.798 seconds).
+Test Case '-[RdrProbeUITests.RdrShotTests test8DefaultsSwipeOffersRemove]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test8DefaultsSwipeOffersRemove]' passed (29.084 seconds).
+Test Case '-[RdrProbeUITests.RdrShotTests test9DefaultAloneOffersNoRemove]' started.
+Test Case '-[RdrProbeUITests.RdrShotTests test9DefaultAloneOffersNoRemove]' passed (31.227 seconds).
+	 Executed 13 tests, with 0 failures (0 unexpected) in 431.995 (432.015) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 431.995 (432.016) seconds
+	 Executed 13 tests, with 0 failures (0 unexpected) in 431.995 (432.020) seconds
+** TEST SUCCEEDED **

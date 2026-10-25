@@ -211,6 +211,17 @@ class ComposerModelTest {
         assertEquals(listOf("config", "account", "interrupt", "turn-id", "retry-message"), rig.calls.filter { it.method != HttpMethod.GET && it.path.first() != "auth" }.map { it.path.last() })
     }
 
+    /** A07-20 (iOS f4e1b0efa): the composer's Stop asks for the background work the session left running to end with the turn; any other
+     * interrupt goes out bodyless, as one that kills nothing. */
+    @Test fun theComposersStopEndsTheBackgroundWorkAndABareInterruptKillsNothing() = runTest {
+        val rig = Rig(this); val model = rig.start()
+        model.stop(); runCurrent()
+        assertEquals("Stop requested.", model.state.value.notice)
+        model.control("interrupt"); runCurrent()
+        val interrupts = rig.calls.filter { it.method == HttpMethod.POST && it.path == listOf("sessions", "s", "interrupt") }
+        assertEquals(listOf("""{"stopBackgroundWork":true}""", null), interrupts.map { it.body?.decodeToString() })
+    }
+
     @Test fun entrySpecificLimitsKeepPhotoPasteAndFileDifferenceAtExactBoundaries() {
         for (mime in AttachmentLimits.inlineTypes) {
             assertNull(AttachmentLimits.rejection("file", mime, AttachmentLimits.MAX_IMAGE))

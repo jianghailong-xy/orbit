@@ -1,0 +1,10 @@
+   3 "GET /api/tasks/evidence-decisions/pending?decidingSessionId=L1 HTTP/1.1" 404 -
+   3 "GET /api/sessions/L1/turns?view=active HTTP/1.1" 404 -
+   3 "GET /api/sessions/L1/events/page?tail=200&maxPayload=2048 HTTP/1.1" 404 -
+   3 "GET /api/sessions/L1/events?sinceSeq=0&maxPayload=2048 HTTP/1.1" 404 -
+   3 "GET /api/sessions/L1/background HTTP/1.1" 404 -
+   3 "GET /api/sessions/L1/approvals?status=PENDING HTTP/1.1" 404 -
+   3 "GET /api/projects/P1/acceptance/criteria-decisions/pending HTTP/1.1" 404 -
+   3 "GET /api/projects/P1/acceptance/confirmation HTTP/1.1" 404 -
+   1 "GET /api/sessions/L1/created-tasks HTTP/1.1" 404 -
+   1 "GET /api/auth/capabilities HTTP/1.1" 404 -

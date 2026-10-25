@@ -402,6 +402,27 @@ test('quota failures neither add escalation nor interrupt the preceding failure 
   assertDecision(routeTaskRun(value), { ...value.baseline, level: null });
 });
 
+test('a Codex run that found the model at capacity keeps the tier; a genuine failure still raises it', () => {
+  const value = codexInput();
+  const prior: ModelRoutingRun = {
+    ordinal: 1, status: 'FAILED', quotaFailure: false, model: 'gpt-default', effort: 'low', runtime: 'codex',
+  };
+  value.history = [
+    { ordinal: 2, status: 'FAILED', quotaFailure: false, capacityFailure: true, model: 'gpt-default', effort: 'medium', runtime: 'codex' },
+  ];
+  const kept = routeTaskRun(value);
+  assert.equal(kept.level, null);
+  assert.equal(kept.effort, value.baseline.effort);
+  assert.ok(kept.reasons.some((reason) => /Run 2 found the model at capacity — not counted/.test(reason)));
+
+  // Behind it, the run before still decides: one genuine failure at S (effort low) raises to M, once.
+  value.history = [...value.history, prior];
+  const raised = routeTaskRun(value);
+  assert.equal(raised.level, 'M');
+  assert.equal(raised.effort, 'medium');
+  assert.match(raised.reasons[0], /run 1 \(S\)/);
+});
+
 function freeze<T>(value: T): T {
   if (value && typeof value === 'object') {
     Object.values(value).forEach(freeze);

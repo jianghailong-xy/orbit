@@ -145,9 +145,13 @@ import {
   type SessionFolderRow,
 } from '../lib/sessionFolders';
 import {
+  SESSION_LANDINGS_COPY,
   SESSION_PROJECT_COPY,
+  landingGroup,
+  landingItemReason,
   listShowsProjects,
   sessionProjectListing,
+  sourceLandingLabel,
   type SessionProjectRow,
   type SessionProjectEntry,
 } from '../lib/sessionProjects';
@@ -221,6 +225,7 @@ import {
   type ContextSeedState,
 } from '../lib/contextSeed';
 import { SessionOutputs } from './SessionOutputs';
+import { mergeRepairLoopLive } from './MergeRecoveryPanel';
 import { BrandMark, NewSessionProviderHero } from './NewSessionProviderHero';
 import { ManagedRunnerNotice } from './ManagedRunnerNotice';
 import { managedRunnerStatusQuery, type ManagedRunner } from '../lib/managedRunner';
@@ -297,6 +302,7 @@ import {
   renameSessionFolder,
   restoreSession,
   resumeSession,
+  type SessionDetail,
   type SessionFolder,
   type SessionListItem,
   sendTurn,
@@ -353,8 +359,13 @@ import {
 } from './ProjectPromotionCard';
 import { ProjectMergeStrip, ProjectMergeTimelineRow } from './ProjectMergeStrip';
 import { isMergeJob, projectTimelineSections } from '../lib/projectMerge';
-import { landingCard } from './ProjectPanoramaHeader';
+import { isLandingSessionDetail } from '../lib/landingSession';
+import { Glyph, landingCard } from './ProjectPanoramaHeader';
+import { SessionRecapCard } from './SessionRecapCard';
 import { LandingJobsSheet } from './LandingJobsSheet';
+import { LandingLink } from './LandingLink';
+import { SessionProjectLandings } from './SessionProjectLandings';
+import { LandingSessionView } from './LandingSessionView';
 import { ProjectLandingCard } from './ProjectLandingCard';
 import { ProjectStartDialog } from './StartProjectCard';
 import {
@@ -436,6 +447,7 @@ import { Spinner } from './ui/Spinner';
 import { Textarea } from './ui/Textarea';
 import { Tooltip } from './ui/Tooltip';
 import type {
+  SessionSourceLanding,
   SessionTurnIntent,
   SessionTurnPlacement,
   WatchView,
@@ -462,7 +474,6 @@ import { lastTypedUserMessage } from '../lib/deliveredMessage';
 import { bindingPlanUsageRow, currentPlanUsageRows } from '../lib/planUsage';
 import { useToast } from '../lib/toast';
 import { setSessionTags } from '../lib/sessionTags';
-import { tagChipLabels } from '../lib/tagColor';
 import {
   isSessionBusy,
   isSessionLive,
@@ -1054,22 +1065,6 @@ const fmtTime = (d?: string): string => {
 // plain tool names (Bash, Read, Edit) pass through unchanged.
 const fmtTool = (name: string): string => name.replace(/^mcp__[^_]+__/, '');
 
-// "5:38 PM" today, "Wed, Aug 6, 5:38 PM" beyond it — a bare clock time on another day misleads
-// (the same call the transcript's turn foot makes).
-const fmtClock = (at: Date): string => {
-  const time = at.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  return at.toDateString() === new Date().toDateString()
-    ? time
-    : `${at.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}, ${time}`;
-};
-
-// The recap's prefix: what the line is, and when the server wrote it (Session.recapAt). A recap
-// that arrived with no time on it — an older control plane — keeps the word without one.
-const recapLabel = (recapAt?: string | null): string => {
-  const at = recapAt ? new Date(recapAt) : null;
-  return at && !Number.isNaN(at.getTime()) ? `Recap · ${fmtClock(at)}` : 'Recap';
-};
-
 // The runner's own sentence about a finished commit — which background jobs were live in the
 // checkout while it committed, and what it did about them (commitResultMessage). Trimmed because a
 // whitespace-only value would otherwise draw an empty detail row; null and blank both mean "the
@@ -1131,8 +1126,6 @@ const parkedWorkLabel = (s: any): ParkedWork | null => {
 type SessionLine = {
   text: string;
   tone: 'preview' | 'running' | 'approval' | 'queued' | 'background' | 'watching' | 'review';
-  /** A muted prefix naming what the line is, before `text` — the recap's "Recap · 5:38 PM". */
-  label?: string;
 };
 // The line for a message of YOURS the workspace hasn't answered yet. Prefixed, because the preview
 // line is otherwise the workspace's voice: unmarked, a message you sent and a reply to it read
@@ -1269,12 +1262,28 @@ export const sessionLine = (s: any, live: boolean, watching?: SessionWatching | 
   // the server wrote about the session, not the raw last reply flattened down to one line. Only
   // here — below every live line above — so a working session still says what it is doing. Off
   // with the account's Session recaps switch, the row falls through to the reply preview below.
+  // Unlabelled, as a project row's always was (the owner, 2026-10-22): the whole line is the
+  // sentence, and when it was written is the Recap card's to say, at the conversation's end.
   if (recaps && typeof s.recapText === 'string' && s.recapText.trim())
-    return { label: recapLabel(s.recapAt), text: s.recapText.trim(), tone: 'preview' };
+    return { text: s.recapText.trim(), tone: 'preview' };
   if (s.lastAssistantText) return { text: plainPreview(s.lastAssistantText), tone: 'preview' };
   // Nothing to preview at all (a run that died before even its user turn was recorded, or an older
   // row from before the server kept the pending message): say what happened rather than nothing.
   return { text: statusLabel(s), tone: 'preview' };
+};
+
+// Whether a conversation is at rest for its Recap card (SessionRecapCard): nothing it is doing or
+// asking outranks the summary of what it did. The lines that outrank the recap on its row
+// (sessionLine above) and are work in hand — waiting on you, starting, generating, queued, an agent
+// it started — keep the card away. A watch it is parked on, or a process it left running, is no
+// turn of its own and does not.
+export const restsForRecap = (s: any): boolean => {
+  const state = sessionReadingState(s);
+  return (s.pendingApprovals ?? 0) === 0
+    && !waitingNoticeFor(s)
+    && !isGenerating(s, state)
+    && state !== 'QUEUED'
+    && (s.runningSubagentCount ?? 0) === 0;
 };
 
 /**
@@ -1598,53 +1607,6 @@ export function SessionProjectListRow({
         </div>
       </div>
     </div>
-  );
-}
-
-/** Compact tag summary for a session-list row. The first tag is the one users can scan; the
- * fixed count survives when that name has to ellipsize, and a container query swaps to the total
- * count when the resizable session column becomes too narrow to show a useful name. */
-export function SessionTagChips({
-  tags,
-  tooltipOpen,
-}: {
-  tags?: SessionTagRef[] | null;
-  tooltipOpen?: boolean;
-}) {
-  if (!tags?.length) return null;
-
-  const first = tags[0];
-  const label = tagChipLabels(first.color);
-  const names = tags.map((tag) => tag.name).join(', ');
-
-  return (
-    <>
-      <Tooltip content={names} open={tooltipOpen}>
-        <span className="session-tag-chips" aria-hidden="true">
-          <span className="session-tag-named">
-            <span
-              className="session-tag-chip"
-              style={
-                {
-                  '--chip': first.color,
-                  '--chip-label': label.light,
-                  '--chip-label-dark': label.dark,
-                } as React.CSSProperties
-              }
-            >
-              <span className="session-tag-chip-label">{first.name}</span>
-            </span>
-          </span>
-          {tags.length > 1 && (
-            <span className="session-tag-more session-tag-more--remaining">+{tags.length - 1}</span>
-          )}
-          <span className="session-tag-more session-tag-more--total">+{tags.length}</span>
-        </span>
-      </Tooltip>
-      {/* Generic spans cannot reliably take an accessible name from aria-label. Keep the real
-          names as text outside the visual summary so compact layouts may hide the named chip. */}
-      <span className="sr-only">Tags: {names}</span>
-    </>
   );
 }
 
@@ -3002,21 +2964,32 @@ export function WorkspaceView({
     // or "commit" is pending, for the runner's outcome (≤1 heartbeat away) to land. Idle else.
     refetchInterval: (q) => {
       const detail = q.state.data;
+      // A landing session polls on its own cadence (§2.7a: RUNNING 4 s, QUEUED 15 s, nothing once
+      // settled), which `LandingSessionView` owns. The conversation's 5 s sweep is not it.
+      if (detail?.id === selectedId && detail.sessionKind === 'LANDING') return false;
       if (
         detail?.id === selectedId &&
         (detail.mergeStatus === 'pending' || detail.commitStatus === 'pending')
       )
         return 3000;
-      const repairState = detail?.mergeRepairSession?.runState
-        ?? detail?.mergeRepairSession?.runStatus
-        ?? detail?.mergeRepairSession?.status;
-      if (['PENDING', 'QUEUED', 'RUNNING'].includes(String(repairState).toUpperCase())) return 3000;
+      // A merge recovery's repair loop: from the repair session running, through it stopping, until the check the
+      // server runs after it has answered. Then it goes quiet.
+      if (detail && mergeRepairLoopLive(detail)) return 3000;
       // A deep-linked/Completed ENDING row may already be absent from the Open list. Keep polling
       // its own current detail until terminal instead of relying solely on selectedFromList.
       return shouldPollSessionDetail(selectedId, detail, selectedFromList) ? 5000 : false;
     },
   });
   const detailForSelected = sessionDetailQ.data?.id === selectedId ? sessionDetailQ.data : null;
+  // The renderer is chosen by the DETAIL's answer, never by `kind` on a list row: a session row is
+  // `kind: 'session'` there, and a landing's own flag is `sessionKind` (§2.9 LS6). A landing whose
+  // row has not been inserted yet answers the same way through its pre-generated id (LS1), so the
+  // page draws in both cases.
+  const landingDetail = isLandingSessionDetail(detailForSelected) ? detailForSelected : null;
+  // A landing is platform work with no transcript: it opens no event stream and reads no event
+  // page (contract §2.9 LS1/LS6). The boolean, not the detail object, is what the stream effect
+  // depends on — the detail is re-read on the page's own cadence, and the stream must not.
+  const landingSession = landingDetail != null;
   const selectedFromDetail = useMemo(() => {
     const d = detailForSelected as any;
     // A freshly-created session primes only id/runner/workspace into this cache; keep the
@@ -3215,6 +3188,23 @@ export function WorkspaceView({
     });
   }, [message, pendingOperationQueries, pendingOperations, qc]);
   const live = !!selectedSession && !selectedTrashed && isSessionLive(selectedSession);
+  // The Recap card at the conversation's end steps aside for the rest of a visit once the
+  // conversation starts a new turn: the reader is in the conversation now, and a card arriving under
+  // each answer would push the answer up the screen. It is back the next time the session is opened
+  // (the owner, 2026-10-22).
+  const selectedRests = selectedSession ? restsForRecap(selectedSession) : true;
+  const [recapAsideFor, setRecapAsideFor] = useState<string | null>(null);
+  useEffect(() => {
+    setRecapAsideFor(null);
+  }, [selectedId]);
+  useEffect(() => {
+    if (selectedId && !selectedRests) setRecapAsideFor(selectedId);
+  }, [selectedId, selectedRests]);
+  const selectedRecap =
+    selectedSession && recapsEnabled && !selectedTrashed && selectedRests && recapAsideFor !== selectedId
+      && typeof selectedSession.recapText === 'string'
+      ? selectedSession.recapText.trim()
+      : '';
   // On older servers, infer resumability exactly as before. Newer servers know whether runner
   // context still exists and are authoritative — notably preventing a false-positive Resume.
   const legacyResumable =
@@ -3276,13 +3266,15 @@ export function WorkspaceView({
     sessions: visibleSessions, view: effectiveView, enabled: projectsShown && !openProjectId,
     controlLive, needsYou: (s) => sessionLine(s, true, sessionWatching(watchingBySession, s.id)).tone === 'approval',
   });
+  // `includeLanding`: the page's Landings group lists the project's LANDING sessions, and no other
+  // read ever sees one (§2.9 LS6).
   const projectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open' }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'open', includeLanding: !!openProjectId }),
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
   const completedProjectSessionsQ = useQuery({
-    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed' }),
+    ...projectSessionsQuery({ projectId: openProjectId ?? '', view: 'completed', includeLanding: !!openProjectId }),
     enabled: !!openProjectId,
     refetchInterval: controlLive ? PROJECT_SESSION_REFRESH_MS : 4000,
   });
@@ -3294,10 +3286,21 @@ export function WorkspaceView({
     refetchInterval: 60_000,
   });
   const pageMerges = useMemo(() => (Array.isArray(pageMergesQ.data) ? pageMergesQ.data : []), [pageMergesQ.data]);
-  const projectMembers = useMemo(() => [...new Map(
+  const allProjectMembers = useMemo(() => [...new Map(
     [...(projectSessionsQ.data ?? []), ...(completedProjectSessionsQ.data ?? [])].map((s) => [s.id, s]),
   ).values()].sort((a, b) => (Date.parse(b.lastTurnAt ?? b.createdAt ?? '') || 0) -
     (Date.parse(a.lastTurnAt ?? a.createdAt ?? '') || 0)), [projectSessionsQ.data, completedProjectSessionsQ.data]);
+  // A project's LANDING sessions are its subject's, not conversations: they are counted nowhere on
+  // this page — not in "Project · N sessions", not in the running count, not among the status dots,
+  // not in the timeline — and are drawn once, in the Landings group below the coordinator.
+  const projectMembers = useMemo(
+    () => allProjectMembers.filter((s) => s.sessionKind !== 'LANDING'),
+    [allProjectMembers],
+  );
+  const landingMembers = useMemo(
+    () => allProjectMembers.filter((s) => s.sessionKind === 'LANDING'),
+    [allProjectMembers],
+  );
   const pageCoordinator = projectMembers.find((s) => s.projectMembership?.role === 'COORDINATOR') ?? null;
   const pageMenuCoordinator = pageCoordinator;
   const pageProject = projectsQ.data?.find((p) => p.id === openProjectId);
@@ -3341,6 +3344,34 @@ export function WorkspaceView({
   const pageStart = pageNotStarted
     ? startPageRow(pageStarted, pageOpenItemsQ.isError ? undefined : pageOpenItemsQ.data)
     : null;
+  // Who is holding each landing that waits (§4.7): the group's rows say the outcome and the holder,
+  // and both are the open items' facts about the same subject — `landingSessionId` is the join.
+  const pageLandingItemsQ = useQuery({
+    ...projectOpenItemsQuery(openProjectId ?? ''),
+    // Only a landing that WAITS needs a holder named, so a project with none pays for no read — and
+    // the page shares this key with the start row's own read, so it is one request either way.
+    enabled: !!openProjectId && landingMembers.some((s) => s.landing?.state === 'AWAITING_DECISION'),
+    refetchInterval: controlLive ? 20_000 : 4000,
+  });
+  const landingHolders = useMemo(() => {
+    const holders = new Map<string, { reason: string | null; assignee: 'OWNER' | 'COORDINATOR' | null }>();
+    const items = pageLandingItemsQ.data;
+    for (const row of [...(items?.needsYou ?? []), ...(items?.withCoordinator ?? [])]) {
+      if (!row.landingSessionId || holders.has(row.landingSessionId)) continue;
+      holders.set(row.landingSessionId, {
+        reason: landingItemReason(row.kind),
+        assignee: row.assignee === 'OWNER' ? 'OWNER' : row.assignee === 'COORDINATOR' ? 'COORDINATOR' : null,
+      });
+    }
+    return holders;
+  }, [pageLandingItemsQ.data]);
+  // The group: waiting first, then the last day's, then one folded line (§2.9 LS6, board v4 04).
+  const landingGroupView = useMemo(
+    () => (openProjectId && landingMembers.length > 0
+      ? landingGroup(landingMembers, { holders: landingHolders })
+      : null),
+    [openProjectId, landingMembers, landingHolders],
+  );
   // The folder page the list is on: `?folder=<id>` on whichever route the console is at, so it
   // survives a reload and Back leaves it. Only a folder of this workspace, and only where the list
   // shows folders at all.
@@ -3459,34 +3490,41 @@ export function WorkspaceView({
   // On a project's page the merges into main it has made sit among its sessions at their own
   // instant (`projectTimelineSections`): rows of their own kind, never sessions.
   const sections = useMemo<Array<{ key: string; title: string; tag: SessionTagRef | null; sessions: Array<SessionProjectEntry<SessionListItem> | ProjectPageMerge> }>>(
-    () =>
-      openProjectId
-        ? [
-            ...(pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
-              sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : []),
-            ...projectTimelineSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), pageMerges)
-              .map((s) => ({ key: s.title, title: s.title, tag: null, sessions: s.items.map((item) =>
-                item.kind === 'merge'
-                  ? { kind: 'merge' as const, id: item.id, promotion: item.promotion }
-                  : { ...item.session, kind: 'session' as const }) })),
-          ]
-        : groupByTag
-        ? sessionTagSections(folderListing.entries).map((s) => ({
-            key: s.tag?.id ?? '__untagged__',
-            tag: s.tag,
-            title: s.tag?.name ?? 'Untagged',
-            sessions: s.sessions,
-          }))
-        : sessionTimeSections(folderListing.entries, {
-            pinnedFirst: view === 'open' && !tagFilter,
-          }).map((s) => ({
-            key: s.title,
-            tag: null as SessionTagRef | null,
-            ...s,
-            // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
-            sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
-          })),
-    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers, pageMerges],
+    () => {
+      if (!openProjectId) {
+        return groupByTag
+          ? sessionTagSections(folderListing.entries).map((s) => ({
+              key: s.tag?.id ?? '__untagged__',
+              tag: s.tag,
+              title: s.tag?.name ?? 'Untagged',
+              sessions: s.sessions,
+            }))
+          : sessionTimeSections(folderListing.entries, {
+              pinnedFirst: view === 'open' && !tagFilter,
+            }).map((s) => ({
+              key: s.title,
+              tag: null as SessionTagRef | null,
+              ...s,
+              // Folded, Pinned keeps its heading but none of its rows — on screen or in the order below.
+              sessions: s.title === 'Pinned' && pinnedCollapsed ? [] : s.sessions,
+            }));
+      }
+      const coordinator = pageCoordinator ? [{ key: 'Coordinator', title: SESSION_PROJECT_COPY.coordinatorSection, tag: null,
+        sessions: [{ ...pageCoordinator, kind: 'session' as const }] }] : [];
+      const timeline = projectTimelineSections(projectMembers.filter((s) => s.id !== pageCoordinator?.id), pageMerges)
+        .map((s) => ({ key: s.title, title: s.title, tag: null, sessions: s.items.map((item) =>
+          item.kind === 'merge'
+            ? { kind: 'merge' as const, id: item.id, promotion: item.promotion }
+            : { ...item.session, kind: 'session' as const }) }));
+      // The Landings group sits below the coordinator and above the timeline, and only when it has
+      // something to list; its rows never enter `sessions`, so no count or arrow key sees one.
+      const landings = landingGroupView
+        ? [{ key: 'Landings', title: SESSION_LANDINGS_COPY.TITLE, tag: null,
+            sessions: [] as Array<SessionProjectEntry<SessionListItem> | ProjectPageMerge> }]
+        : [];
+      return [...coordinator, ...landings, ...timeline];
+    },
+    [folderListing, groupByTag, view, tagFilter, pinnedCollapsed, openProjectId, pageCoordinator, projectMembers, pageMerges, landingGroupView],
   );
 
   // The rows in the order they're actually on screen. Sectioning can reorder relative to the
@@ -4337,7 +4375,7 @@ export function WorkspaceView({
     pendingRecordRef.current = null;
     setDetached(false);
     setLoadingNewer(false);
-    if (!selectedId) {
+    if (!selectedId || landingSession) {
       accRef.current = [];
       setEvents([]);
       seen.current = new Set();
@@ -5015,7 +5053,7 @@ export function WorkspaceView({
       clearTimeout(start);
       stop();
     };
-  }, [selectedId]);
+  }, [selectedId, landingSession]);
 
   // A link to a record of the session already open — a footnote, a link in a message, back and
   // forward through them. The session effect above followed the record the session opened with.
@@ -6914,6 +6952,9 @@ export function WorkspaceView({
       return createMergeRepairSession(selectedId, preparePr);
     },
     onSuccess: (session) => {
+      // The server hands the next step to the repair session already attached when it can go on (S2).
+      const continued = !!selectedId
+        && qc.getQueryData<SessionDetail>(['session', selectedId])?.mergeRepairSession?.id === session.id;
       if (selectedId) {
         qc.setQueryData<any>(['session', selectedId], (old: any) =>
           old ? { ...old, mergeRepairSession: session } : old,
@@ -6921,7 +6962,8 @@ export function WorkspaceView({
         void qc.invalidateQueries({ queryKey: ['session', selectedId], exact: true });
       }
       message.sessionNotice({ sessionId: session.id, sessionTitle: session.title ?? 'Merge repair', event: 'merge-repair',
-        headline: 'Repair session started', detail: 'Opening the repair session.', tone: 'info' });
+        headline: continued ? 'Handed to the existing repair session' : 'Repair session started',
+        detail: 'Opening the repair session.', tone: 'info' });
       navigate(`/sessions/${encodeId(session.id)}`);
       void qc.invalidateQueries({ queryKey: ['sessions'] });
     },
@@ -9781,6 +9823,15 @@ export function WorkspaceView({
     ? fmtTime(selected.lastTurnAt ?? selected.startedAt ?? selected.createdAt)
     : '';
   const headRunWord = selected ? statusLabel(selectedSession ?? selected, selectedWatchingWord) : '';
+  // The landing this conversation's work fed (§2.9 LS1's derived field), for the label at the
+  // session's bottom, and the label itself — one read of one helper, so the words and the ink are
+  // not decided twice.
+  const selectedSourceLanding = (selectedSession as { sourceLanding?: SessionSourceLanding | null } | null)
+    ?.sourceLanding ?? null;
+  const sourceLandingLabelView = sourceLandingLabel(selectedSourceLanding);
+  const sourceLanding = sourceLandingLabelView && selectedSourceLanding
+    ? { ...sourceLandingLabelView, id: selectedSourceLanding.landingSessionId }
+    : null;
   const headLifecycleWord = selectedLifecycleState
     ? sessionLifecycleLabel(selectedLifecycleState)
     : null;
@@ -10097,6 +10148,12 @@ export function WorkspaceView({
             folderEdit?.id === row.folder.id ? folderEditRow(row.folder.id) : folderRowView(row),
           )}
           {sections.map((sec) => (
+            sec.key === 'Landings' && landingGroupView ? (
+              <SessionProjectLandings key={sec.key} group={landingGroupView}
+                onOpen={(landingSessionId) => navigateWithPaneSlide('push', () => navigate(
+                  sessionPath(landingSessionId), { state: stampFromList() },
+                ))} />
+            ) : (
             <section key={sec.key} className={openProjectId && sec.key === 'Coordinator' ? 'session-project-coordinator' : undefined}>
               {sec.key === 'Pinned' ? (
                 <button
@@ -10343,27 +10400,13 @@ export function WorkspaceView({
                         ) : (
                           <>
                             <SessionTitleRow session={s} hoverTipOpen={hoverTipOpen} />
-                            {/* Tags lead the second line and the reply preview follows them. They sat
-                                beside the title as bare colour dots until the naming pass started
-                                writing semantic ones ("登录", "性能"): a dot cannot show a word, so the
-                                meaning lived only in a tooltip. Here they read at a glance and the
-                                preview yields, being the echo of a reply rather than the handle you
-                                file the session under. */}
+                            {/* One line under the title, and all of it is what the session is doing
+                                or waiting on, else its recap (sessionLine). Tags are filed and
+                                filtered by, not drawn on the row (the owner, 2026-10-22). */}
                             <div className="session-sub">
-                              <SessionTagChips
-                                tags={s.tags as SessionTagRef[] | null | undefined}
-                                tooltipOpen={hoverTipOpen}
-                              />
                               <div
                                 className={`session-preview${line.tone === 'preview' ? '' : ` tone-${line.tone}`}`}
                               >
-                                {/* The label and the space after it are drawn together, so a line
-                                    with no label carries no separator of its own. */}
-                                {line.label && (
-                                  <>
-                                    <span className="session-preview-label">{line.label}</span>{' '}
-                                  </>
-                                )}
                                 {line.text}
                               </div>
                             </div>
@@ -10403,6 +10446,7 @@ export function WorkspaceView({
                 );
               })}
             </section>
+            )
           ))}
           {/* Foot of the loaded window while a page is in flight, so a scroll that outruns the
               fetch (or a switch to a workspace not yet cached) shows progress rather than an
@@ -10424,17 +10468,28 @@ export function WorkspaceView({
 
       <div
         className="workspace-view"
-        onDragEnter={onSessionDragEnter}
-        onDragOver={onSessionDragOver}
-        onDragLeave={onSessionDragLeave}
-        onDrop={onSessionDrop}
+        // A landing takes no files: it has no engine and no composer to attach one to (LS6).
+        onDragEnter={landingDetail ? undefined : onSessionDragEnter}
+        onDragOver={landingDetail ? undefined : onSessionDragOver}
+        onDragLeave={landingDetail ? undefined : onSessionDragLeave}
+        onDrop={landingDetail ? undefined : onSessionDrop}
       >
         {/* Drop-to-upload hint covering the whole session pane while files are dragged over it. */}
-        {dragging && (
+        {dragging && !landingDetail && (
           <div className="workspace-dropzone">
             <PaperClipOutlined /> Drop files to upload
           </div>
         )}
+        {landingDetail ? (
+          <LandingSessionView
+            sessionId={selectedId!}
+            detail={landingDetail}
+            onOpenCoordinator={(id) =>
+              navigateWithPaneSlide('push', () =>
+                navigate(sessionPath(id), { state: stampFromList() }))}
+          />
+        ) : (
+        <>
         <div className="workspace-header">
           {isMobile && (
             <button
@@ -10976,6 +11031,19 @@ export function WorkspaceView({
                   </AuthErrorCtx.Provider>
                 </EventFullCtx.Provider>
               </SessionNavCtx.Provider>
+              {/* The conversation's last row while it is at rest: its recap whole, the line its list
+                  row reads in one (SessionRecapCard). Above the cards that ask the owner something,
+                  which stay nearest the composer, and only once the transcript it sums up is drawn.
+                  Keyed by the session like its siblings, so a refresh in flight stays with the
+                  conversation that asked for it. */}
+              {selected && selectedId && selectedRecap && transcriptEvents.length > 0 && (
+                <SessionRecapCard
+                  key={`recap:${selectedId}`}
+                  sessionId={selectedId}
+                  text={selectedRecap}
+                  recapAt={selectedSession?.recapAt ?? null}
+                />
+              )}
               {/* The delivered card, in the conversation it was delivered to and scrolling with
                   it: the server's own ask about this project's ruler. Its content is re-derived on
                   every render — the frame keeps the proposal's address and nothing else — so a
@@ -11096,6 +11164,24 @@ export function WorkspaceView({
                   waitingKind={selectedSession?.waitingKind ?? null}
                 />
               )}
+              {/* The landing this conversation's work fed, at the session's own bottom (owner
+                  2026-10-19, board v4 06 e): a derived label, not a turn — the source session did
+                  the work, the platform lands it, and the label opens the landing session where
+                  every attempt is read. Absent from a session that produced no landing work, and
+                  from a server that predates the field. */}
+              {selected && !selectedTrashed && sourceLanding ? (
+                <div className="session-source-landing">
+                  <LandingLink className={`session-source-landing-chip is-${sourceLanding.tone}`}
+                    sessionId={sourceLanding.id}>
+                    {/* The ring the board draws on the pill (06 e): work in hand, the same mark the
+                        landing rows carry — and the words beside it say the same thing without it. */}
+                    {sourceLanding.tone === 'run'
+                      ? <Glyph shape="spinner" color="currentColor" size={11} />
+                      : null}
+                    {`${sourceLanding.text} ›`}
+                  </LandingLink>
+                </div>
+              ) : null}
               {selected &&
                 !selectedTrashed &&
                 showQueuedNotice &&
@@ -12170,6 +12256,8 @@ export function WorkspaceView({
           </div>
         </div>
       </div>
+        </>
+        )}
       </div>
       {confirmation}
     </div>

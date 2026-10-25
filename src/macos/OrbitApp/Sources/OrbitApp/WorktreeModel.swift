@@ -83,8 +83,10 @@ final class WorktreeModel {
             let pending = detail?.mergeStatus == "pending" || detail?.commitStatus == "pending"
             let repairRunning = detail?.mergeRepairSession?.effectiveRunState == .queued
                 || detail?.mergeRepairSession?.effectiveRunState == .running
+            // The server checks the recovery once a repair round ends: read on until that check shows.
+            let repairCheck = detail.map { MergeRepairRow.awaitsCheck($0) } ?? false
             let live = isSessionLive()
-            guard pending || live || repairRunning else {
+            guard pending || live || repairRunning || repairCheck else {
                 // Settled + terminal: nothing to fetch. Wait, then re-evaluate — an action that sets
                 // pending (below) will make the next pass enter the 3s outcome poll.
                 try? await Task.sleep(nanoseconds: 3_000_000_000)

@@ -495,19 +495,28 @@ export function withEnginePlanUsage(
  *
  * Null when there is nothing to choose between — fewer than two accounts reported, or none signed in —
  * and the session runs where it always did.
+ *
+ * With `defaultRemoved` — the owner removed this engine's Default from Orbit, and the runner reports
+ * another account — there is no such place: Default is no candidate, and the choice is among the
+ * accounts that remain, the only one of them included. With every one of them signed out it is the
+ * first of them, whose sign-in the session then waits on. Null only when none remains.
  */
 export function accountToStartOn(
   engine: AccountEngine,
   accounts: readonly RunnerEngineAccount[] | null | undefined,
   usage: PlanUsage | null | undefined,
   now: Date,
+  options: { defaultRemoved?: boolean } = {},
 ): string | null {
-  if (!accounts || accounts.length < 2) return null;
-  const candidates = rankAccounts(engine, accounts, usage, now);
+  const removed = options.defaultRemoved === true;
+  const pool = removed ? accounts?.filter((account) => account.id !== CODEX_DEFAULT_ACCOUNT) : accounts;
+  if (!pool || pool.length < (removed ? 1 : 2)) return null;
+  const candidates = rankAccounts(engine, pool, usage, now);
   const usable = candidates.filter((c) => c.spentUntil === null);
   if (usable.length > 0) return usable[0].id;
   const first = [...candidates].sort((a, b) => (a.spentUntil ?? 0) - (b.spentUntil ?? 0) || byAccountId(a, b))[0];
-  return first?.id ?? null;
+  if (first) return first.id;
+  return removed ? [...pool].sort(byAccountId)[0].id : null;
 }
 
 /** {@link accountToStartOn} for Codex. */

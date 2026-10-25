@@ -1,0 +1,1585 @@
+{
+ "pooled": {
+  "before/1/lockstep": {
+   "rounds": [
+    "r04-b-n1",
+    "r12-b-n1",
+    "r16-b-n1"
+   ],
+   "api": {
+    "n": 2880,
+    "p50": 10.05,
+    "p95": 30.41,
+    "p99": 50.98,
+    "max": 125.9
+   },
+   "apiWrite": {
+    "n": 720,
+    "p50": 11.67,
+    "p95": 32.2,
+    "p99": 69.32,
+    "max": 125.9
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1769,
+    "p50": 5.171,
+    "p95": 22.963,
+    "p99": 50.007,
+    "max": 152.701
+   },
+   "pgRead": {
+    "n": 1815,
+    "p50": 0.369,
+    "p95": 1.885,
+    "p99": 10.395,
+    "max": 69.491
+   },
+   "syncfs": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "syncfsPerMinute": 0.0,
+   "runnerCommit": {
+    "n": 15,
+    "p50": 729.0,
+    "p95": 3993.0,
+    "p99": 3993.0,
+    "max": 3993.0
+   },
+   "pgIoSome": 2.0,
+   "sdbUtil": 18.18,
+   "hostIoSome": 1.1,
+   "iowait": 0.95,
+   "slowCommitsPerMinute": 0.8,
+   "slowCommitsInASync": 0,
+   "slowCommits": 5,
+   "testHostReadMB": [
+    64.4,
+    176.7,
+    63.5
+   ]
+  },
+  "d10/1/lockstep": {
+   "rounds": [
+    "r15-d-n1",
+    "r19-d-n1"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 10.64,
+    "p95": 26.31,
+    "p99": 37.21,
+    "max": 169.1
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 11.83,
+    "p95": 26.48,
+    "p99": 54.82,
+    "max": 169.1
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1176,
+    "p50": 4.883,
+    "p95": 18.503,
+    "p99": 56.022,
+    "max": 228.099
+   },
+   "pgRead": {
+    "n": 1136,
+    "p50": 0.357,
+    "p95": 0.951,
+    "p99": 15.459,
+    "max": 85.501
+   },
+   "syncfs": {
+    "n": 18,
+    "p50": 46.007,
+    "p95": 187.058,
+    "p99": 187.058,
+    "max": 187.058
+   },
+   "syncfsPerMinute": 4.5,
+   "runnerCommit": {
+    "n": 10,
+    "p50": 741.0,
+    "p95": 6117.0,
+    "p99": 6117.0,
+    "max": 6117.0
+   },
+   "pgIoSome": 1.98,
+   "sdbUtil": 15.49,
+   "hostIoSome": 0.6,
+   "iowait": 0.89,
+   "slowCommitsPerMinute": 0.8,
+   "slowCommitsInASync": 0,
+   "slowCommits": 3,
+   "testHostReadMB": [
+    37.5,
+    163.8
+   ]
+  },
+  "t02c/1/lockstep": {
+   "rounds": [
+    "r01-a-n1",
+    "r09-a-n1"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 9.57,
+    "p95": 32.74,
+    "p99": 58.1,
+    "max": 287.0
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 11.72,
+    "p95": 37.23,
+    "p99": 69.24,
+    "max": 80.6
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1177,
+    "p50": 5.527,
+    "p95": 23.926,
+    "p99": 45.611,
+    "max": 92.56
+   },
+   "pgRead": {
+    "n": 1280,
+    "p50": 0.377,
+    "p95": 1.161,
+    "p99": 10.662,
+    "max": 46.157
+   },
+   "syncfs": {
+    "n": 112,
+    "p50": 40.872,
+    "p95": 148.609,
+    "p99": 162.904,
+    "max": 167.031
+   },
+   "syncfsPerMinute": 28.0,
+   "runnerCommit": {
+    "n": 10,
+    "p50": 775.0,
+    "p95": 3011.0,
+    "p99": 3011.0,
+    "max": 3011.0
+   },
+   "pgIoSome": 2.2,
+   "sdbUtil": 23.71,
+   "hostIoSome": 2.21,
+   "iowait": 1.79,
+   "slowCommitsPerMinute": 0.0,
+   "slowCommitsInASync": 0,
+   "slowCommits": 0,
+   "testHostReadMB": [
+    264.4,
+    33.6
+   ]
+  },
+  "before/4/lockstep": {
+   "rounds": [
+    "r05-b-n4",
+    "r11-b-n4",
+    "r17-b-n4"
+   ],
+   "api": {
+    "n": 2880,
+    "p50": 11.7,
+    "p95": 31.25,
+    "p99": 57.57,
+    "max": 150.12
+   },
+   "apiWrite": {
+    "n": 720,
+    "p50": 15.35,
+    "p95": 51.31,
+    "p99": 89.68,
+    "max": 150.12
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1827,
+    "p50": 5.553,
+    "p95": 48.16,
+    "p99": 114.531,
+    "max": 294.424
+   },
+   "pgRead": {
+    "n": 1806,
+    "p50": 0.345,
+    "p95": 2.855,
+    "p99": 34.476,
+    "max": 273.023
+   },
+   "syncfs": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "syncfsPerMinute": 0.0,
+   "runnerCommit": {
+    "n": 64,
+    "p50": 687.0,
+    "p95": 1842.0,
+    "p99": 1892.0,
+    "max": 1892.0
+   },
+   "pgIoSome": 3.18,
+   "sdbUtil": 32.35,
+   "hostIoSome": 2.86,
+   "iowait": 2.59,
+   "slowCommitsPerMinute": 4.0,
+   "slowCommitsInASync": 0,
+   "slowCommits": 24,
+   "testHostReadMB": [
+    28.5,
+    32.7,
+    87.4
+   ]
+  },
+  "d10/4/lockstep": {
+   "rounds": [
+    "r14-d-n4",
+    "r20-d-n4"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 10.99,
+    "p95": 30.49,
+    "p99": 67.83,
+    "max": 221.09
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 14.63,
+    "p95": 54.32,
+    "p99": 118.66,
+    "max": 221.09
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1238,
+    "p50": 5.822,
+    "p95": 43.635,
+    "p99": 86.385,
+    "max": 243.191
+   },
+   "pgRead": {
+    "n": 1265,
+    "p50": 0.353,
+    "p95": 1.997,
+    "p99": 30.572,
+    "max": 117.198
+   },
+   "syncfs": {
+    "n": 72,
+    "p50": 123.756,
+    "p95": 336.164,
+    "p99": 526.382,
+    "max": 526.382
+   },
+   "syncfsPerMinute": 18.0,
+   "runnerCommit": {
+    "n": 40,
+    "p50": 844.0,
+    "p95": 1192.0,
+    "p99": 1218.0,
+    "max": 1218.0
+   },
+   "pgIoSome": 3.28,
+   "sdbUtil": 31.05,
+   "hostIoSome": 2.0,
+   "iowait": 1.65,
+   "slowCommitsPerMinute": 2.2,
+   "slowCommitsInASync": 5,
+   "slowCommits": 9,
+   "testHostReadMB": [
+    3.5,
+    89.5
+   ]
+  },
+  "t02c/4/lockstep": {
+   "rounds": [
+    "r02-a-n4",
+    "r08-a-n4"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 11.13,
+    "p95": 61.89,
+    "p99": 130.02,
+    "max": 1020.54
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 18.32,
+    "p95": 114.47,
+    "p99": 187.2,
+    "max": 401.99
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1184,
+    "p50": 11.442,
+    "p95": 150.6,
+    "p99": 341.447,
+    "max": 754.784
+   },
+   "pgRead": {
+    "n": 1160,
+    "p50": 0.385,
+    "p95": 55.794,
+    "p99": 218.298,
+    "max": 738.484
+   },
+   "syncfs": {
+    "n": 393,
+    "p50": 112.547,
+    "p95": 694.211,
+    "p99": 1237.765,
+    "max": 1238.521
+   },
+   "syncfsPerMinute": 98.2,
+   "runnerCommit": {
+    "n": 36,
+    "p50": 1789.0,
+    "p95": 8047.0,
+    "p99": 8235.0,
+    "max": 8235.0
+   },
+   "pgIoSome": 5.71,
+   "sdbUtil": 55.35,
+   "hostIoSome": 7.79,
+   "iowait": 5.5,
+   "slowCommitsPerMinute": 24.2,
+   "slowCommitsInASync": 86,
+   "slowCommits": 97,
+   "testHostReadMB": [
+    159.9,
+    272.4
+   ]
+  },
+  "before/8/lockstep": {
+   "rounds": [
+    "r06-b-n8",
+    "r10-b-n8",
+    "r18-b-n8"
+   ],
+   "api": {
+    "n": 2880,
+    "p50": 10.02,
+    "p95": 38.13,
+    "p99": 106.84,
+    "max": 918.69
+   },
+   "apiWrite": {
+    "n": 720,
+    "p50": 12.32,
+    "p95": 69.4,
+    "p99": 122.07,
+    "max": 185.49
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1842,
+    "p50": 5.184,
+    "p95": 62.916,
+    "p99": 172.426,
+    "max": 307.221
+   },
+   "pgRead": {
+    "n": 1799,
+    "p50": 0.316,
+    "p95": 4.756,
+    "p99": 69.414,
+    "max": 173.642
+   },
+   "syncfs": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "syncfsPerMinute": 0.0,
+   "runnerCommit": {
+    "n": 120,
+    "p50": 857.0,
+    "p95": 3916.0,
+    "p99": 5216.0,
+    "max": 5225.0
+   },
+   "pgIoSome": 3.65,
+   "sdbUtil": 28.07,
+   "hostIoSome": 2.63,
+   "iowait": 2.29,
+   "slowCommitsPerMinute": 8.2,
+   "slowCommitsInASync": 0,
+   "slowCommits": 49,
+   "testHostReadMB": [
+    54.3,
+    30.8,
+    111.7
+   ]
+  },
+  "d10/8/lockstep": {
+   "rounds": [
+    "r13-d-n8",
+    "r21-d-n8"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 10.45,
+    "p95": 53.07,
+    "p99": 147.49,
+    "max": 970.17
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 13.77,
+    "p95": 105.43,
+    "p99": 208.17,
+    "max": 328.29
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1236,
+    "p50": 6.287,
+    "p95": 130.774,
+    "p99": 375.142,
+    "max": 576.258
+   },
+   "pgRead": {
+    "n": 1246,
+    "p50": 0.348,
+    "p95": 53.334,
+    "p99": 225.306,
+    "max": 399.097
+   },
+   "syncfs": {
+    "n": 128,
+    "p50": 237.634,
+    "p95": 583.591,
+    "p99": 1412.287,
+    "max": 1421.911
+   },
+   "syncfsPerMinute": 32.0,
+   "runnerCommit": {
+    "n": 72,
+    "p50": 1138.0,
+    "p95": 4170.0,
+    "p99": 4271.0,
+    "max": 4271.0
+   },
+   "pgIoSome": 5.24,
+   "sdbUtil": 35.88,
+   "hostIoSome": 6.64,
+   "iowait": 5.43,
+   "slowCommitsPerMinute": 22.7,
+   "slowCommitsInASync": 38,
+   "slowCommits": 91,
+   "testHostReadMB": [
+    8.4,
+    303.5
+   ]
+  },
+  "t02c/8/lockstep": {
+   "rounds": [
+    "r03-a-n8",
+    "r07-a-n8"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 12.86,
+    "p95": 99.09,
+    "p99": 272.69,
+    "max": 1115.05
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 24.49,
+    "p95": 199.98,
+    "p99": 299.39,
+    "max": 1115.05
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1181,
+    "p50": 17.958,
+    "p95": 375.727,
+    "p99": 676.04,
+    "max": 1113.968
+   },
+   "pgRead": {
+    "n": 1207,
+    "p50": 0.396,
+    "p95": 302.128,
+    "p99": 572.268,
+    "max": 1082.342
+   },
+   "syncfs": {
+    "n": 744,
+    "p50": 215.567,
+    "p95": 1139.721,
+    "p99": 1907.265,
+    "max": 1907.912
+   },
+   "syncfsPerMinute": 186.0,
+   "runnerCommit": {
+    "n": 72,
+    "p50": 3960.0,
+    "p95": 17370.0,
+    "p99": 17912.0,
+    "max": 17912.0
+   },
+   "pgIoSome": 8.35,
+   "sdbUtil": 61.83,
+   "hostIoSome": 11.47,
+   "iowait": 7.18,
+   "slowCommitsPerMinute": 61.2,
+   "slowCommitsInASync": 207,
+   "slowCommits": 245,
+   "testHostReadMB": [
+    296.3,
+    225.6
+   ]
+  },
+  "before/1/staggered": {
+   "rounds": [
+    "s04-b-n1",
+    "s15-b-n1"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 9.84,
+    "p95": 26.18,
+    "p99": 44.83,
+    "max": 500.95
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 11.26,
+    "p95": 26.11,
+    "p99": 60.74,
+    "max": 500.95
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1202,
+    "p50": 4.95,
+    "p95": 20.282,
+    "p99": 71.191,
+    "max": 190.991
+   },
+   "pgRead": {
+    "n": 1134,
+    "p50": 0.356,
+    "p95": 0.944,
+    "p99": 11.735,
+    "max": 142.519
+   },
+   "syncfs": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "syncfsPerMinute": 0.0,
+   "runnerCommit": {
+    "n": 11,
+    "p50": 629.0,
+    "p95": 3408.0,
+    "p99": 3408.0,
+    "max": 3408.0
+   },
+   "pgIoSome": 2.29,
+   "sdbUtil": 19.17,
+   "hostIoSome": 1.06,
+   "iowait": 1.11,
+   "slowCommitsPerMinute": 1.5,
+   "slowCommitsInASync": 0,
+   "slowCommits": 6,
+   "testHostReadMB": [
+    173.8,
+    0.1
+   ]
+  },
+  "d10/1/staggered": {
+   "rounds": [
+    "s03-d-n1",
+    "s10-d-n1"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 11.42,
+    "p95": 26.31,
+    "p99": 32.86,
+    "max": 62.71
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 13.87,
+    "p95": 26.93,
+    "p99": 38.47,
+    "max": 62.71
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1188,
+    "p50": 4.897,
+    "p95": 15.252,
+    "p99": 27.041,
+    "max": 82.597
+   },
+   "pgRead": {
+    "n": 1210,
+    "p50": 0.327,
+    "p95": 0.893,
+    "p99": 3.041,
+    "max": 56.028
+   },
+   "syncfs": {
+    "n": 16,
+    "p50": 46.755,
+    "p95": 167.234,
+    "p99": 167.234,
+    "max": 167.234
+   },
+   "syncfsPerMinute": 4.0,
+   "runnerCommit": {
+    "n": 11,
+    "p50": 731.0,
+    "p95": 936.0,
+    "p99": 936.0,
+    "max": 936.0
+   },
+   "pgIoSome": 1.85,
+   "sdbUtil": 14.02,
+   "hostIoSome": 0.57,
+   "iowait": 0.71,
+   "slowCommitsPerMinute": 0.0,
+   "slowCommitsInASync": 0,
+   "slowCommits": 0,
+   "testHostReadMB": [
+    23.5,
+    2.8
+   ]
+  },
+  "t02c/1/staggered": {
+   "rounds": [
+    "s09-a-n1",
+    "s16-a-n1"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 10.44,
+    "p95": 25.68,
+    "p99": 33.56,
+    "max": 102.76
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 11.81,
+    "p95": 25.0,
+    "p99": 37.17,
+    "max": 102.76
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1215,
+    "p50": 4.91,
+    "p95": 15.007,
+    "p99": 32.44,
+    "max": 78.502
+   },
+   "pgRead": {
+    "n": 1202,
+    "p50": 0.37,
+    "p95": 0.89,
+    "p99": 5.851,
+    "max": 33.591
+   },
+   "syncfs": {
+    "n": 143,
+    "p50": 36.761,
+    "p95": 106.948,
+    "p99": 141.076,
+    "max": 150.607
+   },
+   "syncfsPerMinute": 35.8,
+   "runnerCommit": {
+    "n": 14,
+    "p50": 720.0,
+    "p95": 875.0,
+    "p99": 875.0,
+    "max": 875.0
+   },
+   "pgIoSome": 1.89,
+   "sdbUtil": 12.7,
+   "hostIoSome": 0.3,
+   "iowait": 0.61,
+   "slowCommitsPerMinute": 0.0,
+   "slowCommitsInASync": 0,
+   "slowCommits": 0,
+   "testHostReadMB": [
+    1.1,
+    0.0
+   ]
+  },
+  "before/4/staggered": {
+   "rounds": [
+    "s05-b-n4",
+    "s14-b-n4"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 7.73,
+    "p95": 24.34,
+    "p99": 49.46,
+    "max": 207.05
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 9.73,
+    "p95": 45.4,
+    "p99": 115.23,
+    "max": 207.05
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1150,
+    "p50": 5.034,
+    "p95": 43.613,
+    "p99": 156.405,
+    "max": 733.002
+   },
+   "pgRead": {
+    "n": 1193,
+    "p50": 0.333,
+    "p95": 2.444,
+    "p99": 50.362,
+    "max": 719.072
+   },
+   "syncfs": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "syncfsPerMinute": 0.0,
+   "runnerCommit": {
+    "n": 46,
+    "p50": 679.0,
+    "p95": 924.0,
+    "p99": 952.0,
+    "max": 952.0
+   },
+   "pgIoSome": 2.7,
+   "sdbUtil": 22.83,
+   "hostIoSome": 1.54,
+   "iowait": 1.66,
+   "slowCommitsPerMinute": 3.5,
+   "slowCommitsInASync": 0,
+   "slowCommits": 14,
+   "testHostReadMB": [
+    96.4,
+    77.6
+   ]
+  },
+  "d10/4/staggered": {
+   "rounds": [
+    "s02-d-n4",
+    "s11-d-n4"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 8.59,
+    "p95": 25.57,
+    "p99": 54.15,
+    "max": 173.41
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 10.61,
+    "p95": 39.02,
+    "p99": 107.71,
+    "max": 173.41
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1210,
+    "p50": 5.018,
+    "p95": 28.151,
+    "p99": 93.287,
+    "max": 209.047
+   },
+   "pgRead": {
+    "n": 1217,
+    "p50": 0.351,
+    "p95": 0.99,
+    "p99": 27.591,
+    "max": 194.575
+   },
+   "syncfs": {
+    "n": 78,
+    "p50": 83.348,
+    "p95": 338.575,
+    "p99": 392.593,
+    "max": 392.593
+   },
+   "syncfsPerMinute": 19.5,
+   "runnerCommit": {
+    "n": 48,
+    "p50": 773.0,
+    "p95": 1041.0,
+    "p99": 1167.0,
+    "max": 1167.0
+   },
+   "pgIoSome": 2.47,
+   "sdbUtil": 21.02,
+   "hostIoSome": 0.94,
+   "iowait": 1.23,
+   "slowCommitsPerMinute": 2.7,
+   "slowCommitsInASync": 11,
+   "slowCommits": 11,
+   "testHostReadMB": [
+    19.0,
+    32.2
+   ]
+  },
+  "t02c/4/staggered": {
+   "rounds": [
+    "s08-a-n4",
+    "s17-a-n4"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 10.14,
+    "p95": 28.91,
+    "p99": 85.71,
+    "max": 294.37
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 13.57,
+    "p95": 67.76,
+    "p99": 169.31,
+    "max": 201.21
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1193,
+    "p50": 6.264,
+    "p95": 59.942,
+    "p99": 430.56,
+    "max": 1521.293
+   },
+   "pgRead": {
+    "n": 1226,
+    "p50": 0.298,
+    "p95": 9.449,
+    "p99": 373.244,
+    "max": 1498.526
+   },
+   "syncfs": {
+    "n": 451,
+    "p50": 45.975,
+    "p95": 250.508,
+    "p99": 473.315,
+    "max": 753.198
+   },
+   "syncfsPerMinute": 112.8,
+   "runnerCommit": {
+    "n": 45,
+    "p50": 721.0,
+    "p95": 1899.0,
+    "p99": 5618.0,
+    "max": 5618.0
+   },
+   "pgIoSome": 3.79,
+   "sdbUtil": 31.44,
+   "hostIoSome": 2.73,
+   "iowait": 2.33,
+   "slowCommitsPerMinute": 11.0,
+   "slowCommitsInASync": 33,
+   "slowCommits": 44,
+   "testHostReadMB": [
+    178.5,
+    2.5
+   ]
+  },
+  "before/8/staggered": {
+   "rounds": [
+    "p03-b-n8",
+    "p08-b-n8",
+    "s06-b-n8",
+    "s13-b-n8"
+   ],
+   "api": {
+    "n": 3840,
+    "p50": 9.54,
+    "p95": 41.63,
+    "p99": 137.36,
+    "max": 8294.58
+   },
+   "apiWrite": {
+    "n": 960,
+    "p50": 12.04,
+    "p95": 86.03,
+    "p99": 178.47,
+    "max": 8294.58
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 2368,
+    "p50": 5.436,
+    "p95": 116.587,
+    "p99": 399.888,
+    "max": 1324.735
+   },
+   "pgRead": {
+    "n": 2415,
+    "p50": 0.315,
+    "p95": 21.135,
+    "p99": 298.651,
+    "max": 1208.932
+   },
+   "syncfs": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "syncfsPerMinute": 0.0,
+   "runnerCommit": {
+    "n": 176,
+    "p50": 671.0,
+    "p95": 1274.0,
+    "p99": 47922.0,
+    "max": 51791.0
+   },
+   "pgIoSome": 5.13,
+   "sdbUtil": 31.7,
+   "hostIoSome": 3.77,
+   "iowait": 1.42,
+   "slowCommitsPerMinute": 17.1,
+   "slowCommitsInASync": 0,
+   "slowCommits": 137,
+   "testHostReadMB": [
+    416.8,
+    1.8,
+    13.5,
+    51.9
+   ]
+  },
+  "d10/8/staggered": {
+   "rounds": [
+    "p01-d-n8",
+    "p06-d-n8",
+    "s01-d-n8",
+    "s12-d-n8"
+   ],
+   "api": {
+    "n": 3840,
+    "p50": 9.4,
+    "p95": 47.09,
+    "p99": 132.71,
+    "max": 1125.33
+   },
+   "apiWrite": {
+    "n": 960,
+    "p50": 12.99,
+    "p95": 111.74,
+    "p99": 222.25,
+    "max": 1125.33
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 2391,
+    "p50": 6.455,
+    "p95": 144.668,
+    "p99": 314.399,
+    "max": 1639.643
+   },
+   "pgRead": {
+    "n": 2348,
+    "p50": 0.305,
+    "p95": 43.357,
+    "p99": 231.332,
+    "max": 1370.422
+   },
+   "syncfs": {
+    "n": 292,
+    "p50": 191.483,
+    "p95": 645.774,
+    "p99": 1107.186,
+    "max": 1825.281
+   },
+   "syncfsPerMinute": 36.5,
+   "runnerCommit": {
+    "n": 181,
+    "p50": 873.0,
+    "p95": 4429.0,
+    "p99": 23688.0,
+    "max": 24658.0
+   },
+   "pgIoSome": 5.37,
+   "sdbUtil": 41.1,
+   "hostIoSome": 4.23,
+   "iowait": 3.38,
+   "slowCommitsPerMinute": 24.6,
+   "slowCommitsInASync": 138,
+   "slowCommits": 197,
+   "testHostReadMB": [
+    168.4,
+    201.4,
+    34.4,
+    1.1
+   ]
+  },
+  "t02c/8/staggered": {
+   "rounds": [
+    "s07-a-n8",
+    "s18-a-n8"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 11.77,
+    "p95": 88.72,
+    "p99": 224.89,
+    "max": 867.16
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 24.97,
+    "p95": 183.42,
+    "p99": 319.88,
+    "max": 867.16
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1246,
+    "p50": 19.407,
+    "p95": 289.522,
+    "p99": 758.866,
+    "max": 1245.307
+   },
+   "pgRead": {
+    "n": 1230,
+    "p50": 0.307,
+    "p95": 182.814,
+    "p99": 791.707,
+    "max": 1171.069
+   },
+   "syncfs": {
+    "n": 842,
+    "p50": 105.342,
+    "p95": 477.039,
+    "p99": 896.207,
+    "max": 1207.61
+   },
+   "syncfsPerMinute": 210.5,
+   "runnerCommit": {
+    "n": 89,
+    "p50": 906.0,
+    "p95": 14210.0,
+    "p99": 18803.0,
+    "max": 18803.0
+   },
+   "pgIoSome": 8.53,
+   "sdbUtil": 67.14,
+   "hostIoSome": 9.83,
+   "iowait": 7.83,
+   "slowCommitsPerMinute": 54.0,
+   "slowCommitsInASync": 186,
+   "slowCommits": 216,
+   "testHostReadMB": [
+    29.6,
+    323.8
+   ]
+  },
+  "before/8/staggered-turns-only": {
+   "rounds": [
+    "p04-b-n8c0",
+    "p07-b-n8c0"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 9.32,
+    "p95": 29.73,
+    "p99": 68.81,
+    "max": 176.99
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 12.37,
+    "p95": 58.58,
+    "p99": 113.66,
+    "max": 176.99
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1188,
+    "p50": 5.581,
+    "p95": 50.069,
+    "p99": 119.562,
+    "max": 235.886
+   },
+   "pgRead": {
+    "n": 1162,
+    "p50": 0.29,
+    "p95": 3.586,
+    "p99": 54.649,
+    "max": 147.474
+   },
+   "syncfs": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "syncfsPerMinute": 0.0,
+   "runnerCommit": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "pgIoSome": 3.68,
+   "sdbUtil": 32.02,
+   "hostIoSome": 2.37,
+   "iowait": 2.35,
+   "slowCommitsPerMinute": 4.0,
+   "slowCommitsInASync": 0,
+   "slowCommits": 16,
+   "testHostReadMB": [
+    129.0,
+    24.0
+   ]
+  },
+  "d10/8/staggered-turns-only": {
+   "rounds": [
+    "p02-d-n8c0",
+    "p05-d-n8c0"
+   ],
+   "api": {
+    "n": 1920,
+    "p50": 9.47,
+    "p95": 27.45,
+    "p99": 128.61,
+    "max": 301.68
+   },
+   "apiWrite": {
+    "n": 480,
+    "p50": 13.38,
+    "p95": 102.49,
+    "p99": 184.94,
+    "max": 301.68
+   },
+   "apiErrors": 0,
+   "pgCommit": {
+    "n": 1204,
+    "p50": 6.18,
+    "p95": 113.963,
+    "p99": 236.659,
+    "max": 438.312
+   },
+   "pgRead": {
+    "n": 1237,
+    "p50": 0.288,
+    "p95": 33.589,
+    "p99": 153.596,
+    "max": 339.211
+   },
+   "syncfs": {
+    "n": 80,
+    "p50": 227.048,
+    "p95": 740.45,
+    "p99": 1397.729,
+    "max": 1397.729
+   },
+   "syncfsPerMinute": 20.0,
+   "runnerCommit": {
+    "n": 0,
+    "p50": null,
+    "p95": null,
+    "p99": null,
+    "max": null
+   },
+   "pgIoSome": 4.54,
+   "sdbUtil": 36.66,
+   "hostIoSome": 3.06,
+   "iowait": 2.96,
+   "slowCommitsPerMinute": 17.0,
+   "slowCommitsInASync": 64,
+   "slowCommits": 68,
+   "testHostReadMB": [
+    77.1,
+    3.1
+   ]
+  }
+ },
+ "bound": {
+  "d10/1/lockstep": {
+   "apiP99": {
+    "value": 37.21,
+    "control": 50.98,
+    "limit": 63.7,
+    "within": true
+   },
+   "pgCommitP99": {
+    "value": 56.022,
+    "control": 50.007,
+    "limit": 75.0,
+    "within": true
+   },
+   "pgIoSome": {
+    "value": 1.98,
+    "control": 2.0,
+    "limit": 7.0,
+    "within": true
+   },
+   "runnerCommitP50": {
+    "value": 741.0,
+    "control": 729.0,
+    "limit": 1729.0,
+    "within": true
+   },
+   "withinAll": true
+  },
+  "t02c/1/lockstep": {
+   "apiP99": {
+    "value": 58.1,
+    "control": 50.98,
+    "limit": 63.7,
+    "within": true
+   },
+   "pgCommitP99": {
+    "value": 45.611,
+    "control": 50.007,
+    "limit": 75.0,
+    "within": true
+   },
+   "pgIoSome": {
+    "value": 2.2,
+    "control": 2.0,
+    "limit": 7.0,
+    "within": true
+   },
+   "runnerCommitP50": {
+    "value": 775.0,
+    "control": 729.0,
+    "limit": 1729.0,
+    "within": true
+   },
+   "withinAll": true
+  },
+  "d10/4/lockstep": {
+   "apiP99": {
+    "value": 67.83,
+    "control": 57.57,
+    "limit": 72.0,
+    "within": true
+   },
+   "pgCommitP99": {
+    "value": 86.385,
+    "control": 114.531,
+    "limit": 171.8,
+    "within": true
+   },
+   "pgIoSome": {
+    "value": 3.28,
+    "control": 3.18,
+    "limit": 8.18,
+    "within": true
+   },
+   "runnerCommitP50": {
+    "value": 844.0,
+    "control": 687.0,
+    "limit": 1687.0,
+    "within": true
+   },
+   "withinAll": true
+  },
+  "t02c/4/lockstep": {
+   "apiP99": {
+    "value": 130.02,
+    "control": 57.57,
+    "limit": 72.0,
+    "within": false
+   },
+   "pgCommitP99": {
+    "value": 341.447,
+    "control": 114.531,
+    "limit": 171.8,
+    "within": false
+   },
+   "pgIoSome": {
+    "value": 5.71,
+    "control": 3.18,
+    "limit": 8.18,
+    "within": true
+   },
+   "runnerCommitP50": {
+    "value": 1789.0,
+    "control": 687.0,
+    "limit": 1687.0,
+    "within": false
+   },
+   "withinAll": false
+  },
+  "d10/8/lockstep": {
+   "apiP99": {
+    "value": 147.49,
+    "control": 106.84,
+    "limit": 133.6,
+    "within": false
+   },
+   "pgCommitP99": {
+    "value": 375.142,
+    "control": 172.426,
+    "limit": 258.6,
+    "within": false
+   },
+   "pgIoSome": {
+    "value": 5.24,
+    "control": 3.65,
+    "limit": 8.65,
+    "within": true
+   },
+   "runnerCommitP50": {
+    "value": 1138.0,
+    "control": 857.0,
+    "limit": 1857.0,
+    "within": true
+   },
+   "withinAll": false
+  },
+  "t02c/8/lockstep": {
+   "apiP99": {
+    "value": 272.69,
+    "control": 106.84,
+    "limit": 133.6,
+    "within": false
+   },
+   "pgCommitP99": {
+    "value": 676.04,
+    "control": 172.426,
+    "limit": 258.6,
+    "within": false
+   },
+   "pgIoSome": {
+    "value": 8.35,
+    "control": 3.65,
+    "limit": 8.65,
+    "within": true
+   },
+   "runnerCommitP50": {
+    "value": 3960.0,
+    "control": 857.0,
+    "limit": 1857.0,
+    "within": false
+   },
+   "withinAll": false
+  },
+  "d10/1/staggered": {
+   "apiP99": {
+    "value": 32.86,
+    "control": 44.83,
+    "limit": 56.0,
+    "within": true
+   },
+   "pgCommitP99": {
+    "value": 27.041,
+    "control": 71.191,
+    "limit": 106.8,
+    "within": true
+   },
+   "pgIoSome": {
+    "value": 1.85,
+    "control": 2.29,
+    "limit": 7.29,
+    "within": true
+   },
+   "runnerCommitP50": {
+    "value": 731.0,
+    "control": 629.0,
+    "limit": 1629.0,
+    "within": true
+   },
+   "withinAll": true
+  },
+  "t02c/1/staggered": {
+   "apiP99": {
+    "value": 33.56,
+    "control": 44.83,
+    "limit": 56.0,
+    "within": true
+   },
+   "pgCommitP99": {
+    "value": 32.44,
+    "control": 71.191,
+    "limit": 106.8,
+    "within": true
+   },
+   "pgIoSome": {
+    "value": 1.89,
+    "control": 2.29,
+    "limit": 7.29,
+    "within": true
+   },
+   "runnerCommitP50": {
+    "value": 720.0,
+    "control": 629.0,
+    "limit": 1629.0,
+    "within": true
+   },
+   "withinAll": true
+  },
+  "d10/4/staggered": {
+   "apiP99": {
+    "value": 54.15,
+    "control": 49.46,
+    "limit": 61.8,
+    "within": true
+   },
+   "pgCommitP99": {
+    "value": 93.287,
+    "control": 156.405,
+    "limit": 234.6,
+    "within": true
+   },
+   "pgIoSome": {
+    "value": 2.47,
+    "control": 2.7,
+    "limit": 7.7,
+    "within": true
+   },
+   "runnerCommitP50": {
+    "value": 773.0,
+    "control": 679.0,
+    "limit": 1679.0,
+    "within": true
+   },
+   "withinAll": true
+  },
+  "t02c/4/staggered": {
+   "apiP99": {
+    "value": 85.71,
+    "control": 49.46,
+    "limit": 61.8,
+    "within": false
+   },
+   "pgCommitP99": {
+    "value": 430.56,
+    "control": 156.405,
+    "limit": 234.6,
+    "within": false
+   },
+   "pgIoSome": {
+    "value": 3.79,
+    "control": 2.7,
+    "limit": 7.7,
+    "within": true
+   },
+   "runnerCommitP50": {
+    "value": 721.0,
+    "control": 679.0,
+    "limit": 1679.0,
+    "within": true
+   },
+   "withinAll": false
+  },
+  "d10/8/staggered": {
+   "apiP99": {
+    "value": 132.71,
+    "control": 137.36,
+    "limit": 171.7,
+    "within": true
+   },
+   "pgCommitP99": {
+    "value": 314.399,
+    "control": 399.888,
+    "limit": 599.8,
+    "within": true
+   },
+   "pgIoSome": {
+    "value": 5.37,
+    "control": 5.13,
+    "limit": 10.13,
+    "within": true
+   },
+   "runnerCommitP50": {
+    "value": 873.0,
+    "control": 671.0,
+    "limit": 1671.0,
+    "within": true
+   },
+   "withinAll": true
+  },
+  "t02c/8/staggered": {
+   "apiP99": {
+    "value": 224.89,
+    "control": 137.36,
+    "limit": 171.7,
+    "within": false
+   },
+   "pgCommitP99": {
+    "value": 758.866,
+    "control": 399.888,
+    "limit": 599.8,
+    "within": false
+   },
+   "pgIoSome": {
+    "value": 8.53,
+    "control": 5.13,
+    "limit": 10.13,
+    "within": true
+   },
+   "runnerCommitP50": {
+    "value": 906.0,
+    "control": 671.0,
+    "limit": 1671.0,
+    "within": true
+   },
+   "withinAll": false
+  },
+  "d10/8/staggered-turns-only": {
+   "apiP99": {
+    "value": 128.61,
+    "control": 68.81,
+    "limit": 86.0,
+    "within": false
+   },
+   "pgCommitP99": {
+    "value": 236.659,
+    "control": 119.562,
+    "limit": 179.3,
+    "within": false
+   },
+   "pgIoSome": {
+    "value": 4.54,
+    "control": 3.68,
+    "limit": 8.68,
+    "within": true
+   },
+   "withinAll": false
+  }
+ }
+}

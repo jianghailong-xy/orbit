@@ -18,7 +18,7 @@ import type {
 } from '@orbit/shared';
 import { LOGIN_FAILURE_REASONS } from '@orbit/shared';
 import { generateToken, sha256 } from '../common/crypto.util';
-import { namedRunnerEngines, sanitizeRunnerEngines } from '../common/runner-engines';
+import { namedRunnerEngines, sanitizeRunnerEngines, usedPlanUsage, usedRunnerEngines } from '../common/runner-engines';
 import {
   antigravityGoogleLoginRefusal,
   antigravitySignInUnderWay,
@@ -44,6 +44,7 @@ import {
 import { CURSOR_RUNNER_UPGRADE_ERROR, runnerKnowsCursor } from '../runner-api/runner-provider-support';
 import { loginCodeRelay } from './login-code-relay';
 import { engineKeepsAccounts } from '../common/runner-engines';
+import { ENGINE_LABELS } from '../sessions/engine-signin-preflight';
 import { ACCOUNT_ID_PATTERN, CreateEnrollmentTokenDto, StartLoginDto, UpdateRunnerDto } from './dto';
 import { accountPauseUntil } from '../common/account-pause';
 import { refuseManagedRunnerDeletion, refuseManagedRunnerRotation } from '../managed-runners/managed-runner-delete';
@@ -163,10 +164,12 @@ export class RunnersService {
         heartbeatDraining: true,
         // Per-engine health, and any install the user started for one of them — both drive the
         // engine rows under each machine on Infrastructure. The accounts carry the names given
-        // them here (namedRunnerEngines), not only the ones the runner reports.
+        // them here, not only the ones the runner reports, and leave out a Default removed from
+        // Orbit (usedRunnerEngines).
         engines: true,
         accountNames: true,
         accountPauses: true,
+        defaultRemoved: true,
         installStatus: true,
         installEngine: true,
         installCommand: true,
@@ -196,6 +199,10 @@ export class RunnersService {
     // A runner heartbeats every 30s; treat a missed window as offline so the UI
     // reflects dropouts without waiting for a background reaper.
     const now = Date.now();
+    // Each runner's engines as Orbit uses them (usedRunnerEngines): named, paused, and without a
+    // Default removed from Orbit. null (not []) for a runner that has never reported: "we don't know
+    // yet" and "nothing is installed" are different answers, and only one of them is ours to make up.
+    const used = runners.map((runner) => usedRunnerEngines(runner));
     return runners.map(({
       availableCommands,
       availableSkills,
@@ -203,6 +210,7 @@ export class RunnersService {
       engines,
       accountNames,
       accountPauses,
+      defaultRemoved,
       installStatus,
       installEngine,
       installCommand,
@@ -214,15 +222,15 @@ export class RunnersService {
       codexAccountRemoveMessage,
       selfUpdate,
       ...r
-    }) => ({
+    }, index) => ({
       ...r,
+      // Without the part of a removed Default, as the engines are.
+      planUsage: usedPlanUsage(r.planUsage, used[index]),
       // Never expose null or malformed JSON: clients can always index this as a provider map.
       runtimeDefaultModels: sanitizeRuntimeDefaultModels(runtimeDefaultModels),
       selfUpdate: sanitizeRunnerSelfUpdate(selfUpdate),
-      // null (not []) for a runner that has never reported: "we don't know yet" and "nothing is
-      // installed" are different answers, and only one of them is ours to make up.
-      engines: namedRunnerEngines({ engines, accountNames, accountPauses }),
-      antigravity: antigravityState({ capabilities: r.capabilities, engines }),
+      engines: used[index],
+      antigravity: antigravityState({ capabilities: r.capabilities, engines: used[index] }),
       install: installStateOf({
         installStatus,
         installEngine,
@@ -593,9 +601,9 @@ export class RunnersService {
    * the CLI keeps in it — a CODEX_HOME, a CLAUDE_CONFIG_DIR — and the record beside it. The runner
    * is woken to heartbeat at once, picks it up there and reports what happened.
    *
-   * `default` is refused here rather than on the runner: it is the directory the machine's own
-   * environment selects, and the one the CLI typed in a terminal shares, so there is nothing to
-   * remove without taking the user's own login with it.
+   * `default` never reaches the runner: it is the directory the machine's own environment selects,
+   * and the one the CLI typed in a terminal shares, so there is nothing to remove there without taking
+   * the user's own login with it. It is removed from Orbit instead (removeDefault).
    *
    * A runner that has not declared that engine's account-removal capability is refused in words the
    * person who pressed the button can act on — the alternative is a request that sits pending until
@@ -618,11 +626,7 @@ export class RunnersService {
     if (!ACCOUNT_ID_PATTERN.test(account ?? '')) {
       throw new BadRequestException('Unknown account');
     }
-    if (account === 'default') {
-      throw new BadRequestException(
-        `Default is this machine's own login, which the CLI in a terminal shares — it cannot be removed`,
-      );
-    }
+    if (account === 'default') return this.removeDefault(ownerId, id, engine);
     const runner = await this.prisma.runner.findFirst({ where: { id, ownerId } });
     if (!runner) throw new NotFoundException('runner not found');
     const capability = ACCOUNT_REMOVE_CAPABILITIES[engine];
@@ -642,6 +646,55 @@ export class RunnersService {
     // Delivered on the runner's next heartbeat; have that be now, as for a sign-in.
     this.realtime?.notifyRunnerWake(id);
     return accountRemoveStateOf(r);
+  }
+
+  /**
+   * Remove this runner's Default of `engine` from Orbit. The machine keeps it and its sign-in, and the
+   * CLI in a terminal there keeps working on it; Orbit stops listing and using it. Orbit's own record,
+   * kept in `runner.default_removed`, so the runner takes no part: no relay row, no wake, no
+   * capability to declare, and it can be offline. The answer is the removal done, at once.
+   *
+   * Only while the runner reports another account of that engine: Default is otherwise the one
+   * account Orbit has there, and is refused in words that say what to do first. The engine goes into
+   * the list in the statement itself, once however often it is asked, so two removals at once cannot
+   * lose either.
+   */
+  private async removeDefault(ownerId: string, id: string, engine: LoginEngine): Promise<RunnerAccountRemoveState> {
+    const runner = await this.prisma.runner.findFirst({ where: { id, ownerId }, select: { engines: true } });
+    if (!runner) throw new NotFoundException('runner not found');
+    const another = sanitizeRunnerEngines(runner.engines)
+      ?.find((entry) => entry.engine === engine)
+      ?.accounts?.some((entry) => entry.id !== 'default');
+    if (!another) {
+      throw new BadRequestException(`Add another ${ENGINE_LABELS[engine]} account to this machine before removing Default.`);
+    }
+    const written = await this.prisma.$executeRaw`
+      UPDATE "runner"
+         SET "default_removed" = CASE
+               WHEN ${engine}::text = ANY("default_removed") THEN "default_removed"
+               ELSE array_append("default_removed", ${engine}::text)
+             END
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
+    if (written === 0) throw new NotFoundException('runner not found');
+    return { engine, account: 'default', status: 'done', message: null };
+  }
+
+  /**
+   * Bring this runner's Default of `engine` back into Orbit, after removeAccount removed it: the
+   * engine comes out of `runner.default_removed` in one statement. Orbit's own record, so the runner
+   * need not be online, and bringing back a Default that is not removed is the same state, not an
+   * error.
+   */
+  async restoreDefault(ownerId: string, id: string, engine: LoginEngine): Promise<{ ok: true }> {
+    if (!engineKeepsAccounts(engine)) {
+      throw new BadRequestException(`Only an engine that keeps accounts has a Default to bring back`);
+    }
+    const written = await this.prisma.$executeRaw`
+      UPDATE "runner"
+         SET "default_removed" = array_remove("default_removed", ${engine}::text)
+       WHERE "id" = ${id}::uuid AND "owner_id" = ${ownerId}::uuid`;
+    if (written === 0) throw new NotFoundException('runner not found');
+    return { ok: true };
   }
 
   /**

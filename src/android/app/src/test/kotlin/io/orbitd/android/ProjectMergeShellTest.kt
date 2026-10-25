@@ -41,12 +41,12 @@ class ProjectMergeShellTest {
 
     private val launch = ProjectShell.LAUNCH
     private fun ago(minutes: Long) = Instant.now().minusSeconds(minutes * 60).toString()
-    private fun candidate(state: String, conflicts: String = "[]", execution: String? = null) = """{"promotionId":"pr-1","state":"$state",
+    private fun candidate(state: String, conflicts: String = "[]", execution: String? = null, extra: String = "") = """{"promotionId":"pr-1","state":"$state",
         "sourceRef":"refs/heads/project/launch","sourceSha":"5e5bfca23aa1","upstreamRef":"refs/heads/main","commitsAhead":7,"filesChanged":10,
         "taskIds":["t1","t2","t3","t4"],"tasks":[{"taskId":"t1","title":"Fix D1"},{"taskId":"t2","title":"Logs off by default"},
         {"taskId":"t3","title":"P6 end to end"},{"taskId":"t4","title":"P7 rehearsal"}],
         "checks":[{"name":"MERGE_CHECK","command":"npm test","expectedExitCode":0,"exitCode":0,"timedOut":false,"durationMs":372000}],
-        "conflicts":$conflicts,"landsAs":"MERGE_COMMIT","askedAt":"${ago(130)}","merged":null${execution?.let { ",\"execution\":$it" }.orEmpty()}}"""
+        "conflicts":$conflicts,"landsAs":"MERGE_COMMIT","askedAt":"${ago(130)}","merged":null${execution?.let { ",\"execution\":$it" }.orEmpty()}$extra}"""
     private val criteria = """[{"key":"c1","text":"Notes exist","satisfied":true},{"key":"c2","text":"Contract written","satisfied":true},
         {"key":"c3","text":"Smoke passes","satisfied":false}]"""
 
@@ -123,6 +123,53 @@ class ProjectMergeShellTest {
         title("Merging into main…")
         inCard("confirmed — publishing the tested tree to main")
         compose.onNodeWithTag("project-merge-card:cancel").assertIsNotEnabled()
+    }
+
+    /** §3.3 M-T10 (iOS 262153779, web ProjectMergeStrip): a stop asked for on a confirmed merge is the server's `cancelRequested`, never
+     * the job's phase. The card says it is cancelling, when the runner stops and that the merge may still go through; the merge job's
+     * head carries the clause, Cancel is the dead `Cancel requested` in its place, and the queue's foot goes. Past the push boundary the
+     * ask came too late, and the status is the job's own step again. */
+    @Test fun aStopAskedForIsTheCancellingCardOnEitherSideOfThePush() {
+        fun confirmed(phase: String, extra: String = "") = candidate("CONFIRMED",
+            execution = """{"state":"RUNNING","phase":"$phase","startedAt":"${ago(1)}"}""", extra = extra)
+        ProjectShell.mergeCheck = true; ProjectShell.mergeJobKind = "LAND_PROMOTION"
+        ProjectShell.inFlightJobs = """[{"jobId":"j-merge","kind":"LAND_PROMOTION","state":"RUNNING","phase":"CHECK","taskId":null,"taskTitle":null,
+            "promotionId":"pr-1","generation":1,"startedAt":"${ago(1)}","queuedAt":"${ago(2)}","heartbeatAt":"${ago(0)}","runnerName":"wikova",
+            "timedOut":false,"limitSeconds":600,"retryable":false},
+            {"jobId":"j-task","kind":"LAND_TASK","state":"QUEUED","phase":null,"taskId":"t-2","taskTitle":"Logs off by default","generation":1,
+            "startedAt":"${ago(1)}","queuedAt":"${ago(1)}","heartbeatAt":null,"runnerName":null,"timedOut":false,"limitSeconds":null,"retryable":false}]"""
+        ProjectShell.promotion = confirmed("CHECK")
+        openPage()
+        val card = hasAnyAncestor(hasTestTag("project-merge-card:merging"))
+        fun headDetail() = compose.onAllNodes(hasTestTag("landing-head:detail") and card, useUnmergedTree = true).fetchSemanticsNodes()
+            .firstOrNull()?.config?.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+        // Nothing asked yet: the merging card as it always was, its Cancel live and the queued landing's way in at its foot.
+        await { exists(hasTestTag("project-merge-card:merging")) && exists(hasTestTag("project-merge-card:more-jobs")) }
+        title("Re-checking before merging into main…")
+        compose.onNodeWithTag("project-merge-card:cancel").assertIsEnabled()
+        await { headDetail() != null }
+        assertFalse(headDetail()!!.contains("stop requested"))
+
+        // Asked before the push: the cancelling card.
+        ProjectShell.promotion = confirmed("CHECK", ""","cancelRequested":true,"pushBoundaryPassed":false""")
+        title("Cancelling the merge…")
+        compose.onNodeWithTag("project-merge-card:status").assert(hasText("Stops at the runner’s next report, within 30 s · nothing has been pushed"))
+        compose.onNodeWithTag("project-merge-card:note").assert(hasText("If the push starts before it stops, the merge goes through and this card says so."))
+        compose.onNodeWithTag("project-merge-card:cancel-requested").assertIsNotEnabled().assert(hasText("Cancel requested"))
+        assertFalse(exists(hasTestTag("project-merge-card:cancel")))
+        assertFalse("a stop asked for draws no queue foot", exists(hasTestTag("project-merge-card:more-jobs"), unmerged = true))
+        await { headDetail()?.endsWith(" · stop requested") == true }
+        assertTrue(exists(hasTestTag("project-merge-card:open-landing"), unmerged = true))
+
+        // Asked past the push boundary: too late — the push is the fact, so the status line is the job's step again.
+        ProjectShell.promotion = confirmed("PUSH", ""","cancelRequested":true,"pushBoundaryPassed":true""")
+        title("Too late to cancel — the push has started")
+        compose.onNodeWithTag("project-merge-card:status").assert(hasText("confirmed — publishing the tested tree to main"))
+        compose.onNodeWithTag("project-merge-card:note").assert(hasText("If the push starts before it stops, the merge goes through and this card says so."))
+        compose.onNodeWithTag("project-merge-card:cancel-requested").assertIsNotEnabled()
+        assertFalse(exists(hasTestTag("project-merge-card:more-jobs"), unmerged = true))
+        assertTrue(headDetail()!!.endsWith(" · stop requested"))
+        assertTrue("nothing on the card asked the server for anything", ProjectShell.calls.none { it.startsWith("POST ") })
     }
 
     /** D: why it cannot merge, who has it, the coordinator one press away — and the whole of it in Details. */
@@ -279,7 +326,8 @@ class ProjectMergeShellTest {
         compose.onNodeWithTag("workspace:${ProjectShell.ALPHA}").performClick()
         await { exists(hasText("Plain notes") and hasClickAction()) }
         compose.onNode(hasText("Plain notes") and hasClickAction()).performClick()
-        await { exists(hasTestTag("needs-you-bar")) && exists(hasText("Approve merge to main · Launch"), unmerged = true) }
+        await { exists(hasTestTag("needs-you-bar-text") and hasText("Approve merge to main"), unmerged = true) &&
+            exists(hasTestTag("needs-you-bar-detail") and hasText("Launch"), unmerged = true) }
         compose.onNodeWithTag("needs-you-bar").performClick()
         await { exists(hasTestTag("project-sessions")) && exists(hasTestTag("project-merge-card:asking")) }
         assertFalse("the coordinator conversation is not where it opens", ProjectShell.calls.contains("GET sessions/${ProjectShell.COORD}"))

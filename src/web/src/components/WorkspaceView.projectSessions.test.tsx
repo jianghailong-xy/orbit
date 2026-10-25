@@ -1268,3 +1268,256 @@ describe('the merge into main on the project sessions page', { timeout: 60_000 }
     expect(receipt.textContent).toContain('Fix the runner gate');
   });
 });
+
+/**
+ * The Landings group (owner 2026-10-19, board v4 04 c1; contract §2.9 LS6): under the coordinator,
+ * above the page's own timeline, listing what waits and what settled within the day — never a
+ * landing in flight, never a merge round that merged — and counted by none of the page's numbers.
+ */
+describe('the project sessions page — the Landings group', () => {
+  const LANDING = (n: number, title: string, landing: Record<string, unknown>, over: Record<string, unknown> = {}) => row(n, title, {
+    projectMembership: membership('TASK'),
+    sessionKind: 'LANDING',
+    startup: null,
+    landing,
+    ...over,
+  });
+  const awaiting = (subject: 'TASK' | 'PROMOTION' = 'TASK') => ({
+    subject, state: 'AWAITING_DECISION', settledAs: null, settledAt: null,
+  });
+  const settled = (settledAs: string, minutesAgo: number, subject: 'TASK' | 'PROMOTION' = 'TASK') => ({
+    subject, state: 'SETTLED', settledAs,
+    settledAt: new Date(Date.now() - minutesAgo * 60_000).toISOString(),
+  });
+  const group = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.session-project-landings');
+  const landingRows = (): HTMLElement[] =>
+    [...(group()?.querySelectorAll<HTMLElement>('.session-project-landing-row') ?? [])];
+  const sectionHead = (): string => group()?.querySelector('.session-section-head')?.textContent ?? '';
+  /** The fold's mark as `glyph:tone`, e.g. `✓:is-ok`. */
+  const foldMark = (fold: HTMLElement | null | undefined): string => {
+    const mark = fold?.querySelector<HTMLElement>('.session-project-landing-mark');
+    return `${mark?.textContent}:${mark?.className.replace('session-project-landing-mark ', '')}`;
+  };
+
+  it('lists the landings under the coordinator and above the page’s timeline', async () => {
+    rows = [LOOSE, COORDINATOR, TASK, LANDING(820, 'Land · Build the package', awaiting())];
+    await mount();
+    await openSessions();
+
+    expect(group()).not.toBeNull();
+    expect(sectionHead()).toBe('Landings');
+    const heads = [...mounted().querySelectorAll<HTMLElement>('.session-col-list .session-section-head')]
+      .map((head) => head.textContent);
+    expect(heads[0]).toBe('Coordinator');
+    expect(heads[1]).toBe('Landings');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · Build the package']);
+    // The waiting row says the outcome and who holds it, and how long it has waited.
+    expect(landingRows()[0]!.querySelector('.session-project-merge-row-detail')?.textContent)
+      .toBe('Waiting for a decision');
+    // The row is no conversation: it is not among the session rows.
+    expect(sessionRows().map((row) => row.querySelector('.session-title')?.textContent))
+      .not.toContain('Land · Build the package');
+  });
+
+  it('keeps a LANDING row out of the page’s count, its running number and its timeline', async () => {
+    rows = [LOOSE, COORDINATOR, TASK, LANDING(820, 'Land · Build the package', awaiting(), {
+      status: 'RUNNING', runState: 'RUNNING',
+    })];
+    await mount();
+    await openSessions();
+
+    // The project's TWO conversations, whatever its landings are doing — the landing itself would
+    // make it three, and its RUNNING row a second running one.
+    expect(mounted().querySelector('.session-folder-workspace')?.textContent).toBe('Project · 2 sessions');
+    expect(page()!.querySelector('.session-project-page-progress')?.textContent).toContain('1 running');
+    // And it is not in the time sections either: only the conversations are.
+    expect(sessionRows().map((row) => row.querySelector('.session-title')?.textContent))
+      .toEqual(expect.arrayContaining([COORDINATOR.title, TASK.title]));
+  });
+
+  it('opens the landing session the row is about', async () => {
+    const landing = LANDING(820, 'Land · Build the package', awaiting());
+    rows = [LOOSE, COORDINATOR, TASK, landing];
+    await mount();
+    await openSessions();
+    await click(landingRows()[0], 'the landing row');
+    expect(location).toBe(`/sessions/${landing.id}?project=${PROJECT_ID}`);
+  });
+
+  it('lists the day’s outcomes, folds the rest into one line, and opens it', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(821, 'Land · checks failed', awaiting()),
+      LANDING(822, 'Land · landed today', settled('LANDED', 60)),
+      LANDING(823, 'Land · nothing today', settled('NOTHING_TO_LAND', 180)),
+      LANDING(824, 'Land · landed long ago', settled('LANDED', 30 * 60)),
+      LANDING(825, 'Land · nothing long ago', settled('NOTHING_TO_LAND', 50 * 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed', 'Land · landed today', 'Land · nothing today']);
+    const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
+    expect(fold?.textContent).toContain('Earlier · 1 landed · 1 nothing to land');
+    // A fold that counts landings wears v4 04 c1's green ✓ while closed.
+    expect(foldMark(fold)).toBe('✓:is-ok');
+    expect(landingRows()).toHaveLength(3);
+    // Open it: the folded ones are the rows the count named.
+    await click(fold, 'the fold');
+    expect(foldMark(fold)).toBe('◌:is-quiet');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(expect.arrayContaining(['Land · landed long ago', 'Land · nothing long ago']));
+  });
+
+  it('leaves a zero count out of the fold’s line, and still opens to every older row', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(821, 'Land · checks failed', awaiting()),
+      LANDING(824, 'Land · landed long ago', settled('LANDED', 30 * 60)),
+      LANDING(828, 'Land · cancelled long ago', settled('CANCELLED', 40 * 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
+    expect(fold?.querySelector('.session-project-landing-fold-text')?.textContent).toBe('Earlier · 1 landed');
+    expect(foldMark(fold)).toBe('✓:is-ok');
+    await click(fold, 'the fold');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed', 'Land · landed long ago', 'Land · cancelled long ago']);
+  });
+
+  it('folds older landings neither count names under a bare Earlier, and opens onto them', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(821, 'Land · checks failed', awaiting()),
+      LANDING(828, 'Land · cancelled long ago', settled('CANCELLED', 40 * 60)),
+      LANDING(829, 'Land · handled long ago', settled('HANDLED', 50 * 60)),
+      LANDING(831, 'Land · declined long ago', settled('DECLINED', 60 * 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
+    expect(fold).not.toBeNull();
+    expect(fold?.querySelector('.session-project-landing-fold-text')?.textContent).toBe('Earlier');
+    expect(fold?.getAttribute('aria-expanded')).toBe('false');
+    // A bare fold is no success: its closed ✓ is grey, as iOS and Android draw a closed fold.
+    expect(foldMark(fold)).toBe('✓:is-quiet');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed']);
+    await click(fold, 'the fold');
+    expect(fold?.getAttribute('aria-expanded')).toBe('true');
+    expect(foldMark(fold)).toBe('◌:is-quiet');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed', 'Land · cancelled long ago', 'Land · handled long ago', 'Land · declined long ago']);
+    expect(landingRows().slice(1).map((row) => row.querySelector('.session-project-merge-row-detail')?.textContent))
+      .toEqual(['Cancelled', 'Handled', 'Declined']);
+  });
+
+  it('is a group of one bare fold when its only landings are old ones neither count names', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(828, 'Land · cancelled long ago', settled('CANCELLED', 40 * 60)),
+      LANDING(829, 'Land · handled long ago', settled('HANDLED', 50 * 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    expect(sectionHead()).toBe('Landings');
+    expect(landingRows()).toEqual([]);
+    const fold = group()?.querySelector<HTMLButtonElement>('.session-project-landing-fold');
+    expect(fold?.querySelector('.session-project-landing-fold-text')?.textContent).toBe('Earlier');
+    expect(foldMark(fold)).toBe('✓:is-quiet');
+    await click(fold, 'the fold');
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · cancelled long ago', 'Land · handled long ago']);
+  });
+
+  it('draws no fold when nothing is older than the day', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(821, 'Land · checks failed', awaiting()),
+      LANDING(828, 'Land · cancelled today', settled('CANCELLED', 60)),
+    ];
+    await mount();
+    await openSessions();
+
+    expect(landingRows().map((row) => row.querySelector('.session-project-merge-row-title')?.textContent))
+      .toEqual(['Land · checks failed', 'Land · cancelled today']);
+    expect(group()?.querySelector('.session-project-landing-fold')).toBeNull();
+    expect(group()?.textContent).not.toContain('Earlier');
+  });
+
+  it('never lists a landing in flight, nor a merge round that merged', async () => {
+    rows = [
+      LOOSE, COORDINATOR, TASK,
+      LANDING(826, 'Land · still landing', { subject: 'TASK', state: 'IN_FLIGHT', settledAs: null, settledAt: null }),
+      LANDING(827, 'Merge project → main · #8', settled('MERGED', 30, 'PROMOTION')),
+    ];
+    await mount();
+    await openSessions();
+    // Nothing but those two: no group at all.
+    expect(group()).toBeNull();
+    expect(mounted().textContent).not.toContain('Land · still landing');
+    expect(mounted().textContent).not.toContain('Merge project → main · #8');
+  });
+});
+
+/**
+ * The derived landing label at the bottom of a source work session (owner 2026-10-19, board v4
+ * 06 e): the newest generation of the landing work this conversation fed, in the integration
+ * line's words — blue while it moves, green once it landed, red where it stopped — opening the
+ * landing session. A conversation that fed none draws none.
+ */
+describe('the source work session’s landing label', () => {
+  const LANDING = pid(830);
+  const source = (sourceLanding: Record<string, unknown> | null) => [
+    LOOSE,
+    { ...COORDINATOR, sourceLanding },
+    TASK,
+  ];
+  const chip = (): HTMLElement | null => mounted().querySelector<HTMLElement>('.session-source-landing-chip');
+  const at = (landing: Record<string, unknown> | null) => ({
+    landingSessionId: LANDING, subject: 'TASK', state: 'RUNNING', phase: 'CHECK', settledAs: null,
+    targetRef: 'refs/heads/project/alpha', ...landing,
+  });
+
+  async function openSource(landing: Record<string, unknown> | null): Promise<void> {
+    rows = source(landing);
+    await mount(() => expect(chip() ?? mounted().querySelector('.workspace-header')).not.toBeNull(),
+      `/sessions/${COORDINATOR.id}`);
+  }
+
+  it('says it is landing while it moves, and opens the landing session', async () => {
+    await openSource(at({}));
+    expect(chip()?.textContent).toBe('Landing · checking ›');
+    // Read on a bare conversation route, so there is no list context to keep; from a project's
+    // sessions page the `?project=` rides along (LandingLink).
+    expect(chip()?.getAttribute('href')).toBe(`/sessions/${LANDING}`);
+    expect(chip()?.className).toContain('is-run');
+    // The pill wears the ring the board draws on it (06 e); the words say the same thing.
+    expect(chip()?.querySelector('svg[data-glyph="spinner"]')).not.toBeNull();
+  });
+
+  it('says where it landed, and what stopped it', async () => {
+    await openSource(at({ settledAs: 'LANDED' }));
+    expect(chip()?.textContent).toBe('On project/alpha ✓ ›');
+    expect(chip()?.className).toContain('is-landed');
+    // A landed label is not "in hand": no ring.
+    expect(chip()?.querySelector('svg[data-glyph="spinner"]')).toBeNull();
+  });
+
+  it('says checks failed in the failed ink, and draws nothing for no landing at all', async () => {
+    await openSource(at({ state: 'CHECK_FAILED' }));
+    expect(chip()?.textContent).toBe('Landing · checks failed ›');
+    expect(chip()?.className).toContain('is-failed');
+  });
+
+  it('draws none on a conversation that fed no landing work', async () => {
+    await openSource(null);
+    expect(chip()).toBeNull();
+  });
+});

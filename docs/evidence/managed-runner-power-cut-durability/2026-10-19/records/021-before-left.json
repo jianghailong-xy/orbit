@@ -1,0 +1,636 @@
+{
+ "checks": [
+  {
+   "check": "the copy was read from the snapshot, on the first node",
+   "ok": true,
+   "value": {
+    "fstype": "ext4",
+    "options": "rw,relatime",
+    "source": "/dev/rbd1",
+    "superOptions": "rw,stripe=1024"
+   }
+  },
+  {
+   "check": "the copy, its claim, PV and image, and the snapshot are gone",
+   "ok": true,
+   "value": "[]\n"
+  },
+  {
+   "check": "amy: the cut left damage of the kind T02 and T08x found (a repository unreadable or failing fsck, a returned commit missing, or the last turn missing from the transcript)",
+   "ok": true,
+   "value": {
+    "emptyGitFiles": {
+     "01a15527-aade-766a-b161-b52aff12bcba": [
+      "ORIG_HEAD",
+      "logs/refs/heads/orbit/t02c-amy-hold-a-turn-still-running-at-th-53371a",
+      "objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "objects/39/d9388b8e409ed655b0b6795b0e42ac1e2e6264",
+      "objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1",
+      "objects/61/0505e6f03b89887c6c327db2dd36dfca6fc644",
+      "objects/71/4f86b9093f7257af99c57b247d87c3a6718dd1",
+      "objects/8b/58c463928ab1a27f892bb6fd0527321e588198",
+      "objects/a5/def714b843e09fcbd492df0f71cec8cdabc5ff",
+      "objects/ab/cac63107d5ff01e0ca1c94f9f1ff7dd464e8ea",
+      "objects/ed/3bfdce83a22aa4db85a8759471aa065e4b52cc",
+      "refs/orbit-base/01a15527-bf1b-72da-9733-60e06f0238d1",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/COMMIT_EDITMSG",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/ORIG_HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/commondir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/gitdir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/logs/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/ORIG_HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/commondir",
+      "worktrees/_rebase-scratch-default-1e74b5/gitdir",
+      "worktrees/_rebase-scratch-default-1e74b5/logs/HEAD"
+     ],
+     "01a15527-b3fa-74d6-b522-8cd7dcf92922": [
+      "ORIG_HEAD",
+      "logs/refs/heads/orbit/t02c-amy-hold-a-turn-still-running-at-th-53371a",
+      "objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "objects/39/d9388b8e409ed655b0b6795b0e42ac1e2e6264",
+      "objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1",
+      "objects/61/0505e6f03b89887c6c327db2dd36dfca6fc644",
+      "objects/71/4f86b9093f7257af99c57b247d87c3a6718dd1",
+      "objects/8b/58c463928ab1a27f892bb6fd0527321e588198",
+      "objects/a5/def714b843e09fcbd492df0f71cec8cdabc5ff",
+      "objects/ab/cac63107d5ff01e0ca1c94f9f1ff7dd464e8ea",
+      "objects/ed/3bfdce83a22aa4db85a8759471aa065e4b52cc",
+      "refs/orbit-base/01a15527-bf1b-72da-9733-60e06f0238d1",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/COMMIT_EDITMSG",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/ORIG_HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/commondir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/gitdir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/logs/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/ORIG_HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/commondir",
+      "worktrees/_rebase-scratch-default-1e74b5/gitdir",
+      "worktrees/_rebase-scratch-default-1e74b5/logs/HEAD"
+     ],
+     "workspace": [
+      "ORIG_HEAD",
+      "logs/refs/heads/orbit/t02c-amy-hold-a-turn-still-running-at-th-53371a",
+      "objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "objects/39/d9388b8e409ed655b0b6795b0e42ac1e2e6264",
+      "objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1",
+      "objects/61/0505e6f03b89887c6c327db2dd36dfca6fc644",
+      "objects/71/4f86b9093f7257af99c57b247d87c3a6718dd1",
+      "objects/8b/58c463928ab1a27f892bb6fd0527321e588198",
+      "objects/a5/def714b843e09fcbd492df0f71cec8cdabc5ff",
+      "objects/ab/cac63107d5ff01e0ca1c94f9f1ff7dd464e8ea",
+      "objects/ed/3bfdce83a22aa4db85a8759471aa065e4b52cc",
+      "refs/orbit-base/01a15527-bf1b-72da-9733-60e06f0238d1",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/COMMIT_EDITMSG",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/ORIG_HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/commondir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/gitdir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/logs/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/ORIG_HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/commondir",
+      "worktrees/_rebase-scratch-default-1e74b5/gitdir",
+      "worktrees/_rebase-scratch-default-1e74b5/logs/HEAD"
+     ]
+    },
+    "fsckErrors": [
+     "01a15527-aade-766a-b161-b52aff12bcba",
+     "01a15527-b3fa-74d6-b522-8cd7dcf92922",
+     "workspace"
+    ],
+    "lastTurnInTheTranscript": {
+     "answer": 0,
+     "message": 0
+    },
+    "locks": {},
+    "returnedCommitsMissing": [
+     "runner merge into the workspace (returned)",
+     "s1 first engine commit",
+     "s1 last engine commit (returned: the turn ended)",
+     "s2 engine commit",
+     "s2 runner commit (returned: the merge took it)"
+    ],
+    "s3": {
+     "s3 engine commit (its turn still running)": {
+      "repoReadable": false,
+      "sha": "a5def714b843e09fcbd492df0f71cec8cdabc5ff"
+     }
+    },
+    "unreadable": [
+     "01a15527-aade-766a-b161-b52aff12bcba",
+     "01a15527-b3fa-74d6-b522-8cd7dcf92922",
+     "01a15527-bf1b-72da-9733-60e06f0238d1",
+     "workspace"
+    ]
+   }
+  }
+ ],
+ "endedAt": "2026-10-19T17:17:02.262+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "before",
+ "result": {
+  "asked": {
+   "commits": [
+    {
+     "label": "s1 first engine commit",
+     "ref": "HEAD",
+     "repo": "01a15527-aade-766a-b161-b52aff12bcba",
+     "sha": "db45ce2f391830dcc62928337be43ce5f4522898"
+    },
+    {
+     "label": "s1 last engine commit (returned: the turn ended)",
+     "ref": "HEAD",
+     "repo": "01a15527-aade-766a-b161-b52aff12bcba",
+     "sha": "8b58c463928ab1a27f892bb6fd0527321e588198"
+    },
+    {
+     "label": "s2 engine commit",
+     "ref": "HEAD",
+     "repo": "01a15527-b3fa-74d6-b522-8cd7dcf92922",
+     "sha": "b7ea9b9cc674816d83c68be2ba51a6835b5da2e7"
+    },
+    {
+     "label": "s2 runner commit (returned: the merge took it)",
+     "ref": "HEAD",
+     "repo": "01a15527-b3fa-74d6-b522-8cd7dcf92922",
+     "sha": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e"
+    },
+    {
+     "label": "runner merge into the workspace (returned)",
+     "ref": "HEAD",
+     "repo": "workspace",
+     "sha": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e"
+    },
+    {
+     "label": "s3 engine commit (its turn still running)",
+     "ref": "HEAD",
+     "repo": "01a15527-bf1b-72da-9733-60e06f0238d1",
+     "sha": "a5def714b843e09fcbd492df0f71cec8cdabc5ff"
+    }
+   ],
+   "markers": [
+    "T02C-AMY-S1",
+    "T02C-AMY-LAST",
+    "T08-WROTE-AMYLAST",
+    "tool result received: T08-WROTE-AMYLAST"
+   ],
+   "sessions": [
+    "01a15527-aade-766a-b161-b52aff12bcba",
+    "01a15527-b3fa-74d6-b522-8cd7dcf92922",
+    "01a15527-bf1b-72da-9733-60e06f0238d1"
+   ],
+   "transcript": "c1682585-7d95-425e-9a6d-8fe34c5c5b25"
+  },
+  "copy": {
+   "claim": "t02c-before-cut-171631",
+   "image": "orbit-mr-rbd/csi-vol-c35d0039-2119-41f5-af3f-f78596684951",
+   "info": "{\"name\":\"csi-vol-c35d0039-2119-41f5-af3f-f78596684951\",\"id\":\"4a4131752ad93\",\"size\":2147483648,\"objects\":512,\"order\":22,\"object_size\":4194304,\"snapshot_count\":1,\"block_name_prefix\":\"rbd_data.4a4131752ad93\",\"format\":2,\"features\":[\"layering\"],\"op_features\":[],\"flags\":[],\"create_timestamp\":\"Mon Oct 19 17:16:31 2026\",\"access_timestamp\":\"Mon Oct 19 17:16:31 2026\",\"modify_timestamp\":\"Mon Oct 19 17:16:31 2026\"}\n"
+  },
+  "cutAt": "2026-10-19T17:13:54.395+00:00",
+  "snapshot": {
+   "createdAt": "Mon Oct 19 17:14:23 2026",
+   "listed": [
+    {
+     "id": 3,
+     "name": "t02c-before-cut",
+     "protected": "false",
+     "size": 2147483648,
+     "timestamp": "Mon Oct 19 17:14:23 2026"
+    }
+   ],
+   "name": "orbit-mr-rbd/csi-vol-ba8c0def-ef4c-4028-ba57-626f4eed0fbd@t02c-before-cut"
+  },
+  "summary": {
+   "emptyGitFiles": {
+    "01a15527-aade-766a-b161-b52aff12bcba": [
+     "ORIG_HEAD",
+     "logs/refs/heads/orbit/t02c-amy-hold-a-turn-still-running-at-th-53371a",
+     "objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+     "objects/39/d9388b8e409ed655b0b6795b0e42ac1e2e6264",
+     "objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1",
+     "objects/61/0505e6f03b89887c6c327db2dd36dfca6fc644",
+     "objects/71/4f86b9093f7257af99c57b247d87c3a6718dd1",
+     "objects/8b/58c463928ab1a27f892bb6fd0527321e588198",
+     "objects/a5/def714b843e09fcbd492df0f71cec8cdabc5ff",
+     "objects/ab/cac63107d5ff01e0ca1c94f9f1ff7dd464e8ea",
+     "objects/ed/3bfdce83a22aa4db85a8759471aa065e4b52cc",
+     "refs/orbit-base/01a15527-bf1b-72da-9733-60e06f0238d1",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/COMMIT_EDITMSG",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/HEAD",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/ORIG_HEAD",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/commondir",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/gitdir",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/logs/HEAD",
+     "worktrees/_rebase-scratch-default-1e74b5/HEAD",
+     "worktrees/_rebase-scratch-default-1e74b5/ORIG_HEAD",
+     "worktrees/_rebase-scratch-default-1e74b5/commondir",
+     "worktrees/_rebase-scratch-default-1e74b5/gitdir",
+     "worktrees/_rebase-scratch-default-1e74b5/logs/HEAD"
+    ],
+    "01a15527-b3fa-74d6-b522-8cd7dcf92922": [
+     "ORIG_HEAD",
+     "logs/refs/heads/orbit/t02c-amy-hold-a-turn-still-running-at-th-53371a",
+     "objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+     "objects/39/d9388b8e409ed655b0b6795b0e42ac1e2e6264",
+     "objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1",
+     "objects/61/0505e6f03b89887c6c327db2dd36dfca6fc644",
+     "objects/71/4f86b9093f7257af99c57b247d87c3a6718dd1",
+     "objects/8b/58c463928ab1a27f892bb6fd0527321e588198",
+     "objects/a5/def714b843e09fcbd492df0f71cec8cdabc5ff",
+     "objects/ab/cac63107d5ff01e0ca1c94f9f1ff7dd464e8ea",
+     "objects/ed/3bfdce83a22aa4db85a8759471aa065e4b52cc",
+     "refs/orbit-base/01a15527-bf1b-72da-9733-60e06f0238d1",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/COMMIT_EDITMSG",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/HEAD",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/ORIG_HEAD",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/commondir",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/gitdir",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/logs/HEAD",
+     "worktrees/_rebase-scratch-default-1e74b5/HEAD",
+     "worktrees/_rebase-scratch-default-1e74b5/ORIG_HEAD",
+     "worktrees/_rebase-scratch-default-1e74b5/commondir",
+     "worktrees/_rebase-scratch-default-1e74b5/gitdir",
+     "worktrees/_rebase-scratch-default-1e74b5/logs/HEAD"
+    ],
+    "workspace": [
+     "ORIG_HEAD",
+     "logs/refs/heads/orbit/t02c-amy-hold-a-turn-still-running-at-th-53371a",
+     "objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+     "objects/39/d9388b8e409ed655b0b6795b0e42ac1e2e6264",
+     "objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1",
+     "objects/61/0505e6f03b89887c6c327db2dd36dfca6fc644",
+     "objects/71/4f86b9093f7257af99c57b247d87c3a6718dd1",
+     "objects/8b/58c463928ab1a27f892bb6fd0527321e588198",
+     "objects/a5/def714b843e09fcbd492df0f71cec8cdabc5ff",
+     "objects/ab/cac63107d5ff01e0ca1c94f9f1ff7dd464e8ea",
+     "objects/ed/3bfdce83a22aa4db85a8759471aa065e4b52cc",
+     "refs/orbit-base/01a15527-bf1b-72da-9733-60e06f0238d1",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/COMMIT_EDITMSG",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/HEAD",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/ORIG_HEAD",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/commondir",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/gitdir",
+     "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/logs/HEAD",
+     "worktrees/_rebase-scratch-default-1e74b5/HEAD",
+     "worktrees/_rebase-scratch-default-1e74b5/ORIG_HEAD",
+     "worktrees/_rebase-scratch-default-1e74b5/commondir",
+     "worktrees/_rebase-scratch-default-1e74b5/gitdir",
+     "worktrees/_rebase-scratch-default-1e74b5/logs/HEAD"
+    ]
+   },
+   "fsckErrors": [
+    "01a15527-aade-766a-b161-b52aff12bcba",
+    "01a15527-b3fa-74d6-b522-8cd7dcf92922",
+    "workspace"
+   ],
+   "lastTurnInTheTranscript": {
+    "answer": 0,
+    "message": 0
+   },
+   "locks": {},
+   "returnedCommitsMissing": [
+    "runner merge into the workspace (returned)",
+    "s1 first engine commit",
+    "s1 last engine commit (returned: the turn ended)",
+    "s2 engine commit",
+    "s2 runner commit (returned: the merge took it)"
+   ],
+   "s3": {
+    "s3 engine commit (its turn still running)": {
+     "repoReadable": false,
+     "sha": "a5def714b843e09fcbd492df0f71cec8cdabc5ff"
+    }
+   },
+   "unreadable": [
+    "01a15527-aade-766a-b161-b52aff12bcba",
+    "01a15527-b3fa-74d6-b522-8cd7dcf92922",
+    "01a15527-bf1b-72da-9733-60e06f0238d1",
+    "workspace"
+   ]
+  },
+  "view": {
+   "commits": {
+    "runner merge into the workspace (returned)": {
+     "branchCheck": "home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: Not a valid commit name 22957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+     "object": "ERROR: ject file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: git cat-file: could not get object info",
+     "onTheBranch": false,
+     "ref": "HEAD",
+     "sha": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e"
+    },
+    "s1 first engine commit": {
+     "branchCheck": "y\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nfatal: Not a valid commit name HEAD",
+     "object": "commit",
+     "onTheBranch": false,
+     "ref": "HEAD",
+     "sha": "db45ce2f391830dcc62928337be43ce5f4522898"
+    },
+    "s1 last engine commit (returned: the turn ended)": {
+     "branchCheck": "home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nfatal: Not a valid commit name 8b58c463928ab1a27f892bb6fd0527321e588198",
+     "object": "ERROR: ject file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nfatal: git cat-file: could not get object info",
+     "onTheBranch": false,
+     "ref": "HEAD",
+     "sha": "8b58c463928ab1a27f892bb6fd0527321e588198"
+    },
+    "s2 engine commit": {
+     "branchCheck": "y\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: Not a valid commit name HEAD",
+     "object": "commit",
+     "onTheBranch": false,
+     "ref": "HEAD",
+     "sha": "b7ea9b9cc674816d83c68be2ba51a6835b5da2e7"
+    },
+    "s2 runner commit (returned: the merge took it)": {
+     "branchCheck": "home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: Not a valid commit name 22957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+     "object": "ERROR: ject file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: git cat-file: could not get object info",
+     "onTheBranch": false,
+     "ref": "HEAD",
+     "sha": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e"
+    },
+    "s3 engine commit (its turn still running)": {
+     "repoReadable": false,
+     "sha": "a5def714b843e09fcbd492df0f71cec8cdabc5ff"
+    }
+   },
+   "ext4Options": [
+    "rw",
+    "bsddf",
+    "nogrpid",
+    "block_validity",
+    "dioread_nolock",
+    "nodiscard",
+    "delalloc",
+    "nowarn_on_error",
+    "journal_checksum",
+    "barrier",
+    "auto_da_alloc",
+    "user_xattr",
+    "acl",
+    "noquota",
+    "resuid=0",
+    "resgid=0",
+    "errors=continue",
+    "commit=5",
+    "min_batch_time=0",
+    "max_batch_time=15000",
+    "i_version",
+    "stripe=1024",
+    "data=ordered",
+    "inode_readahead_blks=32",
+    "init_itable=10",
+    "max_dir_size_kb=0",
+    "prefetch_block_bitmaps"
+   ],
+   "git": "git version 2.47.3",
+   "kernel": "7.0.0-34-generic",
+   "mount": {
+    "fstype": "ext4",
+    "options": "rw,relatime",
+    "source": "/dev/rbd1",
+    "superOptions": "rw,stripe=1024"
+   },
+   "repos": {
+    "01a15527-aade-766a-b161-b52aff12bcba": {
+     "branch": {
+      "loose": "8b58c463928ab1a27f892bb6fd0527321e588198",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-amy-s1-a-session-t03-secret-amys1-f-08a072"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a15527-aade-766a-b161-b52aff12bcba",
+     "emptyCheckoutFiles": [
+      "t08-amylast.txt"
+     ],
+     "emptyGitFiles": [
+      "ORIG_HEAD",
+      "logs/refs/heads/orbit/t02c-amy-hold-a-turn-still-running-at-th-53371a",
+      "objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "objects/39/d9388b8e409ed655b0b6795b0e42ac1e2e6264",
+      "objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1",
+      "objects/61/0505e6f03b89887c6c327db2dd36dfca6fc644",
+      "objects/71/4f86b9093f7257af99c57b247d87c3a6718dd1",
+      "objects/8b/58c463928ab1a27f892bb6fd0527321e588198",
+      "objects/a5/def714b843e09fcbd492df0f71cec8cdabc5ff",
+      "objects/ab/cac63107d5ff01e0ca1c94f9f1ff7dd464e8ea",
+      "objects/ed/3bfdce83a22aa4db85a8759471aa065e4b52cc",
+      "refs/orbit-base/01a15527-bf1b-72da-9733-60e06f0238d1",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/COMMIT_EDITMSG",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/ORIG_HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/commondir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/gitdir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/logs/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/ORIG_HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/commondir",
+      "worktrees/_rebase-scratch-default-1e74b5/gitdir",
+      "worktrees/_rebase-scratch-default-1e74b5/logs/HEAD"
+     ],
+     "fsck": {
+      "err": "8e409ed655b0b6795b0e42ac1e2e6264: invalid sha1 pointer in cache-tree of /var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-aade-766a-b161-b52aff12bcba/index\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1 is empty\nerror: 47d2b922da21e8a2b10c084728746e82a3a8fcf1: invalid sha1 pointer in cache-tree of /var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922/index",
+      "exit": 11,
+      "out": "missing blob abcac63107d5ff01e0ca1c94f9f1ff7dd464e8ea\nmissing blob 714f86b9093f7257af99c57b247d87c3a6718dd1"
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-aade-766a-b161-b52aff12bcba",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-amy-s1-a-session-t03-secret-amys1-f-08a072"
+     },
+     "indexBytes": 305,
+     "locks": [],
+     "log": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nfatal: bad object HEAD",
+      "exit": 128,
+      "out": ""
+     },
+     "revParseHead": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nfatal: Needed a single revision",
+      "exit": 128,
+      "out": ""
+     },
+     "status": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/8b/58c463928ab1a27f892bb6fd0527321e588198 is empty\nfatal: bad object HEAD",
+      "exit": 128,
+      "out": ""
+     }
+    },
+    "01a15527-b3fa-74d6-b522-8cd7dcf92922": {
+     "branch": {
+      "loose": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "looseBytes": 41,
+      "ref": "refs/heads/orbit/t02c-amy-s2-a-session-t03-secret-amys2-f-3dfc91"
+     },
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922",
+     "emptyCheckoutFiles": [],
+     "emptyGitFiles": [
+      "ORIG_HEAD",
+      "logs/refs/heads/orbit/t02c-amy-hold-a-turn-still-running-at-th-53371a",
+      "objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "objects/39/d9388b8e409ed655b0b6795b0e42ac1e2e6264",
+      "objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1",
+      "objects/61/0505e6f03b89887c6c327db2dd36dfca6fc644",
+      "objects/71/4f86b9093f7257af99c57b247d87c3a6718dd1",
+      "objects/8b/58c463928ab1a27f892bb6fd0527321e588198",
+      "objects/a5/def714b843e09fcbd492df0f71cec8cdabc5ff",
+      "objects/ab/cac63107d5ff01e0ca1c94f9f1ff7dd464e8ea",
+      "objects/ed/3bfdce83a22aa4db85a8759471aa065e4b52cc",
+      "refs/orbit-base/01a15527-bf1b-72da-9733-60e06f0238d1",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/COMMIT_EDITMSG",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/ORIG_HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/commondir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/gitdir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/logs/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/ORIG_HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/commondir",
+      "worktrees/_rebase-scratch-default-1e74b5/gitdir",
+      "worktrees/_rebase-scratch-default-1e74b5/logs/HEAD"
+     ],
+     "fsck": {
+      "err": "8e409ed655b0b6795b0e42ac1e2e6264: invalid sha1 pointer in cache-tree of /var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-aade-766a-b161-b52aff12bcba/index\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1 is empty\nerror: 47d2b922da21e8a2b10c084728746e82a3a8fcf1: invalid sha1 pointer in cache-tree of /var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922/index",
+      "exit": 11,
+      "out": "missing blob abcac63107d5ff01e0ca1c94f9f1ff7dd464e8ea\nmissing blob 714f86b9093f7257af99c57b247d87c3a6718dd1"
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922",
+     "headFile": {
+      "bytes": 70,
+      "content": "ref: refs/heads/orbit/t02c-amy-s2-a-session-t03-secret-amys2-f-3dfc91"
+     },
+     "indexBytes": 313,
+     "locks": [],
+     "log": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: bad object HEAD",
+      "exit": 128,
+      "out": ""
+     },
+     "revParseHead": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: Needed a single revision",
+      "exit": 128,
+      "out": ""
+     },
+     "status": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: bad object HEAD",
+      "exit": 128,
+      "out": ""
+     }
+    },
+    "01a15527-bf1b-72da-9733-60e06f0238d1": {
+     "checkout": "/var/lib/orbit/home/.orbit/worktrees/01a15527-bf1b-72da-9733-60e06f0238d1",
+     "gitDir": null
+    },
+    "workspace": {
+     "branch": {
+      "loose": "22957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "looseBytes": 41,
+      "ref": "refs/heads/master"
+     },
+     "checkout": "/var/lib/orbit/home/orbit-repos/default",
+     "emptyCheckoutFiles": [
+      "t02c-runner-amy.txt",
+      "t08-amys2.txt"
+     ],
+     "emptyGitFiles": [
+      "ORIG_HEAD",
+      "logs/refs/heads/orbit/t02c-amy-hold-a-turn-still-running-at-th-53371a",
+      "objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e",
+      "objects/39/d9388b8e409ed655b0b6795b0e42ac1e2e6264",
+      "objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1",
+      "objects/61/0505e6f03b89887c6c327db2dd36dfca6fc644",
+      "objects/71/4f86b9093f7257af99c57b247d87c3a6718dd1",
+      "objects/8b/58c463928ab1a27f892bb6fd0527321e588198",
+      "objects/a5/def714b843e09fcbd492df0f71cec8cdabc5ff",
+      "objects/ab/cac63107d5ff01e0ca1c94f9f1ff7dd464e8ea",
+      "objects/ed/3bfdce83a22aa4db85a8759471aa065e4b52cc",
+      "refs/orbit-base/01a15527-bf1b-72da-9733-60e06f0238d1",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/COMMIT_EDITMSG",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/ORIG_HEAD",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/commondir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/gitdir",
+      "worktrees/01a15527-bf1b-72da-9733-60e06f0238d1/logs/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/ORIG_HEAD",
+      "worktrees/_rebase-scratch-default-1e74b5/commondir",
+      "worktrees/_rebase-scratch-default-1e74b5/gitdir",
+      "worktrees/_rebase-scratch-default-1e74b5/logs/HEAD"
+     ],
+     "fsck": {
+      "err": "8e409ed655b0b6795b0e42ac1e2e6264: invalid sha1 pointer in cache-tree of /var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-aade-766a-b161-b52aff12bcba/index\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1 is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/47/d2b922da21e8a2b10c084728746e82a3a8fcf1 is empty\nerror: 47d2b922da21e8a2b10c084728746e82a3a8fcf1: invalid sha1 pointer in cache-tree of /var/lib/orbit/home/orbit-repos/default/.git/worktrees/01a15527-b3fa-74d6-b522-8cd7dcf92922/index",
+      "exit": 11,
+      "out": "missing blob abcac63107d5ff01e0ca1c94f9f1ff7dd464e8ea\nmissing blob 714f86b9093f7257af99c57b247d87c3a6718dd1"
+     },
+     "gitDir": "/var/lib/orbit/home/orbit-repos/default/.git",
+     "headFile": {
+      "bytes": 23,
+      "content": "ref: refs/heads/master"
+     },
+     "indexBytes": 313,
+     "locks": [],
+     "log": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: bad object HEAD",
+      "exit": 128,
+      "out": ""
+     },
+     "revParseHead": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: Needed a single revision",
+      "exit": 128,
+      "out": ""
+     },
+     "status": {
+      "err": "error: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nerror: object file /var/lib/orbit/home/orbit-repos/default/.git/objects/22/957bc1bfe49e80238e5dab4f1fe44c011cb96e is empty\nfatal: bad object HEAD",
+      "exit": 128,
+      "out": ""
+     }
+    }
+   },
+   "transcripts": {
+    ".claude/projects/-tmp-orbit-cmsg-749075719/b91e2104-4697-4484-a2cd-47ba4d844b63.jsonl": {
+     "bytes": 0,
+     "lines": 0,
+     "markers": {
+      "T02C-AMY-LAST": 0,
+      "T02C-AMY-S1": 0,
+      "T08-WROTE-AMYLAST": 0,
+      "tool result received: T08-WROTE-AMYLAST": 0
+     }
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15527-aade-766a-b161-b52aff12bcba/c1682585-7d95-425e-9a6d-8fe34c5c5b25.jsonl": {
+     "bytes": 733184,
+     "lines": 30,
+     "markers": {
+      "T02C-AMY-LAST": 0,
+      "T02C-AMY-S1": 4,
+      "T08-WROTE-AMYLAST": 0,
+      "tool result received: T08-WROTE-AMYLAST": 0
+     }
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15527-b3fa-74d6-b522-8cd7dcf92922/14c264b6-ac91-45af-8c2f-bbb9b458f4c4.jsonl": {
+     "bytes": 731895,
+     "lines": 29,
+     "markers": {
+      "T02C-AMY-LAST": 0,
+      "T02C-AMY-S1": 0,
+      "T08-WROTE-AMYLAST": 0,
+      "tool result received: T08-WROTE-AMYLAST": 0
+     }
+    },
+    ".claude/projects/-var-lib-orbit-home--orbit-worktrees-01a15527-bf1b-72da-9733-60e06f0238d1/095d2bd7-414a-4b61-9d8e-91bf7d98fea9.jsonl": {
+     "bytes": 0,
+     "lines": 0,
+     "markers": {
+      "T02C-AMY-LAST": 0,
+      "T02C-AMY-S1": 0,
+      "T08-WROTE-AMYLAST": 0,
+      "tool result received: T08-WROTE-AMYLAST": 0
+     }
+    }
+   },
+   "uid": 10001
+  }
+ },
+ "seconds": 32.8,
+ "startedAt": "2026-10-19T17:16:29.477+00:00",
+ "step": "left"
+}

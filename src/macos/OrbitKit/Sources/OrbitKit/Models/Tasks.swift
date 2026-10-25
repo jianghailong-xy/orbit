@@ -105,6 +105,10 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
     public let runnable: Bool?
 
     // Nested relations.
+    /// Where this task's done code stands between the branch and main (§2.7, §7.3 V10) — the
+    /// detail read's `integration`, which the task page's Landing section is drawn from. Nil on a
+    /// task in no project, and from a server that predates the read.
+    public let integration: TaskIntegrationView?
     public let assignee: TaskAssignee?
     public let comments: [TaskComment]?
     public let sessions: [SessionRef]?
@@ -131,8 +135,56 @@ public struct TaskItem: Codable, Equatable, Sendable, Identifiable {
         case supersededByTaskIdAbsentReason, supersedes, successorChain
         case running, queued, runningSince, awaitingOwnerConfirmation, confirmationUnderReview, blocked
         case dependencyState, runnable
+        case integration
         case assignee, comments, sessions, creatorSession, dependsOn, dependedOnBy
         case counts = "_count"
+    }
+}
+
+/// One task's integration, as `GET /tasks/:id` serves it (§2.7a, §7.3 V10) — `@orbit/shared`'s
+/// `TaskIntegrationView`: the lane the task's done work is in, who holds it, and the newest
+/// `LAND_TASK` generation the task page's Landing section prints.
+public struct TaskIntegrationView: Codable, Equatable, Sendable {
+    /// `NOT_APPLICABLE`, `QUEUED`, `RUNNING`, `CONFLICT`, `CHECK_FAILED`, `ERROR`, `AWAITING_OWNER`,
+    /// `ON_INTEGRATION_LINE` or `ON_UPSTREAM`; a value this build does not know draws nothing.
+    public let state: String
+    /// When the task entered this state.
+    public let since: String?
+    /// `COORDINATOR` or `OWNER`, while somebody has to act.
+    public let handler: String?
+    public let openItemId: String?
+    public let jobId: String?
+    /// Elapsed job time while it is in CHECK; not the duration of the check phase itself.
+    public let checksRunningForMs: Double?
+    /// The task's newest `LAND_TASK`; nil when the task never landed.
+    public let landTask: LandTaskIntegrationView?
+    /// The project's main branch by name, which `ON_UPSTREAM` is on. Absent from an older server.
+    public let mainBranch: String?
+
+    public init(state: String, since: String? = nil, handler: String? = nil,
+                openItemId: String? = nil, jobId: String? = nil,
+                checksRunningForMs: Double? = nil, landTask: LandTaskIntegrationView? = nil,
+                mainBranch: String? = nil) {
+        self.state = state
+        self.since = since
+        self.handler = handler
+        self.openItemId = openItemId
+        self.jobId = jobId
+        self.checksRunningForMs = checksRunningForMs
+        self.landTask = landTask
+        self.mainBranch = mainBranch
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        state = try c.decodeIfPresent(String.self, forKey: .state) ?? "NOT_APPLICABLE"
+        since = try? c.decodeIfPresent(String.self, forKey: .since)
+        handler = try? c.decodeIfPresent(String.self, forKey: .handler)
+        openItemId = try? c.decodeIfPresent(String.self, forKey: .openItemId)
+        jobId = try? c.decodeIfPresent(String.self, forKey: .jobId)
+        checksRunningForMs = try? c.decodeIfPresent(Double.self, forKey: .checksRunningForMs)
+        landTask = try? c.decodeIfPresent(LandTaskIntegrationView.self, forKey: .landTask)
+        mainBranch = try? c.decodeIfPresent(String.self, forKey: .mainBranch)
     }
 }
 

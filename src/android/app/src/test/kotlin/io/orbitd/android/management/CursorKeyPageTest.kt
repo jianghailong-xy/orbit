@@ -96,6 +96,39 @@ class CursorKeyPageTest {
         compose.onAllNodesWithTag("cursor-key-check-again").assertCountEquals(0)
     }
 
+    /** The fixture runner with Cursor CLI ready, whose catalogue names its own default model. */
+    private fun cursorRunner() {
+        fixture.runnerEngines = """[{"engine":"cursor","installed":true,"version":"2026.10.14-941492e","auth":"yes"}]"""
+        fixture.runnerExtra = ""","capabilities":["provider:cursor"],"modelCatalog":{"cursor":[{"value":"default","label":"Auto"},
+            {"value":"claude-opus-5-5","label":"Claude Opus 5.5"}]},"runtimeDefaultModels":{"cursor":"claude-opus-5-5"}"""
+    }
+
+    /** A13-20 (iOS 4 ①, OrbitKit `CursorRuntime.isKey` and `Infrastructure.cursorModel`): a key connected from the Cursor preset is a Cursor
+     * key whatever its row's runtime says, and its row names the model a session on it starts on — Cursor CLI's default, by the name the
+     * catalogue of the first machine online that runs it gives it. */
+    @Test fun aKeyFromTheCursorPresetIsACursorKeyOnTheRunnersDefaultModel() {
+        cursorRunner()
+        fixture.providersMine = mine("VALID").replace(""""runtime":"cursor"""", """"runtime":null""")
+        val opened = mutableListOf<OrbitRoute>()
+        infrastructure(null, opened)
+        await("Cursor 2")
+        compose.waitUntil(60_000) { compose.onAllNodes(hasTestTag("api-key:cursor-api-2") and hasText("Claude Opus 5.5")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(hasTestTag("api-key:cursor-api-2") and hasClickAction()).performScrollTo().performClick()
+        compose.runOnIdle { assertEquals(listOf(OrbitRoute(Destination.SETTINGS, "infrastructure", recordId = "cursor-key:$key")), opened) }
+    }
+
+    /** A13-20 (iOS 4 ③): the page's Default model is the runner's default by its catalogue's name, and its Endpoint Cursor's API where
+     * the key's own address says no host. */
+    @Test fun aKeysPageNamesTheRunnersDefaultModelAndCursorsEndpoint() {
+        cursorRunner()
+        fixture.providersMine = mine("VALID").replace(""""baseUrl":"https://api2.cursor.sh",""", "")
+        infrastructure("cursor-key:$key")
+        await("Billed to this key’s Cursor plan")
+        await("Claude Opus 5.5")
+        await("api2.cursor.sh")
+        assertTrue(fixture.calls.contains("GET runners"))
+    }
+
     /** A check that could not be had — no runner to ask — is not kept on the key: the page says why in the server's words. */
     @Test fun aCheckNoRunnerCouldAskSaysWhy() {
         fixture.providersMine = mine(null)

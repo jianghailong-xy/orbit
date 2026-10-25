@@ -1,0 +1,52 @@
+{
+ "label": "before-warm",
+ "sourceSha": "4dbaad63e4c26270e27549c91cc2d7dc02db9aa2",
+ "wallSeconds": 128.3,
+ "stepsRunOver0.5s": {
+  "[internal] load metadata for docker.io/library/node:26.10.0-trixie-slim@sha256:ec": 0.8,
+  "[internal] load metadata for docker.io/library/golang:1.27.1-trixie@sha256:3b77fc": 1.1,
+  "[orbit-build 4/4] RUN test \"$(go env GOVERSION)\" = go1.27.1  && printf '%s\\n' \"4dbaad63e": 8.2,
+  "[stage-3  2/11] RUN mkdir -p /etc/ssl/certs  && node -p \"require('tls').rootCertificat": 41.9,
+  "[stage-3  3/11] COPY --from=orbit-build /usr/local/go/ /usr/local/go/": 1.1,
+  "[stage-3  5/11] COPY --from=codex /opt/codex/ /opt/codex/": 0.7,
+  "[stage-3  9/11] RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex  && ln -s /opt/cla": 80.3
+ },
+ "cachedSteps": 4
+}
+{
+ "label": "before-next-commit",
+ "sourceSha": "054503d731ad517ad6650d5eb9ea084572a65145",
+ "wallSeconds": 84.1,
+ "stepsRunOver0.5s": {
+  "[orbit-build 4/4] RUN test \"$(go env GOVERSION)\" = go1.27.1  && printf '%s\\n' \"054503d73": 7.9,
+  "[stage-3  2/11] RUN mkdir -p /etc/ssl/certs  && node -p \"require('tls').rootCertificat": 12.5,
+  "[stage-3  3/11] COPY --from=orbit-build /usr/local/go/ /usr/local/go/": 0.8,
+  "[stage-3  5/11] COPY --from=codex /opt/codex/ /opt/codex/": 0.5,
+  "[stage-3  9/11] RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex  && ln -s /opt/cla": 68.6
+ },
+ "cachedSteps": 5
+}
+probe-exit=0
+{
+ "label": "after-warm",
+ "sourceSha": "6d597ec38119793168825df0f028e871d333dca6",
+ "wallSeconds": 85.3,
+ "stepsRunOver0.5s": {
+  "[orbit-build 4/4] RUN test \"$(go env GOVERSION)\" = go1.27.1  && printf '%s\\n' \"6d597ec38": 9.1,
+  "[stage-3  2/11] RUN mkdir -p /etc/ssl/certs  && node -p \"require('tls').rootCertificat": 18.8,
+  "[stage-3  3/11] COPY --from=orbit-build /usr/local/go/ /usr/local/go/": 0.9,
+  "[stage-3  4/11] COPY --from=codex /opt/codex/ /opt/codex/": 0.6,
+  "[stage-3  7/11] RUN ln -s /opt/codex/bin/codex /usr/local/bin/codex  && ln -s /opt/cla": 63.6
+ },
+ "cachedSteps": 5
+}
+{
+ "label": "after-next-commit",
+ "sourceSha": "cb0c93e3909f2ac3da82e0bd46f464300a8b4c16",
+ "wallSeconds": 9.7,
+ "stepsRunOver0.5s": {
+  "[orbit-build 4/4] RUN test \"$(go env GOVERSION)\" = go1.27.1  && printf '%s\\n' \"cb0c93e39": 8.1
+ },
+ "cachedSteps": 10
+}
+probe-exit=0

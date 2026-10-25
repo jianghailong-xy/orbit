@@ -51,6 +51,8 @@ export class FakeDockerChannel implements DockerChannel {
   };
   /** The ceilings /v1/info reports; the real channel always reports `maxContainers` among them. */
   limits: Record<string, number> = {};
+  /** Set: the host's firewall for managed runners is configured and not in force, and the channel starts no container. */
+  firewallDown: string | null = null;
   private failures: Array<{ call: string; failure: Failure }> = [];
 
   /**
@@ -155,6 +157,7 @@ export class FakeDockerChannel implements DockerChannel {
         throw new DockerChannelError(409, 'CONTAINER_CONFLICT', 'an earlier container is still there');
       }
       if (request.name !== `mr-${request.runnerId}`) throw new DockerChannelError(409, 'SINGLE_CONTAINER_GUARD', 'only the fixed name');
+      if (this.firewallDown !== null) throw new DockerChannelError(503, 'FIREWALL_NOT_ENFORCED', `the managed runners' host firewall is not in force: ${this.firewallDown}`);
       if (request.image !== this.image) throw new DockerChannelError(403, 'IMAGE_REFUSED', 'another image');
       const volume = this.volumes.get(request.volume.name);
       if (!volume || volume.uid !== request.volume.uid) throw new DockerChannelError(409, 'VOLUME_REFUSED', 'not the authorized volume');

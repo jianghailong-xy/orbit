@@ -1,0 +1,15 @@
+23:37:18 door stopped
+23:37:19 apiserver stopped (SIGTERM)
+23:37:19 channel stopped
+23:37:21 down: containers 0, runner containers 0, volumes 0+0
+== after down 2026-10-20T23:37:23Z
+containers labelled orbit.test=d4: 0
+containers of instance orbit-d4-e1a08e4f: 0
+volumes labelled orbit.test=d4: 0
+volumes of instance orbit-d4-e1a08e4f: 0
+mr-* volumes on the host: 0
+network d4-managed-runners: 0
+images orbit-managed-runner:d4-*/orbit-docker-channel:d4-*: 0
+systemd units d4-apiserver/d4-door: 0
+listeners on 3714/5714/2714: 0
+builder t03-capped: exited

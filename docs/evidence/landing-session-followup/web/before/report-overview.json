@@ -1,0 +1,98 @@
+[
+  {
+    "theme": "light",
+    "frame": "overview-merge-check",
+    "errors": [],
+    "unhandled": [],
+    "landingCard": "Merge check2m 40s of 70mchecking · output 1s ago · usually ~18m · claim 1 · round 1 of 1Nothing to do — it lands on its own.Open landing ›All jobs ›",
+    "landingLinks": [
+      "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM2"
+    ],
+    "sheetRows": [],
+    "mergeCard": null,
+    "mergeLinks": [],
+    "landingsGroup": null,
+    "landingsRows": [],
+    "landingFold": null,
+    "workOverviewLanding": "Merge check2m 40s of 70mchecking · output 1s ago · usually ~18m · claim 1 · round 1 of 1Nothing to do — it lands on its own.Open landing ›All jobs ›",
+    "landingNote": [
+      "Nothing to do — it lands on its own."
+    ],
+    "landingHeadDetail": [
+      "checking · output 1s ago · usually ~18m · claim 1 · round 1 of 1"
+    ],
+    "headerCount": null,
+    "xe5": [],
+    "deliveryLinks": [],
+    "sourceChip": null,
+    "sourceChipHref": null,
+    "taskLanding": null,
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
+  },
+  {
+    "theme": "light",
+    "frame": "overview-merge-to-main",
+    "errors": [],
+    "unhandled": [],
+    "landingCard": "Merge to main2m 0s of 70mchecking · output 1s ago · usually ~18m · claim 1 · round 1 of 1Nothing to do — it lands on its own.Open landing ›All jobs ›",
+    "landingLinks": [
+      "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM2"
+    ],
+    "sheetRows": [],
+    "mergeCard": null,
+    "mergeLinks": [],
+    "landingsGroup": null,
+    "landingsRows": [],
+    "landingFold": null,
+    "workOverviewLanding": "Merge to main2m 0s of 70mchecking · output 1s ago · usually ~18m · claim 1 · round 1 of 1Nothing to do — it lands on its own.Open landing ›All jobs ›",
+    "landingNote": [
+      "Nothing to do — it lands on its own."
+    ],
+    "landingHeadDetail": [
+      "checking · output 1s ago · usually ~18m · claim 1 · round 1 of 1"
+    ],
+    "headerCount": null,
+    "xe5": [],
+    "deliveryLinks": [],
+    "sourceChip": null,
+    "sourceChipHref": null,
+    "taskLanding": null,
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
+  },
+  {
+    "theme": "light",
+    "frame": "overview-task",
+    "errors": [],
+    "unhandled": [],
+    "landingCard": "Landing2m 40s of 70mchecking · output 1s ago · usually ~18m · claim 1 · round 1 of 1维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑；10-10 跑了 13 轮，上限 8）onto project/34bmzOkov3xN2yLPrnsCkNothing to do — it lands on its own.Open landing ›All jobs ›",
+    "landingLinks": [
+      "Open landing › → /sessions/2zwQZ2hd93IvLb59t6pM1"
+    ],
+    "sheetRows": [],
+    "mergeCard": null,
+    "mergeLinks": [],
+    "landingsGroup": null,
+    "landingsRows": [],
+    "landingFold": null,
+    "workOverviewLanding": "Landing2m 40s of 70mchecking · output 1s ago · usually ~18m · claim 1 · round 1 of 1维护每日轮数上限在服务端路径上没生效：byJob 计数恒为 0（SQL 三值逻辑；10-10 跑了 13 轮，上限 8）onto project/34bmzOkov3xN2yLPrnsCkNothing to do — it lands on its own.Open landing ›All jobs ›",
+    "landingNote": [
+      "Nothing to do — it lands on its own."
+    ],
+    "landingHeadDetail": [
+      "checking · output 1s ago · usually ~18m · claim 1 · round 1 of 1"
+    ],
+    "headerCount": null,
+    "xe5": [],
+    "deliveryLinks": [],
+    "sourceChip": null,
+    "sourceChipHref": null,
+    "taskLanding": null,
+    "taskLandingLink": [],
+    "receipt": null,
+    "receiptLinks": []
+  }
+]

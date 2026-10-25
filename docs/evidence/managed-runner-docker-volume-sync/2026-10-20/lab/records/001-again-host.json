@@ -1,0 +1,93 @@
+{
+ "checks": [
+  {
+   "check": "the host loads no rbd, nbd, ceph or libceph module",
+   "ok": true,
+   "value": []
+  },
+  {
+   "check": "VM 1 runs in its own unit, not in the runner's cgroup",
+   "ok": true,
+   "value": "/system.slice/orbit-mr-lab.service"
+  },
+  {
+   "check": "VM 2 runs in its own unit, not in the runner's cgroup",
+   "ok": true,
+   "value": "/system.slice/orbit-mr-lab-2.service"
+  }
+ ],
+ "endedAt": "2026-10-19T23:07:14.024+00:00",
+ "error": null,
+ "ok": true,
+ "phase": "again",
+ "result": {
+  "cpus": 24,
+  "hostModules": [],
+  "kernel": "6.12.107+deb13-amd64",
+  "link": {
+   "established": [
+    "0      0      127.0.0.1:16230 127.0.0.1:48212"
+   ],
+   "listen": "127.0.0.1:16230"
+  },
+  "memAvailableMiB": 6559,
+  "memTotalMiB": 15357,
+  "memory": {
+   "at": "2026-10-19T23:07:07.955Z",
+   "host": {
+    "MemAvailable": 6551,
+    "MemTotal": 15357,
+    "SwapFree": 33340,
+    "SwapTotal": 44285
+   },
+   "label": "t02c facts",
+   "vms": {
+    "orbit-mr-lab": {
+     "guest": {
+      "stat-available-memory": 4198,
+      "stat-disk-caches": 821,
+      "stat-free-memory": 3566,
+      "stat-total-memory": 5920
+     },
+     "unit": {
+      "currentMiB": 2884,
+      "peakMiB": 4230,
+      "swapMiB": 0
+     }
+    },
+    "orbit-mr-lab-2": {
+     "guest": {
+      "stat-available-memory": 2377,
+      "stat-disk-caches": 310,
+      "stat-free-memory": 2255,
+      "stat-total-memory": 2903
+     },
+     "unit": {
+      "currentMiB": 986,
+      "peakMiB": 1258,
+      "swapMiB": 0
+     }
+    }
+   }
+  },
+  "units": {
+   "orbit-mr-lab": {
+    "ActiveState": "active",
+    "CPUQuotaPerSecUSec": "4s",
+    "ControlGroup": "/system.slice/orbit-mr-lab.service",
+    "MemoryMax": "6979321856",
+    "OOMScoreAdjust": "1000"
+   },
+   "orbit-mr-lab-2": {
+    "ActiveState": "active",
+    "CPUQuotaPerSecUSec": "2s",
+    "ControlGroup": "/system.slice/orbit-mr-lab-2.service",
+    "MemoryMax": "3758096384",
+    "OOMScoreAdjust": "1000"
+   }
+  }
+ },
+ "seconds": 6.1,
+ "startedAt": "2026-10-19T23:07:07.915+00:00",
+ "step": "host"
+}
