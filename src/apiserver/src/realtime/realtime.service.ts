@@ -486,6 +486,18 @@ export class RealtimeService implements OnModuleInit, OnModuleDestroy {
       // (already-persisted) RunEvent row.
       this.notifyRaw(EVENT_CHANNEL, JSON.stringify({ i: this.instanceId, r: runId, s: event.seq }));
     }
+    // A person's decision on a card, published once its write has committed (SessionsService.decideApproval): the
+    // card's reader may be waiting for it, so over the runner link the runner the session is assigned to is hinted
+    // (runner-hints.ts). Here and not in publishHere: this single-event path is the one the decision takes, on the
+    // replica that made it. An event the NOTIFY bridge carries in from another replica never passes through it, and
+    // neither does an ingest batch (publishBatch). A card collected as ABANDONED carries no behavior: it is no
+    // decision, and nothing is left waiting for it.
+    if (event.type === RunEventType.APPROVAL_RESOLVED) {
+      const resolved = event.payload as { id?: unknown; behavior?: unknown };
+      if (typeof resolved.id === 'string' && (resolved.behavior === 'allow' || resolved.behavior === 'deny')) {
+        this.hints?.approval(runId, resolved.id);
+      }
+    }
   }
 
   /**

@@ -16,6 +16,10 @@ import { normalizeToolOutputEvent } from '../runner-api/tool-output';
  *   - a session queued for a runner (QueueService.notifySessionQueued), for that runner;
  *   - something a heartbeat delivers (RealtimeService.notifyRunnerWake), for that runner.
  *
+ * So is a person's decision on an approval (the APPROVAL_RESOLVED that SessionsService.decideApproval publishes once
+ * its write has committed, RealtimeService.publish), for the runner the session is assigned to: the card's reader may
+ * be waiting for it, and over the link it asks once a hint says there is an answer.
+ *
  * It is a path beside the in-process EventEmitter and the Postgres NOTIFY that the HTTP long polls park on, never in
  * place of them: those stay as they are until the cut-over (D15), and nothing here changes what an HTTP runner is
  * handed or when.
@@ -51,6 +55,7 @@ export type RunnerHint =
   | { inbox: { sessionId: string } }
   | { claim: Record<string, never> }
   | { commands: Record<string, never> }
+  | { approval: { sessionId: string; approvalId: string } }
   | { watchers: { sessionId: string; watchers: number } };
 
 /** The subject a runner's hints are published on. Runner ids are the UUIDs the link token names. */
@@ -272,6 +277,17 @@ export class RunnerHints implements OnModuleInit, OnModuleDestroy {
   /** Something this runner's heartbeat delivers is waiting. */
   commands(runnerId: string): void {
     if (this.ready()) this.publish(runnerId, { commands: {} });
+  }
+
+  /** A person decided one of this session's approvals: hint the runner the session is assigned to. */
+  approval(sessionId: string, approvalId: string): void {
+    if (!this.ready()) return;
+    void this.runnerOf(sessionId).then(
+      (runnerId) => {
+        if (runnerId) this.publish(runnerId, { approval: { sessionId, approvalId } });
+      },
+      () => this.drop(),
+    );
   }
 
   /** Forget the runner a session was assigned to: it has just moved to another one. */

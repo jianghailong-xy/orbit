@@ -220,6 +220,131 @@ func (d *driver) linkDrill(ctx context.Context, o drillOptions) {
 		}
 		return detail, nil
 	})
+	// An approval this runner asks for while the turn runs, which the owner decides through the web API: its hint,
+	// HeartbeatAck's hints while the call that asked waits, the decision read at once, and the card no longer named
+	// once that call has returned.
+	next := claimed.MaxSeq + 1
+	toolUse := fmt.Sprintf("toolu_link_drill_%d", time.Now().UnixNano())
+	var approval, approvalUUID string
+	if d.step("an approval asked for in the running turn: its call reported, the card filed, read PENDING at once", func() (string, error) {
+		use, _ := json.Marshal(map[string]any{"id": toolUse, "name": "Bash", "input": map[string]string{"command": "echo link drill"}})
+		ack, err := d.events(&linkpb.EventBatch{SessionId: claimed.SessionID, Events: []*linkpb.Event{
+			{Seq: next, Type: "tool_use", TsUnixMs: time.Now().UnixMilli(), PayloadJson: use}}}, 30*time.Second)
+		if err != nil {
+			return "", err
+		}
+		if ack.GetFailure() != nil || ack.GetDurableSeq() != next {
+			return summarizeEventAck(ack), errors.New("the tool_use was not stored")
+		}
+		next++
+		body, _ := json.Marshal(map[string]any{"toolName": "Bash", "input": map[string]string{"command": "echo link drill"}, "toolUseId": toolUse})
+		r, err := d.rpc(d.nextID("approval"), "POST", "/runner/sessions/"+claimed.SessionID+"/approvals", body, "", 0)
+		if err != nil {
+			return "", err
+		}
+		var card struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		}
+		if r.GetTunnel().GetStatus()/100 != 2 || json.Unmarshal(r.GetTunnel().GetJsonBody(), &card) != nil || card.Status != "PENDING" {
+			return tunnelStatus(r), errors.New("want the card filed PENDING")
+		}
+		approval = card.ID
+		approvalUUID, _ = sessionUUID(card.ID)
+		f["approval"] = approvalUUID
+		started := time.Now()
+		r, err = d.rpc(d.nextID("approval"), "GET", "/runner/sessions/"+claimed.SessionID+"/approvals/"+approval, nil, "", 0)
+		if err != nil {
+			return "", err
+		}
+		var read struct {
+			Status string `json:"status"`
+		}
+		took := time.Since(started)
+		detail := fmt.Sprintf("card %s filed PENDING; read again: %s in %s", approval, tunnelStatus(r), took.Round(time.Millisecond))
+		if r.GetTunnel().GetStatus() != 200 || json.Unmarshal(r.GetTunnel().GetJsonBody(), &read) != nil || read.Status != "PENDING" || took > 5*time.Second {
+			return detail, errors.New("want PENDING, answered at once")
+		}
+		return detail, nil
+	}) {
+		d.step("the owner allows it through the web API: the approval hint reaches this runner", func() (string, error) {
+			decided := time.Now()
+			var answer struct {
+				Status string `json:"status"`
+			}
+			status, body, err := own.call("POST", "/api/sessions/"+session+"/approvals/"+approval+"/decision", map[string]any{"behavior": "allow"}, &answer)
+			if err != nil || status/100 != 2 || answer.Status != "ALLOWED" {
+				return fmt.Sprintf("POST decision %d %s", status, clip(string(body), 300)), errOr(err, "want the card ALLOWED")
+			}
+			h, err := d.waitHint(20*time.Second, func(h *linkpb.Hint) bool {
+				a := h.GetApproval()
+				got, _ := sessionUUID(a.GetApprovalId())
+				in, _ := sessionUUID(a.GetSessionId())
+				return a != nil && got == approvalUUID && in == sid
+			})
+			if err != nil {
+				return "", err
+			}
+			took := time.Since(decided)
+			f["approvalHintMs"] = took.Milliseconds()
+			return fmt.Sprintf("Hint{approval: session %s, approval %s}, %s after the decision was sent", h.GetApproval().GetSessionId(),
+				h.GetApproval().GetApprovalId(), took.Round(time.Millisecond)), nil
+		})
+		d.step("while the call that asked waits, the heartbeat's hints name the decided approval", func() (string, error) {
+			ack, err := d.heartbeat(d.beat(false, claimed.SessionID))
+			if err != nil {
+				return "", err
+			}
+			for _, a := range ack.GetHints().GetApprovals() {
+				got, _ := sessionUUID(a.GetApprovalId())
+				in, _ := sessionUUID(a.GetSessionId())
+				if got == approvalUUID && in == sid {
+					return "HeartbeatAck.hints.approvals holds {session " + a.GetSessionId() + ", approval " + a.GetApprovalId() + "}", nil
+				}
+			}
+			return summarizeAck(ack), errors.New("HeartbeatAck.hints.approvals does not name the approval")
+		})
+		d.step("the decision is read at once: allowed", func() (string, error) {
+			started := time.Now()
+			r, err := d.rpc(d.nextID("approval"), "GET", "/runner/sessions/"+claimed.SessionID+"/approvals/"+approval, nil, "", 0)
+			if err != nil {
+				return "", err
+			}
+			var read struct {
+				Status   string `json:"status"`
+				Behavior string `json:"behavior"`
+			}
+			took := time.Since(started)
+			detail := fmt.Sprintf("%s in %s", tunnelStatus(r), took.Round(time.Millisecond))
+			if r.GetTunnel().GetStatus() != 200 || json.Unmarshal(r.GetTunnel().GetJsonBody(), &read) != nil || read.Status != "ALLOWED" ||
+				read.Behavior != "allow" || took > 5*time.Second {
+				return detail, errors.New("want ALLOWED with behavior allow, at once")
+			}
+			return detail, nil
+		})
+		d.step("once the call has returned, the heartbeat's hints no longer name the approval", func() (string, error) {
+			result, _ := json.Marshal(map[string]any{"toolUseId": toolUse, "content": "link drill"})
+			ack, err := d.events(&linkpb.EventBatch{SessionId: claimed.SessionID, Events: []*linkpb.Event{
+				{Seq: next, Type: "tool_result", TsUnixMs: time.Now().UnixMilli(), PayloadJson: result}}}, 30*time.Second)
+			if err != nil {
+				return "", err
+			}
+			if ack.GetFailure() != nil || ack.GetDurableSeq() != next {
+				return summarizeEventAck(ack), errors.New("the tool_result was not stored")
+			}
+			next++
+			hb, err := d.heartbeat(d.beat(false, claimed.SessionID))
+			if err != nil {
+				return "", err
+			}
+			for _, a := range hb.GetHints().GetApprovals() {
+				if got, _ := sessionUUID(a.GetApprovalId()); got == approvalUUID {
+					return summarizeAck(hb), errors.New("the approval is still named")
+				}
+			}
+			return "tool_result stored; " + summarizeAck(hb), nil
+		})
+	}
 	d.step("a route's refusal comes back whole: its status, code and retryable", func() (string, error) {
 		r, err := d.rpc(d.nextID("meta"), "GET", "/runner/sessions/"+newUUID()+"/meta", nil, "", 0)
 		if err != nil {
@@ -251,7 +376,6 @@ func (d *driver) linkDrill(ctx context.Context, o drillOptions) {
 	})
 
 	// Durable events.
-	next := claimed.MaxSeq + 1
 	var durable uint64
 	d.step("durable events: stored by the ingest route and acknowledged", func() (string, error) {
 		ack, err := d.events(d.batch(claimed.SessionID, next, next+2, "assistant", 0), 30*time.Second)
@@ -799,8 +923,9 @@ func checkReconciled(ack *linkpb.HeartbeatAck) (string, error) {
 }
 
 func summarizeAck(ack *linkpb.HeartbeatAck) string {
-	return fmt.Sprintf("HeartbeatAck{mode %s, reconcile %d bytes, want %v, hints: inbox %d, claim %v, watchers %d}", ack.GetMode(),
-		len(ack.GetReconcileJson()), ack.GetWantFacts(), len(ack.GetHints().GetInboxSessionIds()), ack.GetHints().GetClaim(), len(ack.GetHints().GetWatchers()))
+	return fmt.Sprintf("HeartbeatAck{mode %s, reconcile %d bytes, want %v, hints: inbox %d, claim %v, approvals %d, watchers %d}", ack.GetMode(),
+		len(ack.GetReconcileJson()), ack.GetWantFacts(), len(ack.GetHints().GetInboxSessionIds()), ack.GetHints().GetClaim(),
+		len(ack.GetHints().GetApprovals()), len(ack.GetHints().GetWatchers()))
 }
 
 func summarizeEventAck(ack *linkpb.EventAck) string {
