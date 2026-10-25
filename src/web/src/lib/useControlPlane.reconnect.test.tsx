@@ -127,6 +127,24 @@ describe('the control-plane stream is never given up on', () => {
     expect(streams()).toBe(23);
   });
 
+  it('backs off a stream that keeps opening and dying before its first message', async () => {
+    await mount();
+    for (let failure = 1; failure <= 5; failure += 1) {
+      await act(async () => latest().onopen?.());
+      await fail();
+      await wait(1000 * failure - 1);
+      expect(streams(), `asked again before the backoff of failure ${failure} was up`).toBe(failure);
+      await wait(501);
+      expect(streams()).toBe(failure + 1);
+    }
+    // Something came down the stream: the next failure starts the backoff over.
+    await act(async () => latest().onopen?.());
+    await act(async () => latest().onmessage?.({ data: JSON.stringify({ type: 'ping' }) }));
+    await fail();
+    await wait(1_500);
+    expect(streams(), 'a stream that delivered a message still waited out the long backoff').toBe(7);
+  });
+
   it('leaves a stream that is open alone', async () => {
     await mount();
     await act(async () => latest().onopen?.());
