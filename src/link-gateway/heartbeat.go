@@ -250,6 +250,11 @@ func heartbeatRequestBody(hb *linkpb.Heartbeat, process string, hello *linkpb.He
 type linkHints struct {
 	InboxSessionIDs []string `json:"inboxSessionIds"`
 	Claim           bool     `json:"claim"`
+	// Approvals are the approvals that have a decision while their reader is still waiting (runner-link-hints.ts).
+	Approvals []struct {
+		SessionID  string `json:"sessionId"`
+		ApprovalID string `json:"approvalId"`
+	} `json:"approvals"`
 	// Watchers are the answering apiserver instance's own counts of the runner's watched sessions (live.go).
 	Watchers *struct {
 		Instance string `json:"instance"`
@@ -290,6 +295,9 @@ func (g *gateway) hintState(runnerID string, h *linkHints) *linkpb.HintState {
 	if h != nil {
 		state.InboxSessionIds = h.InboxSessionIDs
 		state.Claim = h.Claim
+		for _, a := range h.Approvals {
+			state.Approvals = append(state.Approvals, &linkpb.ApprovalHint{SessionId: a.SessionID, ApprovalId: a.ApprovalID})
+		}
 		if w := h.Watchers; w != nil {
 			counts := make(map[string]uint32, len(w.Sessions))
 			for _, s := range w.Sessions {

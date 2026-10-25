@@ -25,10 +25,12 @@ const { runnerHintSubject, runnerHintMessage, turnPrefixRequestMessage, INSTANCE
 const runnerId = '0190a0b0-0000-7000-8000-000000000001';
 const sessionId = '0190a0b0-0000-7000-8000-0000000000a1';
 const instance = '0190a0b0-0000-4000-8000-0000000000e1';
+const approvalId = '0190a0b0-0000-7000-8000-0000000000f1';
 const cases = [
   ['claim: a session is queued for the runner', { claim: {} }],
   ['commands: something its heartbeat delivers is waiting', { commands: {} }],
   ['inbox: a message is waiting in one of its sessions', { inbox: { sessionId } }],
+  ['approval: a person decided an approval of one of its sessions', { approval: { sessionId, approvalId } }],
   ['watchers: one apiserver instance counts the live streams of one of its sessions', { watchers: { sessionId, watchers: 2 } },
     { [INSTANCE_HEADER]: instance }],
 ].map(([name, hint, headers]) => ({

@@ -607,7 +607,7 @@ func cmdUnregister(bools map[string]bool) {
 
 	uninstallService() // stop + remove the background service first
 
-	if err := NewTransport(cfg.ServerURL, cfg.RunnerToken).deregister(); err != nil {
+	if err := newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI).deregister(); err != nil {
 		fmt.Fprintf(os.Stderr, "note: could not delete %q from the control plane (%s)\n", cfg.Name, firstLine(err.Error()))
 	} else {
 		fmt.Printf("✓ deleted %q from the control plane\n", cfg.Name)
@@ -701,7 +701,7 @@ func cmdStatus() {
 	fmt.Printf("\nrunner:  %s (%s)\nserver:  %s\nlabels:  %s\nconfig:  %s\n",
 		cfg.Name, cfg.RunnerID, cfg.ServerURL, labelsOrDash(cfg.Labels), configPath())
 
-	me, err := NewTransport(cfg.ServerURL, cfg.RunnerToken).me()
+	me, err := newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI).me()
 	if err != nil {
 		msg := firstLine(err.Error())
 		if strings.Contains(msg, "401") {
@@ -775,7 +775,7 @@ func cmdResume(args []string) {
 			fmt.Fprintln(os.Stderr, "no runner config — run `orbit register` first")
 			os.Exit(1)
 		}
-		resp, err := NewTransport(cfg.ServerURL, cfg.RunnerToken).sessionMeta(sessionID)
+		resp, err := newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerCLI).sessionMeta(sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "session %q not found: %v\n", sessionID, err)
 			os.Exit(1)

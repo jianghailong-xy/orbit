@@ -522,7 +522,7 @@ func cliSessionTransport(ctx cliOrchestrationContext) (*Transport, error) {
 		return nil, err
 	}
 	if ctx.serviceToken != "" {
-		return NewTransport(t.baseURL, ctx.serviceToken), nil
+		return newCallerTransport(t.baseURL, ctx.serviceToken, runnerCallerCLI), nil
 	}
 	return t, nil
 }

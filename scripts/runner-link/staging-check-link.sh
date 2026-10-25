@@ -6,11 +6,12 @@
 #   1. NATS authenticates: a client without a seed cannot connect, and each user can do only what it does
 #      (TestNATSAuthorizationOnARealServer, on this stack's NATS with its seeds); the apiserver and the gateway are in.
 #   2. The link drill: heartbeats reconciled by the heartbeat route, facts by digest; a session's claim hint and claim,
-#      sent again under its request_id; the inbox hint and HeartbeatAck's hints; route answers relayed whatever their
-#      status, malformed paths refused; durable events stored, acknowledged, deduplicated, a gap refused, credit
-#      exceeded and made good; the live stream published only while the owner watches, and the turn prefix asked of the
-#      runner; an answer that travels in pieces. Then the stack's own record of it: presence says LINK through this
-#      gateway, and the database holds every event the gateway acknowledged.
+#      sent again under its request_id; the inbox hint and HeartbeatAck's hints; an approval the owner allows through the
+#      web API, its approval hint and HeartbeatAck's hints naming it while its call waits, then the decision read; route
+#      answers relayed whatever their status, malformed paths refused; durable events stored, acknowledged,
+#      deduplicated, a gap refused, credit exceeded and made good; the live stream published only while the owner
+#      watches, and the turn prefix asked of the runner; an answer that travels in pieces. Then the stack's own record
+#      of it: presence says LINK through this gateway, and the database holds every event the gateway acknowledged.
 #   3. Cancel: a claim waits for the claim lock, held here, and the runner goes away under it: the gateway cancels the
 #      call, and the session stays unclaimed.
 #   4. Retry: heartbeats and reads keep being answered while the second apiserver is killed and started again.
@@ -91,7 +92,7 @@ snapshot "$out/2-metrics-before.txt"
 client -drill link "${owner[@]}" -nats-url "$nats_url" -nats-seed-file "$secrets/nats_apiserver_seed" \
   -report "$out/2-link.json" -capture "$out/2-link.capture" > "$out/2-link.log" 2>&1 || fail "the link drill"
 snapshot "$out/2-metrics-after.txt"
-check_json "$out/2-link.json" 's.ok && s.steps.length >= 25 && s.steps.every((x) => x.ok)'
+check_json "$out/2-link.json" 's.ok && s.steps.length >= 30 && s.steps.every((x) => x.ok)'
 node -e 'const s = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
   for (const x of s.steps) console.error(`    ok   ${x.name} (${x.ms} ms): ${x.detail}`);' "$out/2-link.json"
 deltas "$out/2-metrics-before.txt" "$out/2-metrics-after.txt" \
@@ -102,7 +103,8 @@ deltas "$out/2-metrics-before.txt" "$out/2-metrics-after.txt" \
   'link_events_stored_total >= 13000' 'link_live_events_total{result="no_watchers"} >= 2' \
   'link_live_events_total{result="published"} >= 2' 'link_turn_prefix_requests_total{result="answered"} >= 1' \
   'link_hints_total{kind="claim",result="sent"} >= 1' 'link_hints_total{kind="inbox",result="sent"} >= 1' \
-  'link_hints_total{kind="watchers",result="sent"} >= 2' 'link_backend_calls_total{kind="rpc",result="cut_off"} == 0'
+  'link_hints_total{kind="approval",result="sent"} >= 1' 'link_hints_total{kind="watchers",result="sent"} >= 2' \
+  'link_backend_calls_total{kind="rpc",result="cut_off"} == 0'
 session_uuid="$(json_field "$out/2-link.json" 'facts.sessionUuid')"
 runner_id="$(json_field "$out/2-link.json" 'facts.runnerId')"
 durable="$(json_field "$out/2-link.json" 'facts.durableSeq')"

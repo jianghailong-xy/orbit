@@ -15,7 +15,10 @@
  *   2. a message sent to that session while it runs is hinted to A alone, as an inbox hint naming the session;
  *   3. Update Runner Now on B is hinted to B alone, as a commands hint, and B's wake poll returns as before;
  *   4. a message sent to a session of A's that is between turns queues it again: a claim hint for A alone;
- *   5. with NATS gone, a session opened on A is still handed to A's claim long poll at once over HTTPS and nothing is
+ *   5. an approval A asks for on its running session, decided by the account owner through the Web API, is hinted to A
+ *      alone, naming the session and the approval, once the decision is stored; a second click on it hints nothing, a
+ *      deny is hinted like an allow, and A's approval poll reads each decision over HTTPS as before;
+ *   6. with NATS gone, a session opened on A is still handed to A's claim long poll at once over HTTPS and nothing is
  *      published; the apiserver logs the disconnect and, a minute later, the number of hints it dropped.
  *
  * Not destructive: every row belongs to the account this run creates.
@@ -241,6 +244,8 @@ test('each wake is hinted on NATS to the runner it concerns alone, and HTTPS wor
   const claimHint = '{"hint":{"claim":{}}}';
   const commandsHint = '{"hint":{"commands":{}}}';
   const inboxHint = (sessionId: string) => `{"hint":{"inbox":{"sessionId":"${sessionId}"}}}`;
+  const approvalHint = (sessionId: string, approvalId: string) =>
+    `{"hint":{"approval":{"sessionId":"${sessionId}","approvalId":"${approvalId}"}}}`;
   /** What was published from `from` on, once nothing more has arrived for a moment. */
   const publishedSince = async (from: number, atLeast: number): Promise<Published[]> => {
     await until(10_000, `${atLeast} hint(s) published`, () => nats.published.length >= from + atLeast);
@@ -321,7 +326,51 @@ test('each wake is hinted on NATS to the runner it concerns alone, and HTTPS wor
     assert.equal(toUuid(claimed.json.sessionId), idle, 'A claims the session it was hinted about');
   });
 
-  await t.test('5. with NATS gone, HTTPS hands A its session at once, nothing is published, and the drop is logged', async () => {
+  await t.test('5. an approval the owner decides through the Web API is hinted to A alone, after the decision is stored', async () => {
+    // A asks, as its MCP permission tool does, on the session it claimed in 1.
+    const ask = async (toolUseId: string) => {
+      const asked = await api('POST', `/api/runner/sessions/${uuidToBase62(onA)}/approvals`, a.token,
+        { toolName: 'Bash', input: { command: 'npm test' }, toolUseId });
+      assert.equal(asked.status, 201, asked.text);
+      assert.equal(asked.json.status, 'PENDING', asked.text);
+      return asked.json.id as string;
+    };
+    const decide = (approvalId: string, behavior: 'allow' | 'deny') =>
+      api('POST', `/api/sessions/${uuidToBase62(onA)}/approvals/${approvalId}/decision`, ownerToken, { behavior });
+    const statusOfApproval = async (approvalId: string) =>
+      (await sql.query<{ status: string }>(`SELECT "status" FROM "approval" WHERE "id" = $1::uuid`, [toUuid(approvalId)])).rows[0].status;
+
+    const allowed = await ask(`toolu_${RUN}_allowed`);
+    let mark = nats.published.length;
+    const allow = await decide(allowed, 'allow');
+    assert.equal(allow.status, 201, allow.text);
+    assert.deepEqual(await publishedSince(mark, 1), [{ subject: `rnr.${a.id}`, message: approvalHint(onA, toUuid(allowed)) }],
+      'one approval hint, for the runner the session is assigned to, and none for B');
+    assert.equal(await statusOfApproval(allowed), 'ALLOWED');
+
+    mark = nats.published.length;
+    const again = await decide(allowed, 'deny');
+    assert.equal(again.status, 201, again.text);
+    assert.equal(again.json.status, 'ALLOWED', 'the first decision stands');
+    await sleep(1_500);
+    assert.deepEqual(nats.published.slice(mark), [], 'a click that lost to the first decision hints nothing');
+
+    const denied = await ask(`toolu_${RUN}_denied`);
+    mark = nats.published.length;
+    assert.equal((await decide(denied, 'deny')).status, 201);
+    assert.deepEqual(await publishedSince(mark, 1), [{ subject: `rnr.${a.id}`, message: approvalHint(onA, toUuid(denied)) }]);
+
+    // Over HTTPS A's poll reads each decision from the row, as it always has.
+    for (const [approvalId, behavior] of [[allowed, 'allow'], [denied, 'deny']] as const) {
+      const read = await within(5_000, "A's approval poll",
+        api('GET', `/api/runner/sessions/${uuidToBase62(onA)}/approvals/${approvalId}`, a.token));
+      assert.equal(read.status, 200, read.text);
+      assert.equal(read.json.behavior, behavior, read.text);
+    }
+    assert.deepEqual(bClaimed, []);
+  });
+
+  await t.test('6. with NATS gone, HTTPS hands A its session at once, nothing is published, and the drop is logged', async () => {
     await nats.stop();
     await until(10_000, 'the apiserver noticing NATS is gone', () => /disconnected from NATS at /.test(server!.output()));
     const published = nats.published.length;

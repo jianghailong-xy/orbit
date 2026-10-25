@@ -48,6 +48,11 @@ import (
 //     own for its token requests and its dials, and no state the work reads.
 //   - Turned off (ORBIT_LINK_SHADOW=0, or "linkShadow": false in the config), nothing is installed at all.
 //
+// When the work itself moves to the link (link_mode.go), the shadow gives way. The gateway holds one connection per
+// process, so while the work connection holds it the shadow holds none, and a connection of the shadow's that says
+// MODE_LINK is told no mirror: in MODE_LINK the gateway forwards heartbeats and stores event batches, and a mirror is
+// neither. It reports the mode each gateway says, which is one of the ways the work learns to move.
+//
 // Every linkShadowSummaryEvery, and when it stops, the shadow logs one "link shadow summary" line of JSON: online
 // time, connects and reconnects with their gaps, the last error, the RTT of its pings, and the mirrors sent, answered
 // and dropped by reason. Phase A6 reads those lines from the runners' logs.
@@ -91,10 +96,11 @@ const (
 	linkDropSendFailed                       // the connection failed while it was being sent
 	linkDropUnreadable                       // the body did not read as its route's JSON
 	linkDropStopped                          // the runner stopped before it was sent
+	linkDropLinkMode                         // the link carries the work: the gateway would forward it as work
 	linkDropReasons
 )
 
-var linkDropReasonNames = [linkDropReasons]string{"queue_full", "too_large", "no_body", "offline", "send_failed", "unreadable", "stopped"}
+var linkDropReasonNames = [linkDropReasons]string{"queue_full", "too_large", "no_body", "offline", "send_failed", "unreadable", "stopped", "link_mode"}
 
 // linkMirrorCounts counts one kind of mirror. Written from the work path, so atomics only.
 type linkMirrorCounts struct {
@@ -136,6 +142,9 @@ func startLinkShadow(cfg *RunnerConfig, t *Transport) func() {
 		return func() {}
 	}
 	s := newLinkShadow(newLinkClient(t.baseURL, t.token, t.leaseOwner, func() *linkpb.Hello { return linkHello(t.leaseOwner) }), logln)
+	if t.link != nil {
+		s.coord = t.link
+	}
 	if err := installLinkShadowTap(t, s); err != nil {
 		logln("link shadow: off (" + err.Error() + ")")
 		return func() {}
@@ -254,6 +263,9 @@ type linkShadow struct {
 	answered   atomic.Int64 // raw halves the gateway answered
 	acks       atomic.Int64 // HeartbeatAcks
 	modeWarned atomic.Bool
+	// coord is the link mode of the transport the shadow watches, when it has one: the shadow holds no connection
+	// while coord's work connection does, and tells it each mode a gateway says.
+	coord linkShadowCoordinator
 
 	started time.Time
 
@@ -285,9 +297,19 @@ type linkRTT struct {
 	sum, min, max, last time.Duration
 }
 
+// linkShadowCoordinator is what the shadow yields to (linkMode, link_mode.go).
+type linkShadowCoordinator interface {
+	// standDown says whether the shadow must hold no connection now, and gives a channel closed when that may change.
+	standDown() (bool, <-chan struct{})
+	// observe takes a mode a gateway stated, and what said it.
+	observe(mode linkpb.Mode, source string)
+}
+
 // linkShadowConn is the shadow's own state of one of its connections.
 type linkShadowConn struct {
 	*linkConn
+	// linkMode is set once the connection's Welcome or a HeartbeatAck on it said MODE_LINK: no mirror is sent on it.
+	linkMode atomic.Bool
 	// pending counts the raw halves sent on the connection that the gateway has not answered yet. The gateway answers
 	// every Rpc, in order, so with none pending it has taken every mirror sent on the connection, both halves.
 	pending atomic.Int64
@@ -373,7 +395,7 @@ func (s *linkShadow) loop(ctx context.Context) {
 	var retryAt, renewAt, drainAt time.Time
 	for {
 		if cur == nil {
-			if !s.offlineUntil(ctx, retryAt, summary.C) {
+			if !s.yield(ctx, summary.C) || !s.offlineUntil(ctx, retryAt, summary.C) {
 				return
 			}
 			st, err := s.connect(ctx)
@@ -392,10 +414,17 @@ func (s *linkShadow) loop(ctx context.Context) {
 			s.adopted(st)
 			continue
 		}
+		down, yieldNow := s.standingDown()
+		if down {
+			s.stoodDown(cur)
+			cur, retryAt = nil, time.Time{}
+			continue
+		}
 		timer.Reset(max(time.Until(renewAt), 0))
 		select {
 		case <-ctx.Done():
 			return
+		case <-yieldNow:
 		case m := <-s.queue:
 			s.send(cur, m)
 		case d := <-s.drains:
@@ -466,9 +495,7 @@ func (s *linkShadow) onFrame(st *linkShadowConn, f *linkpb.Frame) {
 		}
 	case *linkpb.Frame_HeartbeatAck:
 		s.acks.Add(1)
-		if mode := body.HeartbeatAck.GetMode(); mode != linkpb.Mode_MODE_HTTP && s.modeWarned.CompareAndSwap(false, true) {
-			s.log("link shadow: the gateway answers", mode.String(), "— this runner keeps its work on HTTPS and only mirrors")
-		}
+		s.sawMode(st, body.HeartbeatAck.GetMode(), "a HeartbeatAck on the shadow's connection "+st.id)
 	case *linkpb.Frame_Drain:
 		select {
 		case s.drains <- linkShadowDrain{conn: st, after: time.Duration(body.Drain.GetReconnectAfterMs()) * time.Millisecond}:
@@ -521,6 +548,10 @@ func (s *linkShadow) pinger(st *linkShadowConn) {
 func (s *linkShadow) send(st *linkShadowConn, m *linkMirror) {
 	defer s.queuedBytes.Add(-m.size)
 	counts := s.counts[m.kind]
+	if st.linkMode.Load() {
+		counts.dropped[linkDropLinkMode].Add(1)
+		return
+	}
 	body, typed, err := m.build()
 	if err != nil {
 		counts.dropped[linkDropUnreadable].Add(1)
@@ -693,8 +724,64 @@ func (s *linkShadow) settle(st *linkShadowConn, deadline time.Time) {
 	}
 }
 
+// sawMode takes a mode st's gateway stated. MODE_LINK means a mirror sent on st would be forwarded as work, so none
+// is; and when the transport has a link mode, it hears the mode either way.
+func (s *linkShadow) sawMode(st *linkShadowConn, mode linkpb.Mode, source string) {
+	if mode == linkpb.Mode_MODE_LINK {
+		st.linkMode.Store(true)
+	}
+	if s.coord != nil {
+		s.coord.observe(mode, source)
+		return
+	}
+	if mode != linkpb.Mode_MODE_HTTP && mode != linkpb.Mode_MODE_UNSPECIFIED && s.modeWarned.CompareAndSwap(false, true) {
+		s.log("link shadow: the gateway answers", mode.String(), "— this runner keeps its work on HTTPS (link mode off) and mirrors nothing on that connection")
+	}
+}
+
+// standingDown is the coordinator's standDown, or never for a shadow without one.
+func (s *linkShadow) standingDown() (bool, <-chan struct{}) {
+	if s.coord == nil {
+		return false, nil
+	}
+	return s.coord.standDown()
+}
+
+// yield waits while the work connection holds the process's connection, dropping the mirrors that come meanwhile:
+// with the work on the link there is nothing for them to shadow. It reports false once ctx has ended.
+func (s *linkShadow) yield(ctx context.Context, summary <-chan time.Time) bool {
+	for {
+		down, changed := s.standingDown()
+		if !down {
+			return true
+		}
+		select {
+		case <-ctx.Done():
+			return false
+		case <-changed:
+		case m := <-s.queue:
+			s.queuedBytes.Add(-m.size)
+			s.counts[m.kind].dropped[linkDropLinkMode].Add(1)
+		case <-summary:
+			s.logSummary(nil, false)
+		}
+	}
+}
+
+// stoodDown closes st, the shadow's connection, because the work connection takes the process's place at the gateway.
+func (s *linkShadow) stoodDown(st *linkShadowConn) {
+	r := &s.run
+	if !r.onlineSince.IsZero() {
+		r.onlineFor += s.now().Sub(r.onlineSince)
+		r.onlineSince = time.Time{}
+	}
+	st.close(websocket.StatusNormalClosure, "the work connection takes over")
+	s.log(fmt.Sprintf("link shadow: connection %s closed — the runner's work goes over the runner link now, and the shadow stands down", st.id))
+}
+
 // adopted makes st the shadow's connection after a time without one.
 func (s *linkShadow) adopted(st *linkShadowConn) {
+	s.sawMode(st, st.welcome.GetMode(), "the Welcome of the shadow's connection "+st.id)
 	now := s.now()
 	r := &s.run
 	r.connects++
@@ -717,6 +804,7 @@ func (s *linkShadow) adopted(st *linkShadowConn) {
 
 // replaced makes st the shadow's connection in place of old, which it closes.
 func (s *linkShadow) replaced(old, st *linkShadowConn, why string) {
+	s.sawMode(st, st.welcome.GetMode(), "the Welcome of the shadow's connection "+st.id)
 	s.run.connects++
 	s.run.renewals++
 	s.run.link = st.token.linkURL
