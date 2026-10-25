@@ -112,6 +112,9 @@ type linkTuning struct {
 	WatchersTTL time.Duration
 	// PrefixTimeout is how long a turn prefix request waits for the runner's answer.
 	PrefixTimeout time.Duration
+	// WelcomeTimeout bounds the welcome route's call a Welcome waits for (welcome.go), retries included: well inside the
+	// 10 s a runner waits for Welcome after its Hello.
+	WelcomeTimeout time.Duration
 }
 
 // creditLevel is an amount of durable events: a count and their payload bytes.
@@ -132,6 +135,7 @@ func defaultLinkTuning() linkTuning {
 		BackendDownFor:   5 * time.Second,
 		WatchersTTL:      60 * time.Second,
 		PrefixTimeout:    10 * time.Second,
+		WelcomeTimeout:   3 * time.Second,
 	}
 }
 

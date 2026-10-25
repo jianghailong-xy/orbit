@@ -234,3 +234,46 @@ func TestAHeartbeatIsForwardedForItsConnectionsProcess(t *testing.T) {
 		t.Fatal("not counted")
 	}
 }
+
+// HeartbeatAck.release is the release linkHints names: the one the apiserver assigns the runner now
+// (src/apiserver/src/runner-api/runner-release-feed.ts), and none when it names none or the beat was not answered.
+func TestAHeartbeatAckStatesTheReleaseTheRouteAssigns(t *testing.T) {
+	release := map[string]any{"version": "0.1.241", "rollback": false}
+	backend := newFakeBackend(t, nil)
+	answerWith := func(hints map[string]any) {
+		backend.setHandler(func(w http.ResponseWriter, r *http.Request, body []byte) {
+			writeJSON(w, 200, map[string]any{"cancelSessionIds": []string{}, "maxConcurrent": 2, "linkHints": hints})
+		})
+	}
+	h := newLinkHarness(t, []*fakeBackend{backend}, nil)
+	tc, _ := h.connectLink(runnerA, processA)
+	beat := func() *linkpb.HeartbeatAck {
+		tc.send(heartbeatFrame(&linkpb.Heartbeat{ProcessId: processA, IdleCapacity: 1}))
+		return tc.await("heartbeat_ack", 5*time.Second, nil).GetHeartbeatAck()
+	}
+
+	answerWith(map[string]any{"inboxSessionIds": []string{}, "claim": false, "release": release})
+	ack := beat()
+	if r := ack.GetRelease(); r.GetVersion() != "0.1.241" || r.GetRollback() {
+		t.Fatalf("release %v", r)
+	}
+	if strings.Contains(string(ack.GetReconcileJson()), "release") || !strings.Contains(string(ack.GetReconcileJson()), "maxConcurrent") {
+		t.Fatalf("reconcile %s", ack.GetReconcileJson())
+	}
+	answerWith(map[string]any{"inboxSessionIds": []string{}, "claim": false, "release": map[string]any{"version": "0.1.239", "rollback": true}})
+	if r := beat().GetRelease(); r.GetVersion() != "0.1.239" || !r.GetRollback() {
+		t.Fatalf("a rollback: %v", r)
+	}
+	// None assigned, or none the apiserver can state now: the full answer states none.
+	answerWith(map[string]any{"inboxSessionIds": []string{}, "claim": false})
+	if ack := beat(); ack.GetRelease() != nil || len(ack.GetReconcileJson()) == 0 {
+		t.Fatalf("no release named: %v", ack)
+	}
+	// A beat the route refused reconciled nothing, and states nothing.
+	backend.setHandler(func(w http.ResponseWriter, r *http.Request, body []byte) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"code": "DB_UNAVAILABLE", "retryable": true})
+	})
+	if ack := beat(); ack.GetRelease() != nil || len(ack.GetReconcileJson()) != 0 {
+		t.Fatalf("a refused beat: %v", ack)
+	}
+}

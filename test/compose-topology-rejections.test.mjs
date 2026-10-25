@@ -157,6 +157,9 @@ const cases = [
     replace('${RUNNER_LINK_INTERNAL_PORT:-3001}"\n      RUNNER_LINK_INTERNAL_HOST', '${RUNNER_LINK_INTERNAL_PORT:-3002}"\n      RUNNER_LINK_INTERNAL_HOST')],
   ["the gateway's NATS seed given to the apiserver", 'nothing beyond the approved configuration was added',
     replace('${RUNNER_LINK_NATS_APISERVER_SEED:-}', '${RUNNER_LINK_NATS_GATEWAY_SEED:-}')],
+  // The link's releases of 2026-10-25 (task B4a): read from the web container beside the apiserver unless .env says otherwise.
+  ['the runner releases read from elsewhere by default', 'nothing beyond the approved configuration was added',
+    replace('${RUNNER_RELEASE_DL_URL:-http://web/dl/}', '${RUNNER_RELEASE_DL_URL:-https://elsewhere.example/dl/}')],
   ["the apiserver's NATS seed given to the gateway", 'the runner link gateway is exactly the service',
     replace('      LINK_NATS_SEED: "${RUNNER_LINK_NATS_GATEWAY_SEED:-}"', '      LINK_NATS_SEED: "${RUNNER_LINK_NATS_APISERVER_SEED:-}"')],
   ["a NATS user's key given to the gateway", 'NATS is named to the apiserver and the link gateway alone',
