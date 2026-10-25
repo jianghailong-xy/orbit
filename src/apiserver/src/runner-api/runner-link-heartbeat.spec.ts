@@ -14,6 +14,7 @@ import { LINK_GATEWAY_ID_HEADER, parseRunnerLinkGatewayId } from './runner-link-
 const RUNNER_ID = '11111111-1111-4111-8111-111111111111';
 const LEASE_OWNER = '22222222-2222-4222-8222-222222222222';
 const SESSION_ID = '33333333-3333-4333-8333-333333333333';
+const APPROVAL_ID = '44444444-4444-4444-8444-444444444444';
 
 function heartbeatWorld(options: { hintsFail?: boolean; linkWatchers?: boolean } = {}) {
   const presenceWrites: Array<{ update: Record<string, unknown> }> = [];
@@ -36,7 +37,7 @@ function heartbeatWorld(options: { hintsFail?: boolean; linkWatchers?: boolean }
       // Every other read the route makes finds nothing.
       if (!sql.includes('conversation_turn')) return [];
       if (options.hintsFail) throw new Error('the database is failing over');
-      return [{ inboxSessionIds: [SESSION_ID], claim: true }];
+      return [{ inboxSessionIds: [SESSION_ID], claim: true, approvals: [{ sessionId: SESSION_ID, approvalId: APPROVAL_ID }] }];
     },
   } as never;
   const realtime = {
@@ -74,6 +75,7 @@ test('a heartbeat the gateway forwarded is answered with what waits, and recorde
   assert.deepEqual(answer.linkHints, {
     inboxSessionIds: [SESSION_ID],
     claim: true,
+    approvals: [{ sessionId: SESSION_ID, approvalId: APPROVAL_ID }],
     watchers: { instance: 'i-1', sessions: [{ sessionId: SESSION_ID, watchers: 2 }] },
   });
   // Today's response is all there besides.
@@ -83,6 +85,11 @@ test('a heartbeat the gateway forwarded is answered with what waits, and recorde
   assert.match(sql, /"assigned_runner_id" = \?::uuid/);
   assert.match(sql, /t\.status = 'PENDING' OR \(t\.status = 'IN_FLIGHT' AND t\."lease_deadline_at" < now\(\)\)/);
   assert.match(sql, /s\.status = 'PENDING'/);
+  // The approvals: decided ones of the runner's open sessions, while the reader the card names is still there.
+  assert.match(sql, /JOIN "approval" a ON a\."session_id" = s\.id AND a\.status IN \('ALLOWED', 'DENIED'\)/);
+  assert.match(sql, /WHEN a\."background_job_id" IS NOT NULL THEN a\."background_job_id" = ANY \(s\."running_bg_shells"\)/);
+  assert.match(sql, /t\.id = a\."turn_id" AND t\.status <> 'ANSWERED'/);
+  assert.match(sql, /c\."tool_use_id" = a\."tool_use_id" AND c\."finished_at" IS NOT NULL/);
   assert.equal(w.presenceWrites[0].update.gatewayId, 'orbit-link-gateway-1');
   assert.equal(w.presenceWrites[0].update.linkState, 'LINK');
 });
@@ -101,7 +108,9 @@ test('without NATS the answer says what waits, and no watchers', async () => {
   const answer = await w.controller.heartbeat(
     { id: RUNNER_ID, version: null, lastHeartbeatAt: new Date() }, beat, undefined, undefined, undefined, undefined, link,
   );
-  assert.deepEqual(answer.linkHints, { inboxSessionIds: [SESSION_ID], claim: true });
+  assert.deepEqual(answer.linkHints, {
+    inboxSessionIds: [SESSION_ID], claim: true, approvals: [{ sessionId: SESSION_ID, approvalId: APPROVAL_ID }],
+  });
 });
 
 test('the gateway node is read from its header, and only a plain name is', () => {
