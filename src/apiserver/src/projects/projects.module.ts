@@ -10,6 +10,7 @@ import { AttemptBudgetMeterService } from './attempt-budget-meter.service';
 import { ConvergenceLedgerService } from './convergence-ledger.service';
 import { CoordinatorJudgmentModule } from './coordinator-judgment.module';
 import { ProjectOpenItemEscalationService } from './open-item-escalation.service';
+import { ProjectRollupCandidateService } from './project-rollup-candidate';
 import { SessionAttemptService } from './session-attempt.service';
 import { ProjectAcceptanceModule } from './project-acceptance.module';
 import { ProjectAttributionModule } from './project-attribution.module';
@@ -50,6 +51,9 @@ import { IntegrationJobRelay } from '../runner-api/integration-job-relay';
     // that only ever writes an item's assignee belongs beside the items, not beside the sweeps that
     // start work.
     ProjectOpenItemEscalationService,
+    // Tightens the candidate set `GET /projects` classifies (0441) back to the exact one, on a timer
+    // of its own: the read never pays for it.
+    ProjectRollupCandidateService,
     // Merging a project branch into main (§3). Provided here and exported, so the runner door that
     // notices a landing and the owner door that answers the card are the same instance.
     ProjectPromotionService,

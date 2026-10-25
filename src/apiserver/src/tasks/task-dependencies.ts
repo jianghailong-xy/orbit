@@ -507,6 +507,11 @@ export function everyPrerequisiteTailDoneSql(alias = 't'): string {
  * and the DONE or retired rows, through their indexes, so the planner asks it of a whole owner as
  * one hashed set. On the 109,875-task project measured here, 109,737 of 110,891 edges name a
  * prerequisite that is neither, and the walk this spares was 6.3s of the project index's 7.3s.
+ *
+ * Migration 0441's `project_rollup_candidate` triggers restate when this turns TRUE for a task — an
+ * edge goes, or a prerequisite becomes DONE or retired — in SQL, because a trigger cannot splice
+ * it. A change to what "DONE or retired" means here has to move those triggers with it;
+ * `project-rollup-candidate.pg.spec.ts` is what notices when they part.
  */
 export function everyPrerequisiteDoneOrRetiredSql(alias = 't'): string {
   return `NOT EXISTS (
