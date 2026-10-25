@@ -1,0 +1,350 @@
+{
+  "generatedBy": "scripts/runner-link/gen-event-kind-fixtures.mjs, with src/apiserver/src/common/system-noise.ts and the COORDINATOR_CONTEXT_BOUNDARY_SUBTYPES of src/apiserver/src/runner-api/runner-api.controller.ts",
+  "nonReplayableEventTypes": [
+    "text_delta",
+    "thinking_delta",
+    "tool_output",
+    "approval_request",
+    "approval_resolved",
+    "queued_turns_changed",
+    "background_output",
+    "task_progress",
+    "resync",
+    "tombstone"
+  ],
+  "meaningfulSystemSubtypes": [
+    "init",
+    "resumed"
+  ],
+  "pingKeys": [
+    "model",
+    "sessionId",
+    "subtype"
+  ],
+  "coordinatorContextBoundarySubtypes": [
+    "compact_boundary",
+    "compact_summary",
+    "context_compacted"
+  ],
+  "liveEventSeqPlaceholder": {
+    "type": "system",
+    "payload": {
+      "subtype": "live_event_seq"
+    },
+    "noise": true,
+    "coordinatorBoundary": false
+  },
+  "cases": [
+    {
+      "name": "claude progress ping: subtype, model and sessionId only",
+      "type": "system",
+      "payload": {
+        "subtype": "status",
+        "model": null,
+        "sessionId": "sess-1"
+      },
+      "noise": true
+    },
+    {
+      "name": "claude status naming its phase (enginePhase)",
+      "type": "system",
+      "payload": {
+        "subtype": "status",
+        "model": null,
+        "sessionId": "sess-1",
+        "enginePhase": "compacting"
+      },
+      "noise": false
+    },
+    {
+      "name": "claude thinking-tokens ping",
+      "type": "system",
+      "payload": {
+        "subtype": "thinking_tokens",
+        "model": "claude-opus-5-5",
+        "sessionId": "sess-1"
+      },
+      "noise": true
+    },
+    {
+      "name": "init with the runtime session id",
+      "type": "system",
+      "payload": {
+        "subtype": "init",
+        "sessionId": "sess-1"
+      },
+      "noise": false
+    },
+    {
+      "name": "init with nothing but its subtype",
+      "type": "system",
+      "payload": {
+        "subtype": "init"
+      },
+      "noise": false
+    },
+    {
+      "name": "resumed with nothing but its subtype",
+      "type": "system",
+      "payload": {
+        "subtype": "resumed"
+      },
+      "noise": false
+    },
+    {
+      "name": "resumed after a crash",
+      "type": "system",
+      "payload": {
+        "subtype": "resumed",
+        "attempt": 1
+      },
+      "noise": false
+    },
+    {
+      "name": "resumed after a config change",
+      "type": "system",
+      "payload": {
+        "subtype": "resumed",
+        "reason": "config_changed"
+      },
+      "noise": false
+    },
+    {
+      "name": "engine stderr, no subtype",
+      "type": "system",
+      "payload": {
+        "stderr": "No conversation found with session ID x\n"
+      },
+      "noise": false
+    },
+    {
+      "name": "context gauge",
+      "type": "system",
+      "payload": {
+        "subtype": "context",
+        "contextTokens": 12000,
+        "contextWindow": 200000
+      },
+      "noise": false
+    },
+    {
+      "name": "opencode step start",
+      "type": "system",
+      "payload": {
+        "subtype": "step_start",
+        "sessionId": "sess-1"
+      },
+      "noise": true
+    },
+    {
+      "name": "claude compaction boundary with its metadata",
+      "type": "system",
+      "payload": {
+        "subtype": "compact_boundary",
+        "model": null,
+        "sessionId": "sess-1",
+        "compactMetadata": {
+          "trigger": "auto",
+          "preTokens": 180000
+        }
+      },
+      "noise": false
+    },
+    {
+      "name": "claude compaction boundary without metadata",
+      "type": "system",
+      "payload": {
+        "subtype": "compact_boundary",
+        "model": null,
+        "sessionId": "sess-1"
+      },
+      "noise": true
+    },
+    {
+      "name": "claude compaction summary",
+      "type": "system",
+      "payload": {
+        "subtype": "compact_summary",
+        "text": "This session is being continued from a previous conversation"
+      },
+      "noise": false
+    },
+    {
+      "name": "codex app-server compaction, bare",
+      "type": "system",
+      "payload": {
+        "subtype": "context_compacted"
+      },
+      "noise": true
+    },
+    {
+      "name": "a shared-checkout notice",
+      "type": "system",
+      "payload": {
+        "notice": "files changed outside the session",
+        "noticeKind": "shared-checkout-dirty",
+        "paths": [
+          "a.go"
+        ]
+      },
+      "noise": false
+    },
+    {
+      "name": "a cursor notice",
+      "type": "system",
+      "payload": {
+        "noticeKind": "cursor-plan-mode-left",
+        "provider": "cursor",
+        "notice": "refused"
+      },
+      "noise": false
+    },
+    {
+      "name": "a reload naming its provider",
+      "type": "system",
+      "payload": {
+        "subtype": "reload",
+        "reason": "launch_changed",
+        "provider": "dsh"
+      },
+      "noise": false
+    },
+    {
+      "name": "an empty payload",
+      "type": "system",
+      "payload": {},
+      "noise": true
+    },
+    {
+      "name": "no payload at all",
+      "type": "system",
+      "payload": null,
+      "noise": true
+    },
+    {
+      "name": "only model",
+      "type": "system",
+      "payload": {
+        "model": "m"
+      },
+      "noise": true
+    },
+    {
+      "name": "a subtype that is not a string",
+      "type": "system",
+      "payload": {
+        "subtype": 7
+      },
+      "noise": true
+    },
+    {
+      "name": "a null subtype",
+      "type": "system",
+      "payload": {
+        "subtype": null
+      },
+      "noise": true
+    },
+    {
+      "name": "meaningful subtype among ping keys",
+      "type": "system",
+      "payload": {
+        "subtype": "resumed",
+        "model": null,
+        "sessionId": null
+      },
+      "noise": false
+    },
+    {
+      "name": "one key past the ping keys",
+      "type": "system",
+      "payload": {
+        "subtype": "status",
+        "model": null,
+        "sessionId": "s",
+        "x": 1
+      },
+      "noise": false
+    },
+    {
+      "name": "an assistant reply",
+      "type": "assistant",
+      "payload": {
+        "text": "hello"
+      },
+      "noise": false
+    },
+    {
+      "name": "an empty assistant payload",
+      "type": "assistant",
+      "payload": {},
+      "noise": false
+    },
+    {
+      "name": "a user turn",
+      "type": "user",
+      "payload": {
+        "text": "hi"
+      },
+      "noise": false
+    },
+    {
+      "name": "a text delta",
+      "type": "text_delta",
+      "payload": {
+        "text": "he"
+      },
+      "noise": false
+    }
+  ],
+  "boundaries": [
+    {
+      "subtype": "compact_boundary",
+      "bare": {
+        "payload": {
+          "subtype": "compact_boundary"
+        },
+        "noise": true
+      },
+      "enriched": {
+        "payload": {
+          "subtype": "compact_boundary",
+          "provider": "codex"
+        },
+        "noise": false
+      }
+    },
+    {
+      "subtype": "compact_summary",
+      "bare": {
+        "payload": {
+          "subtype": "compact_summary"
+        },
+        "noise": true
+      },
+      "enriched": {
+        "payload": {
+          "subtype": "compact_summary",
+          "provider": "codex"
+        },
+        "noise": false
+      }
+    },
+    {
+      "subtype": "context_compacted",
+      "bare": {
+        "payload": {
+          "subtype": "context_compacted"
+        },
+        "noise": true
+      },
+      "enriched": {
+        "payload": {
+          "subtype": "context_compacted",
+          "provider": "codex"
+        },
+        "noise": false
+      }
+    }
+  ]
+}

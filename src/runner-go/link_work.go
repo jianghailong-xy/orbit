@@ -397,9 +397,12 @@ func (w *linkWork) adopt(conn, old *linkWorkConn, why string) bool {
 		old.retired.Store(&reason)
 		old.close(websocket.StatusNormalClosure, "replaced")
 	}
-	// What the Welcome says, then everything asked once more: hints sent while there was no connection are lost.
+	// What the Welcome says, then everything asked once more: hints sent while there was no connection are lost. The
+	// sessions' event streams send everything they hold again on this connection, from how far the Welcome says each
+	// is stored (link_events.go).
 	w.m.gates.state(welcome.GetHints())
 	w.m.assignRelease(welcome.GetRelease())
+	w.m.events.welcomed(conn, welcome)
 	w.m.gates.markAll()
 	for _, s := range welcome.GetSessions() {
 		if !s.GetLeaseHeld() {
@@ -563,6 +566,7 @@ func (w *linkWork) onFrame(conn *linkWorkConn, f *linkpb.Frame) {
 		ack := body.HeartbeatAck
 		w.m.observe(ack.GetMode(), "a HeartbeatAck on "+conn.id)
 		w.m.gates.state(ack.GetHints())
+		w.m.events.hintState(ack.GetHints())
 		if len(ack.GetReconcileJson()) > 0 || ack.GetRelease() != nil {
 			// A full answer states the assigned release, its absence included; one that reconciled nothing does not.
 			w.m.assignRelease(ack.GetRelease())
@@ -577,6 +581,9 @@ func (w *linkWork) onFrame(conn *linkWorkConn, f *linkpb.Frame) {
 		}
 	case *linkpb.Frame_Hint:
 		w.m.gates.hint(body.Hint)
+		if watchers := body.Hint.GetWatchers(); watchers != nil {
+			w.m.events.watchersHint(watchers)
+		}
 	case *linkpb.Frame_Drain:
 		w.event(linkWorkEvent{conn: conn, drain: body.Drain})
 	case *linkpb.Frame_TokenRefresh:
@@ -584,17 +591,17 @@ func (w *linkWork) onFrame(conn *linkWorkConn, f *linkpb.Frame) {
 	case *linkpb.Frame_Redirect:
 		w.event(linkWorkEvent{conn: conn, redirect: body.Redirect})
 	case *linkpb.Frame_TurnPrefixRequest:
-		// What a turn has streamed is the live stream's (task B8), which this runner does not send over the link yet:
-		// the empty answer, at once, gives the client today's behaviour without the gateway's 10s wait.
-		req := body.TurnPrefixRequest
+		// What the session's current turn has streamed so far, which its live stream keeps (link_events_live.go).
+		resp := w.m.events.turnPrefix(body.TurnPrefixRequest)
 		go func() {
-			_, _ = conn.send(&linkpb.Frame{Body: &linkpb.Frame_TurnPrefixResponse{TurnPrefixResponse: &linkpb.TurnPrefixResponse{
-				RequestId: req.GetRequestId(), SessionId: req.GetSessionId(),
-			}}})
+			_, _ = conn.send(&linkpb.Frame{Body: &linkpb.Frame_TurnPrefixResponse{TurnPrefixResponse: resp}})
 		}()
+	case *linkpb.Frame_EventAck:
+		w.m.events.onAck(conn, body.EventAck)
+	case *linkpb.Frame_Credit:
+		w.m.events.onCredit(conn, body.Credit)
 	}
-	// Credit, EventAck and the watchers concern EventBatch and LiveBatch, which this runner does not send yet (task
-	// B8); a body this binary does not know is ignored, as the protocol asks.
+	// A body this binary does not know is ignored, as the protocol asks.
 }
 
 func (w *linkWork) event(ev linkWorkEvent) {

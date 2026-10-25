@@ -22,7 +22,7 @@ import (
 // stands, the last event seq sent and the turn being executed, and the call in flight is sent again on the new
 // connection under its request_id and answered there.
 func TestLinkResumesAfterADroppedConnection(t *testing.T) {
-	r := newLinkWorkRig(t)
+	r, _ := newLinkEventsRig(t)
 	held := make(chan struct{})
 	var once sync.Once
 	r.g.backend = func(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
@@ -463,43 +463,22 @@ func TestATranscriptPageTooLargeForTheLinkIsAskedForInHalves(t *testing.T) {
 	}
 }
 
-// Over the link an event batch goes as its runs of consecutive seqs, in seq order: the link's ingest refuses a batch
-// whose seqs do not count up by one (EVENT_BATCH_MALFORMED), and a session's emitters can buffer two events swapped.
-func TestEventsGoOverTheLinkInRunsOfConsecutiveSeqs(t *testing.T) {
-	r := newLinkWorkRig(t)
-	r.g.backend = func(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
-		var batch RunEventBatch
-		_ = json.Unmarshal(rpc.GetTunnel().GetJsonBody(), &batch)
-		for i := 1; i < len(batch.Events); i++ {
-			if batch.Events[i].Seq != batch.Events[i-1].Seq+1 {
-				return fakeWorkAnswer(rpc, 400, `{"code":"EVENT_BATCH_MALFORMED","retryable":true}`)
-			}
-		}
-		return fakeWorkAnswer(rpc, 200, `{"ok":true}`)
-	}
+// Over the link a session's events go as EventBatch frames on the work connection, never as calls to the events
+// route, and postEvents returns once the EventAck says they are stored.
+func TestEventsGoOverTheLinkAsEventBatches(t *testing.T) {
+	r, in := newLinkEventsRig(t)
 	r.useLink(t)
-	events := linkTestEvents(1, 6, 10).Events
-	events[3], events[4] = events[4], events[3] // seq 5 buffered before seq 4
-	if err := r.t.postEvents(context.Background(), "session-a", RunEventBatch{Events: events[:4]}); err != nil {
+	if err := r.t.postEvents(context.Background(), "session-a", linkTestEvents(1, 4, 10)); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.t.postEvents(context.Background(), "session-a", RunEventBatch{Events: events[4:]}); err != nil {
+	if err := r.t.postEvents(context.Background(), "session-a", linkTestEvents(5, 2, 10)); err != nil {
 		t.Fatal(err)
 	}
-	var sent [][]int
-	for _, c := range r.g.rpcsTo("/runner/sessions/session-a/events") {
-		var batch RunEventBatch
-		_ = json.Unmarshal(c.body, &batch)
-		var seqs []int
-		for _, e := range batch.Events {
-			seqs = append(seqs, e.Seq)
-		}
-		sent = append(sent, seqs)
+	in.assertContiguous(t, "session-a", 1, 6)
+	if n := len(r.g.rpcsTo("/runner/sessions/session-a/events")); n != 0 {
+		t.Errorf("%d event batches went as calls", n)
 	}
-	if fmt.Sprint(sent) != "[[1 2 3] [5] [4] [6]]" {
-		t.Errorf("batches sent: %v", sent)
-	}
-	if got := r.m.storedSeq("session-a"); got != 6 {
+	if got := r.m.storedRowSeq("session-a"); got != 6 {
 		t.Errorf("stored through %d", got)
 	}
 }
@@ -542,7 +521,7 @@ func requestIDPatternOK(id string) bool {
 // A turn completion carries after_seq, the session's last event seq sent, and while the control plane answers that
 // those events are not all stored yet it is sent again, under the same request_id, after the delay it names.
 func TestATurnCompletionWaitsForItsEventsWithAfterSeq(t *testing.T) {
-	r := newLinkWorkRig(t)
+	r, _ := newLinkEventsRig(t)
 	var pending atomic.Int64
 	r.g.backend = func(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
 		if strings.HasSuffix(rpc.GetTunnel().GetPath(), "/turn-complete") && pending.Add(1) <= 2 {
@@ -576,14 +555,9 @@ func TestATurnCompletionWaitsForItsEventsWithAfterSeq(t *testing.T) {
 			t.Errorf("attempt %d came %s after the one before, sooner than the 120ms it was told", i, c.at.Sub(calls[i-1].at))
 		}
 	}
-	// Other calls depend on no session's events.
-	if err := r.t.postEvents(context.Background(), "session-a", linkTestEvents(8, 1, 10)); err != nil {
-		t.Fatal(err)
-	}
-	for _, c := range r.g.rpcsTo("/runner/sessions/session-a/events") {
-		if c.afterSeq != 0 || c.sessionID != "" {
-			t.Errorf("an event batch carried after_seq %d for %q", c.afterSeq, c.sessionID)
-		}
+	// The events themselves went as EventBatches, which depend on nothing.
+	if n := len(r.g.rpcsTo("/runner/sessions/session-a/events")); n != 0 {
+		t.Errorf("%d event batches went as calls", n)
 	}
 }
 
@@ -591,12 +565,16 @@ func TestATurnCompletionWaitsForItsEventsWithAfterSeq(t *testing.T) {
 // linkAfterSeqWait it depends only on the events the control plane acknowledged.
 func TestATurnCompletionStopsWaitingForEventsThatWillNeverBeStored(t *testing.T) {
 	shortenLinkWaits(t, linkLongPoll, linkApprovalRecheck, 400*time.Millisecond)
-	r := newLinkWorkRig(t)
+	r, in := newLinkEventsRig(t)
+	in.refuseBatch = func(eb *linkpb.EventBatch) *linkpb.Failure {
+		if eb.GetEvents()[0].GetSeq() == 6 {
+			return fakeIngestFailure("REFUSED_FOR_THE_TEST", false, 0) // never stored
+		}
+		return nil
+	}
 	r.g.backend = func(c *fakeWorkConn, rpc *linkpb.Rpc) *linkpb.RpcResult {
 		path := rpc.GetTunnel().GetPath()
 		switch {
-		case strings.HasSuffix(path, "/events") && strings.Contains(string(rpc.GetTunnel().GetJsonBody()), `"seq":6`):
-			return fakeWorkAnswer(rpc, 400, `{"code":"REFUSED_FOR_THE_TEST"}`) // never stored
 		case strings.HasSuffix(path, "/turn-complete") && rpc.GetAfterSeq() > 5:
 			return &linkpb.RpcResult{RequestId: rpc.GetRequestId(), Outcome: &linkpb.RpcResult_Tunnel{Tunnel: &linkpb.TunnelResponse{
 				Status: 503, RetryAfterMs: 50, JsonBody: []byte(`{"code":"RUNNER_LINK_AFTER_SEQ_PENDING","retryable":true}`),

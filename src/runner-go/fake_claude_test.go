@@ -36,6 +36,19 @@ const testOrbitMCPEnv = "ORBIT_TEST_AS_ORBIT_MCP"
 // bounded failure beats a ten-minute test timeout with no output.
 const fakeClaudeTimeout = 10 * time.Second
 
+// fakeClaudeWaitEnv, set to a duration, is how long the scripted CLI waits for its next stdin frame before it gives up,
+// in place of fakeClaudeTimeout: a staging drill whose link is down for longer than that between two turns keeps its
+// engine (/mnt/data/b8-drill).
+const fakeClaudeWaitEnv = "ORBIT_FAKE_CLAUDE_WAIT"
+
+// fakeClaudeWait is how long the scripted CLI waits for a frame.
+func fakeClaudeWait() time.Duration {
+	if d, err := time.ParseDuration(os.Getenv(fakeClaudeWaitEnv)); err == nil && d > 0 {
+		return d
+	}
+	return fakeClaudeTimeout
+}
+
 // TestMain doubles as the fake CLI's entry point. The shim sets fakeClaudeDirEnv, so the
 // dispatch happens before the testing flags are parsed — claude's own argv (`-p`,
 // `--input-format`…) never reaches the test framework. fakeCodexDirEnv does the same for the
@@ -139,9 +152,14 @@ func clearCallingSession() {
 // fakeStep is one instruction of a fake CLI script: emit a frame, or block until one
 // arrives. Steps run in order; the process outlives the last one.
 type fakeStep struct {
-	// Emit: system_init | assistant | thinking_delta | thinking | tool_use | tool_result |
-	// result | prompt_suggestion | control_request | control_response | replay_user |
-	// local_command_stdout | task_notification | stop_reading | eof (eof exits, closing stdout).
+	// Emit: system_init | system_status | assistant | text_delta | thinking_delta | thinking |
+	// tool_use | tool_result | result | prompt_suggestion | control_request | control_response |
+	// replay_user | local_command_stdout | task_notification | stop_reading | eof (eof exits,
+	// closing stdout).
+	//
+	// system_status is a bare system message, a progress ping the control plane stores nowhere
+	// (subtype "status", or Subtype); text_delta one chunk of the reply as
+	// --include-partial-messages streams it.
 	//
 	// task_notification is a background task's lifecycle report, which Claude sends as a
 	// user-role message holding one bare string — the same shape as its local-command output.
@@ -351,7 +369,7 @@ func readFakeStdin(recordPath string, users, ctrlReqs, ctrlResps chan<- map[stri
 }
 
 func awaitFrame(ch <-chan map[string]interface{}, closed <-chan struct{}, match func(map[string]interface{}) bool) (map[string]interface{}, bool) {
-	deadline := time.After(fakeClaudeTimeout)
+	deadline := time.After(fakeClaudeWait())
 	for {
 		select {
 		case msg := <-ch:
@@ -380,7 +398,7 @@ func awaitFrame(ch <-chan map[string]interface{}, closed <-chan struct{}, match 
 // awaitRelease blocks until the test creates path (fakeClaude.Release), stdin closes, or
 // fakeClaudeTimeout passes.
 func awaitRelease(path string, closed <-chan struct{}) bool {
-	deadline := time.After(fakeClaudeTimeout)
+	deadline := time.After(fakeClaudeWait())
 	for {
 		if _, err := os.Stat(path); err == nil {
 			return true
@@ -410,8 +428,22 @@ func fakeFrame(s fakeStep, sessionID, lastReqID, model string) (string, error) {
 			init["claude_code_version"] = s.Version
 		}
 		return marshalFrame(init), nil
+	case "system_status":
+		subtype := s.Subtype
+		if subtype == "" {
+			subtype = "status"
+		}
+		return marshalFrame(map[string]interface{}{"type": "system", "subtype": subtype, "session_id": sessionID, "model": model}), nil
 	case "assistant":
 		return assistantFrame(sessionID, map[string]interface{}{"type": "text", "text": s.Text}), nil
+	case "text_delta":
+		return marshalFrame(map[string]interface{}{
+			"type": "stream_event", "session_id": sessionID, "parent_tool_use_id": nil,
+			"event": map[string]interface{}{
+				"type": "content_block_delta", "index": 0,
+				"delta": map[string]interface{}{"type": "text_delta", "text": s.Text},
+			},
+		}), nil
 	case "thinking_delta":
 		// One chunk of reasoning as --include-partial-messages streams it.
 		return marshalFrame(map[string]interface{}{
