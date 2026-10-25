@@ -31,8 +31,11 @@ import (
 // saw, in a report the script reads besides the stack's own state. `link-gateway client -drill <name>`:
 //
 //	link     heartbeats and their facts by digest; a session created by its owner, its claim hint and its claim, sent
-//	         again under the same request_id; the inbox hint and HeartbeatAck's hints; route answers relayed whatever
-//	         their status, malformed requests refused, after_seq; durable events stored and acknowledged, in order, a
+//	         again under the same request_id; the inbox hint and HeartbeatAck's hints; an approval the runner asks for
+//	         in the running turn, which the owner allows through the web API: its approval hint, HeartbeatAck's hints
+//	         naming it while the call that asked waits and no longer once that call has returned, and the decision read
+//	         at once; route answers relayed whatever their status, malformed requests refused, after_seq; durable
+//	         events stored and acknowledged, in order, a
 //	         gap refused, and credit exceeded by a burst; the live stream published only while a client watches it, and
 //	         the turn prefix asked of this runner when the client opens the session; an answer large enough to travel in
 //	         pieces, with a control frame written between two of them.

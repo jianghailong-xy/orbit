@@ -29,7 +29,7 @@ func cmdMcp() {
 		os.Exit(1)
 	}
 	srv := &mcpServer{
-		t:                     NewTransport(cfg.ServerURL, cfg.RunnerToken),
+		t:                     newCallerTransport(cfg.ServerURL, cfg.RunnerToken, runnerCallerMCP),
 		sessionID:             os.Getenv("ORBIT_SESSION_ID"),
 		agentID:               os.Getenv("ORBIT_AGENT_ID"),
 		taskID:                os.Getenv("ORBIT_TASK_ID"),

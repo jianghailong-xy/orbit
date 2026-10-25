@@ -14,7 +14,10 @@ import (
 
 // Heartbeats forwarded to the heartbeat route (heartbeat.go).
 
-const watchedSession = "0190a0b0-0000-7000-8000-0000000000d1"
+const (
+	watchedSession  = "0190a0b0-0000-7000-8000-0000000000d1"
+	decidedApproval = "0190a0b0-0000-7000-8000-0000000000f1"
+)
 
 func fact(kind, value string) *linkpb.Fact {
 	sum := sha256.Sum256([]byte(value))
@@ -35,7 +38,8 @@ func heartbeatAnswer(w http.ResponseWriter, r *http.Request, body []byte) {
 		"cancelSessionIds": []string{}, "maxConcurrent": 2, "loginRequest": map[string]any{"provider": "claude"},
 		"linkHints": map[string]any{
 			"inboxSessionIds": []string{"0190a0b0-0000-7000-8000-0000000000c1"}, "claim": true,
-			"watchers": map[string]any{"instance": "i-1", "sessions": []map[string]any{{"sessionId": watchedSession, "watchers": 2}}},
+			"approvals": []map[string]any{{"sessionId": "0190a0b0-0000-7000-8000-0000000000c1", "approvalId": decidedApproval}},
+			"watchers":  map[string]any{"instance": "i-1", "sessions": []map[string]any{{"sessionId": watchedSession, "watchers": 2}}},
 		},
 	})
 }
@@ -92,6 +96,10 @@ func TestAHeartbeatIsForwardedAsTheBodyItsMirrorWouldCarry(t *testing.T) {
 	if !hints.GetClaim() || strings.Join(hints.GetInboxSessionIds(), ",") != "0190a0b0-0000-7000-8000-0000000000c1" ||
 		len(hints.GetWatchers()) != 1 || hints.GetWatchers()[0].GetSessionId() != watchedSession || hints.GetWatchers()[0].GetWatchers() != 2 {
 		t.Fatalf("hints %v", hints)
+	}
+	// The approvals the route names as decided and still waited for, as the ApprovalHints they stand for.
+	if a := hints.GetApprovals(); len(a) != 1 || a[0].GetSessionId() != "0190a0b0-0000-7000-8000-0000000000c1" || a[0].GetApprovalId() != decidedApproval {
+		t.Fatalf("hints.approvals %v", a)
 	}
 	if got := h.g.metrics.heartbeatForwards.get("forwarded"); got != 1 {
 		t.Fatalf("forwarded %v", got)

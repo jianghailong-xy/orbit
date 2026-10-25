@@ -278,6 +278,9 @@ func commandsHint() []byte { return []byte(`{"hint":{"commands":{}}}`) }
 func inboxHint(sessionID string) []byte {
 	return []byte(`{"hint":{"inbox":{"sessionId":"` + sessionID + `"}}}`)
 }
+func approvalHint(sessionID, approvalID string) []byte {
+	return []byte(`{"hint":{"approval":{"sessionId":"` + sessionID + `","approvalId":"` + approvalID + `"}}}`)
+}
 
 // quiet checks that the runner was sent nothing for a moment.
 func (tc *testConn) quiet(d time.Duration) {
@@ -343,6 +346,17 @@ func TestHintFixturesDecodeStrictly(t *testing.T) {
 					t.Fatalf("%s: session %q, want %q", c.Name, f.GetHint().GetInbox().GetSessionId(), inbox.SessionID)
 				}
 			}
+			if kind == "approval" {
+				var a struct {
+					SessionID  string `json:"sessionId"`
+					ApprovalID string `json:"approvalId"`
+				}
+				_ = json.Unmarshal(body, &a)
+				got := f.GetHint().GetApproval()
+				if a.SessionID == "" || a.ApprovalID == "" || got.GetSessionId() != a.SessionID || got.GetApprovalId() != a.ApprovalID {
+					t.Fatalf("%s: decoded %v, want %+v", c.Name, got, a)
+				}
+			}
 			if kind == "watchers" {
 				var w struct {
 					SessionID string `json:"sessionId"`
@@ -362,8 +376,8 @@ func TestHintFixturesDecodeStrictly(t *testing.T) {
 		}
 	}
 	slices.Sort(kinds)
-	if !slices.Equal(kinds, []string{"claim", "commands", "inbox", "watchers"}) {
-		t.Fatalf("fixtures cover %v, want every kind the apiserver publishes: claim, commands, inbox, watchers", kinds)
+	if !slices.Equal(kinds, []string{"approval", "claim", "commands", "inbox", "watchers"}) {
+		t.Fatalf("fixtures cover %v, want every kind the apiserver publishes: approval, claim, commands, inbox, watchers", kinds)
 	}
 	if len(fixture.Requests) == 0 {
 		t.Fatal("no turn prefix request in the fixture")
@@ -408,11 +422,18 @@ func TestHintsReachTheRunnerTheyNameAndNoOther(t *testing.T) {
 	}
 	a.quiet(300 * time.Millisecond)
 
+	nats.publish("rnr."+runnerA, approvalHint("0190a0b0-0000-7000-8000-0000000000a1", "0190a0b0-0000-7000-8000-0000000000f1"))
+	if got := a.expect("hint", 5*time.Second).GetHint().GetApproval(); got.GetSessionId() != "0190a0b0-0000-7000-8000-0000000000a1" ||
+		got.GetApprovalId() != "0190a0b0-0000-7000-8000-0000000000f1" {
+		t.Fatalf("A's approval hint names %v", got)
+	}
+	b.quiet(300 * time.Millisecond)
+
 	m := h.g.metrics
 	for _, c := range []struct {
 		kind string
 		want float64
-	}{{"claim", 1}, {"inbox", 1}, {"commands", 1}} {
+	}{{"claim", 1}, {"inbox", 1}, {"commands", 1}, {"approval", 1}} {
 		eventually(t, 5*time.Second, "the "+c.kind+" hint counted", func() bool { return m.hints.get(c.kind, "sent") >= c.want })
 		if got := m.hints.get(c.kind, "sent"); got != c.want {
 			t.Fatalf("link_hints_total{kind=%q,result=\"sent\"} = %v, want %v", c.kind, got, c.want)
@@ -488,8 +509,10 @@ func TestInModeHTTPAHintIsCountedAndNotSent(t *testing.T) {
 	eventually(t, 5*time.Second, "A's subject subscribed", func() bool { return nats.subscribers("rnr."+runnerA) == 1 })
 	nats.publish("rnr."+runnerA, claimHint())
 	nats.publish("rnr."+runnerA, inboxHint("0190a0b0-0000-7000-8000-0000000000a1"))
-	eventually(t, 5*time.Second, "both hints counted", func() bool {
-		return h.g.metrics.hints.get("claim", "mode_http") == 1 && h.g.metrics.hints.get("inbox", "mode_http") == 1
+	nats.publish("rnr."+runnerA, approvalHint("0190a0b0-0000-7000-8000-0000000000a1", "0190a0b0-0000-7000-8000-0000000000f1"))
+	eventually(t, 5*time.Second, "the three hints counted", func() bool {
+		return h.g.metrics.hints.get("claim", "mode_http") == 1 && h.g.metrics.hints.get("inbox", "mode_http") == 1 &&
+			h.g.metrics.hints.get("approval", "mode_http") == 1
 	})
 	a.quiet(300 * time.Millisecond)
 	// Logged just after it is counted.
@@ -630,6 +653,13 @@ func TestHintsOverARealNATSServer(t *testing.T) {
 	}
 	if got := b.expect("hint", 5*time.Second).GetHint().GetInbox().GetSessionId(); got != "0190a0b0-0000-7000-8000-0000000000b1" {
 		t.Fatalf("B's inbox hint names %q", got)
+	}
+	a.quiet(300 * time.Millisecond)
+	if err := apiserver.Publish("rnr."+runnerB, approvalHint("0190a0b0-0000-7000-8000-0000000000b1", "0190a0b0-0000-7000-8000-0000000000f2")); err != nil {
+		t.Fatal(err)
+	}
+	if got := b.expect("hint", 5*time.Second).GetHint().GetApproval().GetApprovalId(); got != "0190a0b0-0000-7000-8000-0000000000f2" {
+		t.Fatalf("B's approval hint names %q", got)
 	}
 	a.quiet(300 * time.Millisecond)
 }

@@ -201,6 +201,9 @@ type linkClient struct {
 
 	mu  sync.Mutex
 	tok *linkToken
+	// nextURL, after a Redirect that brought no token, is where the connection opened with the next token goes in
+	// place of the link address that token names.
+	nextURL string
 }
 
 func newLinkClient(serverURL, runnerToken, processID string, hello func() *linkpb.Hello) *linkClient {
@@ -244,6 +247,9 @@ func (c *linkClient) token(ctx context.Context) (*linkToken, error) {
 		return nil, err
 	}
 	c.mu.Lock()
+	if c.nextURL != "" {
+		fresh.linkURL, c.nextURL = c.nextURL, ""
+	}
 	c.tok = fresh
 	c.mu.Unlock()
 	return fresh, nil

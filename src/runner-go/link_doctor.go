@@ -16,12 +16,18 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
+	"orbit/linkpb"
 )
 
 // The runner link section of `orbit doctor` (docs/runner-link-design.md §7): can this machine hold the link, over
 // which proxy, with what TLS and what round trip, and when it cannot, what is in the way. A proxy that will not carry
 // a WebSocket leaves a runner without the link, and decision D6 ships no fallback for it, so doctor says that one in
 // so many words: "WebSocket blocked by proxy".
+//
+// And the link mode (link_mode.go): which way the runner's daemon calls go now, as the gateway's Welcome and the
+// control plane's answer over HTTPS say it, and, when that is the link, whether a daemon call goes through it: one
+// GET /runner/me sent as the daemon sends its calls, an Rpc forwarded to the control plane.
 
 const (
 	// linkDoctorBudget bounds the whole check: the token, the dial and the pings.
@@ -46,6 +52,21 @@ type linkProbe struct {
 	tlsState        *tls.ConnectionState
 	connectionID    string
 	rtts            []time.Duration
+
+	// The link mode. mode is what the Welcome said; tokenLifetime, how long the link token lives; release, what the
+	// Welcome assigns.
+	mode          linkpb.Mode
+	tokenLifetime time.Duration
+	release       *linkpb.AssignedRelease
+	// call is the daemon call doctor sent over the link, in MODE_LINK: its status, or why there is none, and its
+	// round trip.
+	callStatus int
+	callErr    error
+	callTime   time.Duration
+	// httpsRefused is the control plane refusing a daemon call over HTTPS with UPGRADE_REQUIRED: the cutover.
+	httpsRefused bool
+	// localOff is what turned the link mode off on this machine, "" when nothing did.
+	localOff string
 }
 
 // checkRunnerLink prints doctor's runner link section for the runner cfg describes.
@@ -53,6 +74,9 @@ func checkRunnerLink(cfg *RunnerConfig, out io.Writer) {
 	ctx, cancel := context.WithTimeout(context.Background(), linkDoctorBudget)
 	defer cancel()
 	p := probeRunnerLink(ctx, cfg.ServerURL, cfg.RunnerToken, http.ProxyFromEnvironment, nil)
+	if off, why := linkModeOff(cfg); off {
+		p.localOff = why
+	}
 	fmt.Fprintln(out, "\nRunner link:")
 	for _, line := range p.report() {
 		fmt.Fprintln(out, "  "+line)
@@ -81,7 +105,12 @@ func probeRunnerLink(ctx context.Context, serverURL, runnerToken string, proxy f
 		}
 		return p
 	}
-	p.linkURL = tok.linkURL
+	p.linkURL, p.tokenLifetime = tok.linkURL, tok.lifetime
+	defer func() {
+		// Asked over HTTPS as the daemon asks, naming no caller (runnerCallerHeader): what the daemon is answered there.
+		_, err := NewTransport(serverURL, runnerToken).me()
+		p.httpsRefused = linkUpgradeRequired(err)
+	}()
 	target, err := url.Parse(tok.linkURL)
 	if err != nil || (target.Scheme != "wss" && target.Scheme != "ws") {
 		p.err = fmt.Errorf("the server gave the link address %q, which is not a ws:// or wss:// URL", tok.linkURL)
@@ -128,8 +157,16 @@ func probeRunnerLink(ctx context.Context, serverURL, runnerToken string, proxy f
 		},
 	}
 	start := time.Now()
+	results := make(chan *linkpb.RpcResult, 1)
 	conn, err := dialLink(httptrace.WithClientTrace(ctx, trace), &http.Client{Transport: transport}, tok.linkURL, tok.token,
-		linkHello(processID), nil)
+		linkHello(processID), func(_ *linkConn, f *linkpb.Frame) {
+			if r := f.GetRpcResult(); r != nil {
+				select {
+				case results <- r:
+				default:
+				}
+			}
+		})
 	mu.Lock()
 	defer mu.Unlock()
 	p.total = time.Since(start)
@@ -150,8 +187,41 @@ func probeRunnerLink(ctx context.Context, serverURL, runnerToken string, proxy f
 		}
 		p.rtts = append(p.rtts, rtt)
 	}
+	p.mode, p.release = conn.welcome.GetMode(), conn.welcome.GetRelease()
+	if p.err == nil && p.mode == linkpb.Mode_MODE_LINK {
+		p.callStatus, p.callTime, p.callErr = probeLinkCall(ctx, conn, results, processID)
+	}
 	_ = conn.ws.Close(websocket.StatusNormalClosure, "orbit doctor")
 	return p
+}
+
+// probeLinkCall sends GET /runner/me over conn as an Rpc, as the daemon sends its calls in link mode, and waits for
+// its RpcResult: the route's status and the round trip, or why no answer came.
+func probeLinkCall(ctx context.Context, conn *linkConn, results <-chan *linkpb.RpcResult, processID string) (int, time.Duration, error) {
+	start := time.Now()
+	if _, err := conn.send(&linkpb.Frame{Body: &linkpb.Frame_Rpc{Rpc: &linkpb.Rpc{
+		RequestId: "doctor:" + processID,
+		Body:      &linkpb.Rpc_Tunnel{Tunnel: &linkpb.TunnelRequest{Method: http.MethodGet, Path: "/runner/me"}},
+	}}}); err != nil {
+		return 0, 0, fmt.Errorf("sending it: %w", err)
+	}
+	wait := time.NewTimer(10 * time.Second)
+	defer wait.Stop()
+	select {
+	case r := <-results:
+		took := time.Since(start)
+		if t := r.GetTunnel(); t != nil {
+			return int(t.GetStatus()), took, nil
+		}
+		f := r.GetFailure()
+		return 0, took, fmt.Errorf("the gateway answered %s: %s", f.GetCode(), f.GetMessage())
+	case <-conn.done:
+		return 0, 0, errors.New("the connection ended before an answer came")
+	case <-wait.C:
+		return 0, 0, errors.New("no answer within 10s")
+	case <-ctx.Done():
+		return 0, 0, ctx.Err()
+	}
 }
 
 // blockedBy says how err is a proxy, or something on the way, not carrying the WebSocket; "" when it is not.
@@ -245,6 +315,52 @@ func (p *linkProbe) report() []string {
 	}
 	if p.blocked != "" {
 		lines = append(lines, "  The runner link is one WebSocket straight to "+p.target+". Have it let through without TLS inspection, or run the runner on a network that carries it.")
+	}
+	return append(lines, p.modeReport()...)
+}
+
+// modeReport is the link mode's lines: which way the daemon calls go, and whether that way works.
+func (p *linkProbe) modeReport() []string {
+	var lines []string
+	switch {
+	case p.err != nil:
+	case p.mode == linkpb.Mode_MODE_LINK:
+		lines = append(lines, "  mode:   MODE_LINK — the runner's daemon calls go over this link")
+	case p.mode == linkpb.Mode_MODE_HTTP:
+		lines = append(lines, "  mode:   MODE_HTTP — the runner's daemon calls go over HTTPS; the link only mirrors them (the shadow period)")
+	default:
+		lines = append(lines, "  mode:   the gateway states none; the runner keeps the way it works now")
+	}
+	if p.err == nil && p.mode == linkpb.Mode_MODE_LINK {
+		switch {
+		case p.callErr != nil:
+			lines = append(lines, "✗ a daemon call over the link got no answer: GET /runner/me — "+p.callErr.Error())
+		case p.callStatus >= 200 && p.callStatus < 300:
+			lines = append(lines, fmt.Sprintf("  call:   GET /runner/me answered %d over the link in %s", p.callStatus, linkDoctorMs(p.callTime)))
+		default:
+			lines = append(lines, fmt.Sprintf("✗ a daemon call over the link was refused: GET /runner/me answered %d", p.callStatus))
+		}
+	}
+	if p.httpsRefused {
+		lines = append(lines, "  HTTPS:  the control plane answers daemon calls over HTTPS with UPGRADE_REQUIRED: the runner works only over the link")
+	}
+	if p.err == nil && p.tokenLifetime > 0 {
+		lines = append(lines, fmt.Sprintf("  token:  lives %s; the runner opens its next connection %s before it expires", p.tokenLifetime,
+			min(linkRenewBefore, p.tokenLifetime/2)))
+	}
+	if r := p.release; r.GetVersion() != "" {
+		line := fmt.Sprintf("  update: the link assigns release %s; this binary is %s", r.GetVersion(), version)
+		if r.GetRollback() {
+			line += " (a rollback)"
+		}
+		lines = append(lines, line)
+	}
+	if p.localOff != "" {
+		line := "  local:  link mode is off on this machine (" + p.localOff + "): its daemon calls stay on HTTPS"
+		if p.httpsRefused || p.mode == linkpb.Mode_MODE_LINK {
+			line = "✗ link mode is off on this machine (" + p.localOff + "), but the control plane asks for the link: the runner cannot work until that setting is removed"
+		}
+		lines = append(lines, line)
 	}
 	return lines
 }

@@ -3,7 +3,9 @@ import { generateKeyPairSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test } from 'node:test';
+import { RunEventType } from '@orbit/shared';
 import { QueueService } from '../queue/queue.service';
+import { SessionsService } from '../sessions/sessions.service';
 import { RealtimeService } from './realtime.service';
 import {
   INSTANCE_HEADER,
@@ -26,6 +28,8 @@ const RUNNER_B = '0190a0b0-0000-7000-8000-00000000000b';
 const SESSION_ON_A = '0190a0b0-0000-7000-8000-0000000000a1';
 const SESSION_ON_B = '0190a0b0-0000-7000-8000-0000000000b1';
 const SESSION_WITHOUT_RUNNER = '0190a0b0-0000-7000-8000-0000000000c1';
+const APPROVAL = '0190a0b0-0000-7000-8000-0000000000e1';
+const APPROVAL_ON_B = '0190a0b0-0000-7000-8000-0000000000e2';
 
 // From build/realtime back to the repository root, as the compose specs read the repository.
 const ROOT = path.resolve(__dirname, '../../../..');
@@ -85,6 +89,8 @@ test('a hint is a link Frame carrying only that Hint, in protobuf JSON, on its r
   assert.equal(message({ claim: {} }), '{"hint":{"claim":{}}}');
   assert.equal(message({ commands: {} }), '{"hint":{"commands":{}}}');
   assert.equal(message({ inbox: { sessionId: SESSION_ON_A } }), `{"hint":{"inbox":{"sessionId":"${SESSION_ON_A}"}}}`);
+  assert.equal(message({ approval: { sessionId: SESSION_ON_A, approvalId: APPROVAL } }),
+    `{"hint":{"approval":{"sessionId":"${SESSION_ON_A}","approvalId":"${APPROVAL}"}}}`);
 });
 
 test('the gateway\'s fixtures are what this encoder writes, case by case', () => {
@@ -92,7 +98,7 @@ test('the gateway\'s fixtures are what this encoder writes, case by case', () =>
     cases: Array<{ name: string; runnerId: string; hint: RunnerHint; subject: string; message: string; headers?: Record<string, string> }>;
     requests: Array<{ name: string; runnerId: string; sessionId: string; requestId: string; subject: string; message: string }>;
   };
-  assert.deepEqual(fixture.cases.map((c) => Object.keys(c.hint)[0]).sort(), ['claim', 'commands', 'inbox', 'watchers'],
+  assert.deepEqual(fixture.cases.map((c) => Object.keys(c.hint)[0]).sort(), ['approval', 'claim', 'commands', 'inbox', 'watchers'],
     'every kind of hint the apiserver publishes has a fixture the gateway decodes');
   for (const c of fixture.cases) {
     assert.equal(runnerHintSubject(c.runnerId), c.subject, c.name);
@@ -120,6 +126,7 @@ test('off, nothing is opened, looked up or published', async () => {
   hints.claim(RUNNER_A);
   hints.commands(RUNNER_A);
   hints.inbox(SESSION_ON_A);
+  hints.approval(SESSION_ON_A, APPROVAL);
   await settle();
   assert.equal(hints.enabled, false);
   assert.equal(opened, 0, 'no NATS connection is made');
@@ -319,5 +326,92 @@ test('a queued session still wakes every claim poll of this process once, and hi
   queue.notifySessionQueued([RUNNER_A, RUNNER_B]);
   assert.equal(emitted, 3, 'several runners, one wake of the polls');
   assert.deepEqual(bus.sent.slice(1).map(([subject]) => subject), [`rnr.${RUNNER_A}`, `rnr.${RUNNER_B}`]);
+  await hints.onModuleDestroy();
+});
+
+const approvalHint = (sessionId: string, approvalId: string) =>
+  `{"hint":{"approval":{"sessionId":"${sessionId}","approvalId":"${approvalId}"}}}`;
+
+test('a decided approval is hinted to the runner its session is assigned to, and to no other', async () => {
+  const bus = fakeBus();
+  const { hints } = hintsOver(bus);
+  hints.approval(SESSION_ON_A, APPROVAL);
+  hints.approval(SESSION_ON_B, APPROVAL_ON_B);
+  hints.approval(SESSION_WITHOUT_RUNNER, APPROVAL);
+  hints.approval('0190a0b0-0000-7000-8000-0000000000ff', APPROVAL); // no such session
+  await settle();
+  assert.deepEqual(bus.sent, [
+    [`rnr.${RUNNER_A}`, approvalHint(SESSION_ON_A, APPROVAL)],
+    [`rnr.${RUNNER_B}`, approvalHint(SESSION_ON_B, APPROVAL_ON_B)],
+  ]);
+  await hints.onModuleDestroy();
+});
+
+/**
+ * SessionsService.decideApproval over doubles of its rows, publishing through a RealtimeService whose hints go to the
+ * stand-in, with what happened in order: the approval's write, and each hint published.
+ */
+function decisions(options: { landed?: boolean } = {}) {
+  const bus = fakeBus();
+  const table = sessionsTable();
+  const { hints } = hintsOver(bus, table.prisma);
+  const order: string[] = [];
+  const publish = bus.publish;
+  bus.publish = (subject, message) => {
+    order.push(`hint on ${subject}`);
+    publish(subject, message);
+  };
+  const prisma = {
+    session: {
+      findFirst: async ({ where }: { where: { id: string } }) => ({ id: where.id, workspaceId: null }),
+      findUnique: async () => null,
+    },
+    approval: {
+      // count 0: another decision landed first, so this click changed nothing.
+      updateMany: async () => {
+        order.push('the approval written');
+        return { count: options.landed === false ? 0 : 1 };
+      },
+      findFirst: async ({ where }: { where: { id: string; sessionId: string } }) => ({
+        id: where.id, sessionId: where.sessionId, toolName: 'Bash', input: {}, toolUseId: 'toolu_01', backgroundJobId: null,
+        status: 'ALLOWED', message: null, createdAt: new Date(), decidedAt: new Date(),
+      }),
+    },
+    $executeRawUnsafe: async () => 0,
+  };
+  const realtime = new RealtimeService(prisma as never, { scheduleBadgeSync: () => undefined } as never, hints);
+  return { sessions: new SessionsService(prisma as never, {} as never, realtime), realtime, hints, bus, order };
+}
+
+test('a person\'s decision is hinted to its session\'s runner alone, after the write that records it', async () => {
+  const { sessions, hints, bus, order } = decisions();
+  await sessions.decideApproval('owner-1', SESSION_ON_A, APPROVAL, { behavior: 'allow' });
+  await settle();
+  assert.deepEqual(bus.sent, [[`rnr.${RUNNER_A}`, approvalHint(SESSION_ON_A, APPROVAL)]]);
+  assert.deepEqual(order, ['the approval written', `hint on rnr.${RUNNER_A}`]);
+
+  await sessions.decideApproval('owner-1', SESSION_ON_B, APPROVAL_ON_B, { behavior: 'deny' });
+  await settle();
+  assert.deepEqual(bus.sent.slice(1), [[`rnr.${RUNNER_B}`, approvalHint(SESSION_ON_B, APPROVAL_ON_B)]],
+    'a deny is a decision too, hinted to its own session\'s runner');
+  await hints.onModuleDestroy();
+});
+
+test('a click that lost to an earlier decision is not hinted', async () => {
+  const { sessions, hints, bus } = decisions({ landed: false });
+  await sessions.decideApproval('owner-1', SESSION_ON_A, APPROVAL, { behavior: 'allow' });
+  await settle();
+  assert.deepEqual(bus.sent, []);
+  await hints.onModuleDestroy();
+});
+
+test('a card collected as ABANDONED is no decision: its APPROVAL_RESOLVED is not hinted', async () => {
+  const { realtime, hints, bus } = decisions();
+  // As a takeover and the events ingest publish the cards they collect (runner-api.controller.ts).
+  realtime.publish(SESSION_ON_A, {
+    seq: 0, type: RunEventType.APPROVAL_RESOLVED, payload: { id: APPROVAL, status: 'ABANDONED' }, ts: new Date().toISOString(),
+  });
+  await settle();
+  assert.deepEqual(bus.sent, []);
   await hints.onModuleDestroy();
 });

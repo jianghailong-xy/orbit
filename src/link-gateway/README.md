@@ -172,6 +172,7 @@ protobuf's canonical JSON:
 | `claim` | `{"hint":{"claim":{}}}` | A session is queued for the runner, or a slot it waits for frees up. |
 | `inbox` | `{"hint":{"inbox":{"sessionId":"<uuid>"}}}` | A message is waiting in a session assigned to the runner. |
 | `commands` | `{"hint":{"commands":{}}}` | Something its heartbeat delivers is waiting: a sign-in, a merge, an update. |
+| `approval` | `{"hint":{"approval":{"sessionId":"<uuid>","approvalId":"<uuid>"}}}` | A person allowed or denied an approval of a session assigned to the runner. |
 
 `testdata/b1-hints.json` holds those messages, the watchers hint and its header and the turn prefix request among them,
 as the apiserver's encoder writes them (`src/apiserver/src/realtime/runner-hints.ts`), and
@@ -323,9 +324,10 @@ missing one would say something the runner did not.
 Beats are forwarded one at a time per connection; one waiting its turn is replaced by a newer one. The `HeartbeatAck`
 of a forwarded beat carries the mode, the route's answer as `reconcile_json`, and `hints`:
 
-- the route answers a link call with `linkHints` beside today's HeartbeatResponse: the sessions with a message waiting
-  and whether a session waits to be claimed (`runner-link-hints.ts`), and the answering instance's watcher counts. The
-  gateway takes `linkHints` out of `reconcile_json`, which stays today's response;
+- the route answers a link call with `linkHints` beside today's HeartbeatResponse: the sessions with a message waiting,
+  whether a session waits to be claimed and the approvals that have a decision while the call or job that asked still
+  waits (`runner-link-hints.ts`), and the answering instance's watcher counts. The gateway takes `linkHints` out of
+  `reconcile_json`, which stays today's response, and states the approvals as `HintState.approvals`;
 - `HintState.watchers` is the gateway's sum across apiserver instances.
 
 It carries `release` too when `linkHints` names one: the release the runner is assigned, as in
@@ -619,11 +621,11 @@ link-gateway client -api http://127.0.0.1:18086 -runner-token "$TOKEN" -ca ca.pe
 `-corrupt-every N` alters the typed half of every Nth mirror, to check that the gateway counts the difference.
 
 With `-drill <name>`, against a gateway in `MODE_LINK`, it acts as a runner on each path the gateway forwards and writes
-a report of every step (`-report`): `link` (requests, heartbeats and facts, hints, durable events and credit, the live
-stream and the turn prefix, an answer in pieces), `cancel` (a claim dropped while it waits), `retry` (calls answered
-while a backend goes away) and `slow` (a runner that stops reading). It signs in as the runner's owner
-(`-owner-email`, `-owner-password-file`) to create and watch sessions, and reads the live subject as the apiserver's
-NATS user (`-nats-url`, `-nats-seed-file`). `scripts/runner-link/staging-check-link.sh` runs them all.
+a report of every step (`-report`): `link` (requests, heartbeats and facts, hints, an approval its owner decides, durable
+events and credit, the live stream and the turn prefix, an answer in pieces), `cancel` (a claim dropped while it waits),
+`retry` (calls answered while a backend goes away) and `slow` (a runner that stops reading). It signs in as the runner's
+owner (`-owner-email`, `-owner-password-file`) to create, watch and decide for sessions, and reads the live subject as
+the apiserver's NATS user (`-nats-url`, `-nats-seed-file`). `scripts/runner-link/staging-check-link.sh` runs them all.
 
 The staging stack's scripts ([scripts/runner-link](../../scripts/runner-link/README.md)) build and run all of this.
 
